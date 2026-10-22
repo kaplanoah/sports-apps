@@ -120,9 +120,15 @@ function dropStartUrl(manifest) {
 /**
  * @param {{ path: string, body: string }} file
  * @param {Request} request
+ * @param {boolean} isMoving
  */
-const writeBody = ({ path, body }, request) =>
-  path === MANIFEST_PATH && isFromSafari(request) ? dropStartUrl(body) : body;
+function writeBody({ path, body }, request, isMoving) {
+  if (path === MANIFEST_PATH && isFromSafari(request)) return dropStartUrl(body);
+  // The pages omit optional head tags, so the marker precedes their first script.
+  if (path === "index.html" && isMoving)
+    return body.replace("<script", '<meta name="moving-to-page-host" content="true">\n<script');
+  return body;
+}
 
 /**
  * @param {Parameters<typeof decodePageFiles>[0]} pageFiles
@@ -132,7 +138,7 @@ function createPageServer(pageFiles, releaseFolder) {
   const files = decodePageFiles(pageFiles);
   // Every load asks again for a file outside the release's folder, and a browser that already has
   // it gets a 304 instead of the file.
-  return async function servePageFile(request, pagePath) {
+  return async function servePageFile(request, pagePath, isMoving = false) {
     if (request.method !== "GET" && request.method !== "HEAD")
       return respondText("GET only.\n", 405, { allow: "GET, HEAD" });
     const { path, headers: cacheHeaders } = findPageFile(pagePath, releaseFolder);
@@ -140,13 +146,13 @@ function createPageServer(pageFiles, releaseFolder) {
     if (replaced) return serveReplacedRelease(replaced[1]);
     const file = files.get(path);
     if (!file) return serveNotFound();
-    const body = writeBody({ path, body: file.body }, request);
+    const body = writeBody({ path, body: file.body }, request, isMoving);
     file.etag ??= hashBody(file.body);
     const etag = body === file.body ? await file.etag : await hashBody(body);
     const headers = {
       "content-type": file.contentType,
       etag,
-      ...cacheHeaders,
+      ...(path === "index.html" ? PAGE_HEADERS : cacheHeaders),
       ...(path === MANIFEST_PATH ? { vary: "user-agent" } : {}),
     };
     if (hasMatchingTag(request, etag)) return new Response(null, { status: 304, headers });
@@ -234,16 +240,8 @@ const GATE_PATH = "/gate.html";
  * @param {(env: any) => Promise<boolean>} app.isStoreAnswering
  * @param {Record<string, (url: URL, env: any) => Response | Promise<Response>>} [app.reads] more GET
  *   paths, each handed the Worker's bindings, so it can read the store
- * @param {boolean} [app.isMovingToPageHost] whether the page under the key sends its phones to the
- *   PAGE_HOST address: one signed in with a handoff from MOVE_PATH, and one that isn't with a 301
  */
-export function createAppWorker({
-  pageFiles,
-  forwardToStore,
-  isStoreAnswering,
-  reads = {},
-  isMovingToPageHost = false,
-}) {
+export function createAppWorker({ pageFiles, forwardToStore, isStoreAnswering, reads = {} }) {
   const releaseCommit = readReleaseCommit(pageFiles);
   const releaseFolder = releaseCommit && nameReleaseFolder(releaseCommit);
   const servePageFile = createPageServer(pageFiles, releaseFolder);
@@ -251,7 +249,6 @@ export function createAppWorker({
   const isIndexPath = (appPath) => findPageFile(appPath, releaseFolder).path === "index.html";
   const serveHealth = createHealthServer({ isStoreAnswering, release: releaseCommit });
   const isDataPath = (appPath) => isStorePath(appPath) || Object.hasOwn(reads, appPath);
-  const isMoving = (prefix, env) => isMovingToPageHost && canMoveToPageHost(prefix, env);
 
   // Until the phone sends the access code, the page's address shows the gate instead, or, for a
   // phone that never sent one under a key that's moving, the same page at PAGE_HOST, whose gate
@@ -260,7 +257,8 @@ export function createAppWorker({
   async function serveLocked(request, env, { url, appPath, prefix, access }) {
     if (isDataPath(appPath)) return respondAccessRequired();
     if (!isIndexPath(appPath)) return servePageFile(request, appPath);
-    if (access === "missing" && isMoving(prefix, env)) return redirectToPageHost(url, appPath, env);
+    if (access === "missing" && canMoveToPageHost(prefix, env))
+      return redirectToPageHost(url, appPath, env);
     const gate = await servePageFile(request, GATE_PATH);
     gate.headers.set("cache-control", "no-store");
     return gate;
@@ -268,7 +266,7 @@ export function createAppWorker({
 
   // Each visit to a page with a code renews its cookie, so a phone in use never has to type it again.
   async function servePage(request, env, appPath, prefix) {
-    const page = await servePageFile(request, appPath);
+    const page = await servePageFile(request, appPath, canMoveToPageHost(prefix, env));
     if (env.ACCESS_CODE)
       page.headers.append("set-cookie", await createAccessCookie(request, env, prefix));
     return page;
@@ -285,7 +283,8 @@ export function createAppWorker({
       if (appPath === "") return redirectToFolder(url);
       if (appPath === ACCESS_PATH) return serveAccess(request, env, prefix);
       if (appPath === HANDOFF_PATH) return serveHandoff(request, env, prefix);
-      if (appPath === MOVE_PATH && isMoving(prefix, env)) return serveMoveHandoff(request, env);
+      if (appPath === MOVE_PATH && canMoveToPageHost(prefix, env))
+        return serveMoveHandoff(request, env);
       const access = await readAccess(request, env);
       if (access !== "open") return serveLocked(request, env, { url, appPath, prefix, access });
       if (isStorePath(appPath)) return forwardToStore(request, env, appPath);
