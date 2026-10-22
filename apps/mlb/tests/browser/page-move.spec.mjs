@@ -4,10 +4,12 @@ import {
   checkMoveCard,
   checkMoveCardDismissal,
   checkMoveCardStandIns,
+  checkMoveCarriesNotifications,
   checkMovingIconFollowsTheme,
   checkMovingIconPick,
   checkMovingWelcome,
   checkMovingWelcomeCloses,
+  checkMovingWelcomeOnAndroid,
   checkNotificationsAsk,
   checkNotificationsAskGoes,
   checkSafariMoves,
@@ -76,6 +78,20 @@ test.describe("from an Android phone's Home Screen app", () => {
     browser,
   }) => {
     await checkMovingWelcome({ page, browser, ...MOVING_APP });
+  });
+
+  test("the moving welcome says how to remove the old site on an Android phone", async ({
+    page,
+    browser,
+  }) => {
+    await checkMovingWelcomeOnAndroid({ page, browser, ...MOVING_APP });
+  });
+
+  test("Use new site, tapped while the page reads the subscription, carries notifications on", async ({
+    page,
+    browser,
+  }) => {
+    await checkMoveCarriesNotifications({ page, browser, ...MOVING_APP });
   });
 
   test("the moving welcome starts on the icon of the theme picked last", async ({

@@ -9,7 +9,7 @@ import {
   writeNotificationsText,
 } from "../../shared/page/move-cards.js";
 import { listLowContrastText } from "./contrast.mjs";
-import { IPHONE, takeAwayPush } from "./devices.mjs";
+import { ANDROID_PHONE, IPHONE, takeAwayPush } from "./devices.mjs";
 import { LOCKED_PAGE_PATH } from "./harness.mjs";
 import { WELCOME } from "./home-screen-help.mjs";
 import { PUSH_STUB, stubPushManager } from "./push-stub.mjs";
@@ -249,9 +249,23 @@ export async function checkMoveCardStandIns(app) {
 }
 
 /**
+ * Holds the handoff the page opens at `pageHost` rather than opening it, since the browser is where
+ * the move goes on, and gives its address once the page asks for it.
+ * @param {import("@playwright/test").Page} page
+ * @param {string} pageHost
+ * @returns {Promise<{ handoff: Promise<URL> }>}
+ */
+async function holdHandoff(page, pageHost) {
+  const handoffAddress = `${findNewAddress(pageHost)}access/handoff?**`;
+  await page.route(handoffAddress, (route) => route.abort());
+  const asked = page.waitForRequest(handoffAddress);
+  return { handoff: asked.then((request) => new URL(request.url())) };
+}
+
+/**
  * Taps Use new site in an Android phone's Home Screen app, which keeps `choices`, and returns the
- * handoff it opens, which the test holds rather than opening, since Safari is where the move goes
- * on, with the phone's light or dark setting and the page's clock as the finger landed.
+ * handoff it opens, with the phone's light or dark setting and the page's clock as the finger
+ * landed.
  * @param {MovingApp} app
  * @param {Record<string, unknown>} choices
  * @param {string} [addedOnTheme]
@@ -260,37 +274,41 @@ export async function checkMoveCardStandIns(app) {
 async function tapUseNewSite(app, choices, addedOnTheme) {
   const { page, pageHost } = app;
   await openOldHomeScreenApp(app, choices, addedOnTheme);
-  const handoffAddress = `${findNewAddress(pageHost)}access/handoff?**`;
-  await page.route(handoffAddress, (route) => route.abort());
-  const handoff = page.waitForRequest(handoffAddress);
+  const { handoff } = await holdHandoff(page, pageHost);
   const { tappedAt, isDark } = await page.evaluate(() => ({
     tappedAt: Date.now(),
     isDark: matchMedia("(prefers-color-scheme: dark)").matches,
   }));
   await tapUpdatesButton(page, MOVE_BUTTON);
   return {
-    handoff: new URL((await handoff).url()),
+    handoff: await handoff,
     colorScheme: isDark ? "dark" : "light",
     tappedAt,
   };
 }
 
 /**
- * Opens a move's handoff in Safari, never signed in, on the phone the move left from.
+ * Opens a move's handoff in the phone's browser, Safari unless `device` is another phone, never
+ * signed in, on the phone's light or dark setting as the move left.
  * @param {MovingApp} app
  * @param {{ handoff: URL, colorScheme: "light" | "dark" }} move
+ * @param {typeof IPHONE} [device]
  */
-async function openInSafari({ browser, serve, pageHost }, { handoff, colorScheme }) {
-  const safari = await browser.newContext({ ...IPHONE, reducedMotion: "reduce", colorScheme });
-  const safariPage = await safari.newPage();
-  await takeAwayPush(safariPage);
-  await serve(safariPage, { accessCode: ACCESS_CODE, pageHost });
+async function openInBrowser(
+  { browser, serve, pageHost },
+  { handoff, colorScheme },
+  device = IPHONE,
+) {
+  const context = await browser.newContext({ ...device, reducedMotion: "reduce", colorScheme });
+  const browserPage = await context.newPage();
+  await takeAwayPush(browserPage);
+  await serve(browserPage, { accessCode: ACCESS_CODE, pageHost });
   // A navigation the test starts throws on the redirect Playwright doesn't route, so the blank page
   // starts it, as a link would.
-  await followHandoff(safariPage, pageHost, () =>
-    safariPage.evaluate((href) => location.assign(href), handoff.href),
+  await followHandoff(browserPage, pageHost, () =>
+    browserPage.evaluate((href) => location.assign(href), handoff.href),
   );
-  return safariPage;
+  return browserPage;
 }
 
 /**
@@ -308,13 +326,15 @@ export async function checkMovingWelcome(app) {
   expect(at - move.tappedAt).toBeGreaterThanOrEqual(0);
   expect(at - move.tappedAt).toBeLessThan(60_000);
 
-  const safariPage = await openInSafari(app, move);
+  const safariPage = await openInBrowser(app, move);
   const welcome = safariPage.locator(WELCOME);
   await expect(welcome).toBeVisible();
   await expect(welcome.getByRole("heading")).toHaveText(`Finish moving ${appName}`);
   await expect(welcome.locator(".welcome-steps > li")).toHaveCount(4);
-  await expect(welcome.locator(".welcome-steps > li").last()).toContainText(
-    `Delete the old ${appName} Site`,
+  const deleteStep = welcome.locator(".welcome-steps > li").last();
+  await expect(deleteStep.locator(".welcome-step")).toHaveText(`Delete the old ${appName} Site`);
+  await expect(deleteStep.locator(".welcome-note")).toHaveText(
+    "Press and hold, then tap Delete Bookmark",
   );
   await expect(welcome.getByRole("radio")).toHaveCount(2);
   await expect(welcome.getByRole("radio", { name: looks.dark, exact: true })).toBeChecked();
@@ -322,6 +342,17 @@ export async function checkMovingWelcome(app) {
   await expect(welcome.getByRole("button", { name: "Install" })).toHaveCount(0);
   await checkCardInEachLook(safariPage);
   await safariPage.context().close();
+}
+
+/**
+ * On an Android phone, the moving welcome's last step says how to remove the old site there.
+ * @param {MovingApp} app
+ */
+export async function checkMovingWelcomeOnAndroid(app) {
+  const browserPage = await openInBrowser(app, await tapUseNewSite(app, {}), ANDROID_PHONE);
+  const deleteStep = browserPage.locator(WELCOME).locator(".welcome-steps > li").last();
+  await expect(deleteStep.locator(".welcome-note")).toHaveText("Press and hold, then remove it");
+  await browserPage.context().close();
 }
 
 /**
@@ -334,7 +365,7 @@ export async function checkMovingIconFollowsTheme(app) {
   await page.emulateMedia({ colorScheme: "dark" });
   const move = await tapUseNewSite(app, { appearance: "light" }, "dark");
   expect(unpack(move.handoff.searchParams.get("carried")).icon).toBeUndefined();
-  const safariPage = await openInSafari(app, move);
+  const safariPage = await openInBrowser(app, move);
   await expect(safariPage.locator("html")).toHaveAttribute("data-theme", "light");
   await expect(
     safariPage.locator(WELCOME).getByRole("radio", { name: looks.light, exact: true }),
@@ -344,13 +375,14 @@ export async function checkMovingIconFollowsTheme(app) {
 
 /**
  * A pick of the icon in the moving welcome changes only the icon the site is added with, and rides
- * in the address the site is added from.
+ * in the address the site is added from, until closing the welcome ends the move and the icon goes
+ * back to the theme's.
  * @param {MovingApp} app
  */
 export async function checkMovingIconPick(app) {
   const { page, looks } = app;
   await page.emulateMedia({ colorScheme: "dark" });
-  const safariPage = await openInSafari(app, await tapUseNewSite(app, { appearance: "dark" }));
+  const safariPage = await openInBrowser(app, await tapUseNewSite(app, { appearance: "dark" }));
   const icon = safariPage.locator("#homeScreenIcon");
   const darkIcon = await icon.getAttribute("href");
   await safariPage.locator(WELCOME).getByRole("radio", { name: looks.light, exact: true }).check();
@@ -359,17 +391,35 @@ export async function checkMovingIconPick(app) {
   expect(await safariPage.evaluate(() => localStorage.getItem("appearance"))).toBe('"dark"');
   const address = new URL(safariPage.url());
   expect(unpack(address.searchParams.get("carried")).icon).toBe("light");
+  await safariPage.locator(WELCOME).getByRole("button", { name: "Close" }).click();
+  await expect(icon).toHaveAttribute("href", darkIcon);
   await safariPage.context().close();
 }
 
 /**
+ * Offers Chrome's install dialog, as Chrome does to a page it can install.
+ * @param {import("@playwright/test").Page} page
+ */
+const offerInstall = (page) =>
+  page.evaluate(() => {
+    const offer = Object.assign(new Event("beforeinstallprompt", { cancelable: true }), {
+      prompt: async () => {},
+      userChoice: Promise.resolve({ outcome: "dismissed" }),
+    });
+    window.dispatchEvent(offer);
+  });
+
+/**
  * Closing the moving welcome ends the move, and nothing is left in the address to carry it. The
- * welcome settings' notifications opens from then on holds its own steps, with the theme choices.
+ * welcome settings' notifications opens from then on holds its own steps, Chrome's Install among
+ * them once it's offered, with the theme choices, which set the page's whole look.
  * @param {MovingApp} app
  */
 export async function checkMovingWelcomeCloses(app) {
-  const safariPage = await openInSafari(app, await tapUseNewSite(app, { appearance: "dark" }));
+  const safariPage = await openInBrowser(app, await tapUseNewSite(app, { appearance: "dark" }));
   const welcome = safariPage.locator(WELCOME);
+  await expect(welcome).toBeVisible();
+  await offerInstall(safariPage);
   await welcome.getByRole("button", { name: "Close" }).click();
   await expect(welcome).toBeHidden();
   await expectAtAddressCarryingNothing(safariPage, findNewAddress(app.pageHost));
@@ -381,19 +431,57 @@ export async function checkMovingWelcomeCloses(app) {
   await expect(welcome.locator(".welcome-steps > li")).not.toContainText([
     `Delete the old ${app.appName} Site`,
   ]);
+  await expect(welcome.getByRole("button", { name: "Install" })).toBeVisible();
+  await expect(welcome.locator('[data-ask="browser"]:visible')).toHaveCount(0);
   await expect(welcome.getByRole("radio", { name: app.looks.dark, exact: true })).toBeChecked();
+  const icon = safariPage.locator("#homeScreenIcon");
+  const darkIcon = await icon.getAttribute("href");
   await welcome.getByRole("radio", { name: app.looks.light, exact: true }).check();
   await expect(safariPage.locator("html")).toHaveAttribute("data-theme", "light");
+  await expect(safariPage.locator('input[name="appearance"][value="light"]')).toBeChecked();
+  await expect(icon).not.toHaveAttribute("href", darkIcon);
   await safariPage.context().close();
 }
 
 // A real service worker's requests skip the test's routes for the page's fake hosts, so the page
-// gets a registration whose push manager is the stand-in's.
+// gets a registration whose push manager is the stand-in's, held until the test releases it, so
+// a tap can land while the page still reads whether the phone is subscribed.
 function standInForServiceWorker() {
   const registration = /** @type {ServiceWorkerRegistration} */ (
     /** @type {unknown} */ ({ pushManager: Object.create(PushManager.prototype) })
   );
-  navigator.serviceWorker.register = async () => registration;
+  const registered = new Promise((resolve) => {
+    Object.assign(window, { releaseServiceWorker: () => resolve(registration) });
+  });
+  navigator.serviceWorker.register = () => registered;
+}
+
+/** @param {import("@playwright/test").Page} page */
+const releaseServiceWorker = (page) =>
+  page.evaluate(() =>
+    /** @type {Window & { releaseServiceWorker: () => void }} */ (window).releaseServiceWorker(),
+  );
+
+/**
+ * Use new site, tapped while the page still reads whether the phone has a push subscription,
+ * carries that it has one, so the new site's Home Screen app asks to turn notifications on again.
+ * @param {MovingApp} app
+ */
+export async function checkMoveCarriesNotifications(app) {
+  const { page } = app;
+  await page.addInitScript(stubPushManager, PUSH_STUB);
+  await page.addInitScript(standInForServiceWorker);
+  await openOldHomeScreenApp(app);
+  await page.evaluate(async () => {
+    await Notification.requestPermission();
+    await Object.create(PushManager.prototype).subscribe({
+      applicationServerKey: new Uint8Array(65).buffer,
+    });
+  });
+  const { handoff } = await holdHandoff(page, app.pageHost);
+  await tapUpdatesButton(page, MOVE_BUTTON);
+  await releaseServiceWorker(page);
+  expect(unpack((await handoff).searchParams.get("carried")).notifications).toBe(true);
 }
 
 /**
@@ -453,8 +541,9 @@ export async function checkNotificationsAskGoes(app, buttonName) {
 }
 
 /**
- * Turn on asks the phone, subscribes it, and saves the subscription with the Worker, and the ask
- * goes for good, across a reload.
+ * Turn on, tapped while the page still reads whether the phone is subscribed, asks the phone,
+ * subscribes it, and saves the subscription with the Worker, and the ask goes for good, across a
+ * reload.
  * @param {MovingApp} app
  */
 export async function checkTurnOn(app) {
@@ -465,6 +554,7 @@ export async function checkTurnOn(app) {
       response.url().endsWith("/push/subscription") && response.request().method() === "PUT",
   );
   await tapUpdatesButton(page, TURN_ON_BUTTON);
+  await releaseServiceWorker(page);
   expect((await saving).ok()).toBe(true);
   const updates = findUpdates(page);
   await expect(updates).toBeHidden();

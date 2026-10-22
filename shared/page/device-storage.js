@@ -1,9 +1,9 @@
 // What a viewer chooses on a page, like a ranking, a dismissal, or a theme, kept on their own
 // device as JSON under its key. Nobody signs in, and people share a page's address, so the page
-// saves nothing of a viewer's to the store. An app moving to its own address carries every choice
-// made here (page-move.js), and each tells the page when something other than the page itself, like
-// another tab, changes it. Storage can refuse access, as in a private window, or be full, and then a
-// choice lasts until the page reloads.
+// saves nothing of a viewer's to the store. An app moving to its own address carries the choices
+// made here, as many as fit (page-move.js), and each tells the page when something other than the
+// page itself, like another tab, changes it. Storage can refuse access, as in a private window, or
+// be full, and then a choice lasts until the page reloads.
 
 import { readStoredText, storeJson } from "./local-storage.js";
 

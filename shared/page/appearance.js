@@ -304,6 +304,8 @@ export function startAppearance(looks) {
     showChosenTheme();
     updateNote();
   });
+  // Closing the welcome finishes a move, and the icon picked for it goes with it.
+  findElement("homeScreenWelcome").addEventListener("close", showChosenTheme);
   appearance.watch(() => {
     openThemeAddress(appearance.read());
     checkSavedChoice(findAppearanceChoices());

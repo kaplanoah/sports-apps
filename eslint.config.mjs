@@ -134,8 +134,8 @@ export default [
   },
   {
     // An app's page keeps a viewer's choice only through createViewerChoice in
-    // shared/page/device-storage.js, which keeps it as JSON under its own key, lists it, and tells
-    // the page's other tabs when it changes. A block's rule replaces an earlier block's, so this
+    // shared/page/device-storage.js, which keeps it as JSON under its own key and tells the
+    // page's other tabs when it changes. A block's rule replaces an earlier block's, so this
     // one keeps the local-time restrictions too.
     files: ["apps/*/page/js/**/*.js"],
     rules: {
