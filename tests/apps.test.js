@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -18,6 +18,7 @@ import {
   listWorkersOrExit,
 } from "../worker/apps.mjs";
 import { createServiceRoots } from "./service-roots.js";
+import { readRepoFile } from "./repo-files.js";
 
 test("an app is a folder under apps/ whose Worker has a wrangler.toml", () => {
   assert.ok(listApps().includes("mlb"));
@@ -42,7 +43,7 @@ test("the apps with browser tests are the apps with a tests/browser folder", () 
     rmSync(root, { recursive: true, force: true });
   }
   assert.match(
-    readFileSync(new URL("../playwright.config.mjs", import.meta.url), "utf8"),
+    readRepoFile("playwright.config.mjs"),
     /const appsWithBrowserTests = listAppsWithBrowserTests\(\);/,
   );
 });
@@ -63,7 +64,7 @@ const SHARED_LOADS = {
  * @param {string} file
  */
 const listSharedLoads = (app, file) =>
-  [...readFileSync(`${findPageRoot(app)}${file}`, "utf8").matchAll(SHARED_LOADS[file])].map(
+  [...readRepoFile(`apps/${app}/page/${file}`).matchAll(SHARED_LOADS[file])].map(
     ([, path, call]) => path ?? call,
   );
 

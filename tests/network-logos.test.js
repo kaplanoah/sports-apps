@@ -4,6 +4,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { readThemeToken } from "./css-rules.js";
 import { readPngPixels } from "./png-pixels.js";
+import { REPO_ROOT, readRepoFile } from "./repo-files.js";
 import {
   describeChannel,
   listNetworkLogos,
@@ -15,7 +16,7 @@ import {
 const listLogos = (names) =>
   /** @type {import("../shared/page/network-logos.js").NetworkLogo[]} */ (listNetworkLogos(names));
 
-const LOGO_FOLDER = new URL("../shared/page/networks/", import.meta.url);
+const LOGO_FOLDER = new URL("shared/page/networks/", REPO_ROOT);
 
 /** @param {string[]} networks */
 const renderNetworksLine = (networks) => String(renderNetworks(networks));
@@ -80,14 +81,14 @@ test("every logo is a PNG or a plain drawing: no scripts, links, or anything it 
       );
       continue;
     }
-    const svg = readFileSync(new URL(file, LOGO_FOLDER), "utf8");
+    const svg = readRepoFile(`shared/page/networks/${file}`);
     assert.match(svg, /^<svg[^>]*viewBox=/, file);
     assert.doesNotMatch(svg, /<script|\son\w+=|href="(?!#)|url\((?!#)|@import/i, file);
   }
 });
 
 const WALNUT_INK = readThemeToken(
-  fileURLToPath(new URL("../apps/wnba/page/styles.css", import.meta.url)),
+  fileURLToPath(new URL("apps/wnba/page/styles.css", REPO_ROOT)),
   "dark",
   "--ink",
 );
@@ -96,7 +97,7 @@ const WALNUT_INK = readThemeToken(
 const listDrawingColors = (file) =>
   new Set(
     [
-      ...readFileSync(new URL(file, LOGO_FOLDER), "utf8").matchAll(
+      ...readRepoFile(`shared/page/networks/${file}`).matchAll(
         /(?:fill|stroke|stop-color)\s*[=:]\s*"?(#[0-9a-f]{3,6})/gi,
       ),
     ].map(([, color]) => color.toLowerCase()),

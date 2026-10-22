@@ -1,14 +1,15 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync, readdirSync } from "node:fs";
+import { readdirSync } from "node:fs";
 import { createContext, runInContext } from "node:vm";
+import { REPO_ROOT, readRepoFile } from "./repo-files.js";
 
 const MINUTE_MS = 60 * 1000;
-const PAGE_CODE = new URL("../shared/page/", import.meta.url);
+const PAGE_CODE = new URL("shared/page/", REPO_ROOT);
 
 // The plain script loads in the page's head, so it runs here as the page runs it, on its own.
 const context = createContext({});
-runInContext(readFileSync(new URL("long-away.js", PAGE_CODE), "utf8"), context);
+runInContext(readRepoFile("shared/page/long-away.js"), context);
 const isAwayLong = runInContext("isAwayLong", context);
 const findPlaceInPage = runInContext("findPlaceToShow", context);
 /** The place the page's script finds, in this test's own objects, as it compares them. */
@@ -105,8 +106,7 @@ test("a part saved at a time that can't be read starts over", () => {
 test("only long-away.js keeps the two minutes, which the page's other code reads from it", () => {
   const keepers = readdirSync(PAGE_CODE).filter(
     (name) =>
-      name.endsWith(".js") &&
-      /const \w*AFTER_AWAY_MS\b/.test(readFileSync(new URL(name, PAGE_CODE), "utf8")),
+      name.endsWith(".js") && /const \w*AFTER_AWAY_MS\b/.test(readRepoFile(`shared/page/${name}`)),
   );
   assert.deepEqual(keepers, ["long-away.js"]);
 });

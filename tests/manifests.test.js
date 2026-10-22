@@ -1,12 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { listApps } from "../worker/apps.mjs";
+import { REPO_ROOT, readRepoFile } from "./repo-files.js";
 
-const readManifest = (app) =>
-  JSON.parse(
-    readFileSync(new URL(`../apps/${app}/page/manifest.webmanifest`, import.meta.url), "utf8"),
-  );
+const readManifest = (app) => JSON.parse(readRepoFile(`apps/${app}/page/manifest.webmanifest`));
 
 // Chrome offers to install a page only when its manifest has both of these sizes.
 test("every app's manifest offers the icons Android needs to install it", () => {
@@ -17,7 +15,7 @@ test("every app's manifest offers the icons Android needs to install it", () => 
     assert.ok(sizes.includes("512x512"), app);
     assert.equal(display, "standalone", app);
     for (const { src } of icons)
-      assert.ok(existsSync(new URL(`../apps/${app}/page/${src}`, import.meta.url)), src);
+      assert.ok(existsSync(new URL(`apps/${app}/page/${src}`, REPO_ROOT)), src);
   }
 });
 
