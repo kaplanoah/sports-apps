@@ -19,7 +19,6 @@ import {
   isStillToComeToday,
   nameDay,
   readCalendarDate,
-  readCalendarYear,
   readDayOfMonth,
   readEasternDay,
   readMinutesIntoDay,
@@ -301,7 +300,6 @@ test("a time of day in minutes reads as a clock time, with its minutes only off 
 test("a moment's date and time name its year only when it isn't now's, by the viewer's calendar", () =>
   checkInTimeZone("America/Los_Angeles", () => {
     const newYearsEve = new Date("2027-01-01T05:00:00Z");
-    assert.equal(readCalendarYear(newYearsEve), 2026);
     assert.equal(
       normalizeSpaces(formatDateAndTime(newYearsEve, new Date(2026, 11, 31, 22))),
       "Dec 31, 9:00 PM",

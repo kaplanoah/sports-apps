@@ -4,7 +4,7 @@ import { buildBracket } from "./bracket.js";
 import { namePlayerIndexKey, readPlayerIndex } from "#shared/page-search.js";
 import { createSeasonDocFollower } from "#shared/season-doc-follower.js";
 import { SNAPSHOT_VERSION, nameScheduleCollection } from "./snapshot.js";
-import { composeState, guessSeasonYear, session } from "./session.js";
+import { composeState, guessSeasonYear, isPastSeason, session } from "./session.js";
 import { TEAMS } from "./teams.js";
 
 // The Worker keeps each season's record in the store as it plays out, says which season is
@@ -168,11 +168,11 @@ export function startSeasonData({ showChange, showStamp, showCurrentYear, showUn
   });
 }
 
-// A page whose load failed may be watching a season the store doesn't have yet, and the store may
-// have moved on to a new season, so a retry loads the current season again.
+// A page showing a past season, as its last showing does on a reload, loads it again, and one
+// showing the current season loads whichever the store now says is current, as it may have moved on.
 export async function loadSeason() {
   try {
-    await reader?.loadCurrentSeason();
+    await reader?.loadSeason(isPastSeason() ? session.activeYear : null);
     session.currentSeason = reader?.readCurrentYear() ?? session.currentSeason;
   } catch {
     noteUnreachable();

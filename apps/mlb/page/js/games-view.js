@@ -25,7 +25,7 @@ import {
   nameSeriesGame,
 } from "./series-games.js";
 import { groupGamesByDay, listSeasonGames, nameGameKey } from "./season-games.js";
-import { session } from "./session.js";
+import { isPastSeason, session } from "./session.js";
 
 const HALF_INNING_LABELS = { top: "Top", middle: "Mid", bottom: "Bot", end: "End" };
 const OUT_LIGHTS = 2;
@@ -363,7 +363,7 @@ const findLiveDay = (games) => games.find((game) => game.state === "live")?.date
 
 /** @param {any} slate */
 function describeEmptySeason(slate) {
-  if (session.activeYear !== session.currentSeason) return "No games saved for this season yet";
+  if (isPastSeason()) return "No games saved for this season yet";
   if (!slate) return "Games appear here as soon as the page can reach MLB";
   return "No games scheduled yet";
 }

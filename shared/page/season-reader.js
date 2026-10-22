@@ -2,10 +2,10 @@ import { isSameJson } from "./compare.js";
 
 // Reads a league's season from the store, which says which season is current, so a page never goes
 // by its own clock, and pushes each change to the season's record. A page showing the current
-// season moves on to the next one when the store does. Each season a viewer picks is kept while its
-// record is on its way, and put back on the season shown when it can't be read. A page reads a
-// record in the version it knows, or one saved before records had a version, and reloads once the
-// newer release that saved one is out.
+// season moves on to the next one when the store does, and a page that loads again on a past season
+// stays on it. Each season a viewer picks is kept while its record is on its way, and put back on
+// the season shown when it can't be read. A page reads a record in the version it knows, or one
+// saved before records had a version, and reloads once the newer release that saved one is out.
 
 const CURRENT_PATH = "live/current";
 const STATUS_PATH = "live/status";
@@ -55,11 +55,14 @@ export function createSeasonReader({
   /** @type {number | null} */
   let currentYear = null;
   // The season whose record the page shows, and the one it last asked for, which differ while a
-  // record is on its way, or, before any has loaded, after the current season's read failed.
+  // record is on its way, or, before any has loaded, after a load's read failed.
   /** @type {number | null} */
   let shownYear = null;
   /** @type {number | null} */
   let askedYear = null;
+  // The past season the page last loaded on, null when it loaded the current one.
+  /** @type {number | null} */
+  let loadedPastYear = null;
   // The record as the store last answered, whether or not the page reads it.
   /** @type {any} */
   let lastRecord = null;
@@ -126,10 +129,10 @@ export function createSeasonReader({
   }
 
   // A season that can't be read leaves the page on the season it shows, with any change to it that
-  // came while the read was out. A page that shows none yet still asks for the current one, so it
-  // moves on when the store does.
+  // came while the read was out. A page that shows none yet still asks for the past season it loads
+  // on, or else the current one, so it moves on when the store does.
   function stayOnShownYear() {
-    askedYear = shownYear ?? currentYear;
+    askedYear = shownYear ?? loadedPastYear ?? currentYear;
     const record = heldRecord;
     heldRecord = null;
     if (shownYear !== null && record !== null) showRecord(shownYear, record);
@@ -188,20 +191,29 @@ export function createSeasonReader({
   }
 
   // A load that failed is tried again by loading again, since the store may since have answered
-  // or moved on to a new season.
-  async function loadCurrentSeason() {
+  // or moved on to a new season. A load on a past season asks for it before its first read, so a
+  // store that names a new current season while that read is out leaves the page on it.
+  /** @param {number | null} pastYear */
+  async function loadSeason(pastYear) {
+    loadedPastYear = pastYear;
+    if (pastYear !== null) askedYear = pastYear;
     try {
-      const { year, record } = await readCurrentSeason();
-      currentYear = year;
-      await showYear(year, record);
+      const current = await readCurrentSeason();
+      currentYear = current.year;
+      const year = pastYear ?? current.year;
+      await showYear(year, year === current.year ? current.record : undefined);
     } finally {
       followStore();
     }
   }
 
   return {
-    /** Loads the season the store says is current, and then follows the store. */
-    loadCurrentSeason,
+    /**
+     * Loads the past season the page shows, which a reload stays on, or else the season the store
+     * says is current, and then follows the store.
+     * @param {number | null} [pastYear]
+     */
+    loadSeason: (pastYear = null) => loadSeason(pastYear),
     /** @param {number} year */
     showYear: (year) => showYear(year),
     /** The season the store says is current, or null before it has said. */

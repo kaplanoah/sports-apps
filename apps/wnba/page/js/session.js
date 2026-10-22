@@ -1,11 +1,13 @@
-import { readCalendarYear } from "#shared/days.js";
+import { isEarlierSeason } from "#shared/title-year.js";
 
 // What the page shows, read from the Worker's store and kept current as it changes.
 export const session = {
   /** @type {ReturnType<typeof import("#shared/worker-store.js").createWorkerStore> | null} */
   db: null,
-  // The season shown, and the one the store says is current, null until it says.
-  year: readCalendarYear(new Date()),
+  // The season shown, and the one the store says is current, each null until the store or the
+  // page's last showing names it.
+  /** @type {number | null} */
+  year: null,
   /** @type {number | null} */
   currentYear: null,
   // The season picked, which the page shows once its record arrives, null until the store or the
@@ -33,6 +35,5 @@ export const session = {
   problem: "",
 };
 
-/** Whether the season shown is over, one the store keeps from before the current one. */
-export const isPastSeason = () =>
-  session.currentYear !== null && session.year !== session.currentYear;
+/** Whether the page shows a season before the one the store says is current. */
+export const isPastSeason = () => isEarlierSeason(session.year, session.currentYear);

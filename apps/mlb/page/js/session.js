@@ -1,4 +1,5 @@
 import { readEasternDay } from "#shared/days.js";
+import { isEarlierSeason } from "#shared/title-year.js";
 
 const FRESH_FINAL_MS = 10 * 60 * 1000;
 const APRIL = 4;
@@ -15,8 +16,12 @@ export const hasSpringStarted = (springStart, now = Date.now()) =>
 
 export const session = {
   db: null,
-  currentSeason: guessSeasonYear(),
-  activeYear: guessSeasonYear(),
+  // The season the store says is current, and the season shown, or picked while its record is on
+  // its way, each null until the store or the page's last showing names it.
+  /** @type {number | null} */
+  currentSeason: null,
+  /** @type {number | null} */
+  activeYear: null,
   // The shown season's record, as the Worker saves it.
   season: null,
   // Every game of the shown season, which the Games view lists, null when the store has none.
@@ -39,6 +44,9 @@ export const session = {
 };
 
 export const readSeasonYear = () => session.currentSeason;
+
+/** Whether the page shows, or has picked, a season before the one the store says is current. */
+export const isPastSeason = () => isEarlierSeason(session.activeYear, session.currentSeason);
 
 /** Whether the shown season's playoff field is set, rather than projected from the standings. */
 export const isFieldSet = () => session.state?.projected === false;

@@ -7,7 +7,7 @@ import { html } from "#shared/html.js";
 import { dismissNotes, listNotesToShow, readOrStartSeenAt, showUpdates } from "#shared/updates.js";
 import { keepSeenAt, readSeenAt } from "./kept-on-device.js";
 import { RELEASE_NOTES } from "./release-notes.js";
-import { session, readSeasonYear } from "./session.js";
+import { isPastSeason, session } from "./session.js";
 import { TEAMS } from "./teams.js";
 import { renderGameButton } from "./games-view.js";
 import { describeGame, findCommonGames, groupUpdates, isResult } from "./update-groups.js";
@@ -34,8 +34,6 @@ const readHappenedAt = (entry) => Date.parse(entry.ended || entry.at);
 const findHappenedAt = (group) => Math.max(...group.map(readHappenedAt));
 
 const readNoticedAt = (entry) => Date.parse(entry.at);
-
-const isCurrentSeason = () => session.activeYear === readSeasonYear();
 
 // A page that couldn't read its season shows an empty one in its place, which says nothing of
 // what's out. The copy a page draws first from its last visit does say what was out then, so a
@@ -118,7 +116,7 @@ export const listUpdates = () => listFreshUpdates().map(describeUpdateGroup);
 // Each device keeps when its box counts from, so the box shows only on phones and tablets, not
 // again on each computer.
 export function renderUpdates() {
-  const isShown = isTouchDevice() && isCurrentSeason();
+  const isShown = isTouchDevice() && !isPastSeason();
   const updates = isShown ? listUpdates() : [];
   showUpdates(/** @type {HTMLElement} */ (document.getElementById("updates")), updates, {
     dismiss: dismissUpdates,
