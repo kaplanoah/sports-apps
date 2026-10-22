@@ -34,6 +34,7 @@ import { fillStamp } from "#shared/stamp.js";
 import { chooseTitleYear, showTitleYear } from "#shared/title-year.js";
 import { createWorkerStore } from "#shared/worker-store.js";
 import { startAppearance } from "#shared/appearance.js";
+import { startPageMove } from "#shared/page-move.js";
 import {
   showSeasonPart,
   showSeasonPhase,
@@ -41,6 +42,7 @@ import {
 } from "#shared/bracket-standings.js";
 import { BACKGROUND_JOBS } from "./background-jobs.js";
 import { LOOKS } from "./looks.js";
+import { IS_MOVING_TO_PAGE_HOST } from "./move.js";
 import { placeBracket, startBracket, takeBracketScroll } from "./bracket-tree.js";
 import { renderBracket } from "./bracket-view.js";
 import { openGameSection, refreshGameSheet, startGameSheet } from "./game-sheet.js";
@@ -265,6 +267,7 @@ function catchUp(awayMs) {
 async function boot() {
   startDiagnostics();
   startAppearance(LOOKS);
+  startPageMove({ isMoving: IS_MOVING_TO_PAGE_HOST, redraw: () => redrawEased(drawUpdates) });
   watchReturns({ catchUp, pause: () => session.db.pause() });
   trackKeyboardFocus();
   watchPresses([".team-line .team-open"]);

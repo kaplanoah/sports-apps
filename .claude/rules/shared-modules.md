@@ -87,6 +87,9 @@ but for the tuning panel's, which only a channel off production serves, and only
 - `re-add-note.js`: when settings shows the note on updating the icon
 - `appearance.js`: settings' Appearance choices and the note on updating the icon
 - `handoff.js`: keeping a handoff from the Worker that signs another browser in
+- `move-choices.js`: the choices an app's move to its own address carries, before the first paint
+- `move-notices.js`: when the Updates box shows the move's card or its notifications ask, and their markup
+- `page-move.js`: moving fans from the address under the key to the app's own
 - `dismiss-button.js`: the X in a box's corner
 
 ### Standings and bracket
@@ -206,7 +209,7 @@ Pages link these before their own stylesheet, and theme them with the tokens the
 - `team-sheet.css`: a team's sheet and the buttons that open one
 - `row-button.css`: a table's row that opens wherever it's tapped
 - `game-cards.css`: the cards of a team's nearest games
-- `updates.css`: the Updates box
+- `updates.css`: the Updates box, and the move's card and notifications ask in it
 - `news.css`: the News view's layout
 - `retry.css`: what a sheet shows where a read failed
 - `highlights.css`: a final's Highlights

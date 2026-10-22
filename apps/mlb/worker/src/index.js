@@ -1,5 +1,6 @@
 import PAGE_FILES from "#page-files/mlb";
 import { createAppWorker } from "../../../../shared/worker/app-worker.js";
+import { IS_MOVING_TO_PAGE_HOST } from "../../page/js/move.js";
 import { createBoxScoreServer } from "./box-score.js";
 import { createHighlightsServer } from "./highlights.js";
 import { LEAGUE_READS_COUNT, PITCHER_JOB } from "./pitcher-updater.js";
@@ -25,6 +26,7 @@ export default createAppWorker({
   pageFiles: PAGE_FILES,
   forwardToStore,
   isStoreAnswering,
+  isMovingToPageHost: IS_MOVING_TO_PAGE_HOST,
   reads: {
     "/box-score": (url, env) => boxScores.serveBoxScore(url, (key) => readStoreDoc(env, key)),
     "/highlights": (url, env) => highlights.serveHighlights(url, (key) => readStoreDoc(env, key)),

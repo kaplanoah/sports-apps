@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import * as MLBSnapshot from "../../page/js/snapshot.js";
 import PAGE_FILES from "#page-files/mlb";
 import { createAppWorker } from "../../../../shared/worker/app-worker.js";
+import { IS_MOVING_TO_PAGE_HOST } from "../../page/js/move.js";
 import { describeBoxScore } from "../../worker/src/box-score.js";
 import { describeHighlights } from "../../worker/src/highlights.js";
 import {
@@ -348,6 +349,7 @@ const isWriteRequest = (request) => request.method() !== "GET";
  *   which most tests can do without
  * @param {boolean} [options.isShowingWelcome] whether a phone's browser opens on the welcome,
  *   which starts closed unless a test is about it
+ * @param {string} [options.address] where the page opens
  */
 export async function openApp(
   page,
@@ -363,6 +365,7 @@ export async function openApp(
     highlights = RECORDED_HIGHLIGHTS,
     isWholeSeason = false,
     isShowingWelcome = false,
+    address = "/",
   } = {},
 ) {
   const snapshotsBySeason = {
@@ -434,7 +437,7 @@ export async function openApp(
       return route.fulfill({ contentType: "text/html", body: "<h1>Sign in to Wi-Fi</h1>" });
     return route.fallback();
   });
-  await loadPageAt(page, now, { isShowingWelcome });
+  await loadPageAt(page, now, { isShowingWelcome, address });
 
   const readDocument = async (path) => (await context.ctx.storage.get(path)) ?? null;
   // The Worker finding the official bracket set, which the Updates box lists.
@@ -604,6 +607,7 @@ export function serveLockedApp(page, { accessCode }) {
     pageFiles: PAGE_FILES,
     forwardToStore,
     isStoreAnswering: async () => true,
+    isMovingToPageHost: IS_MOVING_TO_PAGE_HOST,
   });
   return serveLockedPage(page, { worker, testStore, accessCode, now: EVENING_FIXTURE.now });
 }

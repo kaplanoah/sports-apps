@@ -198,13 +198,13 @@ export async function connectToStore(page, testStore) {
  * closed, so a page not about it starts with it closed.
  * @param {import("@playwright/test").Page} page
  * @param {string} now
- * @param {{ isShowingWelcome?: boolean }} [options]
+ * @param {{ isShowingWelcome?: boolean, address?: string }} [options]
  */
-export async function loadPageAt(page, now, { isShowingWelcome = false } = {}) {
+export async function loadPageAt(page, now, { isShowingWelcome = false, address = "/" } = {}) {
   if (!isShowingWelcome)
     await page.addInitScript(() => localStorage.setItem("homeScreenWelcomeClosed", "closed"));
   await page.clock.install({ time: new Date(now) });
-  await page.goto("/");
+  await page.goto(address);
 }
 
 const PAGE_KEY = "test-key";
@@ -269,6 +269,10 @@ export async function serveLockedPage(page, { worker, testStore, accessCode, now
     },
     limitTries: () => {
       tries.isOverLimit = true;
+    },
+    /** @param {string} host the app's own address, which the Worker hands off to */
+    openPageHost: (host) => {
+      env.PAGE_HOST = host;
     },
   };
 }

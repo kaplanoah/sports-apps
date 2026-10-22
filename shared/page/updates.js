@@ -1,6 +1,7 @@
 // The box under the tabs that lists what's new since the viewer first opened the app or last
 // dismissed the box, newest first, each beside when it happened, and under them, what's new in the
-// app. An app says what its updates and release notes are and where the box's start is kept.
+// app, or a notice in their place. An app says what its updates and release notes are and where
+// the box's start is kept.
 
 import {
   countDaysBetween,
@@ -335,18 +336,31 @@ function showBoxEased(panel, markup) {
 }
 
 /**
- * Shows the updates and release notes in the box, or hides it when there are none. Its dismiss
- * button calls `dismiss`, which forgets them. The box's first showing draws at once, as the rest
- * of the page does, and later ones ease it open or closed.
+ * @param {Update[]} updates
+ * @param {Note[]} notes
+ * @param {Date} today
+ */
+const renderLists = (updates, notes, today) =>
+  updates.length || notes.length ? renderUpdates(updates, notes, today) : null;
+
+/**
+ * Shows the updates and release notes in the box, or hides it when there are none, or a notice
+ * in their place, like the app's move to its own address (move-notices.js). Its dismiss button
+ * calls `dismiss`, which forgets them. The box's first showing draws at once, as the rest of the
+ * page does, and later ones ease it open or closed.
  * @param {HTMLElement} panel
  * @param {Update[]} updates newest first
- * @param {{ dismiss: () => void, notes?: Note[], today?: Date }} options
+ * @param {{ dismiss: () => void, notes?: Note[], today?: Date, notice?: Markup | null }} options
  */
-export function showUpdates(panel, updates, { dismiss, notes = [], today = new Date() }) {
+export function showUpdates(
+  panel,
+  updates,
+  { dismiss, notes = [], today = new Date(), notice = null },
+) {
   const isFirstShowing = !dismissals.has(panel);
   if (isFirstShowing) listenForDismiss(panel);
   dismissals.set(panel, dismiss);
-  const markup = updates.length || notes.length ? renderUpdates(updates, notes, today) : null;
+  const markup = notice ?? renderLists(updates, notes, today);
   if (isFirstShowing) showBoxAtOnce(panel, markup);
   else showBoxEased(panel, markup);
 }

@@ -11,6 +11,7 @@
 /* global isOnHomeScreen, WELCOME_CLOSED_KEY -- from pick-theme.js */
 /* global checkPickedChoice, keepPickedAppearance, readPickedAppearance -- from pick-theme.js */
 /* global readStored -- from open-last-tab.js */
+/* global keepMovedIcon, readMovedIcon, readMoveFromAddress -- from move-choices.js */
 
 const TIP_TITLE = "Use this site like an app";
 const BENEFIT = "It'll open full screen, without the browser's bars";
@@ -84,51 +85,104 @@ function copyThemeChoices() {
   return choices;
 }
 
-/** @param {boolean} isOnIos */
-function drawWelcome(isOnIos) {
-  const welcome = /** @type {HTMLDialogElement} */ (document.getElementById("homeScreenWelcome"));
+// The icons settings' Appearance shows for the app's two looks, as the moving welcome's first step,
+// which picks only the icon the app is added with.
+function copyIconChoices() {
+  const choices = copyThemeChoices();
+  choices.querySelector('input[value="auto"]').closest("label").remove();
+  const inputs = choices.querySelectorAll("input");
+  for (const input of inputs) input.name = "welcomeIcon";
+  checkPickedChoice(inputs, readMovedIcon() ?? document.documentElement.dataset.theme);
+  return choices;
+}
+
+const CLOSE_CARET = `<button type="button" class="welcome-close">
+  <!-- Phosphor's caret-down, at its Light weight. -->
+  <svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true">
+    <path
+      d="M212.24,100.24l-80,80a6,6,0,0,1-8.48,0l-80-80a6,6,0,0,1,8.48-8.48L128,167.51l75.76-75.75a6,6,0,0,1,8.48,8.48Z"
+    />
+  </svg>
+  <span class="sheet-close-label">Close</span>
+</button>`;
+
+/**
+ * @param {boolean} isOnIos
+ * @param {string} appName
+ */
+const writeAddSteps = (isOnIos, appName) => {
   const [shareStep, addStep] = listBrowserSteps(isOnIos);
+  return `<h1 class="gate-title welcome-title" id="welcomeTitle">Add ${appName} to your home screen</h1>
+    <ol class="welcome-steps">
+      <li>
+        <span class="welcome-step" id="welcomePickTitle">Pick your theme</span>
+        <span class="welcome-note">You can change it later in Settings</span>
+        <span class="welcome-step-body"></span>
+      </li>
+      <li data-ask="browser"><span class="welcome-step">${shareStep}</span></li>
+      <li data-ask="browser"><span class="welcome-step">${addStep}</span></li>
+      <li data-ask="install" hidden>
+        <span class="welcome-step">Tap to install</span>
+        <span class="welcome-step-body">
+          <button type="button" class="open-button" data-install>Install</button>
+        </span>
+      </li>
+    </ol>`;
+};
+
+// A viewer the app's old address sent here adds the app again from here, and takes the old one off
+// the Home Screen.
+/**
+ * @param {boolean} isOnIos
+ * @param {string} appName
+ */
+const writeMoveSteps = (isOnIos, appName) => {
+  const [shareStep, addStep] = listBrowserSteps(isOnIos);
+  return `<h1 class="gate-title welcome-title" id="welcomeTitle">Finish moving ${appName}</h1>
+    <ol class="welcome-steps">
+      <li>
+        <span class="welcome-step" id="welcomePickTitle">Pick your icon</span>
+        <span class="welcome-note">You can change your theme later in Settings</span>
+        <span class="welcome-step-body"></span>
+      </li>
+      <li><span class="welcome-step">${shareStep}</span></li>
+      <li><span class="welcome-step">${addStep}</span></li>
+      <li>
+        <span class="welcome-step">Delete the old ${appName} Site</span>
+        <span class="welcome-note">Press and hold, then tap Delete Bookmark</span>
+      </li>
+    </ol>`;
+};
+
+/**
+ * @param {boolean} isOnIos
+ * @param {boolean} isMoving
+ */
+function drawWelcome(isOnIos, isMoving) {
+  const welcome = /** @type {HTMLDialogElement} */ (document.getElementById("homeScreenWelcome"));
+  const appName = /** @type {HTMLMetaElement} */ (
+    document.querySelector('meta[name="apple-mobile-web-app-title"]')
+  ).content;
+  const steps = isMoving ? writeMoveSteps(isOnIos, appName) : writeAddSteps(isOnIos, appName);
   welcome.replaceChildren(
-    ...parseMarkup(`<button type="button" class="welcome-close">
-        <!-- Phosphor's caret-down, at its Light weight. -->
-        <svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true">
-          <path
-            d="M212.24,100.24l-80,80a6,6,0,0,1-8.48,0l-80-80a6,6,0,0,1,8.48-8.48L128,167.51l75.76-75.75a6,6,0,0,1,8.48,8.48Z"
-          />
-        </svg>
-        <span class="sheet-close-label">Close</span>
-      </button>
-      <h1 class="gate-title welcome-title" id="welcomeTitle"></h1>
-      <ol class="welcome-steps">
-        <li>
-          <span class="welcome-step" id="welcomePickTitle">Pick your theme</span>
-          <span class="welcome-note">You can change it later in Settings</span>
-          <span class="welcome-step-body"></span>
-        </li>
-        <li data-ask="browser"><span class="welcome-step">${shareStep}</span></li>
-        <li data-ask="browser"><span class="welcome-step">${addStep}</span></li>
-        <li data-ask="install" hidden>
-          <span class="welcome-step">Tap to install</span>
-          <span class="welcome-step-body">
-            <button type="button" class="open-button" data-install>Install</button>
-          </span>
-        </li>
-      </ol>
+    ...parseMarkup(`${CLOSE_CARET}
+      ${steps}
       <button type="button" class="welcome-continue">Continue in browser</button>`),
   );
-  const appName = document.querySelector('meta[name="apple-mobile-web-app-title"]');
-  welcome.querySelector(".welcome-title").textContent =
-    `Add ${appName.getAttribute("content")} to your home screen`;
-  welcome.querySelector(".welcome-step-body").append(copyThemeChoices());
+  welcome
+    .querySelector(".welcome-step-body")
+    .append(isMoving ? copyIconChoices() : copyThemeChoices());
   return welcome;
 }
 
 // appearance.js also shows the icons and bar that go with the theme picked, once it has loaded.
 /** @param {HTMLDialogElement} welcome */
 function wireWelcome(welcome) {
-  welcome.addEventListener("change", (event) =>
-    keepPickedAppearance(/** @type {HTMLInputElement} */ (event.target).value),
-  );
+  welcome.addEventListener("change", (event) => {
+    const choice = /** @type {HTMLInputElement} */ (event.target);
+    if (choice.name === "welcomeIcon") keepMovedIcon(choice.value);
+    else keepPickedAppearance(choice.value);
+  });
   // Its buttons ask to close it as Escape does: home-screen.js takes the ask and slides it down, and
   // until it loads, nothing does, so it closes at once.
   const askToClose = () => {
@@ -164,7 +218,7 @@ function drawHomeScreenAsks() {
   if (!isBrowserOnTouchDevice()) return;
   const isOnIos = isIosDevice();
   drawTip(isOnIos);
-  const welcome = drawWelcome(isOnIos);
+  const welcome = drawWelcome(isOnIos, readMoveFromAddress() !== null);
   wireWelcome(welcome);
   if (readStored(WELCOME_CLOSED_KEY) === "closed") return;
   // It shows before the first paint, so it's already there, and doesn't rise as it does from

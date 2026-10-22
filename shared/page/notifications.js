@@ -218,6 +218,29 @@ function describeStartStatus() {
   return subscription && Notification.permission === "granted" ? "on" : "off";
 }
 
+/** Whether this device gets the app's notifications, read from the phone, not the switch. */
+export async function isNotifying() {
+  if (!canPush() || Notification.permission !== "granted") return false;
+  try {
+    const current = await navigator.serviceWorker.getRegistration();
+    return !!(await current?.pushManager.getSubscription());
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Turns the switch on from a tap elsewhere, as it would from its own.
+ * @returns {boolean} whether notifications are on or turning on, which they can't be while the
+ *   switch is busy, still loading, or can't do its job
+ */
+export function turnOnNotifications() {
+  if (status === "on") return true;
+  if (isBusy || !SWITCHABLE.has(status)) return false;
+  showBusyDuring(turnOn);
+  return true;
+}
+
 /**
  * @param {{ about?: string }} [options] what the app's notifications tell, under the switch while
  *   it works

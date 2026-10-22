@@ -33,6 +33,7 @@ async function requestHandoff(path) {
 export function keepHandoff({ path, isWanted, onRenewed }) {
   /** @type {string | null} */
   let address = null;
+  let isRefused = false;
   /** @type {ReturnType<typeof setTimeout> | undefined} */
   let renewTimer;
   let renewDueAt = Infinity;
@@ -60,9 +61,10 @@ export function keepHandoff({ path, isWanted, onRenewed }) {
       scheduleRenewal(HANDOFF_RETRY_MS);
       return;
     }
-    address = answer === "none" ? null : answer.address;
+    isRefused = answer === "none";
+    address = isRefused ? null : /** @type {Handoff} */ (answer).address;
     onRenewed();
-    if (answer !== "none") scheduleRenewal(answer.expiresInMs / 2);
+    if (!isRefused) scheduleRenewal(/** @type {Handoff} */ (answer).expiresInMs / 2);
   }
 
   // A handoff kept while the link is away would be stale by the time it shows again.
@@ -85,5 +87,7 @@ export function keepHandoff({ path, isWanted, onRenewed }) {
     follow: followHandoff,
     /** The handoff's address, or null until one arrives or where the Worker refuses one. */
     readAddress: () => address,
+    /** Whether the Worker refused the last request, as it does for a phone it hasn't signed in. */
+    isRefused: () => isRefused,
   };
 }

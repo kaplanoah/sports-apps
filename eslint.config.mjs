@@ -41,6 +41,7 @@ export const PLAIN_SCRIPTS = [
   "shared/page/draw-channel-tag-age.js",
   "shared/page/draw-home-screen-asks.js",
   "shared/page/long-away.js",
+  "shared/page/move-choices.js",
   "shared/page/open-last-tab.js",
   "shared/page/pick-theme.js",
   "shared/page/season-header.js",

@@ -2,8 +2,26 @@ declare const Sortable: {
   create(element: HTMLElement, options: Record<string, unknown>): unknown;
 };
 
-// The page's plain scripts in its head share these, from shared/page/pick-theme.js,
-// long-away.js, open-last-tab.js, show-last-drawn.js, season-header.js, and draw-channel-tag-age.js.
+// The page's plain scripts in its head share these, from shared/page/move-choices.js,
+// pick-theme.js, long-away.js, open-last-tab.js, show-last-drawn.js, season-header.js, and
+// draw-channel-tag-age.js.
+declare const MOVE_KEY: string;
+declare const NOTIFICATIONS_ASK_KEY: string;
+declare function packMove(move: {
+  choices: Record<string, string>;
+  icon: "light" | "dark" | null;
+  isNotifying: boolean;
+}): string;
+declare function readKeptChoices(): Record<string, string>;
+declare function readMoveFromAddress(): {
+  choices: Record<string, string>;
+  icon: "light" | "dark" | null;
+  isNotifying: boolean;
+} | null;
+declare function readMovedIcon(): "light" | "dark" | null;
+declare function keepMovedIcon(icon: string): void;
+declare function takeMovedChoices(isAppOnHomeScreen: boolean): void;
+declare function carryKeptChoices(): void;
 declare function isOnHomeScreen(): boolean;
 declare function isAppearanceChoice(value: unknown): boolean;
 declare function readPickedAppearance(): string;

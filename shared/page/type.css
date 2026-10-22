@@ -22,6 +22,8 @@
  *   caption       the smallest text: seeds, stat details, credits
  *   setting       a setting's name, a step up, as the phone's own Settings set it
  *   setting-note  a setting's note
+ *   notice-title  a notice's title: the card on the app's move, the notifications ask
+ *   notice        a notice's text
  *
  * tests/type-roles.test.js checks that every size comes from a role, and
  * tests/browser/type-roles.mjs that every shown text draws at its app's role sizes, in a face the

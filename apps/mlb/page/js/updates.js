@@ -4,6 +4,7 @@ import { describeEntry, describeUpdate } from "./entry-text.js";
 import { readCalendarDate } from "#shared/days.js";
 import { isTouchDevice } from "#shared/device.js";
 import { html } from "#shared/html.js";
+import { renderMoveNotice } from "#shared/page-move.js";
 import { dismissNotes, listNotesToShow, readOrStartSeenAt, showUpdates } from "#shared/updates.js";
 import { keepSeenAt, readSeenAt } from "./kept-on-device.js";
 import { RELEASE_NOTES } from "./release-notes.js";
@@ -118,12 +119,14 @@ export const listUpdates = () => listFreshUpdates().map(describeUpdateGroup);
 // Each device keeps when its box counts from, so the box shows only on phones and tablets, not
 // again on each computer.
 export function renderUpdates() {
-  const isShown = isTouchDevice() && isCurrentSeason();
+  const notice = renderMoveNotice();
+  const isShown = notice === null && isTouchDevice() && isCurrentSeason();
   const updates = isShown ? listUpdates() : [];
   showUpdates(/** @type {HTMLElement} */ (document.getElementById("updates")), updates, {
     dismiss: dismissUpdates,
     notes: isShown ? listNotesToShow(RELEASE_NOTES) : [],
     today: readCalendarDate(readMlbDay(Date.now())),
+    notice,
   });
 }
 

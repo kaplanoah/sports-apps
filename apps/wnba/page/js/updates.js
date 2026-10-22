@@ -7,6 +7,7 @@
 import { countDaysBetween } from "#shared/days.js";
 import { isTouchDevice } from "#shared/device.js";
 import { createViewerChoice } from "#shared/device-storage.js";
+import { renderMoveNotice } from "#shared/page-move.js";
 import {
   dismissNotes,
   listNotesToShow,
@@ -106,9 +107,11 @@ export function watchUpdatesSeen(onChange) {
 }
 
 export function drawUpdates() {
-  const isShown = isTouchDevice() && !isPastSeason();
+  const notice = renderMoveNotice();
+  const isShown = notice === null && isTouchDevice() && !isPastSeason();
   showUpdates(findPanel(), isShown ? listFreshUpdates() : [], {
     dismiss: dismissUpdates,
     notes: isShown ? listNotesToShow(RELEASE_NOTES) : [],
+    notice,
   });
 }

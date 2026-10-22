@@ -9,6 +9,7 @@
 // Every page that loads this runs pick-theme.js first.
 /* global buildSafariAddress, checkPickedChoice, isAppearanceChoice, isLook, openThemeAddress,
    readHomeScreenIcon, readPhoneLook -- from pick-theme.js */
+/* global readMovedIcon -- from move-choices.js */
 
 import { isIos, isOnHomeScreen } from "./device.js";
 import { createViewerChoice } from "./device-storage.js";
@@ -44,18 +45,26 @@ const appearance = createViewerChoice("appearance", (stored) =>
  */
 const resolveTheme = (choice) => (isLook(choice) ? choice : readPhoneLook());
 
+/**
+ * @param {Looks} looks
+ * @param {"light" | "dark"} icon
+ */
+function offerHomeScreenIcon(looks, icon) {
+  findElement("homeScreenIcon").setAttribute("href", looks[icon].homeScreenIcon);
+}
+
 // A phone keeps the icon a page offers at the moment it's added to the home screen, so the page
-// offers the one that matches the theme showing.
+// offers the one that matches the theme showing, or the one picked for a move.
 /**
  * @param {Looks} looks
  * @param {"light" | "dark"} theme
  */
 function showTheme(looks, theme) {
-  const { barColor, tabIcon, homeScreenIcon } = looks[theme];
+  const { barColor, tabIcon } = looks[theme];
   document.documentElement.dataset.theme = theme;
   findElement("themeColor").setAttribute("content", barColor);
   findElement("tabIcon").setAttribute("href", tabIcon);
-  findElement("homeScreenIcon").setAttribute("href", homeScreenIcon);
+  offerHomeScreenIcon(looks, readMovedIcon() ?? theme);
 }
 
 /**
@@ -210,10 +219,22 @@ function wireNote() {
   });
 }
 
+// The moving welcome's icon picks change only the icon the app is added with, which the move keeps
+// for the app's first open (draw-home-screen-asks.js), and leave the theme as it is.
+/** @param {Looks} looks */
+function wireMoveIconChoices(looks) {
+  for (const choice of document.querySelectorAll('input[name="welcomeIcon"]')) {
+    choice.addEventListener("change", () => {
+      const icon = /** @type {HTMLInputElement} */ (choice).value;
+      if (isLook(icon)) offerHomeScreenIcon(looks, icon);
+    });
+  }
+}
+
 /**
  * Wires the settings' Appearance choices, and the welcome's copy of them
- * (draw-home-screen-asks.js), to the look they pick, and the note on bringing a Home Screen app's
- * icon up to date.
+ * (draw-home-screen-asks.js), to the look they pick, the moving welcome's icon picks to the icon
+ * the app is added with, and the note on bringing a Home Screen app's icon up to date.
  * @param {Looks} looks
  */
 export function startAppearance(looks) {
@@ -240,5 +261,6 @@ export function startAppearance(looks) {
   });
   watchTimeAway(keepReturnTime);
   darkScheme.addEventListener("change", followPhoneLook);
+  wireMoveIconChoices(looks);
   wireNote();
 }

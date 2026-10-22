@@ -1,10 +1,13 @@
 // Picks the theme before the first paint, so a dark look never flashes the light one. It loads as
-// a plain script in each page's head, before the other plain scripts, which read the picked look
-// and the Home Screen as it does; appearance.js keeps the theme, and the icons and bar color that
-// go with it, current. The browser's address names the theme picked, which a Home Screen app keeps
-// on its first open, and Safari loads the page again after a pick, since it takes the app's
-// address and its bars' color from the page as it loaded. It keeps the look of each install's
-// icon, and an iPhone's app hands Safari a link to add the site again on the theme picked.
+// a plain script in each page's head, after move-choices.js, which it calls to take the choices a
+// move carries, and before the other plain scripts, which read the picked look and the Home Screen
+// as it does; appearance.js keeps the theme, and the icons and bar color that go with it, current.
+// The browser's address names the theme picked, which a Home Screen app keeps on its first open,
+// and Safari loads the page again after a pick, since it takes the app's address and its bars'
+// color from the page as it loaded. It keeps the look of each install's icon, and an iPhone's app
+// hands Safari a link to add the site again on the theme picked.
+
+/* global carryKeptChoices, readMovedIcon, takeMovedChoices -- from move-choices.js */
 
 // The same test of the Home Screen as device.js makes for the page's modules.
 const isOnHomeScreen = () =>
@@ -138,9 +141,10 @@ function takeThemeFromApp() {
 }
 
 // A Home Screen app keeps the icon the page offered as it was added: the look its address names,
-// which it opens at each time, or, added on System, the look the phone's dark or light setting
-// showed then, which its first open is the nearest to. A reload, as a new release brings, opens at
-// the address the open before it left, which no longer names the look.
+// which it opens at each time, a move's icon before its theme, or, added on System, the look the
+// phone's dark or light setting showed then, which its first open is the nearest to. A reload, as
+// a new release brings, opens at the address the open before it left, which no longer names the
+// look.
 const HOME_SCREEN_ICON_KEY = "homeScreenIcon";
 
 const isReload = () =>
@@ -148,7 +152,7 @@ const isReload = () =>
     ?.type === "reload";
 
 function keepHomeScreenIcon() {
-  const named = new URL(location.href).searchParams.get("theme");
+  const named = readMovedIcon() ?? new URL(location.href).searchParams.get("theme");
   try {
     if (isLook(named)) localStorage.setItem(HOME_SCREEN_ICON_KEY, named);
     else if (!isReload() && localStorage.getItem(HOME_SCREEN_ICON_KEY) === null)
@@ -199,13 +203,16 @@ function keepPickedAppearance(choice) {
   openThemeAddress(choice);
 }
 
-if (!isOnHomeScreen()) takeThemeFromApp();
+if (isOnHomeScreen()) keepHomeScreenIcon();
+takeMovedChoices(isOnHomeScreen());
+if (!isOnHomeScreen()) {
+  takeThemeFromApp();
+  carryKeptChoices();
+}
 
 try {
-  if (isOnHomeScreen()) {
-    keepHomeScreenIcon();
-    keepThemeFromAddress();
-  } else nameThemeInAddress(readPickedAppearance());
+  if (isOnHomeScreen()) keepThemeFromAddress();
+  else nameThemeInAddress(readPickedAppearance());
   showTheme(readPickedAppearance());
 } catch {
   document.documentElement.dataset.theme = "light";

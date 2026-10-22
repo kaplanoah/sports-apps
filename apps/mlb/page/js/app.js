@@ -31,6 +31,7 @@ import { listFoundGameDays } from "./games-view.js";
 import { listSeasonGames } from "./season-games.js";
 import { REORDER_EVENT } from "./ranking.js";
 import { renderAll } from "./render.js";
+import { renderUpdates } from "./updates.js";
 import { reloadIfReplaced, watchReturns } from "#shared/resume.js";
 import { startServiceWorker } from "#shared/service-worker.js";
 import { keepRanking, watchKeptChoices } from "./kept-on-device.js";
@@ -58,8 +59,10 @@ import { createWorkerStore } from "#shared/worker-store.js";
 import { isReadableSeason } from "#shared/season-reader.js";
 import { fillSeasonPicker, keepSeasonYears, watchSeasonPicks } from "#shared/season-picker.js";
 import { startAppearance } from "#shared/appearance.js";
+import { startPageMove } from "#shared/page-move.js";
 import { showSeasonPart, startBracketStandings } from "#shared/bracket-standings.js";
 import { LOOKS } from "./looks.js";
+import { IS_MOVING_TO_PAGE_HOST } from "./move.js";
 import { SNAPSHOT_VERSION } from "./snapshot.js";
 
 const CLOCK_REFRESH_MS = 60 * 1000;
@@ -174,6 +177,11 @@ const listSearchDays = (found, now) =>
     now,
   );
 
+// Until the page has a season, its first drawing shows the move's notice with the rest.
+function redrawMoveNotice() {
+  if (session.state) redrawEased(renderUpdates);
+}
+
 function wireControls() {
   startPageTabs();
   startBracketStandings();
@@ -199,6 +207,7 @@ function wireControls() {
   startSettings();
   startChannelTag();
   startAppearance(LOOKS);
+  startPageMove({ isMoving: IS_MOVING_TO_PAGE_HOST, redraw: redrawMoveNotice });
   startNewsRedraws(findNewsList(), drawNews, NEWS_LEAGUE);
   startHomeScreen();
   watchSeasonPicks(findSeasonRow(), {

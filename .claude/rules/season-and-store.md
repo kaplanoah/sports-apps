@@ -18,8 +18,10 @@ paths:
   or the WNBA's theme, stays on their own device, since nobody signs in and people share a page's address.
   The theme also rides in the browser's address, as `?theme=`, since a Home Screen app keeps its storage apart from the browser's and opens at the address it was added from,
   and a shared link's theme is swapped for the viewer's own (`shared/page/pick-theme.js`).
+  An app moving to its own address carries the choices `MOVED_CHOICES` lists, with the icon picked and whether notifications were on,
+  in one packed value in the new address, as `?move=`, which a page reads only into empty storage and then strips (`shared/page/move-choices.js`).
   Each is a choice made with `createViewerChoice` in `shared/page/device-storage.js`,
   which keeps it as JSON under its key, lists it, and tells the page when another tab changes it, so each tab redraws what it shows.
   A new choice that a viewer would want on their other devices is made the same way;
   what belongs to one device or browser, like the last tab, the Home Screen welcome's dismissal,
-  or the Diagnostics, isn't a viewer choice and stays out of that list.
+  the move's card's dismissal and its notifications ask, or the Diagnostics, isn't a viewer choice and stays out of that list.

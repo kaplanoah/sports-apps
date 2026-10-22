@@ -48,6 +48,8 @@ paths:
   while the Worker has both that secret and a code.
   Under the key, a phone signed in gets a handoff at `PAGE_HOST` from `access/move` (`serveMoveHandoff`),
   and the page's address answers a phone that never signed in with a 301 to the same page there, which no browser keeps.
+  The page there asks for that handoff and carries its choices on (`shared/page/page-move.js`):
+  a browser opens it in place, and a Home Screen app shows a card in the Updates box that opens it in Safari, to add the new site.
   Each update's news goes out as Web Push notifications (`worker/src/notifications.js`,
   `shared/worker/push.js` and `web-push.js`, and `page/sw.js`);
   the Durable Object makes and keeps the signing key itself, under a key the store's paths can't name.

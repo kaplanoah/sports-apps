@@ -47,7 +47,8 @@ paths:
   Never commit, log, or post the code.
 - `npm run set-page-host -- <app> <host>` points a host on a domain in the Cloudflare account at that app's Worker and names it in the Worker's `PAGE_HOST` secret,
   so the page also opens there without its key, behind its access code, which it needs first; the user picks the host.
-  The address with the key keeps working as it was, and phones stay signed in there.
+  The address with the key keeps working as it was, and phones stay signed in there,
+  but for an app that's moving (`isMovingToPageHost`), whose page sends each fan on to the new address (`shared/page/page-move.js`).
   Keep the host out of the repo, as the Worker's own address is.
 - `npm run set-email-key` gives the accounts service the `EMAIL_KEY` secret it hashes each email under, made at random and never printed, with `-- --channel beta` for beta's.
   It refuses when the Worker already has one, since a new key would leave every account's email unfindable.
