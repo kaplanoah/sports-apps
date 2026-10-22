@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   checkAppPage,
+  checkPage,
   hideAddress,
   isFromRelease,
   nameAccessSecrets,
@@ -61,6 +62,51 @@ test("a browser that doesn't start fails the check rather than skipping it", asy
   );
 });
 
+/**
+ * A page as a browser drives it from an old address that sends it on to `landedUrl`, whose Worker
+ * takes the code there and draws once signed in. Playwright routes only a redirect's first
+ * request, so a browser test can't follow the Worker's move.
+ * @param {string} landedUrl
+ */
+function openMovedPage(landedUrl) {
+  /** @type {string[]} */
+  const visits = [];
+  /** @type {string[]} */
+  const codeAddresses = [];
+  let address = "about:blank";
+  const page = {
+    on() {},
+    url: () => address,
+    /** @param {string} visited */
+    async goto(visited) {
+      visits.push(visited);
+      address = landedUrl;
+      return { ok: () => true };
+    },
+    /** @param {unknown} _ @param {{ address: string }} sent */
+    async evaluate(_, sent) {
+      codeAddresses.push(sent.address);
+      return 204;
+    },
+    waitForFunction: async () => {},
+  };
+  return {
+    page: /** @type {import("@playwright/test").Page} */ (/** @type {unknown} */ (page)),
+    visits,
+    codeAddresses,
+  };
+}
+
+test("a page its old address sends on signs in, and opens again, where it landed", async () => {
+  const { page, visits, codeAddresses } = openMovedPage("https://wnba.sports.example/");
+
+  const check = await checkPage(page, { pageUrl: PAGE_URL, accessCode: "LAYUP" });
+
+  assert.deepEqual(check, { status: "drawn" });
+  assert.deepEqual(codeAddresses, ["https://wnba.sports.example/access"]);
+  assert.deepEqual(visits, [PAGE_URL, "https://wnba.sports.example/"]);
+});
+
 test("a page is the release whose commit its scripts' folder starts", () => {
   const sources = [
     "https://wnba-app.example-subdomain.workers.dev/k3y/release/abc1234/js/app.js",
@@ -100,5 +146,29 @@ test("a reason hides the Worker's name without its scheme, and the key on its ow
   assert.deepEqual(check, {
     status: "broken",
     reason: "the page didn't load: getaddrinfo ENOTFOUND <worker>, key <key>, folder /<key>",
+  });
+});
+
+test("a reason hides the page host an old address sent the check on to", () => {
+  const check = hideAddress(
+    {
+      status: "broken",
+      reason:
+        "the access code's route answered 500 at https://wnba.sports.example/access, on wnba.sports.example",
+    },
+    PAGE_URL,
+    "https://wnba.sports.example/",
+  );
+  assert.deepEqual(check, {
+    status: "broken",
+    reason: "the access code's route answered 500 at <page host>/access, on <page host>",
+  });
+});
+
+test("a page that never left the blank page hides only its own address", () => {
+  const reason = `the page didn't load: net::ERR_FAILED at ${PAGE_URL}`;
+  assert.deepEqual(hideAddress({ status: "broken", reason }, PAGE_URL, "about:blank"), {
+    status: "broken",
+    reason: "the page didn't load: net::ERR_FAILED at <page>/",
   });
 });

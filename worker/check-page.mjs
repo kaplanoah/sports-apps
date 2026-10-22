@@ -174,7 +174,9 @@ export async function checkPage(
   page.on("pageerror", (error) => errors.push(error.message));
   const response = await page.goto(pageUrl);
   if (!response?.ok()) return markBroken(`the page answered ${response?.status()}`);
-  const signIn = accessCode ? await signInWithCode(page, pageUrl, accessCode) : {};
+  // An app moving to its own address sends a browser that isn't signed in there, so the check
+  // signs in wherever a phone would land.
+  const signIn = accessCode ? await signInWithCode(page, page.url(), accessCode) : {};
   if (signIn.problem) return signIn.problem;
   if (commit && !isFromRelease(await listScriptSources(page), commit))
     return markBroken("the page is still the version before");
@@ -189,19 +191,27 @@ export async function checkPage(
 /**
  * A check's reason without the page's address, since logs and issues are public: not the whole
  * address, its Worker's with or without its scheme, its folder, or its key on its own, in
- * whatever form a browser's error names them.
+ * whatever form a browser's error names them, nor the page host the address sent it on to.
  * @param {PageCheck} check
  * @param {string} pageUrl
+ * @param {string} [landedUrl] where the page ended up
  * @returns {PageCheck}
  */
-export function hideAddress(check, pageUrl) {
+export function hideAddress(check, pageUrl, landedUrl = pageUrl) {
   if (check.status === "drawn") return check;
   const { origin, hostname, pathname } = new URL(pageUrl);
   const key = pathname.split("/").filter(Boolean).at(-1) ?? "";
+  const landed = new URL(landedUrl);
   const masks = [
     [pageUrl, "<page>/"],
     [origin, "<worker>"],
     [hostname, "<worker>"],
+    ...(landed.hostname
+      ? [
+          [landed.origin, "<page host>"],
+          [landed.hostname, "<page host>"],
+        ]
+      : []),
     [pathname, "/<key>/"],
     ...(key ? [[key, "<key>"]] : []),
   ];
@@ -258,13 +268,15 @@ export async function checkAppPage({
       if (attempt > 0) await waitFor(pauseMs);
       // A service worker would answer the next try from what the last one kept.
       const context = await browser.newContext({ serviceWorkers: "block" });
-      check = await checkPage(await context.newPage(), { ...access, commit }).catch((error) =>
+      const page = await context.newPage();
+      const opened = await checkPage(page, { ...access, commit }).catch((error) =>
         markBroken(`the page didn't load: ${error instanceof Error ? error.message : error}`),
       );
+      check = hideAddress(opened, access.pageUrl, page.url());
       await context.close();
       if (check.status !== "broken") break;
     }
-    return hideAddress(check, access.pageUrl);
+    return check;
   } finally {
     await browser.close();
   }
