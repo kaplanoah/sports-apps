@@ -222,6 +222,7 @@ export async function checkMoveCardDismissal(app) {
  * @param {MovingApp} app
  * @param {Record<string, unknown>} choices
  * @param {string} [addedOnTheme]
+ * @returns {Promise<{ handoff: URL, colorScheme: "light" | "dark", tappedAt: number }>}
  */
 async function tapUseNewSite(app, choices, addedOnTheme) {
   const { page, pageHost } = app;
@@ -236,7 +237,7 @@ async function tapUseNewSite(app, choices, addedOnTheme) {
   await tapUpdatesButton(page, MOVE_BUTTON);
   return {
     handoff: new URL((await handoff).url()),
-    colorScheme: /** @type {const} */ (isDark ? "dark" : "light"),
+    colorScheme: isDark ? "dark" : "light",
     tappedAt,
   };
 }
