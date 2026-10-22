@@ -27,7 +27,6 @@ declare function forgetPageMove(): void;
 declare function isNotificationsAskKept(): boolean;
 declare function forgetNotificationsAsk(): void;
 declare function requestPageMove(extras?: {
-  icon?: "light" | "dark" | null;
   notifications?: boolean;
   fromApp?: boolean;
 }): Promise<URL | null>;
