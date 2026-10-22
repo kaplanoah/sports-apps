@@ -22,7 +22,7 @@ import {
   nameLeagueRosterRequest,
   namePlayerListRequest,
 } from "../../worker/src/roster.js";
-import { SeasonStore, forwardToStore } from "../../worker/src/store.js";
+import { SeasonStore } from "../../worker/src/store.js";
 import worker from "../../worker/src/index.js";
 import {
   test,
