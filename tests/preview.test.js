@@ -277,7 +277,10 @@ function assertNoHost(log, apis) {
   }
 }
 
-const describeDelete = (worker) => [`${API}/accounts/acct123/workers/workers/${worker}/previews/pr-12`, undefined];
+const describeDelete = (worker) => [
+  `${API}/accounts/acct123/workers/workers/${worker}/previews/pr-12`,
+  undefined,
+];
 
 test("a pull request's preview is uploaded from its build, opened, and announced without its address, and any other app's is deleted", async () => {
   const apis = createFakeApis({ missingWorkers: ["wnba-app-beta"] });
@@ -323,7 +326,10 @@ test("a build of a commit the pull request has moved past changes nothing", asyn
 
 test("a pull request that no longer asks for previews has every app's deleted, and says so", async () => {
   const comment = describePreview({ pullRequest: 12, apps: ["mlb"], state: "up", commit: COMMIT });
-  const apis = createFakeApis({ pull: describePull({ labels: [] }), comments: [{ id: 7, body: comment }] });
+  const apis = createFakeApis({
+    pull: describePull({ labels: [] }),
+    comments: [{ id: 7, body: comment }],
+  });
   const { run, seen } = syncWithFakes({ built: ["mlb"], apis });
   assert.deepEqual(await run, []);
 
@@ -370,7 +376,10 @@ test("an upload wrangler refuses fails the run, saying why without the address",
     },
   });
   await assert.rejects(run, (/** @type {Error} */ error) => {
-    assert.equal(error.message, "mlb preview failed: Uploading\nCouldn't route pr-12.<preview host>");
+    assert.equal(
+      error.message,
+      "mlb preview failed: Uploading\nCouldn't route pr-12.<preview host>",
+    );
     return true;
   });
 });
@@ -521,7 +530,10 @@ test("the Preview workflow installs wrangler before the token, and hands every a
   assert.doesNotMatch(installStep ?? "", /secrets\./);
   assert.ok(steps.indexOf(installStep ?? "") < steps.findIndex((step) => step.includes("TOKEN")));
   for (const app of listApps()) {
-    for (const secret of [`${app.toUpperCase()}_BETA_PAGE_URL`, `${app.toUpperCase()}_PREVIEW_HOST`]) {
+    for (const secret of [
+      `${app.toUpperCase()}_BETA_PAGE_URL`,
+      `${app.toUpperCase()}_PREVIEW_HOST`,
+    ]) {
       assert.match(sync, new RegExp(`^ {10}${secret}: \\$\\{\\{ secrets\\.${secret} \\}\\}$`, "m"));
     }
   }

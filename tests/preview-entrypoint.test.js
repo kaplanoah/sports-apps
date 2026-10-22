@@ -190,7 +190,10 @@ test("beta renews a preview's sign-in only for the page itself, not for each of 
 test("beta answers its own access routes, so a preview never serves one from its page files", async () => {
   const beta = createBeta();
   for (const path of ["", "/access", "/access/handoff", "/access/move"]) {
-    const route = await beta.binding.readPageRoute(`https://pr-12.previews.example/k3y${path}`, null);
+    const route = await beta.binding.readPageRoute(
+      `https://pr-12.previews.example/k3y${path}`,
+      null,
+    );
     assert.equal(route, null, path);
   }
   const move = await requestPreview(beta, "/access/move");
