@@ -1,6 +1,6 @@
-// Points a host on a domain in the Cloudflare account at an app's beta Worker for its previews
-// alone, so each pull request's preview answers at its name under it, with a certificate
-// Cloudflare makes for every name one level under the domain. Beta's own page doesn't answer there.
+// Points a host one level under a domain in the Cloudflare account at an app's beta Worker for its
+// previews alone, so each pull request's preview answers at its own name under the host. Beta's own
+// page doesn't answer there.
 import { fileURLToPath } from "node:url";
 import { checkAppName } from "./apps.mjs";
 import { readCommandLine } from "./channels.mjs";
@@ -15,8 +15,8 @@ import { findZone } from "./set-page-host.mjs";
 import { isHostName } from "./worker-secrets.mjs";
 
 /**
- * Cloudflare's free certificate covers one level under a domain, and each preview's name is
- * another level under the host.
+ * Cloudflare makes a wildcard certificate under a preview host, covering each preview's name, but
+ * only for a host one level under its domain; a deeper one needs Advanced Certificate Manager.
  * @param {string} host
  * @param {{ name: string }} zone
  */
@@ -43,7 +43,7 @@ export async function setPreviewHost({
   const zones = await callCloudflare("zones", `${API}/zones?per_page=50`, { method: "GET" });
   const zone = findZone(zones, host);
   if (!isOneLevelUnder(host, zone))
-    throw new Error("Name a host one level under its domain, which the free certificate covers.");
+    throw new Error("Name a host one level under its domain, so its previews get a certificate.");
   await callCloudflare("preview domain", `${findWorkersApi(readAccount(env))}/domains`, {
     method: "PUT",
     headers: { "content-type": "application/json" },

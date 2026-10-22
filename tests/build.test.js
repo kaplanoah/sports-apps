@@ -4,6 +4,7 @@ import { cpSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import { build } from "esbuild";
 import { findPageRoot, listApps, listServices } from "../worker/apps.mjs";
 import {
   buildWorker,
@@ -186,8 +187,36 @@ async function loadForbiddingGlobalWork(app) {
   }
 }
 
+/**
+ * What the built Worker imports, as esbuild reads it, since its page's scripts are text inside it,
+ * and whether it holds its own copy of Node's stand-in for the Workers runtime, whose classes would
+ * then never be the runtime's.
+ * @param {string} built
+ */
+async function readRuntimeImports(built) {
+  const { metafile } = await build({
+    stdin: { contents: built, loader: "js" },
+    bundle: true,
+    write: false,
+    metafile: true,
+    format: "esm",
+    platform: "neutral",
+    external: ["*"],
+    logLevel: "silent",
+  });
+  const imports = metafile.inputs["<stdin>"].imports.map((each) => each.path);
+  return {
+    imports: [...new Set(imports)],
+    isStandInBundled: /^\/\/ tests\/workers-runtime\.js$/m.test(built),
+  };
+}
+
+const RUNTIME_ONLY = { imports: ["cloudflare:workers"], isStandInBundled: false };
+
 test("each app's Worker loads without what Cloudflare refuses while a Worker loads, with the entrypoint its previews bind", async () => {
   for (const app of listApps()) {
+    const built = await buildWorker(app, { release: RELEASE });
+    assert.deepEqual(await readRuntimeImports(built), RUNTIME_ONLY, app);
     const worker = await loadForbiddingGlobalWork(app);
     assert.equal(typeof worker.default.fetch, "function", app);
     assert.equal(typeof worker.PreviewEntrypoint.prototype.readPageRoute, "function", app);
@@ -197,8 +226,7 @@ test("each app's Worker loads without what Cloudflare refuses while a Worker loa
 test("a service's Worker loads its packages as a Worker resolves them, importing only the runtime", async () => {
   for (const service of listServices()) {
     const built = await buildWorker(service, { release: RELEASE });
-    const imports = [...built.matchAll(/^import .* from "([^"]+)";$/gm)].map(([, from]) => from);
-    assert.deepEqual([...new Set(imports)], ["cloudflare:workers"], service);
+    assert.deepEqual(await readRuntimeImports(built), RUNTIME_ONLY, service);
     const worker = await loadForbiddingGlobalWork(service);
     assert.equal(typeof worker.default, "function", service);
   }

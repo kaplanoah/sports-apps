@@ -359,7 +359,8 @@ same secrets: a token limited to each app's beta Worker,
 `<app>-app-beta`, and each service's, from the `[env.beta]` in its `wrangler.toml`, the account ID and subdomain, beta's `ACCESS_CODE`, and each
 page's address with `_BETA` after the app's name, like `WNBA_BETA_PAGE_URL`. Since each token can
 change only its own channel's Workers, a branch pushed to `beta` can never
-reach the live apps.
+reach the live apps. A third environment, `preview`, limited to `main`, holds a
+token limited to the beta Workers too, as "Previewing a design" says.
 
 Each deploy opens its new version's page as a phone does, signed in with its
 code, and puts the version before back when the page doesn't draw what its store
@@ -443,29 +444,47 @@ deploys beta by hand, from a checkout of `origin/beta`, and
 
 ### Previewing a design
 
-A design round runs on a preview instead of beta, so beta stays free. Label a
-pull request `preview`, and the `Preview` workflow makes a preview of each beta
-Worker the pull request changes, named `pr-<number>` and built as beta. It serves
-the pull request's page and reads everything else from beta: its access code,
-data, live connection, and push. So it previews page code on beta's data, and a
-change to a Worker, the store, push, or accounts still needs beta. Each push
-makes it again, and taking the label off or closing the pull request deletes it.
-A preview answers only at its name under its app's preview host, at beta's key,
-behind beta's code.
+A design round that isn't red runs on a preview instead of beta, so beta stays
+free. Label a pull request `preview`, and each app the pull request changes
+gets a preview of its beta Worker, named `pr-<number>` and built as beta.
+It serves the pull request's page and asks beta's live version for everything
+else: its access code, data, live connection, and push. So it previews page code
+on beta's data, and a change to a Worker, the store, push, or accounts still
+needs beta. Each push makes it again, and taking the label off or closing the
+pull request deletes it. A preview answers only at its name under its app's
+preview host, at beta's key, behind beta's code.
+
+The pull request's own code runs only in the `Preview build` workflow, which has
+no secrets and builds each preview. The `Preview` workflow then runs `main`'s
+code in the `preview` environment, which uploads the builds, opens each preview
+as a phone does, and comments with how it went. It never runs the builds, but
+each preview's code runs on Cloudflare and sees what a phone sends it, so only
+label a pull request whose page code you trust. Its bindings come from `main`'s
+`wrangler.toml`, not the pull request's.
+
+A preview runs on beta's live version, so beta must run a Worker at least as
+new as `main`'s before a round opens: put a pull request built on current `main`
+on beta first when it doesn't.
 
 Before the first preview:
 
-1. Pick a preview host for each app, one level under beta's `RP_ID` domain, so
-   passkeys work on previews and Cloudflare's free certificate covers each
-   preview's name. Keep it out of the repo, as the page hosts are.
-2. Create a Cloudflare API token with Workers Scripts edit, limited to each
+1. Put a pull request built on current `main` on beta, so beta's Worker answers
+   its previews.
+2. Pick a preview host for each app, one level under a domain in the Cloudflare
+   account and under beta's `RP_ID` domain. Cloudflare makes a certificate for
+   each preview's name only under a host one level under its domain, and
+   passkeys work only under `RP_ID`'s. Keep it out of the repo, as the page
+   hosts are.
+3. Create a Cloudflare API token with Workers Scripts edit, limited to each
    app's beta Worker.
-3. Add each host to its app's beta Worker for previews alone with
+4. Add each host to its app's beta Worker for previews alone with
    `npm run set-preview-host -- <app> <host>`.
-4. Create a `preview` GitHub environment, open to every branch, with the
-   secrets `CLOUDFLARE_API_TOKEN` (that token), `CLOUDFLARE_ACCOUNT_ID`,
-   `ACCESS_CODE` (beta's), and each app's `<APP>_BETA_APP_KEY` and
-   `<APP>_PREVIEW_HOST`, which the workflow uses only to open each preview.
+5. Create a `preview` GitHub environment, limited to `main`, with the secrets
+   `CLOUDFLARE_API_TOKEN` (that token), `CLOUDFLARE_ACCOUNT_ID`, and, the same
+   as in the `beta` environment, `ACCESS_CODE` and each app's
+   `<APP>_BETA_PAGE_URL`, and each app's `<APP>_PREVIEW_HOST`. The workflow
+   uses the last three only to open each preview, so when beta's key or code
+   changes, change them here too.
 
 ## License
 

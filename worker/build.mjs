@@ -17,7 +17,7 @@ import { addTuningPanel } from "./tuning-files.mjs";
 
 const root = new URL("../", import.meta.url);
 /** @param {string} worker */
-const findOutput = (worker) =>
+export const findOutput = (worker) =>
   fileURLToPath(new URL("worker/dist/worker.mjs", findWorkerRoot(worker)));
 /**
  * @param {string} worker

@@ -49,6 +49,7 @@ test("a merge of only docs, tests, and tooling skips the deploy", () => {
     ".github/workflows/beta.yml",
     ".github/workflows/ci.yml",
     ".github/workflows/flaky.yml",
+    ".github/workflows/preview-build.yml",
     ".github/workflows/preview.yml",
     ".github/workflows/review-area.yml",
     "eslint.config.mjs",

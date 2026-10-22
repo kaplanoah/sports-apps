@@ -240,7 +240,7 @@ const ACCESS_ROUTES = new Set(["", ACCESS_PATH, HANDOFF_PATH, MOVE_PATH]);
 
 /**
  * How a preview's page file stands with beta: the path after beta's key, whether the phone may
- * see the page, and, when it may, the cookie renewing its sign-in.
+ * see the page, and, when it may and the file is the page's index, the cookie renewing its sign-in.
  * @typedef {{ appPath: string, access: "open" | "missing" | "changed", cookie: string | null }} PageRoute
  */
 
@@ -311,15 +311,26 @@ export function createAppWorker({
    * @param {Request} request
    * @param {any} env
    * @param {URL} url
+   * @param {{ prefix: string, appPath: string }} route
+   */
+  function serveAccessRoute(request, env, url, { prefix, appPath }) {
+    if (appPath === "") return redirectToFolder(url);
+    if (appPath === ACCESS_PATH) return serveAccess(request, env, prefix);
+    if (appPath === HANDOFF_PATH) return serveHandoff(request, env, prefix);
+    if (isMoving(prefix, env)) return serveMoveHandoff(request, env);
+    return servePageFile(request, appPath);
+  }
+
+  /**
+   * @param {Request} request
+   * @param {any} env
+   * @param {URL} url
    */
   async function serveApp(request, env, url) {
     const route = findAppRoute(url, env);
     if (route === null) return serveNotFound();
+    if (ACCESS_ROUTES.has(route.appPath)) return serveAccessRoute(request, env, url, route);
     const { prefix, appPath } = route;
-    if (appPath === "") return redirectToFolder(url);
-    if (appPath === ACCESS_PATH) return serveAccess(request, env, prefix);
-    if (appPath === HANDOFF_PATH) return serveHandoff(request, env, prefix);
-    if (appPath === MOVE_PATH && isMoving(prefix, env)) return serveMoveHandoff(request, env);
     const access = await readAccess(request, env);
     if (isDataPath(appPath)) return serveData(request, env, { url, appPath, access });
     // A phone that never sent the code, under a key that's moving, opens the same page at
@@ -347,7 +358,7 @@ export function createAppWorker({
     const request = new Request(url, { headers: cookie === null ? {} : { cookie } });
     const access = await readAccess(request, env);
     const renewal =
-      access === "open" && env.ACCESS_CODE
+      access === "open" && env.ACCESS_CODE && isIndexPath(route.appPath)
         ? await createAccessCookie(request, env, route.prefix)
         : null;
     return { appPath: route.appPath, access, cookie: renewal };

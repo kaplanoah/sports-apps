@@ -1,26 +1,33 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { listApps } from "../worker/apps.mjs";
 import {
-  deletePreviews,
-  deployPreviews,
+  buildPreviews,
   describePreview,
+  isPreviewWanted,
+  judgePreviews,
   listPreviewedApps,
   namePreview,
+  readBuild,
   readPreviewAccess,
+  syncPreviews,
 } from "../worker/preview.mjs";
 import { readRepoFile } from "./repo-files.js";
 
 const API = "https://api.cloudflare.com/client/v4";
 const BASE = "b".repeat(40);
 const COMMIT = "c".repeat(40);
+const REPOSITORY = "owner/sports-apps";
 const ENV = {
   CLOUDFLARE_ACCOUNT_ID: "acct123",
-  GITHUB_REPOSITORY: "owner/sports-apps",
+  GITHUB_REPOSITORY: REPOSITORY,
   GH_TOKEN: "token",
   ACCESS_CODE: "code",
-  MLB_BETA_APP_KEY: "k3y",
-  WNBA_BETA_APP_KEY: "k3y",
+  MLB_BETA_PAGE_URL: "https://mlb-app-beta.example.workers.dev/k3y/",
+  WNBA_BETA_PAGE_URL: "https://wnba-app-beta.example.workers.dev/k3y",
   MLB_PREVIEW_HOST: "mlb-previews.example.com",
   WNBA_PREVIEW_HOST: "wnba-previews.example.com",
 };
@@ -62,7 +69,7 @@ test("each app's previews bind only beta's own Worker, by its preview entrypoint
   }
 });
 
-test("a preview is named for its pull request, and opens at that name under its app's host", () => {
+test("a preview is named for its pull request, and opens as beta's page at that name under its app's host", () => {
   assert.equal(namePreview(12), "pr-12");
   assert.deepEqual(readPreviewAccess("mlb", 12, ENV), {
     host: "mlb-previews.example.com",
@@ -70,12 +77,16 @@ test("a preview is named for its pull request, and opens at that name under its 
     accessCode: "code",
   });
   assert.equal(
-    readPreviewAccess("wnba", 12, { ...ENV, WNBA_BETA_APP_KEY: "wnba-k3y" }).pageUrl,
-    "https://pr-12.wnba-previews.example.com/wnba-k3y/",
+    readPreviewAccess("wnba", 12, ENV).pageUrl,
+    "https://pr-12.wnba-previews.example.com/k3y/",
   );
   assert.throws(
     () => readPreviewAccess("wnba", 12, { ...ENV, WNBA_PREVIEW_HOST: "" }),
     /^Error: Set the preview environment's WNBA_PREVIEW_HOST\.$/,
+  );
+  assert.throws(
+    () => readPreviewAccess("mlb", 12, { ...ENV, MLB_BETA_PAGE_URL: "", MLB_PREVIEW_HOST: "" }),
+    /^Error: Set the preview environment's MLB_BETA_PAGE_URL and MLB_PREVIEW_HOST\.$/,
   );
 });
 
@@ -94,69 +105,188 @@ test("only the apps a pull request's changes deploy get a preview", () => {
 const createFakeGit = (files) => (/** @type {string[]} */ args) => {
   if (args[0] === "merge-base") return BASE;
   if (args[0] === "diff") return files.join("\n");
-  if (args.join(" ") === "rev-parse HEAD") return COMMIT;
   throw new Error(`unexpected git ${args.join(" ")}`);
 };
 
+const createFolder = () => mkdtempSync(path.join(tmpdir(), "preview-"));
+
+test("a pull request's build is each app it changes, built as beta, and a manifest naming them", async () => {
+  const folder = createFolder();
+  const source = path.join(createFolder(), "worker.mjs");
+  writeFileSync(source, "export default {};");
+  const built = [];
+  const apps = await buildPreviews({
+    pullRequest: "12",
+    base: BASE,
+    git: createFakeGit(["apps/wnba/page/styles.css"]),
+    buildApp: async (app, options) => {
+      built.push([app, options]);
+      return { output: source, size: 0 };
+    },
+    folder,
+    log: () => {},
+  });
+
+  assert.deepEqual(apps, ["wnba"]);
+  assert.deepEqual(built, [["wnba", { channel: "beta" }]]);
+  assert.equal(readFileSync(path.join(folder, "wnba.mjs"), "utf8"), "export default {};");
+  assert.deepEqual(readBuild(folder), { pullRequest: "12", apps: ["wnba"] });
+});
+
+test("a build hands on only this repo's apps whose bundles it holds, and a pull request's number", () => {
+  const folder = createFolder();
+  writeFileSync(path.join(folder, "mlb.mjs"), "");
+  writeFileSync(path.join(folder, "other.mjs"), "");
+  const writeManifest = (manifest) =>
+    writeFileSync(path.join(folder, "build.json"), JSON.stringify(manifest));
+
+  writeManifest({ pullRequest: 12, apps: ["mlb", "wnba", "other"] });
+  assert.deepEqual(readBuild(folder), { pullRequest: "12", apps: ["mlb"] });
+  writeManifest({ pullRequest: 12, apps: "mlb" });
+  assert.deepEqual(readBuild(folder).apps, []);
+  for (const pullRequest of ["12/../../pulls", -1, null]) {
+    writeManifest({ pullRequest, apps: ["mlb"] });
+    assert.throws(() => readBuild(folder), /^Error: Name the pull request by its number\.$/);
+  }
+});
+
 /**
- * GitHub's comments on the pull request, starting with these, and each call it was sent.
- * @param {{ id: number, body: string }[]} [comments]
+ * A pull request as GitHub describes it.
+ * @param {object} [options]
+ * @param {string} [options.state]
+ * @param {string[]} [options.labels]
+ * @param {string} [options.repository] the repository its branch is in
+ * @param {string} [options.sha]
  */
-function createFakeGitHub(comments = []) {
+const describePull = ({
+  state = "open",
+  labels = ["preview"],
+  repository = REPOSITORY,
+  sha = COMMIT,
+} = {}) => ({
+  state,
+  labels: labels.map((name) => ({ name })),
+  head: { sha, repo: { full_name: repository } },
+});
+
+test("a pull request asks for previews only while it's open, from this repo, and labeled preview", () => {
+  assert.equal(isPreviewWanted(describePull(), REPOSITORY), true);
+  assert.equal(isPreviewWanted(describePull({ state: "closed" }), REPOSITORY), false);
+  assert.equal(isPreviewWanted(describePull({ labels: ["beta"] }), REPOSITORY), false);
+  assert.equal(
+    isPreviewWanted(describePull({ repository: "someone/sports-apps" }), REPOSITORY),
+    false,
+  );
+  assert.equal(isPreviewWanted({ ...describePull(), head: { repo: null } }, REPOSITORY), false);
+});
+
+test("the previews' state is up only once every one drew", () => {
+  const drawn = { status: "drawn", reason: "" };
+  const unchecked = { status: "unchecked", reason: "" };
+  const broken = { status: "broken", reason: "" };
+  assert.equal(judgePreviews(false, [drawn]), "deleted");
+  assert.equal(judgePreviews(true, []), "unchanged");
+  assert.equal(judgePreviews(true, [drawn, drawn]), "up");
+  assert.equal(judgePreviews(true, [drawn, unchecked]), "unchecked");
+  assert.equal(judgePreviews(true, [unchecked, broken]), "broken");
+});
+
+/**
+ * GitHub, with the pull request and its comments, and Cloudflare, with the previews it already
+ * lacks, and each call either was sent.
+ * @param {object} [options]
+ * @param {ReturnType<typeof describePull>} [options.pull]
+ * @param {{ id: number, body: string }[]} [options.comments]
+ * @param {string[]} [options.missingWorkers] the Workers that have no preview to delete
+ */
+function createFakeApis({ pull = describePull(), comments = [], missingWorkers = [] } = {}) {
   const calls = [];
   /** @type {typeof fetch} */
   const fetchImpl = async (url, init) => {
-    calls.push({ url: String(url), method: init?.method, body: init?.body });
-    return new Response(JSON.stringify(init?.method === "GET" ? comments : {}));
+    const address = String(url);
+    const method = init?.method ?? "GET";
+    calls.push({ url: address, method, body: init?.body });
+    if (address.startsWith(API)) {
+      const isMissing = missingWorkers.some((worker) => address.includes(`/${worker}/`));
+      return new Response(JSON.stringify({ success: !isMissing, result: {} }), {
+        status: isMissing ? 404 : 200,
+      });
+    }
+    if (method !== "GET") return new Response("{}");
+    return new Response(JSON.stringify(address.includes("/comments") ? comments : pull));
   };
-  return { fetchImpl, calls };
+  const listSent = (method) =>
+    calls
+      .filter((call) => call.method === method)
+      .map((call) => [call.url, call.body && JSON.parse(call.body).body]);
+  return { fetchImpl, calls, listSent };
 }
 
-/** @param {{ log: string[], github: ReturnType<typeof createFakeGitHub> }} seen */
-const listShown = ({ log, github }) => [...log, ...github.calls.map((call) => call.body ?? "")];
+/**
+ * A build folder holding the apps' bundles.
+ * @param {string[]} apps
+ */
+function createBuild(apps) {
+  const folder = createFolder();
+  for (const app of apps) writeFileSync(path.join(folder, `${app}.mjs`), `// ${app}`);
+  writeFileSync(path.join(folder, "build.json"), JSON.stringify({ pullRequest: 12, apps }));
+  return folder;
+}
 
-test("a pull request's preview is built as beta, uploaded under its name, opened, and announced without its address", async () => {
-  const built = [];
-  const uploads = [];
-  const opened = [];
-  const log = [];
-  const github = createFakeGitHub();
-  const apps = await deployPreviews({
-    pullRequest: "12",
-    base: BASE,
-    git: createFakeGit(["apps/mlb/page/styles.css"]),
-    buildApp: async (app, options) => {
-      built.push([app, options]);
-      return { output: "", size: 0 };
-    },
-    wrangler: async (args) => {
-      uploads.push(args);
-      return JSON.stringify({ preview: { urls: [`https://pr-12.${ENV.MLB_PREVIEW_HOST}`] } });
-    },
+const UPLOAD = ["preview", "--config", "apps/mlb/worker/wrangler.toml", "--env", "beta"];
+
+/**
+ * Syncs the previews with the fakes, keeping what each was asked and what the run logged.
+ * @param {object} options
+ * @param {string[]} options.built
+ * @param {ReturnType<typeof createFakeApis>} options.apis
+ * @param {(args: string[]) => Promise<string>} [options.wrangler]
+ * @param {import("../worker/check-page.mjs").PageCheck} [options.check]
+ */
+function syncWithFakes({ built, apis, wrangler, check = { status: "drawn", reason: "" } }) {
+  const seen = { placed: [], uploads: [], opened: [], log: [] };
+  const run = syncPreviews({
+    commit: COMMIT,
+    folder: createBuild(built),
+    place: (bundle, app) => seen.placed.push([path.basename(bundle), app]),
+    wrangler:
+      wrangler ??
+      (async (args) => {
+        seen.uploads.push(args);
+        return "{}";
+      }),
     checkPage: async ({ access, commit, attempts, isLiveChecked }) => {
-      opened.push({ access, commit, attempts, isLiveChecked });
-      return { status: "drawn", reason: "" };
+      seen.opened.push({ access, commit, attempts, isLiveChecked });
+      return check;
     },
-    fetchImpl: github.fetchImpl,
+    fetchImpl: apis.fetchImpl,
     env: ENV,
-    log: (line) => log.push(line),
+    log: (line) => seen.log.push(line),
   });
+  return { run, seen };
+}
 
-  assert.deepEqual(apps, ["mlb"]);
-  assert.deepEqual(built, [["mlb", { channel: "beta" }]]);
-  assert.deepEqual(uploads, [
-    [
-      "preview",
-      "--config",
-      "apps/mlb/worker/wrangler.toml",
-      "--env",
-      "beta",
-      "--name",
-      "pr-12",
-      "--json",
-    ],
-  ]);
-  assert.deepEqual(opened, [
+/**
+ * Asserts nothing logged or sent names a preview host.
+ * @param {string[]} log
+ * @param {ReturnType<typeof createFakeApis>} apis
+ */
+function assertNoHost(log, apis) {
+  for (const shown of [...log, ...apis.calls.map((call) => String(call.body ?? ""))]) {
+    for (const host of HOSTS) assert.ok(!shown.includes(host), shown);
+  }
+}
+
+const describeDelete = (worker) => [`${API}/accounts/acct123/workers/workers/${worker}/previews/pr-12`, undefined];
+
+test("a pull request's preview is uploaded from its build, opened, and announced without its address, and any other app's is deleted", async () => {
+  const apis = createFakeApis({ missingWorkers: ["wnba-app-beta"] });
+  const { run, seen } = syncWithFakes({ built: ["mlb"], apis });
+  assert.deepEqual(await run, ["mlb"]);
+
+  assert.deepEqual(seen.placed, [["mlb.mjs", "mlb"]]);
+  assert.deepEqual(seen.uploads, [[...UPLOAD, "--name", "pr-12", "--json"]]);
+  assert.deepEqual(seen.opened, [
     {
       access: { pageUrl: "https://pr-12.mlb-previews.example.com/k3y/", accessCode: "code" },
       commit: COMMIT,
@@ -164,130 +294,94 @@ test("a pull request's preview is built as beta, uploaded under its name, opened
       isLiveChecked: true,
     },
   ]);
-  assert.deepEqual(log, ["mlb preview pr-12: uploaded", "mlb preview check: drawn"]);
-  const posts = github.calls.filter((call) => call.method === "POST");
-  assert.deepEqual(
-    posts.map((call) => [call.url, JSON.parse(call.body).body]),
+  assert.deepEqual(seen.log, [
+    "wnba preview pr-12: none",
+    "mlb preview pr-12: uploaded",
+    "mlb preview check: drawn",
+  ]);
+  assert.deepEqual(apis.listSent("DELETE"), [describeDelete("wnba-app-beta")]);
+  assert.deepEqual(apis.listSent("POST"), [
     [
-      [
-        "https://api.github.com/repos/owner/sports-apps/issues/12/comments",
-        describePreview({ pullRequest: "12", apps: ["mlb"], state: "up", commit: COMMIT }),
-      ],
+      `https://api.github.com/repos/${REPOSITORY}/issues/12/comments`,
+      describePreview({ pullRequest: "12", apps: ["mlb"], state: "up", commit: COMMIT }),
     ],
-  );
-  for (const shown of listShown({ log, github })) {
-    for (const host of HOSTS) assert.ok(!shown.includes(host), shown);
-  }
+  ]);
+  assertNoHost(seen.log, apis);
 });
 
-test("a preview that doesn't open fails the run, saying why without its address", async () => {
-  const log = [];
-  const github = createFakeGitHub([
-    { id: 7, body: describePreview({ pullRequest: 12, apps: ["mlb"], state: "deleted" }) },
-  ]);
-  await assert.rejects(
-    deployPreviews({
-      pullRequest: 12,
-      base: BASE,
-      git: createFakeGit(["apps/mlb/page/styles.css"]),
-      buildApp: async () => ({ output: "", size: 0 }),
-      wrangler: async () => "{}",
-      checkPage: async () => ({
-        status: "broken",
-        reason: `no games drawn at https://pr-12.${ENV.MLB_PREVIEW_HOST}/`,
-      }),
-      fetchImpl: github.fetchImpl,
-      env: ENV,
-      log: (line) => log.push(line),
-    }),
-    /^Error: The preview didn't open for mlb\.$/,
-  );
-
-  assert.deepEqual(log.slice(-1), [
-    "mlb preview check: broken: no games drawn at https://pr-12.<preview host>/",
-  ]);
-  const patches = github.calls.filter((call) => call.method === "PATCH");
+test("a build of a commit the pull request has moved past changes nothing", async () => {
+  const apis = createFakeApis({ pull: describePull({ sha: "d".repeat(40) }) });
+  const { run, seen } = syncWithFakes({ built: ["mlb"], apis });
+  assert.deepEqual(await run, []);
+  assert.deepEqual(seen.uploads, []);
+  assert.deepEqual(seen.log, ["The pull request has a newer commit, whose build follows."]);
   assert.deepEqual(
-    patches.map((call) => [call.url, JSON.parse(call.body).body]),
-    [
-      [
-        "https://api.github.com/repos/owner/sports-apps/issues/comments/7",
-        describePreview({ pullRequest: 12, apps: ["mlb"], state: "broken", commit: COMMIT }),
-      ],
-    ],
+    apis.calls.map((call) => call.method),
+    ["GET"],
   );
-  for (const shown of listShown({ log, github })) {
-    for (const host of HOSTS) assert.ok(!shown.includes(host), shown);
+});
+
+test("a pull request that no longer asks for previews has every app's deleted, and says so", async () => {
+  const comment = describePreview({ pullRequest: 12, apps: ["mlb"], state: "up", commit: COMMIT });
+  const apis = createFakeApis({ pull: describePull({ labels: [] }), comments: [{ id: 7, body: comment }] });
+  const { run, seen } = syncWithFakes({ built: ["mlb"], apis });
+  assert.deepEqual(await run, []);
+
+  assert.deepEqual(seen.uploads, []);
+  assert.deepEqual(apis.listSent("DELETE"), [
+    describeDelete("mlb-app-beta"),
+    describeDelete("wnba-app-beta"),
+  ]);
+  assert.deepEqual(apis.listSent("PATCH"), [
+    [
+      `https://api.github.com/repos/${REPOSITORY}/issues/comments/7`,
+      describePreview({ pullRequest: 12, apps: [], state: "deleted", commit: COMMIT }),
+    ],
+  ]);
+});
+
+test("a preview that couldn't be checked or didn't open fails the run, saying why without its address", async () => {
+  for (const status of ["unchecked", "broken"]) {
+    const apis = createFakeApis();
+    const reason = `no games drawn at https://pr-12.${ENV.MLB_PREVIEW_HOST}/`;
+    const { run, seen } = syncWithFakes({ built: ["mlb"], apis, check: { status, reason } });
+    await assert.rejects(run, /^Error: The preview didn't open for mlb\.$/, status);
+
+    assert.deepEqual(seen.log.slice(-1), [
+      `mlb preview check: ${status}: no games drawn at https://pr-12.<preview host>/`,
+    ]);
+    assert.deepEqual(
+      apis.listSent("POST").map(([, body]) => body),
+      [describePreview({ pullRequest: 12, apps: ["mlb"], state: status, commit: COMMIT })],
+    );
+    assertNoHost(seen.log, apis);
   }
 });
 
 test("an upload wrangler refuses fails the run, saying why without the address", async () => {
-  const github = createFakeGitHub();
   const refusal = Object.assign(new Error("Command failed"), {
     stderr: `Uploading\nCouldn't route pr-12.${ENV.MLB_PREVIEW_HOST}\n`,
   });
-  await assert.rejects(
-    deployPreviews({
-      pullRequest: 12,
-      base: BASE,
-      git: createFakeGit(["apps/mlb/worker/src/store.js"]),
-      buildApp: async () => ({ output: "", size: 0 }),
-      wrangler: async () => {
-        throw refusal;
-      },
-      fetchImpl: github.fetchImpl,
-      env: ENV,
-      log: () => {},
-    }),
-    (/** @type {Error} */ error) => {
-      assert.equal(
-        error.message,
-        "mlb preview failed: Uploading\nCouldn't route pr-12.<preview host>",
-      );
-      return true;
+  const { run } = syncWithFakes({
+    built: ["mlb"],
+    apis: createFakeApis(),
+    wrangler: async () => {
+      throw refusal;
     },
-  );
+  });
+  await assert.rejects(run, (/** @type {Error} */ error) => {
+    assert.equal(error.message, "mlb preview failed: Uploading\nCouldn't route pr-12.<preview host>");
+    return true;
+  });
 });
 
 test("a pull request that changes no app's Worker gets no preview, and says so", async () => {
-  const github = createFakeGitHub();
-  const apps = await deployPreviews({
-    pullRequest: 12,
-    base: BASE,
-    git: createFakeGit(["README.md"]),
-    buildApp: async () => assert.fail("built"),
-    wrangler: async () => assert.fail("uploaded"),
-    fetchImpl: github.fetchImpl,
-    env: ENV,
-    log: () => {},
-  });
-  assert.deepEqual(apps, []);
-  const posts = github.calls.filter((call) => call.method === "POST");
-  assert.match(JSON.parse(posts[0].body).body, /no preview `pr-12`/);
-});
-
-test("a pull request's previews are deleted from every app's beta Worker, one that's gone too", async () => {
-  const github = createFakeGitHub();
-  const deletes = [];
-  const log = [];
-  /** @type {typeof fetch} */
-  const fetchImpl = async (url, init) => {
-    if (!String(url).startsWith(API)) return github.fetchImpl(url, init);
-    deletes.push([init?.method, String(url)]);
-    const isGone = String(url).includes("wnba-app-beta");
-    return new Response(JSON.stringify({ success: !isGone, result: {} }), {
-      status: isGone ? 404 : 200,
-    });
-  };
-  await deletePreviews({ pullRequest: 12, fetchImpl, env: ENV, log: (line) => log.push(line) });
-
-  assert.deepEqual(deletes, [
-    ["DELETE", `${API}/accounts/acct123/workers/workers/mlb-app-beta/previews/pr-12`],
-    ["DELETE", `${API}/accounts/acct123/workers/workers/wnba-app-beta/previews/pr-12`],
-  ]);
-  assert.deepEqual(log, ["mlb preview pr-12: ok", "wnba preview pr-12: none"]);
-  const posts = github.calls.filter((call) => call.method === "POST");
-  assert.match(JSON.parse(posts[0].body).body, /^<!-- preview -->\nPreview `pr-12` is deleted/);
+  const apis = createFakeApis();
+  const { run, seen } = syncWithFakes({ built: [], apis });
+  assert.deepEqual(await run, []);
+  assert.deepEqual(seen.uploads, []);
+  assert.equal(apis.listSent("DELETE").length, listApps().length);
+  assert.match(apis.listSent("POST")[0][1], /no preview `pr-12`/);
 });
 
 test("a session can't run wrangler, or make or delete a preview, itself", () => {
@@ -295,36 +389,44 @@ test("a session can't run wrangler, or make or delete a preview, itself", () => 
   for (const rule of [
     "Bash(wrangler *)",
     "Bash(npx wrangler *)",
+    "Bash(npx --no-install wrangler *)",
+    "Bash(npx -y wrangler*)",
+    "Bash(npm exec * wrangler*)",
+    "Bash(node_modules/.bin/wrangler*)",
     "Bash(node worker/preview.mjs*)",
   ]) {
     assert.ok(permissions.deny.includes(rule), rule);
   }
+  assert.ok(permissions.ask.includes("Bash(npm run set-preview-host *)"));
 });
 
+const BUILD_WORKFLOW = readRepoFile(".github/workflows/preview-build.yml");
 const WORKFLOW = readRepoFile(".github/workflows/preview.yml");
 
-/** @param {string} job */
-function readJobText(job) {
-  const text = WORKFLOW.match(new RegExp(`^ {2}${job}:\\n(?:(?: {4}.*)?\\n)*`, "m"))?.[0];
+/**
+ * @param {string} workflow
+ * @param {string} job
+ */
+function readJobText(workflow, job) {
+  const text = workflow.match(new RegExp(`^ {2}${job}:\\n(?:(?: {4}.*)?\\n)*`, "m"))?.[0];
   assert.ok(text, job);
   return text;
 }
 
 /**
  * A job's `if:`, as a test over the event's context, read by the few rules of GitHub's
- * expressions the workflow uses.
+ * expressions the workflows use.
+ * @param {string} workflow
  * @param {string} job
  */
-function readJobCondition(job) {
-  const text = readJobText(job);
+function readJobCondition(workflow, job) {
+  const text = readJobText(workflow, job);
   const folded = text.match(/^ {4}if: >-\n((?: {6}.*\n)+)/m)?.[1];
+  assert.ok(folded, job);
   const expression = folded
-    ? folded
-        .split("\n")
-        .map((line) => line.trim())
-        .join(" ")
-    : text.match(/^ {4}if: (.+)$/m)?.[1];
-  assert.ok(expression, job);
+    .split("\n")
+    .map((line) => line.trim())
+    .join(" ");
   const script = expression
     .replaceAll(/\.\*\.(\w+)/g, ".map((item) => item.$1)")
     .replaceAll("==", "===");
@@ -344,61 +446,83 @@ const contains = (list, value) => list.includes(value);
  * @param {boolean} [options.isFork]
  */
 const describeEvent = ({ action, labels = [], label, isFork = false }) => ({
-  event_name: "pull_request",
-  repository: "owner/sports-apps",
+  repository: REPOSITORY,
   event: {
     action,
     label: label ? { name: label } : undefined,
     pull_request: {
       labels: labels.map((name) => ({ name })),
-      head: { repo: { full_name: isFork ? "someone/sports-apps" : "owner/sports-apps" } },
+      head: { repo: { full_name: isFork ? "someone/sports-apps" : REPOSITORY } },
     },
   },
 });
 
-/** @param {ReturnType<typeof describeEvent>} github */
-const listRunJobs = (github) =>
-  ["deploy", "delete"].filter((job) => readJobCondition(job)(github, contains));
-
-test("the Preview workflow makes a preview only for a pull request labeled preview", () => {
-  /** @type {[Parameters<typeof describeEvent>[0], string[]][]} */
+test("the Preview build runs only for a pull request from this repo whose preview label or code changed", () => {
+  const isBuilt = readJobCondition(BUILD_WORKFLOW, "build");
+  /** @type {[Parameters<typeof describeEvent>[0], boolean][]} */
   const cases = [
-    [{ action: "labeled", label: "preview", labels: ["preview"] }, ["deploy"]],
-    [{ action: "labeled", label: "beta", labels: ["beta", "preview"] }, []],
-    [{ action: "synchronize", labels: ["preview"] }, ["deploy"]],
-    [{ action: "reopened", labels: ["preview"] }, ["deploy"]],
-    [{ action: "synchronize", labels: ["beta"] }, []],
-    [{ action: "opened", labels: ["preview"] }, []],
-    [{ action: "unlabeled", label: "preview" }, ["delete"]],
-    [{ action: "unlabeled", label: "beta", labels: ["preview"] }, []],
-    [{ action: "closed", labels: ["preview"] }, ["delete"]],
-    [{ action: "closed", labels: [] }, []],
+    [{ action: "labeled", label: "preview", labels: ["preview"] }, true],
+    [{ action: "labeled", label: "beta", labels: ["beta", "preview"] }, false],
+    [{ action: "synchronize", labels: ["preview"] }, true],
+    [{ action: "reopened", labels: ["preview"] }, true],
+    [{ action: "synchronize", labels: ["beta"] }, false],
+    [{ action: "opened", labels: ["preview"] }, false],
+    [{ action: "unlabeled", label: "preview" }, true],
+    [{ action: "unlabeled", label: "beta", labels: ["preview"] }, false],
+    [{ action: "closed", labels: ["preview"] }, true],
+    [{ action: "closed", labels: [] }, false],
   ];
-  for (const [event, jobs] of cases) {
-    assert.deepEqual(listRunJobs(describeEvent(event)), jobs, JSON.stringify(event));
-    assert.deepEqual(listRunJobs(describeEvent({ ...event, isFork: true })), [], "a fork's");
+  for (const [event, isExpected] of cases) {
+    assert.equal(isBuilt(describeEvent(event), contains), isExpected, JSON.stringify(event));
+    assert.equal(isBuilt(describeEvent({ ...event, isFork: true }), contains), false, "a fork's");
   }
   assert.match(
-    WORKFLOW,
+    BUILD_WORKFLOW,
     /^on:\n {2}pull_request:\n {4}types: \[labeled, unlabeled, synchronize, reopened, closed\]\n\n/m,
-  );
-  assert.doesNotMatch(WORKFLOW, /workflow_dispatch/);
-  assert.deepEqual(
-    [...WORKFLOW.matchAll(/^ {2}([\w-]+):\n {4}if:/gm)].map(([, job]) => job),
-    ["deploy", "delete"],
   );
 });
 
-test("the Preview workflow uses only the preview environment, and installs wrangler before the token", () => {
-  const environments = [...WORKFLOW.matchAll(/^ +environment: (.+)$/gm)].map(([, name]) => name);
-  assert.deepEqual(environments, ["preview", "preview"]);
-  const deploy = readJobText("deploy");
-  const install = deploy.match(
-    /^ {6}- run: npm install --no-save --ignore-scripts wrangler@(.+)$/m,
+test("the Preview workflow takes only a finished build of a pull request from this repo", () => {
+  const isSynced = readJobCondition(WORKFLOW, "sync");
+  /**
+   * @param {string} conclusion
+   * @param {string} repository the repository the build's branch is in
+   */
+  const describeRun = (conclusion, repository) => ({
+    repository: REPOSITORY,
+    event: { workflow_run: { conclusion, head_repository: { full_name: repository } } },
+  });
+  assert.equal(isSynced(describeRun("success", REPOSITORY), contains), true);
+  assert.equal(isSynced(describeRun("failure", REPOSITORY), contains), false);
+  assert.equal(isSynced(describeRun("cancelled", REPOSITORY), contains), false);
+  assert.equal(isSynced(describeRun("success", "someone/sports-apps"), contains), false);
+  assert.match(
+    WORKFLOW,
+    /^on:\n {2}workflow_run:\n {4}workflows: \[Preview build\]\n {4}types: \[completed\]\n\n/m,
   );
+});
+
+test("the pull request's code builds with no secret, and the token runs only main's code", () => {
+  assert.doesNotMatch(BUILD_WORKFLOW, /secrets\.|environment:/);
+  assert.doesNotMatch(readJobText(WORKFLOW, "sync"), /^ +ref:/m);
+  for (const workflow of [BUILD_WORKFLOW, WORKFLOW]) {
+    assert.doesNotMatch(workflow, /workflow_dispatch|pull_request_target/);
+  }
+  const environments = [...WORKFLOW.matchAll(/^ +environment: (.+)$/gm)].map(([, name]) => name);
+  assert.deepEqual(environments, ["preview"]);
+});
+
+test("the Preview workflow installs wrangler before the token, and hands every app's secrets to the sync", () => {
+  const sync = readJobText(WORKFLOW, "sync");
+  const install = sync.match(/^ {6}- run: npm install --no-save --ignore-scripts wrangler@(.+)$/m);
   assert.match(install?.[1] ?? "", /^\d+\.\d+\.\d+$/);
-  const steps = deploy.split(/^ {6}- /m);
+  const steps = sync.split(/^ {6}- /m);
   const installStep = steps.find((step) => step.includes("wrangler@"));
   assert.doesNotMatch(installStep ?? "", /secrets\./);
   assert.ok(steps.indexOf(installStep ?? "") < steps.findIndex((step) => step.includes("TOKEN")));
+  for (const app of listApps()) {
+    for (const secret of [`${app.toUpperCase()}_BETA_PAGE_URL`, `${app.toUpperCase()}_PREVIEW_HOST`]) {
+      assert.match(sync, new RegExp(`^ {10}${secret}: \\$\\{\\{ secrets\\.${secret} \\}\\}$`, "m"));
+    }
+  }
 });

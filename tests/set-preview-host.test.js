@@ -42,7 +42,7 @@ test("the host is added to the app's beta Worker for its previews alone, and nev
   for (const line of printed) assert.doesNotMatch(line, /previews\.sports\.example/);
 });
 
-test("a host the free certificate doesn't cover, or that isn't a host, is refused before any change", async () => {
+test("a host deeper than one level under its domain, whose previews would get no certificate, or that isn't a host, is refused before any change", async () => {
   /** @type {[string | undefined, RegExp][]} */
   const refusals = [
     ["mlb.previews.sports.example", /one level under its domain/],

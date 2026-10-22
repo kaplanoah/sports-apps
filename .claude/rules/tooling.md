@@ -41,9 +41,11 @@ paths:
   Run it only when the user asks.
 - `npm run set-app-key -- <app>` gives that app's Worker its `APP_KEY` and prints the page's address.
   `--rotate` replaces the key, which changes the address; do that only when the user asks.
+  A new beta key goes in both the `beta` and `preview` environments' `<APP>_BETA_PAGE_URL`.
 - `npm run set-access-code -- <app> <code>` sets the code an app's page asks for, with a new random `ACCESS_SIGNING_KEY`; the user picks the code.
   Every app on a channel takes the same code, since the deploy and the workflow sign each in with the environment's one `ACCESS_CODE`.
   A new code signs every phone out, and `--remove` stops asking.
+  A new beta code goes in both the `beta` and `preview` environments' `ACCESS_CODE`.
   Never commit, log, or post the code.
 - `npm run set-page-host -- <app> <host>` points a host on a domain in the Cloudflare account at that app's Worker and names it in the Worker's `PAGE_HOST` secret,
   so the page also opens there without its key, behind its access code, which it needs first; the user picks the host.
@@ -56,26 +58,32 @@ paths:
   It's a domain each app's `PAGE_HOST` on that channel is under, since the service checks each passkey against the origin of the caller's page.
   It never prints the domain, and refuses when the Worker already has one, since a passkey signs in only to the site it was made under.
   The owner picks the domain; run it once on each channel, beside `set-email-key`; keep the domain out of the repo, as the page hosts are.
-- Previews: the `Preview` workflow runs the root's `worker/preview.mjs` in the `preview` environment,
-  whose token edits only the apps' beta Workers, and only for PRs from this repo, never a fork's:
-  - `deploy` as a PR gets the `preview` label, and on each push or reopen while it has it,
-    builds each app the PR changes as beta, uploads it with `wrangler preview`, and opens it with `check-page.mjs`,
-    which waits for the page's live connection to get beta's first message.
-  - `delete` as the label comes off, or a PR with it closes, deletes each app's preview by Cloudflare's API.
+- Previews: a PR from this repo labeled `preview`, never a fork's, gets a preview of each beta Worker it changes (the root's `worker/preview.mjs`):
+  - The `Preview build` workflow, as the label goes on or off, and on each push, reopen, or close while the PR has it,
+    builds each app the PR changes as beta, with the PR's own code and no secret or environment.
+  - The `Preview` workflow then runs `main`'s code in the `preview` environment, never the PR's, to upload each build with `wrangler preview`,
+    open it with `check-page.mjs`, which waits for the page's live connection to get beta's first message,
+    and delete, by Cloudflare's API, each app's preview the PR no longer wants.
+  - Its one comment on the PR names each preview and how it stands, never its address, and the run fails on any that didn't draw.
 - A preview previews page code on beta's data: it serves its PR's page files and asks beta's live version for everything else,
   the access code and sign-in, the handoff, `health`, the store and its socket, push, and the reads.
   So a change to a Worker, the store, push, or the accounts service still needs beta.
+  And beta's live version must export `PreviewEntrypoint` and be at least as new as `main`'s Worker before a round opens,
+  so when it isn't, put a PR built on current `main` on beta first, as the `ship` skill says.
 - A preview inherits no binding, var, or secret, and its only binding is `BETA`, to its app's beta Worker's `PreviewEntrypoint`,
-  under `[env.beta.previews]` in its app's `wrangler.toml` (the root's `tests/preview.test.js`).
+  under `[env.beta.previews]` in its app's `wrangler.toml` as `main` has it (the root's `tests/preview.test.js`).
   That entrypoint, which only a binding reaches, answers with beta's own key, code, and store (`shared/worker/preview-entrypoint.js`),
   and the preview never reads a store or secret of its own (`servePreview` in `shared/worker/app-worker.js`).
-- The `preview` environment's secrets are `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, `ACCESS_CODE`, and each app's `<APP>_BETA_APP_KEY` and `<APP>_PREVIEW_HOST`,
+  The preview's own code still runs on Cloudflare and sees what a phone sends it, so the label goes only on a PR whose page code the owner's sessions wrote.
+- The `preview` environment, limited to `main`, holds `CLOUDFLARE_API_TOKEN`, limited to the apps' beta Workers, and `CLOUDFLARE_ACCOUNT_ID`.
+  It also holds `ACCESS_CODE` and each app's `<APP>_BETA_PAGE_URL`, the same as the `beta` environment's, and each app's `<APP>_PREVIEW_HOST`,
   the last three only so `check-page.mjs` can open each preview.
 - Wrangler runs only in that workflow, pinned to one version and installed before the token is there.
   Never run wrangler or `preview.mjs` in a session, which `.claude/settings.json` denies.
 - `npm run set-preview-host -- <app> <host>` adds a host to that app's beta Worker for its previews alone,
   so each preview answers at its name under it, and beta's own page doesn't.
-  The host is one level under beta's `RP_ID` domain, so passkeys work there and Cloudflare's free certificate covers each preview's name.
+  The host is one level under a domain in the Cloudflare account, which the script checks, since Cloudflare makes each preview's certificate only under such a host.
+  It's also under beta's `RP_ID` domain, so passkeys work there.
   The owner picks the host and names it in the `preview` environment's `<APP>_PREVIEW_HOST`; keep it out of the repo, as the page hosts are.
 - Until the accounts service has both secrets, its health says it isn't ok, naming the secret missing, and registration and sign-in refuse.
 - Mask, in anything a workflow logs or posts, what AGENTS.md's public-repo bullet keeps out of the repo,

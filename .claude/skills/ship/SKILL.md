@@ -71,20 +71,24 @@ This skill holds what "Shipping a change" in AGENTS.md leaves out, most of it un
   6. Push to beta: `git push -f origin <branch>:beta`.
   7. Wait for that push's Deploy run to say `worker check: ok` for each Worker, and tell the owner to use the beta app on the Home Screen.
      Name the commit the beta tag at the top of the app should show, so a build swapped since is plain to see.
-- A design round runs on a preview of the PR, never on beta, so beta stays free for what needs it.
+- A design round that isn't red runs on a preview of the PR, never on beta, so beta stays free for what needs it.
   A preview is a copy of an app's beta Worker named `pr-<number>`, built as beta, so it has beta's tag and tuning panel,
   which serves the PR's page files and reads everything else from beta's live version: its access code, store, live connection, push, and reads
   (the root's `worker/preview.mjs` and `servePreview` in `shared/worker/app-worker.js`).
   It answers only at its name under the app's preview host, at beta's key, behind beta's access code.
 - To open a round on a preview:
-  1. Add the `preview` label to the PR.
-     The `Preview` workflow (`.github/workflows/preview.yml`) makes a preview of each app the PR changes,
-     opens each as a phone does, and says on the PR, by the preview's name alone, that it's up.
+  1. Check that beta's live version is at least as new as `main`'s Worker, since a preview reads it through its `PreviewEntrypoint`.
+     The commit in beta's tag is on `main`, or on a PR built on current `main`, once that PR's Deploy run said `worker check: ok`.
+     When it isn't, put a PR built on current `main` on beta first, as above, this one if it's free to hold beta.
+  2. Add the `preview` label to the PR.
+     The `Preview build` workflow (`.github/workflows/preview-build.yml`) builds each app the PR changes as beta, with no secret,
+     and the `Preview` workflow (`.github/workflows/preview.yml`) then uploads each build, opens it as a phone does,
+     and says on the PR, by the preview's name alone, how it stands.
      Each push to the PR makes it again.
-  2. Once that run passes, give the owner each app's link in chat: `https://pr-<number>.<preview host>/<beta's key>/`.
+  3. Once that run passes, give the owner each app's link in chat: `https://pr-<number>.<preview host>/<beta's key>/`.
      Ask the owner in chat for a host or key the session doesn't have.
      Never put the link in the PR, an issue, or a log.
-  3. Take `preview` off once the owner picks the round, which deletes each preview.
+  4. Take `preview` off once the owner picks the round, which deletes each preview.
      Closing the PR deletes them too.
 - Beta, never a preview, is for anything a preview reads from beta's live version:
   - a red change and its `phone-ok`

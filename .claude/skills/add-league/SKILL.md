@@ -28,6 +28,8 @@ Delete it once the app's first PR merges.
 1. **Worker config.** `apps/<app>/worker/wrangler.toml` names the Worker `<app>-app`,
    binds the store and the gate's rate limit, and names the beta channel's Worker `<app>-app-beta` under `[env.beta]`,
    as the WNBA's does, which the root's `tests/deploy.test.js` checks for every app.
+   Its `[env.beta]` keeps `preview_urls = false`, and its `[env.beta.previews]` binds only `BETA`, to `<app>-app-beta`'s `PreviewEntrypoint`,
+   as the WNBA's does, which the root's `tests/preview.test.js` checks.
    The tooling finds apps by this file, and the root's `package.json`'s `#page-files/*` import,
    the lint, type, and dead code globs, and Playwright's projects all pick the new folder up from `apps/*`.
    Add `worker/page-files.mjs`, a one-line call to the root's `readPageFiles`.
@@ -88,6 +90,7 @@ Delete it once the app's first PR merges.
    Each sheet joins `sheet-stack.spec.mjs` and `sheet-reload.spec.mjs` in the PR that adds it.
    Hand the deploy each channel's page secrets in `.github/workflows/deploy.yml`,
    and the `Watch apps` workflow production's in `watch.yml`, which the root's `tests/deploy.test.js` checks.
+   Hand the `Preview` workflow `<APP>_BETA_PAGE_URL` and `<APP>_PREVIEW_HOST` in `.github/workflows/preview.yml`, which the root's `tests/preview.test.js` checks.
 7. **Docs.** Add the app to the README's table and its setup section's list of apps, and give it a `.claude/rules/<app>.md` of its own, as `mlb.md` and `wnba.md` are,
    and name it beside them in AGENTS.md's list of rule files.
 8. **Ship it.** Open it as a `feat:` PR, which starts the app at version 1.0.0.
@@ -105,3 +108,6 @@ Delete it once the app's first PR merges.
    The merge's deploy then replaces `<app>-app`, which `npm run set-app-key -- <app>` gives its key in the same way,
    and the owner adds its address as `<APP>_PAGE_URL`, beside the `production` environment's `ACCESS_CODE`,
    so each deploy and the `Watch apps` workflow open its page.
+   For its previews, the owner adds `<app>-app-beta` to the `preview` environment's token,
+   picks its preview host as the README's "Before the first preview" says, and adds the beta address and the host to that environment's secrets,
+   and you run `npm run set-preview-host -- <app> <host>`, which the owner approves when `.claude/settings.json` asks.

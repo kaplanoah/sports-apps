@@ -173,3 +173,26 @@ test("beta's code changing signs a preview's phones out, as it does beta's", asy
   const data = await requestPreview(changed, "/store/seasons/2026", { cookie });
   assert.equal(data.status, 401);
 });
+
+test("beta renews a preview's sign-in only for the page itself, not for each of its files", async () => {
+  const beta = createBeta();
+  const cookie = await signIn(beta);
+  const address = (/** @type {string} */ path) => `https://pr-12.previews.example/k3y${path}`;
+  const page = await beta.binding.readPageRoute(address("/"), cookie);
+  assert.equal(page?.access, "open");
+  assert.match(String(page?.cookie), /^access=/);
+  const styles = await beta.binding.readPageRoute(address("/styles.css"), cookie);
+  assert.deepEqual(styles, { appPath: "/styles.css", access: "open", cookie: null });
+  const served = await requestPreview(beta, "/styles.css", { cookie });
+  assert.equal(served.headers.get("set-cookie"), null);
+});
+
+test("beta answers its own access routes, so a preview never serves one from its page files", async () => {
+  const beta = createBeta();
+  for (const path of ["", "/access", "/access/handoff", "/access/move"]) {
+    const route = await beta.binding.readPageRoute(`https://pr-12.previews.example/k3y${path}`, null);
+    assert.equal(route, null, path);
+  }
+  const move = await requestPreview(beta, "/access/move");
+  assert.equal(move.status, 404);
+});
