@@ -1,11 +1,6 @@
 import { isSameJson } from "../page/compare.js";
 import { createPushService } from "./push.js";
-import {
-  describeError,
-  respondError,
-  respondJson,
-  respondMethodNotAllowed,
-} from "./responses.js";
+import { describeError, respondError, respondJson, respondMethodNotAllowed } from "./responses.js";
 
 // An app's saved data, kept in one Durable Object so every device reads the latest write.
 // Documents come back with sorted keys, and a missing one reads as null. The page can read any
