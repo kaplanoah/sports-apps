@@ -46,37 +46,38 @@ test("the standings leave room between each group's name and its columns' names"
   expect(gap).toBeGreaterThanOrEqual(STANDINGS_HEADING_GAP_PX);
 });
 
-test("a standings conference tag sits half a pixel above its club's baseline, its dot's bottom, where it looks level with the name", async ({
+test("a standings club's dot and conference tag each center on the middle of its name's capitals", async ({
   page,
 }) => {
   await openApp(page);
   await openSeasonPart(page, "Standings");
-  const cell = page.locator("#standings-league .team-cell", {
-    has: page.locator(".conference-tag"),
-  });
-  const tag = cell.first().locator(".conference-tag");
+  const cell = page
+    .locator("#standings-league .team-cell", { has: page.locator(".conference-tag") })
+    .first();
+  const tag = cell.locator(".conference-tag");
   await expect(tag).toHaveText(/^[EW]$/);
-  const [{ bottom: tagBaseline }, dot] = await Promise.all([
+  const [name, tagCapitals, dot] = await Promise.all([
+    readCapitals(cell.locator(".team-name")),
     readCapitals(tag),
-    cell.first().locator(".dot").boundingBox(),
+    cell.locator(".dot").boundingBox(),
   ]);
-  const clubBaseline = (dot?.y ?? 0) + (dot?.height ?? 0);
-  expect(clubBaseline - tagBaseline).toBeCloseTo(0.5, 2);
+  expect(tagCapitals.middle).toBeCloseTo(name.middle, 1);
+  expect((dot?.y ?? 0) + (dot?.height ?? 0) / 2).toBeCloseTo(name.middle, 1);
   expect(await listChipsOffCenter(page)).toEqual([]);
 });
 
-test("a conference's standings center each seed note on its club", async ({ page }) => {
+test("a conference's standings set each seed note's baseline a third of a pixel above its name's", async ({
+  page,
+}) => {
   await openApp(page);
   await openSeasonPart(page, "Standings");
   const cell = page.locator("#standings-east .team-cell", { has: page.locator(".seed-note") });
   await expect(cell.first()).toBeAttached();
-  const [note, club] = await Promise.all([
-    cell.first().locator(".seed-note").boundingBox(),
-    cell.first().locator(".club").boundingBox(),
+  const [note, name] = await Promise.all([
+    readCapitals(cell.first().locator(".seed-note")),
+    readCapitals(cell.first().locator(".team-name")),
   ]);
-  const findMiddle = (/** @type {{ y: number, height: number } | null} */ box) =>
-    (box?.y ?? 0) + (box?.height ?? 0) / 2;
-  expect(findMiddle(note)).toBeCloseTo(findMiddle(club), 1);
+  expect(name.bottom - note.bottom).toBeCloseTo(1 / 3, 1);
 });
 
 test("the standings' recent form reads a step below the season, in the mid ink", async ({

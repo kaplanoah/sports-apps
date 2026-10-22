@@ -212,6 +212,17 @@
   --numbers: "Barlow Condensed", "Arial Narrow", sans-serif;
   --title-face: "Barlow Condensed", "Arial Narrow", sans-serif;
   --team-name: "Barlow Condensed", "Arial Narrow", sans-serif;
+  /* How far each place moves a team line's dot, seed, or tag down, from where its line puts it to
+     the middle of the name's capitals, and the seed note to just above the name's baseline. */
+  --standings-dot-drop: 1.15px;
+  --conference-tag-drop: 1.15px;
+  --seed-note-drop: 1.65px;
+  --bracket-dot-drop: -0.2px;
+  --bracket-seed-drop: -0.2px;
+  --faceoff-dot-drop: 0.8px;
+  --faceoff-seed-drop: -0.8px;
+  --compact-dot-drop: 0.75px;
+  --news-dot-drop: 0.45px;
   /* Each type role's size and weight in Barlow, and Barlow Condensed where a role sets it
      (shared/page/type.css). */
   --type-title-size: calc(23.5rem / 16);
@@ -571,6 +582,9 @@ header.top h1 .title-letter:nth-child(3) {
 .game-side .dot {
   width: 16px;
   height: 16px;
+}
+.team-line .dot {
+  translate: 0 var(--bracket-dot-drop);
 }
 
 /* Games: each day's games share a card, beside its date as a wall calendar shows it, level with
@@ -969,6 +983,12 @@ header.top h1 .title-letter:nth-child(3) {
 .faceoff-side.home .club {
   flex-direction: row-reverse;
 }
+.faceoff-side .dot {
+  translate: 0 var(--faceoff-dot-drop);
+}
+.faceoff-side .seed {
+  translate: 0 calc(1px + var(--faceoff-seed-drop));
+}
 .faceoff-side.lost .club {
   color: var(--ink-dim);
 }
@@ -1038,6 +1058,9 @@ header.top h1 .title-letter:nth-child(3) {
 }
 .tape-teams .club + .club {
   flex-direction: row-reverse;
+}
+:is(.tape-teams, table.line-score, table.players) .club .dot {
+  translate: 0 var(--compact-dot-drop);
 }
 /* Road on the visitors' side and Home on the hosts', with a thin rule between. */
 .label-split {
@@ -1722,7 +1745,7 @@ th[aria-sort="ascending"] .roster-caret {
   position: absolute;
   top: 50%;
   right: calc(100% + 9px);
-  translate: 0 -50%;
+  translate: 0 calc(-50% + var(--bracket-seed-drop));
   display: flex;
   align-items: flex-end;
   gap: 0.45em;
@@ -2035,22 +2058,20 @@ table.standings tr.below td {
   min-width: 0;
   vertical-align: middle;
 }
-/* A conference chip sits on the club's baseline, its dot's bottom, which keeps its words on a whole
-   pixel, then rises half a pixel, where it looks level with the club's name. */
-.team-cell:has(.conference-tag) {
-  align-items: baseline;
-}
 table.standings td.team .club {
   font-size: var(--type-team-size);
   font-weight: var(--type-team-weight);
 }
+table.standings td.team .dot {
+  translate: 0 var(--standings-dot-drop);
+}
 .conference-tag {
   --chip-ink: var(--ink-mid);
   --chip-line: var(--ink-mid);
-  position: relative;
-  top: -0.5px;
+  translate: 0 var(--conference-tag-drop);
 }
 .seed-note {
+  translate: 0 var(--seed-note-drop);
   font-family: var(--display);
   font-size: var(--type-caption-size);
   font-weight: calc(var(--type-caption-weight) + 200);
@@ -2281,6 +2302,7 @@ table.standings tr.playoff-line + tr td {
 .news-teams .dot {
   width: 14px;
   height: 14px;
+  translate: 0 var(--news-dot-drop);
 }
 .news-title {
   font-size: var(--type-headline-size);

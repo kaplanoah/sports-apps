@@ -1,0 +1,77 @@
+{
+  "name": "Team lines",
+  "values": [
+    {
+      "property": "--standings-dot-drop",
+      "label": "Standings dot",
+      "unit": "px",
+      "min": -3,
+      "max": 3,
+      "step": 0.05
+    },
+    {
+      "property": "--conference-tag-drop",
+      "label": "Standings E/W",
+      "unit": "px",
+      "min": -3,
+      "max": 3,
+      "step": 0.05
+    },
+    {
+      "property": "--seed-note-drop",
+      "label": "Standings seed note",
+      "unit": "px",
+      "min": -3,
+      "max": 3,
+      "step": 0.05
+    },
+    {
+      "property": "--bracket-dot-drop",
+      "label": "Bracket dot",
+      "unit": "px",
+      "min": -3,
+      "max": 3,
+      "step": 0.05
+    },
+    {
+      "property": "--bracket-seed-drop",
+      "label": "Bracket seed",
+      "unit": "px",
+      "min": -3,
+      "max": 3,
+      "step": 0.05
+    },
+    {
+      "property": "--faceoff-dot-drop",
+      "label": "Game sheet band dot",
+      "unit": "px",
+      "min": -3,
+      "max": 3,
+      "step": 0.05
+    },
+    {
+      "property": "--faceoff-seed-drop",
+      "label": "Game sheet band seed",
+      "unit": "px",
+      "min": -3,
+      "max": 3,
+      "step": 0.05
+    },
+    {
+      "property": "--compact-dot-drop",
+      "label": "Game sheet team rows dot",
+      "unit": "px",
+      "min": -3,
+      "max": 3,
+      "step": 0.05
+    },
+    {
+      "property": "--news-dot-drop",
+      "label": "News dot",
+      "unit": "px",
+      "min": -3,
+      "max": 3,
+      "step": 0.05
+    }
+  ]
+}
