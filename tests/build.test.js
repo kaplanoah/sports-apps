@@ -111,7 +111,9 @@ test("a production release has no label, so its page shows no channel tag", () =
 
 const TUNING_ROUND = {
   name: "Corners",
-  values: [{ property: "--radius-control", label: "Button corners", min: 0, max: 12, step: 1 }],
+  values: [
+    { property: "--radius-control", label: "Button corners", unit: "px", min: 0, max: 12, step: 1 },
+  ],
 };
 const TUNING_TAGS = [
   /<script type="application\/json" id="tuningRound">/,

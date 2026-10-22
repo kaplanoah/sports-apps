@@ -93,6 +93,7 @@ test("a slider's value holds to its steps and its range, and writes no float noi
   assert.equal(writeNumber(1.4, halfStart), "1.5px");
   assert.equal(nudgeNumber("4.5px", halfStart, 1), "4.5px");
   assert.equal(writeNumber(3, { ...DOT_LIFT, min: 0, max: 2.5, step: 1 }), "2px");
+  assert.equal(writeNumber(0.3, { ...DOT_LIFT, min: 0, max: 0.3, step: 0.1 }), "0.3px");
 });
 
 test("a slider's arrows move it a step at a time and stop at its ends", () => {
