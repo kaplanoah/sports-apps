@@ -301,7 +301,7 @@ test("the candidates kept for the check across areas are every planned area's, i
   ]);
 });
 
-test("the check across areas' job counts the cases it left unchecked as the judge does, from the record it keeps", () => {
+test("the check across areas' job counts the problems it left unchecked as the judge does, from the record it keeps", () => {
   const folder = mkdtempSync(join(tmpdir(), "judge-review-"));
   writeFileSync(join(folder, CANDIDATES_RECORD), JSON.stringify([{ id: "1.1" }, { id: "2.1" }]));
   const answer = { findings: [{ ids: ["1.1"], verdict: "rejected" }], unjudged: [] };
@@ -459,7 +459,7 @@ test("a file a reviewer didn't read in full fails the review, keeping the earlie
   assert.doesNotMatch(body, /- `c.js`/);
 });
 
-test("a reviewer that gave no answer, or a check across areas that left a case unchecked, fails the review", () => {
+test("a reviewer that gave no answer, or a check across areas that left a problem unchecked, fails the review", () => {
   const records = finishReview(AREAS, {
     [nameFindRecord(1)]: finishReviewer(1, {
       tries: [{ reads: [], answer: null }],
@@ -472,7 +472,7 @@ test("a reviewer that gave no answer, or a check across areas that left a case u
   assert.ok(!isComplete);
   assert.match(
     body,
-    /- the reviewer of mlb page\n- the check across areas, which left 1 case unchecked/,
+    /- the reviewer of mlb page\n- the check across areas, which left 1 problem unchecked/,
   );
   assert.match(body, /Read in full: 3 of 3/);
 });

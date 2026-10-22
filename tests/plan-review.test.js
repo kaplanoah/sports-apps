@@ -832,7 +832,9 @@ test("the files a push changed are the ones its reviewers read, so a merge that 
   ]);
   assert.deepEqual(read(""), []);
   assert.deepEqual(ranges, [
+    WHOLE_CHANGE,
     ["t".repeat(40), "HEAD"],
+    WHOLE_CHANGE,
     ["t".repeat(40), "HEAD"],
   ]);
 });
@@ -937,7 +939,7 @@ test("a push's range starts from the reviewed head merged onto the base, conflic
  * given, `pushChange` commits to it, and `listPushed` checks out the pull request merged onto
  * main, as CI does, and chooses the review's stage.
  */
-function createPullRequest() {
+function createPullRequest({ stacked = false } = {}) {
   const folder = mkdtempSync(join(tmpdir(), "plan-review-git-"));
   const env = { ...process.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1" };
   const git = (/** @type {string[]} */ args) =>
@@ -971,6 +973,10 @@ function createPullRequest() {
   git(["init", "--quiet", "--initial-branch", "main"]);
   commit({ "a.js": writeLines("a", {}), "b.js": writeLines("b", {}) });
   git(["checkout", "--quiet", "-b", "pull"]);
+  if (stacked) {
+    commit({ "b.js": writeLines("b", { 2: "pull b 2" }), "c.js": "earlier pull c\n" });
+    git(["branch", "earlier"]);
+  }
   const reviewedHead = commit({
     "a.js": writeLines("a", { 2: "pull a 2" }),
     "b.js": writeLines("b", { 2: "pull b 2" }),
@@ -984,6 +990,12 @@ function createPullRequest() {
       commit(files);
       git(["checkout", "--quiet", "pull"]);
     },
+    squashEarlier() {
+      git(["checkout", "--quiet", "main"]);
+      git(["merge", "--quiet", "--squash", "earlier"]);
+      git(["commit", "--quiet", "--message", "Squash earlier pull"]);
+      git(["checkout", "--quiet", "pull"]);
+    },
     /** @param {Record<string, string>} resolved */
     pushMerge(resolved) {
       try {
@@ -994,19 +1006,26 @@ function createPullRequest() {
     },
     /** @param {Record<string, string>} files */
     pushChange: (files) => commit(files),
-    listPushed() {
+    readPush() {
       git(["checkout", "--quiet", "--detach", "main"]);
       git(["merge", "--quiet", "--no-ff", "--no-edit", "pull"]);
       const head = git(["rev-parse", "HEAD^2"]).trim();
-      return chooseStage({
+      const pushed = findPushedRange(reviewedHead, git);
+      /** @param {string[]} range @param {string[]} [files] */
+      const readDiff = (range, files = []) => ({
+        numstat: git(["diff", "--numstat", "--no-renames", ...range, "--", ...files]),
+        diff: git(["diff", "--no-renames", ...range, "--", ...files]),
+      });
+      const choice = chooseStage({
         reviewedHead,
         head,
         isOnBranch: true,
-        listChanged: () =>
-          listPushedFiles(findPushedRange(reviewedHead, git), (range) => ({
-            numstat: git(["diff", "--numstat", "--no-renames", ...range]),
-          })),
+        listChanged: () => listPushedFiles(pushed, readDiff),
       });
+      return { choice, pushed, readDiff };
+    },
+    listPushed() {
+      return this.readPush().choice;
     },
   };
 }
@@ -1035,4 +1054,44 @@ test("a change pushed after a merge of main is read, and nothing the merge broug
   pull.pushMerge({});
   pull.pushChange({ "d.js": "pull d\n" });
   assert.deepEqual(pull.listPushed(), { stage: "push", files: ["d.js"] });
+});
+
+test("a stacked pull after its earlier pull is squashed reads no file whose conflict accepts the base's copy", () => {
+  const pull = createPullRequest({ stacked: true });
+  pull.squashEarlier();
+  pull.moveMain({ "b.js": pull.writeLines("b", { 2: "main b 2" }) });
+  pull.pushMerge({ "b.js": pull.writeLines("b", { 2: "main b 2" }) });
+  pull.pushChange({ "a.js": pull.writeLines("a", { 2: "pushed a 2" }) });
+  const { choice, pushed, readDiff } = pull.readPush();
+  const rawDiff = readDiff(pushed).diff;
+  assert.match(rawDiff, /diff --git a\/b.js b\/b.js/);
+  assert.match(rawDiff, /<<<<<<<|>>>>>>>/);
+  assert.deepEqual(choice, { stage: "push", files: ["a.js"] });
+  const folder = mkdtempSync(join(tmpdir(), "plan-review-"));
+  const plan = writeReview(folder, {
+    choice,
+    since: pull.reviewedHead,
+    pushed,
+    readDiff,
+    repoFiles: [],
+    listStale: () => [],
+    rules: [],
+  });
+  assert.deepEqual(
+    plan.areas.flatMap(({ files }) => files),
+    ["a.js"],
+  );
+  assert.equal(
+    readFileSync(join(folder, "push/a.js.diff"), "utf8"),
+    splitDiffByFile(rawDiff).get("a.js"),
+  );
+  assert.ok(!existsSync(join(folder, "push/b.js.diff")));
+  assert.ok(!existsSync(join(folder, "push/c.js.diff")));
+  assert.doesNotMatch(readFileSync(join(folder, "push.md"), "utf8"), /b\.js|c\.js/);
+});
+
+test("a push that reverts a file to the base's copy leaves it unread", () => {
+  const pull = createPullRequest();
+  pull.pushChange({ "a.js": pull.writeLines("a", {}) });
+  assert.deepEqual(pull.listPushed(), { stage: "none" });
 });
