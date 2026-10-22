@@ -605,3 +605,17 @@ test("the page serves both themes' icons and System's", async () => {
   ])
     assert.ok(served.includes(icon), icon);
 });
+
+test("each theme's icon draws its ball and its panels in that theme's colors", () => {
+  const icons = {
+    "icon-light.svg": { ball: "#ea6536", panels: "#f0f1e8" },
+    "icon.svg": { ball: "#e35e31", panels: "#e5e7de" },
+  };
+  for (const [file, { ball, panels }] of Object.entries(icons)) {
+    const svg = readFileSync(`${import.meta.dirname}/../page/${file}`, "utf8");
+    assert.ok(svg.includes(`<circle cx="90" cy="90" r="58" fill="${ball}"/>`), file);
+    assert.ok(svg.includes(`fill="${panels}" fill-rule="evenodd"`), file);
+    for (const earlier of ["#cc3d24", "#e8e8e8", "#dadada"])
+      assert.ok(!svg.includes(earlier), `${file} still holds ${earlier}`);
+  }
+});

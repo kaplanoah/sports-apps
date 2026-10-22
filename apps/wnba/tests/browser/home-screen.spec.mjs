@@ -1,6 +1,6 @@
 import { ANDROID_PHONE, IPHONE } from "../../../../tests/browser/devices.mjs";
 import { WELCOME } from "../../../../tests/browser/home-screen-help.mjs";
-import { drawIcon } from "../../../../tests/browser/home-screen-icons.mjs";
+import { drawIcon, measureIconRedraw } from "../../../../tests/browser/home-screen-icons.mjs";
 import { MIDDLE_ALLOWANCE, measureStepNumbers } from "../../../../tests/browser/step-numbers.mjs";
 import { test, expect, openApp } from "./harness.mjs";
 import { CONTINUE, openSettings } from "./home-screen.mjs";
@@ -334,4 +334,39 @@ test("on a computer, the page asks for nothing", async ({ page }) => {
   await expect(page.locator(WELCOME)).toBeHidden();
   await openSettings(page);
   await expect(page.locator("#homeScreenTip")).toBeHidden();
+});
+
+test.describe("the Home Screen icons", () => {
+  // Only the ball's smoothed edge, where canvas and page draw it a little apart, is this far off.
+  const EDGE_ALLOWANCE = 4;
+  const EDGE_SHARE = 0.001;
+  const MEAN_ALLOWANCE = 0.1;
+
+  for (const [committed, svg] of [
+    ["icon-light-180.png", "icon-light.svg"],
+    ["icon-180.png", "icon.svg"],
+    ["icon-192.png", "icon.svg"],
+    ["icon-512.png", "icon.svg"],
+  ])
+    test(`${committed} is ${svg} drawn at its size`, async ({ page }) => {
+      const { mean, offShare } = await measureIconRedraw(page, PAGE_FOLDER, {
+        committed,
+        svgs: [svg],
+        allowance: EDGE_ALLOWANCE,
+      });
+      expect(mean).toBeLessThan(MEAN_ALLOWANCE);
+      expect(offShare).toBeLessThan(EDGE_SHARE);
+    });
+
+  test("System's icon splits the wood down the middle, its ball fading from Maple's on the left to Walnut's on the right", async ({
+    page,
+  }) => {
+    const { mean, offShare } = await measureIconRedraw(page, PAGE_FOLDER, {
+      committed: "icon-system-180.png",
+      svgs: ["icon-light.svg", "icon.svg"],
+      allowance: EDGE_ALLOWANCE,
+    });
+    expect(mean).toBeLessThan(MEAN_ALLOWANCE);
+    expect(offShare).toBeLessThan(EDGE_SHARE);
+  });
 });
