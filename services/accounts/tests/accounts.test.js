@@ -54,11 +54,12 @@ test("a passkey registers an account and signs back in to it", async () => {
 
 test("the store never holds an email, only its keyed hash", async () => {
   const { accounts, context } = createTestAccounts();
-  await registerAccount(accounts, await createPasskey());
+  const email = "Fan.Club@Example.test";
+  await registerAccount(accounts, await createPasskey(), email);
   const kept = JSON.stringify([...context.stored]).toLowerCase();
-  assert.ok(!kept.includes(EMAIL.toLowerCase()));
-  assert.ok(!kept.includes("fan"));
-  assert.ok(context.stored.has(`email/${await hashEmail(EMAIL, "test-secret")}`));
+  assert.ok(!kept.includes(email.toLowerCase()));
+  assert.ok(!kept.includes("fan.club"));
+  assert.ok(context.stored.has(`email/${await hashEmail(email, "test-secret")}`));
 });
 
 test("an email hashes the same however it's typed, and differently under another key", async () => {
