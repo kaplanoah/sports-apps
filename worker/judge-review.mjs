@@ -344,7 +344,7 @@ const LEADS = {
   first: (/** @type {number} */ areaCount) =>
     `read the whole change in ${pluralize(areaCount, "area")}`,
   push: (/** @type {number} */ areaCount, /** @type {string} */ since) =>
-    `read what the pushes since ${since.slice(0, 7)} changed, in ${pluralize(areaCount, "area")}`,
+    `read what the pushes since ${since.slice(0, 7)} changed in files the pull request still changes, in ${pluralize(areaCount, "area")}`,
 };
 
 /**
@@ -391,7 +391,7 @@ function describeReview(judged, { plan, sha }) {
  */
 const describeNothingDue = (plan, sha) =>
   plan.stage === "none"
-    ? `Claude read nothing new in ${sha}: the pushes since ${(plan.since ?? "").slice(0, 7)} change only what a merge of the base brings in.`
+    ? `Claude read nothing new in ${sha}: the pushes since ${(plan.since ?? "").slice(0, 7)} leave no new changes to review in files the pull request still changes.`
     : `Claude had nothing to read in ${sha}.`;
 
 /**

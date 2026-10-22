@@ -307,13 +307,13 @@ export function listPushedFiles(pushed, readDiff) {
 /**
  * Which review this run makes: the first, of the whole change; reviewed, on the head the last
  * full read ended on, as a label's run is, which leaves that read's summary as it is; one of what
- * the pushes since the last full read changed; or none, when they changed only what a merge of the
- * base brings in.
+ * the pushes since the last full read changed; or none, when the pushes leave no new changes in
+ * files the pull request still changes.
  * @param {object} review
  * @param {string | null} review.reviewedHead the head the last full read ended on
  * @param {string} review.head the pull request's head
  * @param {boolean} review.isOnBranch whether that head is still in the pull request's history
- * @param {() => string[]} review.listChanged the files the pushes since changed
+ * @param {() => string[]} review.listChanged the files both the pull request and the pushes since changed
  * @returns {{ stage: "first" | "reviewed" | "none" } | { stage: "push", files: string[] }}
  */
 export function chooseStage({ reviewedHead, head, isOnBranch, listChanged }) {

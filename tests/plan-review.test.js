@@ -818,15 +818,17 @@ test("equal items still make no more groups than asked for", () => {
   assert.equal(splitEvenly([15, 15, 15, 15], (size) => size, 3).length, 3);
 });
 
-test("the files a push changed are the ones its reviewers read, so a merge that only moved a file's context reads none", () => {
+test("a push reviews only files both it and the whole pull request change", () => {
   /** @type {string[][]} */
   const ranges = [];
   const read = (/** @type {string} */ numstat) =>
     listPushedFiles(["t".repeat(40), "HEAD"], (range) => {
       ranges.push(range);
-      return { numstat };
+      return {
+        numstat: range === WHOLE_CHANGE ? "2\t1\tshared/page/a.js\n-\t-\tlogo.png\n" : numstat,
+      };
     });
-  assert.deepEqual(read("2\t1\tshared/page/a.js\n-\t-\tlogo.png\n"), [
+  assert.deepEqual(read("2\t1\tshared/page/a.js\n-\t-\tlogo.png\n1\t1\trestored.js\n"), [
     "shared/page/a.js",
     "logo.png",
   ]);
@@ -934,10 +936,11 @@ test("a push's range starts from the reviewed head merged onto the base, conflic
 });
 
 /**
- * A pull request in a git repository of its own, reviewed at `reviewedHead`: `moveMain` commits
- * to main, `pushMerge` merges main into the pull request with each conflicted file resolved as
- * given, `pushChange` commits to it, and `listPushed` checks out the pull request merged onto
- * main, as CI does, and chooses the review's stage.
+ * A pull request in its own git repo, reviewed at `reviewedHead`. When `stacked`, it starts on
+ * the earlier pull's commit on `earlier`, which `squashEarlier` squashes onto main. `moveMain`
+ * commits to main, `pushMerge` merges it into the pull with conflicts resolved as given, and
+ * `pushChange` commits to the pull. `readPush` checks out its merge onto main as CI does and
+ * returns the review's choice, range, and diff reader; `listPushed` returns only the choice.
  */
 function createPullRequest({ stacked = false } = {}) {
   const folder = mkdtempSync(join(tmpdir(), "plan-review-git-"));

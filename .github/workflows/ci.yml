@@ -419,8 +419,9 @@ jobs:
   # areas; and one step with no Claude posts what it confirmed or left unsure
   # (worker/post-review.mjs), so no job that runs Claude can write to the pull request. The first
   # review reads the whole change, and a review after it what the pushes since the last full read
-  # changed. A run on the head the last full read ended on reads nothing and leaves that read's
-  # summary as it is.
+  # changed in files the pull request still changes. A push that only restores files to the base
+  # or merges it without resolving conflicts in files the pull request still changes reads nothing.
+  # A run on the head the last full read ended on reads nothing and leaves that read's summary as it is.
   # Review passes only once everything due was read and checked (worker/judge-review.mjs). With
   # nothing to review, such as a push to main or to a pull request, it plans nothing and passes,
   # since check fails on a skipped job, and says whether a review is still owed on the code, which

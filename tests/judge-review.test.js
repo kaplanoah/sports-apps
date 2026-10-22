@@ -512,12 +512,12 @@ test("a review of a push says what it read since, and findings already on the pu
   assert.ok(isComplete);
   assert.match(
     body,
-    /it read what the pushes since eeeeeee changed, in 1 area, and posted no findings, and found 2 findings already on it\./,
+    /it read what the pushes since eeeeeee changed in files the pull request still changes, in 1 area, and posted no findings, and found 2 findings already on it\./,
   );
   assert.doesNotMatch(body, /Left unread/);
 });
 
-test("a push that changes only what a merge brings in passes and moves the reviewed head on", () => {
+test("a merge-only push or one restoring files to the base passes with an accurate summary and moves the reviewed head on", () => {
   const { isComplete, body } = judgeReview({
     sha: HEAD,
     plan: { stage: "none", since: EARLIER, areas: [], unread: [] },
@@ -527,7 +527,7 @@ test("a push that changes only what a merge brings in passes and moves the revie
   assert.equal(readReviewedHead(body), HEAD);
   assert.match(
     body,
-    /read nothing new in c{40}: the pushes since eeeeeee change only what a merge of the base brings in/,
+    /read nothing new in c{40}: the pushes since eeeeeee leave no new changes to review in files the pull request still changes/,
   );
 });
 

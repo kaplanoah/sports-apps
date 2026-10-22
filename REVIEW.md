@@ -7,7 +7,8 @@ AGENTS.md and the rule files in `.claude/rules/` hold the rules the code keeps; 
 
 - Read in full every diff your review hands you:
   the whole change in a first review,
-  and what the pushes since the last finished review changed in a review asked for after them.
+  and what the pushes since the last finished review changed in files the pull request still changes, in a review asked for after them.
+  A file restored to the base's copy has no pull request change left to review and is intentionally left out, including when resolving a merge conflict accepts that copy.
   A recorded fixture (`tests/fixtures/`), `package-lock.json`, a binary file,
   or a drawing or minified library a tool wrote needs only its name and size,
   and whether a test reads it.
