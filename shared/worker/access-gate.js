@@ -3,7 +3,7 @@
 // phone out, and the Worker holds nothing about who has signed in. The signing key is its own
 // secret because the page's key is in every link, and a cookie signed with it could be made, and
 // a code guessed, without ever meeting the limit on tries.
-import { respondError, respondJson } from "./responses.js";
+import { respondError, respondJson, respondMethodNotAllowed } from "./responses.js";
 
 export const ACCESS_PATH = "/access";
 
@@ -159,13 +159,12 @@ const signHandoff = (expiresAt, env) =>
 /**
  * @param {Request} request
  * @param {any} env
- * @param {string} prefix
+ * @param {URL} address the handoff's route where the browser redeems it
  */
-async function createHandoff(request, env, prefix) {
+async function createHandoff(request, env, address) {
   if (!env.ACCESS_CODE) return respondNeedsNoCode();
   if ((await readAccess(request, env)) !== "open") return respondAccessRequired();
   const expiresAt = String(Math.floor(Date.now() / 1000) + HANDOFF_SECONDS);
-  const address = new URL(`${prefix}${HANDOFF_PATH}`, request.url);
   address.searchParams.set(HANDOFF_TOKEN_KEY, `${expiresAt}.${await signHandoff(expiresAt, env)}`);
   return respondJson({ address: address.href, expiresInMs: HANDOFF_SECONDS * 1000 });
 }
@@ -207,9 +206,32 @@ async function redeemHandoff(request, env, prefix) {
  * @param {string} prefix what the page's paths start with at the address the phone used
  */
 export function serveHandoff(request, env, prefix) {
-  if (request.method === "POST") return createHandoff(request, env, prefix);
+  if (request.method === "POST")
+    return createHandoff(request, env, new URL(`${prefix}${HANDOFF_PATH}`, request.url));
   if (request.method === "GET") return redeemHandoff(request, env, prefix);
-  return respondMethodNotAllowed();
+  return respondMethodNotAllowed(["GET", "POST"]);
+}
+
+// The page under its key moves to the address PAGE_HOST names, which shares its code, so a phone
+// signed in under the key arrives there signed in. Both addresses check the code with the same
+// signing key, and the handoff's own route at PAGE_HOST redeems it, keeping its cookie to that host.
+export const MOVE_PATH = `${ACCESS_PATH}/move`;
+
+/**
+ * @param {string} path
+ * @param {any} env
+ */
+export const buildPageHostAddress = (path, env) => new URL(path, `https://${env.PAGE_HOST}`);
+
+/**
+ * The move's route, only while the Worker has PAGE_HOST: a POST from a phone signed in under the
+ * key makes a handoff there.
+ * @param {Request} request
+ * @param {any} env
+ */
+export function serveMoveHandoff(request, env) {
+  if (request.method !== "POST") return respondMethodNotAllowed(["POST"]);
+  return createHandoff(request, env, buildPageHostAddress(HANDOFF_PATH, env));
 }
 
 /**
@@ -224,12 +246,10 @@ export async function serveAccess(request, env, prefix) {
   if (request.method === "GET")
     return respondJson({ isChanged: (await readAccess(request, env)) === "changed" });
   if (request.method === "POST") return checkSentCode(request, env, prefix);
-  return respondMethodNotAllowed();
+  return respondMethodNotAllowed(["GET", "POST"]);
 }
 
 export const respondAccessRequired = () =>
   respondError(401, "access_required", "This page needs its access code.");
 
 const respondNeedsNoCode = () => respondError(404, "not_found", "This page needs no code.");
-
-const respondMethodNotAllowed = () => respondError(405, "method_not_allowed", "GET or POST only.");
