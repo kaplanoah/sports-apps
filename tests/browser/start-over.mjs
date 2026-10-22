@@ -1,4 +1,3 @@
-import { writeUnreadableLastSeen } from "./unreadable-last-seen.mjs";
 // After two minutes away, the page starts over where a viewer moved it, on the tab it showed
 // (shared/page/long-away.js): the season's standings and bracket each at its top with the header
 // back, the pill on the part the tab is named for, the bracket on its opening round, the Games
@@ -11,6 +10,7 @@ import { matchPath } from "./harness.mjs";
 import { holdRequests } from "./hold-requests.mjs";
 import { findSeasonPart, readSeasonRide, scrollSeasonPartToEnd } from "./season-scroll.mjs";
 import { findSeasonPill, findSeasonTab } from "./season-tab.mjs";
+import { writeUnreadableLastSeen } from "./unreadable-last-seen.mjs";
 import { passTime, setHidden } from "./visibility.mjs";
 
 /** A screen short enough for the bracket to scroll, and narrow enough for it to scroll sideways. */
