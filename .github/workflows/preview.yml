@@ -1,0 +1,122 @@
+name: Preview
+
+# A pull request labeled preview gets a preview of each app's beta Worker it changes, named for
+# it, with a store of its own, made again with each push and deleted with its store once the label
+# comes off or the pull request closes (worker/preview.mjs). A manual run gives each beta Worker
+# the secrets every new preview copies. Beta itself stays with whichever pull request holds it.
+on:
+  pull_request:
+    types: [labeled, unlabeled, synchronize, reopened, closed]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  # To post and update the preview's one comment.
+  pull-requests: write
+
+jobs:
+  # A fork's pull request never reaches the preview environment, and only the owner's sessions
+  # label one.
+  deploy:
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      ((github.event.action == 'labeled' && github.event.label.name == 'preview') ||
+      ((github.event.action == 'synchronize' || github.event.action == 'reopened') &&
+      contains(github.event.pull_request.labels.*.name, 'preview')))
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: preview
+    # A delete queued behind a deploy runs once it's done, and a newer push replaces a waiting one.
+    concurrency:
+      group: preview-${{ github.event.pull_request.number }}
+      cancel-in-progress: false
+    steps:
+      # All of the history, so the pull request can be compared with where it left its base.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      # No package's install script runs, and none runs where the token is.
+      - run: npm ci --ignore-scripts
+      - run: npm install --no-save --ignore-scripts wrangler@4.148.0
+      - id: browsers
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+      - if: steps.browsers.outputs.cache-hit != 'true'
+        run: npx playwright install --only-shell chromium
+      # Secrets, so the account ID and each preview's host, key, and code are masked in this
+      # public log.
+      - name: Make the pull request's previews and open each
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          ACCESS_CODE: ${{ secrets.ACCESS_CODE }}
+          MLB_BETA_APP_KEY: ${{ secrets.MLB_BETA_APP_KEY }}
+          WNBA_BETA_APP_KEY: ${{ secrets.WNBA_BETA_APP_KEY }}
+          MLB_PREVIEW_HOST: ${{ secrets.MLB_PREVIEW_HOST }}
+          WNBA_PREVIEW_HOST: ${{ secrets.WNBA_PREVIEW_HOST }}
+          PULL_REQUEST: ${{ github.event.pull_request.number }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: node worker/preview.mjs deploy "$PULL_REQUEST" "$BASE"
+
+  delete:
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      ((github.event.action == 'unlabeled' && github.event.label.name == 'preview') ||
+      (github.event.action == 'closed' && contains(github.event.pull_request.labels.*.name, 'preview')))
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: preview
+    concurrency:
+      group: preview-${{ github.event.pull_request.number }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: Delete the pull request's previews and their stores
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          PULL_REQUEST: ${{ github.event.pull_request.number }}
+        run: node worker/preview.mjs delete "$PULL_REQUEST"
+
+  set-secrets:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: preview
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: Give each beta Worker the secrets its previews copy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          ACCESS_CODE: ${{ secrets.ACCESS_CODE }}
+          MLB_BETA_APP_KEY: ${{ secrets.MLB_BETA_APP_KEY }}
+          WNBA_BETA_APP_KEY: ${{ secrets.WNBA_BETA_APP_KEY }}
+        run: node worker/preview.mjs set-secrets

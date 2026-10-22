@@ -441,6 +441,31 @@ environment's secrets, and add the page to the Home Screen from that address. `n
 deploys beta by hand, from a checkout of `origin/beta`, and
 `npm run rollback -- <worker> --channel beta` rolls it back.
 
+### Previewing a design
+
+A design round runs on a preview instead of beta, so beta stays free. Label a
+pull request `preview`, and the `Preview` workflow makes a preview of each beta
+Worker the pull request changes, named `pr-<number>`, built as beta, with a store
+of its own. Each push makes it again, and taking the label off or closing the
+pull request deletes it and its store. A preview answers only at its name under
+its app's preview host, at beta's key, behind beta's code.
+
+Before the first preview:
+
+1. Pick a preview host for each app, one level under beta's `RP_ID` domain, so
+   passkeys work on previews and Cloudflare's free certificate covers each
+   preview's name. Keep it out of the repo, as the page hosts are.
+2. Create a Cloudflare API token with Workers Scripts edit, limited to each
+   app's beta Worker.
+3. Add each host to its app's beta Worker for previews alone with
+   `npm run set-preview-host -- <app> <host>`.
+4. Create a `preview` GitHub environment, open to every branch, with the
+   secrets `CLOUDFLARE_API_TOKEN` (that token), `CLOUDFLARE_ACCOUNT_ID`,
+   `ACCESS_CODE` (beta's), and each app's `<APP>_BETA_APP_KEY` and
+   `<APP>_PREVIEW_HOST`.
+5. Run the `Preview` workflow by hand, which gives each beta Worker the secrets
+   every new preview copies. Run it again after beta's key or code changes.
+
 ## License
 
 [MIT](LICENSE)

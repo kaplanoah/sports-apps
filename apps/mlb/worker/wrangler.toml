@@ -37,6 +37,7 @@ new_sqlite_classes = ["SeasonStore"]
 # merges, with its own store, key, and address. Durable Objects and rate limits aren't inherited.
 [env.beta]
 name = "mlb-app-beta"
+preview_urls = false
 
 [[env.beta.durable_objects.bindings]]
 name = "STORE"
@@ -51,5 +52,27 @@ limit = 10
 period = 60
 
 [[env.beta.services]]
+binding = "ACCOUNTS"
+service = "accounts-beta"
+
+# A preview of the beta Worker for each pull request labeled preview (worker/preview.mjs), answering
+# only at its own name under the app's preview host. A preview inherits no binding, so it declares
+# every one beta does, and its store is its own, deleted with it.
+[env.beta.previews.observability]
+enabled = true
+
+[[env.beta.previews.durable_objects.bindings]]
+name = "STORE"
+class_name = "SeasonStore"
+
+[[env.beta.previews.ratelimits]]
+name = "ACCESS_LIMIT"
+namespace_id = "2701"
+
+[env.beta.previews.ratelimits.simple]
+limit = 10
+period = 60
+
+[[env.beta.previews.services]]
 binding = "ACCOUNTS"
 service = "accounts-beta"

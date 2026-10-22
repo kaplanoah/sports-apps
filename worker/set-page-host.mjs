@@ -27,7 +27,7 @@ function checkHost(host) {
  * @param {{ id: string, name: string }[]} zones
  * @param {string} host
  */
-function findZone(zones, host) {
+export function findZone(zones, host) {
   const zone = zones.find(({ name }) => host === name || host.endsWith(`.${name}`));
   if (!zone) throw new Error(`No domain in the Cloudflare account holds ${host}.`);
   return zone;

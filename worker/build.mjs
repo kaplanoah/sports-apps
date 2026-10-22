@@ -170,14 +170,24 @@ export async function buildWorker(
   return result.outputFiles[0].text;
 }
 
+/**
+ * Builds a Worker into its `worker/dist/worker.mjs`, where its wrangler.toml's `main` points.
+ * @param {string} worker
+ * @param {{ channel?: string }} [options]
+ */
+export async function writeWorker(worker, { channel = "production" } = {}) {
+  const built = await buildWorker(worker, { channel });
+  const output = findOutput(worker);
+  mkdirSync(path.dirname(output), { recursive: true });
+  writeFileSync(output, built);
+  return { output, size: built.length };
+}
+
 // With no Worker named, builds them all.
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const { positionals, channel } = readCommandLine(process.argv.slice(2));
   for (const worker of listWorkersOrExit(positionals[0])) {
-    const built = await buildWorker(worker, { channel });
-    const output = findOutput(worker);
-    mkdirSync(path.dirname(output), { recursive: true });
-    writeFileSync(output, built);
-    console.log(`Wrote ${output} (${built.length} bytes)`);
+    const { output, size } = await writeWorker(worker, { channel });
+    console.log(`Wrote ${output} (${size} bytes)`);
   }
 }

@@ -225,10 +225,8 @@ async function launchChromium(env) {
 }
 
 /**
- * Opens an app's live page in a browser of its own, trying again after `pauseMs` while it's
- * broken, up to `attempts` times. A page with no address, or whose access code the Worker refuses
- * or rate-limits, goes unchecked; a browser that doesn't start throws, so the deploy puts the
- * version before back and the watch's run fails.
+ * Opens an app's live page in a browser of its own, as `checkPageAt` does. A page with no address
+ * goes unchecked.
  * @param {object} options
  * @param {string} options.app
  * @param {string} options.channel
@@ -239,17 +237,34 @@ async function launchChromium(env) {
  * @param {typeof launchChromium} [options.launchBrowser]
  * @returns {Promise<PageCheck>}
  */
-export async function checkAppPage({
-  app,
-  channel,
+export async function checkAppPage({ app, channel, env = process.env, ...options }) {
+  const access = readPageAccess(app, channel, env);
+  if (!access) return markUnchecked(`no ${nameAccessSecrets(app, channel).pageUrl} secret`);
+  return checkPageAt({ access, env, ...options });
+}
+
+/**
+ * Opens a page in a browser of its own, trying again after `pauseMs` while it's broken, up to
+ * `attempts` times. A page whose access code the Worker refuses or rate-limits goes unchecked; a
+ * browser that doesn't start throws, so the deploy puts the version before back and the watch's
+ * run fails.
+ * @param {object} options
+ * @param {{ pageUrl: string, accessCode: string | undefined }} options.access
+ * @param {string} [options.commit]
+ * @param {NodeJS.ProcessEnv} [options.env]
+ * @param {number} [options.attempts]
+ * @param {number} [options.pauseMs]
+ * @param {typeof launchChromium} [options.launchBrowser]
+ * @returns {Promise<PageCheck>}
+ */
+export async function checkPageAt({
+  access,
   commit,
   env = process.env,
   attempts = 3,
   pauseMs = 5000,
   launchBrowser = launchChromium,
 }) {
-  const access = readPageAccess(app, channel, env);
-  if (!access) return markUnchecked(`no ${nameAccessSecrets(app, channel).pageUrl} secret`);
   const browser = await launchBrowser(env);
   try {
     /** @type {PageCheck} */

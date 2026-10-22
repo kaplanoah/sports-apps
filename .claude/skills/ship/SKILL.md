@@ -71,11 +71,35 @@ This skill holds what "Shipping a change" in AGENTS.md leaves out, most of it un
   6. Push to beta: `git push -f origin <branch>:beta`.
   7. Wait for that push's Deploy run to say `worker check: ok` for each Worker, and tell the owner to use the beta app on the Home Screen.
      Name the commit the beta tag at the top of the app should show, so a build swapped since is plain to see.
+- A design round runs on a preview of the PR, never on beta, so beta stays free for what needs it.
+  A preview is a copy of an app's beta Worker named `pr-<number>`, built as beta, so it has beta's tag and tuning panel,
+  with a store of its own that starts empty and is deleted with it (the root's `worker/preview.mjs`).
+  It answers only at its name under the app's preview host, at beta's key, behind beta's access code,
+  and passkeys work there, since the host is under beta's `RP_ID` domain.
+  It has no `ANTHROPIC_API_KEY`, so its News tab is empty, as beta's is.
+- To open a round on a preview:
+  1. Add the `preview` label to the PR.
+     The `Preview` workflow (`.github/workflows/preview.yml`) makes a preview of each app the PR changes,
+     opens each as a phone does, and says on the PR, by the preview's name alone, that it's up.
+     Each push to the PR makes it again.
+  2. Once that run passes, give the owner each app's link in chat: `https://pr-<number>.<preview host>/<beta's key>/`.
+     Ask the owner in chat for a host or key the session doesn't have.
+     Never put the link in the PR, an issue, or a log.
+  3. Take `preview` off once the owner picks the round, which deletes each preview and its store.
+     Closing the PR deletes them too.
+- Beta, never a preview, is for:
+  - a red change and its `phone-ok`
+  - push notifications
+  - a change to the accounts service, since a preview's `ACCOUNTS` reaches only `accounts-beta`'s live version
+  - a change to the store that needs one warmed up by days of updates, since a preview's starts empty
+- A session makes a mockup instead of a preview only when the owner asks for one,
+  or offers one for a round that isn't about exact pixels, like a rough layout or very different directions, and the owner decides.
+  A mockup is built from `main`'s real stylesheets and markup, and checked against production.
 - A design round tuned on the phone opens with an app's `page/tuning-round.json`,
   which names each CSS variable on `:root` to tune,
   with a slider's `min`, `max`, `step`, and `unit`, or a list of `options`, as `readRound` in `shared/page/tuning-round.js` checks.
   It tunes only a variable that's the same in every theme and at every width, since the panel reads each start once, as the page loads.
-  Beta's build writes it into the page with the tuning panel, and production's leaves both out (the root's `worker/tuning-files.mjs`).
+  Beta's build, a preview's too, writes it into the page with the tuning panel, and production's leaves both out (the root's `worker/tuning-files.mjs`).
   The owner pastes back what the panel's Copy gives, and the PR sets those values in its stylesheets and deletes the round file in the same push.
 - If beta is held, add `beta-wait` to the PR if the workflow hasn't, stay subscribed to the PR, and stop.
   The last message to the owner names the PR holding beta, with its link,
@@ -90,7 +114,7 @@ This skill holds what "Shipping a change" in AGENTS.md leaves out, most of it un
 - A PR gives beta up as it closes or merges, as its branch is pushed, and as the owner adds `phone-ok`, and the workflow takes the label off.
   Take `beta` off yourself when going back to work without a push yet, as when the owner's test found a problem,
   and when the owner is done testing a PR that isn't red, which never gets `phone-ok`.
-  Take off both `beta` and `beta-wait` before saying the work is done.
+  Take off `beta`, `beta-wait`, and `preview` before saying the work is done.
 
 ## Red changes
 
