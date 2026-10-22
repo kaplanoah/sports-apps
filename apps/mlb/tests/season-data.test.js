@@ -139,6 +139,15 @@ test("a season the store can't answer shows as an empty one, and says so", async
   assert.equal(session.problem, "Can't reach the page's server right now");
 });
 
+test("a first load with no last showing, while the store can't be reached, shows no season, never the clock's", async () => {
+  startReading({}, { unreadable: ["live/current"] });
+  Object.assign(session, { activeYear: null, currentSeason: null });
+
+  await loadSeason();
+
+  assert.deepEqual([session.activeYear, session.currentSeason], [null, null]);
+});
+
 test("a record in a version the page doesn't read isn't shown, and the page checks for a newer release", async () => {
   const { redraws, deliver } = startReading({
     "live/current": { season: 2026 },

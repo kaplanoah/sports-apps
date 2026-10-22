@@ -60,6 +60,9 @@ export function createSeasonReader({
   let shownYear = null;
   /** @type {number | null} */
   let askedYear = null;
+  // The past season the page last loaded on, null when it loaded the current one.
+  /** @type {number | null} */
+  let loadedPastYear = null;
   // The record as the store last answered, whether or not the page reads it.
   /** @type {any} */
   let lastRecord = null;
@@ -126,10 +129,10 @@ export function createSeasonReader({
   }
 
   // A season that can't be read leaves the page on the season it shows, with any change to it that
-  // came while the read was out. A page that shows none yet still asks for the current one, so it
-  // moves on when the store does.
+  // came while the read was out. A page that shows none yet still asks for the past season it loads
+  // on, or else the current one, so it moves on when the store does.
   function stayOnShownYear() {
-    askedYear = shownYear ?? currentYear;
+    askedYear = shownYear ?? loadedPastYear ?? currentYear;
     const record = heldRecord;
     heldRecord = null;
     if (shownYear !== null && record !== null) showRecord(shownYear, record);
@@ -188,9 +191,12 @@ export function createSeasonReader({
   }
 
   // A load that failed is tried again by loading again, since the store may since have answered
-  // or moved on to a new season.
+  // or moved on to a new season. A load on a past season asks for it before its first read, so a
+  // store that names a new current season while that read is out leaves the page on it.
   /** @param {number | null} pastYear */
   async function loadSeason(pastYear) {
+    loadedPastYear = pastYear;
+    if (pastYear !== null) askedYear = pastYear;
     try {
       const current = await readCurrentSeason();
       currentYear = current.year;

@@ -4,13 +4,21 @@
 import { nameSeason } from "./league-words.js";
 
 /**
+ * Whether a page shows, or has picked, a season other than the one the store says is current,
+ * which is always an earlier one.
+ * @param {number | null} shownYear
+ * @param {number | null} currentYear
+ */
+export const isEarlierSeason = (shownYear, currentYear) =>
+  currentYear !== null && shownYear !== currentYear;
+
+/**
  * The year the title shows, or null while the shown season is being played.
  * @param {{ shownYear: number, currentYear: number | null, isSeasonOver: boolean }} season
  * @returns {number | null}
  */
 export function chooseTitleYear({ shownYear, currentYear, isSeasonOver }) {
-  const isEarlierSeason = currentYear !== null && shownYear !== currentYear;
-  return isEarlierSeason || isSeasonOver ? shownYear : null;
+  return isEarlierSeason(shownYear, currentYear) || isSeasonOver ? shownYear : null;
 }
 
 /**

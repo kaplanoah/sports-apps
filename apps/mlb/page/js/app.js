@@ -238,7 +238,7 @@ const pickShown = ({ season, schedule, trackedTitles }) => ({ season, schedule, 
 
 const readShown = () =>
   session.season && {
-    year: session.activeYear,
+    year: session.season.year,
     currentYear: session.currentSeason,
     ...pickShown(session),
     news: session.news,

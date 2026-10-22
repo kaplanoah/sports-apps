@@ -56,6 +56,15 @@ test("a page whose last showing was the current season loads the one the store n
   assert.deepEqual(session.season, season2027);
 });
 
+test("a first load with no last showing, while the store can't be reached, shows no season, never the clock's", async () => {
+  startReading({ unreadable: ["live/current"] });
+  Object.assign(session, { year: null, pickedYear: null, currentYear: null });
+
+  await loadSeason();
+
+  assert.deepEqual([session.year, session.currentYear], [null, null]);
+});
+
 test("picking a season that can't be read puts back the season shown, not the pick before it, and says the store can't be reached", async () => {
   startReading({ unreadable: ["seasons/2025"] });
   await loadSeason();

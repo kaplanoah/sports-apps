@@ -152,6 +152,44 @@ test("a page that loads again on a past season shows it, and stays on it when th
   assert.deepEqual(shown.currentYears, [2027]);
 });
 
+test("a page that loads again on a past season before the store answers stays on it once it does", async () => {
+  const documents = {
+    "live/current": { season: 2026 },
+    "seasons/2025": { year: 2025 },
+    "seasons/2026": SEASON_2026,
+  };
+  const unreadable = ["live/current"];
+  const { reader, shown, deliver } = startReader(documents, { unreadable });
+
+  await assert.rejects(reader.loadSeason(2025));
+  unreadable.length = 0;
+  deliver("live/current", { season: 2026 });
+  await settle();
+
+  assert.equal(shown.year, null);
+  assert.deepEqual(shown.currentYears, [2026]);
+  await reader.loadSeason(2025);
+  assert.equal(shown.year, 2025);
+});
+
+test("a page that loads again on a past season it can't read stays on it when the store moves on", async () => {
+  const { reader, shown, deliver } = startReader(
+    {
+      "live/current": { season: 2026 },
+      "seasons/2026": SEASON_2026,
+      "seasons/2027": SEASON_2027,
+    },
+    { unreadable: ["seasons/2025"] },
+  );
+
+  await assert.rejects(reader.loadSeason(2025));
+  deliver("live/current", { season: 2027 });
+  await settle();
+
+  assert.equal(shown.year, null);
+  assert.deepEqual(shown.currentYears, [2027]);
+});
+
 test("a page that loads again on the current season moves on when the store has", async () => {
   const { reader, shown } = startReader({
     "live/current": { season: 2027 },

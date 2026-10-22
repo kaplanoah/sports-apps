@@ -103,12 +103,6 @@ export function shiftMonth(date, months) {
   return { month: shifted.getUTCMonth() + 1, year: shifted.getUTCFullYear() };
 }
 
-/**
- * The year of a moment on the viewer's calendar.
- * @param {Date} moment
- */
-export const readCalendarYear = (moment) => moment.getFullYear();
-
 // Making a formatter takes far longer than using one, and a search reads every game's start on
 // each key press, so each zone's clock is made once.
 /** @type {Map<string, Intl.DateTimeFormat>} */

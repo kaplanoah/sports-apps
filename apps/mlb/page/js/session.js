@@ -1,4 +1,5 @@
 import { readEasternDay } from "#shared/days.js";
+import { isEarlierSeason } from "#shared/title-year.js";
 
 const FRESH_FINAL_MS = 10 * 60 * 1000;
 const APRIL = 4;
@@ -44,9 +45,8 @@ export const session = {
 
 export const readSeasonYear = () => session.currentSeason;
 
-/** Whether the season shown is over, one the store keeps from before the current one. */
-export const isPastSeason = () =>
-  session.currentSeason !== null && session.activeYear !== session.currentSeason;
+/** Whether the page shows, or has picked, a season before the one the store says is current. */
+export const isPastSeason = () => isEarlierSeason(session.activeYear, session.currentSeason);
 
 /** Whether the shown season's playoff field is set, rather than projected from the standings. */
 export const isFieldSet = () => session.state?.projected === false;

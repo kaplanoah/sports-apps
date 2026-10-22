@@ -11,7 +11,10 @@ import {
   readSeasonPlace,
 } from "../../../../tests/browser/start-over.mjs";
 import { passTime, setHidden } from "../../../../tests/browser/visibility.mjs";
-import { reloadOnPastSeason } from "../../../../tests/browser/past-season-reload.mjs";
+import {
+  markLastSeenUnreadable,
+  reloadWithStoreHeld,
+} from "../../../../tests/browser/held-store-reload.mjs";
 import { openSettings } from "../../../../tests/browser/settings.mjs";
 import { ONE_PAST_SEASON } from "./past-season.mjs";
 
@@ -84,11 +87,38 @@ test("a reload on a past season stays on it once the store answers", async ({ pa
   await page.locator("#seasonPicker").selectOption("2025");
   await expect(page.locator("#titleYear")).toHaveText("2025");
 
-  const titleYears = await reloadOnPastSeason(page, app);
+  const titleYears = await reloadWithStoreHeld(page, await app.holdStore());
 
   expect(titleYears).toEqual([]);
   await expect(page.locator("#titleYear")).toHaveText("2025");
   await expect(page.locator("#seasonPicker")).toHaveValue("2025");
+});
+
+test("a reload on a past season it can no longer draw loads that season", async ({ page }) => {
+  const app = await openApp(page, ONE_PAST_SEASON);
+  await openSettings(page);
+  await page.locator("#seasonPicker").selectOption("2025");
+  await expect(page.locator("#titleYear")).toHaveText("2025");
+  await markLastSeenUnreadable(page);
+
+  await reloadWithStoreHeld(page, await app.holdStore());
+
+  await expect(page.locator("#titleYear")).toHaveText("2025");
+  await expect(page.locator("#seasonPicker")).toHaveValue("2025");
+});
+
+test("a reload while a picked season is on its way stays on the season shown", async ({ page }) => {
+  const app = await openApp(page, ONE_PAST_SEASON);
+  await openSettings(page);
+  const titleBefore = await page.locator("#titleYear").textContent();
+  const release = await app.holdStore();
+  await page.locator("#seasonPicker").selectOption("2025");
+
+  const titleYears = await reloadWithStoreHeld(page, release);
+
+  expect(titleYears).toEqual([]);
+  await expect(page.locator("#titleYear")).toHaveText(titleBefore ?? "");
+  await expect(page.locator("#seasonPicker")).not.toHaveValue("2025");
 });
 
 test("a last-shown season the page can't draw is skipped", async ({ page }) => {
