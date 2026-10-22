@@ -3,18 +3,14 @@ import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
 import { listApps } from "../worker/apps.mjs";
 import { readThemeToken } from "./css-rules.js";
-import { readRepoFile } from "./repo-files.js";
+import { REPO_ROOT, readRepoFile } from "./repo-files.js";
 
 /**
  * @param {string} app
  * @param {"light" | "dark"} theme
  */
 const readFloor = (app, theme) =>
-  readThemeToken(
-    fileURLToPath(new URL(`../apps/${app}/page/styles.css`, import.meta.url)),
-    theme,
-    "--bg",
-  );
+  readThemeToken(fileURLToPath(new URL(`apps/${app}/page/styles.css`, REPO_ROOT)), theme, "--bg");
 
 /**
  * @param {string} app

@@ -5,12 +5,12 @@ import { listApps } from "../worker/apps.mjs";
 import { REPO_ROOT, readRepoFile } from "./repo-files.js";
 
 const listPages = (app) => {
-  const folder = new URL(`apps/${app}/page/`, REPO_ROOT);
-  return readdirSync(folder)
+  const folder = `apps/${app}/page/`;
+  return readdirSync(new URL(folder, REPO_ROOT))
     .filter((name) => name.endsWith(".html"))
     .map((name) => ({
       name: `${app}/${name}`,
-      markup: readRepoFile(`apps/${app}/page/${name}`),
+      markup: readRepoFile(`${folder}${name}`),
     }));
 };
 
