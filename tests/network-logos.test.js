@@ -133,6 +133,19 @@ test("every color a dark drawing of a logo adds to its light one is the WNBA's W
   }
 });
 
+/** @param {string} color */
+function isNearBlack(color) {
+  const digits = color.slice(1);
+  const fullDigits = digits.length === 3 ? digits.replace(/./g, "$&$&") : digits;
+  const channels = fullDigits.match(/../g) ?? [];
+  return channels.every((channel) => parseInt(channel, 16) < 0x40);
+}
+
+test("no dark drawing of a logo keeps a near-black, which would vanish on a dark page", () => {
+  for (const file of readdirSync(LOGO_FOLDER).filter((name) => name.endsWith("-dark.svg")))
+    assert.deepEqual([...listDrawingColors(file)].filter(isNearBlack), [], file);
+});
+
 test("every dark picture of a logo draws its cream, its main color, in the WNBA's Walnut ink", () => {
   for (const file of readdirSync(LOGO_FOLDER).filter((name) => name.endsWith("-dark.png")))
     assert.equal(readMainColor(file), WALNUT_INK, file);
