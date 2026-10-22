@@ -86,6 +86,11 @@ export function followSavedTheme(looks) {
 /** @param {NodeListOf<HTMLInputElement>} choices */
 const checkSavedChoice = (choices) => checkPickedChoice(choices, appearance.read());
 
+const APPEARANCE_CHOICES = 'input[name="appearance"], input[name="welcomeAppearance"]';
+
+const findAppearanceChoices = () =>
+  /** @type {NodeListOf<HTMLInputElement>} */ (document.querySelectorAll(APPEARANCE_CHOICES));
+
 const findSettings = () => findElement("settingsDialog");
 const findNote = () => findElement("appearanceNote");
 
@@ -284,30 +289,26 @@ function wireNote() {
  * @param {Looks} looks
  */
 export function startAppearance(looks) {
-  const choices = /** @type {NodeListOf<HTMLInputElement>} */ (
-    document.querySelectorAll('input[name="appearance"], input[name="welcomeAppearance"]')
-  );
-  checkSavedChoice(choices);
+  checkSavedChoice(findAppearanceChoices());
   const showChosenTheme = followTheme(looks, appearance.read);
-  for (const choice of choices) {
-    choice.addEventListener("change", () => {
-      if (isIosApp()) keepLookSwitched();
-      appearance.keep(choice.value);
-      openThemeAddress(choice.value);
-      checkSavedChoice(choices);
-      showChosenTheme();
-      updateNote();
-    });
-  }
-  appearance.watch(() => {
-    openThemeAddress(appearance.read());
-    checkSavedChoice(choices);
+  // The welcome draws its steps again as a move finishes (draw-home-screen-asks.js), so the page
+  // follows its choices wherever they are now, after the welcome keeps an icon picked for a move.
+  document.addEventListener("change", (event) => {
+    const choice = /** @type {HTMLInputElement} */ (event.target);
+    if (choice.name === "welcomeIcon") showChosenTheme();
+    if (!choice.matches(APPEARANCE_CHOICES)) return;
+    if (isIosApp()) keepLookSwitched();
+    appearance.keep(choice.value);
+    openThemeAddress(choice.value);
+    checkSavedChoice(findAppearanceChoices());
     showChosenTheme();
     updateNote();
   });
-  // The welcome keeps an icon picked for a move first (draw-home-screen-asks.js).
-  findElement("homeScreenWelcome").addEventListener("change", (event) => {
-    if (/** @type {HTMLInputElement} */ (event.target).name === "welcomeIcon") showChosenTheme();
+  appearance.watch(() => {
+    openThemeAddress(appearance.read());
+    checkSavedChoice(findAppearanceChoices());
+    showChosenTheme();
+    updateNote();
   });
   watchTimeAway(keepReturnTime);
   darkScheme.addEventListener("change", followPhoneLook);

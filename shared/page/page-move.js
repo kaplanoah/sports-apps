@@ -11,7 +11,7 @@
 // pick-theme.js, which takes the choices first, before it keeps a theme the address names.
 
 /* global isAppleBrowser, isLook, isOnHomeScreen, readPhoneLook -- from pick-theme.js */
-/* global readPickedAppearance -- from pick-theme.js */
+/* global readAppearanceChoice -- from pick-theme.js */
 
 const CARRIED_PARAMETER = "carried";
 
@@ -243,7 +243,8 @@ function takeIntoHomeScreen(carried) {
 /** @param {string} choice */
 const showLookOf = (choice) => (isLook(choice) ? choice : readPhoneLook());
 
-// The welcome starts on the icon of the theme showing, the look the fan picked most recently.
+// The welcome starts on the icon of the theme the app showed as the fan moved, the look they picked
+// most recently, even where the browser kept a theme of its own.
 /**
  * @param {Carried} carried
  * @param {number} now
@@ -252,7 +253,10 @@ function takeIntoBrowser(carried, now) {
   if (Math.abs(now - carried.at) < CARRIED_FRESH_MS) {
     if (!hasOwnChoices()) keepCarriedChoices(carried.choices);
     if (carried.fromApp)
-      keepPageMove({ ...carried, icon: carried.icon ?? showLookOf(readPickedAppearance()) });
+      keepPageMove({
+        ...carried,
+        icon: carried.icon ?? showLookOf(readAppearanceChoice(carried.choices.appearance ?? "")),
+      });
   }
   nameMoveInAddress();
 }

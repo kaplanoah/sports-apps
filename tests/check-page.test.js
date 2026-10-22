@@ -64,18 +64,23 @@ test("a browser that doesn't start fails the check rather than skipping it", asy
 
 /**
  * A page as a browser drives it from an old address that sends it on to `landedUrl`, whose Worker
- * takes the code there and draws once signed in. Playwright routes only a redirect's first
- * request, so a browser test can't follow the Worker's move.
+ * takes the code there and draws once signed in, or, with `thrown`, throws that and never draws.
+ * Playwright routes only a redirect's first request, so a browser test can't follow the Worker's
+ * move.
  * @param {string} landedUrl
+ * @param {{ thrown?: string }} [options]
  */
-function openMovedPage(landedUrl) {
+function openMovedPage(landedUrl, { thrown } = {}) {
   /** @type {string[]} */
   const visits = [];
   /** @type {string[]} */
   const codeAddresses = [];
   let address = "about:blank";
   const page = {
-    on() {},
+    /** @param {string} event @param {(error: Error) => void} listener */
+    on(event, listener) {
+      if (thrown && event === "pageerror") listener(new Error(thrown));
+    },
     url: () => address,
     /** @param {string} visited */
     async goto(visited) {
@@ -88,7 +93,9 @@ function openMovedPage(landedUrl) {
       codeAddresses.push(sent.address);
       return 204;
     },
-    waitForFunction: async () => {},
+    waitForFunction: async () => {
+      if (thrown) throw new Error("Timeout exceeded");
+    },
   };
   return {
     page: /** @type {import("@playwright/test").Page} */ (/** @type {unknown} */ (page)),
@@ -105,6 +112,28 @@ test("a page its old address sends on signs in, and opens again, where it landed
   assert.deepEqual(check, { status: "drawn" });
   assert.deepEqual(codeAddresses, ["https://wnba.sports.example/access"]);
   assert.deepEqual(visits, [PAGE_URL, "https://wnba.sports.example/"]);
+});
+
+test("a failed check never names the host the page's old address sent it on to", async () => {
+  const { page } = openMovedPage("https://wnba.sports.example/", {
+    thrown: "Failed to fetch https://wnba.sports.example/store/live",
+  });
+  const context = { newPage: async () => page, close: async () => {} };
+  const browser = { newContext: async () => context, close: async () => {} };
+
+  const check = await checkAppPage({
+    app: "wnba",
+    channel: "production",
+    env: { WNBA_PAGE_URL: PAGE_URL, ACCESS_CODE: "LAYUP" },
+    attempts: 1,
+    launchBrowser: async () =>
+      /** @type {import("@playwright/test").Browser} */ (/** @type {unknown} */ (browser)),
+  });
+
+  assert.deepEqual(check, {
+    status: "broken",
+    reason: "the page threw: Failed to fetch <page host>/store/live",
+  });
 });
 
 test("a page is the release whose commit its scripts' folder starts", () => {

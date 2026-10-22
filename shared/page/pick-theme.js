@@ -44,15 +44,9 @@ function checkPickedChoice(choices, picked) {
   for (const choice of choices) choice.checked = choice.value === picked;
 }
 
-// A device keeps the choice as JSON, or, if it kept one earlier, as its name. Storage can refuse
-// access, as in a private window, so the page never depends on it.
-function readPickedAppearance() {
-  let stored;
-  try {
-    stored = localStorage.getItem("appearance") ?? "";
-  } catch {
-    return "auto";
-  }
+// A device keeps the choice as JSON, or, if it kept one earlier, as its name.
+/** @param {string} stored */
+function readAppearanceChoice(stored) {
   let choice;
   try {
     choice = JSON.parse(stored);
@@ -60,6 +54,15 @@ function readPickedAppearance() {
     choice = stored;
   }
   return isAppearanceChoice(choice) ? choice : "auto";
+}
+
+// Storage can refuse access, as in a private window, so the page never depends on it.
+function readPickedAppearance() {
+  try {
+    return readAppearanceChoice(localStorage.getItem("appearance") ?? "");
+  } catch {
+    return "auto";
+  }
 }
 
 // Only Apple's browsers tell a page whether it runs from the Home Screen this way.

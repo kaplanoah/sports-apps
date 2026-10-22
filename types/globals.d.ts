@@ -8,6 +8,7 @@ declare function isOnHomeScreen(): boolean;
 declare function isAppleBrowser(): boolean;
 declare function isAppearanceChoice(value: unknown): boolean;
 declare function readPickedAppearance(): string;
+declare function readAppearanceChoice(stored: string): string;
 declare function checkPickedChoice(choices: Iterable<HTMLInputElement>, picked: string): void;
 declare function keepPickedAppearance(choice: string): void;
 declare function openThemeAddress(choice: string): void;

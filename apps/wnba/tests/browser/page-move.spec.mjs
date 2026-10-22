@@ -3,6 +3,7 @@ import { ANDROID_PHONE, IPHONE } from "../../../../tests/browser/devices.mjs";
 import {
   checkMoveCard,
   checkMoveCardDismissal,
+  checkMoveCardStandIns,
   checkMovingIconFollowsTheme,
   checkMovingIconPick,
   checkMovingWelcome,
@@ -10,6 +11,7 @@ import {
   checkNotificationsAsk,
   checkNotificationsAskGoes,
   checkSafariMoves,
+  checkTurnOn,
 } from "../../../../tests/browser/page-move.mjs";
 
 // Moving fans from the app's old address to its own, with their choices, as a Worker that moves them does.
@@ -37,6 +39,13 @@ test.describe("on an iPhone", () => {
     await checkMoveCardDismissal({ page, browser, ...MOVING_APP });
   });
 
+  test("on the season tab, a tap on the card's X under the riding header takes it away", async ({
+    page,
+    browser,
+  }) => {
+    await checkMoveCardStandIns({ page, browser, ...MOVING_APP });
+  });
+
   test("the new Home Screen app asks to turn notifications on again", async ({ page, browser }) => {
     await checkNotificationsAsk({ page, browser, ...MOVING_APP });
   });
@@ -47,6 +56,13 @@ test.describe("on an iPhone", () => {
 
   test("the X takes the notifications ask away for good", async ({ page, browser }) => {
     await checkNotificationsAskGoes({ page, browser, ...MOVING_APP }, "Dismiss notifications");
+  });
+
+  test("Turn on subscribes the phone, and the notifications ask goes", async ({
+    page,
+    browser,
+  }) => {
+    await checkTurnOn({ page, browser, ...MOVING_APP });
   });
 });
 

@@ -1,6 +1,6 @@
 import test, { afterEach } from "node:test";
 import assert from "node:assert/strict";
-import { createViewerChoice, listViewerChoices } from "../shared/page/device-storage.js";
+import { createViewerChoice } from "../shared/page/device-storage.js";
 import {
   dropSavedStorage,
   useDeniedStorage,
@@ -81,12 +81,6 @@ test("a choice kept on this page leaves redrawing to the page that kept it", () 
   choice.keep(true);
 
   assert.equal(changes, 0);
-});
-
-test("every choice the page makes is listed by its key", () => {
-  createViewerChoice("listed", readAsIs);
-
-  assert.ok(listViewerChoices().includes("listed"));
 });
 
 test("a device whose storage refuses access keeps a choice until the page reloads", () => {

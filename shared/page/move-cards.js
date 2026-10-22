@@ -10,7 +10,7 @@ import { isIos, isOnHomeScreen } from "./device.js";
 import { renderDismissButton } from "./dismiss-button.js";
 import { html } from "./html.js";
 import { readStoredText, storeText } from "./local-storage.js";
-import { areNotificationsOn, turnOnNotifications } from "./notifications.js";
+import { canPush, hasNotificationsSubscription, turnOnNotifications } from "./notifications.js";
 
 /** @typedef {"move" | "notifications"} MoveCard */
 
@@ -19,8 +19,9 @@ export const MOVE_TEXT =
   "The app has a new icon (took me embarrassingly long to notice the WNBA ball is always orange and white) and a simpler link. Please add the new site to your home screen.";
 export const MOVE_BUTTON = "Use new site";
 export const NOTIFICATIONS_TITLE = "Keep notifications on?";
-export const NOTIFICATIONS_TEXT =
-  "You had notifications turned on from the old site. Apple requires approving notifications again for a new site. You can always configure notifications in settings.";
+/** @param {boolean} isOnIos */
+export const writeNotificationsText = (isOnIos) =>
+  `You had notifications turned on from the old site. ${isOnIos ? "Apple requires" : "Your phone requires"} approving notifications again for a new site. You can always configure notifications in settings.`;
 export const LEAVE_OFF_BUTTON = "Leave off";
 export const TURN_ON_BUTTON = "Turn on";
 
@@ -47,11 +48,7 @@ export function chooseMoveCard({ isMoving, isOldAddress, isCardDismissed, isAskK
 }
 
 // Only a phone that hasn't answered the new site's ask yet can be asked.
-const canAskForNotifications = () =>
-  "serviceWorker" in navigator &&
-  "PushManager" in window &&
-  "Notification" in window &&
-  Notification.permission === "default";
+const canAskForNotifications = () => canPush() && Notification.permission === "default";
 
 /** The card this page shows in place of the box's updates, if any. */
 export const chooseShownMoveCard = () =>
@@ -73,24 +70,27 @@ const renderCopy = (title, text) =>
     <span class="move-card-text">${text}</span>
   </span>`;
 
-/** @param {MoveCard} card */
-export function renderMoveCard(card) {
+/**
+ * @param {MoveCard} card
+ * @param {boolean} [isOnIos]
+ */
+export function renderMoveCard(card, isOnIos = isIos()) {
   if (card === "move")
     return html`<div class="move-card-row">
-        <span class="appearance-icon appearance-icon-light move-card-icon" aria-hidden="true"></span>
+        <span class="appearance-icon appearance-icon-light theme-shown-icon move-card-icon" aria-hidden="true"></span>
         ${renderCopy(MOVE_TITLE, MOVE_TEXT)}
         ${renderDismissButton({ id: "dismissMoveCard", label: "Dismiss the new site" })}
       </div>
       <div class="move-card-actions">
-        <button type="button" class="move-card-button" id="useNewSite">${MOVE_BUTTON}</button>
+        <button type="button" class="accent-button move-card-button" id="useNewSite">${MOVE_BUTTON}</button>
       </div>`;
   return html`<div class="move-card-row">
-      ${renderCopy(NOTIFICATIONS_TITLE, NOTIFICATIONS_TEXT)}
+      ${renderCopy(NOTIFICATIONS_TITLE, writeNotificationsText(isOnIos))}
       ${renderDismissButton({ id: "dismissNotificationsAsk", label: "Dismiss notifications" })}
     </div>
     <div class="move-card-actions">
-      <button type="button" class="move-card-button move-card-button-outlined" id="leaveNotificationsOff">${LEAVE_OFF_BUTTON}</button>
-      <button type="button" class="move-card-button" id="turnNotificationsOn">${TURN_ON_BUTTON}</button>
+      <button type="button" class="accent-button move-card-button move-card-button-outlined" id="leaveNotificationsOff">${LEAVE_OFF_BUTTON}</button>
+      <button type="button" class="accent-button move-card-button" id="turnNotificationsOn">${TURN_ON_BUTTON}</button>
     </div>`;
 }
 
@@ -98,7 +98,7 @@ export function renderMoveCard(card) {
 // open it itself, and Safari is where the new site is added.
 async function openNewSite() {
   const address = await requestPageMove({
-    notifications: areNotificationsOn(),
+    notifications: await hasNotificationsSubscription(),
     fromApp: isOnHomeScreen(),
   });
   if (!address) return;

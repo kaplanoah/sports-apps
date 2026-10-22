@@ -4,16 +4,21 @@ import {
   MOVE_BUTTON,
   MOVE_TEXT,
   MOVE_TITLE,
-  NOTIFICATIONS_TEXT,
   NOTIFICATIONS_TITLE,
   TURN_ON_BUTTON,
+  writeNotificationsText,
 } from "../../shared/page/move-cards.js";
 import { listLowContrastText } from "./contrast.mjs";
-import { IPHONE } from "./devices.mjs";
+import { IPHONE, takeAwayPush } from "./devices.mjs";
 import { LOCKED_PAGE_PATH } from "./harness.mjs";
 import { WELCOME } from "./home-screen-help.mjs";
+import { PUSH_STUB, stubPushManager } from "./push-stub.mjs";
+import { waitForLoadToSettle } from "./at-rest.mjs";
+import { findCenter } from "./season-scroll.mjs";
+import { openSeasonPart } from "./season-tab.mjs";
 import { listStrayPeriods } from "./stray-periods.mjs";
 import { listTapsOffButtons } from "./tap-states.mjs";
+import { openSettings } from "./settings.mjs";
 import { listTextOffRoles, readRole } from "./type-roles.mjs";
 import { tapUpdatesButton } from "./updates-box.mjs";
 
@@ -216,6 +221,34 @@ export async function checkMoveCardDismissal(app) {
 }
 
 /**
+ * On the season tab, where the header rides over the parts, each of the card's buttons has a
+ * stand-in under it in each part, and a tap there, on the X's, takes the card away.
+ * @param {MovingApp} app
+ */
+export async function checkMoveCardStandIns(app) {
+  const { page } = app;
+  await openOldHomeScreenApp(app);
+  await openSeasonPart(page, "Bracket");
+  await waitForLoadToSettle(page);
+  const updates = findUpdates(page);
+
+  await expect(page.locator(".rider-tap")).toHaveCount(2 * 2);
+
+  const { x, y } = findCenter(
+    await updates.getByRole("button", { name: "Dismiss the new site" }).boundingBox(),
+  );
+  expect(
+    await page.evaluate(
+      ([atX, atY]) => document.elementFromPoint(atX, atY)?.classList.contains("rider-tap"),
+      [x, y],
+    ),
+  ).toBe(true);
+  await page.touchscreen.tap(x, y);
+  await expect(updates).toBeHidden();
+  await expect(page.locator(".rider-tap")).toHaveCount(0);
+}
+
+/**
  * Taps Use new site in an Android phone's Home Screen app, which keeps `choices`, and returns the
  * handoff it opens, which the test holds rather than opening, since Safari is where the move goes
  * on, with the phone's light or dark setting and the page's clock as the finger landed.
@@ -250,6 +283,7 @@ async function tapUseNewSite(app, choices, addedOnTheme) {
 async function openInSafari({ browser, serve, pageHost }, { handoff, colorScheme }) {
   const safari = await browser.newContext({ ...IPHONE, reducedMotion: "reduce", colorScheme });
   const safariPage = await safari.newPage();
+  await takeAwayPush(safariPage);
   await serve(safariPage, { accessCode: ACCESS_CODE, pageHost });
   // A navigation the test starts throws on the redirect Playwright doesn't route, so the blank page
   // starts it, as a link would.
@@ -329,7 +363,8 @@ export async function checkMovingIconPick(app) {
 }
 
 /**
- * Closing the moving welcome ends the move, and nothing is left in the address to carry it.
+ * Closing the moving welcome ends the move, and nothing is left in the address to carry it. The
+ * welcome settings' notifications opens from then on holds its own steps, with the theme choices.
  * @param {MovingApp} app
  */
 export async function checkMovingWelcomeCloses(app) {
@@ -339,16 +374,40 @@ export async function checkMovingWelcomeCloses(app) {
   await expect(welcome).toBeHidden();
   await expectAtAddressCarryingNothing(safariPage, findNewAddress(app.pageHost));
   expect(await safariPage.evaluate(() => localStorage.getItem("pageMove"))).toBeNull();
+  await openSettings(safariPage);
+  await safariPage.getByRole("button", { name: "How to get notifications" }).click();
+  await expect(welcome).toBeVisible();
+  await expect(welcome.getByRole("heading")).toHaveText(`Add ${app.appName} to your home screen`);
+  await expect(welcome.locator(".welcome-steps > li")).not.toContainText([
+    `Delete the old ${app.appName} Site`,
+  ]);
+  await expect(welcome.getByRole("radio", { name: app.looks.dark, exact: true })).toBeChecked();
+  await welcome.getByRole("radio", { name: app.looks.light, exact: true }).check();
+  await expect(safariPage.locator("html")).toHaveAttribute("data-theme", "light");
   await safariPage.context().close();
+}
+
+// A real service worker's requests skip the test's routes for the page's fake hosts, so the page
+// gets a registration whose push manager is the stand-in's.
+function standInForServiceWorker() {
+  const registration = /** @type {ServiceWorkerRegistration} */ (
+    /** @type {unknown} */ ({ pushManager: Object.create(PushManager.prototype) })
+  );
+  navigator.serviceWorker.register = async () => registration;
 }
 
 /**
  * Opens the new site's Home Screen app for the first time, signed in, from the address a move with
- * notifications on carried.
+ * notifications on carried, where the phone has yet to answer whether the new site may notify,
+ * and, with `canSubscribe`, says yes when asked and subscribes.
  * @param {MovingApp} app
+ * @param {{ canSubscribe?: boolean }} [options]
  */
-async function openNewHomeScreenApp({ page, serve, pageHost }) {
-  await page.addInitScript(leaveNotificationsUnanswered);
+async function openNewHomeScreenApp({ page, serve, pageHost }, { canSubscribe = false } = {}) {
+  if (canSubscribe) {
+    await page.addInitScript(stubPushManager, PUSH_STUB);
+    await page.addInitScript(standInForServiceWorker);
+  } else await page.addInitScript(leaveNotificationsUnanswered);
   await serve(page, { accessCode: ACCESS_CODE, pageHost });
   await signIn(page, findNewAddress(pageHost));
   await page.addInitScript(markOnHomeScreen);
@@ -368,7 +427,7 @@ export async function checkNotificationsAsk(app) {
   const updates = findUpdates(page);
   await expect(updates).toBeVisible();
   await expect(updates.locator(".move-card-title")).toHaveText(NOTIFICATIONS_TITLE);
-  await expect(updates.locator(".move-card-text")).toHaveText(NOTIFICATIONS_TEXT);
+  await expect(updates.locator(".move-card-text")).toHaveText(writeNotificationsText(true));
   await expect(updates.getByRole("button", { name: LEAVE_OFF_BUTTON })).toBeVisible();
   await expect(updates.getByRole("button", { name: TURN_ON_BUTTON })).toBeVisible();
   await expect(updates.getByRole("button", { name: "Dismiss notifications" })).toBeVisible();
@@ -387,6 +446,27 @@ export async function checkNotificationsAskGoes(app, buttonName) {
   await openNewHomeScreenApp(app);
   const updates = findUpdates(page);
   await tapUpdatesButton(page, buttonName);
+  await expect(updates).toBeHidden();
+  await page.reload();
+  await expect(page.locator("#loadNote")).toHaveCount(0);
+  await expect(updates).toBeHidden();
+}
+
+/**
+ * Turn on asks the phone, subscribes it, and saves the subscription with the Worker, and the ask
+ * goes for good, across a reload.
+ * @param {MovingApp} app
+ */
+export async function checkTurnOn(app) {
+  const { page } = app;
+  await openNewHomeScreenApp(app, { canSubscribe: true });
+  const saving = page.waitForResponse(
+    (response) =>
+      response.url().endsWith("/push/subscription") && response.request().method() === "PUT",
+  );
+  await tapUpdatesButton(page, TURN_ON_BUTTON);
+  expect((await saving).ok()).toBe(true);
+  const updates = findUpdates(page);
   await expect(updates).toBeHidden();
   await page.reload();
   await expect(page.locator("#loadNote")).toHaveCount(0);

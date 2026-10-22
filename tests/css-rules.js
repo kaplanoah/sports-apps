@@ -116,7 +116,6 @@ const OWN_SHAPES = new Set([
   ".tab-backing",
   ".tab-pill",
   ".home-screen-icon",
-  ".home-screen-tip .home-screen-icon",
   ".gate-icon",
   ".appearance-icon",
 ]);

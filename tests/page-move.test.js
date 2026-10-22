@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { createContext, runInContext } from "node:vm";
+import { listTrackedFiles, readRepoFile } from "./repo-files.js";
 
 const MINUTE_MS = 60 * 1000;
 const NOW = Date.parse("2026-10-22T16:00:00Z");
@@ -74,7 +75,13 @@ function loadPageMove({
     isOnHomeScreen: () => isOnHomeScreen,
     isAppleBrowser: () => isAppleBrowser,
     readPhoneLook: () => "light",
-    readPickedAppearance: () => JSON.parse(localStorage.getItem("appearance") ?? '"auto"'),
+    readAppearanceChoice: (stored) => {
+      try {
+        return JSON.parse(stored);
+      } catch {
+        return "auto";
+      }
+    },
   });
   runInContext(readFileSync(new URL("page-move.js", PAGE_CODE), "utf8"), context);
   const pageMove = runInContext(
@@ -177,19 +184,11 @@ test("the carried choices are the ones each device keeps with createViewerChoice
       .replace(/,\s*\]/, "]")
       .replaceAll("'", '"'),
   );
-  const files = [
-    "shared/page/appearance.js",
-    "shared/page/news-choices.js",
-    "shared/page/updates.js",
-    "apps/mlb/page/js/kept-on-device.js",
-    "apps/wnba/page/js/updates.js",
-  ];
-  const kept = files.flatMap((file) =>
-    [
-      ...readFileSync(new URL(`../${file}`, import.meta.url), "utf8").matchAll(
-        /createViewerChoice\(\s*"(\w+)"/g,
-      ),
-    ].map((match) => match[1]),
+  const pageFiles = listTrackedFiles().filter((path) =>
+    /^(?:shared|apps\/[^/]+)\/page\/.*\.js$/.test(path),
+  );
+  const kept = pageFiles.flatMap((path) =>
+    [...readRepoFile(path).matchAll(/createViewerChoice\(\s*"(\w+)"/g)].map((match) => match[1]),
   );
   assert.deepEqual([...new Set(kept)].sort(), [...carried].sort());
 });
@@ -270,6 +269,16 @@ test("a move from the Home Screen app keeps its icon in the browser's address wh
   page.forgetPageMove();
   assert.equal(page.readPageMove(), null);
   assert.equal(page.location.href, NEW_ADDRESS);
+});
+
+test("a move's icon starts on the theme the app showed, even where the browser keeps its own", () => {
+  const page = loadPageMove({
+    href: addCarried(NEW_ADDRESS, writeCarried({ fromApp: true })),
+    stored: { appearance: '"light"' },
+  });
+  page.takeCarriedChoices(NOW);
+  assert.equal(page.localStorage.getItem("appearance"), '"light"');
+  assert.equal(page.readPageMove().icon, "dark");
 });
 
 test("a browser off Safari keeps the icon picked in its address without loading again", () => {

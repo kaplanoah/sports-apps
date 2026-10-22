@@ -29,11 +29,11 @@ let status = "loading";
 let note = "";
 let about = "";
 let isBusy = false;
-let started = Promise.resolve();
+let reading = null;
 
 const findElement = (id) => /** @type {HTMLElement} */ (document.getElementById(id));
 
-const canPush = () =>
+export const canPush = () =>
   "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
 
 function renderNote() {
@@ -180,7 +180,7 @@ async function showBusyDuring(task) {
 // the service worker a tap elsewhere on the page may come before.
 async function turnOn() {
   const permission = await Notification.requestPermission();
-  await started;
+  await readSubscriptionOnce();
   if (!registration) return;
   if (permission !== "granted") {
     setStatus(permission === "denied" ? "blocked" : "off");
@@ -231,12 +231,21 @@ async function readSubscription() {
   }
 }
 
+// A tap on the Updates box's ask can come before settings starts the switch, so both wait on the
+// one read.
+const readSubscriptionOnce = () => (reading ??= readSubscription());
+
 /** Turns notifications on from a tap elsewhere on the page, as the switch does. */
 export function turnOnNotifications() {
   if (!isBusy && status !== "on") showBusyDuring(turnOn);
 }
 
-export const areNotificationsOn = () => status === "on";
+/** Whether this device is subscribed to the Worker's pushes, once that's known. */
+export async function hasNotificationsSubscription() {
+  if (!canPush()) return false;
+  await readSubscriptionOnce();
+  return !!subscription && Notification.permission === "granted";
+}
 
 /**
  * @param {{ about?: string }} [options] what the app's notifications tell, under the switch while
@@ -250,8 +259,7 @@ export async function startNotifications(options = {}) {
     setStatus(isIos() && !isOnHomeScreen() ? "homeScreen" : "unsupported");
     return;
   }
-  started = readSubscription();
-  await started;
+  await readSubscriptionOnce();
   if (!registration) {
     setStatus("unsupported");
     return;

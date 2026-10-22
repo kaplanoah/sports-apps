@@ -9,7 +9,7 @@
 // Chrome's Install in both, and slides the welcome closed as settings closes. While a move from
 // the Home Screen app is being finished (page-move.js), the welcome's steps finish it instead: pick
 // the new app's icon, add it, and delete the old one. It opens until it's closed, even where the
-// welcome was closed before.
+// welcome was closed before, and closing it draws the welcome's own steps again, for settings.
 
 /* global isOnHomeScreen, WELCOME_CLOSED_KEY -- from pick-theme.js */
 /* global checkPickedChoice, keepPickedAppearance, readPickedAppearance -- from pick-theme.js */
@@ -72,6 +72,10 @@ const listBrowserSteps = (isOnIos) =>
     : [`Tap ${MENU_GLYPH} Menu`, "Tap Add to Home screen"];
 
 /** @param {boolean} isOnIos */
+const writeDeleteNote = (isOnIos) =>
+  isOnIos ? "Press and hold, then tap Delete Bookmark" : "Press and hold, then remove it";
+
+/** @param {boolean} isOnIos */
 const writeTipSteps = (isOnIos) =>
   isOnIos
     ? `Tap ${SHARE_GLYPH} <b>Share</b> then <b>Add to Home Screen</b>. ${BENEFIT}.`
@@ -124,7 +128,7 @@ function writeSteps(isOnIos, appName) {
       <li><span class="welcome-step">${addStep}</span></li>
       <li>
         <span class="welcome-step">Delete the old ${appName} Site</span>
-        <span class="welcome-note">Press and hold, then tap Delete Bookmark</span>
+        <span class="welcome-note">${writeDeleteNote(isOnIos)}</span>
       </li>`;
   return `<li>
       <span class="welcome-step" id="welcomePickTitle">Pick your theme</span>
@@ -175,9 +179,20 @@ function keepWelcomeChoice(choice) {
   else keepPickedAppearance(choice.value);
 }
 
+/** @param {boolean} isOnIos */
+function finishMove(isOnIos) {
+  if (!isFinishingMove()) return;
+  forgetPageMove();
+  drawWelcome(isOnIos);
+}
+
 // appearance.js also shows the icons and bar that go with the theme picked, once it has loaded.
-/** @param {HTMLDialogElement} welcome */
-function wireWelcome(welcome) {
+// Each listener is on the welcome itself, which keeps it as its steps are drawn again.
+/**
+ * @param {HTMLDialogElement} welcome
+ * @param {boolean} isOnIos
+ */
+function wireWelcome(welcome, isOnIos) {
   welcome.addEventListener("change", (event) =>
     keepWelcomeChoice(/** @type {HTMLInputElement} */ (event.target)),
   );
@@ -186,11 +201,13 @@ function wireWelcome(welcome) {
   const askToClose = () => {
     if (welcome.dispatchEvent(new Event("cancel", { cancelable: true }))) welcome.close();
   };
-  welcome.querySelector(".welcome-continue").addEventListener("click", askToClose);
-  welcome.querySelector(".welcome-close").addEventListener("click", askToClose);
+  welcome.addEventListener("click", (event) => {
+    if (/** @type {Element} */ (event.target).closest(".welcome-continue, .welcome-close"))
+      askToClose();
+  });
   // Continue in browser, the caret, Escape, and Android's back all close it, and it stays closed.
   welcome.addEventListener("close", keepWelcomeClosed);
-  if (isFinishingMove()) welcome.addEventListener("close", forgetPageMove);
+  welcome.addEventListener("close", () => finishMove(isOnIos));
   // Opened again from settings, it rises, even when it closed before the modules arrived.
   welcome.addEventListener("close", () => welcome.removeAttribute("data-reopened"));
 }
@@ -199,12 +216,12 @@ function wireWelcome(welcome) {
 function drawTip(isOnIos) {
   const tip = /** @type {HTMLElement} */ (document.getElementById("homeScreenTip"));
   tip.replaceChildren(
-    ...parseMarkup(`<span class="home-screen-icon" aria-hidden="true"></span>
+    ...parseMarkup(`<span class="home-screen-icon theme-shown-icon" aria-hidden="true"></span>
       <span class="home-screen-copy">
         <span class="home-screen-title">${TIP_TITLE}</span>
         <span class="home-screen-steps" data-ask="browser">${writeTipSteps(isOnIos)}</span>
         <span class="home-screen-steps" data-ask="install" hidden>${BENEFIT}</span>
-        <button type="button" class="home-screen-install" data-ask="install" data-install hidden>
+        <button type="button" class="accent-button home-screen-install" data-ask="install" data-install hidden>
           Install
         </button>
       </span>`),
@@ -224,7 +241,7 @@ function drawHomeScreenAsks() {
   const isOnIos = isIosDevice();
   drawTip(isOnIos);
   const welcome = drawWelcome(isOnIos);
-  wireWelcome(welcome);
+  wireWelcome(welcome, isOnIos);
   if (!isWelcomeOpening()) return;
   // It shows before the first paint, so it's already there, and doesn't rise as it does from
   // settings.

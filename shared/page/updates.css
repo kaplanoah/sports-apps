@@ -146,9 +146,6 @@
   flex: none;
   margin-top: calc(var(--box-pad-start) - var(--box-pad-block));
 }
-:root[data-theme="dark"] .move-card-icon {
-  background-image: var(--home-screen-icon-dark);
-}
 .move-card-copy {
   flex: 1;
   display: flex;
@@ -178,17 +175,10 @@
 }
 .move-card-button {
   margin: 0;
-  padding: 7px 12px;
-  border: 0;
-  border-radius: var(--radius-control);
-  background: var(--accent);
-  color: var(--accent-ink);
-  font: inherit;
   font-size: var(--type-detail-size);
   font-weight: calc(var(--type-detail-weight) + 100);
   letter-spacing: normal;
   text-transform: none;
-  cursor: pointer;
 }
 .move-card-button-outlined {
   background: var(--raised);
