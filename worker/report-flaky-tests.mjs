@@ -502,10 +502,13 @@ function downloadRun({ id, artifacts }) {
   for (const artifact of artifacts) {
     const zipPath = join(directory, `${artifact.id}.zip`);
     const zip = openSync(zipPath, "w");
-    execFileSync("gh", ["api", `repos/{owner}/{repo}/actions/artifacts/${artifact.id}/zip`], {
-      stdio: ["ignore", zip, "inherit"],
-    });
-    closeSync(zip);
+    try {
+      execFileSync("gh", ["api", `repos/{owner}/{repo}/actions/artifacts/${artifact.id}/zip`], {
+        stdio: ["ignore", zip, "inherit"],
+      });
+    } finally {
+      closeSync(zip);
+    }
     execFileSync("unzip", ["-q", zipPath, "-d", join(directory, String(artifact.id))]);
   }
   return directory;
@@ -541,15 +544,25 @@ export async function collectFailedTests({
     uncounted.filter((artifact) => !isCountedBefore(artifact)),
   );
   const tonight = { url: night.url, at: night.now.toISOString() };
+  /** @type {TestRuns[][]} */
+  const failed = [listFailedTests(nightReports).map((test) => ({ ...test, foundIn: tonight }))];
+  const counted = uncounted.filter(isCountedBefore).map(({ id, created_at: at }) => ({ id, at }));
+  for (const run of runs) {
+    let directory;
+    try {
+      directory = download(run);
+    } catch {
+      console.warn(
+        `Could not download CI run ${run.id}'s artifacts (${run.artifacts.map(({ id }) => id).join(", ")}); leaving this try uncounted for a later night.`,
+      );
+      continue;
+    }
+    failed.push(readRunFailures(directory, run.foundIn));
+    counted.push(...run.artifacts.map(({ id, at }) => ({ id, at })));
+  }
   return {
-    failed: mergeFailedTests([
-      listFailedTests(nightReports).map((test) => ({ ...test, foundIn: tonight })),
-      ...runs.map((run) => readRunFailures(download(run), run.foundIn)),
-    ]),
-    counted: [
-      ...uncounted.filter(isCountedBefore).map(({ id, created_at: at }) => ({ id, at })),
-      ...runs.flatMap((run) => run.artifacts.map(({ id, at }) => ({ id, at }))),
-    ],
+    failed: mergeFailedTests(failed),
+    counted,
   };
 }
 

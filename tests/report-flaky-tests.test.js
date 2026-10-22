@@ -699,6 +699,110 @@ const ONE_REPORT = {
 };
 const NEXT_NIGHT = new Date("2026-10-11T07:40:00Z");
 
+test("a failed download leaves the whole try uncounted while other runs and tonight report, then retries it once", async () => {
+  const state = {
+    ciRuns: [
+      { id: 1, updated_at: "2026-10-09T12:00:00Z", tries: ["2026-10-09T11:00:00Z"] },
+      { id: 2, updated_at: "2026-10-09T14:00:00Z", tries: ["2026-10-09T13:00:00Z"] },
+      { id: 3, updated_at: "2026-10-09T16:00:00Z", tries: ["2026-10-09T15:00:00Z"] },
+    ],
+    artifacts: [
+      { id: 11, name: "browser-report-1", created_at: "2026-10-09T11:30:00Z", run: 1 },
+      { id: 21, name: "browser-report-1", created_at: "2026-10-09T13:30:00Z", run: 2 },
+      { id: 22, name: "browser-report-2", created_at: "2026-10-09T13:35:00Z", run: 2 },
+      { id: 31, name: "burn-in-flaky-1", created_at: "2026-10-09T15:30:00Z", run: 3 },
+    ],
+  };
+  const { download, downloaded } = createFakeDownloads({
+    11: RETRY_PASSED_REPORT,
+    21: RETRY_PASSED_REPORT,
+    22: BROKEN_REPORT,
+    31: BURN_IN_LIST,
+  });
+  const first = await collect({
+    github: createFakeRunsApi(state).github,
+    nightReports: [nightReport],
+    download: (run) => {
+      const directory = download(run);
+      if (run.id === 2) throw new Error("HTTP 503 downloading the second shard");
+      return directory;
+    },
+  });
+
+  assert.deepEqual(
+    first.counted.map(({ id }) => id),
+    [11, 31],
+  );
+  assert.deepEqual(
+    Object.fromEntries(first.failed.map(({ name, foundIn }) => [name, foundIn?.url])),
+    {
+      [LAST_DRAWN]: RUN_URL,
+      [AT_REST]: RUN_URL,
+      [RETRY_PASSED]: nameRunUrl(1),
+      [BURN_IN_FLAKY.name]: nameRunUrl(3),
+    },
+  );
+  const stale = tableRow({ name: "stale test", lastSeen: "2026-10-01" });
+  const body = await postNight({ body: renderTable([stale]), ...first, now: TONIGHT });
+  assert.ok(!readTable(body).some(({ name }) => name === stale.name));
+  assert.deepEqual(readCounted(body), first.counted);
+
+  const second = await collect({
+    github: createFakeRunsApi(state).github,
+    download,
+    ledger: readLedger({ body, updated_at: TONIGHT.toISOString() }),
+    now: NEXT_NIGHT,
+  });
+  assert.deepEqual(second.failed, [], "the recovered shard makes this a broken try, not flaky");
+  assert.deepEqual(
+    second.counted.map(({ id }) => id),
+    [21, 22],
+  );
+  assert.deepEqual(listTries(downloaded), [
+    [1, [11]],
+    [2, [21, 22]],
+    [3, [31]],
+    [2, [21, 22]],
+  ]);
+  const nextBody = await postNight({ body, ...second, now: NEXT_NIGHT });
+  assert.equal(readTable(nextBody).find(({ name }) => name === RETRY_PASSED)?.failures, 1);
+  assert.deepEqual(
+    await collect({
+      github: createFakeRunsApi(state).github,
+      download,
+      ledger: readLedger({ body: nextBody, updated_at: NEXT_NIGHT.toISOString() }),
+      now: NEXT_NIGHT,
+    }),
+    { failed: [], counted: [] },
+  );
+  assert.equal(downloaded.length, 4);
+});
+
+test("when every CI download fails the nightly results can still prune and update the table", async () => {
+  const result = await collect({
+    github: createFakeRunsApi(ONE_REPORT).github,
+    nightReports: [nightReport],
+    download: () => {
+      throw new Error("HTTP 503");
+    },
+  });
+  assert.deepEqual(result.counted, []);
+  assert.deepEqual(
+    result.failed.map(({ name }) => name),
+    [LAST_DRAWN, AT_REST],
+  );
+  const body = await postNight({
+    body: renderTable([tableRow({ name: "stale test", lastSeen: "2026-10-01" })]),
+    ...result,
+    now: TONIGHT,
+  });
+  assert.deepEqual(
+    readTable(body).map(({ name }) => name),
+    [LAST_DRAWN, AT_REST],
+  );
+  assert.deepEqual(readCounted(body), []);
+});
+
 test("a run tried again before a night judges each try on its own, and counts its first try's report once", async () => {
   const { github } = createFakeRunsApi({
     ciRuns: [
