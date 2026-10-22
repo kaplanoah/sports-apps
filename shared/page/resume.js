@@ -4,7 +4,7 @@
 // A phone waking a page often fails its first requests, so a release check that got no answer
 // tries again on each tick until one does.
 
-import { fetchRelease, loadRelease } from "./release.js";
+import { fetchRelease, readPageRelease } from "./release.js";
 import { refreshPageCopy } from "./service-worker.js";
 
 // Timers stop while a phone suspends the page, so a tick this late means the page was asleep,
@@ -67,9 +67,9 @@ function reloadPage() {
 
 async function checkRelease() {
   try {
-    const [loaded, current] = await Promise.all([loadRelease(), fetchRelease()]);
+    const current = await fetchRelease();
     isReleaseCheckOwed = false;
-    if (!isReplaced(loaded, current)) return;
+    if (!isReplaced(readPageRelease(), current)) return;
     // A reload opens the service worker's copy, so it waits until the copy holds the newer page.
     if (await refreshPageCopy()) reloadPage();
     else isReleaseCheckOwed = true;
@@ -149,9 +149,6 @@ export function watchReturns(options = {}) {
   isBusy = options.isBusy ?? isBusy;
   catchUp = options.catchUp ?? catchUp;
   pause = options.pause ?? pause;
-  loadRelease().catch(() => {
-    isReleaseCheckOwed = true;
-  });
   document.addEventListener("visibilitychange", () => {
     clearTimeout(pauseTimer);
     if (document.hidden) noteHidden();

@@ -1,10 +1,33 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { describeTimeSince, listChannelFacts, readChannelFacts } from "#shared/channel-tag.js";
+import { readFileSync } from "node:fs";
+import { createContext, runInContext } from "node:vm";
 
 const MINUTE_MS = 60 * 1000;
 const HOUR_MS = 60 * MINUTE_MS;
 const DAY_MS = 24 * HOUR_MS;
+
+class HTMLTimeElement {
+  dateTime = "";
+  textContent = "";
+}
+
+// The plain script loads in the page's head, so it runs here as the page runs it, on its own,
+// with a page whose tag holds `time` and this test's clock.
+const tagTime = new HTMLTimeElement();
+const context = createContext({
+  HTMLTimeElement,
+  get Date() {
+    return Date;
+  },
+  document: { querySelector: (selector) => (selector === "#channelTag time" ? tagTime : null) },
+});
+runInContext(
+  readFileSync(new URL("../shared/page/draw-channel-tag-age.js", import.meta.url), "utf8"),
+  context,
+);
+const describeTimeSince = runInContext("describeTimeSince", context);
+const drawChannelTagAge = runInContext("drawChannelTagAge", context);
 
 test("how long ago reads just now, then minutes, whole hours, and days", () => {
   const ages = [
@@ -27,44 +50,9 @@ test("how long ago reads just now, then minutes, whole hours, and days", () => {
   );
 });
 
-test("a beta release's tag names its channel, its commit, and how long ago it went live", () => {
-  const release = {
-    version: "2.33.0-beta",
-    commit: "3f2a91c",
-    builtAt: "2026-10-18T20:00:00Z",
-    label: "beta",
-  };
-  const now = Date.parse("2026-10-18T20:04:30Z");
-  assert.deepEqual(listChannelFacts(release, now), ["beta", "3f2a91c", "4 min ago"]);
-});
-
-test("production, whose release has no label, has no tag", () => {
-  const release = {
-    version: "2.33.0",
-    commit: "3f2a91c",
-    builtAt: "2026-10-18T20:00:00Z",
-    label: null,
-  };
-  assert.equal(listChannelFacts(release, Date.parse("2026-10-18T20:04:30Z")), null);
-});
-
-test("a release the Worker no longer has, which names only its commit, has no tag", () => {
-  const release = { version: null, commit: "3f2a91c", builtAt: null, label: null };
-  assert.equal(listChannelFacts(release, Date.parse("2026-10-18T20:04:30Z")), null);
-});
-
-test("a release that can't be read, as offline, leaves no tag", async () => {
-  const unreadable = () => Promise.reject(new Error("version.json answered 500"));
-  assert.equal(await readChannelFacts(unreadable), null);
-});
-
-test("a release read now names how long ago it went live as of now", async (context) => {
+test("the tag's age reads how long ago its deploy went live, as of now", (context) => {
   context.mock.timers.enable({ apis: ["Date"], now: Date.parse("2026-10-18T23:00:00Z") });
-  const release = {
-    version: "2.33.0-beta",
-    commit: "3f2a91c",
-    builtAt: "2026-10-18T20:00:00Z",
-    label: "beta",
-  };
-  assert.deepEqual(await readChannelFacts(async () => release), ["beta", "3f2a91c", "3 h ago"]);
+  tagTime.dateTime = "2026-10-18T20:00:00.000Z";
+  drawChannelTagAge();
+  assert.equal(tagTime.textContent, "3 h ago");
 });

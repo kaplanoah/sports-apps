@@ -17,7 +17,7 @@ const readReleaseLine = (release) =>
     mock.timers.enable({ apis: ["Date"], now: Date.parse("2026-10-07T12:00:00Z") });
     try {
       const line = describeRelease(release);
-      return line && stripTags(normalizeSpaces(line).replace(/&bull;/g, " | "));
+      return stripTags(normalizeSpaces(line).replace(/&bull;/g, " | "));
     } finally {
       mock.timers.reset();
     }
@@ -38,12 +38,5 @@ test("a release without a version names its commit", () => {
   assert.equal(
     readReleaseLine({ ...RELEASE, version: null }),
     "abc1234 | Released Sep 24, 11:00 AM",
-  );
-});
-
-test("a release the Worker no longer has, named only by its commit, has no line to show", () => {
-  assert.equal(
-    readReleaseLine({ version: null, commit: "abc1234", builtAt: null, label: null }),
-    null,
   );
 });

@@ -27,9 +27,10 @@ const readRoleSizes = (page) =>
 /**
  * Every piece of shown text off its app's type roles (shared/page/type.css), with what sets it and
  * why: a size that isn't one of the roles' sizes, a weight its font has no face for, which the
- * browser would fake from another, and Safari enlarging text on its own. A field's text is at
- * least 16px, which an iPhone doesn't zoom into on a tap. The tab bar's labels keep the phone's own
- * size, and text hidden for screen readers is left out.
+ * browser would fake from another, and Safari enlarging text on its own. A field's text, a
+ * textarea's too, is instead at least 16px, which an iPhone doesn't zoom into on a tap, in a weight
+ * its font has a face for. The tab bar's labels keep the phone's own size, and text hidden for
+ * screen readers is left out.
  * @param {import("@playwright/test").Page} page
  */
 export const listTextOffRoles = async (page) =>
@@ -38,7 +39,7 @@ export const listTextOffRoles = async (page) =>
       await document.fonts.ready;
       const SMALLEST_FIELD_SIZE = 16;
       const TYPED_FIELDS =
-        "select, textarea, input:not([type=checkbox], [type=radio], [type=hidden])";
+        "select, textarea, input:not([type=checkbox], [type=radio], [type=range], [type=hidden])";
 
       /** @param {string} range a face's weight, like "300" or "100 900" @param {number} weight */
       const isInRange = (range, weight) => {
@@ -89,7 +90,8 @@ export const listTextOffRoles = async (page) =>
       for (let node = walker.nextNode(); node; node = walker.nextNode()) {
         const element = node.parentElement;
         if (!element || !node.textContent?.trim() || !element.checkVisibility()) continue;
-        if (element.closest(".tab-label") || isScreenReaderOnly(element)) continue;
+        if (element.closest(".tab-label") || element.matches(TYPED_FIELDS)) continue;
+        if (isScreenReaderOnly(element)) continue;
         const problems = listProblems(element);
         if (problems.length)
           offRoles.add(
@@ -97,10 +99,17 @@ export const listTextOffRoles = async (page) =>
           );
       }
       for (const field of document.querySelectorAll(TYPED_FIELDS)) {
-        const size = parseFloat(getComputedStyle(field).fontSize);
-        if (field.checkVisibility() && size < SMALLEST_FIELD_SIZE)
+        if (!field.checkVisibility()) continue;
+        const style = getComputedStyle(field);
+        const size = parseFloat(style.fontSize);
+        const family = style.fontFamily.split(",")[0].replaceAll('"', "").trim();
+        const problems = [
+          size < SMALLEST_FIELD_SIZE ? `field at ${size}px, which an iPhone zooms into` : "",
+          describeFaceProblem(family, style.fontStyle, Number(style.fontWeight)),
+        ].filter(Boolean);
+        if (problems.length)
           offRoles.add(
-            `${field.tagName.toLowerCase()}.${field.getAttribute("class") ?? ""}: field at ${size}px, which an iPhone zooms into`,
+            `${field.tagName.toLowerCase()}.${field.getAttribute("class") ?? ""}: ${problems.join(", ")}`,
           );
       }
       return [...offRoles];

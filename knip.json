@@ -12,7 +12,9 @@
     "shared/page/push-worker.js",
     "shared/page/offline-worker.js",
     "shared/page/service-worker-steps.js",
+    "shared/page/draw-channel-tag-age.js",
     "shared/page/draw-home-screen-asks.js",
+    "shared/page/tuning-panel.js",
     "shared/page/long-away.js",
     "shared/page/open-last-tab.js",
     "shared/page/season-header.js",
@@ -38,5 +40,6 @@
     ".claude/hooks/*.mjs"
   ],
   "ignore": ["apps/*/page/js/sortable.min.js"],
-  "ignoreBinaries": ["jq"]
+  "ignoreBinaries": ["jq"],
+  "ignoreDependencies": ["cloudflare"]
 }

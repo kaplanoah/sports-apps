@@ -1,10 +1,10 @@
 import test, { mock } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { listApps } from "../worker/apps.mjs";
+import { findPageRoot, listApps, listServices } from "../worker/apps.mjs";
 import {
   buildWorker,
   describeBanner,
@@ -109,11 +109,69 @@ test("a production release has no label, so its page shows no channel tag", () =
   });
 });
 
+const TUNING_ROUND = {
+  name: "Corners",
+  values: [
+    { property: "--radius-control", label: "Button corners", unit: "px", min: 0, max: 12, step: 1 },
+  ],
+};
+const TUNING_TAGS = [
+  /<script type="application\/json" id="tuningRound">/,
+  /<link rel="stylesheet" href="release\/b102733\/shared\/tuning-panel\.css"/,
+  /<script type="module" src="release\/b102733\/shared\/tuning-panel\.js"/,
+];
+
+/**
+ * A copy of an app's page with a tuning round open, as the apps' folder a build reads from.
+ * @param {string} app
+ */
+function createTuningRoot(app) {
+  const folder = mkdtempSync(path.join(tmpdir(), "apps-"));
+  cpSync(findPageRoot(app), path.join(folder, app, "page"), { recursive: true });
+  writeFileSync(path.join(folder, app, "page/tuning-round.json"), JSON.stringify(TUNING_ROUND));
+  return {
+    appsRoot: pathToFileURL(`${folder}/`),
+    remove: () => rmSync(folder, { recursive: true, force: true }),
+  };
+}
+
+test("a beta build with a round open loads the tuning panel, and production's leaves it out", () => {
+  for (const app of listApps()) {
+    const { appsRoot, remove } = createTuningRoot(app);
+    try {
+      const beta = listBundledFiles(app, RELEASE, "beta", appsRoot);
+      for (const tag of TUNING_TAGS) assert.ok(tag.test(beta["index.html"].text), `${app}: ${tag}`);
+      assert.ok(beta["shared/tuning-panel.js"], app);
+      assert.equal(beta["tuning-round.json"], undefined, app);
+
+      const production = listBundledFiles(app, { ...RELEASE, label: null }, "production", appsRoot);
+      assert.doesNotMatch(production["index.html"].text, /tuning/i, app);
+      for (const file of [
+        "shared/tuning-panel.js",
+        "shared/tuning-panel.css",
+        "shared/tuning-round.js",
+        "tuning-round.json",
+      ])
+        assert.equal(production[file], undefined, `${app} ${file}`);
+    } finally {
+      remove();
+    }
+  }
+});
+
+// Node has no Workers runtime, so the runtime's own module stands in as its two classes.
+const WORKERS_RUNTIME_STAND_IN =
+  "data:text/javascript,export class DurableObject {} export class WorkerEntrypoint {}";
+
 /** @param {string} app */
 async function loadForbiddingGlobalWork(app) {
   const folder = mkdtempSync(path.join(tmpdir(), `${app}-worker-`));
   const bundlePath = path.join(folder, "worker.mjs");
-  writeFileSync(bundlePath, await buildWorker(app, { release: RELEASE }));
+  const built = await buildWorker(app, { release: RELEASE });
+  writeFileSync(
+    bundlePath,
+    built.replaceAll('"cloudflare:workers"', `"${WORKERS_RUNTIME_STAND_IN}"`),
+  );
   /** @param {string} name */
   const refuse = (name) => () => {
     throw new Error(`${app}'s Worker called ${name} while it loads`);
@@ -138,6 +196,16 @@ test("each app's Worker loads without what Cloudflare refuses while a Worker loa
   for (const app of listApps()) {
     const worker = await loadForbiddingGlobalWork(app);
     assert.equal(typeof worker.default.fetch, "function", app);
+  }
+});
+
+test("a service's Worker loads its packages as a Worker resolves them, importing only the runtime", async () => {
+  for (const service of listServices()) {
+    const built = await buildWorker(service, { release: RELEASE });
+    const imports = [...built.matchAll(/^import .* from "([^"]+)";$/gm)].map(([, from]) => from);
+    assert.deepEqual([...new Set(imports)], ["cloudflare:workers"], service);
+    const worker = await loadForbiddingGlobalWork(service);
+    assert.equal(typeof worker.default, "function", service);
   }
 });
 

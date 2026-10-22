@@ -6,7 +6,7 @@
 
 import { formatDateAndTime } from "./days.js";
 import { joinWithSeparator, setHtml } from "./html.js";
-import { loadRelease } from "./release.js";
+import { readPageRelease } from "./release.js";
 import { openSheet, wireSheet } from "./sheet.js";
 import { keepDialogFor } from "./sheet-memory.js";
 
@@ -16,22 +16,19 @@ const findElement = (id) => /** @type {HTMLElement} */ (document.getElementById(
 const findDialog = () =>
   /** @type {HTMLDialogElement} */ (document.getElementById("settingsDialog"));
 
-// A release this Worker no longer has names only its commit, and the page reloads for it, so it
-// has no line. A version the build couldn't work out leaves the commit in its place.
+// A version the build couldn't work out leaves the commit in its place.
 /** @param {import("./release.js").Release} release */
 export function describeRelease({ version, commit, builtAt }) {
-  if (!builtAt) return null;
   const name = version ? `v${version}` : commit;
   return joinWithSeparator([name, `Released ${formatDateAndTime(new Date(builtAt), new Date())}`]);
 }
 
 // The commit is there on hover.
-async function showRelease() {
-  const release = await loadRelease().catch(() => null);
-  const line = release && describeRelease(release);
-  if (!line) return;
+function showRelease() {
+  const release = readPageRelease();
+  if (!release) return;
   const note = findElement("versionNote");
-  setHtml(note, line);
+  setHtml(note, describeRelease(release));
   note.title = `Commit ${release.commit}`;
   note.hidden = false;
 }

@@ -1,19 +1,21 @@
 import { createAppWorker } from "../../shared/worker/app-worker.js";
+import { findPageRoot } from "../../worker/apps.mjs";
 import { listBundledFiles } from "../../worker/build.mjs";
+import { readPageFiles } from "../../worker/page-files.mjs";
+import { addTuningPanel } from "../../worker/tuning-files.mjs";
 import { TEST_SERVER } from "./harness.mjs";
 
 const APP_KEY = "test-key";
 const answerNothing = () => new Response(null, { status: 500 });
 
 /**
- * The page's files as a deploy of this release serves them, from an address without the key.
- * @param {string} app
- * @param {Parameters<typeof listBundledFiles>[1]} release
+ * Page files as the Worker serves them, from an address without the key.
+ * @param {ReturnType<typeof listBundledFiles>} pageFiles
  * @returns {(url: URL) => Promise<Response>}
  */
-export function buildReleaseServer(app, release) {
+function serveBundledFiles(pageFiles) {
   const worker = createAppWorker({
-    pageFiles: listBundledFiles(app, release),
+    pageFiles,
     forwardToStore: answerNothing,
     isStoreAnswering: async () => false,
   });
@@ -21,6 +23,26 @@ export function buildReleaseServer(app, release) {
     worker.fetch(new Request(new URL(`/${APP_KEY}${url.pathname}${url.search}`, url)), {
       APP_KEY,
     });
+}
+
+/**
+ * The page's files as a deploy of this release serves them.
+ * @param {string} app
+ * @param {Parameters<typeof listBundledFiles>[1]} release
+ */
+export const buildReleaseServer = (app, release) =>
+  serveBundledFiles(listBundledFiles(app, release));
+
+/**
+ * The page's files as a channel serves them while this tuning round is open.
+ * @param {string} app
+ * @param {import("../../shared/page/tuning-round.js").Round} round
+ * @param {string | null} label the channel's, null for production
+ */
+export function buildTuningServer(app, round, label) {
+  const roundFile = { contentType: "application/json", text: JSON.stringify(round) };
+  const files = { ...readPageFiles(findPageRoot(app)), "tuning-round.json": roundFile };
+  return serveBundledFiles(addTuningPanel(files, label));
 }
 
 /**

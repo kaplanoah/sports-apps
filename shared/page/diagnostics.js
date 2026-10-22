@@ -29,9 +29,10 @@ import {
   storeText,
 } from "./local-storage.js";
 import { prefersReducedMotion } from "./reduced-motion.js";
-import { loadRelease } from "./release.js";
+import { readPageRelease } from "./release.js";
 import { watchTimeAway } from "./resume.js";
 import { forgetServiceWorkerSteps, readServiceWorkerSteps } from "./service-worker.js";
+import { SENT_MS } from "./sent-label.js";
 import { listSheetsInOpenDialogs } from "./sheet-reopen.js";
 import { bracketStandingsLog, watchTouches } from "./bracket-standings-log.js";
 import { dayStripLog } from "./day-strip-log.js";
@@ -53,8 +54,6 @@ const KEPT_RECORDS = 5;
 // A part whose text shrinks by more than this share dipped, which is what a flicker looks like.
 const DIP_SHARE = 0.25;
 const MINUTE_MS = 60 * 1000;
-// The report button says it copied or shared the report for this long, then offers it again.
-const SENT_MS = 2000;
 const ON_REQUEST = "On request";
 const STEP_LOGS = [errorLog, sheetLog, dayStripLog, bracketStandingsLog, phoneLookLog];
 const SERVICE_WORKER_TITLE = "Service worker";
@@ -105,8 +104,6 @@ let reportStep = null;
 let reportTimer;
 const openedAt = Date.now();
 let returns = 0;
-/** @type {import("./release.js").Release | null} */
-let release = null;
 /** @type {(() => Promise<JobStatus[]>) | null} */
 let readJobStatuses = null;
 /** @type {JobStatus[]} */
@@ -431,7 +428,7 @@ const readPageFacts = () => ({
   appName:
     document.querySelector('meta[name="apple-mobile-web-app-title"]')?.getAttribute("content") ??
     document.title,
-  release,
+  release: readPageRelease(),
   userAgent: navigator.userAgent,
   isOnHomeScreen: isOnHomeScreen(),
   width: innerWidth,
@@ -766,12 +763,6 @@ export function startDiagnostics() {
   // Its line for the page leaving the screen joins the record before the record closes, and the
   // step logs keep it as they save on the page's hiding.
   watchPhoneLook(noteStep);
-  loadRelease().then(
-    (loaded) => {
-      release = loaded;
-    },
-    () => {},
-  );
   document.addEventListener("visibilitychange", () => {
     if (document.hidden) finishRecord();
   });

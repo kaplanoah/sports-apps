@@ -3,6 +3,7 @@
 import { readFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { nameServiceBinding } from "../shared/worker/services.js";
 import { findWorkerRoot, isService, listApps, listServices, listWorkersOrExit } from "./apps.mjs";
 import { buildWorker } from "./build.mjs";
 import { findChannel, readCommandLine } from "./channels.mjs";
@@ -126,7 +127,7 @@ const VERSION_BINDING = { type: "version_metadata", name: "VERSION" };
 const listServiceBindings = (channel, roots) =>
   listServices(roots?.servicesRoot).map((service) => ({
     type: "service",
-    name: service.toUpperCase().replaceAll("-", "_"),
+    name: nameServiceBinding(service),
     service: loadWorkerConfig(service, channel, roots).name,
   }));
 

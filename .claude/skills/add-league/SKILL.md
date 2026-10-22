@@ -60,6 +60,9 @@ Delete it once the app's first PR merges.
    Give it a manifest, icons, and an `apple-mobile-web-app-title` of the league's short name,
    which its manifest's `name` and `short_name` match.
    Agree on the league's look with the owner from a mockup first: its fonts and its light and dark themes.
+   The mockup is one plain HTML page that works on a phone, never a design canvas,
+   with the WNBA's styles, separators, and layout from its `page/styles.css`, and only the new league's fonts and colors in place of its own.
+   Once the views are built, look at each beside the mockup, with the same data, in each theme, and fix anything off.
    The league's fonts are self-hosted in `page/fonts/`, with each type role's size and weight set in its `:root`, as `.claude/rules/page-look.md` says.
    The league's light and dark themes are each a set of colors, the dark one under `:root[data-theme="dark"]`,
    with an icon and a bar color of its own, which `page/js/looks.js` hands the shared `appearance.js`
@@ -91,12 +94,13 @@ Delete it once the app's first PR merges.
    Its page adds lines that give parts layers of their own, so it's a red change,
    tried on the owner's phone from beta before it merges, as the `ship` skill says.
    Each channel's token can edit only the Workers it names, so before the first deploy of each channel,
-   the owner creates its Worker in Cloudflare's dashboard and adds it to that environment's token:
+   the owner creates its Worker in Cloudflare's dashboard, as the README's "Deploying on merge" says, and adds it to that environment's token:
    `<app>-app-beta` to the `beta` token before the first push to `beta`, and `<app>-app` to the `production` token before the merge.
    Once its CI passes, push it to `beta`, whose deploy replaces `<app>-app-beta`,
    which answers nothing but `robots.txt` and `health` until `npm run set-app-key -- <app> --channel beta` gives it a key and prints its address.
-   Give the owner that address, and ask them to set its code, the one every app asks for, with `npm run set-access-code -- <app> <code> --channel beta`,
-   add the address as `<APP>_BETA_PAGE_URL` in the `beta` environment's secrets, beside its `ACCESS_CODE`,
+   Give the owner that address, and ask them for its code, the one every app asks for,
+   then run `npm run set-access-code -- <app> <code> --channel beta` yourself, which the owner approves when `.claude/settings.json` asks.
+   Ask the owner to add the address as `<APP>_BETA_PAGE_URL` in the `beta` environment's secrets, beside its `ACCESS_CODE`,
    add the page to the Home Screen, and label the PR `phone-ok` once they've used it.
    The merge's deploy then replaces `<app>-app`, which `npm run set-app-key -- <app>` gives its key in the same way,
    and the owner adds its address as `<APP>_PAGE_URL`, beside the `production` environment's `ACCESS_CODE`,

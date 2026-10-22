@@ -40,11 +40,12 @@ This skill holds what "Shipping a change" in AGENTS.md leaves out, most of it un
 
 - Each app has a beta channel: a second Worker, `<app>-app-beta`,
   from the `[env.beta]` in its `wrangler.toml`, with its own store,
-  key, and address, whose page says beta on the Home Screen and in settings' version line (the root's `worker/build.mjs`),
-  and in a tag beside the app's name, with the commit it runs and how long ago that went live (`shared/page/channel-tag.js`).
+  key, and address, whose page says beta on the Home Screen and in settings' version line (the root's `worker/build.mjs`).
+  Its page also shows a tag beside the app's name, with the commit it runs and how long ago that went live
+  (`writeRelease` in the root's `worker/page-files.mjs`, its age drawn by `shared/page/draw-channel-tag-age.js`).
   A push to the `beta` branch deploys it at once, with the same checks and rollback as `main`'s deploy,
   but only when the pushed commit is the head of the PR that holds beta (the root's `worker/beta-claim.mjs`).
-  Each of `deploy:api`, `rollback`, `set-app-key`, `set-access-code`, and `set-page-host` takes `--channel beta`.
+  Each of `deploy:api`, `rollback`, `set-app-key`, `set-access-code`, `set-page-host`, `set-email-key`, and `set-rp-id` takes `--channel beta`.
 - Beta holds one PR at a time, while the owner tests it on the phone.
   A PR claims beta with the `beta` label, and of the open PRs labeled `beta`, the one labeled first holds it.
   A PR waiting for beta has the `beta-wait` label, and the one labeled first has waited longest.
@@ -68,8 +69,14 @@ This skill holds what "Shipping a change" in AGENTS.md leaves out, most of it un
      If the workflow took `beta` off the PR, beta is held: see the next bullet.
   5. Take `beta-wait` off the PR if it has it, only now: taking it off first would tell the next in line, who would then lose the race.
   6. Push to beta: `git push -f origin <branch>:beta`.
-  7. Wait for that push's Deploy run to say `worker check: ok` for each app, and tell the owner to use the beta app on the Home Screen.
+  7. Wait for that push's Deploy run to say `worker check: ok` for each Worker, and tell the owner to use the beta app on the Home Screen.
      Name the commit the beta tag at the top of the app should show, so a build swapped since is plain to see.
+- A design round tuned on the phone opens with an app's `page/tuning-round.json`,
+  which names each CSS variable on `:root` to tune,
+  with a slider's `min`, `max`, `step`, and `unit`, or a list of `options`, as `readRound` in `shared/page/tuning-round.js` checks.
+  It tunes only a variable that's the same in every theme and at every width, since the panel reads each start once, as the page loads.
+  Beta's build writes it into the page with the tuning panel, and production's leaves both out (the root's `worker/tuning-files.mjs`).
+  The owner pastes back what the panel's Copy gives, and the PR sets those values in its stylesheets and deletes the round file in the same push.
 - If beta is held, add `beta-wait` to the PR if the workflow hasn't, stay subscribed to the PR, and stop.
   The last message to the owner names the PR holding beta, with its link,
   and says the owner can say "put this on beta now" to take it.
@@ -77,7 +84,9 @@ This skill holds what "Shipping a change" in AGENTS.md leaves out, most of it un
 - When the owner says "put this on beta now", take `beta` off the PR that holds it and add `beta-wait` to it, which puts it at the back of the line,
   then put this PR on beta from step 1.
   This is the only time a session changes another PR's labels, and only on the owner's word.
-  If the workflow tells another waiter in between, that waiter finds beta held and goes back in line.
+  If the workflow told another waiter before this PR took beta, it comments on that waiter that it stays first in line,
+  or, when that waiter claimed beta meanwhile, takes `beta` off it.
+  Either way, the workflow tells it again once beta is free.
 - A PR gives beta up as it closes or merges, as its branch is pushed, and as the owner adds `phone-ok`, and the workflow takes the label off.
   Take `beta` off yourself when going back to work without a push yet, as when the owner's test found a problem,
   and when the owner is done testing a PR that isn't red, which never gets `phone-ok`.
@@ -152,6 +161,9 @@ Wait for the Deploy runs for the merge commit to finish, then read their logs an
   A line before it saying "page check: skipped" names a page the deploy couldn't open, like one whose secrets are missing or out of date,
   and one saying "page check: ok, but" a page that opened without the code its environment holds:
   tell the user that too.
+- A service's lines say "health check: ok": every app that reports it says it answers at the new commit.
+  Saying "health check: skipped" because "no app reaches" it yet, no app's live version binds it, so the service went unchecked:
+  tell the user, since the `Watch apps` workflow is the first to read it.
 - It says "Nothing the Worker runs changed": the merge didn't need a deploy, or the first Deploy run already deployed it.
   Tell the user which.
 - It says "has moved on" and "whose deploy covers": another merge landed first, and CI passed on it, so its Deploy run covers this one.

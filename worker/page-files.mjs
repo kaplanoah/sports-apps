@@ -5,6 +5,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { extname, join, posix, relative } from "node:path";
 import { fileURLToPath } from "node:url";
+import { html, joinWithSeparator } from "../shared/page/html.js";
 import { nameReleaseFolder } from "../shared/worker/app-worker.js";
 
 const SHARED_PAGE_ROOT = fileURLToPath(new URL("../shared/page/", import.meta.url));
@@ -16,6 +17,7 @@ const TEXT_TYPES = {
   ".svg": "image/svg+xml",
   ".webmanifest": "application/manifest+json",
   ".txt": "text/plain; charset=utf-8",
+  ".json": "application/json",
 };
 const BINARY_TYPES = { ".png": "image/png", ".woff2": "font/woff2" };
 
@@ -191,21 +193,53 @@ const pinPage = (page, guard, folder) =>
     )
     .replace(LOADING_TAG, (tag) => pinTag(tag, folder));
 
+const CHANNEL_TAG = '<span class="channel-tag" id="channelTag" hidden></span>';
+
 /**
- * Each page reading its code and styles from its release's folder, with its release guard
- * written in, since the guard has to run when a file from that folder goes missing.
- * @param {Record<string, { contentType: string, text?: string, base64?: string }>} files
- * @param {string} commit
+ * The channel tag's channel, commit, and the moment of the deploy, whose age
+ * shared/page/draw-channel-tag-age.js draws, or the tag left hidden on production.
+ * @param {import("../shared/page/release.js").Release} release
  */
-export function pinPageFiles(files, commit) {
+function renderChannelTag({ label, commit, builtAt }) {
+  if (!label) return CHANNEL_TAG;
+  const facts = joinWithSeparator([label, commit, html`<time datetime="${builtAt}"></time>`]);
+  return html`<span class="channel-tag" id="channelTag">${facts}</span>`.text;
+}
+
+/**
+ * A JSON script tag holding a value, with every < escaped so no text in it can end the tag.
+ * @param {string} id
+ * @param {unknown} value
+ */
+export const writeJsonScript = (id, value) =>
+  `<script type="application/json" id="${id}">${JSON.stringify(value).replaceAll("<", "\\u003c")}</script>`;
+
+/**
+ * A page with its release written in, for its code to read without asking the Worker, and with
+ * its channel tag filled from it.
+ * @param {string} page
+ * @param {import("../shared/page/release.js").Release} release
+ */
+export const writeRelease = (page, release) =>
+  page
+    .replace(RELEASE_GUARD, () => `${writeJsonScript("release", release)}\n  ${RELEASE_GUARD}`)
+    .replace(CHANNEL_TAG, () => renderChannelTag(release));
+
+/**
+ * Each page reading its code and styles from its release's folder, with its release and release
+ * guard written in, since the guard has to run when a file from that folder goes missing.
+ * @param {Record<string, { contentType: string, text?: string, base64?: string }>} files
+ * @param {import("../shared/page/release.js").Release} release
+ */
+export function pinPageFiles(files, release) {
   const guard = files["shared/release-guard.js"]?.text;
-  const folder = nameReleaseFolder(commit);
+  const folder = nameReleaseFolder(release.commit);
   const pinned = Object.entries(files)
     .filter(([path]) => isPage(path))
     .map(([path, file]) => {
       if (!file.text?.includes(RELEASE_GUARD) || !guard)
         throw new Error(`The head of ${path} must load shared/release-guard.js.`);
-      return [path, { ...file, text: pinPage(file.text, guard, folder) }];
+      return [path, { ...file, text: pinPage(writeRelease(file.text, release), guard, folder) }];
     });
   return { ...files, ...Object.fromEntries(pinned) };
 }

@@ -76,9 +76,9 @@ let view = null;
 let shown = null;
 /** @type {string | null} */
 let chosenDay = null;
-// A day a tap or Today sent the list to stays chosen while the list travels there, and until it
-// moves away again, since the season's last days can't all reach the top, with where its top was
-// last seen, for Diagnostics to say when it moves while the list travels.
+// A day a tap or Today sent the list to stays chosen while the list travels there, past other days
+// at the top, and until it moves away again, with where its top was last seen, for Diagnostics to
+// say when it moves while the list travels.
 /** @type {{ day: string, hasArrived: boolean, top: number | null } | null} */
 let held = null;
 let isPlaced = false;
@@ -855,11 +855,14 @@ function noteFill(drawing, before, after) {
   dayStripLog.noteStep(`${drawing || "redraw nothing"}; ${describeTopDay(after)}${was}`);
 }
 
+// A tap chose the held day before the list got there, and a list stopped short may send no more
+// scrolls, so the strip chooses the day at the top again.
 /** @param {string} taker what took the list over */
 function letGoOfHeldDay(taker) {
   if (!held) return;
   dayStripLog.noteStep(`${taker} takes the list over on its way to ${held.day}`);
   setHeld(null);
+  followList();
 }
 
 // A finger, wheel, click, or key on the list takes it over, even on its way to a day, as anything

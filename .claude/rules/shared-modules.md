@@ -13,7 +13,8 @@ The root's `tests/shared-modules-list.test.js` keeps this list whole.
 
 ## `shared/page/`
 
-The Worker serves every file here, its `networks/` logos too, under `shared/`.
+The Worker serves every file here, its `networks/` logos too, under `shared/`,
+but for the tuning panel's, which only a channel off production serves, and only while a round is open (the root's `worker/tuning-files.mjs`).
 
 ### The page and its tabs
 
@@ -32,9 +33,12 @@ The Worker serves every file here, its `networks/` logos too, under `shared/`.
 - `local-storage.js`: what the page keeps on the device, safe when storage refuses or is full
 - `keyboard-focus.js`: focus rings only for keyboard use
 - `league-words.js`: what a league's pages call things, in its fans' words
-- `channel-tag.js`: the tag beside the app's name on beta
-- `release.js`: a release's version, commit, and channel
+- `draw-channel-tag-age.js`: how long ago beta's release went live, in the tag beside the app's name, before the first paint
+- `channel-tag.js`: keeping that tag's age current while the page stays open
+- `release.js`: the release the build writes into the page, and the latest one the Worker serves
 - `release-guard.js`: reloading until every file comes from one release, as a deploy lands
+- `tuning-panel.js`: off production, the panel that tunes a round's values on the page
+- `tuning-round.js`: off production, what a tuning round asks for, and its values as text to copy
 
 ### Opening, coming back, and catching up
 
@@ -65,6 +69,7 @@ The Worker serves every file here, its `networks/` logos too, under `shared/`.
 - `notifications.js`: settings' notifications switch
 - `notification-status.js`: what that switch says under it
 - `diagnostics.js`: the Diagnostics and their shared report
+- `sent-label.js`: how long a button that copies or shares says it did
 - `step-log.js`: a Diagnostics log of what one part of the page does
 - `viewport-log.js`: each change to the screen's viewports
 - `sheet-log.js`: what each dialog's sheets do
@@ -208,13 +213,15 @@ Pages link these before their own stylesheet, and theme them with the tokens the
 - `rank-curve.css`: a rank curve and its notes
 - `no-field-note.css`: the bracket before the playoff field is set
 - `channel-tag.css`: the tag beside the app's name on beta
+- `tuning-panel.css`: the tuning panel and its Tune button
 - `gate.css`: the access code's gate
 
 ## `shared/worker/`
 
 - `app-worker.js`: the Worker's routing under the key
 - `access-gate.js`: asking for the access code before the page opens
-- `health.js`: the Worker's health, for an uptime monitor
+- `health.js`: the Worker's health, for an uptime monitor, and what each service it binds answers
+- `services.js`: the services an app may bind, and each one's binding name
 - `season-store.js`: the store's Durable Object, which each app's store hands its league
 - `background-job.js`: what a league's background jobs share
 - `job-status.js`: what each job's status says of its last run
