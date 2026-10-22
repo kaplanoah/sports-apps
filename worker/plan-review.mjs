@@ -1,11 +1,11 @@
 // Splits a pull request's change into areas by what its files are about, each test with the code
 // it tests, so CI's review (the review jobs in ci.yml, and review-area.yml for each area) has one
 // reviewer read each area in full. The first review reads the whole change. A review after it
-// reads only what the pushes since the last full read changed. A push that changes only what a
-// merge of the base brings in is read by no one, but for how it resolved each conflict, and
-// neither is a run on the head the last full read ended on. A test's recorded data, the lockfile,
-// a binary file, and a drawing or minified library a tool wrote go unread, named in the summary
-// instead.
+// reads only files the pull request still changes and the pushes since the last full read
+// changed. A push that only merges the base is read by no one, but for how it resolved conflicts
+// in files the pull request still changes. Neither is a run on the head the last full read ended
+// on. A test's recorded data, the lockfile, a binary file, and a drawing or minified library a tool
+// wrote go unread, named in the summary instead.
 // Each file's diff is written in parts a reviewer reads whole, as is each rule file whose paths
 // match a file of its area, which judge-review.mjs checks.
 // Usage: node worker/plan-review.mjs <folder>, in a full checkout of the pull request's merge
@@ -292,24 +292,28 @@ export function splitDiffByFile(diff) {
 }
 
 /**
- * The files the pushes since a reviewed head changed: those the pushed range changes, the range
- * the push's reviewers read.
+ * The files the pushes since a reviewed head changed that the pull request still changes, so
+ * accepting the base's copy leaves no diff for the push's reviewers to read.
  * @param {string[]} pushed
  * @param {(range: string[]) => { numstat: string }} readDiff
  */
-export const listPushedFiles = (pushed, readDiff) =>
-  readChangedFiles(readDiff(pushed).numstat).map(({ path }) => path);
+export function listPushedFiles(pushed, readDiff) {
+  const changed = new Set(readChangedFiles(readDiff(WHOLE_CHANGE).numstat).map(({ path }) => path));
+  return readChangedFiles(readDiff(pushed).numstat)
+    .map(({ path }) => path)
+    .filter((path) => changed.has(path));
+}
 
 /**
  * Which review this run makes: the first, of the whole change; reviewed, on the head the last
  * full read ended on, as a label's run is, which leaves that read's summary as it is; one of what
- * the pushes since the last full read changed; or none, when they changed only what a merge of the
- * base brings in.
+ * the pushes since the last full read changed; or none, when the pushes leave no new changes in
+ * files the pull request still changes.
  * @param {object} review
  * @param {string | null} review.reviewedHead the head the last full read ended on
  * @param {string} review.head the pull request's head
  * @param {boolean} review.isOnBranch whether that head is still in the pull request's history
- * @param {() => string[]} review.listChanged the files the pushes since changed
+ * @param {() => string[]} review.listChanged the files both the pull request and the pushes since changed
  * @returns {{ stage: "first" | "reviewed" | "none" } | { stage: "push", files: string[] }}
  */
 export function chooseStage({ reviewedHead, head, isOnBranch, listChanged }) {
@@ -548,7 +552,7 @@ const SHOW_WHOLE_FILE = `\`node worker/review-git.mjs show --diff-merges=first-p
 
 const STAGE_WORDS = {
   first: "The first review of this pull request: each area's diffs hold its whole change.",
-  push: `The diffs hold only what the pushes since the last full review changed. Where they merged the base and git couldn't settle a conflict on its own, a file's diff starts from git's conflict markers, so it shows how the conflict was resolved. ${SHOW_WHOLE_FILE}`,
+  push: `The diffs hold only what the pushes since the last full review changed, in files the pull request still changes. Where they merged the base and git couldn't settle a conflict on its own, a file's diff starts from git's conflict markers, so it shows how the conflict was resolved. ${SHOW_WHOLE_FILE}`,
 };
 
 /**

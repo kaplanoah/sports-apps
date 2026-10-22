@@ -301,7 +301,7 @@ test("the candidates kept for the check across areas are every planned area's, i
   ]);
 });
 
-test("the check across areas' job counts the cases it left unchecked as the judge does, from the record it keeps", () => {
+test("the check across areas' job counts the problems it left unchecked as the judge does, from the record it keeps", () => {
   const folder = mkdtempSync(join(tmpdir(), "judge-review-"));
   writeFileSync(join(folder, CANDIDATES_RECORD), JSON.stringify([{ id: "1.1" }, { id: "2.1" }]));
   const answer = { findings: [{ ids: ["1.1"], verdict: "rejected" }], unjudged: [] };
@@ -459,7 +459,7 @@ test("a file a reviewer didn't read in full fails the review, keeping the earlie
   assert.doesNotMatch(body, /- `c.js`/);
 });
 
-test("a reviewer that gave no answer, or a check across areas that left a case unchecked, fails the review", () => {
+test("a reviewer that gave no answer, or a check across areas that left a problem unchecked, fails the review", () => {
   const records = finishReview(AREAS, {
     [nameFindRecord(1)]: finishReviewer(1, {
       tries: [{ reads: [], answer: null }],
@@ -472,7 +472,7 @@ test("a reviewer that gave no answer, or a check across areas that left a case u
   assert.ok(!isComplete);
   assert.match(
     body,
-    /- the reviewer of mlb page\n- the check across areas, which left 1 case unchecked/,
+    /- the reviewer of mlb page\n- the check across areas, which left 1 problem unchecked/,
   );
   assert.match(body, /Read in full: 3 of 3/);
 });
@@ -512,12 +512,12 @@ test("a review of a push says what it read since, and findings already on the pu
   assert.ok(isComplete);
   assert.match(
     body,
-    /it read what the pushes since eeeeeee changed, in 1 area, and posted no findings, and found 2 findings already on it\./,
+    /it read what the pushes since eeeeeee changed in files the pull request still changes, in 1 area, and posted no findings, and found 2 findings already on it\./,
   );
   assert.doesNotMatch(body, /Left unread/);
 });
 
-test("a push that changes only what a merge brings in passes and moves the reviewed head on", () => {
+test("a merge-only push or one restoring files to the base passes with an accurate summary and moves the reviewed head on", () => {
   const { isComplete, body } = judgeReview({
     sha: HEAD,
     plan: { stage: "none", since: EARLIER, areas: [], unread: [] },
@@ -527,7 +527,7 @@ test("a push that changes only what a merge brings in passes and moves the revie
   assert.equal(readReviewedHead(body), HEAD);
   assert.match(
     body,
-    /read nothing new in c{40}: the pushes since eeeeeee change only what a merge of the base brings in/,
+    /read nothing new in c{40}: the pushes since eeeeeee leave no new changes to review in files the pull request still changes/,
   );
 });
 

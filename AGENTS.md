@@ -137,6 +137,7 @@ When a step says to go back to an earlier step, continue in order from there.
    Fix it and go back to step 2.
    If you can't reproduce or fix it, tell the user which job failed, what its log says, what you tried, and what you recommend.
 7. CI's review reads the PR by the root's `REVIEW.md` as `main` has it.
+   After the first review, it reads only what changed since the last full read in files the PR still changes.
    Answer its findings as the `steward` skill says, and read a failed `review` job as the `ship` skill says.
    Add the `review` label to the PR, which asks CI to review it again, only when the `steward` skill says to.
    A push alone starts no review, and `check` fails on a ready PR until a review passes on the code that merges, the PR merged into `main`.

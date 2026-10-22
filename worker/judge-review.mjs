@@ -5,12 +5,12 @@
 // named for its retry and, still unread then, fails the review, as does a rule file its area calls
 // for (plan-review.mjs writes the parts and the rule files' copies).
 // A reviewer that gave no answer, as one that ran out of turns, is tried again too, and a check
-// across areas that left any of the reviewers' cases unnamed hasn't finished.
+// across areas that left any of the reviewers' problems unnamed hasn't finished.
 // Usage, after each try of an area's reviewer: node worker/judge-review.mjs find <folder> <area>,
 // with EXECUTION_FILE and STRUCTURED_OUTPUT from the try; it prints unread=<parts> and
 // answered=<true|false> for $GITHUB_OUTPUT. Before the check across areas: node
 // worker/judge-review.mjs candidates <folder>. After it: node worker/judge-review.mjs across
-// <folder>, with STRUCTURED_OUTPUT; it prints unchecked=<count of cases it left unnamed> for
+// <folder>, with STRUCTURED_OUTPUT; it prints unchecked=<count of problems it left unnamed> for
 // $GITHUB_OUTPUT. Last: node worker/judge-review.mjs summary <folder>, with GH_TOKEN,
 // GITHUB_REPOSITORY, PR, and SHA set, which fails when anything due went unread or unchecked.
 import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
@@ -316,7 +316,7 @@ function judgeAreas(areas, records) {
   if (!across) missing.push("the check across areas");
   else if (unchecked.length)
     missing.push(
-      `the check across areas, which left ${pluralize(unchecked.length, "case")} unchecked`,
+      `the check across areas, which left ${pluralize(unchecked.length, "problem")} unchecked`,
     );
   if (!post) missing.push("the step that posts the findings");
   const verdicts = (across?.items ?? [])
@@ -344,7 +344,7 @@ const LEADS = {
   first: (/** @type {number} */ areaCount) =>
     `read the whole change in ${pluralize(areaCount, "area")}`,
   push: (/** @type {number} */ areaCount, /** @type {string} */ since) =>
-    `read what the pushes since ${since.slice(0, 7)} changed, in ${pluralize(areaCount, "area")}`,
+    `read what the pushes since ${since.slice(0, 7)} changed in files the pull request still changes, in ${pluralize(areaCount, "area")}`,
 };
 
 /**
@@ -391,7 +391,7 @@ function describeReview(judged, { plan, sha }) {
  */
 const describeNothingDue = (plan, sha) =>
   plan.stage === "none"
-    ? `Claude read nothing new in ${sha}: the pushes since ${(plan.since ?? "").slice(0, 7)} change only what a merge of the base brings in.`
+    ? `Claude read nothing new in ${sha}: the pushes since ${(plan.since ?? "").slice(0, 7)} leave no new changes to review in files the pull request still changes.`
     : `Claude had nothing to read in ${sha}.`;
 
 /**
