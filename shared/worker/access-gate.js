@@ -3,7 +3,7 @@
 // phone out, and the Worker holds nothing about who has signed in. The signing key is its own
 // secret because the page's key is in every link, and a cookie signed with it could be made, and
 // a code guessed, without ever meeting the limit on tries.
-import { respondError, respondJson } from "./responses.js";
+import { respondError, respondJson, respondMethodNotAllowed } from "./responses.js";
 
 export const ACCESS_PATH = "/access";
 
@@ -209,7 +209,7 @@ export function serveHandoff(request, env, prefix) {
   if (request.method === "POST")
     return createHandoff(request, env, new URL(`${prefix}${HANDOFF_PATH}`, request.url));
   if (request.method === "GET") return redeemHandoff(request, env, prefix);
-  return respondMethodNotAllowed("GET or POST");
+  return respondMethodNotAllowed(["GET", "POST"]);
 }
 
 // The page under its key moves to the address PAGE_HOST names, which shares its code, so a phone
@@ -218,14 +218,20 @@ export function serveHandoff(request, env, prefix) {
 export const MOVE_PATH = `${ACCESS_PATH}/move`;
 
 /**
+ * @param {string} path
+ * @param {any} env
+ */
+export const buildPageHostAddress = (path, env) => new URL(path, `https://${env.PAGE_HOST}`);
+
+/**
  * The move's route, only while the Worker has PAGE_HOST: a POST from a phone signed in under the
  * key makes a handoff there.
  * @param {Request} request
  * @param {any} env
  */
 export function serveMoveHandoff(request, env) {
-  if (request.method !== "POST") return respondMethodNotAllowed("POST");
-  return createHandoff(request, env, new URL(HANDOFF_PATH, `https://${env.PAGE_HOST}`));
+  if (request.method !== "POST") return respondMethodNotAllowed(["POST"]);
+  return createHandoff(request, env, buildPageHostAddress(HANDOFF_PATH, env));
 }
 
 /**
@@ -240,14 +246,10 @@ export async function serveAccess(request, env, prefix) {
   if (request.method === "GET")
     return respondJson({ isChanged: (await readAccess(request, env)) === "changed" });
   if (request.method === "POST") return checkSentCode(request, env, prefix);
-  return respondMethodNotAllowed("GET or POST");
+  return respondMethodNotAllowed(["GET", "POST"]);
 }
 
 export const respondAccessRequired = () =>
   respondError(401, "access_required", "This page needs its access code.");
 
 const respondNeedsNoCode = () => respondError(404, "not_found", "This page needs no code.");
-
-/** @param {string} methods */
-const respondMethodNotAllowed = (methods) =>
-  respondError(405, "method_not_allowed", `${methods} only.`);

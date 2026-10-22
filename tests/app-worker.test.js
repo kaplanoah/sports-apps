@@ -374,6 +374,7 @@ test("a handoff is made only for a phone signed in, and only while the page asks
   assert.equal(noCode.status, 404);
   const deleted = await requestLocked("/access/handoff", { method: "DELETE" });
   assert.equal(deleted.status, 405);
+  assert.equal(deleted.headers.get("allow"), "GET, POST");
 });
 
 /**
@@ -515,6 +516,7 @@ test("a move's handoff is made only by a POST from a phone signed in, and only w
   const read = await requestMoving("/access/move", { cookie });
   assert.equal(read.status, 405);
   assert.equal((await read.json()).error.message, "POST only.");
+  assert.equal(read.headers.get("allow"), "POST");
   await assertNoMoveRoute(
     await requestLocked("/access/move", { method: "POST", cookie, env: PAGE_HOST_ENV }),
   );

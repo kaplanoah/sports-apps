@@ -6,6 +6,7 @@
 
 import {
   ACCESS_PATH,
+  buildPageHostAddress,
   createAccessCookie,
   HANDOFF_PATH,
   MOVE_PATH,
@@ -171,8 +172,12 @@ const serveRobots = (commit) =>
     commit ? { [RELEASE_COMMIT_HEADER]: commit } : {},
   );
 
-// The page and its store answer under the APP_KEY secret, and at the address the PAGE_HOST secret
-// names without it, where the access code alone guards them, so only while the Worker has one.
+// The access code alone guards the page at the PAGE_HOST address, so it answers there only while
+// the Worker has one.
+/** @param {any} env */
+const isPageHostOpen = (env) => !!env.PAGE_HOST && !!env.ACCESS_CODE;
+
+// The page and its store answer under the APP_KEY secret, and at the PAGE_HOST address without it.
 // Only robots.txt and health answer anywhere.
 /**
  * @param {URL} url
@@ -180,7 +185,7 @@ const serveRobots = (commit) =>
  * @returns {string | null} what the page's paths start with, or null where nothing answers
  */
 function findAppPrefix(url, env) {
-  if (env.PAGE_HOST && url.hostname === env.PAGE_HOST) return env.ACCESS_CODE ? "" : null;
+  if (env.PAGE_HOST && url.hostname === env.PAGE_HOST) return isPageHostOpen(env) ? "" : null;
   return env.APP_KEY ? `/${env.APP_KEY}` : null;
 }
 
@@ -193,13 +198,11 @@ function findAppPath(pathname, prefix) {
   return pathname.startsWith(`${prefix}/`) ? pathname.slice(prefix.length) : null;
 }
 
-// The page moves from under its key only to an address that asks for the code, since a phone
-// arrives there signed in or meets the gate.
 /**
  * @param {string} prefix
  * @param {any} env
  */
-const canMoveToPageHost = (prefix, env) => prefix !== "" && !!env.PAGE_HOST && !!env.ACCESS_CODE;
+const canMoveToPageHost = (prefix, env) => prefix !== "" && isPageHostOpen(env);
 
 // A browser keeps a 301 for good unless told not to, and a phone that later signs in under the key
 // has to reach the page there.
@@ -208,14 +211,14 @@ const canMoveToPageHost = (prefix, env) => prefix !== "" && !!env.PAGE_HOST && !
  * @param {string} appPath
  * @param {any} env
  */
-const redirectToPageHost = (url, appPath, env) =>
-  new Response(null, {
+function redirectToPageHost(url, appPath, env) {
+  const address = buildPageHostAddress(appPath, env);
+  address.search = url.search;
+  return new Response(null, {
     status: 301,
-    headers: {
-      location: `https://${env.PAGE_HOST}${appPath}${url.search}`,
-      "cache-control": "no-store",
-    },
+    headers: { location: address.href, "cache-control": "no-store" },
   });
+}
 
 const isStorePath = (appPath) =>
   appPath === "/watch" || appPath.startsWith("/store/") || appPath.startsWith("/push/");

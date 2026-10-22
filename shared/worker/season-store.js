@@ -1,6 +1,11 @@
 import { isSameJson } from "../page/compare.js";
 import { createPushService } from "./push.js";
-import { describeError, respondError, respondJson } from "./responses.js";
+import {
+  describeError,
+  respondError,
+  respondJson,
+  respondMethodNotAllowed,
+} from "./responses.js";
 
 // An app's saved data, kept in one Durable Object so every device reads the latest write.
 // Documents come back with sorted keys, and a missing one reads as null. The page can read any
@@ -226,7 +231,7 @@ export function createSeasonStore(league) {
       if (pathname.startsWith("/count/")) return this.addToCount(request, pathname);
       const path = readPath(pathname);
       if (!path) return respondError(404, "not_found", "No such path.");
-      if (request.method !== "GET") return respondError(405, "method_not_allowed", "GET only.");
+      if (request.method !== "GET") return respondMethodNotAllowed(["GET"]);
       if (path.id === undefined) return this.listDocs(path.collection, searchParams);
       return this.readDoc(`${path.collection}/${path.id}`);
     }
@@ -256,7 +261,7 @@ export function createSeasonStore(league) {
 
     // Kept in the job's own storage, where its next run reads it.
     async addToCount(request, pathname) {
-      if (request.method !== "POST") return respondError(405, "method_not_allowed", "POST only.");
+      if (request.method !== "POST") return respondMethodNotAllowed(["POST"]);
       const [, , job, name, ...rest] = pathname.split("/");
       const isJob = Object.hasOwn(league.backgroundJobs ?? {}, job);
       if (!isJob || !NAME_PATTERN.test(name ?? "") || rest.length)
