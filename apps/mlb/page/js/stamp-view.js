@@ -5,7 +5,7 @@ import { html } from "#shared/html.js";
 import { fillStamp, renderStampLine, renderStampWhen } from "#shared/stamp.js";
 import { readRanking } from "./kept-on-device.js";
 import { findStandingsRow } from "./race.js";
-import { isFieldSet, session } from "./session.js";
+import { isFieldSet, isPastSeason, session } from "./session.js";
 import { describeLastStamp, describeSeriesNote, describeUpNextGame } from "./stamp.js";
 
 function isAliveInStandings(id) {
@@ -63,7 +63,7 @@ function renderStampLines() {
 // The store's status is about the current season's updates, so another season's page leaves it out.
 function describeStatusProblem() {
   const { status } = session;
-  if (session.activeYear !== session.currentSeason) return "";
+  if (isPastSeason()) return "";
   if (status?.error === "mlb_fields_missing")
     return `MLB stopped sending ${status.detail}, so some details may be blank`;
   if (status?.error === "upstream_error")

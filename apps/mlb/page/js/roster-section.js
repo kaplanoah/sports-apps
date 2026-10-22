@@ -13,7 +13,7 @@ import {
 } from "#shared/sheet-reads.js";
 import { fetchFromWorker } from "#shared/worker-fetch.js";
 import { renderRoster } from "./roster-view.js";
-import { session } from "./session.js";
+import { isPastSeason } from "./session.js";
 
 /** @typedef {import("./roster-view.js").Roster} Roster */
 /** @typedef {import("#shared/sheet-reads.js").SheetRead<{ roster: Roster | null }>} RosterRead */
@@ -55,12 +55,10 @@ const readRoster = (club) =>
     })),
   );
 
-const isCurrentSeason = () => session.activeYear === session.currentSeason;
-
 function renderSection() {
   if (!shownClub) return;
   const body = findElement("rosterBody");
-  if (!isCurrentSeason()) {
+  if (isPastSeason()) {
     setHtml(body, html`<p class="sheet-message">Rosters show for the current season only</p>`);
     return;
   }
@@ -80,7 +78,7 @@ function retryRoster() {
  * @returns {RosterRead | null}
  */
 export function findClubRoster(club) {
-  if (!isCurrentSeason()) return null;
+  if (isPastSeason()) return null;
   return reads.find(club) ?? { at: 0, roster: null, isLoading: true, failure: null };
 }
 

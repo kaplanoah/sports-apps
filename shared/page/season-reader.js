@@ -55,7 +55,7 @@ export function createSeasonReader({
   /** @type {number | null} */
   let currentYear = null;
   // The season whose record the page shows, and the one it last asked for, which differ while a
-  // record is on its way, or, before any has loaded, after the current season's read failed.
+  // record is on its way, or, before any has loaded, after a load's read failed.
   /** @type {number | null} */
   let shownYear = null;
   /** @type {number | null} */

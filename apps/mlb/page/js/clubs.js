@@ -3,7 +3,7 @@ import { buildBracket } from "./bracket.js";
 import { html, joinWithSeparator } from "#shared/html.js";
 import { renderTeamSheetButton } from "#shared/team-sheet.js";
 import { readRanking } from "./kept-on-device.js";
-import { session, readSeasonYear } from "./session.js";
+import { isPastSeason, session, readSeasonYear } from "./session.js";
 
 // A page saved before tracked titles were lists kept only a club's latest one, as a number.
 const listTrackedTitles = (id) => [].concat(session.trackedTitles[id] ?? []);
@@ -12,7 +12,7 @@ const listTrackedTitles = (id) => [].concat(session.trackedTitles[id] ?? []);
 // title shows as soon as the bracket does, without waiting for the page to read the seasons again.
 function findCurrentChampion() {
   const { state } = session;
-  const isCurrentShown = session.activeYear === readSeasonYear() && state && state.teams;
+  const isCurrentShown = !isPastSeason() && state && state.teams;
   return isCurrentShown ? (buildBracket(state).ws?.winner ?? null) : null;
 }
 

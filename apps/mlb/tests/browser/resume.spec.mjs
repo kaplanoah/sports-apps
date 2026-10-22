@@ -161,15 +161,14 @@ test("a reload on a past season it can no longer draw loads that season", async 
 test("a reload while a picked season is on its way stays on the season shown", async ({ page }) => {
   const app = await openApp(page, { store: { "seasons/2025": SEASON_2025 } });
   await expect.poll(() => app.countSeasonReads()).toBe(2);
-  const titleBefore = await page.locator("#titleYear").textContent();
   const release = await app.holdStore();
   await chooseSeason(page, "2025");
 
   const titleYears = await reloadWithStoreHeld(page, release);
 
   expect(titleYears).toEqual([]);
-  await expect(page.locator("#titleYear")).toHaveText(titleBefore ?? "");
-  await expect(page.locator("#seasonPicker")).not.toHaveValue("2025");
+  await expect(page.locator("#seasonPicker")).toHaveValue("2026");
+  await expect(page.locator("#titleYear")).toBeHidden();
 });
 
 test("a reload leaves out a season it last showed that it can no longer read", async ({ page }) => {

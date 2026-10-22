@@ -110,15 +110,14 @@ test("a reload on a past season it can no longer draw loads that season", async 
 test("a reload while a picked season is on its way stays on the season shown", async ({ page }) => {
   const app = await openApp(page, ONE_PAST_SEASON);
   await openSettings(page);
-  const titleBefore = await page.locator("#titleYear").textContent();
   const release = await app.holdStore();
   await page.locator("#seasonPicker").selectOption("2025");
 
   const titleYears = await reloadWithStoreHeld(page, release);
 
   expect(titleYears).toEqual([]);
-  await expect(page.locator("#titleYear")).toHaveText(titleBefore ?? "");
-  await expect(page.locator("#seasonPicker")).not.toHaveValue("2025");
+  await expect(page.locator("#seasonPicker")).toHaveValue("2026");
+  await expect(page.locator("#titleYear")).toBeHidden();
 });
 
 test("a last-shown season the page can't draw is skipped", async ({ page }) => {

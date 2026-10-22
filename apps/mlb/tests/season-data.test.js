@@ -10,6 +10,8 @@ import {
 import { session } from "../page/js/session.js";
 import { createFakeStore } from "../../../tests/fake-store.js";
 
+const STARTING_YEARS = { activeYear: session.activeYear, currentSeason: session.currentSeason };
+
 const settle = () => new Promise((resolve) => setImmediate(resolve));
 
 const RECORD_2026 = {
@@ -140,8 +142,9 @@ test("a season the store can't answer shows as an empty one, and says so", async
 });
 
 test("a first load with no last showing, while the store can't be reached, shows no season, never the clock's", async () => {
+  assert.deepEqual(STARTING_YEARS, { activeYear: null, currentSeason: null });
   startReading({}, { unreadable: ["live/current"] });
-  Object.assign(session, { activeYear: null, currentSeason: null });
+  Object.assign(session, STARTING_YEARS);
 
   await loadSeason();
 

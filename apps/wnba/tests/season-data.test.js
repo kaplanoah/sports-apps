@@ -4,6 +4,12 @@ import { loadSeason, showYear, startSeasonData } from "../page/js/season-data.js
 import { session } from "../page/js/session.js";
 import { createFakeStore } from "../../../tests/fake-store.js";
 
+const STARTING_YEARS = {
+  year: session.year,
+  pickedYear: session.pickedYear,
+  currentYear: session.currentYear,
+};
+
 const SEASON_2026 = { season: 2026, games: [], series: [], standings: [] };
 
 /**
@@ -57,8 +63,9 @@ test("a page whose last showing was the current season loads the one the store n
 });
 
 test("a first load with no last showing, while the store can't be reached, shows no season, never the clock's", async () => {
+  assert.deepEqual(STARTING_YEARS, { year: null, pickedYear: null, currentYear: null });
   startReading({ unreadable: ["live/current"] });
-  Object.assign(session, { year: null, pickedYear: null, currentYear: null });
+  Object.assign(session, STARTING_YEARS);
 
   await loadSeason();
 
