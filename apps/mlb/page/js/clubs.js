@@ -124,8 +124,8 @@ export function listRankedOrder() {
   return ranked.concat(unranked);
 }
 
-export function renderRankTag(id, solid) {
+export function renderRankTag(id, isFilled) {
   const index = listRankedOrder().indexOf(id);
   if (index === -1) return html``;
-  return html`<span class="rank-slot"><span class="chip numbers ${solid ? "filled" : "outlined"} rank-tag">#${index + 1}</span></span>`;
+  return html`<span class="rank-slot"><span class="chip numbers ${isFilled ? "filled" : "outlined"} rank-tag">#${index + 1}</span></span>`;
 }

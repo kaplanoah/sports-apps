@@ -18,7 +18,7 @@ const CHIP_LOOKS = new Set(["filled", "outlined", "numbers"]);
 // What only chip.css sets, so every chip in every app has one height, padding, type, and border,
 // and a kind of chip sets its colors only through --chip-ink, --chip-fill, and --chip-line.
 const CHIP_ONLY =
-  /^(height|min-height|max-height|padding(-[a-z-]+)?|font(-[a-z-]+)?|line-height|letter-spacing|text-indent|text-transform|border(?!(-[a-z]+)*-radius$)(-[a-z-]+)?|color|background(-color)?)$/;
+  /^(height|min-height|max-height|width|min-width|max-width|box-shadow|outline(-[a-z-]+)?|padding(-[a-z-]+)?|font(-[a-z-]+)?|line-height|letter-spacing|text-indent|text-transform|border(?!(-[a-z]+)*-radius$)(-[a-z-]+)?|color|background(-[a-z-]+)?)$/;
 
 /**
  * A page module's source with each value a template fills in left out, since one may hold quotes.
