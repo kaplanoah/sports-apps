@@ -1,4 +1,5 @@
-import { nameTeam, renderClub, renderPlainClub } from "./clubs.js";
+import { renderClub, renderPlainClub } from "./clubs.js";
+import { nameTeam } from "./teams.js";
 import { renderAllStarMark } from "#shared/all-star.js";
 import { fillDayStrip } from "#shared/day-strip.js";
 import {
