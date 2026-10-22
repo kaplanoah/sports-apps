@@ -14,14 +14,14 @@ const DUE = {
   isIosApp: true,
   choice: "light",
   icon: "dark",
-  phoneLook: /** @type {"light" | "dark"} */ ("light"),
+  picked: /** @type {"light" | "dark"} */ ("light"),
   isSwitched: true,
   isDismissed: false,
 };
 
 test("the note shows in an iPhone's Home Screen app while the look picked isn't its icon's, with both", () => {
   assert.deepEqual(chooseReAddNote(DUE), { icon: "dark", picked: "light", choice: "light" });
-  assert.deepEqual(chooseReAddNote({ ...DUE, choice: "dark", icon: "light" }), {
+  assert.deepEqual(chooseReAddNote({ ...DUE, choice: "dark", picked: "dark", icon: "light" }), {
     icon: "light",
     picked: "dark",
     choice: "dark",
@@ -29,21 +29,18 @@ test("the note shows in an iPhone's Home Screen app while the look picked isn't 
 });
 
 test("the note leaves once the look picked is the icon's again", () => {
-  assert.equal(chooseReAddNote({ ...DUE, choice: "dark" }), null);
+  assert.equal(chooseReAddNote({ ...DUE, choice: "dark", picked: "dark" }), null);
   assert.equal(chooseReAddNote({ ...DUE, icon: "light" }), null);
 });
 
 test("on System, an app that knows its icon shows the note while the phone's look isn't the icon's, with a link back on System", () => {
-  assert.deepEqual(chooseReAddNote({ ...DUE, choice: "auto", phoneLook: "light" }), {
+  assert.deepEqual(chooseReAddNote({ ...DUE, choice: "auto", picked: "light" }), {
     icon: "dark",
     picked: "light",
     choice: "auto",
   });
-  assert.equal(chooseReAddNote({ ...DUE, choice: "auto", phoneLook: "dark" }), null);
-  assert.equal(
-    chooseReAddNote({ ...DUE, choice: "auto", icon: "light", phoneLook: "light" }),
-    null,
-  );
+  assert.equal(chooseReAddNote({ ...DUE, choice: "auto", picked: "dark" }), null);
+  assert.equal(chooseReAddNote({ ...DUE, choice: "auto", icon: "light", picked: "light" }), null);
 });
 
 test("the note stays away once dismissed, whether or not the app knows its icon", () => {
@@ -64,7 +61,7 @@ test("an app that doesn't know its icon says nothing until the viewer switches l
 test("once the viewer switches looks, an app that doesn't know its icon shows the note for each look, with the other as its icon", () => {
   const unknown = { ...DUE, icon: null };
   assert.deepEqual(chooseReAddNote(unknown), { icon: "dark", picked: "light", choice: "light" });
-  assert.deepEqual(chooseReAddNote({ ...unknown, choice: "dark" }), {
+  assert.deepEqual(chooseReAddNote({ ...unknown, choice: "dark", picked: "dark" }), {
     icon: "light",
     picked: "dark",
     choice: "dark",
@@ -73,12 +70,12 @@ test("once the viewer switches looks, an app that doesn't know its icon shows th
 
 test("an app that doesn't know its icon shows the note on System too, with the phone's look and a link back on System", () => {
   const unknown = { ...DUE, icon: null, choice: "auto" };
-  assert.deepEqual(chooseReAddNote({ ...unknown, phoneLook: "dark" }), {
+  assert.deepEqual(chooseReAddNote({ ...unknown, picked: "dark" }), {
     icon: "light",
     picked: "dark",
     choice: "auto",
   });
-  assert.deepEqual(chooseReAddNote({ ...unknown, phoneLook: "light" }), {
+  assert.deepEqual(chooseReAddNote({ ...unknown, picked: "light" }), {
     icon: "dark",
     picked: "light",
     choice: "auto",

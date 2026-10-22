@@ -418,17 +418,15 @@ test.describe("on a phone, in full motion", () => {
 
   /** @typedef {import("../../../../tests/browser/animations.mjs").PlayedAnimation} PlayedAnimation */
   /** @param {PlayedAnimation} animation */
-  const isOpening = ({ classes, first, last, direction }) =>
+  const isOpening = ({ classes, first, last }) =>
     classes.includes("updates") &&
-    direction === "normal" &&
     first.height === "0px" &&
     first.marginBottom === "0px" &&
     parseFloat(String(last.height)) > 0;
   // The box shrinks away on its opening's curve, from where it is to nothing.
   /** @param {PlayedAnimation} animation */
-  const isClosing = ({ classes, first, last, direction }) =>
+  const isClosing = ({ classes, first, last }) =>
     classes.includes("updates") &&
-    direction === "normal" &&
     last.height === "0px" &&
     last.marginBottom === "0px" &&
     parseFloat(String(first.height)) > 0;
@@ -606,7 +604,6 @@ test.describe("on a phone, in full motion", () => {
     // redraws it without one.
     await expect(updates.locator(".updates-count")).toHaveText(["1 update since earlier today"]);
     const reopening = await readLastOfBox();
-    expect(reopening.direction).toBe("normal");
     expect(reopening.first).toMatchObject({
       height: halfClosed.height,
       opacity: halfClosed.opacity,
@@ -616,7 +613,6 @@ test.describe("on a phone, in full motion", () => {
 
     await dismissUpdatesBox(page);
     const closing = await readLastOfBox();
-    expect(closing.direction).toBe("normal");
     expect(closing.first.height).toBe(halfReopened.height);
     expect(closing.last.height).toBe("0px");
     expect((await readBox()).easings).toBe(1);

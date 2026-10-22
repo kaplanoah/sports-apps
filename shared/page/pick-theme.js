@@ -163,7 +163,8 @@ function keepHomeScreenIcon(carriedIcon) {
     else if (!isReload() && localStorage.getItem(HOME_SCREEN_ICON_KEY) === null)
       localStorage.setItem(HOME_SCREEN_ICON_KEY, readPhoneLook());
   } catch {
-    /* without storage, settings can't tell the icon, and says nothing of it */
+    /* Without storage, settings can't tell the icon, and shows the note only once the viewer
+       switches looks. */
   }
 }
 
