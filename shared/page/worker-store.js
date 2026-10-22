@@ -38,6 +38,33 @@ const readId = (path) => path.slice(path.lastIndexOf("/") + 1);
 const readCollectionName = (path) => path.slice(0, path.lastIndexOf("/"));
 const compareIds = ([first], [second]) => (first < second ? -1 : 1);
 
+/**
+ * @param {unknown} data
+ * @returns {{ kind: "updating", updating: boolean } | { kind: "push", path: string, data: any } | null}
+ */
+function readSocketMessage(data) {
+  if (typeof data !== "string") return null;
+  let message;
+  try {
+    message = JSON.parse(data);
+  } catch {
+    return null;
+  }
+  if (!message || typeof message !== "object" || Array.isArray(message)) return null;
+  if ("updating" in message) {
+    if (typeof message.updating !== "boolean" || "path" in message || "data" in message)
+      return null;
+    return { kind: "updating", updating: message.updating };
+  }
+  if (
+    typeof message.path !== "string" ||
+    !/^[^/]+\/[^/]+$/.test(message.path) ||
+    !("data" in message)
+  )
+    return null;
+  return { kind: "push", path: message.path, data: message.data };
+}
+
 async function requestJson(url) {
   let response;
   try {
@@ -391,8 +418,9 @@ export function createWorkerStore({
       readWatchedPaths(opened);
     });
     opened.addEventListener("message", (event) => {
-      const message = JSON.parse(event.data);
-      if (!("updating" in message)) receivePush(message);
+      const message = readSocketMessage(event.data);
+      if (!message) return;
+      if (message.kind === "push") receivePush(message);
       else if (socket === opened) noteUpdating(message.updating);
     });
     opened.addEventListener("close", () => {
