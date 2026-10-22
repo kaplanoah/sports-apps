@@ -5,6 +5,7 @@ import path from "node:path";
 import * as MLBSnapshot from "../page/js/snapshot.js";
 import { createMemoryStorage } from "../../../shared/worker/feed-keeper.js";
 import { createSnapshotLoader } from "../worker/src/snapshot.js";
+import { importBundle } from "../../../tests/worker-bundle.js";
 
 const EVENING = JSON.parse(
   readFileSync(path.join(import.meta.dirname, "fixtures/2026-09-24-evening.json"), "utf8"),
@@ -201,7 +202,7 @@ let bundle;
 const loadBundle = () =>
   (bundle ??= import("../../../worker/build.mjs")
     .then(({ buildWorker }) => buildWorker("mlb", { release: RELEASE }))
-    .then((script) => import(`data:text/javascript,${encodeURIComponent(script)}`)));
+    .then(importBundle));
 
 test("the deployable bundle builds and exports the Worker and its store", async () => {
   const { default: worker, SeasonStore } = await loadBundle();

@@ -13,6 +13,7 @@ import {
   readRelease,
 } from "../worker/build.mjs";
 import { createServiceRoots } from "./service-roots.js";
+import { replaceWorkersRuntime } from "./worker-bundle.js";
 
 const BUILT_AT = new Date("2026-10-07T12:00:00Z");
 const RELEASE = {
@@ -159,19 +160,12 @@ test("a beta build with a round open loads the tuning panel, and production's le
   }
 });
 
-// Node has no Workers runtime, so the runtime's own module stands in as its two classes.
-const WORKERS_RUNTIME_STAND_IN =
-  "data:text/javascript,export class DurableObject {} export class WorkerEntrypoint {}";
-
 /** @param {string} app */
 async function loadForbiddingGlobalWork(app) {
   const folder = mkdtempSync(path.join(tmpdir(), `${app}-worker-`));
   const bundlePath = path.join(folder, "worker.mjs");
   const built = await buildWorker(app, { release: RELEASE });
-  writeFileSync(
-    bundlePath,
-    built.replaceAll('"cloudflare:workers"', `"${WORKERS_RUNTIME_STAND_IN}"`),
-  );
+  writeFileSync(bundlePath, replaceWorkersRuntime(built));
   /** @param {string} name */
   const refuse = (name) => () => {
     throw new Error(`${app}'s Worker called ${name} while it loads`);
