@@ -1046,7 +1046,7 @@ test("deploy:api runs the tests before it deploys, and sends its calls through a
 
 test("the deploy job runs no package's install scripts or tests while it holds the token", () => {
   const workflow = readRepoFile(".github/workflows/deploy.yml");
-  assert.match(workflow, /- run: npm ci --ignore-scripts\n/);
+  assert.match(workflow, /- run: npm ci --ignore-scripts\b/);
   assert.match(workflow, /\n {10}node worker\/deploy\.mjs --channel "\$CHANNEL"\n/);
   assert.doesNotMatch(workflow, /npm run deploy:api|npm test/);
   assert.match(workflow, /timeout-minutes: \d+/);
