@@ -171,6 +171,9 @@
   --gate-problem: var(--now);
   --radius-card: 3px;
   --radius-chip: 3px;
+  /* Chivo Mono's capitals land its baseline on a whole pixel only in an even height. */
+  --chip-numbers-face: var(--numbers);
+  --chip-numbers-height: 18px;
   --radius-control: 6px;
   --radius-tabs: 8px;
   --radius-sheet: 12px;
@@ -323,7 +326,6 @@ h3 {
 .game-facts,
 .cell-number,
 .stamp b:not(.now),
-.rank-tag,
 .seed-cell,
 .elim-num,
 .arm,
@@ -476,7 +478,8 @@ header.top h1 .title-letter:nth-child(2) {
   border-bottom: 1px solid var(--divider);
   padding: 7px 10px;
 }
-/* Always a tag's height, so a clinched tag's border can't make one title bar taller than its neighbor. */
+/* One fixed height, so a division's title bar is as tall as its neighbor's whether it holds a
+   clinched tag, a magic number, or neither. */
 .title-right {
   display: flex;
   align-items: center;
@@ -627,7 +630,7 @@ table.st .rank-cell {
 }
 /* The slot is there for unranked clubs too, and sets every row to a rank tag's height. */
 table.st .rank-slot {
-  height: 19px;
+  height: var(--chip-numbers-height);
   vertical-align: middle;
 }
 table.st .seed-cell {
@@ -642,40 +645,21 @@ table.st .seed-cell {
 .elim-num.live {
   color: var(--now);
 }
-.league-tag,
-.status-chip,
-.clinch-tag,
-.magic-tag {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: none;
-  height: 19px;
-  padding: 0 7px;
-  border-radius: var(--radius-chip);
-  line-height: var(--leading);
-  font-size: var(--type-label-size);
-  font-weight: var(--type-label-weight);
-  text-transform: uppercase;
-  letter-spacing: var(--type-label-tracking);
-  white-space: nowrap;
-}
-/* text-indent balances the letter-spacing added after the last letter. */
 .league-tag {
-  width: 24px;
-  padding-left: 0;
-  padding-right: 0;
-  text-indent: var(--type-label-tracking);
+  --chip-min-width: 27.5px;
 }
 .clinch-tag {
-  color: var(--highlight);
-  border: 1px solid color-mix(in srgb, var(--highlight) 45%, transparent);
+  --chip-ink: var(--highlight);
+  --chip-line: color-mix(in srgb, var(--highlight) 45%, transparent);
 }
 .magic-tag {
+  font-size: var(--type-label-size);
+  font-weight: var(--type-label-weight);
+  line-height: var(--leading);
+  letter-spacing: var(--type-label-tracking);
+  text-transform: uppercase;
+  white-space: nowrap;
   color: var(--now);
-  border: 0;
-  padding: 0;
-  height: auto;
 }
 .stand-empty {
   color: var(--ink-dim);
@@ -941,24 +925,14 @@ table.st .seed-cell {
 }
 
 .rank-tag {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 26px;
-  height: 19px;
-  padding: 0 5px;
-  border-radius: var(--radius-chip);
-  font-size: var(--type-caption-size);
-  font-weight: calc(var(--type-caption-weight) + 150);
+  --chip-min-width: 26px;
+  --chip-ink: var(--now);
+  --chip-fill: var(--now-line);
+  --chip-line: var(--now-line);
   flex: none;
-  background: transparent;
-  border: 1px solid var(--now-line);
-  color: var(--now);
-  line-height: 13px;
 }
-.rank-tag.solid {
-  background: var(--now-line);
-  color: var(--now-ink);
+.rank-tag.filled {
+  --chip-ink: var(--now-ink);
 }
 
 /* Card part heights add up to CARD.height in bracket-view.js: 1 + 24 + 32 + 32 + 1 = 90px. */
@@ -1352,9 +1326,6 @@ body.kbd .rank-item .grip:focus {
 }
 .rank-item .league-tag {
   grid-area: league;
-  font-size: var(--type-label-size);
-  font-weight: var(--type-label-weight);
-  letter-spacing: var(--type-label-tracking);
 }
 .rank-drought {
   display: none;
@@ -1374,13 +1345,6 @@ body.kbd .rank-item .grip:focus {
   font-weight: var(--type-caption-weight);
   line-height: 14px;
   color: var(--ink-dim);
-}
-.rank-item .status-chip {
-  height: 19px;
-  padding: 0 7px;
-  font-size: var(--type-label-size);
-  font-weight: var(--type-label-weight);
-  letter-spacing: var(--type-label-tracking);
 }
 @container (max-height: 47px) {
   .rank-id {
@@ -1415,17 +1379,17 @@ body.kbd .rank-item .grip:focus {
 }
 
 .status-chip.alive {
-  background: color-mix(in srgb, var(--ink) 15%, transparent);
-  color: var(--ink);
+  --chip-fill: color-mix(in srgb, var(--ink) 15%, transparent);
+  --chip-ink: var(--ink);
 }
 /* The word takes a step toward cream to read on the taupe's own wash. */
 .status-chip.out {
-  background: color-mix(in srgb, var(--out) 25%, transparent);
-  color: color-mix(in srgb, var(--out) 65%, var(--ink));
+  --chip-fill: color-mix(in srgb, var(--out) 25%, transparent);
+  --chip-ink: color-mix(in srgb, var(--out) 65%, var(--ink));
 }
 .status-chip.champ {
-  background: var(--accent);
-  color: var(--accent-ink);
+  --chip-fill: var(--accent);
+  --chip-ink: var(--accent-ink);
 }
 .home-screen-steps {
   color: var(--receding-ink);
@@ -1978,7 +1942,7 @@ table.st.line-score td.team .club {
 }
 .out-line {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   gap: 9px;
   margin: 0;
   font-size: var(--type-body-size);
@@ -1986,8 +1950,8 @@ table.st.line-score td.team .club {
   color: var(--now);
 }
 .status-chip.injured {
-  background: var(--now-line);
-  color: var(--now-ink);
+  --chip-fill: var(--now-line);
+  --chip-ink: var(--now-ink);
 }
 .out-sentence {
   margin: 7px 0 0;
@@ -2504,12 +2468,12 @@ table.st.line-score td.team .club {
 }
 
 .league-tag.AL {
-  background: color-mix(in srgb, var(--al) 20%, transparent);
-  color: var(--al-tag);
+  --chip-fill: color-mix(in srgb, var(--al) 20%, transparent);
+  --chip-ink: var(--al-tag);
 }
 .league-tag.NL {
-  background: color-mix(in srgb, var(--nl) 20%, transparent);
-  color: var(--nl-tag);
+  --chip-fill: color-mix(in srgb, var(--nl) 20%, transparent);
+  --chip-ink: var(--nl-tag);
 }
 
 @media (max-width: 779px) {

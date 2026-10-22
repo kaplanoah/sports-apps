@@ -397,7 +397,7 @@ const OUT_SOURCE = "RotoWire";
 function renderOutBox({ injury, out }) {
   if (!injury) return html``;
   return html`<section class="out-box">
-    <p class="out-line"><span class="status-chip injured">${injury}</span>${out?.reason && html`<span class="out-words">${out.reason}</span>`}</p>
+    <p class="out-line"><span class="chip filled status-chip injured">${injury}</span>${out?.reason && html`<span class="out-words">${out.reason}</span>`}</p>
     ${
       out?.sentence &&
       html`<p class="out-sentence" data-quoted>${out.sentence}</p>

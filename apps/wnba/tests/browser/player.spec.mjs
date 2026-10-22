@@ -3,6 +3,8 @@ import { holdRequests } from "../../../../tests/browser/hold-requests.mjs";
 import { expectShown } from "../../../../tests/browser/sheet-row.mjs";
 import { listLowContrastText } from "../../../../tests/browser/contrast.mjs";
 import { listTextOffRoles, readRole } from "../../../../tests/browser/type-roles.mjs";
+import { listChipsOffCenter } from "../../../../tests/browser/chip-centering.mjs";
+import { readCapitals } from "../../../../tests/browser/capitals.mjs";
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
 import { checkRanksAreDim } from "../../../../tests/browser/rank-ink.mjs";
 import { readDotRings } from "../../../../tests/browser/dot-ring.mjs";
@@ -56,6 +58,7 @@ test("a player's name on her roster opens her sheet over it: her facts, her last
   await expect(sheet.locator(".player-rank-row").first()).toHaveText(/Pts\s*20.8\s*7th of 125/);
   await expect(sheet.locator(".player-curve b")).toHaveCount(8);
   expect(await listTextOffRoles(page)).toEqual([]);
+  expect(await listChipsOffCenter(page)).toEqual([]);
   expect(await listLowContrastText(page)).toEqual([]);
   expect(await listStrayPeriods(page)).toEqual([]);
 
@@ -205,7 +208,10 @@ test.describe("a player who is out", () => {
       await expect(box).toHaveCSS("padding", "10px 9.5px 8px");
       expect(await measureOutLines(box)).toEqual({ sentence: 6, source: 4 });
       await expect(box.locator(".foul-chip")).toHaveCSS("margin-right", "7px");
-      await expect(box.locator(".out-words")).toHaveCSS("top", "-1px");
+      const [chip, words] = await Promise.all(
+        [".foul-chip", ".out-words"].map((name) => readCapitals(box.locator(name))),
+      );
+      expect(chip.bottom).toBeCloseTo(words.bottom, 2);
       const [body, detail, caption] = await Promise.all(
         ["body", "detail", "caption"].map(async (role) => `${(await readRole(page, role)).size}px`),
       );
@@ -213,6 +219,7 @@ test.describe("a player who is out", () => {
       await expect(box.locator(".out-sentence")).toHaveCSS("font-size", detail);
       await expect(box.locator(".out-source")).toHaveCSS("font-size", caption);
       expect(await listTextOffRoles(page)).toEqual([]);
+      expect(await listChipsOffCenter(page)).toEqual([]);
       expect(await listLowContrastText(page)).toEqual([]);
       expect(await listStrayPeriods(page)).toEqual([]);
     });
@@ -360,6 +367,7 @@ test("her sheet that didn't load says so over Try again, which holds its shape a
   await expect(block.locator(".retry-title")).toHaveText("The server had a problem");
   await expect(block.locator(".retry-next")).toHaveText("Try again to load her numbers");
   expect(await listTextOffRoles(page)).toEqual([]);
+  expect(await listChipsOffCenter(page)).toEqual([]);
   expect(await listLowContrastText(page)).toEqual([]);
   expect(await listStrayPeriods(page)).toEqual([]);
 

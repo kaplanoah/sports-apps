@@ -9,6 +9,7 @@ import {
 import { expectShown, readLeft } from "../../../../tests/browser/sheet-row.mjs";
 import { listLowContrastText } from "../../../../tests/browser/contrast.mjs";
 import { listTextOffRoles, readRole } from "../../../../tests/browser/type-roles.mjs";
+import { listChipsOffCenter } from "../../../../tests/browser/chip-centering.mjs";
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
 import { openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
 
@@ -101,6 +102,7 @@ test("a team's Roster pill shows its roster beside its stats: each player by las
   const astier = await findRows(section, "Astier");
   await expect(astier.facts.locator(".roster-country")).toHaveText("France");
   expect(await listTextOffRoles(page)).toEqual([]);
+  expect(await listChipsOffCenter(page)).toEqual([]);
   expect(await listLowContrastText(page)).toEqual([]);
   expect(await listStrayPeriods(page)).toEqual([]);
 
@@ -567,6 +569,7 @@ test("a roster that didn't load says so over Try again, which holds its shape as
   await expect(block.locator(".retry-title")).toHaveText("The server had a problem");
   await expect(block.locator(".retry-next")).toHaveText("Try again to load roster");
   expect(await listTextOffRoles(page)).toEqual([]);
+  expect(await listChipsOffCenter(page)).toEqual([]);
   expect(await listLowContrastText(page)).toEqual([]);
   expect(await listStrayPeriods(page)).toEqual([]);
 
@@ -639,6 +642,7 @@ test("a roster read offline says so with a crossed-out signal, and loads once th
   await expect(block.locator(".retry-next")).toHaveText("Will load roster when back online");
   await expect(block.locator(".retry-art path")).toHaveAttribute("d", /^M86,152v48/);
   expect(await listTextOffRoles(page)).toEqual([]);
+  expect(await listChipsOffCenter(page)).toEqual([]);
   expect(await listLowContrastText(page)).toEqual([]);
   expect(await listStrayPeriods(page)).toEqual([]);
 

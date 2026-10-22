@@ -1,6 +1,7 @@
 import { test, expect, openApp } from "./harness.mjs";
 import { listLowContrastText } from "../../../../tests/browser/contrast.mjs";
 import { listTextOffRoles } from "../../../../tests/browser/type-roles.mjs";
+import { listChipsOffCenter } from "../../../../tests/browser/chip-centering.mjs";
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
 import { keepInOtherTab } from "../../../../tests/browser/other-tab.mjs";
 import { countTextLines } from "../../../../tests/browser/text-lines.mjs";
@@ -135,6 +136,7 @@ test("the News tab shows a card for each story the Worker saves", async ({ page 
     findCard(page, "Film review").getByRole("link", { name: /^Read on ESPN/ }),
   ).toHaveAttribute("href", "https://example.com/espn");
   expect(await listTextOffRoles(page)).toEqual([]);
+  expect(await listChipsOffCenter(page)).toEqual([]);
   expect(await listLowContrastText(page)).toEqual([]);
   expect(await listStrayPeriods(page)).toEqual([]);
 });
@@ -247,6 +249,7 @@ test("under its lead, a card lists the stories that add to it, quieter than the 
     await readSize(page.locator("h3.news-title")),
   );
   expect(await listTextOffRoles(page)).toEqual([]);
+  expect(await listChipsOffCenter(page)).toEqual([]);
   expect(await listLowContrastText(page)).toEqual([]);
   expect(await listStrayPeriods(page)).toEqual([]);
 });

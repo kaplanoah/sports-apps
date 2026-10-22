@@ -10,6 +10,7 @@ import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
 import { listTapsOffButtons } from "../../../../tests/browser/tap-states.mjs";
 import { listThemeLayoutChanges } from "../../../../tests/browser/theme-layout.mjs";
 import { listTextOffRoles, readRole } from "../../../../tests/browser/type-roles.mjs";
+import { listChipsOffCenter } from "../../../../tests/browser/chip-centering.mjs";
 import { LEAGUE_WORDS } from "../../page/js/league-words.js";
 import { SETTINGS } from "../../../../tests/browser/settings.mjs";
 
@@ -59,6 +60,7 @@ test.describe("on an iPhone, in the browser", () => {
     await expect(welcome.getByRole("radio", { name: "System" })).toBeChecked();
     await expect(welcome.getByRole("button", CONTINUE)).toBeVisible();
     expect(await listTextOffRoles(page)).toEqual([]);
+    expect(await listChipsOffCenter(page)).toEqual([]);
     expect(await listLowContrastText(page)).toEqual([]);
     expect(await listStrayPeriods(page)).toEqual([]);
     expect(await listTapsOffButtons(page)).toEqual([]);
@@ -283,6 +285,7 @@ test.describe("on an Android phone, in the browser", () => {
 
     await expect(listWelcomeSteps(page)).toHaveText([PICK_STEP, "Tap to install Install"]);
     expect(await listTextOffRoles(page)).toEqual([]);
+    expect(await listChipsOffCenter(page)).toEqual([]);
     expect(await listStrayPeriods(page)).toEqual([]);
     await page.locator(WELCOME).getByRole("button", CONTINUE).click();
     await openSettings(page);

@@ -98,7 +98,7 @@ test("a player finds her averages by the league's id, under whatever team they w
 });
 
 test("a player out shows so only while her team still plays: until the playoff field is set, then until it's out", () => {
-  assert.match(renderText(), /Sabally<span class="foul-chip">/);
+  assert.match(renderText(), /Sabally<span class="chip outlined foul-chip">/);
   assert.doesNotMatch(renderText({ showsOut: false }), /foul-chip/);
   assert.equal(isStillPlaying([], "PHX"), true);
   assert.equal(isStillPlaying(SERIES, "NYL"), true);
@@ -144,7 +144,7 @@ test("the roster lists its players by last name with their facts, their points, 
   const markup = renderText();
   assert.deepEqual(listLastNames(markup).slice(0, 3), ["Allen", "Astier", "Balogun"]);
   assert.match(markup, /<dt>Head coach<\/dt>\s*<dd>Chris DeMarco<\/dd>/);
-  assert.match(markup, /Balogun<span class="foul-chip"><span class="foul-chip-words">Out/);
+  assert.match(markup, /Balogun<span class="chip outlined foul-chip">Out/);
   assert.match(markup, /<span class="roster-country">France<\/span>/);
   assert.match(markup, /scope="colgroup">Per game</);
   assert.match(markup, /class="roster-player" aria-sort="ascending"/);
