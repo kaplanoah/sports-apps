@@ -199,6 +199,17 @@ const waitForNoFrameRequests = (page) =>
   waitForNone(() => listFrameRequestsAcross(page, 1000), "asking for frames", LOAD_TIMEOUT_MS);
 
 /**
+ * Waits, inside the page, for its store to keep when it was current, which it notes for its next
+ * visit once it has caught up.
+ * @param {import("@playwright/test").Page} page
+ */
+export const waitForCatchUp = (page) =>
+  page.waitForFunction(() => localStorage.getItem("syncedAt") !== null, null, {
+    polling: 100,
+    timeout: LOAD_TIMEOUT_MS,
+  });
+
+/**
  * Waits for the page to finish drawing what it loaded. Its first drawing ends the load note, its
  * store then reads every document it watches again to catch up, which it marks by keeping when it
  * was current, and each drawing can lay the page out again a frame later. A page quiet while its
@@ -207,11 +218,7 @@ const waitForNoFrameRequests = (page) =>
  */
 export async function waitForLoadToSettle(page) {
   await expect(page.locator("#loadNote")).toHaveCount(0, { timeout: LOAD_TIMEOUT_MS });
-  await expect
-    .poll(() => page.evaluate(() => localStorage.getItem("syncedAt")), {
-      timeout: LOAD_TIMEOUT_MS,
-    })
-    .not.toBeNull();
+  await waitForCatchUp(page);
   await waitForNoFrameRequests(page);
 }
 

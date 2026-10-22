@@ -1,5 +1,6 @@
 import { NEXT_RELEASE, serveReleases } from "../../../../tests/browser/serve-releases.mjs";
 import { wakeAsStoreUpdates } from "../../../../tests/browser/wake-as-store-updates.mjs";
+import { waitForCatchUp } from "../../../../tests/browser/at-rest.mjs";
 import {
   test,
   expect,
@@ -259,8 +260,7 @@ test("a page coming back as the store updates draws once, with the update, never
   await app.updateFromWorker();
   const stamp = page.locator("#stamp");
   await expect(stamp).toContainText("Next first pitch");
-  // Only the page's code keeps when it was last current, once it has caught up.
-  await expect.poll(() => page.evaluate(() => localStorage.getItem("syncedAt"))).not.toBeNull();
+  await waitForCatchUp(page);
 
   const { texts } = await wakeAsStoreUpdates(page, app, {
     changeWhileAway: async () => {
@@ -293,7 +293,7 @@ test("a page whose load failed, coming back as the store updates, never draws th
     .locator("#seasonGames .game-day.is-today .game-row")
     .filter({ hasText: "Cardinals" });
   await expect(final).toContainText("1-2Final");
-  await expect.poll(() => page.evaluate(() => localStorage.getItem("syncedAt"))).not.toBeNull();
+  await waitForCatchUp(page);
   // Unrouting by the handler too leaves the store's own route, which has the same pattern.
   const failStore = (route) => route.fulfill({ status: 503, body: "" });
   await page.route(matchPath("/store/"), failStore);
