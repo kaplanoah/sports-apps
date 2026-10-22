@@ -118,6 +118,7 @@ test("a pull request's build is each app it changes, built as beta, and a manife
   const apps = await buildPreviews({
     pullRequest: "12",
     base: BASE,
+    action: "synchronize",
     git: createFakeGit(["apps/wnba/page/styles.css"]),
     buildApp: async (app, options) => {
       built.push([app, options]);
@@ -131,6 +132,26 @@ test("a pull request's build is each app it changes, built as beta, and a manife
   assert.deepEqual(built, [["wnba", { channel: "beta" }]]);
   assert.equal(readFileSync(path.join(folder, "wnba.mjs"), "utf8"), "export default {};");
   assert.deepEqual(readBuild(folder), { pullRequest: "12", apps: ["wnba"] });
+});
+
+test("taking the label off, or closing, builds nothing, so code that doesn't build still loses its previews", async () => {
+  for (const action of ["unlabeled", "closed"]) {
+    const folder = createFolder();
+    const apps = await buildPreviews({
+      pullRequest: "12",
+      base: BASE,
+      action,
+      git: createFakeGit(["apps/wnba/page/styles.css"]),
+      buildApp: async () => {
+        throw new Error("SyntaxError");
+      },
+      folder,
+      log: () => {},
+    });
+
+    assert.deepEqual(apps, [], action);
+    assert.deepEqual(readBuild(folder), { pullRequest: "12", apps: [] }, action);
+  }
 });
 
 test("a build hands on only this repo's apps whose bundles it holds, and a pull request's number", () => {
@@ -492,6 +513,12 @@ test("the Preview build runs only for a pull request from this repo whose previe
     BUILD_WORKFLOW,
     /^on:\n {2}pull_request:\n {4}types: \[labeled, unlabeled, synchronize, reopened, closed\]\n\n/m,
   );
+});
+
+test("the Preview build hands the build its pull request, base, and event", () => {
+  const build = readJobText(BUILD_WORKFLOW, "build");
+  assert.match(build, /^ {10}ACTION: \$\{\{ github\.event\.action \}\}$/m);
+  assert.match(build, /^ {8}run: node worker\/preview\.mjs build "\$PULL_REQUEST" "\$BASE" "\$ACTION"$/m);
 });
 
 test("the Preview workflow takes only a finished build of a pull request from this repo", () => {

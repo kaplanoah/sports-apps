@@ -61,6 +61,7 @@ paths:
 - Previews: a PR from this repo labeled `preview`, never a fork's, gets a preview of each beta Worker it changes (the root's `worker/preview.mjs`):
   - The `Preview build` workflow, as the label goes on or off, and on each push, reopen, or close while the PR has it,
     builds each app the PR changes as beta, with the PR's own code and no secret or environment.
+    Taking the label off or closing the PR builds nothing, so code that doesn't build still loses its previews.
   - The `Preview` workflow then runs `main`'s code in the `preview` environment, never the PR's, to upload each build with `wrangler preview`,
     open it with `check-page.mjs`, which waits for the page's live connection to get beta's first message,
     and delete, by Cloudflare's API, each app's preview the PR no longer wants.
@@ -68,13 +69,14 @@ paths:
 - A preview previews page code on beta's data: it serves its PR's page files and asks beta's live version for everything else,
   the access code and sign-in, the handoff, `health`, the store and its socket, push, and the reads.
   So a change to a Worker, the store, push, or the accounts service still needs beta.
-  And beta's live version must export `PreviewEntrypoint` and be at least as new as `main`'s Worker before a round opens,
-  so when it isn't, put a PR built on current `main` on beta first, as the `ship` skill says.
+  And beta's live version must export `PreviewEntrypoint` and have `main`'s head in its history before a round opens,
+  so when it doesn't, put a PR built on current `main` on beta first, as the `ship` skill says.
 - A preview inherits no binding, var, or secret, and its only binding is `BETA`, to its app's beta Worker's `PreviewEntrypoint`,
   under `[env.beta.previews]` in its app's `wrangler.toml` as `main` has it (the root's `tests/preview.test.js`).
   That entrypoint, which only a binding reaches, answers with beta's own key, code, and store (`shared/worker/preview-entrypoint.js`),
   and the preview never reads a store or secret of its own (`servePreview` in `shared/worker/app-worker.js`).
-  The preview's own code still runs on Cloudflare and sees what a phone sends it, so the label goes only on a PR whose page code the owner's sessions wrote.
+  The PR's own Worker code runs on Cloudflare too, its page and its routing both, and sees what a phone sends it,
+  so the label goes only on a PR whose code the owner's sessions wrote.
 - The `preview` environment, limited to `main`, holds `CLOUDFLARE_API_TOKEN`, limited to the apps' beta Workers, and `CLOUDFLARE_ACCOUNT_ID`.
   It also holds `ACCESS_CODE` and each app's `<APP>_BETA_PAGE_URL`, the same as the `beta` environment's, and each app's `<APP>_PREVIEW_HOST`,
   the last three only so `check-page.mjs` can open each preview.

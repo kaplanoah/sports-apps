@@ -29,6 +29,8 @@ const LABEL = "preview";
 const COMMENT_MARKER = "<!-- preview -->";
 const BUILD_FOLDER = "preview";
 const BUILD_MANIFEST = "build.json";
+// The pull request events after which it no longer asks for previews.
+const ENDING_ACTIONS = ["unlabeled", "closed"];
 
 /** @param {number | string} pullRequest */
 export const namePreview = (pullRequest) => `pr-${pullRequest}`;
@@ -96,9 +98,11 @@ const findBundle = (folder, app) => path.join(folder, `${app}.mjs`);
 /**
  * Builds each app the pull request changes as beta, so its preview has beta's tag and tuning
  * panel, into the folder the Preview workflow takes, which names the pull request and its apps.
+ * An event that ends its previews builds nothing, so code that doesn't build can't keep them up.
  * @param {object} options
  * @param {number | string} options.pullRequest
  * @param {string} options.base the base branch's commit
+ * @param {string} options.action the pull request event's
  * @param {import("./deploy.mjs").Git} [options.git]
  * @param {typeof writeWorker} [options.buildApp]
  * @param {string} [options.folder]
@@ -107,12 +111,15 @@ const findBundle = (folder, app) => path.join(folder, `${app}.mjs`);
 export async function buildPreviews({
   pullRequest,
   base,
+  action,
   git = runGit,
   buildApp = writeWorker,
   folder = BUILD_FOLDER,
   log = console.log,
 }) {
-  const apps = listPreviewedApps(listPullRequestChanges(base, git));
+  const apps = ENDING_ACTIONS.includes(action)
+    ? []
+    : listPreviewedApps(listPullRequestChanges(base, git));
   mkdirSync(folder, { recursive: true });
   for (const app of apps) {
     const { output } = await buildApp(app, { channel: CHANNEL });
@@ -367,8 +374,8 @@ export async function syncPreviews({
 
 /** @type {Record<string, (args: string[]) => Promise<unknown>>} */
 const COMMANDS = {
-  build: ([pullRequest, base]) =>
-    buildPreviews({ pullRequest: checkPullRequest(pullRequest), base }),
+  build: ([pullRequest, base, action]) =>
+    buildPreviews({ pullRequest: checkPullRequest(pullRequest), base, action }),
   sync: ([commit]) => {
     if (!/^[0-9a-f]{40}$/.test(commit ?? "")) throw new Error("Name the commit the build was of.");
     return syncPreviews({ commit });

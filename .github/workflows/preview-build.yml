@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   # A fork's pull request never gets a preview, and only the owner's sessions label one. Taking the
-  # label off, or closing, builds too, so the Preview workflow deletes the previews.
+  # label off, or closing, runs too, building nothing, so the Preview workflow deletes the previews.
   build:
     if: >-
       github.event.pull_request.head.repo.full_name == github.repository &&
@@ -43,7 +43,8 @@ jobs:
         env:
           PULL_REQUEST: ${{ github.event.pull_request.number }}
           BASE: ${{ github.event.pull_request.base.sha }}
-        run: node worker/preview.mjs build "$PULL_REQUEST" "$BASE"
+          ACTION: ${{ github.event.action }}
+        run: node worker/preview.mjs build "$PULL_REQUEST" "$BASE" "$ACTION"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: preview

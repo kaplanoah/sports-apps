@@ -78,7 +78,8 @@ This skill holds what "Shipping a change" in AGENTS.md leaves out, most of it un
   It answers only at its name under the app's preview host, at beta's key, behind beta's access code.
 - To open a round on a preview:
   1. Check that beta's live version is at least as new as `main`'s Worker, since a preview reads it through its `PreviewEntrypoint`.
-     The commit in beta's tag is on `main`, or on a PR built on current `main`, once that PR's Deploy run said `worker check: ok`.
+     It is once its PR's Deploy run said `worker check: ok` and, after `git fetch origin main beta`,
+     `git merge-base --is-ancestor origin/main origin/beta` succeeds, since beta then has `main`'s head in its history.
      When it isn't, put a PR built on current `main` on beta first, as above, this one if it's free to hold beta.
   2. Add the `preview` label to the PR.
      The `Preview build` workflow (`.github/workflows/preview-build.yml`) builds each app the PR changes as beta, with no secret,

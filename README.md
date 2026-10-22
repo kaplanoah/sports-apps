@@ -458,13 +458,14 @@ The pull request's own code runs only in the `Preview build` workflow, which has
 no secrets and builds each preview. The `Preview` workflow then runs `main`'s
 code in the `preview` environment, which uploads the builds, opens each preview
 as a phone does, and comments with how it went. It never runs the builds, but
-each preview's code runs on Cloudflare and sees what a phone sends it, so only
-label a pull request whose page code you trust. Its bindings come from `main`'s
-`wrangler.toml`, not the pull request's.
+each preview runs the pull request's own Worker code on Cloudflare, its page
+and its routing both, which sees what a phone sends it, so only label a pull
+request whose code you trust. Its bindings come from `main`'s `wrangler.toml`,
+not the pull request's.
 
-A preview runs on beta's live version, so beta must run a Worker at least as
-new as `main`'s before a round opens: put a pull request built on current `main`
-on beta first when it doesn't.
+A preview runs on beta's live version, so beta must run a build with `main`'s
+head in its history before a round opens: put a pull request built on current
+`main` on beta first when it doesn't.
 
 Before the first preview:
 

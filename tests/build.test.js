@@ -161,11 +161,13 @@ test("a beta build with a round open loads the tuning panel, and production's le
   }
 });
 
-/** @param {string} app */
-async function loadForbiddingGlobalWork(app) {
+/**
+ * @param {string} app
+ * @param {string} built its Worker, as `buildWorker` bundles it
+ */
+async function loadForbiddingGlobalWork(app, built) {
   const folder = mkdtempSync(path.join(tmpdir(), `${app}-worker-`));
   const bundlePath = path.join(folder, "worker.mjs");
-  const built = await buildWorker(app, { release: RELEASE });
   writeFileSync(bundlePath, replaceWorkersRuntime(built));
   /** @param {string} name */
   const refuse = (name) => () => {
@@ -217,7 +219,7 @@ test("each app's Worker loads without what Cloudflare refuses while a Worker loa
   for (const app of listApps()) {
     const built = await buildWorker(app, { release: RELEASE });
     assert.deepEqual(await readRuntimeImports(built), RUNTIME_ONLY, app);
-    const worker = await loadForbiddingGlobalWork(app);
+    const worker = await loadForbiddingGlobalWork(app, built);
     assert.equal(typeof worker.default.fetch, "function", app);
     assert.equal(typeof worker.PreviewEntrypoint.prototype.readPageRoute, "function", app);
   }
@@ -227,7 +229,7 @@ test("a service's Worker loads its packages as a Worker resolves them, importing
   for (const service of listServices()) {
     const built = await buildWorker(service, { release: RELEASE });
     assert.deepEqual(await readRuntimeImports(built), RUNTIME_ONLY, service);
-    const worker = await loadForbiddingGlobalWork(service);
+    const worker = await loadForbiddingGlobalWork(service, built);
     assert.equal(typeof worker.default, "function", service);
   }
 });
