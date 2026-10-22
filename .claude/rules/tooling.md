@@ -21,10 +21,12 @@ paths:
   and the one code every app asks for as `ACCESS_CODE`.
   A beta deploy reads them from the `beta` environment's, with `_BETA` after the app's name in each address's.
 - Services: each deploy uploads every service before any app, since an app binds each service, by its name in capitals, to its Worker on the app's channel (`listServiceBindings` in the root's `worker/deploy.mjs`).
-  A service has no workers.dev address, so its deploy reads what each app's `health` says of it,
+  After all app deploys settle, the deploy checks every service, including unchanged services an app can newly bind.
+  A service has no workers.dev address, so the check reads what each app's `health` says of it,
   in a field of its own, `services.<name>`, apart from the app's own status,
   and puts the service's earlier version back unless every app that reports it says it's ok at the new commit (`worker/check-service.mjs`).
-  No app reports a service until its live version binds it, so a service's first deploy logs that the check was skipped.
+  An unchanged service is checked at its own live commit and isn't rolled back.
+  The check is skipped only when no app's live version binds the service.
   The service reads its release from its `VERSION` binding, which the upload's `workers/tag` sets to the short commit.
   The `Watch apps` workflow checks each service the same way, keeping one open issue for each that isn't answering, which closes once it answers again.
   Each channel's Cloudflare token edits only the Workers it names, so before a service's first deploy on a channel,
