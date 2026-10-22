@@ -10,11 +10,11 @@ import { appendFileSync, existsSync, readFileSync, readdirSync } from "node:fs";
 import { join, posix } from "node:path";
 import { fileURLToPath } from "node:url";
 import { listAppsWithBrowserTests } from "./apps.mjs";
-import { CONFIG_ONLY_FILES, isDocument } from "./deploy-scope.mjs";
+import { CONFIG_ONLY_FILES, isDocument, isSessionPath } from "./deploy-scope.mjs";
 import { CI_WORKFLOW } from "./find-passed-ci.mjs";
 import { resolvePackageImport } from "./package-imports.mjs";
 
-const UNTESTED_FOLDERS = [/^\.claude\//, /^\.github\//, /^types\//];
+const UNTESTED_FOLDERS = [/^\.github\//, /^types\//];
 // Code here reaches the browser tests only by import, which the reached files list.
 const IMPORTED_ONLY = [
   /^worker\/[^/]+\.mjs$/,
@@ -62,6 +62,7 @@ export function listReachedFiles(entries, readText) {
  */
 const isUntested = (path, reached) =>
   isDocument(path) ||
+  isSessionPath(path) ||
   CONFIG_ONLY_FILES.has(path) ||
   // CI's own workflow runs the browser tests, so a change to it runs them to show they still do.
   (path !== CI_WORKFLOW && UNTESTED_FOLDERS.some((folder) => folder.test(path))) ||
