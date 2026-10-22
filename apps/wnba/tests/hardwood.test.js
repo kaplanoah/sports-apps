@@ -6,6 +6,7 @@ import {
   readDeclarations,
   readFontFaces,
   readRule,
+  readThemeToken,
 } from "../../../tests/css-rules.js";
 
 const STYLES = fileURLToPath(new URL("../page/styles.css", import.meta.url));
@@ -20,6 +21,13 @@ test("only :root names orange or teal, so every rule colors by what it means: no
       (declaration) => `${readRule(declaration)} { ${declaration.property}: ${declaration.value} }`,
     );
   assert.deepEqual(strays, []);
+});
+
+test("a switch's knob is Walnut's cream", () => {
+  assert.equal(
+    readThemeToken(STYLES, "light", "--switch-knob"),
+    readThemeToken(STYLES, "dark", "--ink"),
+  );
 });
 
 test("every corner comes from Hardwood's shape tokens, but for dots and app icons", () => {

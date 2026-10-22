@@ -80,6 +80,22 @@ export const readFontFaces = (path) =>
 /** @param {Declaration} declaration */
 export const readRule = (declaration) => declaration.selectors.at(-1) ?? "";
 
+const THEME_RULES = { light: ":root", dark: ':root[data-theme="dark"]' };
+
+/**
+ * The value an app's light or dark theme gives a custom property, like its floor's `--bg`.
+ * @param {string} path
+ * @param {"light" | "dark"} theme
+ * @param {string} property
+ */
+export const readThemeToken = (path, theme, property) =>
+  readDeclarations(path).find(
+    (declaration) =>
+      declaration.selectors.length === 1 &&
+      declaration.selectors[0] === THEME_RULES[theme] &&
+      declaration.property === property,
+  )?.value;
+
 /**
  * The custom properties a stylesheet's `:root` blocks define.
  * @param {string} path

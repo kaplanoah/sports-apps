@@ -5,6 +5,7 @@ paths:
   - "tests/type-roles.test.js"
   - "tests/shape-tokens.test.js"
   - "tests/icons.test.js"
+  - "tests/network-logos.test.js"
   - "tests/browser/theme-layout.mjs"
   - "tests/browser/type-roles.mjs"
   - "tests/browser/tap-states.mjs"
@@ -87,7 +88,9 @@ paths:
   - everything else in ink, which its `tests/hardwood.test.js` checks
 - Channel logos in `shared/page/networks/` come only from Wikimedia Commons files marked public domain or CC0, or from the repo's owner, since the repo is public.
   A logo that works on only one background gets a version for the other,
-  made by turning its black parts the cream of team names on a dark page or its white parts dark, and named with `-dark` for the dark one.
+  made by turning its black parts the WNBA's Walnut ink, and named with `-dark` for the dark one.
+  The root's `tests/network-logos.test.js` checks each dark version's cream, an SVG's or a PNG's, against that ink,
+  and that no color a dark SVG writes out in hex is near-black.
 - Icons come only from [Phosphor](https://phosphoricons.com), the apps' one icon set.
   Copy the icon's path from it at the weight its neighbors use,
   Light for the page's controls, like the tab bar and close buttons,
