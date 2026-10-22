@@ -8,14 +8,10 @@ import {
 } from "../../../../tests/browser/season-tab.mjs";
 import { readSeasonPartScroll } from "../../../../tests/browser/season-scroll.mjs";
 import { readRole } from "../../../../tests/browser/type-roles.mjs";
-import { readCapitals } from "../../../../tests/browser/capitals.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
 const PHONE = { width: 390, height: 844 };
-// How far below the middle of a team's name's capitals its dot sits, as this browser draws the spot
-// set by eye on a phone.
-const DOT_DROP_PX = 0.1;
 
 const readRoundName = (page, round) => page.locator(`.round-name[data-round="${round}"]`);
 
@@ -524,19 +520,15 @@ test("a series' winner's row is washed in teal, more on Walnut, and its loser's 
   await expect(out.locator(".dot")).toHaveCSS("opacity", "0.55");
 });
 
-test("each team's name sits a pixel above its wins, which stay where they were, and its dot just below the middle of the name's capitals", async ({
+test("each team's name sits a pixel above its dot and wins, which stay where they were", async ({
   page,
 }) => {
   await openApp(page);
   const row = page.locator('[data-series="1-0"] .team-line[data-team="NYL"]');
   await expect(row).toBeVisible();
   await expect(row.locator(".team-name")).toHaveCSS("translate", "0px -1px");
-  await expect(row.locator(".wins")).toHaveCSS("translate", "none");
-  const [name, dot] = await Promise.all([
-    readCapitals(row.locator(".team-name")),
-    row.locator(".dot").boundingBox(),
-  ]);
-  expect((dot?.y ?? 0) + (dot?.height ?? 0) / 2 - name.middle).toBeCloseTo(DOT_DROP_PX, 1);
+  for (const part of [".dot", ".wins"])
+    await expect(row.locator(part)).toHaveCSS("translate", "none");
 });
 
 test("each team's wins sit on a block that casts a shadow on the card", async ({ page }) => {

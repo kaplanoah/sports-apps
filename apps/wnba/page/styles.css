@@ -212,20 +212,6 @@
   --numbers: "Barlow Condensed", "Arial Narrow", sans-serif;
   --title-face: "Barlow Condensed", "Arial Narrow", sans-serif;
   --team-name: "Barlow Condensed", "Arial Narrow", sans-serif;
-  /* How far each place moves a team line's dot, seed, or tag down from where its line puts it, set
-     by eye on a phone: one before a name sits on the name's capitals, and one after it on its
-     lowercase letters. */
-  --standings-dot-drop: 0.75px;
-  --conference-tag-drop: 0.7px;
-  --seed-note-drop: 1.15px;
-  --bracket-dot-drop: -0.15px;
-  --bracket-seed-drop: 0.05px;
-  --faceoff-dot-drop: 1.95px;
-  --faceoff-seed-drop: 0.45px;
-  --faceoff-after-name-dot-drop: 3.75px;
-  --faceoff-after-name-seed-drop: 2.25px;
-  --compact-dot-drop: 0.6px;
-  --news-dot-drop: 0.45px;
   /* Each type role's size and weight in Barlow, and Barlow Condensed where a role sets it
      (shared/page/type.css). */
   --type-title-size: calc(23.5rem / 16);
@@ -585,9 +571,6 @@ header.top h1 .title-letter:nth-child(3) {
 .game-side .dot {
   width: 16px;
   height: 16px;
-}
-.team-line .dot {
-  translate: 0 var(--bracket-dot-drop);
 }
 
 /* Games: each day's games share a card, beside its date as a wall calendar shows it, level with
@@ -986,18 +969,6 @@ header.top h1 .title-letter:nth-child(3) {
 .faceoff-side.home .club {
   flex-direction: row-reverse;
 }
-.faceoff-side .dot {
-  translate: 0 var(--faceoff-dot-drop);
-}
-.faceoff-side .seed {
-  translate: 0 calc(1px + var(--faceoff-seed-drop));
-}
-.faceoff-side.home .dot {
-  translate: 0 var(--faceoff-after-name-dot-drop);
-}
-.faceoff-side.home .seed {
-  translate: 0 calc(1px + var(--faceoff-after-name-seed-drop));
-}
 .faceoff-side.lost .club {
   color: var(--ink-dim);
 }
@@ -1067,9 +1038,6 @@ header.top h1 .title-letter:nth-child(3) {
 }
 .tape-teams .club + .club {
   flex-direction: row-reverse;
-}
-:is(.tape-teams, table.line-score, table.players) .club .dot {
-  translate: 0 var(--compact-dot-drop);
 }
 /* Road on the visitors' side and Home on the hosts', with a thin rule between. */
 .label-split {
@@ -1754,7 +1722,7 @@ th[aria-sort="ascending"] .roster-caret {
   position: absolute;
   top: 50%;
   right: calc(100% + 9px);
-  translate: 0 calc(-50% + var(--bracket-seed-drop));
+  translate: 0 -50%;
   display: flex;
   align-items: flex-end;
   gap: 0.45em;
@@ -2071,16 +2039,18 @@ table.standings td.team .club {
   font-size: var(--type-team-size);
   font-weight: var(--type-team-weight);
 }
+/* The dot, E/W, and a seed note each move down to where a phone shows them centered on the name,
+   set by eye. */
 table.standings td.team .dot {
-  translate: 0 var(--standings-dot-drop);
+  translate: 0 0.75px;
 }
 .conference-tag {
   --chip-ink: var(--ink-mid);
   --chip-line: var(--ink-mid);
-  translate: 0 var(--conference-tag-drop);
+  translate: 0 0.7px;
 }
 .seed-note {
-  translate: 0 var(--seed-note-drop);
+  translate: 0 1.15px;
   font-family: var(--display);
   font-size: var(--type-caption-size);
   font-weight: calc(var(--type-caption-weight) + 200);
@@ -2311,7 +2281,6 @@ table.standings tr.playoff-line + tr td {
 .news-teams .dot {
   width: 14px;
   height: 14px;
-  translate: 0 var(--news-dot-drop);
 }
 .news-title {
   font-size: var(--type-headline-size);
