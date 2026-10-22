@@ -181,9 +181,12 @@ test("a pull request asks for previews only while it's open, from this repo, and
 });
 
 test("the previews' state is up only once every one drew", () => {
-  const drawn = { status: "drawn", reason: "" };
-  const unchecked = { status: "unchecked", reason: "" };
-  const broken = { status: "broken", reason: "" };
+  /** @type {import("../worker/check-page.mjs").PageCheck[]} */
+  const [drawn, unchecked, broken] = [
+    { status: "drawn" },
+    { status: "unchecked", reason: "" },
+    { status: "broken", reason: "" },
+  ];
   assert.equal(judgePreviews(false, [drawn]), "deleted");
   assert.equal(judgePreviews(true, []), "unchanged");
   assert.equal(judgePreviews(true, [drawn, drawn]), "up");
@@ -243,7 +246,7 @@ const UPLOAD = ["preview", "--config", "apps/mlb/worker/wrangler.toml", "--env",
  * @param {(args: string[]) => Promise<string>} [options.wrangler]
  * @param {import("../worker/check-page.mjs").PageCheck} [options.check]
  */
-function syncWithFakes({ built, apis, wrangler, check = { status: "drawn", reason: "" } }) {
+function syncWithFakes({ built, apis, wrangler, check = { status: "drawn" } }) {
   const seen = { placed: [], uploads: [], opened: [], log: [] };
   const run = syncPreviews({
     commit: COMMIT,
@@ -347,7 +350,7 @@ test("a pull request that no longer asks for previews has every app's deleted, a
 });
 
 test("a preview that couldn't be checked or didn't open fails the run, saying why without its address", async () => {
-  for (const status of ["unchecked", "broken"]) {
+  for (const status of /** @type {const} */ (["unchecked", "broken"])) {
     const apis = createFakeApis();
     const reason = `no games drawn at https://pr-12.${ENV.MLB_PREVIEW_HOST}/`;
     const { run, seen } = syncWithFakes({ built: ["mlb"], apis, check: { status, reason } });
