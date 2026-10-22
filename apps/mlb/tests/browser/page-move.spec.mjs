@@ -1,4 +1,4 @@
-import { test, serveLockedApp } from "./harness.mjs";
+import { test, MOVING_APP } from "./harness.mjs";
 import { ANDROID_PHONE, IPHONE } from "../../../../tests/browser/devices.mjs";
 import {
   checkMoveCard,
@@ -15,14 +15,6 @@ import {
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
-const app = {
-  serve: serveLockedApp,
-  appName: "MLB",
-  looks: { light: "Ball", dark: "Night Game" },
-  pageHost: "mlb.sports.example",
-  oldHost: "mlb-app.example-subdomain.workers.dev",
-};
-
 test.describe("on an iPhone", () => {
   test.use(IPHONE);
 
@@ -30,30 +22,30 @@ test.describe("on an iPhone", () => {
     page,
     browser,
   }) => {
-    await checkSafariMoves({ page, browser, ...app });
+    await checkSafariMoves({ page, browser, ...MOVING_APP });
   });
 
   test("the Home Screen app at the old address shows the card for the new site", async ({
     page,
     browser,
   }) => {
-    await checkMoveCard({ page, browser, ...app });
+    await checkMoveCard({ page, browser, ...MOVING_APP });
   });
 
   test("the card's X takes it away for good", async ({ page, browser }) => {
-    await checkMoveCardDismissal({ page, browser, ...app });
+    await checkMoveCardDismissal({ page, browser, ...MOVING_APP });
   });
 
   test("the new Home Screen app asks to turn notifications on again", async ({ page, browser }) => {
-    await checkNotificationsAsk({ page, browser, ...app });
+    await checkNotificationsAsk({ page, browser, ...MOVING_APP });
   });
 
   test("Leave off takes the notifications ask away for good", async ({ page, browser }) => {
-    await checkNotificationsAskGoes({ page, browser, ...app }, "Leave off");
+    await checkNotificationsAskGoes({ page, browser, ...MOVING_APP }, "Leave off");
   });
 
   test("the X takes the notifications ask away for good", async ({ page, browser }) => {
-    await checkNotificationsAskGoes({ page, browser, ...app }, "Dismiss notifications");
+    await checkNotificationsAskGoes({ page, browser, ...MOVING_APP }, "Dismiss notifications");
   });
 });
 
@@ -66,14 +58,14 @@ test.describe("from an Android phone's Home Screen app", () => {
     page,
     browser,
   }) => {
-    await checkMovingWelcome({ page, browser, ...app });
+    await checkMovingWelcome({ page, browser, ...MOVING_APP });
   });
 
   test("a pick in the moving welcome changes only the icon", async ({ page, browser }) => {
-    await checkMovingIconPick({ page, browser, ...app });
+    await checkMovingIconPick({ page, browser, ...MOVING_APP });
   });
 
   test("closing the moving welcome ends the move", async ({ page, browser }) => {
-    await checkMovingWelcomeCloses({ page, browser, ...app });
+    await checkMovingWelcomeCloses({ page, browser, ...MOVING_APP });
   });
 });

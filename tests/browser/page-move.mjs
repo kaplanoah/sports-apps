@@ -14,7 +14,7 @@ import { LOCKED_PAGE_PATH } from "./harness.mjs";
 import { WELCOME } from "./home-screen-help.mjs";
 import { listStrayPeriods } from "./stray-periods.mjs";
 import { listTapsOffButtons } from "./tap-states.mjs";
-import { listTextOffRoles } from "./type-roles.mjs";
+import { listTextOffRoles, readRole } from "./type-roles.mjs";
 import { tapUpdatesButton } from "./updates-box.mjs";
 
 const ACCESS_CODE = "FASTBREAK";
@@ -112,6 +112,26 @@ async function checkCardReads(page) {
 }
 
 /**
+ * Checks the card's title and text each draw at its notice role's size and weight.
+ * @param {import("@playwright/test").Page} page
+ */
+async function checkCardRoles(page) {
+  for (const [part, role] of [
+    ["title", "notice-title"],
+    ["text", "notice-text"],
+  ]) {
+    const { size, weight } = await readRole(page, role);
+    const drawn = await findUpdates(page)
+      .locator(`.move-card-${part}`)
+      .evaluate((text) => {
+        const style = getComputedStyle(text);
+        return { size: parseFloat(style.fontSize), weight: Number(style.fontWeight) };
+      });
+    expect(drawn, part).toEqual({ size, weight });
+  }
+}
+
+/**
  * Checks the card reads in the light look and the dark.
  * @param {import("@playwright/test").Page} page
  */
@@ -141,10 +161,10 @@ export async function checkSafariMoves({ page, serve, pageHost, oldHost }) {
 
 /**
  * Opens the Home Screen app at the old address, signed in, with `choices` kept.
- * @param {MovingApp} app
+ * @param {Pick<MovingApp, "page" | "serve" | "pageHost" | "oldHost">} app
  * @param {Record<string, unknown>} [choices]
  */
-async function openOldHomeScreenApp({ page, serve, pageHost, oldHost }, choices) {
+export async function openOldHomeScreenApp({ page, serve, pageHost, oldHost }, choices) {
   await page.addInitScript(markOnHomeScreen);
   await serve(page, { accessCode: ACCESS_CODE, pageHost });
   await signIn(page, findOldAddress(oldHost), choices);
@@ -169,6 +189,7 @@ export async function checkMoveCard(app) {
   await expect(updates.locator(".move-card-icon")).toBeVisible();
   await expect(updates.getByRole("button", { name: MOVE_BUTTON })).toBeVisible();
   await expect(updates.getByRole("button", { name: "Dismiss the new site" })).toBeVisible();
+  await checkCardRoles(page);
   await checkCardInEachLook(page);
   await expect(page).toHaveURL(findOldAddress(app.oldHost));
 }
@@ -321,6 +342,7 @@ export async function checkNotificationsAsk(app) {
   await expect(updates.getByRole("button", { name: TURN_ON_BUTTON })).toBeVisible();
   await expect(updates.getByRole("button", { name: "Dismiss notifications" })).toBeVisible();
   await expectAtAddressCarryingNothing(page, findNewAddress(app.pageHost));
+  await checkCardRoles(page);
   await checkCardInEachLook(page);
 }
 

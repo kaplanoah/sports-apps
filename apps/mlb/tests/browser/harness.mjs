@@ -616,6 +616,15 @@ export function serveLockedApp(page, { accessCode, pageHost }) {
   });
 }
 
+/** The app as the root's page-move.mjs checks move it from its old address to its own. */
+export const MOVING_APP = {
+  serve: serveLockedApp,
+  appName: "MLB",
+  looks: { light: "Ball", dark: "Night Game" },
+  pageHost: "mlb.sports.example",
+  oldHost: "mlb-app.example-subdomain.workers.dev",
+};
+
 /**
  * Opens the page `serveLockedApp` serves.
  * @param {import("@playwright/test").Page} page

@@ -427,6 +427,15 @@ export async function serveMovingApp(page, { accessCode, pageHost }) {
   });
 }
 
+/** The app as the root's page-move.mjs checks move it from its old address to its own. */
+export const MOVING_APP = {
+  serve: serveMovingApp,
+  appName: "WNBA",
+  looks: { light: "Maple", dark: "Walnut" },
+  pageHost: "wnba.sports.example",
+  oldHost: "wnba-app.example-subdomain.workers.dev",
+};
+
 /**
  * Opens the page `serveLockedApp` serves.
  * @param {import("@playwright/test").Page} page

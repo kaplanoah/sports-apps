@@ -107,6 +107,10 @@
   --type-setting-weight: 425;
   --type-setting-note-size: calc(13.25rem / 16);
   --type-setting-note-weight: 400;
+  --type-notice-title-size: calc(14.75rem / 16);
+  --type-notice-title-weight: 525;
+  --type-notice-text-size: calc(13.75rem / 16);
+  --type-notice-text-weight: 400;
   /* Libre Franklin sets its lines a little apart. */
   --leading: 1.01;
   --bg: #f5f1e6;
@@ -1438,12 +1442,9 @@ body.kbd .rank-item .grip:focus {
 .home-screen-steps .share-glyph {
   vertical-align: -1px;
 }
-/* The Home Screen box, the move card, and Diagnostics, each a step from its role of MLB's own. */
+/* The Home Screen box and Diagnostics, each a step from its role of MLB's own. */
 .home-screen-title {
   font-weight: calc(var(--type-detail-weight) + 100);
-}
-.move-card-title {
-  font-weight: calc(var(--type-setting-weight) + 100);
 }
 .home-screen-steps b {
   font-weight: calc(var(--type-caption-weight) + 75);

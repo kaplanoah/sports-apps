@@ -158,14 +158,14 @@
   margin-top: calc(10.5px - var(--box-pad-block));
 }
 .move-card-title {
-  font-size: var(--type-setting-size);
-  font-weight: calc(var(--type-setting-weight) + 200);
+  font-size: var(--type-notice-title-size);
+  font-weight: var(--type-notice-title-weight);
   line-height: calc(1.2 * var(--leading));
   color: var(--ink);
 }
 .move-card-text {
-  font-size: var(--type-body-size);
-  font-weight: var(--type-body-weight);
+  font-size: var(--type-notice-text-size);
+  font-weight: var(--type-notice-text-weight);
   line-height: calc(1.45 * var(--leading));
   color: var(--ink-dim);
 }

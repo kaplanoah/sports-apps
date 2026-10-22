@@ -246,6 +246,10 @@
   --type-setting-weight: 400;
   --type-setting-note-size: calc(13.75rem / 16);
   --type-setting-note-weight: 400;
+  --type-notice-title-size: calc(15.25rem / 16);
+  --type-notice-title-weight: 600;
+  --type-notice-text-size: calc(14.5rem / 16);
+  --type-notice-text-weight: 400;
   --gate-code-font: var(--numbers);
   --gate-problem: var(--now);
   --text: "Barlow", system-ui, sans-serif;
