@@ -87,7 +87,11 @@ export async function wakeAsStoreUpdates(page, app, { changeWhileAway, onWake = 
   // update says it has caught up, which its hold for that update keeps from coming sooner.
   const savesBehind = (await readStampsAsSynced()).length;
   await app.updateFromWorker();
-  await expect.poll(async () => (await readStampsAsSynced()).length).toBeGreaterThan(savesBehind);
+  await page.waitForFunction(
+    (count) => /** @type {string[]} */ (Reflect.get(window, "stampsAsSynced")).length > count,
+    savesBehind,
+    { polling: 100 },
+  );
   return {
     texts: [...(await readGamesTexts()), ...(await readStampTexts())],
     stampAsCaughtUp: (await readStampsAsSynced()).at(-1),
