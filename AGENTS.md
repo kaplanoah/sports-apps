@@ -91,15 +91,16 @@
   Add `!` after a type that releases, as in `feat!:`, for a major change: a new address, lost data, or something that's gone; the `ship` skill says how it reaches each Worker.
 - Each app has a beta channel, a second Worker the `beta` branch deploys, which the `ship` skill says how to use.
   `beta` is a scratch branch: never commit to it or open a PR from it.
+  A design round that isn't red runs on a preview of the PR, which serves its page on beta's data, so beta stays free, as the `ship` skill says.
 - A red change is one only the owner's phone can test: `.claude/rules/red-change.md` says what makes one, and the `ship` skill how it ships.
-- `npm run rollback`, `set-app-key`, `set-access-code`, `set-page-host`, `set-email-key`, and `set-rp-id` change the live Workers: run each only as `.claude/rules/tooling.md` says.
+- `npm run rollback`, `set-app-key`, `set-access-code`, `set-page-host`, `set-preview-host`, `set-email-key`, and `set-rp-id` change the live Workers: run each only as `.claude/rules/tooling.md` says.
 - The repo is public.
   Never commit secrets, keys, access codes, account IDs, real Worker addresses, subdomains, page hosts, or personal data; use placeholders in tests and docs:
   `example` or `example-subdomain` for a Worker's subdomain and `k3y` or `<key>` for a page's key,
   which the root's `tests/no-secrets.test.js` tells from a real one, failing on any real one in a tracked file.
   Nothing a change logs or posts where the public can read it, like a workflow's log or an issue, carries any of these either.
-- The Cloudflare tokens live only in the cloud environment's API credentials and the repo's `production` and `beta` GitHub environments,
-  each environment's limited to its channel's Workers and usable only from its channel's branch, so a branch on beta can't change the live apps.
+- The Cloudflare tokens live only in the cloud environment's API credentials and the repo's `production`, `beta`, and `preview` GitHub environments,
+  each environment's limited to its channel's Workers, `preview`'s to beta's, and usable only from its channel's branch, `preview`'s from `main`, so a branch on beta or a preview can't change the live apps.
   Never ask for one in chat or put one in environment variables, code, or commits.
 - Keep scratch work (design playgrounds, test harnesses) out of git, and never point tests at the real page.
 - When unsure, do what best serves the intent of the work, and confirm with the user.

@@ -1,0 +1,68 @@
+name: Preview
+
+# Uploads each app the Preview build built as the pull request's preview of beta's Worker, which
+# serves its page on beta's data, opens each, and deletes each preview the pull request no longer
+# asks for (worker/preview.mjs). It runs main's code, never the pull request's, which reaches it only
+# as the bundles it uploads. Beta itself stays with whichever pull request holds it.
+on:
+  workflow_run:
+    workflows: [Preview build]
+    types: [completed]
+
+permissions:
+  contents: read
+  # To read the Preview build's bundles.
+  actions: read
+  # To post and update the preview's one comment.
+  pull-requests: write
+
+jobs:
+  sync:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: preview
+    # A pull request's runs go one at a time, in order, and a newer build replaces a waiting one.
+    concurrency:
+      group: preview-${{ github.event.workflow_run.head_branch }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      # No package's install script runs, and none runs where the token is.
+      - run: npm ci --ignore-scripts
+      - run: npm install --no-save --ignore-scripts wrangler@4.148.0
+      - id: browsers
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+      - if: steps.browsers.outputs.cache-hit != 'true'
+        run: npx playwright install --only-shell chromium
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: preview
+          path: preview/
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+      # Secrets, so the account ID and each preview's host, key, and code are masked in this
+      # public log.
+      - name: Bring the pull request's previews in line with its build
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          ACCESS_CODE: ${{ secrets.ACCESS_CODE }}
+          MLB_BETA_PAGE_URL: ${{ secrets.MLB_BETA_PAGE_URL }}
+          WNBA_BETA_PAGE_URL: ${{ secrets.WNBA_BETA_PAGE_URL }}
+          MLB_PREVIEW_HOST: ${{ secrets.MLB_PREVIEW_HOST }}
+          WNBA_PREVIEW_HOST: ${{ secrets.WNBA_PREVIEW_HOST }}
+          COMMIT: ${{ github.event.workflow_run.head_sha }}
+        run: node worker/preview.mjs sync "$COMMIT"

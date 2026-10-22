@@ -7,6 +7,7 @@ import { nameScoreboardRequest, nameSummaryRequest } from "../worker/src/lead.js
 import { describePreview } from "../worker/src/preview.js";
 import { createSnapshotLoader } from "../worker/src/snapshot.js";
 import { nameFeedKey } from "../../../shared/worker/feed-keeper.js";
+import { importBundle } from "../../../tests/worker-bundle.js";
 
 const AFTERNOON = JSON.parse(
   readFileSync(`${import.meta.dirname}/fixtures/2026-09-30-afternoon.json`, "utf8"),
@@ -576,9 +577,7 @@ test("a snapshot says why it couldn't be read when no feed answers", async () =>
 
 test("the Worker bundles with its page, and exports its store", async () => {
   const { buildWorker } = await import("../../../worker/build.mjs");
-  const bundle = await import(
-    `data:text/javascript,${encodeURIComponent(await buildWorker("wnba", { release: null }))}`
-  );
+  const bundle = await importBundle(await buildWorker("wnba", { release: null }));
   assert.equal(typeof bundle.SeasonStore, "function");
   const page = await bundle.default.fetch(new Request("https://app.example/k3y/"), {
     APP_KEY: "k3y",

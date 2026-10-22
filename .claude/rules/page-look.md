@@ -110,8 +110,9 @@ paths:
   and each app's browser tests check every view with it; a new view or sheet joins that list,
   and a test of a row's tap checks where a finger lands, with `document.elementFromPoint`, as well as what opens.
 - Separate items in a line of facts with `joinWithSeparator` from `shared/page/html.js`; lint rejects a bullet or middle dot typed by hand.
-- Tune a design on the real app on beta with the tuning panel (`shared/page/tuning-panel.js`),
-  in Safari: the Simulator, Mac Safari, or the phone, never in a copied mockup.
+- Tune a design on the real app with the tuning panel (`shared/page/tuning-panel.js`),
+  in Safari: the Simulator, Mac Safari, or the phone.
+  Where a round runs, on a preview, on beta, or in a mockup, the `ship` skill's "The beta channel" says.
   A round names the CSS variables it tunes,
   and the values the owner copies back become fixed values in the code.
 - A phone and a wide screen look the same, except where the width forces a difference.

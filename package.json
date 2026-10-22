@@ -4,7 +4,8 @@
   "type": "module",
   "imports": {
     "#page-files/*": "./apps/*/worker/page-files.mjs",
-    "#shared/*": "./shared/page/*"
+    "#shared/*": "./shared/page/*",
+    "#workers-runtime": "./tests/workers-runtime.js"
   },
   "description": "Year-round tracker pages for sports leagues, and the Cloudflare Workers that serve them. Its one runtime dependency checks passkeys for the accounts service.",
   "license": "MIT",
@@ -26,6 +27,7 @@
     "set-app-key": "NODE_USE_ENV_PROXY=1 node worker/set-app-key.mjs",
     "set-access-code": "NODE_USE_ENV_PROXY=1 node worker/set-access-code.mjs",
     "set-page-host": "NODE_USE_ENV_PROXY=1 node worker/set-page-host.mjs",
+    "set-preview-host": "NODE_USE_ENV_PROXY=1 node worker/set-preview-host.mjs",
     "set-email-key": "NODE_USE_ENV_PROXY=1 node worker/set-email-key.mjs",
     "set-rp-id": "NODE_USE_ENV_PROXY=1 node worker/set-rp-id.mjs"
   },

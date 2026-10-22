@@ -157,6 +157,42 @@ const waitForDrawing = (page, timeoutMs) =>
       () => false,
     );
 
+// Counts, in the page, each message its live connection gets, which works for a socket a test
+// answers in the page as for one the Worker does.
+function countLiveMessages() {
+  const PageSocket = window.WebSocket;
+  const counter = /** @type {{ liveMessageCount?: number }} */ (window);
+  counter.liveMessageCount = 0;
+  window.WebSocket = class extends PageSocket {
+    /** @param {ConstructorParameters<typeof WebSocket>} args */
+    constructor(...args) {
+      super(...args);
+      if (!new URL(this.url).pathname.endsWith("/watch")) return;
+      this.addEventListener("message", () => {
+        counter.liveMessageCount = (counter.liveMessageCount ?? 0) + 1;
+      });
+    }
+  };
+}
+
+// The store sends a page its first message as the page's socket opens, so a page whose socket
+// gets none isn't reading the store live.
+/** @param {import("@playwright/test").Page} page @param {number} timeoutMs */
+const waitForLiveMessage = (page, timeoutMs) =>
+  page
+    .waitForFunction(
+      () => {
+        const counter = /** @type {{ liveMessageCount?: number }} */ (window);
+        return (counter.liveMessageCount ?? 0) > 0;
+      },
+      null,
+      { timeout: timeoutMs },
+    )
+    .then(
+      () => true,
+      () => false,
+    );
+
 /**
  * @param {import("@playwright/test").Page} page
  * @param {object} options
@@ -164,22 +200,30 @@ const waitForDrawing = (page, timeoutMs) =>
  * @param {string} [options.accessCode]
  * @param {string} [options.commit] the release the page should be, when it's a new one
  * @param {number} [options.timeoutMs]
+ * @param {boolean} [options.isLiveChecked] whether the page's live connection must get the
+ *   store's first message too
  * @returns {Promise<PageCheck>}
  */
 export async function checkPage(
   page,
-  { pageUrl, accessCode, commit, timeoutMs = DRAW_TIMEOUT_MS },
+  { pageUrl, accessCode, commit, timeoutMs = DRAW_TIMEOUT_MS, isLiveChecked = false },
 ) {
   const errors = [];
   page.on("pageerror", (error) => errors.push(error.message));
+  if (isLiveChecked) await page.addInitScript(countLiveMessages);
   const response = await page.goto(pageUrl);
   if (!response?.ok()) return markBroken(`the page answered ${response?.status()}`);
   const signIn = accessCode ? await signInWithCode(page, pageUrl, accessCode) : {};
   if (signIn.problem) return signIn.problem;
   if (commit && !isFromRelease(await listScriptSources(page), commit))
     return markBroken("the page is still the version before");
-  if (await waitForDrawing(page, timeoutMs))
+  if (await waitForDrawing(page, timeoutMs)) {
+    if (isLiveChecked && !(await waitForLiveMessage(page, timeoutMs)))
+      return markBroken(
+        `the page's live connection got nothing within ${timeoutMs / 1000} seconds`,
+      );
     return signIn.note ? { status: "drawn", note: signIn.note } : { status: "drawn" };
+  }
   if (errors.length) return markBroken(`the page threw: ${errors[0]}`);
   const serverProblem = await readServerProblem(page);
   if (serverProblem) return markBroken(`the page says "${serverProblem}"`);
@@ -225,10 +269,8 @@ async function launchChromium(env) {
 }
 
 /**
- * Opens an app's live page in a browser of its own, trying again after `pauseMs` while it's
- * broken, up to `attempts` times. A page with no address, or whose access code the Worker refuses
- * or rate-limits, goes unchecked; a browser that doesn't start throws, so the deploy puts the
- * version before back and the watch's run fails.
+ * Opens an app's live page in a browser of its own, as `checkPageAt` does. A page with no address
+ * goes unchecked.
  * @param {object} options
  * @param {string} options.app
  * @param {string} options.channel
@@ -239,17 +281,36 @@ async function launchChromium(env) {
  * @param {typeof launchChromium} [options.launchBrowser]
  * @returns {Promise<PageCheck>}
  */
-export async function checkAppPage({
-  app,
-  channel,
+export async function checkAppPage({ app, channel, env = process.env, ...options }) {
+  const access = readPageAccess(app, channel, env);
+  if (!access) return markUnchecked(`no ${nameAccessSecrets(app, channel).pageUrl} secret`);
+  return checkPageAt({ access, env, ...options });
+}
+
+/**
+ * Opens a page in a browser of its own, trying again after `pauseMs` while it's broken, up to
+ * `attempts` times. A page whose access code the Worker refuses or rate-limits goes unchecked; a
+ * browser that doesn't start throws, so the deploy puts the version before back and the watch's
+ * run fails.
+ * @param {object} options
+ * @param {{ pageUrl: string, accessCode: string | undefined }} options.access
+ * @param {string} [options.commit]
+ * @param {NodeJS.ProcessEnv} [options.env]
+ * @param {number} [options.attempts]
+ * @param {number} [options.pauseMs]
+ * @param {boolean} [options.isLiveChecked]
+ * @param {typeof launchChromium} [options.launchBrowser]
+ * @returns {Promise<PageCheck>}
+ */
+export async function checkPageAt({
+  access,
   commit,
   env = process.env,
   attempts = 3,
   pauseMs = 5000,
+  isLiveChecked = false,
   launchBrowser = launchChromium,
 }) {
-  const access = readPageAccess(app, channel, env);
-  if (!access) return markUnchecked(`no ${nameAccessSecrets(app, channel).pageUrl} secret`);
   const browser = await launchBrowser(env);
   try {
     /** @type {PageCheck} */
@@ -258,8 +319,9 @@ export async function checkAppPage({
       if (attempt > 0) await waitFor(pauseMs);
       // A service worker would answer the next try from what the last one kept.
       const context = await browser.newContext({ serviceWorkers: "block" });
-      check = await checkPage(await context.newPage(), { ...access, commit }).catch((error) =>
-        markBroken(`the page didn't load: ${error instanceof Error ? error.message : error}`),
+      check = await checkPage(await context.newPage(), { ...access, commit, isLiveChecked }).catch(
+        (error) =>
+          markBroken(`the page didn't load: ${error instanceof Error ? error.message : error}`),
       );
       await context.close();
       if (check.status !== "broken") break;

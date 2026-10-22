@@ -4,6 +4,7 @@ import { cpSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import { build } from "esbuild";
 import { findPageRoot, listApps, listServices } from "../worker/apps.mjs";
 import {
   buildWorker,
@@ -13,6 +14,7 @@ import {
   readRelease,
 } from "../worker/build.mjs";
 import { createServiceRoots } from "./service-roots.js";
+import { replaceWorkersRuntime } from "./worker-bundle.js";
 
 const BUILT_AT = new Date("2026-10-07T12:00:00Z");
 const RELEASE = {
@@ -159,19 +161,14 @@ test("a beta build with a round open loads the tuning panel, and production's le
   }
 });
 
-// Node has no Workers runtime, so the runtime's own module stands in as its two classes.
-const WORKERS_RUNTIME_STAND_IN =
-  "data:text/javascript,export class DurableObject {} export class WorkerEntrypoint {}";
-
-/** @param {string} app */
-async function loadForbiddingGlobalWork(app) {
+/**
+ * @param {string} app
+ * @param {string} built its Worker, as `buildWorker` bundles it
+ */
+async function loadForbiddingGlobalWork(app, built) {
   const folder = mkdtempSync(path.join(tmpdir(), `${app}-worker-`));
   const bundlePath = path.join(folder, "worker.mjs");
-  const built = await buildWorker(app, { release: RELEASE });
-  writeFileSync(
-    bundlePath,
-    built.replaceAll('"cloudflare:workers"', `"${WORKERS_RUNTIME_STAND_IN}"`),
-  );
+  writeFileSync(bundlePath, replaceWorkersRuntime(built));
   /** @param {string} name */
   const refuse = (name) => () => {
     throw new Error(`${app}'s Worker called ${name} while it loads`);
@@ -192,19 +189,47 @@ async function loadForbiddingGlobalWork(app) {
   }
 }
 
-test("each app's Worker loads without what Cloudflare refuses while a Worker loads", async () => {
+/**
+ * What the built Worker imports, as esbuild reads it, since its page's scripts are text inside it,
+ * and whether it holds its own copy of Node's stand-in for the Workers runtime, whose classes would
+ * then never be the runtime's.
+ * @param {string} built
+ */
+async function readRuntimeImports(built) {
+  const { metafile } = await build({
+    stdin: { contents: built, loader: "js" },
+    bundle: true,
+    write: false,
+    metafile: true,
+    format: "esm",
+    platform: "neutral",
+    external: ["*"],
+    logLevel: "silent",
+  });
+  const imports = metafile.inputs["<stdin>"].imports.map((each) => each.path);
+  return {
+    imports: [...new Set(imports)],
+    isStandInBundled: /^\/\/ tests\/workers-runtime\.js$/m.test(built),
+  };
+}
+
+const RUNTIME_ONLY = { imports: ["cloudflare:workers"], isStandInBundled: false };
+
+test("each app's Worker loads without what Cloudflare refuses while a Worker loads, with the entrypoint its previews bind", async () => {
   for (const app of listApps()) {
-    const worker = await loadForbiddingGlobalWork(app);
+    const built = await buildWorker(app, { release: RELEASE });
+    assert.deepEqual(await readRuntimeImports(built), RUNTIME_ONLY, app);
+    const worker = await loadForbiddingGlobalWork(app, built);
     assert.equal(typeof worker.default.fetch, "function", app);
+    assert.equal(typeof worker.PreviewEntrypoint.prototype.readPageRoute, "function", app);
   }
 });
 
 test("a service's Worker loads its packages as a Worker resolves them, importing only the runtime", async () => {
   for (const service of listServices()) {
     const built = await buildWorker(service, { release: RELEASE });
-    const imports = [...built.matchAll(/^import .* from "([^"]+)";$/gm)].map(([, from]) => from);
-    assert.deepEqual([...new Set(imports)], ["cloudflare:workers"], service);
-    const worker = await loadForbiddingGlobalWork(service);
+    assert.deepEqual(await readRuntimeImports(built), RUNTIME_ONLY, service);
+    const worker = await loadForbiddingGlobalWork(service, built);
     assert.equal(typeof worker.default, "function", service);
   }
 });

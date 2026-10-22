@@ -13,3 +13,9 @@ export async function serveUnreachableStore(page) {
   );
   await page.routeWebSocket(isLockedWatchSocket, (socket) => socket.close());
 }
+
+/**
+ * Opens the locked page's socket and sends it nothing, as a store that never answers it.
+ * @param {import("@playwright/test").Page} page
+ */
+export const serveSilentSocket = (page) => page.routeWebSocket(isLockedWatchSocket, () => {});
