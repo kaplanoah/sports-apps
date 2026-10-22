@@ -39,14 +39,8 @@ test("every workflow's actions are pinned to a commit", () => {
   }
 });
 
-// npm's audit is a request to the registry that can take minutes, longer than the gate's whole
-// timeout.
-test("every workflow's install skips npm's audit", () => {
-  for (const workflow of WORKFLOWS)
-    for (const [install] of readRepoFile(`.github/workflows/${workflow}`).matchAll(
-      /\bnpm ci\b.*$/gm,
-    ))
-      assert.match(install, /--no-audit\b/, `${workflow}: ${install}`);
+test("every install skips npm's audit", () => {
+  assert.match(readRepoFile(".npmrc"), /^audit=false$/m);
 });
 
 // An image holds only the browsers its own Playwright version runs, and Dependabot moves the
@@ -334,7 +328,7 @@ test("the gate judges a pull request with the base's own gate, Node, and modules
   assert.doesNotMatch(gate, /\*setup-node|\*restore-modules|\*install-modules|node worker\//);
   assert.match(
     gate,
-    /- name: Install the base's modules\n\s+working-directory: \$\{\{ runner\.temp \}\}\/base\n\s+run: npm ci --ignore-scripts --no-audit --no-fund\n/,
+    /- name: Install the base's modules\n\s+working-directory: \$\{\{ runner\.temp \}\}\/base\n\s+run: npm ci --ignore-scripts --no-audit\n/,
   );
   assert.doesNotMatch(gate, /actions\/cache/);
   for (const workflow of WORKFLOWS)

@@ -66,7 +66,7 @@ jobs:
         run: node worker/find-passed-ci.mjs
       # CI already ran the tests on this code, and no package's install script runs where the
       # token is.
-      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npm ci --ignore-scripts
         if: github.event_name != 'push' || env.CHANNEL == 'beta' || steps.passed.outputs.run
       # The deploy opens each new version's page in Chromium's headless shell, and puts the one
       # before back when it doesn't draw (worker/check-page.mjs).

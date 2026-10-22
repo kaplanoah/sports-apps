@@ -91,10 +91,11 @@ jobs:
       # The gate parses a page's scripts and stylesheets with esbuild, to tell what a change does
       # from how it's written. Its modules are installed fresh from the base's lockfile, never
       # restored from a cache, since a pull request's own run can save a cache its later runs
-      # restore first. No module the base installs runs a script of its own.
+      # restore first. No module the base installs runs a script of its own. It skips npm's audit
+      # itself, since the base's own .npmrc decides that otherwise.
       - name: Install the base's modules
         working-directory: ${{ runner.temp }}/base
-        run: npm ci --ignore-scripts --no-audit --no-fund
+        run: npm ci --ignore-scripts --no-audit
       - name: Hold a red change for the owner's phone
         id: hold
         shell: bash
@@ -150,7 +151,7 @@ jobs:
           key: &modules-key node-modules-${{ runner.os }}-${{ steps.node.outputs.node-version }}-${{ hashFiles('package-lock.json') }}
       - &install-modules
         if: steps.modules.outputs.cache-hit != 'true'
-        run: npm ci --no-audit --no-fund
+        run: npm ci
       # Each check runs even when one before it failed, so one run reports them all.
       - name: Lint
         if: ${{ !cancelled() }}
@@ -396,7 +397,7 @@ jobs:
           lookup-only: true
       # Installing the browser takes the installed Playwright.
       - if: steps.modules.outputs.cache-hit != 'true' || steps.browsers.outputs.cache-hit != 'true'
-        run: npm ci --no-audit --no-fund
+        run: npm ci
       - if: steps.modules.outputs.cache-hit != 'true'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
