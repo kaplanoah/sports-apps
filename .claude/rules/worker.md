@@ -44,6 +44,10 @@ paths:
   A handoff is good for ten minutes under the code it was made under.
   The app asks for a handoff as settings shows the note on updating the icon, and again halfway through while it does,
   or as it comes back once that's past, since a phone freezes its timers while it's away (`shared/page/appearance.js`).
+  An app that hands `createAppWorker` its `isMovingToPageHost` moves its page from under the key to the `PAGE_HOST` address,
+  while the Worker has both that secret and a code.
+  Under the key, a phone signed in gets a handoff at `PAGE_HOST` from `access/move` (`serveMoveHandoff`),
+  and the page's address answers a phone that never signed in with a 301 to the same page there, which no browser keeps.
   Each update's news goes out as Web Push notifications (`worker/src/notifications.js`,
   `shared/worker/push.js` and `web-push.js`, and `page/sw.js`);
   the Durable Object makes and keeps the signing key itself, under a key the store's paths can't name.

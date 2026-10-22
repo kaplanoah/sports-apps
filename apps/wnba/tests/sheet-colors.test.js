@@ -1,11 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { formatMarkColors, formatSheetColors, pickSheetColors } from "../page/js/sheet-colors.js";
 import { measureColorDistance, readOklab } from "../../../shared/page/team-colors.js";
 import { TEAMS } from "../page/js/teams.js";
+import { readThemeToken } from "../../../tests/css-rules.js";
 
-const STYLES = readFileSync(`${import.meta.dirname}/../page/styles.css`, "utf8");
+const STYLES = fileURLToPath(new URL("../page/styles.css", import.meta.url));
 const THEMES = /** @type {const} */ (["light", "dark"]);
 const CODES = Object.keys(TEAMS);
 // What a team's name needs to read, as WCAG asks of text its size.
@@ -20,16 +21,6 @@ const SAME_HUE_DEGREES = 3;
 const BLACK_LUMINANCE = 0.01;
 // A light half looks largest against black, so it takes this share of the dot.
 const LIGHT_ON_BLACK_SPLIT = 48;
-
-/**
- * A token's value in the block of styles.css that a selector opens.
- * @param {string} selector
- * @param {string} token
- */
-function readToken(selector, token) {
-  const block = STYLES.slice(STYLES.indexOf(`${selector} {`));
-  return block.match(new RegExp(`${token}: (#[0-9a-f]{6});`))[1];
-}
 
 /** @param {string} hex */
 function measureLuminance(hex) {
@@ -70,11 +61,8 @@ test("every dot with a black half gives its light half the same smaller share", 
 
 // The lead chart's tile is a mix of the sheet and the floor, so reading on both reads on it too.
 const CHART_SURFACES = {
-  light: [readToken(":root", "--card"), readToken(":root", "--bg")],
-  dark: [
-    readToken(':root[data-theme="dark"]', "--card"),
-    readToken(':root[data-theme="dark"]', "--bg"),
-  ],
+  light: [readThemeToken(STYLES, "light", "--card"), readThemeToken(STYLES, "light", "--bg")],
+  dark: [readThemeToken(STYLES, "dark", "--card"), readThemeToken(STYLES, "dark", "--bg")],
 };
 
 /**
@@ -149,10 +137,14 @@ function measureHueGap(first, second) {
 }
 
 test("every team's mark colors stand out on the sheet, each one of its own colors or that color's hue made only as dark or light as standing out needs", () => {
-  assert.match(STYLES, /--sheet: var\(--card\);/, "a sheet is the card's color");
+  assert.equal(
+    readThemeToken(STYLES, "light", "--sheet"),
+    "var(--card)",
+    "a sheet is the card's color",
+  );
   const sheets = {
-    light: readToken(":root", "--card"),
-    dark: readToken(':root[data-theme="dark"]', "--card"),
+    light: readThemeToken(STYLES, "light", "--card"),
+    dark: readThemeToken(STYLES, "dark", "--card"),
   };
   for (const code of CODES) {
     const { color, color2, markColors } = TEAMS[code];
@@ -175,7 +167,7 @@ test("every team's mark colors stand out on the sheet, each one of its own color
 });
 
 test("a player's sheet hands its curves her team's mark color on each theme", () => {
-  assert.equal(formatMarkColors("NYL"), "--mark-light: #449274; --mark-dark: #87d5b5;");
+  assert.equal(formatMarkColors("NYL"), "--mark-light: #4f9c7e; --mark-dark: #87d5b5;");
 });
 
 test("every pairing of teams, either way round, gets two colors that read apart, on each theme", () => {

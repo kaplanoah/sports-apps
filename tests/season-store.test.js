@@ -86,6 +86,7 @@ test("a store takes no changes from the page", async () => {
 
   assert.equal(refused.status, 405);
   assert.equal((await refused.json()).error.message, "GET only.");
+  assert.equal(refused.headers.get("allow"), "GET");
   assert.equal(await context.ctx.storage.get("seasons/2026"), undefined);
 });
 
@@ -786,5 +787,6 @@ test("the Worker adds to a count a job keeps, which the job reads and the page c
   await assert.rejects(addToJobCount(env, "news", "leagueReads"), /The store answered 404/);
   const read = await store.fetch(new Request(`${ORIGIN}/count/players/leagueReads`));
   assert.equal(read.status, 405);
+  assert.equal(read.headers.get("allow"), "POST");
   assert.equal(await store.createJobStorage("players").get("count:leagueReads"), 2);
 });

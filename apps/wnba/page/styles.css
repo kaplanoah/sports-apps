@@ -122,19 +122,19 @@
  * Text stops at 600.
  */
 :root {
-  --bg: #ead5b2;
-  --card: #f3e5ca;
-  --card-border: #ccb089;
-  --divider: #d6bd96;
-  --ink: #2a1c10;
-  --ink-dim: #6f563c;
+  --bg: #f3e4ce;
+  --card: #fff3e3;
+  --card-border: #d1c0a6;
+  --divider: #ddccb3;
+  --ink: #2a0e02;
+  --ink-dim: #735344;
   /* Dark ink fading toward the light floor shows less than light ink fading toward the walnut, so
      Maple's lines fade further as the page catches up. */
   --catch-up-fade: 0.5;
   /* Barlow's digits sit low in their line, which would leave each step's number under its
      circle's middle. */
   --step-number-lift: 0.5px;
-  --orange: #a23a0a;
+  --orange: #b93800;
   --orange-ink: #ffffff;
   --teal: #0b6860;
   --teal-ink: #ffffff;
@@ -184,14 +184,14 @@
   --re-add-note-above: 14px;
   --control-height: 36px;
   --control-room: 15px;
-  --scoreboard: #24180e;
+  --scoreboard: #220b02;
   --led: #f84434;
   --led-dim: #e8291c;
   /* The wide, deeper glow around a lit score. */
   --led-haze: rgba(229, 7, 19, 0.5);
   --shadow-ink: #321c08;
   --engrave-light: rgba(255, 255, 255, 0.4);
-  --block-side: #d6bfa0;
+  --block-side: #ddcfba;
   --dot-shadow: color-mix(in srgb, var(--shadow-ink) 30%, transparent);
   --dot-light: rgba(255, 255, 255, 0.49);
   --dot-hairline: color-mix(in srgb, var(--shadow-ink) 3%, transparent);
@@ -207,7 +207,7 @@
   --tab-bar-ink: var(--ink);
   --tab-bar-pill: var(--edge);
   /* Walnut's cream, in Maple too. */
-  --switch-knob: #f1e9df;
+  --switch-knob: #f4e8e1;
   --display: "Barlow", system-ui, sans-serif;
   --numbers: "Barlow Condensed", "Arial Narrow", sans-serif;
   --title-face: "Barlow Condensed", "Arial Narrow", sans-serif;
@@ -290,7 +290,7 @@
   --sheet-part-head: var(--structure);
   --game-card-edge: var(--edge);
   /* A player's Out box takes the floor's edge a little lighter, richer, and toward the orange. */
-  --out-box-edge: #e6c89f;
+  --out-box-edge: #ebd9bd;
   --game-card-now: var(--now);
   --game-card-won: var(--result);
   --game-card-team-font: var(--team-name);
@@ -310,24 +310,24 @@
 }
 /* Set by js/appearance.js from the viewer's choice, or the phone's setting. */
 :root[data-theme="dark"] {
-  --bg: #1d1511;
-  --card: #2a1f18;
-  --card-border: #4a3628;
-  --divider: #3a2b21;
-  --ink: #f1e9df;
-  --ink-dim: #b19a86;
+  --bg: #1a110b;
+  --card: #2a1c13;
+  --card-border: #4a301e;
+  --divider: #392619;
+  --ink: #f4e8e1;
+  --ink-dim: #b39988;
   --quiet-stat-ink: var(--ink-mid);
   --catch-up-fade: 0.75;
-  --orange: #f07a3a;
+  --orange: #f87145;
   --orange-ink: #1d0d03;
   --teal: #3cb4a4;
   --teal-ink: #06201c;
   --ink-hover: color-mix(in srgb, var(--ink) 75%, var(--action));
-  --line: #5e4836;
-  --scoreboard: #110b08;
+  --line: #60412c;
+  --scoreboard: #0e0704;
   --shadow-ink: #000000;
   --engrave-light: rgba(255, 255, 255, 0.1);
-  --block-side: #261610;
+  --block-side: #241206;
   --dot-shadow: color-mix(in srgb, var(--shadow-ink) 62%, transparent);
   --dot-light: rgba(255, 255, 255, 0.15);
   --all-star-shadow: color-mix(in srgb, var(--shadow-ink) 37.2%, transparent);
@@ -335,7 +335,7 @@
   --logos-for-light: none;
   --logos-for-dark: inline;
   --won-row-wash: 12%;
-  --out-box-edge: #563d2a;
+  --out-box-edge: #58361e;
   color-scheme: dark;
 }
 

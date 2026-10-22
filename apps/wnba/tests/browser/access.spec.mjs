@@ -210,7 +210,7 @@ async function expectGateIcons(page, theme) {
   );
   await expect(page.locator('meta[name="theme-color"]')).toHaveAttribute(
     "content",
-    isDark ? "#1d1511" : "#ead5b2",
+    isDark ? "#1a110b" : "#f3e4ce",
   );
 }
 

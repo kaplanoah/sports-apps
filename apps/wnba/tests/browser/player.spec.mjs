@@ -108,7 +108,7 @@ test("her mark on each curve is her team's mark color for the theme", async ({ p
   const sheet = await openFromRoster(page, "Breanna Stewart");
   const mark = sheet.locator(".player-curve b").first();
 
-  await expect(mark).toHaveCSS("background-color", "rgb(68, 146, 116)");
+  await expect(mark).toHaveCSS("background-color", "rgb(79, 156, 126)");
   await page.emulateMedia({ colorScheme: "dark" });
   await expect(mark).toHaveCSS("background-color", "rgb(135, 213, 181)");
 });
@@ -230,16 +230,16 @@ test.describe("a player who is out", () => {
     await openApp(page);
     const box = (await openFromRoster(page, "Elizabeth Balogun")).locator(".out-box");
 
-    await expect(box).toHaveCSS("border-top-color", "rgb(230, 200, 159)");
+    await expect(box).toHaveCSS("border-top-color", "rgb(235, 217, 189)");
     await expect(box).toHaveCSS(
       "background-color",
-      /^color\(srgb 0\.635\d* 0\.227\d* 0\.039\d* \/ 0\.065\)$/,
+      /^color\(srgb 0\.7254\d* 0\.2196\d* 0 \/ 0\.065\)$/,
     );
     await page.emulateMedia({ colorScheme: "dark" });
-    await expect(box).toHaveCSS("border-top-color", "rgb(86, 61, 42)");
+    await expect(box).toHaveCSS("border-top-color", "rgb(88, 54, 30)");
     await expect(box).toHaveCSS(
       "background-color",
-      /^color\(srgb 0\.941\d* 0\.478\d* 0\.227\d* \/ 0\.065\)$/,
+      /^color\(srgb 0\.9725\d* 0\.4431\d* 0\.2705\d* \/ 0\.065\)$/,
     );
   });
 
