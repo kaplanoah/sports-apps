@@ -1,8 +1,10 @@
-import { test, expect, openApp, openLockedApp } from "./harness.mjs";
+import { test, expect, openApp, openLockedApp, MOVING_APP } from "./harness.mjs";
 import { ON_A_PHONE } from "./search-page.mjs";
 import { checkEachView, openWithNews } from "./views.mjs";
 import { openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
 import { listRoleLooks } from "../../../../tests/browser/type-roles.mjs";
+import { IPHONE } from "../../../../tests/browser/devices.mjs";
+import { openOldHomeScreenApp } from "../../../../tests/browser/page-move.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" }, viewport: { width: 390, height: 844 } });
 
@@ -23,6 +25,8 @@ const ROLE_LOOKS = {
   caption: "Barlow",
   setting: "Barlow",
   "setting-note": "Barlow",
+  "notice-title": "Barlow",
+  "notice-text": "Barlow",
 };
 
 // A second look a role keeps for some of its text, and which text and why.
@@ -77,6 +81,12 @@ const OTHER_PLACES = [
       return openApp(page, { updatesBox: "shown" });
     },
     shown: (page) => page.locator("#updates .updates-notes b"),
+  },
+  {
+    name: "the card for the new site, in the Home Screen app at the old address",
+    device: IPHONE,
+    open: (page) => openOldHomeScreenApp({ page, ...MOVING_APP }),
+    shown: (page) => page.locator("#updates .move-card-text"),
   },
 ];
 

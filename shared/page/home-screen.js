@@ -74,10 +74,12 @@ function forgetAsks() {
 
 /**
  * Opens the welcome over the page, rising as a sheet does, and keeps it open through the reload a
- * theme picked on it brings in Safari.
+ * theme picked on it brings in Safari. Its steps may have been drawn again since the asks were
+ * last shown.
  */
 export function openWelcome() {
   forgetWelcomeClosed();
+  showAsks();
   findWelcome().showModal();
 }
 

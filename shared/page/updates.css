@@ -4,9 +4,10 @@
  * refine these rules.
  *
  * The box is a card with an X in its corner, chrome.css's .dismissible-box, padded by its
- * --box-pad- tokens. Beside chrome.css's --ink, --ink-dim, --ink-hover, and --radius-card, an
- * app's :root defines this token:
+ * --box-pad- tokens. Beside chrome.css's --ink, --ink-dim, --ink-hover, --accent, --accent-ink,
+ * --radius-card, and --radius-control, an app's :root defines these tokens:
  *   --updates-head         the count across the top of the box
+ *   --raised, --edge       an outlined button's fill and edge
  */
 
 .updates {
@@ -131,4 +132,56 @@
   .updates-list li:has(> .game-open) .team-open {
     pointer-events: auto;
   }
+}
+
+/* A card about the app's move to its own address (move-cards.js) takes the updates' place. Its
+   icon and its buttons sit as far from the box's corners as the icon sits from its start. */
+.move-card-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+.move-card-icon {
+  --appearance-icon-size: 44px;
+  flex: none;
+  margin-top: calc(var(--box-pad-start) - var(--box-pad-block));
+}
+.move-card-copy {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 3.5px;
+  min-width: 0;
+  margin-top: calc(10.5px - var(--box-pad-block));
+}
+.move-card-title {
+  font-size: var(--type-notice-title-size);
+  font-weight: var(--type-notice-title-weight);
+  line-height: calc(1.2 * var(--leading));
+  color: var(--ink);
+}
+.move-card-text {
+  font-size: var(--type-notice-text-size);
+  font-weight: var(--type-notice-text-weight);
+  line-height: calc(1.45 * var(--leading));
+  color: var(--ink-dim);
+}
+.move-card-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin: 10px calc(var(--box-pad-start) - var(--box-pad-end))
+    calc(var(--box-pad-start) - var(--box-pad-block)) 0;
+}
+.move-card-button {
+  margin: 0;
+  font-size: var(--type-detail-size);
+  font-weight: calc(var(--type-detail-weight) + 100);
+  letter-spacing: normal;
+  text-transform: none;
+}
+.move-card-button-outlined {
+  background: var(--raised);
+  box-shadow: inset 0 0 0 1px var(--edge);
+  color: var(--ink);
 }

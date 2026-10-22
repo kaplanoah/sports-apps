@@ -107,6 +107,10 @@
   --type-setting-weight: 425;
   --type-setting-note-size: calc(13.25rem / 16);
   --type-setting-note-weight: 400;
+  --type-notice-title-size: calc(14.75rem / 16);
+  --type-notice-title-weight: 525;
+  --type-notice-text-size: calc(13.75rem / 16);
+  --type-notice-text-weight: 400;
   /* Libre Franklin sets its lines a little apart. */
   --leading: 1.01;
   --bg: #f5f1e6;

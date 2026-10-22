@@ -592,11 +592,12 @@ export async function chooseSeason(page, year) {
 
 /**
  * Serves the page at its key's address behind an access code, as the Worker serves it, with the
- * evening's scores in place of MLB's.
+ * evening's scores in place of MLB's, and with a `pageHost`, at that host too, where the page
+ * under the key moves.
  * @param {import("@playwright/test").Page} page
- * @param {{ accessCode: string }} options
+ * @param {{ accessCode: string, pageHost?: string }} options
  */
-export function serveLockedApp(page, { accessCode }) {
+export function serveLockedApp(page, { accessCode, pageHost }) {
   const snapshot = buildFixtureSnapshot(EVENING_FIXTURE);
   const loadSnapshot = async () => structuredClone(snapshot);
   const testStore = createTestStore(SeasonStore, { loadSnapshot, now: EVENING_FIXTURE.now });
@@ -604,9 +605,25 @@ export function serveLockedApp(page, { accessCode }) {
     pageFiles: PAGE_FILES,
     forwardToStore,
     isStoreAnswering: async () => true,
+    isMovingToPageHost: true,
   });
-  return serveLockedPage(page, { worker, testStore, accessCode, now: EVENING_FIXTURE.now });
+  return serveLockedPage(page, {
+    worker,
+    testStore,
+    accessCode,
+    now: EVENING_FIXTURE.now,
+    pageHost,
+  });
 }
+
+/** The app as the root's page-move.mjs checks move it from its old address to its own. */
+export const MOVING_APP = {
+  serve: serveLockedApp,
+  appName: "MLB",
+  looks: { light: "Ball", dark: "Night Game" },
+  pageHost: "mlb.sports.example",
+  oldHost: "mlb-app.example-subdomain.workers.dev",
+};
 
 /**
  * Opens the page `serveLockedApp` serves.

@@ -19,7 +19,11 @@ paths:
   The theme also rides in the browser's address, as `?theme=`, since a Home Screen app keeps its storage apart from the browser's and opens at the address it was added from,
   and a shared link's theme is swapped for the viewer's own (`shared/page/pick-theme.js`).
   Each is a choice made with `createViewerChoice` in `shared/page/device-storage.js`,
-  which keeps it as JSON under its key, lists it, and tells the page when another tab changes it, so each tab redraws what it shows.
+  which keeps it as JSON under its key and tells the page when another tab changes it, so each tab redraws what it shows.
   A new choice that a viewer would want on their other devices is made the same way;
   what belongs to one device or browser, like the last tab, the Home Screen welcome's dismissal,
-  or the Diagnostics, isn't a viewer choice and stays out of that list.
+  or the Diagnostics, isn't a viewer choice and isn't made with it.
+  An app moving to its own address carries the viewer's choices there, as many as fit, in one packed `?carried=` value,
+  which the new address keeps only into storage with none of its own,
+  a browser only soon after it was packed, so a copied link carries nobody's choices (`shared/page/page-move.js`).
+  Its `CARRIED_CHOICES` names each choice, the most missed first, and the root's `tests/page-move.test.js` fails on one it leaves out.

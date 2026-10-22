@@ -29,10 +29,11 @@ let status = "loading";
 let note = "";
 let about = "";
 let isBusy = false;
+let reading = null;
 
 const findElement = (id) => /** @type {HTMLElement} */ (document.getElementById(id));
 
-const canPush = () =>
+export const canPush = () =>
   "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
 
 function renderNote() {
@@ -175,9 +176,12 @@ async function showBusyDuring(task) {
   }
 }
 
-// iOS asks for permission only from a tap, so the request comes before anything is awaited.
+// iOS asks for permission only from a tap, so the request comes before anything is awaited, even
+// the service worker a tap elsewhere on the page may come before.
 async function turnOn() {
   const permission = await Notification.requestPermission();
+  await readSubscriptionOnce();
+  if (!registration) return;
   if (permission !== "granted") {
     setStatus(permission === "denied" ? "blocked" : "off");
     return;
@@ -218,6 +222,31 @@ function describeStartStatus() {
   return subscription && Notification.permission === "granted" ? "on" : "off";
 }
 
+async function readSubscription() {
+  try {
+    registration = await registerServiceWorker();
+    subscription = await registration.pushManager.getSubscription();
+  } catch {
+    registration = null;
+  }
+}
+
+// A tap on the Updates box's ask can come before settings starts the switch, so both wait on the
+// one read.
+const readSubscriptionOnce = () => (reading ??= readSubscription());
+
+/** Turns notifications on from a tap elsewhere on the page, as the switch does. */
+export function turnOnNotifications() {
+  if (!isBusy && status !== "on") showBusyDuring(turnOn);
+}
+
+/** Whether this device is subscribed to the Worker's pushes, once that's known. */
+export async function hasNotificationsSubscription() {
+  if (!canPush()) return false;
+  await readSubscriptionOnce();
+  return !!subscription && Notification.permission === "granted";
+}
+
 /**
  * @param {{ about?: string }} [options] what the app's notifications tell, under the switch while
  *   it works
@@ -230,10 +259,8 @@ export async function startNotifications(options = {}) {
     setStatus(isIos() && !isOnHomeScreen() ? "homeScreen" : "unsupported");
     return;
   }
-  try {
-    registration = await registerServiceWorker();
-    subscription = await registration.pushManager.getSubscription();
-  } catch {
+  await readSubscriptionOnce();
+  if (!registration) {
     setStatus("unsupported");
     return;
   }

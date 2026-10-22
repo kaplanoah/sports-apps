@@ -238,15 +238,18 @@ export const isLockedWatchSocket = (url) => url.pathname === `${LOCKED_PAGE_PATH
 
 /**
  * Serves the page at its key's address behind an access code, with every request under the key
- * answered by `worker` in front of `testStore`, with the page's clock at `now`.
+ * answered by `worker` in front of `testStore`, with the page's clock at `now`. With a `pageHost`,
+ * the Worker also serves the page at that https host without the key, as its PAGE_HOST secret
+ * names it.
  * @param {import("@playwright/test").Page} page
  * @param {object} options
  * @param {Parameters<typeof answerThroughWorker>[1]} options.worker the app's Worker
  * @param {ReturnType<typeof createTestStore>} options.testStore
  * @param {string} options.accessCode
  * @param {string} options.now
+ * @param {string} [options.pageHost]
  */
-export async function serveLockedPage(page, { worker, testStore, accessCode, now }) {
+export async function serveLockedPage(page, { worker, testStore, accessCode, now, pageHost }) {
   const tries = { isOverLimit: false };
   const env = {
     APP_KEY: PAGE_KEY,
@@ -254,12 +257,23 @@ export async function serveLockedPage(page, { worker, testStore, accessCode, now
     ACCESS_SIGNING_KEY: "test-signing-key",
     ACCESS_LIMIT: { limit: async () => ({ success: !tries.isOverLimit }) },
     STORE: { idFromName: () => "store", get: () => testStore.store },
+    ...(pageHost && { PAGE_HOST: pageHost }),
   };
+  /** @param {import("@playwright/test").WebSocketRoute} socket */
+  const acceptWatcher = (socket) =>
+    testStore.acceptWatcher({ send: (message) => socket.send(message) });
   await blockOtherHosts(page);
   await page.route(matchPath(LOCKED_PAGE_PATH), (route) => answerThroughWorker(route, worker, env));
-  await page.routeWebSocket(isLockedWatchSocket, (socket) =>
-    testStore.acceptWatcher({ send: (message) => socket.send(message) }),
-  );
+  await page.routeWebSocket(isLockedWatchSocket, acceptWatcher);
+  if (pageHost) {
+    await page.route(new RegExp(`^https://${escapePattern(pageHost)}/`), (route) =>
+      answerThroughWorker(route, worker, env),
+    );
+    await page.routeWebSocket(
+      new RegExp(`^wss://${escapePattern(pageHost)}/watch$`),
+      acceptWatcher,
+    );
+  }
   await page.clock.install({ time: new Date(now) });
 
   return {

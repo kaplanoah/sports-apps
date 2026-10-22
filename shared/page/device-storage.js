@@ -1,7 +1,7 @@
 // What a viewer chooses on a page, like a ranking, a dismissal, or a theme, kept on their own
 // device as JSON under its key. Nobody signs in, and people share a page's address, so the page
-// saves nothing of a viewer's to the store. Every choice is listed, so carrying a viewer's choices
-// between their devices can find them all, and each tells the page when something other than the
+// saves nothing of a viewer's to the store. An app moving to its own address carries the choices
+// made here, as many as fit (page-move.js), and each tells the page when something other than the
 // page itself, like another tab, changes it. Storage can refuse access, as in a private window, or
 // be full, and then a choice lasts until the page reloads.
 
@@ -16,8 +16,6 @@ import { readStoredText, storeJson } from "./local-storage.js";
  *   changes the choice, and returns a way to stop
  */
 
-/** @type {Set<string>} */
-const viewerChoiceKeys = new Set();
 /** @type {Map<string, unknown>} */
 const keptInMemory = new Map();
 /** @type {Map<string, Set<() => void>>} */
@@ -98,13 +96,9 @@ function watchKey(key, onChange) {
  * @returns {ViewerChoice<T>}
  */
 export function createViewerChoice(key, readValue) {
-  viewerChoiceKeys.add(key);
   return {
     read: () => readValue(readKept(key)),
     keep: (value) => keep(key, value),
     watch: (onChange) => watchKey(key, onChange),
   };
 }
-
-/** The keys of every choice the page has made. */
-export const listViewerChoices = () => [...viewerChoiceKeys];

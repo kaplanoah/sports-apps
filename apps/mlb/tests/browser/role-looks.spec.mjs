@@ -7,10 +7,13 @@ import {
   keepUpdatesFromEarlierVisit,
   EVENING_FIXTURE,
   ON_A_PHONE,
+  MOVING_APP,
 } from "./harness.mjs";
 import { VIEW_GROUPS, checkEachView, openWithEverything } from "./views.mjs";
 import { openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
 import { listRoleLooks } from "../../../../tests/browser/type-roles.mjs";
+import { IPHONE } from "../../../../tests/browser/devices.mjs";
+import { openOldHomeScreenApp } from "../../../../tests/browser/page-move.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" }, viewport: { width: 390, height: 844 } });
 
@@ -30,6 +33,8 @@ const ROLE_LOOKS = {
   caption: "Libre Franklin",
   setting: "Libre Franklin",
   "setting-note": "Libre Franklin",
+  "notice-title": "Libre Franklin",
+  "notice-text": "Libre Franklin",
 };
 
 // A second look a role keeps for some of its text, and which text and why.
@@ -114,6 +119,12 @@ const OTHER_PLACES = [
       });
     },
     shown: (page) => page.locator("#updates .updates-notes b"),
+  },
+  {
+    name: "the card for the new site, in the Home Screen app at the old address",
+    device: IPHONE,
+    open: (page) => openOldHomeScreenApp({ page, ...MOVING_APP }),
+    shown: (page) => page.locator("#updates .move-card-text"),
   },
 ];
 

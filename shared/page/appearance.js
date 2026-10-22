@@ -9,6 +9,7 @@
 // Every page that loads this runs pick-theme.js first.
 /* global buildSafariAddress, checkPickedChoice, isAppearanceChoice, isLook, openThemeAddress,
    readHomeScreenIcon, readPhoneLook -- from pick-theme.js */
+/* global readPageMoveIcon -- from page-move.js */
 
 import { isIos, isOnHomeScreen } from "./device.js";
 import { createViewerChoice } from "./device-storage.js";
@@ -44,17 +45,21 @@ const appearance = createViewerChoice("appearance", (stored) =>
 const resolveTheme = (choice) => (isLook(choice) ? choice : readPhoneLook());
 
 // A phone keeps the icon a page offers at the moment it's added to the home screen, so the page
-// offers the one that matches the theme showing.
+// offers the one that matches the theme showing, or, while a move is being finished, the one
+// picked for it.
 /**
  * @param {Looks} looks
  * @param {"light" | "dark"} theme
  */
 function showTheme(looks, theme) {
-  const { barColor, tabIcon, homeScreenIcon } = looks[theme];
+  const { barColor, tabIcon } = looks[theme];
   document.documentElement.dataset.theme = theme;
   findElement("themeColor").setAttribute("content", barColor);
   findElement("tabIcon").setAttribute("href", tabIcon);
-  findElement("homeScreenIcon").setAttribute("href", homeScreenIcon);
+  findElement("homeScreenIcon").setAttribute(
+    "href",
+    looks[readPageMoveIcon() ?? theme].homeScreenIcon,
+  );
 }
 
 /**
@@ -80,6 +85,11 @@ export function followSavedTheme(looks) {
 
 /** @param {NodeListOf<HTMLInputElement>} choices */
 const checkSavedChoice = (choices) => checkPickedChoice(choices, appearance.read());
+
+const APPEARANCE_CHOICES = 'input[name="appearance"], input[name="welcomeAppearance"]';
+
+const findAppearanceChoices = () =>
+  /** @type {NodeListOf<HTMLInputElement>} */ (document.querySelectorAll(APPEARANCE_CHOICES));
 
 const findSettings = () => findElement("settingsDialog");
 const findNote = () => findElement("appearanceNote");
@@ -279,24 +289,26 @@ function wireNote() {
  * @param {Looks} looks
  */
 export function startAppearance(looks) {
-  const choices = /** @type {NodeListOf<HTMLInputElement>} */ (
-    document.querySelectorAll('input[name="appearance"], input[name="welcomeAppearance"]')
-  );
-  checkSavedChoice(choices);
+  checkSavedChoice(findAppearanceChoices());
   const showChosenTheme = followTheme(looks, appearance.read);
-  for (const choice of choices) {
-    choice.addEventListener("change", () => {
-      if (isIosApp()) keepLookSwitched();
-      appearance.keep(choice.value);
-      openThemeAddress(choice.value);
-      checkSavedChoice(choices);
-      showChosenTheme();
-      updateNote();
-    });
-  }
+  // The welcome draws its steps again as a move finishes (draw-home-screen-asks.js), so the page
+  // follows its choices wherever they are now, after the welcome keeps an icon picked for a move.
+  document.addEventListener("change", (event) => {
+    const choice = /** @type {HTMLInputElement} */ (event.target);
+    if (choice.name === "welcomeIcon") showChosenTheme();
+    if (!choice.matches(APPEARANCE_CHOICES)) return;
+    if (isIosApp()) keepLookSwitched();
+    appearance.keep(choice.value);
+    openThemeAddress(choice.value);
+    checkSavedChoice(findAppearanceChoices());
+    showChosenTheme();
+    updateNote();
+  });
+  // Closing the welcome finishes a move, and the icon picked for it goes with it.
+  findElement("homeScreenWelcome").addEventListener("close", showChosenTheme);
   appearance.watch(() => {
     openThemeAddress(appearance.read());
-    checkSavedChoice(choices);
+    checkSavedChoice(findAppearanceChoices());
     showChosenTheme();
     updateNote();
   });

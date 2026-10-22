@@ -16,8 +16,8 @@
  *   --ink, --ink-mid, --ink-dim                text, from brightest to dimmest
  *   --ink-hover                                text under a mouse, the one change a hover makes
  *   --accent, --accent-ink                     a sheet's close and back buttons, a switch that is on,
- *                                              the Home Screen asks' buttons and step numbers, and
- *                                              text on them
+ *                                              the Home Screen asks' buttons and step numbers, the
+ *                                              Updates box's card buttons, and text on them
  *   --focus-ring                               the keyboard focus ring
  *   --radius-card                              a card's corners, like the Updates box's
  *   --radius-chip                              a chip's corners, like a status beside a title
@@ -835,9 +835,9 @@ body.kbd .notify-help:focus {
   background-image: var(--home-screen-icon-light);
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--ink) 14%, transparent);
 }
-/* The Home Screen box shows the icon the theme showing would give the Home Screen, and the note on
-   bringing the icon up to date the one its data-look names. */
-:root[data-theme="dark"] .home-screen-tip .home-screen-icon,
+/* The Home Screen box and the Updates box's move card show the icon the theme showing would give
+   the Home Screen, and the note on bringing the icon up to date the one its data-look names. */
+:root[data-theme="dark"] .theme-shown-icon,
 .home-screen-icon[data-look="dark"] {
   background-image: var(--home-screen-icon-dark);
 }
@@ -877,20 +877,22 @@ body.kbd .notify-help:focus {
   margin: 0 -1.5px;
   vertical-align: -1.5px;
 }
-.home-screen-install {
-  flex: none;
-  margin-top: 7px;
+.accent-button {
   padding: 7px 12px;
   border: 0;
   border-radius: var(--radius-control);
   background: var(--accent);
   color: var(--accent-ink);
   font: inherit;
+  cursor: pointer;
+}
+.home-screen-install {
+  flex: none;
+  margin-top: 7px;
   font-size: var(--type-label-size);
   font-weight: var(--type-label-weight);
   text-transform: uppercase;
   letter-spacing: var(--type-label-tracking);
-  cursor: pointer;
 }
 
 /* The welcome a phone's or tablet's browser opens on (draw-home-screen-asks.js), over the whole

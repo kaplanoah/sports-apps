@@ -12,6 +12,7 @@ paths:
   and keeps beta to one pull request at a time, as the `ship` skill's "The beta channel" says.
   `ls worker/` lists its modules, and its tests are in the root `tests/`.
   It opens each app's live page as a phone does, signed in with its code, and says whether it drew what its store sent (`check-page.mjs`).
+  It checks the page where a browser lands, which for an app moving to its own address is that address.
   Each deploy does this for its new version, putting the one before back when it doesn't.
   The `Watch apps` workflow does it every 15 minutes,
   keeping one open issue for each app that isn't opening, which closes once it opens again,
@@ -47,7 +48,9 @@ paths:
   Never commit, log, or post the code.
 - `npm run set-page-host -- <app> <host>` points a host on a domain in the Cloudflare account at that app's Worker and names it in the Worker's `PAGE_HOST` secret,
   so the page also opens there without its key, behind its access code, which it needs first; the user picks the host.
-  The address with the key keeps working as it was, and phones stay signed in there.
+  The address with the key keeps working, and phones stay signed in there.
+  An app moving to its own address sends its fans on there with their choices,
+  a browser at once and a Home Screen app from a card in its Updates box (`shared/page/page-move.js`).
   Keep the host out of the repo, as the Worker's own address is.
 - `npm run set-email-key` gives the accounts service the `EMAIL_KEY` secret it hashes each email under, made at random and never printed, with `-- --channel beta` for beta's.
   It refuses when the Worker already has one, since a new key would leave every account's email unfindable.

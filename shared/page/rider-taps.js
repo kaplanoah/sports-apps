@@ -2,11 +2,11 @@ import { html, setHtml } from "./html.js";
 
 // What rides above a season's pill (season-header.js) is drawn over its parts, so a finger that
 // lands on it starts outside the part that scrolls. Most of it lets a touch through to the part's
-// empty top (pager.css), but the Updates box is rows a tap opens, so each of its buttons has a
-// stand-in in that empty top of each part, right under it: a tap there does what the button does,
-// and a finger that moves scrolls the part, as a button inside a list that scrolls does.
+// empty top (pager.css), but the Updates box is rows and cards a tap answers, so each of its buttons
+// has a stand-in in that empty top of each part, right under it: a tap there does what the button
+// does, and a finger that moves scrolls the part, as a button inside a list that scrolls does.
 
-const BOX_BUTTONS = "#updates .game-open, #dismissUpdates";
+const BOX_BUTTONS = "#updates :is(.game-open, .dismiss-button, .move-card-button)";
 
 /** The Updates box's buttons that show, in the order their stand-ins are laid. */
 const listBoxButtons = () =>

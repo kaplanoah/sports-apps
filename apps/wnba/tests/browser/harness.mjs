@@ -22,7 +22,9 @@ import {
   nameLeagueRosterRequest,
   namePlayerListRequest,
 } from "../../worker/src/roster.js";
-import { SeasonStore } from "../../worker/src/store.js";
+import PAGE_FILES from "#page-files/wnba";
+import { createAppWorker } from "../../../../shared/worker/app-worker.js";
+import { SeasonStore, forwardToStore } from "../../worker/src/store.js";
 import worker from "../../worker/src/index.js";
 import {
   test,
@@ -390,6 +392,49 @@ export async function serveLockedApp(page, { accessCode }) {
   const testStore = await createAfternoonStore();
   return serveLockedPage(page, { worker, testStore, accessCode, now: NOW });
 }
+
+// The page and Worker as they'll be once the app moves to its own address, as MLB's is.
+const MOVING_PAGE_FILES = {
+  ...PAGE_FILES,
+  "index.html": {
+    ...PAGE_FILES["index.html"],
+    text: PAGE_FILES["index.html"].text.replace(
+      '<meta name="theme-color"',
+      '<meta name="moving-to-page-host" content="true" />\n  <meta name="theme-color"',
+    ),
+  },
+};
+const movingWorker = createAppWorker({
+  pageFiles: MOVING_PAGE_FILES,
+  forwardToStore,
+  isStoreAnswering: async () => true,
+  isMovingToPageHost: true,
+});
+
+/**
+ * Serves the page as `serveLockedApp` does, but moving to `pageHost`, as the app will.
+ * @param {import("@playwright/test").Page} page
+ * @param {{ accessCode: string, pageHost?: string }} options
+ */
+async function serveMovingApp(page, { accessCode, pageHost }) {
+  const testStore = await createAfternoonStore();
+  return serveLockedPage(page, {
+    worker: movingWorker,
+    testStore,
+    accessCode,
+    now: NOW,
+    pageHost,
+  });
+}
+
+/** The app as the root's page-move.mjs checks move it from its old address to its own. */
+export const MOVING_APP = {
+  serve: serveMovingApp,
+  appName: "WNBA",
+  looks: { light: "Maple", dark: "Walnut" },
+  pageHost: "wnba.sports.example",
+  oldHost: "wnba-app.example-subdomain.workers.dev",
+};
 
 /**
  * Opens the page `serveLockedApp` serves.

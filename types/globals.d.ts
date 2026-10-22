@@ -2,11 +2,13 @@ declare const Sortable: {
   create(element: HTMLElement, options: Record<string, unknown>): unknown;
 };
 
-// The page's plain scripts in its head share these, from shared/page/pick-theme.js,
+// The page's plain scripts in its head share these, from shared/page/pick-theme.js, page-move.js,
 // long-away.js, open-last-tab.js, show-last-drawn.js, season-header.js, and draw-channel-tag-age.js.
 declare function isOnHomeScreen(): boolean;
+declare function isAppleBrowser(): boolean;
 declare function isAppearanceChoice(value: unknown): boolean;
 declare function readPickedAppearance(): string;
+declare function readAppearanceChoice(stored: string): string;
 declare function checkPickedChoice(choices: Iterable<HTMLInputElement>, picked: string): void;
 declare function keepPickedAppearance(choice: string): void;
 declare function openThemeAddress(choice: string): void;
@@ -16,6 +18,20 @@ declare function readPhoneLook(): "light" | "dark";
 declare function readHomeScreenIcon(): string | null;
 declare const WELCOME_CLOSED_KEY: string;
 declare function forgetWelcomeClosed(): void;
+declare function isMovingToPageHost(): boolean;
+declare function isOldAddress(href: string): boolean;
+declare function takeCarriedChoices(now?: number): "light" | "dark" | null;
+declare function readPageMove(): object | null;
+declare function readPageMoveIcon(): "light" | "dark" | null;
+declare function keepPageMoveIcon(icon: "light" | "dark"): void;
+declare function forgetPageMove(): void;
+declare function isNotificationsAskKept(): boolean;
+declare function forgetNotificationsAsk(): void;
+declare function requestPageMove(extras?: {
+  notifications?: boolean;
+  fromApp?: boolean;
+}): Promise<URL | null>;
+declare function leaveOldAddress(): Promise<void>;
 declare const START_AFTER_AWAY_MS: number;
 declare function isAwayLong(awayMs: number): boolean;
 declare function isLongAwayFrom(savedAt: unknown, now?: number): boolean;
