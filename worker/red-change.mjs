@@ -40,6 +40,7 @@ import {
   isPageLayerDeclaration,
   isTransition,
   readMinifiedCode,
+  readPropertyName,
 } from "./red-change-styles.mjs";
 
 const RED_FILES = new Set(
@@ -84,12 +85,13 @@ const LAYER_SETTINGS = [
     name: "a CSS declaration",
     pattern: new RegExp(
       `(?:^|[\\s{;"'\`])(?:-webkit-)?(${PROPERTY_NAMES})(?:-[a-z]+)*\\s*:(?!:)(?!\\s*-?[\\d.]+\\s*(?:[,}]|$))`,
+      "i",
     ),
   },
   { name: "an animation", pattern: /\.(animate)\(/ },
   {
     name: "a fixed or sticky position",
-    pattern: /\b(position\s*:\s*(?:-webkit-)?(?:fixed|sticky))\b/,
+    pattern: /\b(position\s*:\s*(?:-webkit-)?(?:fixed|sticky))\b/i,
   },
 ];
 
@@ -473,11 +475,7 @@ const findStyleTextSetting = (text, isWatched) =>
 const findPropertyCallSetting = (text, isWatched) =>
   findFirstSetting(text, STYLE_PROPERTY_CALL, ([, quote, name, written]) =>
     quote
-      ? describeStyleProperty(
-          name.startsWith("--") ? name : name.toLowerCase(),
-          readScriptValue(written ?? ""),
-          isWatched,
-        )
+      ? describeStyleProperty(readPropertyName(name), readScriptValue(written ?? ""), isWatched)
       : UNREADABLE_PROPERTY,
   );
 
