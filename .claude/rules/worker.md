@@ -42,6 +42,9 @@ paths:
   signs the browser in with a handoff the Worker makes for a phone signed in,
   and opens the page at its own address without the handoff (`serveHandoff` in `shared/worker/access-gate.js`).
   A handoff is good for ten minutes under the code it was made under.
+  An app that hands `createAppWorker` its `isMovingToPageHost` moves its page from under the key to the `PAGE_HOST` address, while the Worker has both that secret and a code.
+  There, a phone signed in under the key gets a handoff at `PAGE_HOST` from `access/move` (`serveMoveHandoff`),
+  and the page's address answers a phone that never signed in with a 301 to the same page there, which no browser keeps.
   The app asks for a handoff as settings shows the note on updating the icon, and again halfway through while it does,
   or as it comes back once that's past, since a phone freezes its timers while it's away (`shared/page/appearance.js`).
   Each update's news goes out as Web Push notifications (`worker/src/notifications.js`,

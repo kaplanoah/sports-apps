@@ -1,16 +1,19 @@
 // The Worker's routing: the page, its store, and its sheets' reads, only under the page's key, or
 // without it at the address PAGE_HOST names, behind the access code (access-gate.js), and
-// robots.txt and health with neither (health.js). Each release's files are served from a folder named for its commit,
-// which browsers keep for good.
+// robots.txt and health with neither (health.js). An app can move its page from under the key to the
+// PAGE_HOST address. Each release's files are served from a folder named for its commit, which
+// browsers keep for good.
 
 import {
   ACCESS_PATH,
   createAccessCookie,
   HANDOFF_PATH,
+  MOVE_PATH,
   readAccess,
   respondAccessRequired,
   serveAccess,
   serveHandoff,
+  serveMoveHandoff,
 } from "./access-gate.js";
 import { createHealthServer } from "./health.js";
 
@@ -190,6 +193,30 @@ function findAppPath(pathname, prefix) {
   return pathname.startsWith(`${prefix}/`) ? pathname.slice(prefix.length) : null;
 }
 
+// The page moves from under its key only to an address that asks for the code, since a phone
+// arrives there signed in or meets the gate.
+/**
+ * @param {string} prefix
+ * @param {any} env
+ */
+const canMoveToPageHost = (prefix, env) => prefix !== "" && !!env.PAGE_HOST && !!env.ACCESS_CODE;
+
+// A browser keeps a 301 for good unless told not to, and a phone that later signs in under the key
+// has to reach the page there.
+/**
+ * @param {URL} url
+ * @param {string} appPath
+ * @param {any} env
+ */
+const redirectToPageHost = (url, appPath, env) =>
+  new Response(null, {
+    status: 301,
+    headers: {
+      location: `https://${env.PAGE_HOST}${appPath}${url.search}`,
+      "cache-control": "no-store",
+    },
+  });
+
 const isStorePath = (appPath) =>
   appPath === "/watch" || appPath.startsWith("/store/") || appPath.startsWith("/push/");
 
@@ -204,8 +231,16 @@ const GATE_PATH = "/gate.html";
  * @param {(env: any) => Promise<boolean>} app.isStoreAnswering
  * @param {Record<string, (url: URL, env: any) => Response | Promise<Response>>} [app.reads] more GET
  *   paths, each handed the Worker's bindings, so it can read the store
+ * @param {boolean} [app.isMovingToPageHost] whether the page under the key sends its phones to the
+ *   PAGE_HOST address: one signed in with a handoff from MOVE_PATH, and one that isn't with a 301
  */
-export function createAppWorker({ pageFiles, forwardToStore, isStoreAnswering, reads = {} }) {
+export function createAppWorker({
+  pageFiles,
+  forwardToStore,
+  isStoreAnswering,
+  reads = {},
+  isMovingToPageHost = false,
+}) {
   const releaseCommit = readReleaseCommit(pageFiles);
   const releaseFolder = releaseCommit && nameReleaseFolder(releaseCommit);
   const servePageFile = createPageServer(pageFiles, releaseFolder);
@@ -213,12 +248,16 @@ export function createAppWorker({ pageFiles, forwardToStore, isStoreAnswering, r
   const isIndexPath = (appPath) => findPageFile(appPath, releaseFolder).path === "index.html";
   const serveHealth = createHealthServer({ isStoreAnswering, release: releaseCommit });
   const isDataPath = (appPath) => isStorePath(appPath) || Object.hasOwn(reads, appPath);
+  const isMoving = (prefix, env) => isMovingToPageHost && canMoveToPageHost(prefix, env);
 
-  // Until the phone sends the access code, the page's address shows the gate instead, and
-  // nothing from the season answers. The page's other files are the repo's own, and public.
-  async function serveLocked(request, appPath) {
+  // Until the phone sends the access code, the page's address shows the gate instead, or, for a
+  // phone that never sent one under a key that's moving, the same page at PAGE_HOST, whose gate
+  // asks there. Nothing from the season answers. The page's other files are the repo's own, and
+  // public.
+  async function serveLocked(request, env, { url, appPath, prefix, access }) {
     if (isDataPath(appPath)) return respondAccessRequired();
     if (!isIndexPath(appPath)) return servePageFile(request, appPath);
+    if (access === "missing" && isMoving(prefix, env)) return redirectToPageHost(url, appPath, env);
     const gate = await servePageFile(request, GATE_PATH);
     gate.headers.set("cache-control", "no-store");
     return gate;
@@ -243,7 +282,9 @@ export function createAppWorker({ pageFiles, forwardToStore, isStoreAnswering, r
       if (appPath === "") return redirectToFolder(url);
       if (appPath === ACCESS_PATH) return serveAccess(request, env, prefix);
       if (appPath === HANDOFF_PATH) return serveHandoff(request, env, prefix);
-      if ((await readAccess(request, env)) !== "open") return serveLocked(request, appPath);
+      if (appPath === MOVE_PATH && isMoving(prefix, env)) return serveMoveHandoff(request, env);
+      const access = await readAccess(request, env);
+      if (access !== "open") return serveLocked(request, env, { url, appPath, prefix, access });
       if (isStorePath(appPath)) return forwardToStore(request, env, appPath);
       if (request.method === "GET" && Object.hasOwn(reads, appPath))
         return reads[appPath](url, env);

@@ -121,12 +121,13 @@ const PAGE_FILES = {
 
 const answerOk = () => new Response("data");
 
-function createLockedWorker() {
+function createLockedWorker({ isMovingToPageHost = false } = {}) {
   return createAppWorker({
     pageFiles: PAGE_FILES,
     forwardToStore: answerOk,
     isStoreAnswering: storeAnswers,
     reads: { "/box-score": answerOk },
+    isMovingToPageHost,
   });
 }
 
@@ -134,15 +135,25 @@ const LOCKED_ENV = { APP_KEY: "key", ACCESS_CODE: "fast break", ACCESS_SIGNING_K
 
 /**
  * @param {string} path under the page's key
- * @param {{ method?: string, cookie?: string, body?: unknown, env?: object, origin?: string }} [options]
+ * @param {{ method?: string, cookie?: string, body?: unknown, env?: object, origin?: string, isMovingToPageHost?: boolean }} [options]
  */
 function requestLocked(
   path,
-  { method = "GET", cookie, body, env = LOCKED_ENV, origin = "https://worker.example" } = {},
+  {
+    method = "GET",
+    cookie,
+    body,
+    env = LOCKED_ENV,
+    origin = "https://worker.example",
+    isMovingToPageHost = false,
+  } = {},
 ) {
   const headers = { "cf-connecting-ip": "203.0.113.7", ...(cookie && { cookie }) };
   const init = { method, headers, ...(body !== undefined && { body: JSON.stringify(body) }) };
-  return createLockedWorker().fetch(new Request(`${origin}/key${path}`, init), env);
+  return createLockedWorker({ isMovingToPageHost }).fetch(
+    new Request(`${origin}/key${path}`, init),
+    env,
+  );
 }
 
 const readCookie = (response) => response.headers.get("set-cookie")?.split(";")[0] ?? null;
@@ -465,6 +476,91 @@ test("with an address of its own, the page still answers under its key, and only
   );
   assert.equal(keyless.status, 404);
   assert.equal((await requestAtPageHost("/key/", { cookie })).status, 404);
+});
+
+/**
+ * @param {string} path under the page's key, on a Worker moving the page to its own address
+ * @param {{ method?: string, cookie?: string, env?: object }} [options]
+ */
+const requestMoving = (path, { env = PAGE_HOST_ENV, ...options } = {}) =>
+  requestLocked(path, { ...options, env, isMovingToPageHost: true });
+
+test("a key that's moving gives a phone signed in under it a handoff at the page's own address, which signs it in there", async () => {
+  const cookie = await signIn(PAGE_HOST_ENV);
+  const handoff = await requestMoving("/access/move", { method: "POST", cookie });
+  assert.equal(handoff.status, 200);
+  const address = new URL((await handoff.json()).address);
+  assert.equal(`${address.origin}${address.pathname}`, `https://${PAGE_HOST}/access/handoff`);
+  address.searchParams.set("app-theme", "dark");
+
+  const opened = await openHandoff(address.href, PAGE_HOST_ENV);
+  assert.equal(opened.status, 302);
+  assert.equal(opened.headers.get("location"), `https://${PAGE_HOST}/?app-theme=dark`);
+  assert.equal(opened.headers.get("set-cookie").split("; ")[1], "Path=/");
+  const page = await requestAtPageHost("/", { cookie: readCookie(opened) });
+  assert.equal(await page.text(), "the app");
+});
+
+// Where the key isn't moving, the move's path is no route, and a POST to it meets the page's
+// files, which answer only a GET.
+/** @param {Response} response */
+async function assertNoMoveRoute(response) {
+  assert.equal(response.status, 405);
+  assert.equal(await response.text(), "GET only.\n");
+}
+
+test("a move's handoff is made only by a POST from a phone signed in, and only while the key is moving to an address that asks for a code", async () => {
+  const cookie = await signIn(PAGE_HOST_ENV);
+  assert.equal((await requestMoving("/access/move", { method: "POST" })).status, 401);
+  const read = await requestMoving("/access/move", { cookie });
+  assert.equal(read.status, 405);
+  assert.equal((await read.json()).error.message, "POST only.");
+  await assertNoMoveRoute(
+    await requestLocked("/access/move", { method: "POST", cookie, env: PAGE_HOST_ENV }),
+  );
+  await assertNoMoveRoute(
+    await requestMoving("/access/move", { method: "POST", cookie, env: LOCKED_ENV }),
+  );
+  await assertNoMoveRoute(
+    await requestMoving("/access/move", { method: "POST", env: { APP_KEY: "key", PAGE_HOST } }),
+  );
+  await assertNoMoveRoute(
+    await createLockedWorker({ isMovingToPageHost: true }).fetch(
+      new Request(`https://${PAGE_HOST}/access/move`, { method: "POST", headers: { cookie } }),
+      PAGE_HOST_ENV,
+    ),
+  );
+});
+
+test("a key that's moving sends a phone that never signed in to the same page at the page's own address", async () => {
+  const moved = await requestMoving("/?theme=dark");
+  assert.equal(moved.status, 301);
+  assert.equal(moved.headers.get("location"), `https://${PAGE_HOST}/?theme=dark`);
+  assert.equal(moved.headers.get("cache-control"), "no-store");
+  const index = await requestMoving("/index.html");
+  assert.equal(index.headers.get("location"), `https://${PAGE_HOST}/index.html`);
+});
+
+test("a key that's moving keeps the page for a phone signed in, the gate for one whose code changed, and its data and files where they were", async () => {
+  const cookie = await signIn(PAGE_HOST_ENV);
+  assert.equal(await (await requestMoving("/", { cookie })).text(), "the app");
+  const changed = await requestMoving("/", {
+    cookie,
+    env: { ...PAGE_HOST_ENV, ACCESS_CODE: "LAYUP" },
+  });
+  assert.equal(await changed.text(), "the gate");
+  for (const path of DATA_PATHS) assert.equal((await requestMoving(path)).status, 401, path);
+  assert.equal(await (await requestMoving("/styles.css")).text(), "body {}");
+});
+
+test("a page with no address to move to, or a key that isn't moving, shows the gate under the key as before", async () => {
+  assert.equal(await (await requestMoving("/", { env: LOCKED_ENV })).text(), "the gate");
+  assert.equal(await (await requestLocked("/", { env: PAGE_HOST_ENV })).text(), "the gate");
+  const atPageHost = await createLockedWorker({ isMovingToPageHost: true }).fetch(
+    new Request(`https://${PAGE_HOST}/`),
+    PAGE_HOST_ENV,
+  );
+  assert.equal(await atPageHost.text(), "the gate");
 });
 
 const AGENTS = {
