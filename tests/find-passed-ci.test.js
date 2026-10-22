@@ -2,8 +2,10 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   findPassedRun,
+  findReviewedRun,
   findTestedRun,
   namePassedArtifact,
+  nameReviewedArtifact,
   nameTestedArtifact,
 } from "../worker/find-passed-ci.mjs";
 
@@ -137,6 +139,42 @@ test("a run whose tests passed but whose gate didn't isn't found for main's depl
     fetchImpl: github.fetchImpl,
   });
   assert.equal(runId, null);
+});
+
+test("tests on a draft or a ready pull request with review owed don't satisfy review or deployment", async () => {
+  for (const conclusion of ["success", "failure"]) {
+    const run = { ...PASSED_RUN, conclusion };
+    const github = createFakeGitHub([buildArtifact(7)], [run], nameTestedArtifact(TREE));
+    const options = { tree: TREE, repository: REPOSITORY, fetchImpl: github.fetchImpl };
+    assert.equal(await findTestedRun(options), 7);
+    assert.equal(await findReviewedRun(options), null);
+    assert.equal(await findPassedRun(options), null);
+  }
+});
+
+test("a review satisfied on exactly this code is reusable even while the gate holds it", async () => {
+  const run = { ...PASSED_RUN, conclusion: "failure" };
+  const github = createFakeGitHub([buildArtifact(7)], [run], nameReviewedArtifact(TREE));
+  const options = { tree: TREE, repository: REPOSITORY, fetchImpl: github.fetchImpl };
+  assert.equal(await findReviewedRun(options), 7);
+  assert.equal(await findTestedRun(options), null);
+  assert.equal(await findPassedRun(options), null);
+});
+
+test("review reuse refuses forks, other workflows and events, and expired records", async () => {
+  const runs = [
+    { ...PASSED_RUN, id: 1, head_repository: FORK },
+    { ...PASSED_RUN, id: 2, path: ".github/workflows/deploy.yml" },
+    { ...PASSED_RUN, id: 3, event: "push" },
+    { ...PASSED_RUN, id: 4 },
+  ];
+  const artifacts = [1, 2, 3].map((id) => buildArtifact(id)).concat(buildArtifact(4, true));
+  const github = createFakeGitHub(artifacts, runs, nameReviewedArtifact(TREE));
+  assert.equal(
+    await findReviewedRun({ tree: TREE, repository: REPOSITORY, fetchImpl: github.fetchImpl }),
+    null,
+  );
+  assert.ok(!github.paths.some((path) => path.endsWith("/actions/runs/4")));
 });
 
 test("a refusal from GitHub names its status, and sends the token", async () => {

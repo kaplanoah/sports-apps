@@ -201,7 +201,7 @@ test("burn-in runs only when a pull request has a browser spec to repeat, and ch
   );
   assert.match(burnIn, /SPECS: \$\{\{ needs\.scope\.outputs\.specs \}\}/);
   assert.match(
-    readJob("check"),
+    readJob("tested"),
     /\(needs\.scope\.outputs\.specs == '' \|\| needs\.burn-in\.result == 'success'\)/,
   );
 });
@@ -224,7 +224,7 @@ test("the browser and WebKit jobs run only the apps the change reaches, and chec
     assert.match(text, /npm run test:browser -- .*"\$\{projects\[@\]\}"/, job);
   }
   assert.match(
-    readJob("check"),
+    readJob("tested"),
     /\(needs\.scope\.outputs\.apps == '' \|\| \(needs\.browser\.result == 'success' &&\n\s+needs\.webkit\.result == 'success'\)\)/,
   );
 });
@@ -410,12 +410,12 @@ test("a label change runs only the gate again once a run passed every test on th
     /SEARCH: \$\{\{ github\.event_name == 'pull_request' && '--tested' \|\| '' \}\}/,
   );
   assert.match(readJob("scope"), /needs: passed\n.*!needs\.passed\.outputs\.run/);
-  const check = readJob("check");
+  const tested = readJob("tested");
   assert.match(
-    check,
-    /github\.event_name == 'pull_request' && steps\.tested\.outputs\.tested == 'true' &&\n\s+steps\.tested\.outputs\.reviewed == 'true'\n.*\n\s+name: ci-tested-/,
+    tested,
+    /if: github\.event_name == 'pull_request' && steps\.tests\.outputs\.tested == 'true'\n.*\n\s+name: ci-tested-/,
   );
-  assert.ok(check.indexOf("name: ci-tested-") < check.indexOf("Require every job to pass"));
+  assert.match(readJob("check"), /TESTED: \$\{\{ needs\.tested\.outputs\.tested == 'true' \}\}/);
 });
 
 // A run that wasn't asked to review, like a push's or a draft's, leaves a review owed on its
@@ -424,7 +424,11 @@ test("a label change runs only the gate again once a run passed every test on th
 test("a run that leaves a review owed never records its code as reviewed", () => {
   assert.match(
     readJob("check"),
-    /REVIEWED: >-\n\s+\$\{\{ needs\.passed\.outputs\.run != '' \|\| needs\.review-plan\.outputs\.owed == 'false' \}\}/,
+    /REVIEWED: >-\n\s+\$\{\{ needs\.passed\.outputs\.reviewed-run != '' \|\|\n\s+\(needs\.review-plan\.outputs\.owed == 'false' && needs\.review\.result == 'success'\) \}\}/,
+  );
+  assert.match(
+    readJob("check"),
+    /github\.event_name == 'pull_request' && steps\.tested\.outputs\.reviewed == 'true'\n.*\n\s+name: ci-reviewed-/,
   );
   assert.match(readJob("review-plan"), /\n {6}owed: \$\{\{ steps\.decision\.outputs\.owed \}\}\n/);
 });
@@ -465,7 +469,7 @@ function decideReview(event) {
       EVENT: "pull_request",
       ACTION: "opened",
       LABEL: "",
-      PASSED_RUN: "",
+      REVIEWED_RUN: "",
       IS_DRAFT: "false",
       AUTHOR: "someone",
       CLAUDE_CODE_OAUTH_TOKEN: "token",
@@ -522,7 +526,7 @@ test("a pull request is reviewed when it's opened ready, marked ready, or labele
 // Only a draft still owes the review it skips; the rest never run one or already passed it.
 test("every reason not to review holds when the review is asked for", () => {
   for (const [event, reason, owed] of /** @type {[Record<string, string>, RegExp, string][]} */ ([
-    [{ PASSED_RUN: "7" }, /already passed its review/, "false"],
+    [{ REVIEWED_RUN: "7" }, /already passed its review/, "false"],
     [{ IS_DRAFT: "true" }, /a draft is reviewed once it's ready/, "true"],
     [{ AUTHOR: "dependabot[bot]" }, /Dependabot/, "false"],
     [{ CLAUDE_CODE_OAUTH_TOKEN: "" }, /no CLAUDE_CODE_OAUTH_TOKEN or ANTHROPIC_API_KEY/, "false"],
@@ -533,16 +537,57 @@ test("every reason not to review holds when the review is asked for", () => {
     assert.equal(asked.labeled, "true", "a label that asks comes off however the run decides");
     assert.match(asked.notice, reason);
   }
-  assert.match(readJob("review-plan"), /PASSED_RUN: \$\{\{ needs\.passed\.outputs\.run \}\}/);
+  assert.match(
+    readJob("review-plan"),
+    /REVIEWED_RUN: \$\{\{ needs\.passed\.outputs\.reviewed-run \}\}/,
+  );
 });
 
 // The owner's phone-ok comes after the review passed on the same code, so check, which holds a
 // ready pull request while a review is owed, lets it through.
 test("a label on code a run already passed the review on owes no review", () => {
-  const phoneOk = decideReview({ ACTION: "labeled", LABEL: "phone-ok", PASSED_RUN: "7" });
+  const phoneOk = decideReview({ ACTION: "labeled", LABEL: "phone-ok", REVIEWED_RUN: "7" });
   assert.equal(phoneOk.review, "false");
   assert.equal(phoneOk.owed, "false");
   assert.match(phoneOk.notice, /already passed its review/);
+});
+
+test("reusing tests on a draft never waives the review when it becomes ready or is requested", () => {
+  const plan = readJob("review-plan");
+  assert.doesNotMatch(plan, /needs\.passed\.outputs\.run\b/);
+  assert.match(readJob("passed"), /reviewed-run: \$\{\{ steps\.reviewed\.outputs\.run \}\}/);
+  assert.match(readJob("passed"), /run: node worker\/find-passed-ci\.mjs --reviewed/);
+  for (const label of ["beta", "beta-wait", "phone-ok"]) {
+    for (const action of ["labeled", "unlabeled"]) {
+      const draft = decideReview({ ACTION: action, LABEL: label, IS_DRAFT: "true" });
+      assert.equal(draft.review, "false");
+      assert.equal(draft.owed, "true");
+      const ready = decideReview({ ACTION: action, LABEL: label });
+      assert.equal(ready.owed, "true");
+    }
+  }
+  for (const event of [{ ACTION: "ready_for_review" }, { ACTION: "labeled", LABEL: "review" }]) {
+    const decision = decideReview({ ...event });
+    assert.equal(decision.review, "true");
+    assert.equal(decision.owed, "false");
+  }
+});
+
+test("the tests-only record depends only on test jobs, even when review fails or is owed", () => {
+  const tested = readJob("tested");
+  assert.deepEqual(readNeeds("tested"), [
+    "passed",
+    "checks",
+    "scope",
+    "browser",
+    "burn-in",
+    "webkit",
+  ]);
+  assert.doesNotMatch(tested, /review|gate/);
+  for (const job of ["checks", "scope", "browser", "webkit", "burn-in"])
+    assert.ok(tested.includes(`needs.${job}.result`), job);
+  assert.match(tested, /name: ci-tested-\$\{\{ steps\.code\.outputs\.tree \}\}/);
+  assert.match(tested, /tested: \$\{\{ steps\.tests\.outputs\.tested \}\}/);
 });
 
 // Each ask is a fresh label, which GitHub sends only when the label isn't on the pull request, so
