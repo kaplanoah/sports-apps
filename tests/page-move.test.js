@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { createContext, runInContext } from "node:vm";
 import { listTrackedFiles, readRepoFile } from "./repo-files.js";
+import { listApps } from "../worker/apps.mjs";
 
 const MINUTE_MS = 60 * 1000;
 const NOW = Date.parse("2026-10-22T16:00:00Z");
@@ -334,12 +335,12 @@ test("a move from the Home Screen app carries notifications and where it left fr
   assert.equal(carried.fromApp, true);
 });
 
-test("MLB moves to its own address, page and Worker alike, and the WNBA doesn't yet", () => {
+test("every app moves to its own address, page and Worker alike", () => {
   const readApp = (app, file) =>
     readFileSync(new URL(`../apps/${app}/${file}`, import.meta.url), "utf8");
   const meta = '<meta name="moving-to-page-host" content="true"';
-  assert.ok(readApp("mlb", "page/index.html").includes(meta));
-  assert.match(readApp("mlb", "worker/src/index.js"), /isMovingToPageHost: true/);
-  assert.ok(!readApp("wnba", "page/index.html").includes("moving-to-page-host"));
-  assert.doesNotMatch(readApp("wnba", "worker/src/index.js"), /isMovingToPageHost/);
+  for (const app of listApps()) {
+    assert.ok(readApp(app, "page/index.html").includes(meta), app);
+    assert.match(readApp(app, "worker/src/index.js"), /isMovingToPageHost: true/, app);
+  }
 });
