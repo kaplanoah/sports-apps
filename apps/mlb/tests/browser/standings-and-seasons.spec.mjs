@@ -73,6 +73,23 @@ test("standings open on each league's playoff field, and every table lines up", 
   expect(new Set(await readHeights("#standingsWrap .div-title")).size).toBe(1);
 });
 
+test("every club's rank slot in the standings is as tall as a rank tag, so a ranked club's row is as tall as an unranked one's", async ({
+  page,
+}) => {
+  await openApp(page);
+  await openSeasonPart(page, "Standings");
+  await expect(page.locator("#standingsWrap table.st .rank-tag").first()).toBeVisible();
+  const readHeights = (selector) =>
+    page
+      .locator(selector)
+      .evaluateAll((elements) => elements.map((element) => element.getBoundingClientRect().height));
+  const tagHeights = new Set(await readHeights("#standingsWrap table.st .rank-tag"));
+  const emptySlots = "#standingsWrap table.st .rank-slot:empty";
+  await expect(page.locator(emptySlots).first()).toBeAttached();
+  expect(tagHeights.size).toBe(1);
+  expect(new Set(await readHeights(emptySlots))).toEqual(tagHeights);
+});
+
 test("on a wide screen, every column of the standings shows inside its table", async ({ page }) => {
   await page.setViewportSize(LAPTOP);
   await openApp(page);

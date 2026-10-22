@@ -1,6 +1,7 @@
 import { test, expect, openLockedApp, readColor } from "./harness.mjs";
 import { listLowContrastText } from "../../../../tests/browser/contrast.mjs";
 import { listTextOffRoles, readRole } from "../../../../tests/browser/type-roles.mjs";
+import { listChipsOffCenter } from "../../../../tests/browser/chip-centering.mjs";
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
 import { findSeasonTab } from "../../../../tests/browser/season-tab.mjs";
 import { readCapitals } from "../../../../tests/browser/capitals.mjs";
@@ -24,6 +25,7 @@ test("the gate's text keeps to its type roles", async ({ page }) => {
   await openLockedApp(page, { accessCode: "FASTBREAK" });
   await expect(findGate(page)).toBeVisible();
   expect(await listTextOffRoles(page)).toEqual([]);
+  expect(await listChipsOffCenter(page)).toEqual([]);
   expect(await listLowContrastText(page)).toEqual([]);
   expect(await listStrayPeriods(page)).toEqual([]);
 });

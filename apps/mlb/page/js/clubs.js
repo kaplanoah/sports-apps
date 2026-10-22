@@ -54,7 +54,7 @@ const STATUS_CHIPS = {
 /** @param {"champion" | "alive" | "out"} status */
 export function renderStatusChip(status) {
   const chip = STATUS_CHIPS[status];
-  return html`<span class="status-chip ${chip.className}">${chip.label}</span>`;
+  return html`<span class="chip filled status-chip ${chip.className}">${chip.label}</span>`;
 }
 
 const measureLightness = (hex) => {
@@ -127,5 +127,5 @@ export function listRankedOrder() {
 export function renderRankTag(id, solid) {
   const index = listRankedOrder().indexOf(id);
   if (index === -1) return html``;
-  return html`<span class="rank-slot"><span class="rank-tag ${solid ? "solid" : ""}">#${index + 1}</span></span>`;
+  return html`<span class="rank-slot"><span class="chip numbers ${solid ? "filled" : "outlined"} rank-tag">#${index + 1}</span></span>`;
 }

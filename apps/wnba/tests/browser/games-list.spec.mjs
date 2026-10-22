@@ -78,6 +78,12 @@ test("a team stays put as Bonus comes and goes, level with the score", async ({ 
   const before = await readTeamCenters();
   await goLive(true);
   await expect(row.locator(".bonus")).toHaveText("Bonus");
+  const [rowBox, bonusBox] = await Promise.all([
+    row.boundingBox(),
+    row.locator(".bonus").boundingBox(),
+  ]);
+  expect(bonusBox?.height).toBe(15);
+  expect((bonusBox?.y ?? 0) - (rowBox?.y ?? 0)).toBe(56);
   expect(await readTeamCenters()).toEqual(before);
   await goLive(false);
   await expect(row.locator(".bonus")).toHaveCount(0);

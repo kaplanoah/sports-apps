@@ -285,7 +285,7 @@
   --game-card-won: var(--result);
   --game-card-team-font: var(--team-name);
   --game-row-height: 90px;
-  --game-side-offset: 9px;
+  --game-side-offset: 9.25px;
   --game-label-offset: -32px;
   --game-headline-offset: 0px;
   --game-status-offset: 32px;
@@ -697,9 +697,11 @@ header.top h1 .title-letter:nth-child(3) {
 .game-side.lost .club {
   color: var(--ink-dim);
 }
+/* Bonus's line, with --game-side-offset, keeps each team level with the score and Bonus on a whole
+   pixel of its row. */
 .game-extra {
-  min-height: 14px;
-  margin-top: 4px;
+  min-height: 15px;
+  margin-top: 3.5px;
 }
 .game-middle {
   min-width: 76px;
@@ -809,18 +811,11 @@ header.top h1 .title-letter:nth-child(3) {
   font-size: var(--type-stat-large-size);
   font-weight: var(--type-stat-large-weight);
 }
-/* Bonus is happening now, so it's outlined in orange, like foul trouble. */
-.bonus {
-  padding: 0 5px;
-  border: 1px solid currentColor;
-  border-radius: var(--radius-chip);
-  color: var(--now);
-  font-family: var(--display);
-  font-size: var(--type-label-size);
-  font-weight: var(--type-label-weight);
-  line-height: 12px;
-  text-transform: uppercase;
-  letter-spacing: var(--type-label-tracking);
+/* Each marks what's happening now to a team or a player, so it's outlined in orange. */
+.bonus,
+.foul-chip {
+  --chip-ink: var(--now);
+  --chip-line: var(--now);
 }
 
 /* The game sheet: the two teams across the score in its band, then the game's parts, each under a
@@ -1289,15 +1284,10 @@ table.players th[scope="row"] {
   font-weight: calc(var(--type-detail-weight) + 100);
   text-align: left;
 }
-/* Barlow sits low beside Barlow Condensed's numbers, so a player's name rises a pixel, and a chip
-   beside it stays where it was. */
+/* Barlow sits low beside Barlow Condensed's numbers, so a player's name rises a pixel. */
 table.players th[scope="row"] {
   position: relative;
   top: -1px;
-}
-table.players th[scope="row"] .foul-chip {
-  position: relative;
-  top: 1px;
 }
 table.players td.quiet-stat {
   font-weight: calc(var(--type-stat-weight) - 100);
@@ -1311,25 +1301,7 @@ table.players td.quiet-stat {
   color: var(--ink-dim);
 }
 .foul-chip {
-  display: inline-block;
   margin-left: 6px;
-  padding: 0 5px;
-  border: 1px solid currentColor;
-  border-radius: var(--radius-chip);
-  font-family: var(--display);
-  font-size: var(--type-label-size);
-  font-weight: var(--type-label-weight);
-  letter-spacing: var(--type-label-tracking);
-  text-transform: uppercase;
-  vertical-align: 1px;
-  white-space: nowrap;
-  color: var(--now);
-}
-/* Capitals sit low in Barlow's line, so a chip's words rise half a pixel to center between its
-   borders. */
-.foul-chip-words {
-  position: relative;
-  top: -0.5px;
 }
 
 /* A team's Roster section scrolls both ways on its own, stopping at its edges without springing
@@ -2060,7 +2032,6 @@ table.standings tr.below td {
 .playoff-out {
   color: var(--ink-dim);
 }
-/* The chip centers on the name, rather than sharing its baseline. */
 .team-cell {
   display: inline-flex;
   align-items: center;
@@ -2072,20 +2043,18 @@ table.standings td.team .club {
   font-size: var(--type-team-size);
   font-weight: var(--type-team-weight);
 }
-/* Barlow's line runs well above its capitals, so the letter is trimmed to its capital and centers
-   by what's drawn. */
+/* The dot, E/W, and a seed note each move down to where a phone shows them centered on the name,
+   set by eye. */
+table.standings td.team .dot {
+  translate: 0 0.75px;
+}
 .conference-tag {
-  padding: 3px 4px;
-  border: 1px solid currentColor;
-  border-radius: var(--radius-chip);
-  font-family: var(--display);
-  font-size: var(--type-caption-size);
-  font-weight: calc(var(--type-caption-weight) + 200);
-  line-height: var(--leading);
-  text-box: trim-both cap alphabetic;
-  color: var(--ink-mid);
+  --chip-ink: var(--ink-mid);
+  --chip-line: var(--ink-mid);
+  translate: 0 0.7px;
 }
 .seed-note {
+  translate: 0 1.15px;
   font-family: var(--display);
   font-size: var(--type-caption-size);
   font-weight: calc(var(--type-caption-weight) + 200);
@@ -2154,20 +2123,20 @@ table.standings tr.playoff-line + tr td {
   height: 9.5px;
 }
 .status-chip.alive {
-  background: color-mix(in srgb, var(--ink) 15%, transparent);
-  color: var(--ink-mid);
+  --chip-fill: color-mix(in srgb, var(--ink) 15%, transparent);
+  --chip-ink: var(--ink-mid);
 }
 .status-chip.champion {
-  background: var(--result);
-  color: var(--result-ink);
+  --chip-fill: var(--result);
+  --chip-ink: var(--result-ink);
 }
 .status-chip.out {
-  background: color-mix(in srgb, var(--ink-dim) 16%, transparent);
-  color: var(--ink-mid);
+  --chip-fill: color-mix(in srgb, var(--ink-dim) 16%, transparent);
+  --chip-ink: var(--ink-mid);
 }
 .status-chip.missed {
-  box-shadow: inset 0 0 0 1px var(--divider);
-  color: var(--ink-dim);
+  --chip-line: var(--divider);
+  --chip-ink: var(--ink-dim);
 }
 /* Each playoff game takes the same --game-row-height, whatever its row holds, and the numbers
    under them start --field-space-above the games. Over them, the team, with its record, and the
@@ -2453,8 +2422,8 @@ table.roster .player-open {
 /* A player who is out has a box as her sheet's first part, outlined like the team sheet's game
    cards and washed in the chip's orange, --out-box-space from the band, the sheet's sides, and the
    part under it, the sheet's sides being --sheet-side from its text. Her Out chip leads the box's
-   first line, its words a pixel up, so they sit centered on the chip, then RotoWire's sentence 6px
-   under it and where it's from 4px under that, closer, so it reads as the sentence's credit. Its
+   first line, on the same baseline as why she is out, then RotoWire's sentence 6px under it and
+   where it's from 4px under that, closer, so it reads as the sentence's credit. Its
    reason and sentence set their own sizes, matched by eye. */
 .out-box {
   --out-box-space: 11.5px;
@@ -2474,10 +2443,6 @@ table.roster .player-open {
 }
 .out-line .foul-chip {
   margin: 0 7px 0 0;
-}
-.out-words {
-  position: relative;
-  top: -1px;
 }
 .out-dash {
   margin-inline: 0.3em;

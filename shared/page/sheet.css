@@ -26,7 +26,8 @@
  *
  * Its content falls in titled parts, as sheet-part.js builds them, each with an optional note
  * across from its title, which takes the app's --sheet-part-head color. A short status beside a
- * title, like how far a team got, is a .status-chip, whose kinds the app colors.
+ * title, like how far a team got, is a .status-chip, a chip as chip.css draws it, whose kinds the
+ * app colors.
  *
  * It also lays out a tape, as tape.js builds it: rows of one measure each, the away side's number
  * and bar reaching left of the measure's name and the home side's right, the leader's bar in
@@ -197,20 +198,6 @@
   text-align: right;
   color: var(--ink-dim);
 }
-.status-chip {
-  display: inline-flex;
-  align-items: center;
-  height: 19px;
-  padding: 0 7px;
-  border-radius: var(--radius-chip);
-  font-size: var(--type-label-size);
-  font-weight: var(--type-label-weight);
-  line-height: var(--leading);
-  text-transform: uppercase;
-  letter-spacing: var(--type-label-tracking);
-  white-space: nowrap;
-}
-
 .tape {
   display: grid;
   gap: 10px;

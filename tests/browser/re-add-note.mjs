@@ -10,6 +10,7 @@ import { keepInOtherTab } from "./other-tab.mjs";
 import { listStrayPeriods } from "./stray-periods.mjs";
 import { listTapsOffButtons } from "./tap-states.mjs";
 import { listTextOffRoles } from "./type-roles.mjs";
+import { listChipsOffCenter } from "./chip-centering.mjs";
 import { passTime, setHidden } from "./visibility.mjs";
 
 const markOnHomeScreen = () => {
@@ -112,6 +113,7 @@ const readNoteIcons = (page) =>
  */
 async function checkNoteReads(page) {
   expect(await listTextOffRoles(page)).toEqual([]);
+  expect(await listChipsOffCenter(page)).toEqual([]);
   expect(await listLowContrastText(page)).toEqual([]);
   expect(await listStrayPeriods(page)).toEqual([]);
   expect(await listTapsOffButtons(page)).toEqual([]);

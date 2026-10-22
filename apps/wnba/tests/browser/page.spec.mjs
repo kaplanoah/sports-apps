@@ -8,6 +8,7 @@ import {
 } from "../../../../tests/browser/tap-states.mjs";
 import { listLowContrastText } from "../../../../tests/browser/contrast.mjs";
 import { listTextOffRoles, readRole } from "../../../../tests/browser/type-roles.mjs";
+import { listChipsOffCenter } from "../../../../tests/browser/chip-centering.mjs";
 import { listNeverShownWords } from "../../../../tests/browser/never-shown-words.mjs";
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
 import { LEAGUE_WORDS } from "../../page/js/league-words.js";
@@ -84,30 +85,35 @@ test("every font the page's views draw with is preloaded", async ({ page }) => {
 test("every piece of text keeps to its type role, in every view", async ({ page }) => {
   await openApp(page);
   expect(await listTextOffRoles(page)).toEqual([]);
+  expect(await listChipsOffCenter(page)).toEqual([]);
   expect(await listLowContrastText(page)).toEqual([]);
   expect(await listStrayPeriods(page)).toEqual([]);
   expect(await listNeverShownWords(page, LEAGUE_WORDS.neverShown)).toEqual([]);
   await page.getByRole("tab", { name: "Games" }).click();
   await expect(page.locator("#seasonGames .game-day.is-today .game-row").first()).toBeVisible();
   expect(await listTextOffRoles(page)).toEqual([]);
+  expect(await listChipsOffCenter(page)).toEqual([]);
   expect(await listLowContrastText(page)).toEqual([]);
   expect(await listStrayPeriods(page)).toEqual([]);
   expect(await listNeverShownWords(page, LEAGUE_WORDS.neverShown)).toEqual([]);
   await page.locator("#seasonGames .day-list").evaluate((list) => list.scrollTo({ top: 0 }));
   await expect(page.locator("#seasonGames .scoreboard").first()).toBeVisible();
   expect(await listTextOffRoles(page)).toEqual([]);
+  expect(await listChipsOffCenter(page)).toEqual([]);
   expect(await listLowContrastText(page)).toEqual([]);
   expect(await listStrayPeriods(page)).toEqual([]);
   expect(await listNeverShownWords(page, LEAGUE_WORDS.neverShown)).toEqual([]);
   await openSeasonPart(page, "Standings");
   await expect(page.locator("#standings-league tr").nth(2)).toBeVisible();
   expect(await listTextOffRoles(page)).toEqual([]);
+  expect(await listChipsOffCenter(page)).toEqual([]);
   expect(await listLowContrastText(page)).toEqual([]);
   expect(await listStrayPeriods(page)).toEqual([]);
   expect(await listNeverShownWords(page, LEAGUE_WORDS.neverShown)).toEqual([]);
   await page.getByRole("button", { name: "Team details: Minnesota Lynx" }).first().click();
   await expect(page.locator("#teamSheet table.players")).toBeVisible();
   expect(await listTextOffRoles(page)).toEqual([]);
+  expect(await listChipsOffCenter(page)).toEqual([]);
   expect(await listLowContrastText(page)).toEqual([]);
   expect(await listStrayPeriods(page)).toEqual([]);
   expect(await listNeverShownWords(page, LEAGUE_WORDS.neverShown)).toEqual([]);
@@ -116,6 +122,7 @@ test("every piece of text keeps to its type role, in every view", async ({ page 
   await page.getByRole("button", { name: "Settings", exact: true }).click();
   await expect(page.locator(SETTINGS)).toBeVisible();
   expect(await listTextOffRoles(page)).toEqual([]);
+  expect(await listChipsOffCenter(page)).toEqual([]);
   expect(await listLowContrastText(page)).toEqual([]);
   expect(await listStrayPeriods(page)).toEqual([]);
   expect(await listNeverShownWords(page, LEAGUE_WORDS.neverShown)).toEqual([]);
@@ -216,6 +223,7 @@ test.describe("on a phone, the text", () => {
     await openApp(page, { updatesBox: "shown" });
     await expect(page.locator("#updates .what").first()).toBeVisible();
     expect(await listTextOffRoles(page)).toEqual([]);
+    expect(await listChipsOffCenter(page)).toEqual([]);
     expect(await listLowContrastText(page)).toEqual([]);
     expect(await listStrayPeriods(page)).toEqual([]);
     expect(await listNeverShownWords(page, LEAGUE_WORDS.neverShown)).toEqual([]);
@@ -223,12 +231,14 @@ test.describe("on a phone, the text", () => {
     await page.getByRole("tab", { name: "Games" }).click();
     await expect(page.locator("#seasonGames .game-day.is-today .game-row").first()).toBeVisible();
     expect(await listTextOffRoles(page)).toEqual([]);
+    expect(await listChipsOffCenter(page)).toEqual([]);
     expect(await listLowContrastText(page)).toEqual([]);
     expect(await listStrayPeriods(page)).toEqual([]);
     expect(await listNeverShownWords(page, LEAGUE_WORDS.neverShown)).toEqual([]);
     await page.locator("#seasonGames .day-list").evaluate((list) => list.scrollTo({ top: 0 }));
     await expect(page.locator("#seasonGames .scoreboard").first()).toBeVisible();
     expect(await listTextOffRoles(page)).toEqual([]);
+    expect(await listChipsOffCenter(page)).toEqual([]);
     expect(await listLowContrastText(page)).toEqual([]);
     expect(await listStrayPeriods(page)).toEqual([]);
     expect(await listNeverShownWords(page, LEAGUE_WORDS.neverShown)).toEqual([]);
@@ -237,6 +247,7 @@ test.describe("on a phone, the text", () => {
     const standings = page.locator("#standings-league");
     await expect(standings.locator("tbody tr").first()).toBeVisible();
     expect(await listTextOffRoles(page)).toEqual([]);
+    expect(await listChipsOffCenter(page)).toEqual([]);
     expect(await listLowContrastText(page)).toEqual([]);
     expect(await listStrayPeriods(page)).toEqual([]);
     expect(await listNeverShownWords(page, LEAGUE_WORDS.neverShown)).toEqual([]);
@@ -245,6 +256,7 @@ test.describe("on a phone, the text", () => {
     const sheet = page.locator("#teamSheet");
     await expect(sheet.locator(".team-game")).toHaveCount(3);
     expect(await listTextOffRoles(page)).toEqual([]);
+    expect(await listChipsOffCenter(page)).toEqual([]);
     expect(await listLowContrastText(page)).toEqual([]);
     expect(await listStrayPeriods(page)).toEqual([]);
     expect(await listNeverShownWords(page, LEAGUE_WORDS.neverShown)).toEqual([]);
@@ -254,6 +266,7 @@ test.describe("on a phone, the text", () => {
     await page.getByRole("button", { name: "Settings", exact: true }).click();
     await expect(page.locator(SETTINGS)).toBeVisible();
     expect(await listTextOffRoles(page)).toEqual([]);
+    expect(await listChipsOffCenter(page)).toEqual([]);
     expect(await listLowContrastText(page)).toEqual([]);
     expect(await listStrayPeriods(page)).toEqual([]);
     expect(await listNeverShownWords(page, LEAGUE_WORDS.neverShown)).toEqual([]);

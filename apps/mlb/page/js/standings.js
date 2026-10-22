@@ -127,7 +127,7 @@ function renderHeader(gamesBackLabel, eliminationLabel, eliminationTitle) {
 
 function renderDivisionTag(leader) {
   const magic = readMagicNumber(leader);
-  if (magic === "-") return html`<span class="clinch-tag">clinched</span>`;
+  if (magic === "-") return html`<span class="chip outlined clinch-tag">clinched</span>`;
   return magic ? html`<span class="magic-tag">magic ${magic}</span>` : html``;
 }
 
