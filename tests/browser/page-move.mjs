@@ -458,9 +458,7 @@ function standInForServiceWorker() {
 
 /** @param {import("@playwright/test").Page} page */
 const releaseServiceWorker = (page) =>
-  page.evaluate(() =>
-    /** @type {Window & { releaseServiceWorker: () => void }} */ (window).releaseServiceWorker(),
-  );
+  page.evaluate(() => /** @type {any} */ (window).releaseServiceWorker());
 
 /**
  * Use new site, tapped while the page still reads whether the phone has a push subscription,
