@@ -91,10 +91,11 @@ jobs:
       # The gate parses a page's scripts and stylesheets with esbuild, to tell what a change does
       # from how it's written. Its modules are installed fresh from the base's lockfile, never
       # restored from a cache, since a pull request's own run can save a cache its later runs
-      # restore first. No module the base installs runs a script of its own.
+      # restore first. No module the base installs runs a script of its own. It skips npm's audit
+      # itself, since the base's own .npmrc decides that otherwise.
       - name: Install the base's modules
         working-directory: ${{ runner.temp }}/base
-        run: npm ci --ignore-scripts
+        run: npm ci --ignore-scripts --no-audit
       - name: Hold a red change for the owner's phone
         id: hold
         shell: bash

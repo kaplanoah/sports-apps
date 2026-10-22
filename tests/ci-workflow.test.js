@@ -39,6 +39,10 @@ test("every workflow's actions are pinned to a commit", () => {
   }
 });
 
+test("every install skips npm's audit", () => {
+  assert.match(readRepoFile(".npmrc"), /^audit=false$/m);
+});
+
 // An image holds only the browsers its own Playwright version runs, and Dependabot moves the
 // lockfile's Playwright without it, so each job installs its browsers from the installed one.
 test("no workflow runs its browsers from an image that pins Playwright's version", () => {
@@ -324,7 +328,7 @@ test("the gate judges a pull request with the base's own gate, Node, and modules
   assert.doesNotMatch(gate, /\*setup-node|\*restore-modules|\*install-modules|node worker\//);
   assert.match(
     gate,
-    /- name: Install the base's modules\n\s+working-directory: \$\{\{ runner\.temp \}\}\/base\n\s+run: npm ci --ignore-scripts\n/,
+    /- name: Install the base's modules\n\s+working-directory: \$\{\{ runner\.temp \}\}\/base\n\s+run: npm ci --ignore-scripts --no-audit\n/,
   );
   assert.doesNotMatch(gate, /actions\/cache/);
   for (const workflow of WORKFLOWS)
