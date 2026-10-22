@@ -181,7 +181,10 @@ function countLiveMessages() {
 const waitForLiveMessage = (page, timeoutMs) =>
   page
     .waitForFunction(
-      () => /** @type {{ liveMessageCount?: number }} */ ((window).liveMessageCount ?? 0) > 0,
+      () => {
+        const counter = /** @type {{ liveMessageCount?: number }} */ (window);
+        return (counter.liveMessageCount ?? 0) > 0;
+      },
       null,
       { timeout: timeoutMs },
     )
