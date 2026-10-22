@@ -19,7 +19,12 @@ import { refreshGameSearch, startGameSearch } from "#shared/game-search-view.js"
 import { listSearchGames } from "#shared/game-search.js";
 import { trackKeyboardFocus } from "#shared/keyboard-focus.js";
 import { keepLastRead } from "#shared/kept-read.js";
-import { keepLastSeen, readLastSeen, reopenLastSheets } from "#shared/last-seen.js";
+import {
+  keepLastSeen,
+  readLastSeen,
+  readLastSeenYears,
+  reopenLastSheets,
+} from "#shared/last-seen.js";
 import { endLoadNote, hasDrawing } from "#shared/load-note.js";
 import { watchPresses } from "#shared/press.js";
 import { startNotifications } from "#shared/notifications.js";
@@ -123,16 +128,27 @@ function refreshClockEveryMinute() {
 const readLastSeenSchedule = (schedule) =>
   Array.isArray(schedule?.games) && isReadableSeason(schedule, SNAPSHOT_VERSION) ? schedule : null;
 
+// The seasons the page last showed and the store then said was current name the season a reload
+// loads, even when what it showed can't be drawn.
+function keepLastSeenYears(lastSeen) {
+  const years = readLastSeenYears(lastSeen);
+  if (!years) return;
+  Object.assign(session, {
+    year: years.year,
+    pickedYear: years.year,
+    currentYear: years.currentYear,
+  });
+}
+
 // The season the page last showed is only a stand-in until the store answers, so one that can't
 // be drawn is skipped.
 function drawLastSeen() {
   const lastSeen = readLastSeen();
+  keepLastSeenYears(lastSeen);
   if (!lastSeen?.season || !isReadableSeason(lastSeen.season, SNAPSHOT_VERSION)) return;
-  const { year, pickedYear, season, schedule, news } = session;
+  const { season, schedule, news } = session;
   try {
     Object.assign(session, {
-      year: lastSeen.year,
-      pickedYear: lastSeen.year,
       season: lastSeen.season,
       schedule: readLastSeenSchedule(lastSeen.schedule),
       news: readLastSeenNews(lastSeen.news),
@@ -140,7 +156,7 @@ function drawLastSeen() {
     renderAll();
     endLoadNote();
   } catch {
-    Object.assign(session, { year, pickedYear, season, schedule, news });
+    Object.assign(session, { season, schedule, news });
   }
 }
 
@@ -151,6 +167,7 @@ const renderShownTeam = (team) =>
 const readShown = () =>
   session.season && {
     year: session.year,
+    currentYear: session.currentYear,
     season: session.season,
     schedule: session.schedule,
     news: session.news,

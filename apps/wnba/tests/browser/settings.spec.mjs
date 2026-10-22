@@ -79,7 +79,6 @@ test("a reload with settings open shows its seasons, switches, and look picked b
     look: "Walnut",
     switchName: "Include content from The Athletic",
     pastSeason: "2025",
-    currentSeason: "2026",
   });
 });
 

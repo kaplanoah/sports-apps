@@ -28,17 +28,16 @@ const readSettings = (page) =>
 
 /**
  * A reload with settings open shows the seasons it can pick, its switches, and the look picked as
- * they were before the page's code arrives, and once it runs, what the device keeps, on the
- * current season, which a load opens on.
+ * they were before the page's code arrives, and once it runs, what the device keeps, still on the
+ * past season the page showed.
  * @param {{
  *   page: import("@playwright/test").Page,
  *   look: string,
  *   switchName: string,
  *   pastSeason: string,
- *   currentSeason: string,
  * }} options a look, a switch, and a season other than the ones a device starts on
  */
-export async function checkSettingsOnReload({ page, look, switchName, pastSeason, currentSeason }) {
+export async function checkSettingsOnReload({ page, look, switchName, pastSeason }) {
   await openSettings(page);
   const settings = page.locator(SETTINGS);
   await settings.getByRole("radio", { name: look, exact: true }).check();
@@ -76,7 +75,6 @@ export async function checkSettingsOnReload({ page, look, switchName, pastSeason
     .poll(() => readSettings(page))
     .toEqual({
       ...shown,
-      season: currentSeason,
       switches: shown.switches.map(([id, isOn]) => [id, id === switchId ? "true" : isOn]),
     });
 }

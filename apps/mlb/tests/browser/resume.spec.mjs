@@ -10,6 +10,8 @@ import {
   ON_A_PHONE,
   keepUpdatesFromEarlierVisit,
   matchPath,
+  chooseSeason,
+  SEASON_2025,
 } from "./harness.mjs";
 import {
   SHORT_PHONE,
@@ -19,6 +21,7 @@ import {
   readSeasonPlace,
 } from "../../../../tests/browser/start-over.mjs";
 import { setHidden } from "../../../../tests/browser/visibility.mjs";
+import { reloadOnPastSeason } from "../../../../tests/browser/past-season-reload.mjs";
 
 const MINUTE_MS = 60 * 1000;
 
@@ -124,6 +127,19 @@ test("a reload shows what the page last showed while the store is still answerin
   await expect(page.locator("#bracketWrap .matchup-row")).toHaveCount(22);
   await expect(page.locator("#seasonGames .game-day.is-today .game-row")).toHaveCount(12);
   release();
+});
+
+test("a reload on a past season stays on it once the store answers", async ({ page }) => {
+  const app = await openApp(page, { store: { "seasons/2025": SEASON_2025 } });
+  await expect.poll(() => app.countSeasonReads()).toBe(2);
+  await chooseSeason(page, "2025");
+  await expect(page.locator("#titleYear")).toHaveText("2025");
+
+  const titleYears = await reloadOnPastSeason(page, app);
+
+  expect(titleYears).toEqual([]);
+  await expect(page.locator("#titleYear")).toHaveText("2025");
+  await expect(page.locator("#seasonPicker")).toHaveValue("2025");
 });
 
 test("a reload leaves out a season it last showed that it can no longer read", async ({ page }) => {

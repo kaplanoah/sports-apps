@@ -2,10 +2,10 @@ import { isSameJson } from "./compare.js";
 
 // Reads a league's season from the store, which says which season is current, so a page never goes
 // by its own clock, and pushes each change to the season's record. A page showing the current
-// season moves on to the next one when the store does. Each season a viewer picks is kept while its
-// record is on its way, and put back on the season shown when it can't be read. A page reads a
-// record in the version it knows, or one saved before records had a version, and reloads once the
-// newer release that saved one is out.
+// season moves on to the next one when the store does, and a page that loads again on a past season
+// stays on it. Each season a viewer picks is kept while its record is on its way, and put back on
+// the season shown when it can't be read. A page reads a record in the version it knows, or one
+// saved before records had a version, and reloads once the newer release that saved one is out.
 
 const CURRENT_PATH = "live/current";
 const STATUS_PATH = "live/status";
@@ -189,19 +189,25 @@ export function createSeasonReader({
 
   // A load that failed is tried again by loading again, since the store may since have answered
   // or moved on to a new season.
-  async function loadCurrentSeason() {
+  /** @param {number | null} pastYear */
+  async function loadSeason(pastYear) {
     try {
-      const { year, record } = await readCurrentSeason();
-      currentYear = year;
-      await showYear(year, record);
+      const current = await readCurrentSeason();
+      currentYear = current.year;
+      const year = pastYear ?? current.year;
+      await showYear(year, year === current.year ? current.record : undefined);
     } finally {
       followStore();
     }
   }
 
   return {
-    /** Loads the season the store says is current, and then follows the store. */
-    loadCurrentSeason,
+    /**
+     * Loads the past season the page shows, which a reload stays on, or else the season the store
+     * says is current, and then follows the store.
+     * @param {number | null} [pastYear]
+     */
+    loadSeason: (pastYear = null) => loadSeason(pastYear),
     /** @param {number} year */
     showYear: (year) => showYear(year),
     /** The season the store says is current, or null before it has said. */

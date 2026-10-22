@@ -62,6 +62,35 @@ test("the page loads the season the store says is current, and drops clubs it do
   assert.equal(session.currentSeason, 2026);
 });
 
+test("a page whose last showing was a past season loads it again, not the current one", async () => {
+  const record2025 = { ...RECORD_2026, year: 2025 };
+  startReading({
+    "live/current": { season: 2026 },
+    "seasons/2025": record2025,
+    "seasons/2026": RECORD_2026,
+  });
+  Object.assign(session, { activeYear: 2025, currentSeason: 2026 });
+
+  await loadSeason();
+
+  assert.deepEqual([session.activeYear, session.currentSeason], [2025, 2026]);
+  assert.deepEqual(session.season, record2025);
+});
+
+test("a page whose last showing was the current season loads the one the store now says is current", async () => {
+  const record2027 = { ...RECORD_2026, year: 2027 };
+  startReading({
+    "live/current": { season: 2027 },
+    "seasons/2026": RECORD_2026,
+    "seasons/2027": record2027,
+  });
+
+  await loadSeason();
+
+  assert.deepEqual([session.activeYear, session.currentSeason], [2027, 2027]);
+  assert.deepEqual(session.season, record2027);
+});
+
 test("an update that arrives during a drag waits for it, without a redraw", async () => {
   const { redraws, deliver } = startReading({
     "live/current": { season: 2026 },

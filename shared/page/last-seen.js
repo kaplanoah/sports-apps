@@ -26,6 +26,20 @@ const KEPT_IMAGE_COUNT = 12;
 
 export const readLastSeen = () => readStoredJson(LAST_SEEN_KEY);
 
+/**
+ * The season the page last showed and the one the store then said was current, or null for a page
+ * that has shown none. A copy saved before the page kept the current season names only the one it
+ * showed, which was the current one but for a viewer's pick.
+ * @param {any} lastSeen
+ * @returns {{ year: number, currentYear: number } | null}
+ */
+export function readLastSeenYears(lastSeen) {
+  const year = lastSeen?.year;
+  if (!Number.isInteger(year)) return null;
+  const currentYear = Number.isInteger(lastSeen.currentYear) ? lastSeen.currentYear : year;
+  return { year, currentYear };
+}
+
 /** Has the sheets the page showed when it was last on screen show again what they showed. */
 export const reopenLastSheets = () => reopenSheets(readStoredJson(OPEN_SHEETS_KEY));
 

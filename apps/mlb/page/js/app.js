@@ -12,7 +12,12 @@ import { trackKeyboardFocus } from "#shared/keyboard-focus.js";
 import { showStartDay, startDayStrip, startOverDayStrip } from "#shared/day-strip.js";
 import { startGameSearch } from "#shared/game-search-view.js";
 import { keepLastRead } from "#shared/kept-read.js";
-import { keepLastSeen, readLastSeen, reopenLastSheets } from "#shared/last-seen.js";
+import {
+  keepLastSeen,
+  readLastSeen,
+  readLastSeenYears,
+  reopenLastSheets,
+} from "#shared/last-seen.js";
 import { endLoadNote, hasDrawing } from "#shared/load-note.js";
 import { watchPresses } from "#shared/press.js";
 import { startNotifications } from "#shared/notifications.js";
@@ -232,7 +237,12 @@ function refreshClockEveryMinute() {
 const pickShown = ({ season, schedule, trackedTitles }) => ({ season, schedule, trackedTitles });
 
 const readShown = () =>
-  session.season && { year: session.activeYear, ...pickShown(session), news: session.news };
+  session.season && {
+    year: session.activeYear,
+    currentYear: session.currentSeason,
+    ...pickShown(session),
+    news: session.news,
+  };
 
 // The news isn't any one season's, so the page's last showing of it is drawn whichever season shows.
 function drawLastSeenNews(lastSeen) {
@@ -240,15 +250,21 @@ function drawLastSeenNews(lastSeen) {
   drawNews();
 }
 
+// The seasons the page last showed and the store then said was current name the season a reload
+// loads, even when what it showed can't be drawn.
+function keepLastSeenYears(lastSeen) {
+  const years = readLastSeenYears(lastSeen);
+  if (!years) return;
+  Object.assign(session, { activeYear: years.year, currentSeason: years.currentYear });
+}
+
 // What the page last showed is only a stand-in until the store answers, so what can't be drawn is
 // skipped.
 function drawLastSeen() {
   const lastSeen = readLastSeen();
+  keepLastSeenYears(lastSeen);
   drawLastSeenNews(lastSeen);
-  const isShowable =
-    !!lastSeen?.season &&
-    lastSeen.year === session.activeYear &&
-    isReadableSeason(lastSeen.season, SNAPSHOT_VERSION);
+  const isShowable = !!lastSeen?.season && isReadableSeason(lastSeen.season, SNAPSHOT_VERSION);
   if (!isShowable) return;
   const before = pickShown(session);
   try {

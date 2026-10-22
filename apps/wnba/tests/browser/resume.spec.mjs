@@ -11,6 +11,9 @@ import {
   readSeasonPlace,
 } from "../../../../tests/browser/start-over.mjs";
 import { passTime, setHidden } from "../../../../tests/browser/visibility.mjs";
+import { reloadOnPastSeason } from "../../../../tests/browser/past-season-reload.mjs";
+import { openSettings } from "../../../../tests/browser/settings.mjs";
+import { ONE_PAST_SEASON } from "./past-season.mjs";
 
 const MINUTE_MS = 60 * 1000;
 const LAST_RELEASE = {
@@ -73,6 +76,19 @@ test("a reload shows the bracket the page last showed while the store is still a
 
   await expect(findFinalWinner(page)).toContainText("Liberty");
   release();
+});
+
+test("a reload on a past season stays on it once the store answers", async ({ page }) => {
+  const app = await openApp(page, ONE_PAST_SEASON);
+  await openSettings(page);
+  await page.locator("#seasonPicker").selectOption("2025");
+  await expect(page.locator("#titleYear")).toHaveText("2025");
+
+  const titleYears = await reloadOnPastSeason(page, app);
+
+  expect(titleYears).toEqual([]);
+  await expect(page.locator("#titleYear")).toHaveText("2025");
+  await expect(page.locator("#seasonPicker")).toHaveValue("2025");
 });
 
 test("a last-shown season the page can't draw is skipped", async ({ page }) => {

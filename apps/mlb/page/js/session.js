@@ -15,8 +15,12 @@ export const hasSpringStarted = (springStart, now = Date.now()) =>
 
 export const session = {
   db: null,
-  currentSeason: guessSeasonYear(),
-  activeYear: guessSeasonYear(),
+  // The season the store says is current, and the season shown, or picked while its record is on
+  // its way, each null until the store or the page's last showing names it.
+  /** @type {number | null} */
+  currentSeason: null,
+  /** @type {number | null} */
+  activeYear: null,
   // The shown season's record, as the Worker saves it.
   season: null,
   // Every game of the shown season, which the Games view lists, null when the store has none.
@@ -39,6 +43,10 @@ export const session = {
 };
 
 export const readSeasonYear = () => session.currentSeason;
+
+/** Whether the season shown is over, one the store keeps from before the current one. */
+export const isPastSeason = () =>
+  session.currentSeason !== null && session.activeYear !== session.currentSeason;
 
 /** Whether the shown season's playoff field is set, rather than projected from the standings. */
 export const isFieldSet = () => session.state?.projected === false;
