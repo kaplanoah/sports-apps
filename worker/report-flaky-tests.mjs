@@ -524,7 +524,7 @@ function downloadRun({ id, artifacts }) {
  * @param {{ url: string, now: Date }} options.night
  * @param {Ledger} options.ledger what the table counted before
  * @param {(run: FlakyRun) => string} [options.download]
- * @returns {Promise<{ failed: TestRuns[], counted: CountedArtifact[] }>}
+ * @returns {Promise<{ failed: TestRuns[], counted: CountedArtifact[], skipped: FlakyRun[] }>}
  */
 export async function collectFailedTests({
   nightReports,
@@ -547,14 +547,18 @@ export async function collectFailedTests({
   /** @type {TestRuns[][]} */
   const failed = [listFailedTests(nightReports).map((test) => ({ ...test, foundIn: tonight }))];
   const counted = uncounted.filter(isCountedBefore).map(({ id, created_at: at }) => ({ id, at }));
+  /** @type {FlakyRun[]} */
+  const skipped = [];
   for (const run of runs) {
     let directory;
     try {
       directory = download(run);
-    } catch {
+    } catch (error) {
+      const message = readFirstLine(error instanceof Error ? error.message : String(error));
       console.warn(
-        `Could not download CI run ${run.id}'s artifacts (${run.artifacts.map(({ id }) => id).join(", ")}); leaving this try uncounted for a later night.`,
+        `Could not download CI run ${run.id}'s artifacts (${run.artifacts.map(({ id }) => id).join(", ")}); leaving this try uncounted for a later night: ${message}`,
       );
+      skipped.push(run);
       continue;
     }
     failed.push(readRunFailures(directory, run.foundIn));
@@ -563,6 +567,7 @@ export async function collectFailedTests({
   return {
     failed: mergeFailedTests(failed),
     counted,
+    skipped,
   };
 }
 
@@ -571,11 +576,12 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const runUrl = String(process.env.RUN_URL);
   const now = new Date();
   const github = createGitHub({ repository, fetchImpl: fetch, env: process.env });
-  const { failed, counted } = await collectFailedTests({
+  const { failed, counted, skipped } = await collectFailedTests({
     nightReports: process.argv.slice(2).map((path) => JSON.parse(readFileSync(path, "utf8"))),
     github,
     night: { url: runUrl, now },
     ledger: readLedger(await findOpenIssue(github)),
   });
   console.log(await postReport({ repository, failed, counted, runUrl, now }));
+  if (skipped.length) process.exitCode = 1;
 }
