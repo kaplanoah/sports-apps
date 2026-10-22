@@ -1463,6 +1463,10 @@ test("a page's script that sets a part's style is red where a page's stylesheet 
     '  sheet.insertRule(".tip { transition: color 0.2s }");',
     '  sheet.insertRule(".tip { transition: color 0.2s" + eased + " }");',
     '  sheet.insertRule(".bar { position: -webkit-sticky; top: 0 }");',
+    '  sheet.insertRule(".bar { POSITION: FIXED; top: 0 }");',
+    '  sheet.insertRule(".tip { Transform: translateZ(0) }");',
+    '  sheet.insertRule(".tip { -WEBKIT-TRANSFORM: translateZ(0) }");',
+    '  sheet.insertRule(".tip { TRANSITION-DURATION: 0.2s }");',
     '  part.style.setProperty("Z-Index", "2");',
     '  part.setAttribute("Style", "z-index: 2");',
     '  part.style.transition = "";',
@@ -1630,6 +1634,10 @@ test("a page's script that sets a custom property is red only where a stack decl
   const path = "apps/wnba/page/js/games-view.js";
   for (const [line, count] of /** @type {[string, number][]} */ ([
     ['  root.style.setProperty("--lift", lift);', 1],
+    ['  root.style.setProperty("--slideX", slide);', 1],
+    ['  root.style.setProperty("--slidex", slide);', 0],
+    ['  root.style.cssText = "--slideX: 10px";', 1],
+    ['  root.style.cssText = "--slidex: 10px";', 0],
     ["  root.style.setProperty(`--${name}`, value);", 1],
     ['  root.style.setProperty("--team", color);', 0],
   ]))

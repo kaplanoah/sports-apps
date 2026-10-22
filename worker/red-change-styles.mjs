@@ -150,12 +150,15 @@ function splitTopLevel(text, separator) {
     .filter(Boolean);
 }
 
+/** @param {string} name */
+export const readPropertyName = (name) => (name.startsWith("--") ? name : name.toLowerCase());
+
 /** @param {string} text */
 function readDeclaration(text) {
   const [property, ...value] = text.split(":");
   const name = property.trim();
   return {
-    property: name.startsWith("--") ? name : name.toLowerCase(),
+    property: readPropertyName(name),
     value: value.join(":").trim(),
   };
 }
