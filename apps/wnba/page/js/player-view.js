@@ -6,7 +6,13 @@
 import { describeDay, formatShortDate, readCalendarDate } from "#shared/days.js";
 import { html, joinNames, joinWithSeparator } from "#shared/html.js";
 import { renderPlaceholder } from "#shared/placeholder.js";
-import { describeFewestFirst, rankAmong, renderRankRow } from "#shared/rank-curve.js";
+import {
+  describeFewestFirst,
+  describeSmallSample,
+  isNearlyRanked,
+  rankAmong,
+  renderRankRow,
+} from "#shared/rank-curve.js";
 import { renderRetryBlock } from "#shared/retry.js";
 import { renderSheetPart } from "#shared/sheet-part.js";
 import { renderTeamDetail } from "#shared/team-sheet.js";
@@ -349,8 +355,12 @@ const describeRule = (season) =>
 export function describeRankNote(season, isPastSeason) {
   if (season.stats.every((stat) => stat.rank != null))
     return `The number of ranked players varies by stat because the ${describeRule(season)}`;
-  if (season.games < season.gamesNeeded)
-    return `The ${describeRule(season)}. She's played ${season.games} ${season.games === 1 ? "game" : "games"}.`;
+  if (season.games < season.gamesNeeded) {
+    const sample = isNearlyRanked(season.games / season.gamesNeeded)
+      ? ""
+      : `, ${describeSmallSample("ranked players")}`;
+    return `The ${describeRule(season)}. She's played ${season.games} ${season.games === 1 ? "game" : "games"}${sample}.`;
+  }
   const unranked = listUnrankedShares(season);
   const shots = joinNames(
     unranked.map((stat) => stat.shots ?? ""),

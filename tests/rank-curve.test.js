@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
 import { listAppStylesheets, readDeclarations, readRule } from "./css-rules.js";
 import {
+  describeSmallSample,
   drawSpread,
   isNearlyRanked,
   placeOnRange,
@@ -11,6 +12,15 @@ import {
   renderRankRow,
   renderSpreadCurve,
 } from "../shared/page/rank-curve.js";
+
+test("a small sample's explanation names the players it would be compared with", () => {
+  for (const players of ["ranked players", "qualified starters", "qualified hitters"]) {
+    assert.equal(
+      describeSmallSample(players),
+      `too small a sample to fairly compare with ${players}`,
+    );
+  }
+});
 
 test("the curve spreads across from the lowest number to the highest, its peak at the top, with the player's mark on it", () => {
   const { area, edge, left, top } = drawSpread([10, 10, 10, 20], 20);

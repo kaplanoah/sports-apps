@@ -292,8 +292,47 @@ test("a stat she isn't ranked in shows her number alone, and the note says why",
     "The WNBA only ranks players who've played 31 games or reached a certain total in a stat, and shooting percentages only for those who've made a certain number of shots. She's played 21 games.",
   );
   player.regularSeason.games = 1;
-  assert.match(describeRankNote(player.regularSeason, false), /She's played 1 game\.$/);
+  assert.match(
+    describeRankNote(player.regularSeason, false),
+    /She's played 1 game, too small a sample to fairly compare with ranked players\.$/,
+  );
 });
+
+for (const { games, ending, curves } of [
+  { games: 4, ending: ", too small a sample to fairly compare with ranked players", curves: 1 },
+  { games: 7, ending: ", too small a sample to fairly compare with ranked players", curves: 1 },
+  { games: 8, ending: "", curves: 2 },
+]) {
+  test(`at ${games} of 31 games, her note explains missing marks only below a quarter, without naming her FT% exception`, () => {
+    const player = createPlayer();
+    player.regularSeason.games = games;
+    player.regularSeason.stats = [
+      describeStat({ rank: null, progress: games / 31 }),
+      describeStat({
+        key: "freeThrowShare",
+        value: 0.8,
+        rank: null,
+        progress: 0.5,
+        values: [0.7, 0.85],
+      }),
+    ];
+    const note = `The WNBA only ranks players who've played 31 games or reached a certain total in a stat, and shooting percentages only for those who've made a certain number of shots. She's played ${games} games${ending}.`;
+    assert.equal(describeRankNote(player.regularSeason, false), note);
+    assert.equal(describeRankNote(player.regularSeason, true), note);
+    const body = renderPlayerBody({
+      player,
+      isLoading: false,
+      season: SEASON,
+      isPastSeason: false,
+      showsOut: true,
+      now: NOW,
+    });
+    assert.ok(readText(body).endsWith(note));
+    assert.match(readText(body), /FT% 80\.0 would be 2nd/);
+    assert.equal(String(body.text).match(/player-curve-area/g)?.length, curves);
+    assert.doesNotMatch(note, /except|FT%/);
+  });
+}
 
 test("a stat she isn't ranked in, once she's a quarter of the way to the rule for it, shows where she would rank, as a line on its curve with no dot", () => {
   const player = createPlayer();

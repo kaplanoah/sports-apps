@@ -33,6 +33,10 @@ const NEARLY_RANKED_SHARE = 0.25;
  */
 export const isNearlyRanked = (progress) => progress != null && progress >= NEARLY_RANKED_SHARE;
 
+/** @param {string} players who the player would be compared with */
+export const describeSmallSample = (players) =>
+  `too small a sample to fairly compare with ${players}`;
+
 /**
  * How wide each player's number spreads on the curve, by Silverman's rule of thumb.
  * @param {number[]} values
