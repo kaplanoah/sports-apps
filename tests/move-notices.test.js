@@ -59,7 +59,10 @@ test("the card stays away from an app not moving, the new address, the browser, 
 test("the notifications ask shows until it's answered, wherever the card doesn't", () => {
   const waiting = { ...CARD_DUE, isOnHomeScreen: false, notificationsAsk: "ask" };
   assert.equal(chooseMoveNotice(waiting), "notifications");
-  assert.equal(chooseMoveNotice({ ...waiting, isMoving: false, isOldAddress: false }), "notifications");
+  assert.equal(
+    chooseMoveNotice({ ...waiting, isMoving: false, isOldAddress: false }),
+    "notifications",
+  );
   assert.equal(chooseMoveNotice({ ...waiting, notificationsAsk: "answered" }), null);
   assert.equal(chooseMoveNotice({ ...waiting, notificationsAsk: null }), null);
 });

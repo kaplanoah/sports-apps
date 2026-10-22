@@ -84,9 +84,7 @@ test("the moving welcome names each app", () => {
 
 test("the welcome that adds the app keeps its own steps", () => {
   const steps = runInContext("writeAddSteps", welcomeScript)(true, "MLB");
-  assert.deepEqual(readTexts(steps, "gate-title welcome-title"), [
-    "Add MLB to your home screen",
-  ]);
+  assert.deepEqual(readTexts(steps, "gate-title welcome-title"), ["Add MLB to your home screen"]);
   assert.equal(readTexts(steps, "welcome-step")[0], "Pick your theme");
   assert.match(steps, /data-ask="install"/);
 });
