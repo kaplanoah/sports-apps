@@ -5,7 +5,6 @@
 
 /* global forgetNotificationsAsk, isMovingToPageHost, isNotificationsAskKept, isOldAddress,
    requestPageMove -- from page-move.js */
-/* global isLook, readHomeScreenIcon -- from pick-theme.js */
 
 import { isIos, isOnHomeScreen } from "./device.js";
 import { renderDismissButton } from "./dismiss-button.js";
@@ -98,9 +97,7 @@ export function renderMoveCard(card) {
 // A Home Screen app hands Safari the new address under this scheme, since the app would otherwise
 // open it itself, and Safari is where the new site is added.
 async function openNewSite() {
-  const icon = readHomeScreenIcon();
   const address = await requestPageMove({
-    icon: isLook(icon) ? icon : null,
     notifications: areNotificationsOn(),
     fromApp: isOnHomeScreen(),
   });

@@ -3,6 +3,7 @@ import { ANDROID_PHONE, IPHONE } from "../../../../tests/browser/devices.mjs";
 import {
   checkMoveCard,
   checkMoveCardDismissal,
+  checkMovingIconFollowsTheme,
   checkMovingIconPick,
   checkMovingWelcome,
   checkMovingWelcomeCloses,
@@ -59,6 +60,13 @@ test.describe("from an Android phone's Home Screen app", () => {
     browser,
   }) => {
     await checkMovingWelcome({ page, browser, ...MOVING_APP });
+  });
+
+  test("the moving welcome starts on the icon of the theme picked last", async ({
+    page,
+    browser,
+  }) => {
+    await checkMovingIconFollowsTheme({ page, browser, ...MOVING_APP });
   });
 
   test("a pick in the moving welcome changes only the icon", async ({ page, browser }) => {

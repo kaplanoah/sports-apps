@@ -41,8 +41,9 @@ const CARRIED_TAKEN_KEY = "carriedChoicesTaken";
 const NOTIFICATIONS_ASK_KEY = "notificationsAsk";
 
 /**
- * What a move carries: when it was packed, each choice as the device keeps it, the look of the
- * Home Screen icon, whether notifications were on, and whether it left from the Home Screen app.
+ * What a move carries: when it was packed, each choice as the device keeps it, the look of the icon
+ * picked for the new Home Screen app, whether notifications were on, and whether it left from the
+ * Home Screen app.
  * @typedef {{ at: number, choices: Record<string, string>, icon: "light" | "dark" | null,
  *   notifications: boolean, fromApp: boolean }} Carried
  */
@@ -242,6 +243,7 @@ function takeIntoHomeScreen(carried) {
 /** @param {string} choice */
 const showLookOf = (choice) => (isLook(choice) ? choice : readPhoneLook());
 
+// The welcome starts on the icon of the theme showing, the look the fan picked most recently.
 /**
  * @param {Carried} carried
  * @param {number} now
@@ -291,16 +293,22 @@ function forgetNotificationsAsk() {
 
 /**
  * The new address, carrying this device's choices, or null where the Worker gives none.
- * @param {{ icon?: "light" | "dark" | null, notifications?: boolean, fromApp?: boolean }} [extras]
+ * @param {{ notifications?: boolean, fromApp?: boolean }} [extras]
  * @returns {Promise<URL | null>}
  */
-async function requestPageMove({ icon = null, notifications = false, fromApp = false } = {}) {
+async function requestPageMove({ notifications = false, fromApp = false } = {}) {
   try {
     const response = await fetch("access/move", { method: "POST" });
     if (!response.ok) return null;
     const { address } = await response.json();
     const choices = readCarriedChoices();
-    return buildCarriedAddress(address, { at: Date.now(), choices, icon, notifications, fromApp });
+    return buildCarriedAddress(address, {
+      at: Date.now(),
+      choices,
+      icon: null,
+      notifications,
+      fromApp,
+    });
   } catch {
     return null;
   }

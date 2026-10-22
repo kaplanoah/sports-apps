@@ -317,11 +317,10 @@ test("a page stays where it is when it isn't moving, is a Home Screen app, or ge
   }
 });
 
-test("a move from the Home Screen app carries its icon, notifications, and where it left from", async () => {
+test("a move from the Home Screen app carries notifications and where it left from", async () => {
   const page = loadPageMove({ isOnHomeScreen: true, stored: CHOICES });
-  const address = await page.requestPageMove({ icon: "dark", notifications: true, fromApp: true });
+  const address = await page.requestPageMove({ notifications: true, fromApp: true });
   const carried = page.unpackCarried(address.searchParams.get("carried"));
-  assert.equal(carried.icon, "dark");
   assert.equal(carried.notifications, true);
   assert.equal(carried.fromApp, true);
 });
