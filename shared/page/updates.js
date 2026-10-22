@@ -13,6 +13,7 @@ import { createViewerChoice } from "./device-storage.js";
 import { renderDismissButton } from "./dismiss-button.js";
 import { easeBackOpen, easeClosed, isEasingClosed } from "./eased-redraw.js";
 import { html, noteHeight, setHtml } from "./html.js";
+import { answerMoveCard, chooseShownMoveCard, renderMoveCard } from "./move-cards.js";
 
 /** @typedef {import("./html.js").Markup} Markup */
 /**
@@ -268,16 +269,22 @@ function renderNoteList(notes, isFirst) {
 export const renderUpdates = (updates, notes = [], today = new Date()) =>
   html`${updates.length > 0 && renderUpdateList(updates, today)}${notes.length > 0 && renderNoteList(notes, !updates.length)}`;
 
-// Redraws keep a box's markup when it hasn't changed, so each box listens for its dismiss button
-// once, and calls whichever `dismiss` its latest showing handed it.
-/** @type {WeakMap<HTMLElement, () => void>} */
-const dismissals = new WeakMap();
+/** @typedef {{ updates: Update[], options: ShowOptions }} Showing */
+/** @typedef {{ dismiss: () => void, notes?: Note[], today?: Date }} ShowOptions */
+
+// Redraws keep a box's markup when it hasn't changed, so each box listens for its buttons once,
+// and answers them with whatever its latest showing handed it.
+/** @type {WeakMap<HTMLElement, Showing>} */
+const showings = new WeakMap();
 
 /** @param {HTMLElement} panel */
-function listenForDismiss(panel) {
+function listenForTaps(panel) {
   panel.addEventListener("click", (event) => {
     const target = /** @type {Element} */ (event.target);
-    if (target.closest("#dismissUpdates")) dismissals.get(panel)?.();
+    const showing = showings.get(panel);
+    if (!showing) return;
+    if (target.closest("#dismissUpdates")) showing.options.dismiss();
+    else if (answerMoveCard(target)) showUpdates(panel, showing.updates, showing.options);
   });
 }
 
@@ -335,18 +342,30 @@ function showBoxEased(panel, markup) {
 }
 
 /**
+ * @param {Update[]} updates
+ * @param {ShowOptions} options
+ * @returns {Markup | null} null for a box with nothing to show
+ */
+function renderBox(updates, { notes = [], today = new Date() }) {
+  const card = chooseShownMoveCard();
+  if (card) return renderMoveCard(card);
+  return updates.length || notes.length ? renderUpdates(updates, notes, today) : null;
+}
+
+/**
  * Shows the updates and release notes in the box, or hides it when there are none. Its dismiss
- * button calls `dismiss`, which forgets them. The box's first showing draws at once, as the rest
- * of the page does, and later ones ease it open or closed.
+ * button calls `dismiss`, which forgets them. While the app moves to its own address, a card about
+ * the move takes their place until it's answered, on any device (move-cards.js). The box's first
+ * showing draws at once, as the rest of the page does, and later ones ease it open or closed.
  * @param {HTMLElement} panel
  * @param {Update[]} updates newest first
- * @param {{ dismiss: () => void, notes?: Note[], today?: Date }} options
+ * @param {ShowOptions} options
  */
-export function showUpdates(panel, updates, { dismiss, notes = [], today = new Date() }) {
-  const isFirstShowing = !dismissals.has(panel);
-  if (isFirstShowing) listenForDismiss(panel);
-  dismissals.set(panel, dismiss);
-  const markup = updates.length || notes.length ? renderUpdates(updates, notes, today) : null;
+export function showUpdates(panel, updates, options) {
+  const isFirstShowing = !showings.has(panel);
+  if (isFirstShowing) listenForTaps(panel);
+  showings.set(panel, { updates, options });
+  const markup = renderBox(updates, options);
   if (isFirstShowing) showBoxAtOnce(panel, markup);
   else showBoxEased(panel, markup);
 }

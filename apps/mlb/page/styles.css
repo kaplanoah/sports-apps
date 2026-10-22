@@ -1438,9 +1438,12 @@ body.kbd .rank-item .grip:focus {
 .home-screen-steps .share-glyph {
   vertical-align: -1px;
 }
-/* The Home Screen box and Diagnostics, each a step from its role of MLB's own. */
+/* The Home Screen box, the move card, and Diagnostics, each a step from its role of MLB's own. */
 .home-screen-title {
   font-weight: calc(var(--type-detail-weight) + 100);
+}
+.move-card-title {
+  font-weight: calc(var(--type-setting-weight) + 100);
 }
 .home-screen-steps b {
   font-weight: calc(var(--type-caption-weight) + 75);

@@ -4,7 +4,11 @@
 // go with it, current. The browser's address names the theme picked, which a Home Screen app keeps
 // on its first open, and Safari loads the page again after a pick, since it takes the app's
 // address and its bars' color from the page as it loaded. It keeps the look of each install's
-// icon, and an iPhone's app hands Safari a link to add the site again on the theme picked.
+// icon, and an iPhone's app hands Safari a link to add the site again on the theme picked. It first
+// takes the choices a move to the app's own address carries (page-move.js, which loads before it),
+// and leaves the old address for that one.
+
+/* global leaveOldAddress, takeCarriedChoices -- from page-move.js */
 
 // The same test of the Home Screen as device.js makes for the page's modules.
 const isOnHomeScreen = () =>
@@ -147,8 +151,10 @@ const isReload = () =>
   /** @type {PerformanceNavigationTiming[]} */ (performance.getEntriesByType("navigation"))[0]
     ?.type === "reload";
 
-function keepHomeScreenIcon() {
-  const named = new URL(location.href).searchParams.get("theme");
+// A move names the icon picked for it, which outranks the theme its address names.
+/** @param {"light" | "dark" | null} carriedIcon */
+function keepHomeScreenIcon(carriedIcon) {
+  const named = carriedIcon ?? new URL(location.href).searchParams.get("theme");
   try {
     if (isLook(named)) localStorage.setItem(HOME_SCREEN_ICON_KEY, named);
     else if (!isReload() && localStorage.getItem(HOME_SCREEN_ICON_KEY) === null)
@@ -202,11 +208,14 @@ function keepPickedAppearance(choice) {
 if (!isOnHomeScreen()) takeThemeFromApp();
 
 try {
+  const carriedIcon = takeCarriedChoices();
   if (isOnHomeScreen()) {
-    keepHomeScreenIcon();
+    keepHomeScreenIcon(carriedIcon);
     keepThemeFromAddress();
   } else nameThemeInAddress(readPickedAppearance());
   showTheme(readPickedAppearance());
 } catch {
   document.documentElement.dataset.theme = "light";
 }
+
+leaveOldAddress();

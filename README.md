@@ -178,8 +178,10 @@ one, and `--remove` stops asking. Never commit or post the code.
 To give the page an address of its own, on a domain in the Cloudflare account,
 run `npm run set-page-host -- <app> <host>` once the page has a code. It points
 `https://<host>/` at the Worker, which opens the page there without the key,
-behind the code alone. The address with the key keeps working as before. Keep
-the host out of the repo, as the Worker's own address is.
+behind the code alone. The address with the key keeps working, but an app that's
+moving to its own address sends its fans on there with their choices: a browser
+at once, and a Home Screen app from a card in its Updates box. Keep the host out
+of the repo, as the Worker's own address is.
 
 Each app's news needs an Anthropic API key, as its Worker's `ANTHROPIC_API_KEY`
 secret. Have the user add it themselves in the Cloudflare dashboard (the Worker's

@@ -6,10 +6,15 @@
 // would arrive over a page already painted. This plain script loads in the head, and the page calls
 // drawHomeScreenAsks() right after its settings, before anything is painted, and it answers the
 // welcome's own taps from then on, so they work while the modules still load. home-screen.js runs
-// Chrome's Install in both, and slides the welcome closed as settings closes.
+// Chrome's Install in both, and slides the welcome closed as settings closes. While a move from
+// the Home Screen app is being finished (page-move.js), the welcome's steps finish it instead: pick
+// the new app's icon, add it, and delete the old one. It opens until it's closed, even where the
+// welcome was closed before.
 
 /* global isOnHomeScreen, WELCOME_CLOSED_KEY -- from pick-theme.js */
 /* global checkPickedChoice, keepPickedAppearance, readPickedAppearance -- from pick-theme.js */
+/* global forgetPageMove, isMovingToPageHost, isOldAddress, keepPageMoveIcon, readPageMove,
+   readPageMoveIcon -- from page-move.js */
 /* global readStored -- from open-last-tab.js */
 
 const TIP_TITLE = "Use this site like an app";
@@ -72,22 +77,76 @@ const writeTipSteps = (isOnIos) =>
     ? `Tap ${SHARE_GLYPH} <b>Share</b> then <b>Add to Home Screen</b>. ${BENEFIT}.`
     : `Tap ${MENU_GLYPH} <b>Menu</b> then <b>Add to Home screen</b>. ${BENEFIT}.`;
 
-// The appearance choices settings shows, as the welcome's first step, kept apart from them.
-function copyThemeChoices() {
+const isFinishingMove = () => readPageMove() !== null;
+
+/** @param {string} name */
+function copyChoices(name) {
   const choices = /** @type {HTMLElement} */ (
     document.querySelector(".appearance-row .appearance-choices").cloneNode(true)
   );
   choices.setAttribute("aria-labelledby", "welcomePickTitle");
-  const inputs = choices.querySelectorAll("input");
-  for (const input of inputs) input.name = "welcomeAppearance";
-  checkPickedChoice(inputs, readPickedAppearance());
+  for (const input of choices.querySelectorAll("input")) input.name = name;
   return choices;
+}
+
+// The appearance choices settings shows, as the welcome's first step, kept apart from them.
+function copyThemeChoices() {
+  const choices = copyChoices("welcomeAppearance");
+  checkPickedChoice(choices.querySelectorAll("input"), readPickedAppearance());
+  return choices;
+}
+
+// An icon is one look or the other, so a move offers the app's two looks without System.
+function copyIconChoices() {
+  const choices = copyChoices("welcomeIcon");
+  choices.querySelector('input[value="auto"]').closest("label").remove();
+  checkPickedChoice(choices.querySelectorAll("input"), readPageMoveIcon());
+  return choices;
+}
+
+/** @param {string} appName */
+const writeTitle = (appName) =>
+  isFinishingMove() ? `Finish moving ${appName}` : `Add ${appName} to your home screen`;
+
+/**
+ * @param {boolean} isOnIos
+ * @param {string} appName
+ */
+function writeSteps(isOnIos, appName) {
+  const [shareStep, addStep] = listBrowserSteps(isOnIos);
+  if (isFinishingMove())
+    return `<li>
+        <span class="welcome-step" id="welcomePickTitle">Pick your icon</span>
+        <span class="welcome-note">You can change your theme later in Settings</span>
+        <span class="welcome-step-body"></span>
+      </li>
+      <li><span class="welcome-step">${shareStep}</span></li>
+      <li><span class="welcome-step">${addStep}</span></li>
+      <li>
+        <span class="welcome-step">Delete the old ${appName} Site</span>
+        <span class="welcome-note">Press and hold, then tap Delete Bookmark</span>
+      </li>`;
+  return `<li>
+      <span class="welcome-step" id="welcomePickTitle">Pick your theme</span>
+      <span class="welcome-note">You can change it later in Settings</span>
+      <span class="welcome-step-body"></span>
+    </li>
+    <li data-ask="browser"><span class="welcome-step">${shareStep}</span></li>
+    <li data-ask="browser"><span class="welcome-step">${addStep}</span></li>
+    <li data-ask="install" hidden>
+      <span class="welcome-step">Tap to install</span>
+      <span class="welcome-step-body">
+        <button type="button" class="open-button" data-install>Install</button>
+      </span>
+    </li>`;
 }
 
 /** @param {boolean} isOnIos */
 function drawWelcome(isOnIos) {
   const welcome = /** @type {HTMLDialogElement} */ (document.getElementById("homeScreenWelcome"));
-  const [shareStep, addStep] = listBrowserSteps(isOnIos);
+  const appName = document
+    .querySelector('meta[name="apple-mobile-web-app-title"]')
+    .getAttribute("content");
   welcome.replaceChildren(
     ...parseMarkup(`<button type="button" class="welcome-close">
         <!-- Phosphor's caret-down, at its Light weight. -->
@@ -99,35 +158,28 @@ function drawWelcome(isOnIos) {
         <span class="sheet-close-label">Close</span>
       </button>
       <h1 class="gate-title welcome-title" id="welcomeTitle"></h1>
-      <ol class="welcome-steps">
-        <li>
-          <span class="welcome-step" id="welcomePickTitle">Pick your theme</span>
-          <span class="welcome-note">You can change it later in Settings</span>
-          <span class="welcome-step-body"></span>
-        </li>
-        <li data-ask="browser"><span class="welcome-step">${shareStep}</span></li>
-        <li data-ask="browser"><span class="welcome-step">${addStep}</span></li>
-        <li data-ask="install" hidden>
-          <span class="welcome-step">Tap to install</span>
-          <span class="welcome-step-body">
-            <button type="button" class="open-button" data-install>Install</button>
-          </span>
-        </li>
-      </ol>
+      <ol class="welcome-steps">${writeSteps(isOnIos, appName)}</ol>
       <button type="button" class="welcome-continue">Continue in browser</button>`),
   );
-  const appName = document.querySelector('meta[name="apple-mobile-web-app-title"]');
-  welcome.querySelector(".welcome-title").textContent =
-    `Add ${appName.getAttribute("content")} to your home screen`;
-  welcome.querySelector(".welcome-step-body").append(copyThemeChoices());
+  welcome.querySelector(".welcome-title").textContent = writeTitle(appName);
+  welcome
+    .querySelector(".welcome-step-body")
+    .append(isFinishingMove() ? copyIconChoices() : copyThemeChoices());
   return welcome;
+}
+
+/** @param {HTMLInputElement} choice */
+function keepWelcomeChoice(choice) {
+  if (choice.name === "welcomeIcon")
+    keepPageMoveIcon(/** @type {"light" | "dark"} */ (choice.value));
+  else keepPickedAppearance(choice.value);
 }
 
 // appearance.js also shows the icons and bar that go with the theme picked, once it has loaded.
 /** @param {HTMLDialogElement} welcome */
 function wireWelcome(welcome) {
   welcome.addEventListener("change", (event) =>
-    keepPickedAppearance(/** @type {HTMLInputElement} */ (event.target).value),
+    keepWelcomeChoice(/** @type {HTMLInputElement} */ (event.target)),
   );
   // Its buttons ask to close it as Escape does: home-screen.js takes the ask and slides it down, and
   // until it loads, nothing does, so it closes at once.
@@ -138,6 +190,7 @@ function wireWelcome(welcome) {
   welcome.querySelector(".welcome-close").addEventListener("click", askToClose);
   // Continue in browser, the caret, Escape, and Android's back all close it, and it stays closed.
   welcome.addEventListener("close", keepWelcomeClosed);
+  if (isFinishingMove()) welcome.addEventListener("close", forgetPageMove);
   // Opened again from settings, it rises, even when it closed before the modules arrived.
   welcome.addEventListener("close", () => welcome.removeAttribute("data-reopened"));
 }
@@ -159,6 +212,12 @@ function drawTip(isOnIos) {
   tip.hidden = false;
 }
 
+// A browser at the old address leaves it before the welcome would matter.
+const isWelcomeOpening = () =>
+  isFinishingMove() ||
+  (readStored(WELCOME_CLOSED_KEY) !== "closed" &&
+    !(isMovingToPageHost() && isOldAddress(location.href)));
+
 // A computer, or the page open from the Home Screen, asks nothing.
 function drawHomeScreenAsks() {
   if (!isBrowserOnTouchDevice()) return;
@@ -166,7 +225,7 @@ function drawHomeScreenAsks() {
   drawTip(isOnIos);
   const welcome = drawWelcome(isOnIos);
   wireWelcome(welcome);
-  if (readStored(WELCOME_CLOSED_KEY) === "closed") return;
+  if (!isWelcomeOpening()) return;
   // It shows before the first paint, so it's already there, and doesn't rise as it does from
   // settings.
   welcome.setAttribute("data-reopened", "");

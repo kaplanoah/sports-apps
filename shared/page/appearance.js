@@ -9,6 +9,7 @@
 // Every page that loads this runs pick-theme.js first.
 /* global buildSafariAddress, checkPickedChoice, isAppearanceChoice, isLook, openThemeAddress,
    readHomeScreenIcon, readPhoneLook -- from pick-theme.js */
+/* global readPageMoveIcon -- from page-move.js */
 
 import { isIos, isOnHomeScreen } from "./device.js";
 import { createViewerChoice } from "./device-storage.js";
@@ -44,17 +45,21 @@ const appearance = createViewerChoice("appearance", (stored) =>
 const resolveTheme = (choice) => (isLook(choice) ? choice : readPhoneLook());
 
 // A phone keeps the icon a page offers at the moment it's added to the home screen, so the page
-// offers the one that matches the theme showing.
+// offers the one that matches the theme showing, or, while a move is being finished, the one
+// picked for it.
 /**
  * @param {Looks} looks
  * @param {"light" | "dark"} theme
  */
 function showTheme(looks, theme) {
-  const { barColor, tabIcon, homeScreenIcon } = looks[theme];
+  const { barColor, tabIcon } = looks[theme];
   document.documentElement.dataset.theme = theme;
   findElement("themeColor").setAttribute("content", barColor);
   findElement("tabIcon").setAttribute("href", tabIcon);
-  findElement("homeScreenIcon").setAttribute("href", homeScreenIcon);
+  findElement("homeScreenIcon").setAttribute(
+    "href",
+    looks[readPageMoveIcon() ?? theme].homeScreenIcon,
+  );
 }
 
 /**
@@ -299,6 +304,10 @@ export function startAppearance(looks) {
     checkSavedChoice(choices);
     showChosenTheme();
     updateNote();
+  });
+  // The welcome keeps an icon picked for a move first (draw-home-screen-asks.js).
+  findElement("homeScreenWelcome").addEventListener("change", (event) => {
+    if (/** @type {HTMLInputElement} */ (event.target).name === "welcomeIcon") showChosenTheme();
   });
   watchTimeAway(keepReturnTime);
   darkScheme.addEventListener("change", followPhoneLook);

@@ -29,6 +29,7 @@ let status = "loading";
 let note = "";
 let about = "";
 let isBusy = false;
+let started = Promise.resolve();
 
 const findElement = (id) => /** @type {HTMLElement} */ (document.getElementById(id));
 
@@ -175,9 +176,12 @@ async function showBusyDuring(task) {
   }
 }
 
-// iOS asks for permission only from a tap, so the request comes before anything is awaited.
+// iOS asks for permission only from a tap, so the request comes before anything is awaited, even
+// the service worker a tap elsewhere on the page may come before.
 async function turnOn() {
   const permission = await Notification.requestPermission();
+  await started;
+  if (!registration) return;
   if (permission !== "granted") {
     setStatus(permission === "denied" ? "blocked" : "off");
     return;
@@ -218,6 +222,22 @@ function describeStartStatus() {
   return subscription && Notification.permission === "granted" ? "on" : "off";
 }
 
+async function readSubscription() {
+  try {
+    registration = await registerServiceWorker();
+    subscription = await registration.pushManager.getSubscription();
+  } catch {
+    registration = null;
+  }
+}
+
+/** Turns notifications on from a tap elsewhere on the page, as the switch does. */
+export function turnOnNotifications() {
+  if (!isBusy && status !== "on") showBusyDuring(turnOn);
+}
+
+export const areNotificationsOn = () => status === "on";
+
 /**
  * @param {{ about?: string }} [options] what the app's notifications tell, under the switch while
  *   it works
@@ -230,10 +250,9 @@ export async function startNotifications(options = {}) {
     setStatus(isIos() && !isOnHomeScreen() ? "homeScreen" : "unsupported");
     return;
   }
-  try {
-    registration = await registerServiceWorker();
-    subscription = await registration.pushManager.getSubscription();
-  } catch {
+  started = readSubscription();
+  await started;
+  if (!registration) {
     setStatus("unsupported");
     return;
   }

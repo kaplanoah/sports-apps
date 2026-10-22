@@ -1,0 +1,79 @@
+import { test, serveLockedApp } from "./harness.mjs";
+import { ANDROID_PHONE, IPHONE } from "../../../../tests/browser/devices.mjs";
+import {
+  checkMoveCard,
+  checkMoveCardDismissal,
+  checkMovingIconPick,
+  checkMovingWelcome,
+  checkMovingWelcomeCloses,
+  checkNotificationsAsk,
+  checkNotificationsAskGoes,
+  checkSafariMoves,
+} from "../../../../tests/browser/page-move.mjs";
+
+// Moving fans from the app's old address to its own, with their choices.
+
+test.use({ contextOptions: { reducedMotion: "reduce" } });
+
+const app = {
+  serve: serveLockedApp,
+  appName: "MLB",
+  looks: { light: "Ball", dark: "Night Game" },
+  pageHost: "mlb.sports.example",
+  oldHost: "mlb-app.example-subdomain.workers.dev",
+};
+
+test.describe("on an iPhone", () => {
+  test.use(IPHONE);
+
+  test("Safari signed in at the old address leaves for the new one, signed in, with its choices", async ({
+    page,
+    browser,
+  }) => {
+    await checkSafariMoves({ page, browser, ...app });
+  });
+
+  test("the Home Screen app at the old address shows the card for the new site", async ({
+    page,
+    browser,
+  }) => {
+    await checkMoveCard({ page, browser, ...app });
+  });
+
+  test("the card's X takes it away for good", async ({ page, browser }) => {
+    await checkMoveCardDismissal({ page, browser, ...app });
+  });
+
+  test("the new Home Screen app asks to turn notifications on again", async ({ page, browser }) => {
+    await checkNotificationsAsk({ page, browser, ...app });
+  });
+
+  test("Leave off takes the notifications ask away for good", async ({ page, browser }) => {
+    await checkNotificationsAskGoes({ page, browser, ...app }, "Leave off");
+  });
+
+  test("the X takes the notifications ask away for good", async ({ page, browser }) => {
+    await checkNotificationsAskGoes({ page, browser, ...app }, "Dismiss notifications");
+  });
+});
+
+// An iPhone's Home Screen app hands Safari the new site under a scheme no test browser follows,
+// so Android's opens it.
+test.describe("from an Android phone's Home Screen app", () => {
+  test.use(ANDROID_PHONE);
+
+  test("Use new site opens the welcome's steps for finishing the move", async ({
+    page,
+    browser,
+  }) => {
+    await checkMovingWelcome({ page, browser, ...app });
+  });
+
+  test("a pick in the moving welcome changes only the icon", async ({ page, browser }) => {
+    await checkMovingIconPick({ page, browser, ...app });
+  });
+
+  test("closing the moving welcome ends the move", async ({ page, browser }) => {
+    await checkMovingWelcomeCloses({ page, browser, ...app });
+  });
+});

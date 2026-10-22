@@ -94,9 +94,9 @@
 /* What rides above the pill (season-header.js marks it) draws over all the parts hold, just under
    the pill, since a browser takes whatever draws over a moving part as overlapping it and gives it
    a layer. It lets a finger that drags anywhere but on a button scroll the part under it, as the
-   page does on every other tab, and the Updates box, which is all rows a tap opens, lets its
-   buttons' touches through too, to their stand-ins in the part's empty top right under them
-   (rider-taps.js), so a finger that drags from a row scrolls the part as well. */
+   page does on every other tab, and the Updates box, which is all rows and cards a tap answers,
+   lets its buttons' touches through too, to their stand-ins in the part's empty top right under
+   them (rider-taps.js), so a finger that drags from a row scrolls the part as well. */
 :root:has(.bracket-standings.active[data-follows]) [data-rides] {
   position: relative;
   z-index: 4;

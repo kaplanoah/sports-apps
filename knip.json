@@ -3,6 +3,7 @@
   "entry": [
     "apps/*/page/js/app.js",
     "shared/page/pick-theme.js",
+    "shared/page/page-move.js",
     "apps/*/page/js/gate-theme.js",
     "apps/*/worker/src/index.js",
     "services/*/worker/src/index.js",

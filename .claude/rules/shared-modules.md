@@ -84,6 +84,8 @@ but for the tuning panel's, which only a channel off production serves, and only
 - `draw-home-screen-asks.js`: the welcome and settings' box of steps, before the first paint
 - `home-screen.js`: Chrome's Install and opening the welcome again
 - `pick-theme.js`: the theme picked, and each install's icon
+- `page-move.js`: moving from the old address to the app's own, carrying the viewer's choices
+- `move-cards.js`: the Updates box's cards for that move and for turning notifications back on
 - `re-add-note.js`: when settings shows the note on updating the icon
 - `appearance.js`: settings' Appearance choices and the note on updating the icon
 - `dismiss-button.js`: the X in a box's corner

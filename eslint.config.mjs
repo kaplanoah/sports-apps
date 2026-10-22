@@ -42,6 +42,7 @@ export const PLAIN_SCRIPTS = [
   "shared/page/draw-home-screen-asks.js",
   "shared/page/long-away.js",
   "shared/page/open-last-tab.js",
+  "shared/page/page-move.js",
   "shared/page/pick-theme.js",
   "shared/page/season-header.js",
   "shared/page/show-last-drawn.js",
