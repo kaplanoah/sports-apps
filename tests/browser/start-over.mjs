@@ -1,3 +1,4 @@
+import { writeUnreadableLastSeen } from "./unreadable-last-seen.mjs";
 // After two minutes away, the page starts over where a viewer moved it, on the tab it showed
 // (shared/page/long-away.js): the season's standings and bracket each at its top with the header
 // back, the pill on the part the tab is named for, the bracket on its opening round, the Games
@@ -221,9 +222,7 @@ export async function expectOpeningRoundAfterReload(page, { sideways, changeWhil
 
   const release = await reloadAfter(page, 2 * MINUTE_MS);
   await changeWhileAway();
-  await page.evaluate(() =>
-    localStorage.setItem("lastSeen", JSON.stringify({ year: 2026, season: { series: 5 } })),
-  );
+  await page.evaluate(writeUnreadableLastSeen);
 
   await expect(page.locator("#standingsWrap table").first()).toBeAttached();
   await expect.poll(readLeft).toBe(start.bracketLeft);
