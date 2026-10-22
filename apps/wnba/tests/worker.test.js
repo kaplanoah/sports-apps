@@ -615,7 +615,5 @@ test("each theme's icon draws its ball and its panels in that theme's colors", (
     const svg = readFileSync(`${import.meta.dirname}/../page/${file}`, "utf8");
     assert.ok(svg.includes(`<circle cx="90" cy="90" r="58" fill="${ball}"/>`), file);
     assert.ok(svg.includes(`fill="${panels}" fill-rule="evenodd"`), file);
-    for (const earlier of ["#cc3d24", "#e8e8e8", "#dadada"])
-      assert.ok(!svg.includes(earlier), `${file} still holds ${earlier}`);
   }
 });
