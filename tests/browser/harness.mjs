@@ -207,6 +207,14 @@ export async function loadPageAt(page, now, { isShowingWelcome = false } = {}) {
   await page.goto("/");
 }
 
+/**
+ * Holds the page's clock a second ahead of its current time, so a slow load never puts the
+ * pause in the past.
+ * @param {import("@playwright/test").Page} page
+ */
+export const holdClock = async (page) =>
+  page.clock.pauseAt(await page.evaluate(() => Date.now() + 1000));
+
 const PAGE_KEY = "test-key";
 
 /**

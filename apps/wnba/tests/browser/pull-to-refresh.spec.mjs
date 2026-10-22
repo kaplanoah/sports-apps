@@ -1,3 +1,4 @@
+import { holdClock } from "../../../../tests/browser/harness.mjs";
 import { waitForLoadToSettle } from "../../../../tests/browser/at-rest.mjs";
 import {
   leaveFractionDown,
@@ -382,7 +383,7 @@ test("a refresh quicker than the eye still shows the spokes turning a moment", a
   await openGames(page);
   const spinner = page.locator(".pull-refresh");
   // The page's clock otherwise keeps time with the test's, which would race the steps below.
-  await page.clock.pauseAt((await page.evaluate(() => Date.now())) + 1000);
+  await holdClock(page);
 
   await pullDown(page, 200);
 
