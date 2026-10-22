@@ -212,16 +212,19 @@
   --numbers: "Barlow Condensed", "Arial Narrow", sans-serif;
   --title-face: "Barlow Condensed", "Arial Narrow", sans-serif;
   --team-name: "Barlow Condensed", "Arial Narrow", sans-serif;
-  /* How far each place moves a team line's dot, seed, or tag down, from where its line puts it to
-     the middle of the name's capitals, and the seed note to just above the name's baseline. */
-  --standings-dot-drop: 1.15px;
-  --conference-tag-drop: 1.15px;
-  --seed-note-drop: 1.65px;
-  --bracket-dot-drop: -0.2px;
-  --bracket-seed-drop: -0.2px;
-  --faceoff-dot-drop: 0.8px;
-  --faceoff-seed-drop: -0.8px;
-  --compact-dot-drop: 0.75px;
+  /* How far each place moves a team line's dot, seed, or tag down from where its line puts it, set
+     by eye on a phone: one before a name sits on the name's capitals, and one after it on its
+     lowercase letters. */
+  --standings-dot-drop: 0.75px;
+  --conference-tag-drop: 0.7px;
+  --seed-note-drop: 1.15px;
+  --bracket-dot-drop: -0.15px;
+  --bracket-seed-drop: 0.05px;
+  --faceoff-dot-drop: 1.95px;
+  --faceoff-seed-drop: 0.45px;
+  --faceoff-after-name-dot-drop: 3.75px;
+  --faceoff-after-name-seed-drop: 2.25px;
+  --compact-dot-drop: 0.6px;
   --news-dot-drop: 0.45px;
   /* Each type role's size and weight in Barlow, and Barlow Condensed where a role sets it
      (shared/page/type.css). */
@@ -988,6 +991,12 @@ header.top h1 .title-letter:nth-child(3) {
 }
 .faceoff-side .seed {
   translate: 0 calc(1px + var(--faceoff-seed-drop));
+}
+.faceoff-side.home .dot {
+  translate: 0 var(--faceoff-after-name-dot-drop);
+}
+.faceoff-side.home .seed {
+  translate: 0 calc(1px + var(--faceoff-after-name-seed-drop));
 }
 .faceoff-side.lost .club {
   color: var(--ink-dim);

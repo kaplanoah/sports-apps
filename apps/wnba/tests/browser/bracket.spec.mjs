@@ -13,6 +13,9 @@ import { readCapitals } from "../../../../tests/browser/capitals.mjs";
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
 const PHONE = { width: 390, height: 844 };
+// How far below the middle of a team's name's capitals its dot sits, as this browser draws the spot
+// set by eye on a phone.
+const DOT_DROP_PX = 0.1;
 
 const readRoundName = (page, round) => page.locator(`.round-name[data-round="${round}"]`);
 
@@ -521,7 +524,7 @@ test("a series' winner's row is washed in teal, more on Walnut, and its loser's 
   await expect(out.locator(".dot")).toHaveCSS("opacity", "0.55");
 });
 
-test("each team's name sits a pixel above its wins, which stay where they were, and its dot centers on the name's capitals", async ({
+test("each team's name sits a pixel above its wins, which stay where they were, and its dot just below the middle of the name's capitals", async ({
   page,
 }) => {
   await openApp(page);
@@ -533,7 +536,7 @@ test("each team's name sits a pixel above its wins, which stay where they were, 
     readCapitals(row.locator(".team-name")),
     row.locator(".dot").boundingBox(),
   ]);
-  expect((dot?.y ?? 0) + (dot?.height ?? 0) / 2).toBeCloseTo(name.middle, 1);
+  expect((dot?.y ?? 0) + (dot?.height ?? 0) / 2 - name.middle).toBeCloseTo(DOT_DROP_PX, 1);
 });
 
 test("each team's wins sit on a block that casts a shadow on the card", async ({ page }) => {

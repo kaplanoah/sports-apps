@@ -10,6 +10,11 @@ test.use({ contextOptions: { reducedMotion: "reduce" } });
 const STANDINGS_NAME_GAP_PX = 20;
 // The least room between a standings group's name, like Playoffs, and its columns' names under it.
 const STANDINGS_HEADING_GAP_PX = 6;
+// How far above the middle of a club's name's capitals its dot and conference tag sit, and above the
+// name's baseline a seed note's sits, as this browser draws the spots set by eye on a phone.
+const DOT_LIFT_PX = 0.35;
+const CONFERENCE_TAG_LIFT_PX = 0.45;
+const SEED_NOTE_LIFT_PX = 0.85;
 
 test("the standings leave room between each team's name and the next one's", async ({ page }) => {
   await openApp(page);
@@ -46,7 +51,7 @@ test("the standings leave room between each group's name and its columns' names"
   expect(gap).toBeGreaterThanOrEqual(STANDINGS_HEADING_GAP_PX);
 });
 
-test("a standings club's dot and conference tag each center on the middle of its name's capitals", async ({
+test("a standings club's dot and conference tag each sit just above the middle of its name's capitals", async ({
   page,
 }) => {
   await openApp(page);
@@ -61,12 +66,12 @@ test("a standings club's dot and conference tag each center on the middle of its
     readCapitals(tag),
     cell.locator(".dot").boundingBox(),
   ]);
-  expect(tagCapitals.middle).toBeCloseTo(name.middle, 1);
-  expect((dot?.y ?? 0) + (dot?.height ?? 0) / 2).toBeCloseTo(name.middle, 1);
+  expect(name.middle - tagCapitals.middle).toBeCloseTo(CONFERENCE_TAG_LIFT_PX, 1);
+  expect(name.middle - (dot?.y ?? 0) - (dot?.height ?? 0) / 2).toBeCloseTo(DOT_LIFT_PX, 1);
   expect(await listChipsOffCenter(page)).toEqual([]);
 });
 
-test("a conference's standings set each seed note's baseline a third of a pixel above its name's", async ({
+test("a conference's standings set each seed note's baseline just above its name's", async ({
   page,
 }) => {
   await openApp(page);
@@ -77,7 +82,7 @@ test("a conference's standings set each seed note's baseline a third of a pixel 
     readCapitals(cell.first().locator(".seed-note")),
     readCapitals(cell.first().locator(".team-name")),
   ]);
-  expect(name.bottom - note.bottom).toBeCloseTo(1 / 3, 1);
+  expect(name.bottom - note.bottom).toBeCloseTo(SEED_NOTE_LIFT_PX, 1);
 });
 
 test("the standings' recent form reads a step below the season, in the mid ink", async ({
