@@ -59,7 +59,9 @@ paths:
   for Diagnostics to show (`shared/page/service-worker-steps.js`, read by `service-worker.js`).
   A phone the Worker signs out drops the copy (`shared/page/access.js`).
   Browser tests block service workers, whose requests skip the tests' routes, unless a test is about one.
-  Deploys bundle it with all of the app's `page/`; `npm run build` writes each app's bundle to its `worker/dist/`, which git ignores.
+  Deploys bundle it with all of the app's `page/` but a tuning round's `page/tuning-round.json`,
+  which a channel off production writes into the page instead (the root's `worker/tuning-files.mjs`);
+  `npm run build` writes each app's bundle to its `worker/dist/`, which git ignores.
   The build points the page's stylesheets, scripts, and import map into a folder named for its commit (`pinPageFiles` in the root's `worker/page-files.mjs`),
   which only that release's Worker serves, and browsers keep for good,
   so a page loaded mid-deploy never runs two releases' files together;

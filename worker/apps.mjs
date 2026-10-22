@@ -125,5 +125,9 @@ export function listWorkersOrExit(
   }
 }
 
-/** @param {string} app */
-export const findPageRoot = (app) => fileURLToPath(new URL("page/", findAppRoot(app)));
+/**
+ * @param {string} app
+ * @param {URL} [appsRoot] the folder that holds every app's
+ */
+export const findPageRoot = (app, appsRoot) =>
+  fileURLToPath(new URL("page/", findAppRoot(app, appsRoot)));

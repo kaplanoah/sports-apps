@@ -13,6 +13,7 @@ import {
 import { findChannel, readCommandLine } from "./channels.mjs";
 import { pinPageFiles, readPageFiles } from "./page-files.mjs";
 import { readVersion } from "./release.mjs";
+import { addTuningPanel } from "./tuning-files.mjs";
 
 const root = new URL("../", import.meta.url);
 /** @param {string} worker */
@@ -115,9 +116,12 @@ export function labelChannelFiles(files, label) {
  * @param {string} app
  * @param {ReturnType<typeof readRelease>} release
  * @param {string} [channel]
+ * @param {URL} [appsRoot] the folder that holds every app's
  */
-export function listBundledFiles(app, release, channel = "production") {
-  const files = labelChannelFiles(readPageFiles(findPageRoot(app)), findChannel(channel).label);
+export function listBundledFiles(app, release, channel = "production", appsRoot) {
+  const { label } = findChannel(channel);
+  const pageFiles = readPageFiles(findPageRoot(app, appsRoot));
+  const files = addTuningPanel(labelChannelFiles(pageFiles, label), label);
   if (!release) return files;
   return {
     ...pinPageFiles(files, release),
