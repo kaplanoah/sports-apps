@@ -86,6 +86,7 @@ but for the tuning panel's, which only a channel off production serves, and only
 - `pick-theme.js`: the theme picked, and each install's icon
 - `re-add-note.js`: when settings shows the note on updating the icon
 - `appearance.js`: settings' Appearance choices and the note on updating the icon
+- `handoff.js`: keeping a handoff from the Worker that signs another browser in
 - `dismiss-button.js`: the X in a box's corner
 
 ### Standings and bracket

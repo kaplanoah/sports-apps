@@ -14,6 +14,7 @@ import { isIos, isOnHomeScreen } from "./device.js";
 import { createViewerChoice } from "./device-storage.js";
 import { renderDismissButton } from "./dismiss-button.js";
 import { easeBackOpen, easeClosed, isEasingClosed, redrawEased } from "./eased-redraw.js";
+import { keepHandoff } from "./handoff.js";
 import { html, noteHeight, setHtml } from "./html.js";
 import {
   chooseReAddNote,
@@ -103,16 +104,13 @@ const ARROW = html`<svg class="re-add-arrow" viewBox="0 0 256 256" fill="current
   />
 </svg>`;
 
-/** @type {string | null} */
-let handoffAddress = null;
-
 // An iPhone's Home Screen app keeps the icon it was added with, so a theme picked in the app
 // changes its icon only once the site is added again, from Safari, which opens on the same theme.
 // Safari keeps its cookies apart from the app's, so the link signs it in with a handoff from the
 // Worker (access-gate.js), and until one arrives, or where none does, Safari asks for the code.
 /** @param {{ icon: "light" | "dark", picked: "light" | "dark", choice: string }} note */
 const renderNote = ({ icon, picked, choice }) => {
-  const reAddAddress = buildSafariAddress(choice, handoffAddress ?? location.href);
+  const reAddAddress = buildSafariAddress(choice, handoff.readAddress() ?? location.href);
   return html`<span class="re-add-icons" aria-hidden="true"
       ><span class="home-screen-icon" data-look="${icon}"></span>${ARROW}<span
         class="home-screen-icon"
@@ -151,77 +149,18 @@ function hideNote() {
 function updateNote() {
   if (readNote()) showNote();
   else hideNote();
-  followHandoff();
-}
-
-const HANDOFF_RETRY_MS = 30 * 1000;
-
-// The Worker makes one only for a phone signed in, and only while it asks for a code, so only a
-// read that didn't reach it, or that it failed, is worth trying again.
-/** @returns {Promise<{ address: string, expiresInMs: number } | "none" | "failed">} */
-async function requestHandoff() {
-  try {
-    const response = await fetch("access/handoff", { method: "POST" });
-    if (response.ok) return await response.json();
-    return response.status < 500 ? "none" : "failed";
-  } catch {
-    return "failed";
-  }
-}
-
-/** @type {ReturnType<typeof setTimeout> | undefined} */
-let renewTimer;
-let renewDueAt = Infinity;
-let isAskingForHandoff = false;
-
-/** @param {number} delayMs */
-function scheduleRenewal(delayMs) {
-  clearTimeout(renewTimer);
-  renewDueAt = Date.now() + delayMs;
-  renewTimer = setTimeout(renewHandoff, delayMs);
-}
-
-function stopRenewals() {
-  clearTimeout(renewTimer);
-  renewDueAt = Infinity;
+  handoff.follow();
 }
 
 // The note's link needs a handoff only while settings shows it.
 const isHandoffWanted = () =>
   /** @type {HTMLDialogElement} */ (findSettings()).open && readNote() !== null;
 
-// A handoff lasts minutes and settings can stay open longer, so the note asks for a new one
-// halfway through each.
-async function renewHandoff() {
-  stopRenewals();
-  isAskingForHandoff = true;
-  const answer = await requestHandoff();
-  isAskingForHandoff = false;
-  if (!isHandoffWanted()) return;
-  if (answer === "failed") {
-    scheduleRenewal(HANDOFF_RETRY_MS);
-    return;
-  }
-  handoffAddress = answer === "none" ? null : answer.address;
-  drawNote();
-  if (answer !== "none") scheduleRenewal(answer.expiresInMs / 2);
-}
-
-// A handoff kept while the note is away would be stale by the time it shows again.
-function followHandoff() {
-  if (isHandoffWanted()) {
-    if (renewDueAt === Infinity && !isAskingForHandoff) renewHandoff();
-    return;
-  }
-  stopRenewals();
-  handoffAddress = null;
-}
-
-// A phone freezes the page's timers while it's away, and short trips away leave settings open, so
-// a renewal they held back goes out as the page comes back.
-function renewIfDue() {
-  if (Date.now() >= renewDueAt) renewHandoff();
-}
+const handoff = keepHandoff({
+  path: "access/handoff",
+  isWanted: isHandoffWanted,
+  onRenewed: drawNote,
+});
 
 // A page that opens reads the phone's look as it opens, so only a return counts.
 let shownAt = -Infinity;
@@ -236,7 +175,7 @@ function drawNoteAtOnce() {
   const note = findNote();
   if (isEasingClosed(note)) easeBackOpen(note, drawNote);
   else drawNote();
-  followHandoff();
+  handoff.follow();
 }
 
 // On System, the icon re-adding gives follows the phone's setting. A change that comes as the page
@@ -260,16 +199,15 @@ function wireNote() {
   drawNote();
   // Settings opening asks for a handoff, and closing lets go of it, before the dialog's close
   // event, which then draws the link waiting for a fresh one.
-  new MutationObserver(followHandoff).observe(settings, {
+  new MutationObserver(handoff.follow).observe(settings, {
     attributes: true,
     attributeFilter: ["open"],
   });
-  followHandoff();
+  handoff.follow();
   settings.addEventListener("close", drawNote);
   findNote().addEventListener("click", (event) => {
     if (/** @type {Element} */ (event.target).closest("#dismissReAddNote")) dismissNote();
   });
-  watchTimeAway(renewIfDue);
 }
 
 /**
