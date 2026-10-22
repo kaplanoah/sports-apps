@@ -192,10 +192,11 @@ async function loadForbiddingGlobalWork(app) {
   }
 }
 
-test("each app's Worker loads without what Cloudflare refuses while a Worker loads", async () => {
+test("each app's Worker loads without what Cloudflare refuses while a Worker loads, with the entrypoint its previews bind", async () => {
   for (const app of listApps()) {
     const worker = await loadForbiddingGlobalWork(app);
     assert.equal(typeof worker.default.fetch, "function", app);
+    assert.equal(typeof worker.PreviewEntrypoint.prototype.readPageRoute, "function", app);
   }
 });
 

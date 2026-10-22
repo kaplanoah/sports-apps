@@ -2,7 +2,8 @@
 // without it at the address PAGE_HOST names, behind the access code (access-gate.js), and
 // robots.txt and health with neither (health.js). An app can move its page from under the key to the
 // PAGE_HOST address. Each release's files are served from a folder named for its commit, which
-// browsers keep for good.
+// browsers keep for good. A preview of beta's Worker serves its own page files and asks beta, by
+// its BETA binding, for everything else (preview-entrypoint.js).
 
 import {
   ACCESS_PATH,
@@ -199,6 +200,17 @@ function findAppPath(pathname, prefix) {
 }
 
 /**
+ * @param {URL} url
+ * @param {any} env
+ * @returns {{ prefix: string, appPath: string } | null} null where nothing answers
+ */
+function findAppRoute(url, env) {
+  const prefix = findAppPrefix(url, env);
+  const appPath = prefix === null ? null : findAppPath(url.pathname, prefix);
+  return appPath === null ? null : { prefix: String(prefix), appPath };
+}
+
+/**
  * @param {string} prefix
  * @param {any} env
  */
@@ -224,6 +236,13 @@ const isStorePath = (appPath) =>
   appPath === "/watch" || appPath.startsWith("/store/") || appPath.startsWith("/push/");
 
 const GATE_PATH = "/gate.html";
+const ACCESS_ROUTES = new Set(["", ACCESS_PATH, HANDOFF_PATH, MOVE_PATH]);
+
+/**
+ * How a preview's page file stands with beta: the path after beta's key, whether the phone may
+ * see the page, and, when it may, the cookie renewing its sign-in.
+ * @typedef {{ appPath: string, access: "open" | "missing" | "changed", cookie: string | null }} PageRoute
+ */
 
 /**
  * An app's Worker: its page, its store, and any reads of its own, all under the APP_KEY secret or
@@ -253,46 +272,112 @@ export function createAppWorker({
   const isDataPath = (appPath) => isStorePath(appPath) || Object.hasOwn(reads, appPath);
   const isMoving = (prefix, env) => isMovingToPageHost && canMoveToPageHost(prefix, env);
 
-  // Until the phone sends the access code, the page's address shows the gate instead, or, for a
-  // phone that never sent one under a key that's moving, the same page at PAGE_HOST, whose gate
-  // asks there. Nothing from the season answers. The page's other files are the repo's own, and
-  // public.
-  async function serveLocked(request, env, { url, appPath, prefix, access }) {
-    if (isDataPath(appPath)) return respondAccessRequired();
+  // Until the phone sends the access code, the page's address shows the gate instead. The page's
+  // other files are the repo's own, and public. Each visit to a page with a code renews its cookie,
+  // so a phone in use never has to type it again.
+  /**
+   * @param {Request} request
+   * @param {string} appPath
+   * @param {PageRoute["access"]} access
+   * @param {() => Promise<string | null> | string | null} readRenewal
+   */
+  async function servePageBehindGate(request, appPath, access, readRenewal) {
     if (!isIndexPath(appPath)) return servePageFile(request, appPath);
-    if (access === "missing" && isMoving(prefix, env)) return redirectToPageHost(url, appPath, env);
-    const gate = await servePageFile(request, GATE_PATH);
-    gate.headers.set("cache-control", "no-store");
-    return gate;
-  }
-
-  // Each visit to a page with a code renews its cookie, so a phone in use never has to type it again.
-  async function servePage(request, env, appPath, prefix) {
+    if (access !== "open") {
+      const gate = await servePageFile(request, GATE_PATH);
+      gate.headers.set("cache-control", "no-store");
+      return gate;
+    }
     const page = await servePageFile(request, appPath);
-    if (env.ACCESS_CODE)
-      page.headers.append("set-cookie", await createAccessCookie(request, env, prefix));
+    const renewal = await readRenewal();
+    if (renewal) page.headers.append("set-cookie", renewal);
     return page;
   }
 
+  // Nothing from the season answers until the phone sends the access code.
+  /**
+   * @param {Request} request
+   * @param {any} env
+   * @param {{ url: URL, appPath: string, access: PageRoute["access"] }} route
+   */
+  function serveData(request, env, { url, appPath, access }) {
+    if (access !== "open") return respondAccessRequired();
+    if (isStorePath(appPath)) return forwardToStore(request, env, appPath);
+    if (request.method === "GET") return reads[appPath](url, env);
+    return servePageFile(request, appPath);
+  }
+
+  /**
+   * @param {Request} request
+   * @param {any} env
+   * @param {URL} url
+   */
+  async function serveApp(request, env, url) {
+    const route = findAppRoute(url, env);
+    if (route === null) return serveNotFound();
+    const { prefix, appPath } = route;
+    if (appPath === "") return redirectToFolder(url);
+    if (appPath === ACCESS_PATH) return serveAccess(request, env, prefix);
+    if (appPath === HANDOFF_PATH) return serveHandoff(request, env, prefix);
+    if (appPath === MOVE_PATH && isMoving(prefix, env)) return serveMoveHandoff(request, env);
+    const access = await readAccess(request, env);
+    if (isDataPath(appPath)) return serveData(request, env, { url, appPath, access });
+    // A phone that never sent the code, under a key that's moving, opens the same page at
+    // PAGE_HOST, whose gate asks there.
+    if (access === "missing" && isIndexPath(appPath) && isMoving(prefix, env))
+      return redirectToPageHost(url, appPath, env);
+    return servePageBehindGate(request, appPath, access, () =>
+      env.ACCESS_CODE ? createAccessCookie(request, env, prefix) : null,
+    );
+  }
+
+  /**
+   * What beta's Worker tells a preview of an address the preview may serve from its own page
+   * files, or null for one beta answers itself.
+   * @param {string} address
+   * @param {string | null} cookie
+   * @param {any} env
+   * @returns {Promise<PageRoute | null>}
+   */
+  async function readPageRoute(address, cookie, env) {
+    const url = new URL(address);
+    const route = findAppRoute(url, env);
+    if (route === null || ACCESS_ROUTES.has(route.appPath) || isDataPath(route.appPath))
+      return null;
+    const request = new Request(url, { headers: cookie === null ? {} : { cookie } });
+    const access = await readAccess(request, env);
+    const renewal =
+      access === "open" && env.ACCESS_CODE
+        ? await createAccessCookie(request, env, route.prefix)
+        : null;
+    return { appPath: route.appPath, access, cookie: renewal };
+  }
+
+  // A preview has no secret or store of its own: beta's Worker, with its key, code, and store,
+  // says how each page file stands and answers everything else.
+  /**
+   * @param {Request} request
+   * @param {any} beta
+   */
+  async function servePreview(request, beta) {
+    /** @type {PageRoute | null} */
+    const route = await beta.readPageRoute(request.url, request.headers.get("cookie"));
+    if (route === null) return beta.fetch(request);
+    return servePageBehindGate(request, route.appPath, route.access, () => route.cookie);
+  }
+
   return {
+    /**
+     * @param {Request} request
+     * @param {any} [env]
+     */
     async fetch(request, env = {}) {
       const url = new URL(request.url);
       if (url.pathname === "/robots.txt") return serveRobots(releaseCommit);
+      if (env.BETA) return servePreview(request, env.BETA);
       if (url.pathname === "/health") return serveHealth(env);
-      const prefix = findAppPrefix(url, env);
-      const appPath = prefix === null ? null : findAppPath(url.pathname, prefix);
-      if (appPath === null) return serveNotFound();
-      if (appPath === "") return redirectToFolder(url);
-      if (appPath === ACCESS_PATH) return serveAccess(request, env, prefix);
-      if (appPath === HANDOFF_PATH) return serveHandoff(request, env, prefix);
-      if (appPath === MOVE_PATH && isMoving(prefix, env)) return serveMoveHandoff(request, env);
-      const access = await readAccess(request, env);
-      if (access !== "open") return serveLocked(request, env, { url, appPath, prefix, access });
-      if (isStorePath(appPath)) return forwardToStore(request, env, appPath);
-      if (request.method === "GET" && Object.hasOwn(reads, appPath))
-        return reads[appPath](url, env);
-      if (isIndexPath(appPath)) return servePage(request, env, appPath, prefix);
-      return servePageFile(request, appPath);
+      return serveApp(request, env, url);
     },
+    readPageRoute,
   };
 }

@@ -91,8 +91,9 @@
   Add `!` after a type that releases, as in `feat!:`, for a major change: a new address, lost data, or something that's gone; the `ship` skill says how it reaches each Worker.
 - Each app has a beta channel, a second Worker the `beta` branch deploys, which the `ship` skill says how to use.
   `beta` is a scratch branch: never commit to it or open a PR from it.
+  A design round runs on a preview of the PR, which serves its page on beta's data, so beta stays free.
 - A red change is one only the owner's phone can test: `.claude/rules/red-change.md` says what makes one, and the `ship` skill how it ships.
-- `npm run rollback`, `set-app-key`, `set-access-code`, `set-page-host`, `set-email-key`, and `set-rp-id` change the live Workers: run each only as `.claude/rules/tooling.md` says.
+- `npm run rollback`, `set-app-key`, `set-access-code`, `set-page-host`, `set-preview-host`, `set-email-key`, and `set-rp-id` change the live Workers: run each only as `.claude/rules/tooling.md` says.
 - The repo is public.
   Never commit secrets, keys, access codes, account IDs, real Worker addresses, subdomains, page hosts, or personal data; use placeholders in tests and docs:
   `example` or `example-subdomain` for a Worker's subdomain and `k3y` or `<key>` for a page's key,

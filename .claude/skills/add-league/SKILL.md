@@ -45,7 +45,7 @@ Delete it once the app's first PR merges.
 4. **Keeping the season.** `worker/src/season-updater.js` saves each snapshot into the store,
    leaving a field as it was when a feed it needs didn't answer, and lists the notifications for what's new.
    `worker/src/store.js` hands those functions to the shared store with `createSeasonStore(league)`.
-   `worker/src/index.js` builds the Worker with `createAppWorker` and exports the store's class.
+   `worker/src/index.js` builds the Worker with `createAppWorker` and exports the store's class and `createPreviewEntrypoint(worker)` as `PreviewEntrypoint`, which its previews bind.
 5. **The page.** `index.html` keeps the shared tab bar and settings markup, its element IDs, and the import map for `#shared/`.
    Its Games view is one empty `#seasonGames`, which `startDayStrip()` wires and `fillDayStrip()` fills with the league's game days.
    It loads the same shared stylesheets and scripts as the WNBA's, in the same order,

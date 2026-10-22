@@ -1,5 +1,6 @@
 import PAGE_FILES from "#page-files/mlb";
 import { createAppWorker } from "../../../../shared/worker/app-worker.js";
+import { createPreviewEntrypoint } from "../../../../shared/worker/preview-entrypoint.js";
 import { createBoxScoreServer } from "./box-score.js";
 import { createHighlightsServer } from "./highlights.js";
 import { LEAGUE_READS_COUNT, PITCHER_JOB } from "./pitcher-updater.js";
@@ -21,7 +22,7 @@ const rotations = createRotationServer();
 /** @param {any} env */
 const createLeagueReadCounter = (env) => () => addToJobCount(env, PITCHER_JOB, LEAGUE_READS_COUNT);
 
-export default createAppWorker({
+const worker = createAppWorker({
   pageFiles: PAGE_FILES,
   forwardToStore,
   isStoreAnswering,
@@ -35,4 +36,6 @@ export default createAppWorker({
   },
 });
 
+export default { fetch: worker.fetch };
+export const PreviewEntrypoint = createPreviewEntrypoint(worker);
 export { SeasonStore };

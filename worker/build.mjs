@@ -145,6 +145,18 @@ const embedPageFiles = (app, release, channel) => ({
   },
 });
 
+// Node, which runs only the tests, reads a stand-in for the Workers runtime through
+// #workers-runtime; the Worker reads the runtime's own.
+const importWorkersRuntime = {
+  name: "import-workers-runtime",
+  setup(bundler) {
+    bundler.onResolve({ filter: /^#workers-runtime$/ }, () => ({
+      path: "cloudflare:workers",
+      external: true,
+    }));
+  },
+};
+
 /**
  * @param {string} worker an app or a service
  * @param {{ channel?: string, release?: ReturnType<typeof readRelease> }} [options]
@@ -164,20 +176,30 @@ export async function buildWorker(
     target: "es2022",
     external: ["cloudflare:*"],
     banner: { js: describeBanner(worker) },
-    plugins: [embedPageFiles(worker, release, channel)],
+    plugins: [embedPageFiles(worker, release, channel), importWorkersRuntime],
     write: false,
   });
   return result.outputFiles[0].text;
+}
+
+/**
+ * Builds a Worker into its `worker/dist/worker.mjs`, where its wrangler.toml's `main` points.
+ * @param {string} worker
+ * @param {{ channel?: string }} [options]
+ */
+export async function writeWorker(worker, { channel = "production" } = {}) {
+  const built = await buildWorker(worker, { channel });
+  const output = findOutput(worker);
+  mkdirSync(path.dirname(output), { recursive: true });
+  writeFileSync(output, built);
+  return { output, size: built.length };
 }
 
 // With no Worker named, builds them all.
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const { positionals, channel } = readCommandLine(process.argv.slice(2));
   for (const worker of listWorkersOrExit(positionals[0])) {
-    const built = await buildWorker(worker, { channel });
-    const output = findOutput(worker);
-    mkdirSync(path.dirname(output), { recursive: true });
-    writeFileSync(output, built);
-    console.log(`Wrote ${output} (${built.length} bytes)`);
+    const { output, size } = await writeWorker(worker, { channel });
+    console.log(`Wrote ${output} (${size} bytes)`);
   }
 }

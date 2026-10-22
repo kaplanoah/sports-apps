@@ -1,5 +1,6 @@
 import PAGE_FILES from "#page-files/wnba";
 import { createAppWorker } from "../../../../shared/worker/app-worker.js";
+import { createPreviewEntrypoint } from "../../../../shared/worker/preview-entrypoint.js";
 import { createBoxScoreServer } from "./box-score.js";
 import { createHighlightsServer } from "./highlights.js";
 import { createLeadServer } from "./lead.js";
@@ -22,7 +23,7 @@ const previews = createPreviewServer();
 const rosters = createRosterServer();
 const players = createPlayerServer({ loadRoster: rosters.loadRoster });
 
-export default createAppWorker({
+const worker = createAppWorker({
   pageFiles: PAGE_FILES,
   forwardToStore,
   isStoreAnswering,
@@ -41,4 +42,6 @@ export default createAppWorker({
   },
 });
 
+export default { fetch: worker.fetch };
+export const PreviewEntrypoint = createPreviewEntrypoint(worker);
 export { SeasonStore };
