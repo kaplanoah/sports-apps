@@ -1,7 +1,5 @@
 import { readFileSync } from "node:fs";
 import * as MLBSnapshot from "../../page/js/snapshot.js";
-import PAGE_FILES from "#page-files/mlb";
-import { createAppWorker } from "../../../../shared/worker/app-worker.js";
 import { describeBoxScore } from "../../worker/src/box-score.js";
 import { describeHighlights } from "../../worker/src/highlights.js";
 import {
@@ -34,7 +32,8 @@ import {
   listSeasonStatsRequest,
   nameRosterKey,
 } from "../../worker/src/rosters.js";
-import { SeasonStore, forwardToStore } from "../../worker/src/store.js";
+import worker from "../../worker/src/index.js";
+import { SeasonStore } from "../../worker/src/store.js";
 import {
   test,
   expect,
@@ -601,12 +600,6 @@ export function serveLockedApp(page, { accessCode, pageHost }) {
   const snapshot = buildFixtureSnapshot(EVENING_FIXTURE);
   const loadSnapshot = async () => structuredClone(snapshot);
   const testStore = createTestStore(SeasonStore, { loadSnapshot, now: EVENING_FIXTURE.now });
-  const worker = createAppWorker({
-    pageFiles: PAGE_FILES,
-    forwardToStore,
-    isStoreAnswering: async () => true,
-    isMovingToPageHost: true,
-  });
   return serveLockedPage(page, {
     worker,
     testStore,
