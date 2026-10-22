@@ -416,7 +416,7 @@ const movingWorker = createAppWorker({
  * @param {import("@playwright/test").Page} page
  * @param {{ accessCode: string, pageHost?: string }} options
  */
-export async function serveMovingApp(page, { accessCode, pageHost }) {
+async function serveMovingApp(page, { accessCode, pageHost }) {
   const testStore = await createAfternoonStore();
   return serveLockedPage(page, {
     worker: movingWorker,
