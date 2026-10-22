@@ -44,7 +44,10 @@ async function screenshotSvg(page, svgUrl, size) {
     `<style>html, body { margin: 0 } img { display: block; width: ${size}px; height: ${size}px }</style><img src="${svgUrl}" />`,
   );
   await page.locator("img").evaluate((image) => /** @type {HTMLImageElement} */ (image).decode());
-  const shot = await page.screenshot({ clip: { x: 0, y: 0, width: size, height: size }, scale: "css" });
+  const shot = await page.screenshot({
+    clip: { x: 0, y: 0, width: size, height: size },
+    scale: "css",
+  });
   return writeDataUrl("image/png", shot);
 }
 
