@@ -518,7 +518,10 @@ test("the Preview build runs only for a pull request from this repo whose previe
 test("the Preview build hands the build its pull request, base, and event", () => {
   const build = readJobText(BUILD_WORKFLOW, "build");
   assert.match(build, /^ {10}ACTION: \$\{\{ github\.event\.action \}\}$/m);
-  assert.match(build, /^ {8}run: node worker\/preview\.mjs build "\$PULL_REQUEST" "\$BASE" "\$ACTION"$/m);
+  assert.match(
+    build,
+    /^ {8}run: node worker\/preview\.mjs build "\$PULL_REQUEST" "\$BASE" "\$ACTION"$/m,
+  );
 });
 
 test("the Preview workflow takes only a finished build of a pull request from this repo", () => {
