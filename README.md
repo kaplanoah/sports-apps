@@ -251,12 +251,8 @@ ready pull request's `check` fails until a review has passed on the code that
 merges, the pull request merged into `main`. A review that can't run, that left
 a changed file or a rule file unread, or whose reviewers, check across areas, or
 posting step didn't finish, blocks the merge. Its findings don't fail the check;
-answer all of the first review's findings in one push, by fixing each or
-replying why not, then add the `review` label to have it reviewed again, which
-takes the label off. From the second review on, only a fix for an Important
-finding, or an Unsure one that proved a real bug, gets a push and the label: a
-Nit or Pre-existing finding gets a reply on its thread. Resolve each thread,
-since `main` merges only once every thread is resolved.
+answer and resolve every finding as the [steward skill](.claude/skills/steward/SKILL.md)
+says. `main` merges only once every review thread is resolved.
 
 A change that only an iPhone can test, like one to how the page's parts slide or
 layer, is a red change (`worker/red-change.mjs`). CI holds it on a `phone`
