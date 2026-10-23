@@ -50,9 +50,11 @@ paths:
   - `.claude/hooks/context-limit.mjs` hands a session off to a fresh one as its context grows.
   - `.claude/hooks/install-packages.mjs` runs `npm ci` as a session starts when `node_modules` is out of date.
   - `.claude/hooks/check-push.mjs` runs lint, format, types, and dead code before each `git push`.
-- A hand deploy needs the session's page URL and access code settings to verify its app.
-  Without them, an upload can stay live but fail verification;
-  finish setup and use the applicable GitHub rerun or production `Watch apps` check described above.
+- A hand deploy needs `<APP>_PAGE_URL` (`<APP>_BETA_PAGE_URL` for beta) and `ACCESS_CODE` in the session's environment to verify its app.
+  Without them, an upload stays live but fails verification.
+  For standalone setup, follow the README's environment settings and manual page check.
+  With GitHub deployment configured, re-run the Deploy run's jobs after saving its page secrets,
+  following the rerun requirements above.
 - A session runs `deploy:api`, `rollback`, and each `set-` script itself, in the cloud environment that holds the Cloudflare token,
   and the owner approves each when `.claude/settings.json` asks.
   Never hand the owner one to run on their own computer, which has neither the token nor the account ID,

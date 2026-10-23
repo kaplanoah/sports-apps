@@ -154,9 +154,9 @@ themselves, see "If they deploy it themselves" below.
 
 **2. Deploy the Worker.** Run `npm ci`, then `npm run deploy:api -- <app>`. It
 runs the tests, deploys the app from `main` exactly as it is on GitHub, and
-checks that the Worker answers. The first upload can fail as live but unverified
-until the page settings exist; continue to step 3 in that case, then complete the
-[tooling rules' verification steps](.claude/rules/tooling.md). It keeps the Worker's address out of its output, because GitHub's
+checks that the Worker answers. The first upload fails verification while leaving
+the version live because its page settings do not exist yet. Continue to step 3,
+then check that initial page manually in step 4. It keeps the Worker's address out of its output, because GitHub's
 deploy logs are public; step 3 prints it. It refuses uncommitted changes and anything that isn't `main`'s latest commit.
 The session's own branch works once it matches `main`. It sets
 `NODE_USE_ENV_PROXY=1` so Node sends its requests through the session's
@@ -178,6 +178,13 @@ Running it again with a new code signs every phone out until it types the new
 one. See the [tooling rules](.claude/rules/tooling.md) before using `--remove`,
 which changes deployment verification. Never commit or post the code.
 
+Have the user add `<APP>_PAGE_URL=<page address>` and `ACCESS_CODE=<chosen code>`
+to the cloud environment's **Environment variables**, then **Save changes**.
+Replace `<APP>` with the app's uppercase name, such as `MLB` or `WNBA`.
+These settings apply to new sessions, which receive them for future manual
+deploys. Finish this initial setup with step 4's manual page check; it needs
+no GitHub deployment workflow.
+
 To give the page an address of its own, on a domain in the Cloudflare account,
 run `npm run set-page-host -- <app> <host>` once the page has a code. It points
 `https://<host>/` at the Worker, which opens the page there without the key,
@@ -193,9 +200,10 @@ Without it, the Worker still reads the feeds but keeps no story.
 `<address>store/news/status` says what the last run couldn't do, and counts
 Claude's calls and tokens by day.
 
-**4. Check the page.** Have the user open the address. The first visit also
-starts the Worker's own updates. Then read `<address>store/live/status` with
-`curl`. If `data.error` and `data.write` are empty, it works. If not, `error`
+**4. Check the page.** Have the user open the address, enter its code, and
+confirm the season appears. The first visit also starts the Worker's own updates.
+Then have them open `<address>store/live/status` in that signed-in browser.
+If `data.error` and `data.write` are empty, it works. If not, `error`
 says why the Worker couldn't read the league, and `write` names the save that failed.
 
 **5. Save it to the home screen.** On an iPhone, have them open the address
@@ -371,7 +379,8 @@ Each app deploy checks its Worker's release and opens its page as a phone does,
 signed in with its code. The [tooling rules](.claude/rules/tooling.md) distinguish
 broken releases that roll back from unavailable verification that fails the run
 while leaving the upload live but unverified. After configuring a new app's key,
-code, and page URL, complete the bootstrap verification steps in those rules.
+code, and page URL, re-run that Deploy run's jobs in GitHub following those
+rules' rerun requirements.
 
 Every 15 minutes, the **Watch apps** workflow opens each production app's page
 the same way and keeps one open issue for each app that isn't opening, which

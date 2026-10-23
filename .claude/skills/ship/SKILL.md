@@ -181,8 +181,8 @@ Wait for the Deploy runs for the merge commit to finish, then read their logs an
 - It says "Nothing the Worker runs changed": this run left the Worker unchanged because the merge didn't need a deploy,
   or an earlier run already deployed it.
   Tell the user which; this line alone establishes no new verification.
-  For bootstrap verification and superseded runs,
-  follow `.claude/rules/tooling.md`.
+  For bootstrap verification, re-run the Deploy run's jobs following `.claude/rules/tooling.md`'s rerun requirements.
+  For superseded runs, follow its guidance instead.
 - It says "has moved on" and "whose deploy covers": another merge landed first, and CI passed on it, so its Deploy run covers this one.
   This run is superseded; read that run's log for its verified outcome.
   Saying "hasn't passed on it" instead, it deploys this merge while the newer one's CI is still to pass, so read on in this run's log.
