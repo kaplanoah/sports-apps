@@ -77,6 +77,13 @@ function loadPageMove({
     isOnHomeScreen: () => isOnHomeScreen,
     isAppleBrowser: () => isAppleBrowser,
     readPhoneLook: () => phoneLook,
+    keepPickedAppearance: (choice) => {
+      localStorage.setItem("appearance", JSON.stringify(choice));
+      const address = new URL(location.href);
+      address.searchParams.set("theme", choice);
+      if (isAppleBrowser) location.replace(address);
+      else location.href = address.href;
+    },
     readAppearanceChoice: (stored) => {
       try {
         return JSON.parse(stored);
@@ -328,7 +335,7 @@ test("a copied link carries no choices into a browser once it's old", () => {
 
 test("a move from the Home Screen app keeps its icon in the browser's address while it's finished", () => {
   const page = loadPageMove({ href: addCarried(NEW_ADDRESS, writeCarried({ fromApp: true })) });
-  assert.equal(page.takeCarriedChoices(NOW), null);
+  assert.equal(page.takeCarriedChoices(NOW), "dark");
   assert.equal(page.readPageMove().icon, "dark");
   const address = new URL(page.location.href);
   assert.equal(page.unpackCarried(address.searchParams.get("carried")).icon, "dark");
@@ -343,14 +350,43 @@ test("a move from the Home Screen app keeps its icon in the browser's address wh
   assert.equal(page.location.href, NEW_ADDRESS);
 });
 
-test("a move's icon starts on the theme the app showed, even where the browser keeps its own", () => {
+test("a move opens the browser on the source app's appearance and icon, keeping other browser choices", () => {
   const page = loadPageMove({
     href: addCarried(NEW_ADDRESS, writeCarried({ fromApp: true })),
-    stored: { appearance: '"light"' },
+    stored: { appearance: '"light"', rankings: '["BOS"]' },
+  });
+  page.takeCarriedChoices(NOW);
+  assert.equal(page.localStorage.getItem("appearance"), '"dark"');
+  assert.equal(page.localStorage.getItem("rankings"), '["BOS"]');
+  assert.equal(page.readPageMove().icon, "dark");
+});
+
+test("a move from System sets the browser to the selected icon's look even without a stored source choice", () => {
+  const page = loadPageMove({
+    href: addCarried(NEW_ADDRESS, writeCarried({ fromApp: true, choices: {} })),
+    stored: { appearance: '"dark"' },
   });
   page.takeCarriedChoices(NOW);
   assert.equal(page.localStorage.getItem("appearance"), '"light"');
-  assert.equal(page.readPageMove().icon, "dark");
+  assert.equal(page.readPageMove().icon, "light");
+});
+
+test("picking a migration icon carries its matching appearance into the new app", () => {
+  const page = loadPageMove({ href: addCarried(NEW_ADDRESS, writeCarried({ fromApp: true })) });
+  page.takeCarriedChoices(NOW);
+  page.keepPageMoveIcon("light");
+  const address = new URL(page.location.replaced);
+  const carried = page.unpackCarried(address.searchParams.get("carried"));
+  assert.equal(carried.icon, "light");
+  assert.equal(carried.choices.appearance, '"light"');
+  const installed = loadPageMove({
+    href: addCarried(NEW_ADDRESS, address.searchParams.get("carried")),
+    isOnHomeScreen: true,
+    phoneLook: "dark",
+  });
+  const state = installed.startTheme();
+  assert.equal(state.choice, "light");
+  assert.equal(state.icon, "light");
 });
 
 test("a browser off Safari keeps the icon picked in its address without loading again", () => {

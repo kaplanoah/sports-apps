@@ -314,21 +314,28 @@ async function tapUseNewSite(app, choices, addedOnTheme) {
 }
 
 /**
- * Opens a move's handoff in the phone's browser, Safari unless `device` is another phone, never
- * signed in, on the phone's light or dark setting as the move left.
+ * Opens a move's handoff in the phone's browser, Safari unless `device` is another phone, on the
+ * phone's light or dark setting as the move left, with any `choices` a previous visit kept.
  * @param {MovingApp} app
  * @param {{ handoff: URL, colorScheme: "light" | "dark" }} move
  * @param {typeof IPHONE} [device]
+ * @param {Record<string, unknown>} [choices]
  */
 async function openInBrowser(
   { browser, serve, pageHost },
   { handoff, colorScheme },
   device = IPHONE,
+  choices = {},
 ) {
   const context = await browser.newContext({ ...device, reducedMotion: "reduce", colorScheme });
   const browserPage = await context.newPage();
+  if (device === IPHONE)
+    await browserPage.addInitScript(() => {
+      Object.defineProperty(navigator, "standalone", { get: () => false });
+    });
   await takeAwayPush(browserPage);
   await serve(browserPage, { accessCode: ACCESS_CODE, pageHost });
+  if (Object.keys(choices).length) await signIn(browserPage, findNewAddress(pageHost), choices);
   // A navigation the test starts throws on the redirect Playwright doesn't route, so the blank page
   // starts it, as a link would.
   await followHandoff(browserPage, pageHost, () =>
@@ -366,7 +373,11 @@ export async function checkMovingWelcome(app) {
   await page.emulateMedia({ colorScheme: "dark" });
   const move = await tapUseNewSite(app, { appearance: "auto" });
   const { at, ...carried } = unpack(move.handoff.searchParams.get("carried"));
-  expect(carried).toMatchObject({ choices: { appearance: '"auto"' }, fromApp: true });
+  expect(carried).toMatchObject({
+    choices: { appearance: '"dark"' },
+    icon: "dark",
+    fromApp: true,
+  });
   expect(at - move.tappedAt).toBeGreaterThanOrEqual(0);
   expect(at - move.tappedAt).toBeLessThan(60_000);
 
@@ -384,7 +395,11 @@ export async function checkMovingWelcome(app) {
   await expect(welcome.getByRole("radio", { name: looks.dark, exact: true })).toBeChecked();
   await expect(welcome.getByRole("button", { name: "Continue in browser" })).toBeVisible();
   await expect(welcome.getByRole("button", { name: "Install" })).toHaveCount(0);
-  await checkCardInEachLook(safariPage);
+  for (const look of /** @type {const} */ (["light", "dark"])) {
+    await welcome.getByRole("radio", { name: looks[look], exact: true }).check();
+    await expect(safariPage.locator("html")).toHaveAttribute("data-theme", look);
+    await checkCardReads(safariPage);
+  }
   await safariPage.context().close();
 }
 
@@ -409,7 +424,7 @@ export async function checkMovingIconFollowsTheme(app) {
   await page.emulateMedia({ colorScheme: "dark" });
   const move = await tapUseNewSite(app, { appearance: "light" }, "dark");
   expect(unpack(move.handoff.searchParams.get("carried")).icon).toBe("light");
-  const safariPage = await openInBrowser(app, move);
+  const safariPage = await openInBrowser(app, move, IPHONE, { appearance: "dark" });
   await expect(safariPage.locator("html")).toHaveAttribute("data-theme", "light");
   await expect(
     safariPage.locator(WELCOME).getByRole("radio", { name: looks.light, exact: true }),
@@ -426,9 +441,8 @@ export async function checkMovingIconFollowsTheme(app) {
 }
 
 /**
- * A pick of the icon in the moving welcome changes only the icon the site is added with, and rides
- * in the address the site is added from, until closing the welcome ends the move and the icon goes
- * back to the theme's.
+ * A pick in the moving welcome sets the icon and its matching theme in the browser and the new
+ * Home Screen app. Only a later theme change in Settings shows the icon reminder.
  * @param {MovingApp} app
  */
 export async function checkMovingIconPick(app) {
@@ -439,13 +453,26 @@ export async function checkMovingIconPick(app) {
   const darkIcon = await icon.getAttribute("href");
   await safariPage.locator(WELCOME).getByRole("radio", { name: looks.light, exact: true }).check();
   await expect(icon).not.toHaveAttribute("href", darkIcon);
-  await expect(safariPage.locator("html")).toHaveAttribute("data-theme", "dark");
-  expect(await safariPage.evaluate(() => localStorage.getItem("appearance"))).toBe('"dark"');
+  await expect(safariPage.locator("html")).toHaveAttribute("data-theme", "light");
+  expect(await safariPage.evaluate(() => localStorage.getItem("appearance"))).toBe('"light"');
   const address = new URL(safariPage.url());
   expect(unpack(address.searchParams.get("carried")).icon).toBe("light");
+  expect(unpack(address.searchParams.get("carried")).choices.appearance).toBe('"light"');
+  expect(address.searchParams.get("theme")).toBe("light");
   await safariPage.locator(WELCOME).getByRole("button", { name: "Close" }).click();
-  await expect(icon).toHaveAttribute("href", darkIcon);
+  await expect(icon).not.toHaveAttribute("href", darkIcon);
   await safariPage.context().close();
+  const installed = await openMovedHomeScreenApp(app, address);
+  await openSettings(installed);
+  await expect(installed.locator('input[name="appearance"][value="light"]')).toBeChecked();
+  expect(await installed.evaluate(() => localStorage.getItem("homeScreenIcon"))).toBe("light");
+  await expect(installed.locator("#appearanceNote")).toBeHidden();
+  await installed.reload();
+  await expect(installed.locator("#settingsDialog")).toBeVisible();
+  await expect(installed.locator("#appearanceNote")).toBeHidden();
+  await installed.getByRole("radio", { name: looks.dark, exact: true }).check();
+  await expect(installed.locator("#appearanceNote")).toBeVisible();
+  await installed.context().close();
 }
 
 /**
@@ -571,6 +598,9 @@ export async function checkNotificationsAsk(app) {
   await expect(updates.getByRole("button", { name: "Dismiss notifications" })).toBeVisible();
   await expectAtAddressCarryingNothing(page, findNewAddress(app.pageHost));
   await checkCardRoles(page);
+  await openSettings(page);
+  await page.locator('input[name="appearance"][value="auto"]').check();
+  await page.locator("#settingsDialog").getByRole("button", { name: "Close", exact: true }).click();
   await checkCardInEachLook(page);
 }
 

@@ -3,15 +3,17 @@
 // address leaves for the new one at once, and a Home Screen app there offers the move in its
 // Updates box (move-cards.js). Either carries the viewer's choices in the new address, packed in
 // one value, since a Home Screen app keeps its storage apart from the browser's and opens at the
-// address it was added from. The browser keeps them only where it has none of its own, and only
-// soon after they were packed, so a copied link carries nobody's choices into another browser. A
+// address it was added from. Soon after they were packed, the browser keeps them where it has none
+// of its own; a Home Screen move also replaces its appearance to match the source app. A
 // move from the Home Screen app opens the welcome's steps for finishing it, whose pick of the icon
-// rides in the address too. The new app's first open keeps the choices into its empty storage,
-// with the icon and whether to ask about notifications. This plain script loads in the head before
-// pick-theme.js, which takes the choices first, before it keeps a theme the address names.
+// and its matching theme ride in the address too. The new app's first open keeps the choices into
+// its empty storage, with the icon and whether to ask about notifications. This plain script loads
+// in the head before pick-theme.js, which takes the choices first, before it keeps a theme the
+// address names.
 
-/* global isAppleBrowser, isLook, isOnHomeScreen, readPhoneLook -- from pick-theme.js */
+/* global isLook, isOnHomeScreen, readPhoneLook -- from pick-theme.js */
 /* global readAppearanceChoice -- from pick-theme.js */
+/* global keepPickedAppearance -- from pick-theme.js */
 
 const CARRIED_PARAMETER = "carried";
 
@@ -153,9 +155,15 @@ function readCarriedChoices() {
 const hasOwnChoices = () => Object.keys(readCarriedChoices()).length > 0;
 
 /** @param {Carried} carried */
-const resolveCarriedIcon = (carried) =>
-  carried.icon ??
-  (carried.fromApp ? showLookOf(readAppearanceChoice(carried.choices.appearance ?? "")) : null);
+function resolveCarriedAppearance(carried) {
+  if (!carried.fromApp) return carried;
+  const icon = carried.icon ?? showLookOf(readAppearanceChoice(carried.choices.appearance ?? ""));
+  return {
+    ...carried,
+    icon,
+    choices: { ...carried.choices, appearance: JSON.stringify(icon) },
+  };
+}
 
 /** @param {Record<string, string>} choices */
 function keepCarriedChoices(choices) {
@@ -172,10 +180,7 @@ function keepCarriedChoices(choices) {
  */
 function buildCarriedAddress(address, carried) {
   const url = new URL(address);
-  url.searchParams.set(
-    CARRIED_PARAMETER,
-    packCarried({ ...carried, icon: resolveCarriedIcon(carried) }),
-  );
+  url.searchParams.set(CARRIED_PARAMETER, packCarried(resolveCarriedAppearance(carried)));
   return url;
 }
 
@@ -230,10 +235,9 @@ function forgetPageMove() {
 function keepPageMoveIcon(icon) {
   const move = readPageMove();
   if (!move) return;
-  keepPageMove({ ...move, icon });
-  const address = buildCarriedAddress(location.href, { ...move, icon });
-  if (isAppleBrowser()) location.replace(address);
-  else replaceAddress(address);
+  keepPageMove(resolveCarriedAppearance({ ...move, icon }));
+  nameMoveInAddress();
+  keepPickedAppearance(icon);
 }
 
 /** @param {Carried} carried */
@@ -260,11 +264,10 @@ const showLookOf = (choice) => (isLook(choice) ? choice : readPhoneLook());
 function takeIntoBrowser(carried, now) {
   if (Math.abs(now - carried.at) < CARRIED_FRESH_MS) {
     if (!hasOwnChoices()) keepCarriedChoices(carried.choices);
-    if (carried.fromApp)
-      keepPageMove({
-        ...carried,
-        icon: resolveCarriedIcon(carried),
-      });
+    if (carried.fromApp) {
+      keepCarriedChoices({ appearance: carried.choices.appearance });
+      keepPageMove(carried);
+    }
   }
   nameMoveInAddress();
 }
@@ -277,12 +280,12 @@ function takeIntoBrowser(carried, now) {
 function takeCarriedChoices(now = Date.now()) {
   const address = new URL(location.href);
   if (!address.searchParams.has(CARRIED_PARAMETER)) return null;
-  const carried = unpackCarried(address.searchParams.get(CARRIED_PARAMETER));
+  const unpacked = unpackCarried(address.searchParams.get(CARRIED_PARAMETER));
+  const carried = unpacked ? resolveCarriedAppearance(unpacked) : null;
   if (isOnHomeScreen()) {
     address.searchParams.delete(CARRIED_PARAMETER);
     replaceAddress(address);
     if (carried) takeIntoHomeScreen(carried);
-    return carried ? resolveCarriedIcon(carried) : null;
   } else if (carried) takeIntoBrowser(carried, now);
   else nameMoveInAddress();
   return carried?.icon ?? null;
