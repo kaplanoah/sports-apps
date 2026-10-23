@@ -122,16 +122,14 @@ const readMarkedYear = (picker) =>
  *   pick: (year: number) => Promise<void>,
  *   watchSelection: (watcher: (selection: import("./season-reader.js").SeasonSelection) => void) => unknown,
  *   showPicked: () => void,
- *   showUnread: () => void,
  * }} handlers
  */
-export function watchSeasonPicks(row, { pick, watchSelection, showPicked, showUnread }) {
+export function watchSeasonPicks(row, { pick, watchSelection, showPicked }) {
   const picker = row.querySelector("select");
   const initialYear = picker ? readMarkedYear(picker) : "";
   watchSelection(({ year, kind }) => {
     markPicked(row, year === null ? initialYear : String(year));
     if (kind === "shown") showPicked();
-    if (kind === "unread") showUnread();
   });
   row.addEventListener("change", (event) => {
     const picker = /** @type {HTMLSelectElement} */ (event.target);

@@ -19,6 +19,7 @@ function startReader(documents, options = {}) {
   };
   const reader = createSeasonReader({
     store,
+    readPick: options.readPick,
     version: 1,
     showUnreadable: () => shown.unreadable++,
     guessYear: () => options.guessedYear ?? 2026,
@@ -274,7 +275,9 @@ function startPicks(reader, pickBefore) {
     keepPick: (year) => {
       picks.picked = year;
     },
-    noteUnreachable: () => picks.unreachable++,
+  });
+  reader.watchSelection(({ kind }) => {
+    if (kind === "unread") picks.unreachable++;
   });
   return { picks, pickSeason };
 }
@@ -444,6 +447,22 @@ test("a load the store can't answer fails, and loading again reads the current s
   await assert.rejects(reader.loadSeason(), /unreadable/);
   unreadable.length = 0;
   await reader.loadSeason();
+
+  assert.deepEqual([shown.year, shown.season], [2026, SEASON_2026]);
+});
+
+test("a restored pick after a failed first current read still recovers from the store's current snapshot", async () => {
+  const { reader, shown, deliver } = startReader(
+    { "live/current": { season: 2026 }, "seasons/2026": SEASON_2026 },
+    { unreadable: ["live/current"], readPick: () => 2026 },
+  );
+  const selections = [];
+  reader.watchSelection((selection) => selections.push(selection));
+
+  await assert.rejects(reader.loadSeason(), /unreadable/);
+  assert.deepEqual(selections.at(-1), { year: 2026, kind: "unread" });
+  deliver("live/current", { season: 2026 });
+  await settle();
 
   assert.deepEqual([shown.year, shown.season], [2026, SEASON_2026]);
 });

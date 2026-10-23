@@ -1,4 +1,3 @@
-import { isEarlierSeason } from "#shared/title-year.js";
 import { createSeasonPicks, createSeasonReader, isReadableSeason } from "#shared/season-reader.js";
 import { listSeasonYears } from "#shared/season-picker.js";
 import { buildBracket } from "./bracket.js";
@@ -165,7 +164,6 @@ export function startSeasonData({ showChange, showStamp, showCurrentYear, showUn
     keepPick: (year) => {
       session.activeYear = year;
     },
-    noteUnreachable,
   });
 }
 
@@ -173,11 +171,10 @@ export function startSeasonData({ showChange, showStamp, showCurrentYear, showUn
 // showing the current season loads whichever the store now says is current, as it may have moved on.
 export async function loadSeason() {
   try {
-    const shownYear = reader?.readShownYear() ?? session.activeYear;
-    await reader?.loadSeason(isEarlierSeason(shownYear, session.currentSeason) ? shownYear : null);
+    await reader?.reloadSeason(session.activeYear, session.currentSeason);
     session.currentSeason = reader?.readCurrentYear() ?? session.currentSeason;
   } catch {
-    noteUnreachable();
+    /* the reader has reported the failure */
   }
 }
 

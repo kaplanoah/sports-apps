@@ -126,7 +126,7 @@ test("an older read of the seasons that answers after a newer one leaves the new
 function watchRow(row) {
   /** @type {(selection: import("../shared/page/season-reader.js").SeasonSelection) => void} */
   let publish = () => {};
-  const redraws = { picked: 0, unread: 0 };
+  const redraws = { picked: 0 };
   const picks = [];
   watchSeasonPicks(row, {
     pick: async (year) => {
@@ -136,7 +136,6 @@ function watchRow(row) {
       publish = watcher;
     },
     showPicked: () => redraws.picked++,
-    showUnread: () => redraws.unread++,
   });
   return { publish, redraws, picks };
 }
@@ -149,7 +148,7 @@ test("a pick asks for its season, and the reader's selection marks its value and
   publish({ year: 2025, kind: "loading" });
   assert.deepEqual([picker.value, readMarked()], ["2025", "2025"]);
   publish({ year: 2025, kind: "shown" });
-  assert.deepEqual(redraws, { picked: 1, unread: 0 });
+  assert.deepEqual(redraws, { picked: 1 });
 });
 
 test("a reload taking over a pick marks the reader's season without waiting for the pick", () => {
@@ -160,16 +159,16 @@ test("a reload taking over a pick marks the reader's season without waiting for 
   publish({ year: 2026, kind: "loading" });
   publish({ year: 2026, kind: "loaded" });
   assert.deepEqual([picker.value, readMarked()], ["2026", "2026"]);
-  assert.deepEqual(redraws, { picked: 0, unread: 0 });
+  assert.deepEqual(redraws, { picked: 0 });
 });
 
-test("a failed selection marks the restored season and redraws its error", () => {
+test("a failed selection marks the restored season without redrawing", () => {
   const { row, picker, readMarked } = createRow(["2026", "2025", "2024"], "2024");
   const { publish, redraws } = watchRow(row);
   publish({ year: 2025, kind: "loading" });
   publish({ year: 2026, kind: "unread" });
   assert.deepEqual([picker.value, readMarked()], ["2026", "2026"]);
-  assert.deepEqual(redraws, { picked: 0, unread: 1 });
+  assert.deepEqual(redraws, { picked: 0 });
 });
 
 test("before the reader knows any season, a failure restores the initially drawn choice", () => {

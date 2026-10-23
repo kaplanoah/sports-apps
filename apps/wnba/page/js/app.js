@@ -335,7 +335,6 @@ async function boot() {
     pick: showYear,
     watchSelection: watchSeasonSelection,
     showPicked: drawPickedSeason,
-    showUnread: () => redrawEased(renderStamp),
   });
   const [years] = await Promise.all([readSeasonYears(), loadSeason()]);
   fillSeasonList(years);

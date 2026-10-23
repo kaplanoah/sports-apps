@@ -44,6 +44,10 @@ async function expectPickedSeason(page, year) {
   await expect(page.locator("#seasonPicker option[selected]")).toHaveAttribute("value", year);
   if (year === "2026") await expect(page.locator("#titleYear")).toBeHidden();
   else await expect(page.locator("#titleYear")).toHaveText(year);
+  await page.waitForFunction(async (year) => {
+    const { session } = await import(new URL("js/session.js", location.href).href);
+    return (session.season?.year ?? session.season?.season) === year;
+  }, Number(year));
 }
 
 /** @param {import("@playwright/test").Page} page */
@@ -71,6 +75,7 @@ async function checkPickDuringReload(page) {
 /** @param {import("@playwright/test").Page} page */
 async function checkNewestPickDraws(page) {
   await waitForLoadToSettle(page);
+  await observePickedRead(page);
   await openSettings(page);
   const release = await holdRequests(page, matchPath("/store/seasons/2025"), { times: 1 });
   const picking = page.waitForRequest(matchPath("/store/seasons/2025"));
@@ -79,6 +84,7 @@ async function checkNewestPickDraws(page) {
   await page.locator("#seasonPicker").selectOption("2024");
   await expectPickedSeason(page, "2024");
   release();
+  await page.waitForFunction(() => Reflect.get(window, "pickedReadSettled"));
   await waitForLoadToSettle(page);
   await expectPickedSeason(page, "2024");
 }
