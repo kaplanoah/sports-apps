@@ -11,6 +11,7 @@ import {
   saveSnapshot,
 } from "../worker/src/season-updater.js";
 import { createDocs } from "../../../tests/job-context.js";
+import { settle } from "../../../tests/settle.js";
 import { readSeasonAverages } from "./player-fixtures.js";
 
 const AFTERNOON = JSON.parse(
@@ -403,7 +404,7 @@ test("an update and the player job that change the season at once each keep the 
   const { read } = docs;
   docs.read = async (key) => {
     const doc = await read(key);
-    await new Promise((resolve) => setImmediate(resolve));
+    await settle();
     return doc;
   };
 

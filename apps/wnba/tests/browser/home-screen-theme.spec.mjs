@@ -111,8 +111,7 @@ test.describe("on an iPhone, in the browser", () => {
       Object.defineProperty(navigator, "standalone", { get: () => true });
     });
     await page.emulateMedia({ colorScheme: "light" });
-    await openApp(page);
-    await page.goto("/?theme=dark");
+    await openApp(page, { path: "/?theme=dark" });
     await expect(page.locator("#stamp")).toBeVisible();
     await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
     expect(new URL(page.url()).search).toBe("");
@@ -144,8 +143,7 @@ test.describe("on an iPhone, in the browser", () => {
     });
     await page.emulateMedia({ colorScheme: "dark" });
     // The harness would keep the welcome and the Updates box closed in the storage this test takes away.
-    await openApp(page, { isShowingWelcome: true, updatesBox: "new" });
-    await page.goto("/?theme=dark");
+    await openApp(page, { isShowingWelcome: true, updatesBox: "new", path: "/?theme=dark" });
     await expect(page.locator("#stamp")).toBeVisible();
     expect(new URL(page.url()).search).toBe("");
     const themesShown = await page.evaluate(() => /** @type {any} */ (window).themesShown);
@@ -166,8 +164,7 @@ test.describe("on an iPhone, in the browser", () => {
     page,
   }) => {
     await page.emulateMedia({ colorScheme: "light" });
-    await openApp(page);
-    await page.goto("/?theme=dark");
+    await openApp(page, { path: "/?theme=dark" });
     await expect(page.locator("#stamp")).toBeVisible();
     await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
     expect(new URL(page.url()).search).toBe("");
@@ -179,8 +176,7 @@ test.describe("on an iPhone, in the browser", () => {
     page,
   }) => {
     await page.emulateMedia({ colorScheme: "light" });
-    await openApp(page);
-    await page.goto("/?app-theme=dark");
+    await openApp(page, { path: "/?app-theme=dark" });
     await expect(page.locator(WELCOME)).toBeVisible();
     await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
     expect(new URL(page.url()).search).toBe("?theme=dark");

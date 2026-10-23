@@ -7,8 +7,8 @@
 // reports as the page comes back, which takes the note to its new state at once.
 
 // Every page that loads this runs pick-theme.js first.
-/* global buildSafariAddress, checkPickedChoice, isAppearanceChoice, isLook, openThemeAddress,
-   readHomeScreenIcon, readPhoneLook -- from pick-theme.js */
+/* global buildSafariAddress, checkPickedChoice, isAppearanceChoice, openThemeAddress,
+   readHomeScreenIcon, resolveTheme -- from pick-theme.js */
 /* global readPageMoveIcon -- from page-move.js */
 
 import { isIos, isOnHomeScreen } from "./device.js";
@@ -37,12 +37,6 @@ const findElement = (id) => /** @type {HTMLElement} */ (document.getElementById(
 const appearance = createViewerChoice("appearance", (stored) =>
   typeof stored === "string" && isAppearanceChoice(stored) ? stored : "auto",
 );
-
-/**
- * @param {string} choice
- * @returns {"light" | "dark"}
- */
-const resolveTheme = (choice) => (isLook(choice) ? choice : readPhoneLook());
 
 // A phone keeps the icon a page offers at the moment it's added to the home screen, so the page
 // offers the one that matches the theme showing, or, while a move is being finished, the one
@@ -96,15 +90,17 @@ const findNote = () => findElement("appearanceNote");
 
 const isIosApp = () => isOnHomeScreen() && isIos();
 
-const readNote = () =>
-  chooseReAddNote({
+function readNote() {
+  const choice = appearance.read();
+  return chooseReAddNote({
     isIosApp: isIosApp(),
-    choice: appearance.read(),
+    choice,
+    picked: resolveTheme(choice),
     icon: readHomeScreenIcon(),
-    phoneLook: readPhoneLook(),
     isSwitched: isLookSwitched(),
     isDismissed: isReAddNoteDismissed(),
   });
+}
 
 // Phosphor's arrow-right, at its Regular weight, as in a line of text.
 const ARROW = html`<svg class="re-add-arrow" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true">
@@ -267,14 +263,13 @@ function dismissNote() {
 
 function wireNote() {
   const settings = findSettings();
-  drawNote();
+  updateNote();
   // Settings opening asks for a handoff, and closing lets go of it, before the dialog's close
   // event, which then draws the link waiting for a fresh one.
   new MutationObserver(followHandoff).observe(settings, {
     attributes: true,
     attributeFilter: ["open"],
   });
-  followHandoff();
   settings.addEventListener("close", drawNote);
   findNote().addEventListener("click", (event) => {
     if (/** @type {Element} */ (event.target).closest("#dismissReAddNote")) dismissNote();
