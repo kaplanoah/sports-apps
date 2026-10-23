@@ -257,7 +257,11 @@ test("arithmetic commands preserve following separators and shell comment bounda
     for (const prefix of [arithmetic, `echo $( ${arithmetic} )`])
       for (const separator of [";", "&&", "||", "&", "\n"]) {
         const command = `${prefix}${separator} git status`;
-        assert.equal(findSeparator(command), separator === "\n" ? "a line break" : separator, command);
+        assert.equal(
+          findSeparator(command),
+          separator === "\n" ? "a line break" : separator,
+          command,
+        );
         assert.match(findCommandProblem(command) ?? "", /^It joins commands with /, command);
         assert.equal(parseCommandWords(command), null, command);
       }
