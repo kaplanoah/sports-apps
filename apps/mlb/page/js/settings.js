@@ -1,10 +1,8 @@
-// Baseball's parts of the settings panel: the touches in the sheet that belong to the ranking and
-// the season picker instead of the swipe.
+// Baseball's ranking claims touches on its drag handles instead of the sheet's swipe.
 
 import { startSettingsSheet } from "#shared/settings-sheet.js";
 
-// The ranking's grips drag rows, and the season picker opens its own menu.
-const isOwnGesture = (target) => target instanceof Element && !!target.closest(".grip, select");
+const isOwnGesture = (target) => target instanceof Element && !!target.closest(".grip");
 
 export function startSettings() {
   startSettingsSheet({ isOwnGesture });
