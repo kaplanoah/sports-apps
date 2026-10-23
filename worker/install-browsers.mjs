@@ -137,7 +137,8 @@ export async function installBrowsers(
     log = console.log,
   } = {},
 ) {
-  let lastCode = 1;
+  /** @type {number} */
+  let lastCode;
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
     if (signal?.aborted) return 130;
     const result = await installAttempt(arguments_, { spawnImpl, cleanupSpawn, timeoutMs, signal });
