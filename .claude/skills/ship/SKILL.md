@@ -180,7 +180,7 @@ Wait for the Deploy runs for the merge commit to finish, then read their logs an
   The line names the PR holding beta and when it took it, or else says no PR holds beta or GitHub couldn't say.
   Put the PR on beta by the steps under The beta channel above.
 - It says "No CLOUDFLARE_API_TOKEN": the channel's environment has no Cloudflare token, so nothing was deployed.
-  Tell the user.
+  The run fails: tell the user which channel needs its token restored.
 - The run failed: read the log.
   If it says "the earlier version is live again", the Worker rolled back and is unchanged.
   Tell the user what failed and recommend a fix.
