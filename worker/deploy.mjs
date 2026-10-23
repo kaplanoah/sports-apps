@@ -12,6 +12,7 @@ import { checkService } from "./check-service.mjs";
 import { CHECK_INTERVAL_MS, CHECK_TIMEOUT_MS, waitFor } from "./check-timing.mjs";
 import { decideDeploy, listChangedFiles } from "./deploy-scope.mjs";
 import { createGitHub } from "./github-api.mjs";
+import { isGitObjectId } from "./git-object.mjs";
 
 export const API = "https://api.cloudflare.com/client/v4";
 const root = new URL("../", import.meta.url);
@@ -52,8 +53,6 @@ export const loadWorkerConfig = (worker, channel, roots) =>
     readFileSync(new URL("worker/wrangler.toml", findWorkerRoot(worker, roots)), "utf8"),
     channel,
   );
-
-const COMMIT_PATTERN = /^[0-9a-f]{40}$/;
 
 /** @typedef {(args: string[]) => string} Git */
 
@@ -282,7 +281,7 @@ export function createDeploymentsClient({ base, name, callCloudflare }) {
         { method: "GET" },
       );
       const recorded = version?.annotations?.["workers/message"];
-      return COMMIT_PATTERN.test(recorded || "") ? recorded : null;
+      return isGitObjectId(recorded) ? recorded : null;
     },
     /** @param {{ version_id: string, percentage: number }[]} versions */
     async putLive(versions) {

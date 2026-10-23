@@ -1,6 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { createGitHub, readAllPages } from "./github-api.mjs";
+import { isGitObjectId } from "./git-object.mjs";
 import { PHONE_CONTEXT, PHONE_OK_LABEL } from "./labeling.mjs";
 import { readRedApproval, readMergedChange } from "./red-change.mjs";
 
@@ -25,8 +26,7 @@ export async function refreshRedApprovals({
       continue;
     try {
       const head = pull.head.sha;
-      if (!/^[a-f0-9]{40}$/.test(head))
-        throw new Error("Pull request returned no valid head commit.");
+      if (!isGitObjectId(head)) throw new Error("Pull request returned no valid head commit.");
       /** @param {string} state @param {string} description */
       const publish = (state, description) =>
         github(`/statuses/${head}`, {

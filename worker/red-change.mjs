@@ -32,6 +32,7 @@ import { fileURLToPath } from "node:url";
 import { findChannel } from "./channels.mjs";
 import { PHONE_OK_LABEL, findLabeling, readPushTime, readTimeline } from "./labeling.mjs";
 import { createGitHub, readAllPages } from "./github-api.mjs";
+import { isGitObjectId } from "./git-object.mjs";
 import {
   LAYER_PROPERTIES,
   createWatchCheck,
@@ -908,15 +909,13 @@ export function readMergedChange(main, head, cwd = process.cwd()) {
   const headSha = readGit(["rev-parse", "--verify", "--end-of-options", `${head}^{commit}`]).trim();
   const tree = readGit([
     "-c",
-    "core.hooksPath=/dev/null",
-    "-c",
     "merge.renormalize=false",
     "merge-tree",
     "--write-tree",
     mainSha,
     headSha,
   ]).trim();
-  if (!/^[a-f0-9]{40}$/.test(tree)) throw new Error("The current merge tree could not be read.");
+  if (!isGitObjectId(tree)) throw new Error("The current merge tree could not be read.");
   return readCommitChange(mainSha, tree, cwd);
 }
 
@@ -983,6 +982,7 @@ export function decideGate(
  * @param {(path: string) => Promise<any>} github
  */
 export async function readDeployedMain(github) {
+  const prefix = "production-checked-";
   const { workflow_runs: runs } = await github(
     "/actions/workflows/deploy.yml/runs?branch=main&status=success&per_page=10",
   );
@@ -1002,9 +1002,12 @@ export async function readDeployedMain(github) {
       ...new Set(
         artifacts
           .filter((artifact) => artifact.expired === false)
-          .flatMap(
-            (artifact) => /^production-checked-([a-f0-9]{40})$/.exec(artifact.name)?.slice(1) ?? [],
-          ),
+          .map((artifact) =>
+            typeof artifact.name === "string" && artifact.name.startsWith(prefix)
+              ? artifact.name.slice(prefix.length)
+              : null,
+          )
+          .filter(isGitObjectId),
       ),
     ];
     if (commits.length === 1) return commits[0];

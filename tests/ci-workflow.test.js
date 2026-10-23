@@ -21,6 +21,7 @@ import { findRefusal } from "../worker/review-git.mjs";
 import { escapePattern } from "../shared/page/escape-pattern.js";
 import { REPO_ROOT, readRepoFile } from "./repo-files.js";
 import { readStepScript } from "./workflow-step.js";
+import { PHONE_CONTEXT as EXPECTED_PHONE_CONTEXT } from "../worker/labeling.mjs";
 
 const WORKFLOWS = readdirSync(new URL(".github/workflows/", REPO_ROOT)).filter((name) =>
   name.endsWith(".yml"),
@@ -274,7 +275,7 @@ const PHONE_CONTEXT =
 // a lookup in the workflow rather than the pull request's code, or the pull request comes from a
 // fork, and never records it as passed for main to deploy at once.
 test("a held red change waits on the phone status, and check holds it whenever main's rules don't, or it comes from a fork", () => {
-  assert.equal(PHONE_CONTEXT, "phone");
+  assert.equal(PHONE_CONTEXT, EXPECTED_PHONE_CONTEXT);
   assert.match(readJob("gate"), /held: \$\{\{ steps\.hold\.outputs\.held \}\}/);
   assert.match(
     readJob("gate"),

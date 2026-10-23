@@ -1823,7 +1823,7 @@ function createGateHistory(context) {
   return { cwd, readGit, writeFile, commit, base, findMissing };
 }
 
-test("phone approval holds a tested head missing red main commits since the label, even when their combined diff is empty", (context) => {
+test("phone approval holds a tested head missing red main commits, even when their combined diff is empty", (context) => {
   const history = createGateHistory(context);
   history.writeFile("shared/page/sheet.js", "export const draw = 2;\n");
   const red = history.commit("2026-10-07T11:00:00Z");
@@ -1859,7 +1859,7 @@ test("a pre-label red main commit missing from the tested head holds approval, w
   );
 });
 
-test("a merge classifies its first-parent diff even when its red branch commit predates approval", (context) => {
+test("a merge classifies its first-parent diff when its red change came from a branch commit", (context) => {
   const history = createGateHistory(context);
   history.readGit(["checkout", "-qb", "feature"]);
   history.writeFile("shared/page/sheet.js", "export const draw = 2;\n");
@@ -1940,16 +1940,6 @@ function createApprovalApi(history, head, deployed) {
       };
     else if (url.pathname.endsWith("/artifacts"))
       answer = { artifacts: [{ name: `production-checked-${deployed}`, expired: false }] };
-    else if (url.pathname.endsWith("/jobs"))
-      answer = {
-        jobs: [
-          {
-            name: "deploy",
-            conclusion: "success",
-            steps: [{ name: "Deploy the Worker", conclusion: "success" }],
-          },
-        ],
-      };
     else if (url.pathname.includes("/statuses/")) {
       statuses.push(JSON.parse(String(options.body)));
       answer = {};
@@ -2040,21 +2030,27 @@ test("deploy evidence rejects expired or conflicting actual-target receipts", as
     readDeployedMain(async (path) => {
       if (path.includes("deploy.yml/runs")) return { workflow_runs: [run] };
       if (path.includes("/artifacts")) return { artifacts };
-      return {
-        jobs: [
-          {
-            name: "deploy",
-            conclusion: "success",
-            steps: [{ name: "Deploy the Worker", conclusion: "success" }],
-          },
-        ],
-      };
+      throw new Error(`Unexpected request: ${path}`);
     });
   await assert.rejects(
     readWith([{ name: `production-checked-${"a".repeat(40)}`, expired: true }]),
     /No successful production/,
   );
   await assert.rejects(readWith([]), /No successful production/);
+  await assert.rejects(
+    readWith([{ name: `production-checked-${"z".repeat(40)}`, expired: false }]),
+    /No successful production/,
+  );
+  await assert.rejects(
+    readWith([{ name: `not-a-valid-prefix-${"a".repeat(40)}`, expired: false }]),
+    /No successful production/,
+  );
+  for (const size of [39, 41])
+    await assert.rejects(
+      readWith([{ name: `production-checked-${"a".repeat(size)}`, expired: false }]),
+      /No successful production/,
+    );
+
   await assert.rejects(
     readWith([{ name: `production-checked-${"a".repeat(40)}` }]),
     /No successful production/,
@@ -2211,10 +2207,6 @@ test("approval refresh runs trusted main code after main and deploy changes, wit
     workflow,
     /pull_request_target|pull_request:|head_sha|actions\/cache|upload-artifact|download-artifact/,
   );
-  assert.equal(
-    readRepoFile(".github/workflows/ci.yml").match(/PHONE_CONTEXT: (\S+)/)?.[1],
-    PHONE_CONTEXT,
-  );
   const gate = readRepoFile(".github/workflows/ci.yml")
     .split("\n  gate:")[1]
     .split("\n  phone:")[0];
@@ -2228,6 +2220,7 @@ test("approval refresh runs trusted main code after main and deploy changes, wit
   const upload = deploy.indexOf("- name: Deploy the Worker");
   const record = deploy.indexOf("- name: Record checked production commit");
   assert.ok(upload !== -1 && record > upload);
+  assert.match(deploy, /- name: Deploy the Worker\n\s+id: deploy\n/);
   assert.match(
     deploy,
     /name: Record checked production commit\n\s+if: steps.deploy.outputs.checked-commit/,
