@@ -275,8 +275,8 @@ test("her regular season ranks each average among the players the WNBA ranks, on
 
 test("a stat she isn't ranked in shows her number alone, and the note says why", () => {
   const player = createPlayer();
-  player.regularSeason.games = 21;
-  player.regularSeason.stats[0] = describeStat({ rank: null });
+  player.regularSeason.games = 1;
+  player.regularSeason.stats[0] = describeStat({ rank: null, progress: 1 / 31 });
   const body = renderPlayerBody({
     player,
     isLoading: false,
@@ -289,10 +289,96 @@ test("a stat she isn't ranked in shows her number alone, and the note says why",
   assert.equal(String(body.text).match(/player-curve-area/g)?.length, 1);
   assert.equal(
     describeRankNote(player.regularSeason, false),
-    "The WNBA only ranks players who've played 31 games or reached a certain total in a stat, and shooting percentages only for those who've made a certain number of shots. She's played 21 games.",
+    "The WNBA only ranks players who've played 31 games or reached a certain total in a stat, and shooting percentages only for those who've made a certain number of shots. She's played 1 game, too small a sample to fairly compare with ranked players.",
   );
-  player.regularSeason.games = 1;
-  assert.match(describeRankNote(player.regularSeason, false), /She's played 1 game\.$/);
+});
+
+for (const { games, ending, curves } of [
+  { games: 4, ending: ", too small a sample to fairly compare with ranked players", curves: 1 },
+  { games: 7, ending: ", too small a sample to fairly compare with ranked players", curves: 1 },
+  { games: 8, ending: "", curves: 2 },
+]) {
+  test(`at ${games} of 31 games, her note explains missing marks only below a quarter, without naming her FT% exception`, () => {
+    const player = createPlayer();
+    player.regularSeason.games = games;
+    player.regularSeason.stats = [
+      describeStat({ rank: null, progress: games / 31 }),
+      describeStat({
+        key: "freeThrowShare",
+        value: 0.8,
+        rank: null,
+        progress: 0.5,
+        values: [0.7, 0.85],
+      }),
+    ];
+    const note = `The WNBA only ranks players who've played 31 games or reached a certain total in a stat, and shooting percentages only for those who've made a certain number of shots. She's played ${games} games${ending}.`;
+    assert.equal(describeRankNote(player.regularSeason, false), note);
+    assert.equal(describeRankNote(player.regularSeason, true), note);
+    const body = renderPlayerBody({
+      player,
+      isLoading: false,
+      season: SEASON,
+      isPastSeason: false,
+      showsOut: true,
+      now: NOW,
+    });
+    assert.ok(readText(body).endsWith(note));
+    assert.match(readText(body), /FT% 80\.0 would be 2nd/);
+    assert.equal(String(body.text).match(/player-curve-area/g)?.length, curves);
+    assert.doesNotMatch(note, /except|FT%/);
+  });
+}
+
+for (const { progress, rank, ranking } of [
+  { progress: 0.25, rank: null, ranking: "would be 2nd" },
+  { progress: 1, rank: 2, ranking: "2nd of 125" },
+  { progress: undefined, rank: 2, ranking: "2nd of 125" },
+]) {
+  test(`her counting stat at progress ${progress} and rank ${rank} keeps its mark and has no small-sample note despite too few games`, () => {
+    const player = createPlayer();
+    player.regularSeason.games = 3;
+    player.regularSeason.gamesNeeded = 16;
+    player.regularSeason.stats = [
+      describeStat({ value: 22, rank, progress }),
+      describeStat({ key: "threeShare", value: 0.1, rank: null, progress: 0.1 }),
+      describeStat({
+        key: "freeThrowShare",
+        value: 0.8,
+        rank: null,
+        progress: 0.5,
+        values: [0.7, 0.85],
+      }),
+    ];
+    const note =
+      "The WNBA only ranks players who've played 16 games or reached a certain total in a stat, and shooting percentages only for those who've made a certain number of shots. She's played 3 games.";
+    assert.equal(describeRankNote(player.regularSeason, false), note);
+    assert.equal(describeRankNote(player.regularSeason, true), note);
+    const body = renderPlayerBody({
+      player,
+      isLoading: false,
+      season: SEASON,
+      isPastSeason: false,
+      showsOut: true,
+      now: NOW,
+    });
+    assert.ok(readText(body).includes(`Pts 22.0 ${ranking}`));
+    assert.ok(readText(body).endsWith(note));
+    assert.equal(String(body.text).match(/player-curve-area/g)?.length, 2);
+  });
+}
+
+test("a counting stat with a mark doesn't hide the explanation for another counting stat without one", () => {
+  const player = createPlayer();
+  player.regularSeason.games = 3;
+  player.regularSeason.gamesNeeded = 16;
+  player.regularSeason.stats = [
+    describeStat({ rank: null, progress: 0.5 }),
+    describeStat({ key: "rebounds", rank: null, progress: 0.1 }),
+  ];
+  assert.match(
+    describeRankNote(player.regularSeason, false),
+    /She's played 3 games, too small a sample to fairly compare with ranked players\.$/,
+  );
 });
 
 test("a stat she isn't ranked in, once she's a quarter of the way to the rule for it, shows where she would rank, as a line on its curve with no dot", () => {

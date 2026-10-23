@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { listAppStylesheets, readDeclarations, readRule } from "./css-rules.js";
 import { REPO_ROOT } from "./repo-files.js";
 import {
+  describeSmallSample,
   drawSpread,
   isNearlyRanked,
   placeOnRange,
@@ -12,6 +13,18 @@ import {
   renderRankRow,
   renderSpreadCurve,
 } from "../shared/page/rank-curve.js";
+
+test("a small sample's explanation joins the named comparison only below a quarter of known progress", () => {
+  for (const players of ["ranked players", "qualified starters", "qualified hitters"]) {
+    for (const progress of [0, 0.24])
+      assert.equal(
+        describeSmallSample(progress, players),
+        `, too small a sample to fairly compare with ${players}`,
+      );
+    for (const progress of [0.25, 0.5, 1, null, undefined])
+      assert.equal(describeSmallSample(progress, players), "");
+  }
+});
 
 test("the curve spreads across from the lowest number to the highest, its peak at the top, with the player's mark on it", () => {
   const { area, edge, left, top } = drawSpread([10, 10, 10, 20], 20);
