@@ -5,6 +5,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { extname, join, posix, relative } from "node:path";
 import { fileURLToPath } from "node:url";
+import { parse } from "parse5";
 import { html, joinWithSeparator } from "../shared/page/html.js";
 import { nameReleaseFolder } from "../shared/worker/app-worker.js";
 
@@ -49,8 +50,49 @@ function readFolder(pageRoot) {
   );
 }
 
-const IMPORT_MAP = /<script type="importmap">([\s\S]*?)<\/script>\n/;
-const ENTRY_MODULE = /<script type="module" src="([^"]+)"><\/script>/;
+/** @typedef {import("parse5").DefaultTreeAdapterTypes.Element} PageElement */
+/** @typedef {{ startOffset: number, endOffset: number, text: string }} PageEdit */
+
+/** @param {string} page */
+function listPageElements(page) {
+  /** @type {PageElement[]} */
+  const elements = [];
+  /** @param {import("parse5").DefaultTreeAdapterTypes.Node} node */
+  function visitElement(node) {
+    if ("tagName" in node && node.namespaceURI === "http://www.w3.org/1999/xhtml")
+      elements.push(node);
+    if ("childNodes" in node) node.childNodes.forEach(visitElement);
+  }
+  visitElement(parse(page, { sourceCodeLocationInfo: true }));
+  return elements;
+}
+
+/** @param {PageElement} element @param {string} name */
+const readAttribute = (element, name) =>
+  element.attrs.find((attribute) => attribute.name === name)?.value;
+
+/** @param {PageElement} element @param {string} type */
+const isScriptType = (element, type) =>
+  element.tagName === "script" && readAttribute(element, "type")?.trim().toLowerCase() === type;
+
+/** @param {string} page @param {PageEdit[]} edits */
+function applyPageEdits(page, edits) {
+  return edits
+    .toSorted((left, right) => right.startOffset - left.startOffset)
+    .reduce(
+      (text, edit) => text.slice(0, edit.startOffset) + edit.text + text.slice(edit.endOffset),
+      page,
+    );
+}
+
+/** @param {string} page @param {PageElement} element */
+function readElementText(page, element) {
+  const { startTag, endTag } = element.sourceCodeLocation;
+  return page.slice(
+    startTag.endOffset,
+    endTag?.startOffset ?? element.sourceCodeLocation.endOffset,
+  );
+}
 const MODULE_IMPORT =
   /^(?:import\s[^;]*?\sfrom|export\s*(?:\*|\{)[^;]*?\sfrom|import)\s*"([^"]+)"/gm;
 
@@ -87,14 +129,22 @@ export function listModules(files, entry, imports) {
 // all after its import map, and the browser asks for every one at once.
 function addModulePreloads(files) {
   const page = files["index.html"]?.text;
-  const importMap = page?.match(IMPORT_MAP);
-  const entry = page?.match(ENTRY_MODULE)?.[1];
+  if (!page) return files;
+  const elements = listPageElements(page);
+  const importMap = elements.find((element) => isScriptType(element, "importmap"));
+  const entry = elements.find(
+    (element) => isScriptType(element, "module") && readAttribute(element, "src"),
+  );
   if (!importMap || !entry) return files;
-  const { imports } = JSON.parse(importMap[1]);
-  const links = listModules(files, entry, imports)
-    .map((path) => `  <link rel="modulepreload" href="${path}" />\n`)
+  const { imports } = JSON.parse(readElementText(page, importMap));
+  const links = listModules(files, readAttribute(entry, "src"), imports)
+    .map((path) => html`  <link rel="modulepreload" href="${path}" />\n`.text)
     .join("");
-  const text = page.replace(importMap[0], importMap[0] + links);
+  const end = importMap.sourceCodeLocation.endOffset;
+  const insertion = page[end] === "\n" ? end + 1 : end;
+  const text = applyPageEdits(page, [
+    { startOffset: insertion, endOffset: insertion, text: (insertion === end ? "\n" : "") + links },
+  ]);
   return { ...files, "index.html": { ...files["index.html"], text } };
 }
 
@@ -143,22 +193,35 @@ export function readPageFiles(pageRoot) {
   );
 }
 
-const RELEASE_GUARD = '<script src="shared/release-guard.js"></script>';
-const LOADING_TAG = /<(?:link|script)\b[^>]*>/g;
-const LOADED_LINK = /\brel="(?:stylesheet|preload|modulepreload)"/;
-const FILE_ATTRIBUTE = /\b(href|src)="([^"]+)"/;
 const isRelative = (address) => !/^(?:[a-z][a-z0-9+.-]*:|\/|#)/i.test(address);
 
+/** @param {PageElement} element */
+const isReleaseGuard = (element) =>
+  element.tagName === "script" &&
+  element.parentNode.nodeName === "head" &&
+  readAttribute(element, "src")?.trim() === "shared/release-guard.js";
+
 /**
- * A link or script tag, reading a page file from the release's folder when it loads one.
- * @param {string} tag
+ * The URL attribute reading a page file from the release's folder when it loads one.
+ * @param {PageElement} element
  * @param {string} folder
  */
-function pinTag(tag, folder) {
-  if (tag.startsWith("<link") && !LOADED_LINK.test(tag)) return tag;
-  return tag.replace(FILE_ATTRIBUTE, (attribute, name, address) =>
-    isRelative(address) ? `${name}="${folder}${address}"` : attribute,
-  );
+function pinFileAttribute(element, folder) {
+  const relations = readAttribute(element, "rel")?.toLowerCase().split(/\s+/) ?? [];
+  const loadsFile =
+    element.tagName === "script" ||
+    (element.tagName === "link" &&
+      relations.some((relation) => ["stylesheet", "preload", "modulepreload"].includes(relation)));
+  if (!loadsFile) return [];
+  const name = element.tagName === "script" ? "src" : "href";
+  const address = readAttribute(element, name)?.trim();
+  if (!address || !isRelative(address)) return [];
+  return [
+    {
+      ...element.sourceCodeLocation.attrs[name],
+      text: `${name}="${html`${folder}${address}`.text}"`,
+    },
+  ];
 }
 
 /**
@@ -172,7 +235,7 @@ function pinImportMap(importMap, folder) {
     prefix,
     isRelative(path) ? `./${folder}${posix.normalize(path)}` : path,
   ]);
-  return `\n    ${JSON.stringify({ imports: Object.fromEntries(pinned) })}\n  `;
+  return `\n    ${JSON.stringify({ imports: Object.fromEntries(pinned) }).replaceAll("<", "\\u003c")}\n  `;
 }
 
 // The page and the access code's gate, which the page's address shows until the phone signs in.
@@ -185,13 +248,22 @@ const isPage = (path) => path.endsWith(".html") && !path.includes("/");
  * @param {string} guard
  * @param {string} folder
  */
-const pinPage = (page, guard, folder) =>
-  page
-    .replace(RELEASE_GUARD, () => `<script>\n${guard}</script>`)
-    .replace(IMPORT_MAP, (tag, importMap) =>
-      tag.replace(importMap, pinImportMap(importMap, folder)),
-    )
-    .replace(LOADING_TAG, (tag) => pinTag(tag, folder));
+function pinPage(page, guard, folder) {
+  const edits = listPageElements(page).flatMap((element) => {
+    const location = element.sourceCodeLocation;
+    if (isReleaseGuard(element)) return [{ ...location, text: `<script>\n${guard}</script>` }];
+    if (isScriptType(element, "importmap"))
+      return [
+        {
+          startOffset: location.startTag.endOffset,
+          endOffset: location.endTag?.startOffset ?? location.endOffset,
+          text: pinImportMap(readElementText(page, element), folder),
+        },
+      ];
+    return pinFileAttribute(element, folder);
+  });
+  return applyPageEdits(page, edits);
+}
 
 const CHANNEL_TAG = '<span class="channel-tag" id="channelTag" hidden></span>';
 
@@ -220,10 +292,23 @@ export const writeJsonScript = (id, value) =>
  * @param {string} page
  * @param {import("../shared/page/release.js").Release} release
  */
-export const writeRelease = (page, release) =>
-  page
-    .replace(RELEASE_GUARD, () => `${writeJsonScript("release", release)}\n  ${RELEASE_GUARD}`)
-    .replace(CHANNEL_TAG, () => renderChannelTag(release));
+export function writeRelease(page, release) {
+  const edits = listPageElements(page).flatMap((element) => {
+    const location = element.sourceCodeLocation;
+    if (isReleaseGuard(element))
+      return [
+        {
+          startOffset: location.startOffset,
+          endOffset: location.startOffset,
+          text: `${writeJsonScript("release", release)}\n  `,
+        },
+      ];
+    if (element.tagName === "span" && readAttribute(element, "id") === "channelTag")
+      return [{ ...location, text: renderChannelTag(release) }];
+    return [];
+  });
+  return applyPageEdits(page, edits);
+}
 
 /**
  * Each page reading its code and styles from its release's folder, with its release and release
@@ -237,7 +322,7 @@ export function pinPageFiles(files, release) {
   const pinned = Object.entries(files)
     .filter(([path]) => isPage(path))
     .map(([path, file]) => {
-      if (!file.text?.includes(RELEASE_GUARD) || !guard)
+      if (!file.text || !listPageElements(file.text).some(isReleaseGuard) || !guard)
         throw new Error(`The head of ${path} must load shared/release-guard.js.`);
       return [path, { ...file, text: pinPage(writeRelease(file.text, release), guard, folder) }];
     });

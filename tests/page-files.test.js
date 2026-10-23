@@ -1,8 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { parse } from "parse5";
 import { listApps } from "../worker/apps.mjs";
 import {
   HOME_SCREEN_ICONS,
@@ -172,6 +173,141 @@ test("a page whose head doesn't load the release guard isn't built", () => {
   assert.throws(() => pinPageFiles(files, RELEASE), /release-guard\.js/);
 });
 
+function pinFixture(page) {
+  const files = {
+    "index.html": { contentType: "text/html", text: page },
+    "shared/release-guard.js": { contentType: "text/javascript", text: "guardPage();\n" },
+  };
+  return pinPageFiles(files, RELEASE)["index.html"].text;
+}
+
+function listParsedNodes(page) {
+  /** @type {import("parse5").DefaultTreeAdapterTypes.Node[]} */
+  const nodes = [parse(page)];
+  for (const node of nodes) if ("childNodes" in node) nodes.push(...node.childNodes);
+  return nodes;
+}
+
+for (const [tag, expected] of [
+  ['<SCRIPT SRC="js/app.js"></SCRIPT>', '<SCRIPT src="release/abc1234/js/app.js"></SCRIPT>'],
+  ["<ScRiPt src='js/app.js'></ScRiPt>", '<ScRiPt src="release/abc1234/js/app.js"></ScRiPt>'],
+  ["<script src=js/app.js></script>", '<script src="release/abc1234/js/app.js"></script>'],
+  [
+    '<LINK HREF="styles.css" REL="alternate StyleSheet">',
+    '<LINK href="release/abc1234/styles.css" REL="alternate StyleSheet">',
+  ],
+  [
+    "<link rel=preload href='fonts/text.woff2'>",
+    '<link rel=preload href="release/abc1234/fonts/text.woff2">',
+  ],
+  [
+    '<script data-note=">" data-src="decoy.js" src="js/app.js"></script>',
+    '<script data-note=">" data-src="decoy.js" src="release/abc1234/js/app.js"></script>',
+  ],
+  [
+    '<link rel="stylesheet" href="styles.css?a=1&amp;b=2">',
+    '<link rel="stylesheet" href="release/abc1234/styles.css?a=1&amp;b=2">',
+  ],
+]) {
+  test(`release pinning follows HTML syntax: ${tag}`, () => {
+    assert.equal(
+      pinFixture('<script src="shared/release-guard.js"></script>\n' + tag)
+        .split("\n")
+        .at(-1),
+      expected,
+    );
+  });
+}
+
+test("release pinning leaves comments, raw text, templates, foreign elements and nonlocal URLs untouched", () => {
+  const untouched = `<!-- <script src="decoy.js"></script> -->
+<script>const example = '<script src="decoy.js">';</script>
+<textarea><link rel="stylesheet" href="decoy.css"></textarea>
+<template><script src="decoy.js"></script></template>
+<svg><script src="decoy.js"></script></svg>
+<link rel="icon" href="icon.svg">
+<link rel="stylesheet" href="&#104;ttps://example.com/styles.css">
+<script src="//example.com/app.js"></script>
+<script src="&#47;app.js"></script>
+<script src=" https://example.com/app.js "></script>`;
+  assert.ok(
+    pinFixture('<script src="shared/release-guard.js"></script>\n' + untouched).endsWith(untouched),
+  );
+});
+
+test("release guards and import maps use real HTML elements with any valid attribute syntax", () => {
+  const page = `<SCRIPT data-note=">" SRC='shared/release-guard.js'></SCRIPT>
+<SCRIPT TYPE=importmap>{"imports":{"#shared/":"./shared/"}}</SCRIPT>`;
+  assert.equal(
+    pinFixture(page),
+    `${WRITTEN_RELEASE}\n  <script>\nguardPage();\n</script>
+<SCRIPT TYPE=importmap>\n    {"imports":{"#shared/":"./release/abc1234/shared/"}}\n  </SCRIPT>`,
+  );
+  for (const page of [
+    '<!-- <script src="shared/release-guard.js"></script> -->',
+    "<script>const example = '<script src=\"shared/release-guard.js\">';</script>",
+    '<template><script src="shared/release-guard.js"></script></template>',
+    '<p>Content</p><script src="shared/release-guard.js"></script>',
+  ])
+    assert.throws(() => pinFixture(page), /release-guard\.js/);
+});
+
+test("module preloads follow parsed import maps and entry scripts without rewriting their lookalikes", (context) => {
+  const pageRoot = mkdtempSync(join(tmpdir(), "page-html-"));
+  context.after(() => rmSync(pageRoot, { recursive: true, force: true }));
+  const decoy = '<!-- <script type="importmap">not JSON</script> -->';
+  writeFileSync(
+    join(pageRoot, "index.html"),
+    `${decoy}\n<SCRIPT TYPE='importmap'>{"imports":{}}</SCRIPT><SCRIPT TYPE=module SRC='app&quot;&amp;.js'></SCRIPT>`,
+  );
+  writeFileSync(join(pageRoot, 'app"&.js'), "export const value = 1;\n");
+  writeFileSync(join(pageRoot, HOME_SCREEN_ICONS.light), "png");
+  writeFileSync(join(pageRoot, HOME_SCREEN_ICONS.dark), "png");
+  assert.equal(
+    readPageFiles(pageRoot)["index.html"].text,
+    `${decoy}\n<SCRIPT TYPE='importmap'>{"imports":{}}</SCRIPT>\n  <link rel="modulepreload" href="app&quot;&amp;.js" />\n<SCRIPT TYPE=module SRC='app&quot;&amp;.js'></SCRIPT>`,
+  );
+});
+
+test("rewriting import maps cannot turn a JSON string into a closing script tag", () => {
+  const pinned = pinFixture(
+    '<script src="shared/release-guard.js"></script>\n<script type=importmap>{"imports":{"<\\/script>":"./shared/"}}</script>',
+  );
+  const nodes = listParsedNodes(pinned);
+  const map = nodes.find(
+    (node) =>
+      "attrs" in node &&
+      node.attrs.some(({ name, value }) => name === "type" && value === "importmap"),
+  );
+  assert.ok(map && "childNodes" in map);
+  const text = map.childNodes.map((node) => ("value" in node ? node.value : "")).join("");
+  assert.deepEqual(JSON.parse(text), { imports: { "</script>": "./release/abc1234/shared/" } });
+});
+
+test("release import maps retain the existing imports-only contract", () => {
+  const page =
+    '<script src="shared/release-guard.js"></script>\n<script type=importmap>{"imports":{"#shared/":"./shared/"},"scopes":{"./":{"example":"./example.js"}}}</script>';
+  const pinned = pinFixture(page);
+  const nodes = listParsedNodes(pinned);
+  const map = nodes.find(
+    (node) =>
+      "attrs" in node &&
+      node.attrs.some(({ name, value }) => name === "type" && value === "importmap"),
+  );
+  assert.ok(map && "childNodes" in map);
+  assert.deepEqual(
+    JSON.parse(map.childNodes.map((node) => ("value" in node ? node.value : "")).join("")),
+    { imports: { "#shared/": "./release/abc1234/shared/" } },
+  );
+  assert.throws(
+    () =>
+      pinFixture(
+        '<script src="shared/release-guard.js"></script>\n<script type=importmap>{}</script>',
+      ),
+    TypeError,
+  );
+});
+
 test("every page at the folder's top is pinned, the gate too, and each must load the guard", () => {
   const gate =
     '<!doctype html>\n  <script src="shared/release-guard.js"></script>\n  <link rel="stylesheet" href="shared/gate.css" />\n';
@@ -199,13 +335,20 @@ for (const [app, page] of listApps().flatMap((app) => [
   test(`${app}: every file the built ${page} loads is in its release's folder and served`, async () => {
     const { default: files } = await import(`#page-files/${app}`);
     const pinned = pinPageFiles(files, RELEASE)[page].text;
-    const loaded = [...pinned.matchAll(/<(?:script|link)\b[^>]*>/g)]
-      .map(([tag]) => tag)
-      .filter(
-        (tag) =>
-          tag.startsWith("<script") || /rel="(?:stylesheet|preload|modulepreload)"/.test(tag),
+    const nodes = listParsedNodes(pinned);
+    const loaded = nodes.flatMap((node) => {
+      if (!("tagName" in node)) return [];
+      const attributes = Object.fromEntries(node.attrs.map(({ name, value }) => [name, value]));
+      if (node.tagName === "script") return attributes.src ?? [];
+      if (
+        node.tagName === "link" &&
+        attributes.rel
+          ?.split(/\s+/)
+          .some((relation) => ["stylesheet", "preload", "modulepreload"].includes(relation))
       )
-      .flatMap((tag) => tag.match(/\b(?:src|href)="([^"]+)"/)?.[1] ?? []);
+        return attributes.href ?? [];
+      return [];
+    });
     assert.ok(loaded.length > 0);
     for (const path of loaded) {
       assert.ok(path.startsWith("release/abc1234/"), path);
