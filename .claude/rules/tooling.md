@@ -8,6 +8,11 @@ paths:
 
 # Tooling
 
+- CI runs every Node test in the runner's zone, then repeats the explicit `tests/time-zone-sensitive.json` list in Honolulu (`worker/test-time-zone.mjs`).
+  The list includes every Node test whose imports reach `shared/page/days.js`, plus independent season and scheduling tests; a Node test verifies that coverage with the existing browser-scope import walk.
+  Workflow, Node-version, dependency, selector and shared test-helper changes repeat the full suite instead.
+  Added or renamed Node tests outside the list do too; an unreadable change list also repeats everything.
+  The nightly Flaky tests workflow runs the complete Honolulu suite, independently of its browser job.
 - Tooling: the root `worker/` builds, versions, deploys, and rolls back every Worker, each app's and each service's, tells a red change for CI's gate,
   and keeps beta to one pull request at a time, as the `ship` skill's "The beta channel" says.
   `ls worker/` lists its modules, and its tests are in the root `tests/`.

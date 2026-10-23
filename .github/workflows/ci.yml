@@ -179,11 +179,12 @@ jobs:
         env: &test-reporter
           NODE_OPTIONS: --test-reporter=dot
         run: npm test
-      # The runner is on UTC, ahead of MLB's Eastern day; this zone is behind it.
+      # The runner is ahead of MLB's Eastern day; Honolulu is behind it. Infrastructure and
+      # unclassified new tests repeat the full suite; other changes repeat its sensitive tests.
       - name: Test in another time zone
         if: ${{ !cancelled() }}
         env: *test-reporter
-        run: TZ=Pacific/Honolulu npm test
+        run: node worker/test-time-zone.mjs
       # A pull request's title sets the next version once it's squash merged (worker/release.mjs).
       # The title comes from GitHub rather than the event, so a re-run checks an edited title. The
       # files come from git, which lists a change of any size, where GitHub's diff stops at 20,000

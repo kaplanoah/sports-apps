@@ -58,6 +58,7 @@ const SKIPPED_FILES = new Set([
   "worker/set-email-key.mjs",
   "worker/set-page-host.mjs",
   "worker/set-rp-id.mjs",
+  "worker/test-time-zone.mjs",
   "worker/watch-apps.mjs",
   "worker/worker-secrets.mjs",
 ]);
