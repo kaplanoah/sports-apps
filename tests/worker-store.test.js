@@ -2,6 +2,7 @@ import { afterEach, beforeEach, mock, test } from "node:test";
 import assert from "node:assert/strict";
 import { UPDATING_WAIT_MS } from "../shared/page/catch-up-note.js";
 import { createWorkerStore } from "../shared/page/worker-store.js";
+import { settle } from "./settle.js";
 
 // Stand-ins for the browser: each read waits until the test answers it, and the socket opens
 // when the test says so.
@@ -49,7 +50,6 @@ const START = Date.parse("2026-10-04T21:00:00Z");
 beforeEach(() => mock.timers.enable({ apis: ["setTimeout", "Date"], now: START }));
 afterEach(() => mock.timers.reset());
 
-const settle = () => new Promise((resolve) => setImmediate(resolve));
 const HANDSHAKE_WAIT_MS = 3 * 1000;
 const RECONNECT_MAX_MS = 30 * 1000;
 const SEASON_URL = "https://mlb-app.example/k3y/store/seasons/2026";

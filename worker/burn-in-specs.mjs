@@ -1,7 +1,7 @@
 // Lists the browser specs burn-in repeats: each one a pull request adds or changes, but for one
 // that has passed burn-in in an earlier run, on this push or one before it, and hasn't changed
 // since. A file the specs reach by import, or the dependencies, the Node version, or CI's own
-// workflow they run with, that changed since then, on the pull request's side or its base's, burns
+// workflow or browser installer they run with, that changed since then, on either side, burns
 // them all in again. A change to the page or the Worker alone doesn't, since the spec already ran
 // ten times as it is, and the browser job and the nightly run catch a test the page made flaky.
 // Usage: node worker/burn-in-specs.mjs, in a full checkout of the pull request's merge commit,
@@ -11,14 +11,14 @@ import { appendFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { posix } from "node:path";
 import { fileURLToPath } from "node:url";
-import { listBrowserTestReach } from "./browser-scope.mjs";
+import { BROWSER_SETUP_FILES, listBrowserTestReach } from "./browser-scope.mjs";
 import { CI_WORKFLOW, isPullRequestRun } from "./find-passed-ci.mjs";
 import { createGitHub, readAllPages } from "./github-api.mjs";
 
 const SPEC = /^apps\/[^/]+\/tests\/browser\/.+\.spec\.mjs$/;
 // What every spec runs with beyond what it imports: the dependencies, the Node version every job
-// runs them on, and CI's own workflow, which says how burn-in runs each spec.
-const RUN_SETUP = new Set(["package.json", "package-lock.json", ".nvmrc", CI_WORKFLOW]);
+// runs them on, and browser setup, which says how burn-in installs and runs each spec.
+const RUN_SETUP = new Set(["package.json", "package-lock.json", ".nvmrc", ...BROWSER_SETUP_FILES]);
 // What a spec tests rather than runs with.
 const TESTED_CODE = /^(?:apps\/[^/]+\/(?:page|worker)|shared\/(?:page|worker))\//;
 // A branch's last thirty completed runs reach past the label changes, cancelled runs, and pushes
@@ -28,7 +28,7 @@ const RUNS_READ = 30;
 
 /**
  * Whether a changed file is one every spec runs with: a helper or config the specs reach, a
- * dependency, the Node version, or CI's own workflow.
+ * dependency, the Node version, or browser setup.
  * @param {string} path
  * @param {Set<string>} reached every file the browser specs, their helpers, and the config reach
  */
