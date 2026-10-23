@@ -294,14 +294,15 @@ test("CI always runs the complete ordinary-zone suite and scopes only its altern
   );
 });
 
-test("the nightly and manual workflow independently repeat the focused Honolulu Node list", () => {
+test("only the nightly run repeats the focused Honolulu Node list", () => {
   const workflow = readRepoFile(".github/workflows/flaky.yml");
   assert.match(workflow, /schedule:\n\s+- cron:/);
   assert.match(workflow, /workflow_dispatch:/);
   const node = readJob("node", "flaky.yml");
   assert.ok(node);
-  assert.doesNotMatch(node, /^ {4}(?:if|needs):/m);
-  assert.match(node, /ref: \$\{\{ inputs.ref \}\}/);
+  assert.match(node, /^ {4}if: github.event_name == 'schedule'$/m);
+  assert.doesNotMatch(node, /^ {4}needs:/m);
+  assert.doesNotMatch(node, /inputs\.ref/);
   assert.match(node, /node-version-file: \.nvmrc/);
   assert.match(node, /run: npm ci\n/);
   assert.match(node, /run: node worker\/test-time-zone\.mjs\n/);

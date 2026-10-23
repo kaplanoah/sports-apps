@@ -8,11 +8,18 @@ paths:
 
 # Tooling
 
-- CI runs every Node test once in UTC, then repeats the explicit `tests/time-zone-sensitive.json` sensitive list and changed Node tests in Honolulu (`worker/test-time-zone.mjs`).
-  `worker/time-zone-scope.mjs` verifies native Date/Intl coverage with `listReachedFiles` in `worker/browser-scope.mjs`; missing coverage or unreadable changes fail instead of silently narrowing the run.
-  The manifest's two `browserOnly` adapters already run only in browser tests; a new native time API source without a Node import path needs a test before CI can pass.
-  Only the two search sweeps use the manifest's fixed list; they import Eastern setup before their tested modules, so their initialization and assertions have the same zone in either run.
-  The nightly Flaky tests workflow repeats the sensitive list, independently of its browser job; a Node failure fails the workflow, separately from the browser-flake issue.
+- CI runs every Node test once in UTC,
+  then repeats the explicit `tests/time-zone-sensitive.json` sensitive list and changed Node tests in Honolulu (`worker/test-time-zone.mjs`).
+  `worker/time-zone-scope.mjs` verifies native Date/Intl coverage with `listReachedFiles` in `worker/browser-scope.mjs`.
+  Missing coverage or unreadable changes fail instead of silently narrowing the run.
+  The manifest's `browserOnly` adapters run only in browser tests.
+  A native time API source without a Node import path needs a test before CI can pass.
+  Tests in the manifest's `fixed` list import `tests/eastern-time-zone.js` first,
+  so their initialization and assertions use Eastern whatever zone they inherit.
+  They are left out of the Honolulu run.
+  The nightly Flaky tests workflow repeats the sensitive list independently of its browser job.
+  A Node failure fails the workflow separately from the browser-flake issue.
+  Manual runs reproduce browser tests without repeating Node tests.
 - Tooling: the root `worker/` builds, versions, deploys, and rolls back every Worker, each app's and each service's, tells a red change for CI's gate,
   and keeps beta to one pull request at a time, as the `ship` skill's "The beta channel" says.
   `ls worker/` lists its modules, and its tests are in the root `tests/`.

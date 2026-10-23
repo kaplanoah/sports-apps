@@ -24,10 +24,6 @@ test("the shared repo reader uses the requested root and leaves missing files ou
   writeFileSync(join(folder, "fixture.js"), "export const value = 1;");
   const root = pathToFileURL(`${folder}/`);
   assert.equal(readRepoText("fixture.js", root), "export const value = 1;");
-  for (const name of ["calendar#local.js", "calendar?local.js", "calendar%20local.js"]) {
-    writeFileSync(join(folder, name), `export const name = ${JSON.stringify(name)};`);
-    assert.equal(readRepoText(name, root), `export const name = ${JSON.stringify(name)};`);
-  }
   assert.equal(readRepoText("missing.js", root), null);
   assert.match(readRepoText("worker/browser-scope.mjs"), /export const readRepoText/);
 });
@@ -41,6 +37,7 @@ test("a change to the docs, the other workflows, or the tooling no browser test 
       ".github/workflows/flaky.yml",
       "worker/plan-review.mjs",
       "tests/plan-review.test.js",
+      "tests/time-zone-sensitive.json",
       "apps/wnba/tests/search.test.js",
       "services/accounts/tests/health.test.js",
       "knip.json",

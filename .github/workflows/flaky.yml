@@ -5,8 +5,8 @@ run-name: ${{ inputs.tests && format('Repeat {0} on {1}', inputs.tests, inputs.r
 # them. Each night, main's browser tests run three times over with no retry, and one open issue
 # names each test that failed in any run (worker/report-flaky-tests.mjs). Run by hand, it repeats
 # the tests it's given on any branch, on the machine CI uses, WebKit included, to reproduce a flaky
-# test and to show a fix holds. Its independent Node job repeats the date/time-sensitive tests
-# in Honolulu; a Node failure fails this workflow and is separate from the browser-flake issue.
+# test and to show a fix holds. Only the nightly run also repeats the date/time-sensitive Node
+# tests in Honolulu; a Node failure fails the workflow separately from the browser-flake issue.
 on:
   schedule:
     - cron: "17 7 * * *"
@@ -30,12 +30,12 @@ permissions:
 
 jobs:
   node:
+    if: github.event_name == 'schedule'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          ref: ${{ inputs.ref }}
           persist-credentials: false
       - id: node
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7

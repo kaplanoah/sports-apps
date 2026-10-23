@@ -1,13 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
-import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { execFileSync, spawnSync } from "node:child_process";
+import { mkdtempSync, writeFileSync, rmSync, renameSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import {
   TIME_ZONE_MANIFEST,
-  parseTimeZoneChanges,
   selectTimeZoneTests,
   testInTimeZone,
 } from "../worker/test-time-zone.mjs";
@@ -27,7 +26,6 @@ const TESTS = [
   "services/accounts/tests/accounts.test.js",
 ];
 const MANIFEST = { sensitive: [TESTS[0]], fixed: [] };
-const change = (path, status = "M") => ({ path, status });
 
 const readFixture = (path) =>
   path === "package.json"
@@ -41,11 +39,10 @@ const readFixture = (path) =>
 test("the explicit manifest covers native time APIs in every current Node test and its imports", () => {
   const tracked = listTrackedFiles();
   const tests = listNodeTests();
-  const sources = tracked.filter(
-    (path) => TIME_ZONE_SOURCE.test(path) && !path.endsWith(".min.js"),
-  );
+  const sources = tracked.filter((path) => TIME_ZONE_SOURCE.test(path));
   verifyTimeZoneCoverage(tests, TIME_ZONE_MANIFEST, readRepoText, sources);
   assert.deepEqual(TIME_ZONE_MANIFEST.sensitive, [...TIME_ZONE_MANIFEST.sensitive].sort());
+  assert.equal(TIME_ZONE_SOURCE.test("apps/mlb/page/js/sortable.min.js"), false);
   assert.equal(TIME_ZONE_MANIFEST.fixed.length, 2);
   assert.ok(TIME_ZONE_MANIFEST.fixed.every((path) => path.endsWith("/search-typing.test.js")));
 });
@@ -163,33 +160,44 @@ test("Eastern setup controls a tested module's initialization under both inherit
   }
 });
 
-test("ordinary and empty diffs keep the sensitive list, while every changed Node test is included", () => {
-  for (const changes of [[], [change("apps/mlb/page/js/app.js")], [change("package-lock.json")]])
-    assert.deepEqual(selectTimeZoneTests(changes, TESTS, MANIFEST), [TESTS[0]]);
-  for (const path of [TESTS[1], TESTS[2]])
-    for (const status of ["A", "M"])
-      assert.deepEqual(
-        selectTimeZoneTests([change(path, status)], TESTS, MANIFEST),
-        [TESTS[0], path].sort(),
-      );
-  assert.deepEqual(selectTimeZoneTests([change(TESTS[1], "D")], TESTS.slice(0, 1), MANIFEST), [
-    TESTS[0],
-  ]);
-  const fixed = { sensitive: [TESTS[0]], fixed: [TESTS[1]] };
-  assert.deepEqual(selectTimeZoneTests([change(TESTS[1])], TESTS, fixed), [TESTS[0]]);
-  const future = "future-tests/calendar.test.js";
-  assert.deepEqual(
-    selectTimeZoneTests([change(future)], [...TESTS, future], MANIFEST),
-    [TESTS[0], future].sort(),
-  );
+test("the shared reader follows ESM query, fragment and percent-decoding semantics", async () => {
+  const folder = mkdtempSync(join(tmpdir(), "calendar-esm-"));
+  try {
+    const source = "export const day = 10;";
+    writeFileSync(join(folder, "calendar local.mjs"), source);
+    const root = pathToFileURL(`${folder}/`);
+    for (const reference of [
+      "calendar%20local.mjs",
+      "calendar%20local.mjs?version=1",
+      "calendar%20local.mjs#calendar",
+    ]) {
+      const module = await import(new URL(reference, root).href);
+      assert.equal(module.day, 10);
+      assert.equal(readRepoText(reference, root), source);
+    }
+  } finally {
+    rmSync(folder, { recursive: true, force: true });
+  }
 });
 
-test("NUL diffs preserve names and classify renamed tests as deletion plus addition", () => {
-  const changes = parseTimeZoneChanges(`D\0tests/old.test.js\0A\0${TESTS[1]}\0`);
-  assert.deepEqual(selectTimeZoneTests(changes, TESTS, MANIFEST), [TESTS[0], TESTS[1]].sort());
-  assert.deepEqual(parseTimeZoneChanges("M\0a b\nc.js\0"), [change("a b\nc.js")]);
-  for (const text of ["M\0missing-terminator", "A\0", "M\0\0", "R100\0old\0new\0", "T\0file\0"])
-    assert.throws(() => parseTimeZoneChanges(text));
+test("ordinary and empty diffs keep the sensitive list, while every changed Node test is included", () => {
+  for (const changes of [[], ["apps/mlb/page/js/app.js"], ["package-lock.json"]])
+    assert.deepEqual(selectTimeZoneTests(changes, TESTS, MANIFEST), [TESTS[0]]);
+  for (const path of [TESTS[1], TESTS[2]])
+    assert.deepEqual(selectTimeZoneTests([path], TESTS, MANIFEST), [TESTS[0], path].sort());
+  assert.deepEqual(selectTimeZoneTests([], TESTS.slice(0, 1), MANIFEST), [TESTS[0]]);
+  const fixed = { sensitive: [TESTS[0]], fixed: [TESTS[1]] };
+  assert.deepEqual(selectTimeZoneTests([TESTS[1]], TESTS, fixed), [TESTS[0]]);
+  const future = "future-tests/calendar.test.js";
+  assert.deepEqual(
+    selectTimeZoneTests([future], [...TESTS, future], MANIFEST),
+    [TESTS[0], future].sort(),
+  );
+  const spaced = "tests/calendar day\nlocal.test.js";
+  assert.deepEqual(
+    selectTimeZoneTests([spaced], [...TESTS, spaced], MANIFEST),
+    [TESTS[0], spaced].sort(),
+  );
 });
 
 /** @param {{changed?: boolean, diff?: string, failingCommand?: string, status?: number, error?: Error, readText?: typeof readFixture}} [options] */
@@ -250,25 +258,69 @@ test("the protected focused command keeps inherited Node options and reports fai
   assert.deepEqual(gitCalls, [["ls-files", "-z"]]);
 });
 
+test("PR discovery uses added/modified names and leaves deletions and type changes to Git", () => {
+  const folder = mkdtempSync(join(tmpdir(), "calendar-diff-"));
+  const git = (args) =>
+    execFileSync(
+      "git",
+      [
+        "-c",
+        "user.name=Fixture",
+        "-c",
+        "user.email=example@example.com",
+        "-c",
+        "commit.gpgsign=false",
+        ...args,
+      ],
+      { cwd: folder, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] },
+    );
+  try {
+    git(["init", "--quiet"]);
+    for (const name of [
+      "modified.test.js",
+      "deleted.test.js",
+      "type.test.js",
+      "rename.test.js",
+      "target.txt",
+    ])
+      writeFileSync(join(folder, name), "before");
+    git(["add", "."]);
+    git(["commit", "--quiet", "-m", "fixture before"]);
+    writeFileSync(join(folder, "modified.test.js"), "after");
+    writeFileSync(join(folder, "added.test.js"), "added");
+    rmSync(join(folder, "deleted.test.js"));
+    rmSync(join(folder, "type.test.js"));
+    symlinkSync("target.txt", join(folder, "type.test.js"));
+    renameSync(join(folder, "rename.test.js"), join(folder, "new name\ncalendar.test.js"));
+    git(["add", "."]);
+    git(["commit", "--quiet", "-m", "fixture after"]);
+    const command = captureInvocation({ changed: true }).gitCalls[1];
+    assert.deepEqual(git(command).split("\0").filter(Boolean).sort(), [
+      "added.test.js",
+      "modified.test.js",
+      "new name\ncalendar.test.js",
+    ]);
+  } finally {
+    rmSync(folder, { recursive: true, force: true });
+  }
+});
+
 test("PR mode includes modified tests without requesting a full second suite", () => {
-  const result = captureInvocation({ changed: true, diff: `M\0${TESTS[1]}\0` });
+  const result = captureInvocation({ changed: true, diff: `${TESTS[1]}\0` });
   assert.deepEqual(result.calls[0].arguments_.slice(4), [TESTS[0], TESTS[1]].sort());
   assert.deepEqual(result.gitCalls[1], [
     "diff",
-    "--name-status",
+    "--name-only",
     "--no-renames",
+    "--diff-filter=AM",
     "-z",
     "HEAD^1",
     "HEAD",
   ]);
 });
 
-test("unreadable changes, unclassified time APIs and test-command drift fail closed", () => {
-  for (const options of [
-    { changed: true, diff: "bad diff" },
-    { changed: true, failingCommand: "diff" },
-    { failingCommand: "ls-files" },
-  ])
+test("unreadable Git changes, unclassified time APIs and test-command drift fail closed", () => {
+  for (const options of [{ changed: true, failingCommand: "diff" }, { failingCommand: "ls-files" }])
     assert.throws(() => captureInvocation(options));
   assert.throws(
     () =>
@@ -307,7 +359,7 @@ test("the CLI includes changed tests and propagates the child test failure", () 
       return read(path, ...options);
     };
     childProcess.execFileSync = (_, args) => args[0] === 'diff'
-      ? 'M\\0tests/html.test.js\\0' : 'tests/days.test.js\\0tests/html.test.js\\0';
+      ? 'tests/html.test.js\\0' : 'tests/days.test.js\\0tests/html.test.js\\0';
     childProcess.spawnSync = (command, arguments_, options) => {
       console.log(JSON.stringify({command, arguments_, zone:options.env.TZ}));
       return {status:7};

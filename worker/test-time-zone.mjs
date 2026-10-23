@@ -14,30 +14,15 @@ export const TIME_ZONE_MANIFEST = JSON.parse(
 );
 const TEST_SCRIPT = "node worker/node-tests.mjs";
 
-/** @param {string} text git diff --name-status --no-renames -z */
-export function parseTimeZoneChanges(text) {
-  const fields = text.split("\0");
-  if (fields.pop() !== "" || fields.length % 2) throw new Error("Incomplete change list.");
-  const changes = [];
-  for (let index = 0; index < fields.length; index += 2) {
-    const status = fields[index];
-    const path = fields[index + 1];
-    if (!/^[AMD]$/.test(status) || !path) throw new Error("Unclassified change.");
-    changes.push({ status, path });
-  }
-  return changes;
-}
-
 /**
- * @param {{ status: string, path: string }[]} changes
+ * @param {string[]} changes added or modified paths
  * @param {string[]} availableTests
  * @param {typeof TIME_ZONE_MANIFEST} [manifest]
  */
 export function selectTimeZoneTests(changes, availableTests, manifest = TIME_ZONE_MANIFEST) {
   const selected = new Set(manifest.sensitive);
-  for (const { path, status } of changes)
-    if (status !== "D" && availableTests.includes(path) && !manifest.fixed.includes(path))
-      selected.add(path);
+  for (const path of changes)
+    if (availableTests.includes(path) && !manifest.fixed.includes(path)) selected.add(path);
   return [...selected].filter((path) => availableTests.includes(path)).sort();
 }
 
@@ -68,12 +53,12 @@ export function testInTimeZone({
     );
   const tracked = git(["ls-files", "-z"]).split("\0");
   const available = listTests();
-  const sources = tracked.filter(
-    (path) => TIME_ZONE_SOURCE.test(path) && !path.endsWith(".min.js"),
-  );
+  const sources = tracked.filter((path) => TIME_ZONE_SOURCE.test(path));
   verifyTimeZoneCoverage(available, manifest, readText, sources);
   const changes = changed
-    ? parseTimeZoneChanges(git(["diff", "--name-status", "--no-renames", "-z", "HEAD^1", "HEAD"]))
+    ? git(["diff", "--name-only", "--no-renames", "--diff-filter=AM", "-z", "HEAD^1", "HEAD"])
+        .split("\0")
+        .filter(Boolean)
     : [];
   const files = selectTimeZoneTests(changes, available, manifest);
   if (!files.length)
