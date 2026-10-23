@@ -39,7 +39,7 @@ jobs:
           path: ~/.cache/ms-playwright
           key: playwright-chromium-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
       - if: steps.browsers.outputs.cache-hit != 'true'
-        run: npx playwright install --only-shell chromium
+        run: node worker/install-browsers.mjs --only-shell chromium
       # Secrets, so each page's address and code, and the subdomain in each Worker's address, are
       # masked in this public log.
       - run: node worker/watch-apps.mjs
