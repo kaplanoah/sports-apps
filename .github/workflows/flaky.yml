@@ -102,6 +102,7 @@ jobs:
           name: nightly-report
           path: nightly-report/
       - name: Name each test that failed in the open issue
+        timeout-minutes: 12
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}

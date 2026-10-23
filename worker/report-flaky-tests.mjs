@@ -8,11 +8,11 @@
 // writes, so no two writes ever race, with the list of the artifacts it has counted, so none is
 // counted twice and none is lost; a comment names each test new to it, and starts the routine that
 // fixes the table's top test; a row goes once its test hasn't failed for a week, and the issue
-// closes once no row is left.
+// closes once a complete sweep leaves no row.
 // Usage: node worker/report-flaky-tests.mjs <the nightly run's report.json files>
 // with GH_TOKEN, GH_REPO, RUN_URL, and GITHUB_REPOSITORY set, as Actions sets the last.
 import { execFileSync } from "node:child_process";
-import { closeSync, mkdtempSync, openSync, readdirSync, readFileSync } from "node:fs";
+import { closeSync, mkdtempSync, openSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -30,6 +30,19 @@ const ROUTINE_TIMEOUT_MS = 10000;
 const FAILED_STATUSES = new Set(["failed", "timedOut"]);
 const STATE_PATTERN = /<!-- flaky-tests (.*?) -->/s;
 const COUNTED_PATTERN = /<!-- flaky-counted (.*?) -->/s;
+const SWEEP_PATTERN = /<!-- flaky-sweep (.*?) -->/s;
+export const COLLECTION_TIMEOUT_MS = 8 * 60 * 1000;
+const ARTIFACT_TIMEOUT_MS = 30 * 1000;
+const UNZIP_TIMEOUT_MS = 10 * 1000;
+
+/** @typedef {{ complete: boolean, unavailable: number[], problem?: string }} CollectionStatus */
+/** @typedef {CollectionStatus & { checkedAt: string, lastSuccess: string | null }} Sweep */
+
+/** @param {string | null | undefined} body @returns {Sweep | null} */
+export function readSweep(body) {
+  const state = (body ?? "").match(SWEEP_PATTERN)?.[1];
+  return state ? JSON.parse(state) : null;
+}
 
 /**
  * When the week the table keeps begins: the start of the earliest day a row stays for, as a time.
@@ -231,11 +244,13 @@ const escapeText = (text) =>
  * artifacts it has counted.
  * @param {TableRow[]} table
  * @param {CountedArtifact[]} [counted]
+ * @param {Sweep} [sweep]
  */
-export const renderTable = (table, counted = []) =>
+export const renderTable = (table, counted = [], sweep) =>
   [
-    `Each browser test that failed only some of the time, in main's nightly runs with no retry or in a pull request's run where its retry passed. A test leaves the table once it hasn't failed for ${DAYS_KEPT} days, and the issue closes once none is left.`,
+    `Each browser test that failed only some of the time, in main's nightly runs with no retry or in a pull request's run where its retry passed. A test leaves the table once it hasn't failed for ${DAYS_KEPT} days, and the issue closes once a complete sweep leaves none.`,
     "",
+    ...(sweep ? renderSweep(sweep) : []),
     "| Test | Failed | First seen | Last seen | First line of its last error |",
     "| --- | --- | --- | --- | --- |",
     ...table.map(
@@ -246,7 +261,29 @@ export const renderTable = (table, counted = []) =>
     // An error's own text could close the comment early.
     `<!-- flaky-tests ${JSON.stringify(table).replaceAll(">", "\\u003e")} -->`,
     `<!-- flaky-counted ${JSON.stringify(counted)} -->`,
+    ...(sweep ? [`<!-- flaky-sweep ${JSON.stringify(sweep).replaceAll(">", "\\u003e")} -->`] : []),
   ].join("\n");
+
+/** @param {Sweep} sweep */
+function renderSweep(sweep) {
+  const unavailable = sweep.unavailable.slice(0, 20).join(", ");
+  const remaining =
+    sweep.unavailable.length > 20 ? ` (+${sweep.unavailable.length - 20} more)` : "";
+  return [
+    `Collection of completed CI tries: **${sweep.complete ? "complete" : "incomplete"}** (${formatSweepTime(sweep.checkedAt)}). Last complete sweep: ${sweep.lastSuccess ? formatSweepTime(sweep.lastSuccess) : "not recorded"}.`,
+    ...(unavailable ? [`Unavailable artifacts: ${unavailable}${remaining}.`] : []),
+    ...(sweep.problem ? [`Collection stopped: ${escapeText(sweep.problem)}.`] : []),
+    "",
+  ];
+}
+
+/** @param {string} value */
+const formatSweepTime = (value) =>
+  new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    dateStyle: "medium",
+    timeStyle: "long",
+  }).format(new Date(value));
 
 /**
  * Each test new to the table, with the run that holds its failed try's trace.
@@ -297,23 +334,24 @@ export async function startFixRoutine({ added, runUrl, fetchImpl, env }) {
 }
 
 /**
- * The open issue Flaky browser tests, or undefined when none is open.
+ * The open report, or the latest closed one holding its counted ledger and sweep state.
  * @param {GitHub} github
  */
-async function findOpenIssue(github) {
-  const issues = await readAllPages(github, "/issues?state=open");
-  return issues.find((issue) => issue.title === ISSUE_TITLE && !issue.pull_request);
+async function findReportIssue(github) {
+  const issues = await readAllPages(github, "/issues?state=all&sort=updated&direction=desc");
+  const reports = issues.filter((issue) => issue.title === ISSUE_TITLE && !issue.pull_request);
+  return reports.find((issue) => issue.state !== "closed") ?? reports[0];
 }
 
 /**
- * Adds a night's failed tests to the open issue, opening one if there's none, and closes it once
- * its table is empty, writing down the CI artifacts the night counted with the table, so a night
- * whose report never lands leaves them to the next. With no issue open, no artifact counted in the
- * week found a failure, so one counted again finds none either.
+ * Writes a night's table and collection state, retaining the last complete sweep across partial
+ * reports. An incomplete sweep keeps even an empty table open; a complete empty sweep closes it.
+ * A closed report retains its ledger, so reopening it never counts a successful try twice.
  * @param {object} options
  * @param {string} options.repository as owner/name
  * @param {TestRuns[]} options.failed
  * @param {CountedArtifact[]} [options.counted] the CI artifacts the night counted
+ * @param {CollectionStatus} [options.collection]
  * @param {string} options.runUrl
  * @param {Date} [options.now]
  * @param {typeof fetch} [options.fetchImpl]
@@ -324,44 +362,63 @@ export async function postReport({
   repository,
   failed,
   counted = [],
+  collection = { complete: true, unavailable: [] },
   runUrl,
   now = new Date(),
   fetchImpl = fetch,
   env = process.env,
 }) {
   const github = createGitHub({ repository, fetchImpl, env });
-  const open = await findOpenIssue(github);
-  if (!open && !failed.length) return "No browser test failed, and no issue is open.";
+  const previous = await findReportIssue(github);
+  const open = previous?.state === "closed" ? undefined : previous;
+  if (!previous && !failed.length && collection.complete)
+    return "No browser test failed, and no issue is open.";
 
   const day = now.toISOString().slice(0, 10);
   const table = readTable(open?.body);
   const updated = addToTable(table, failed, { day, runUrl });
-  const body = renderTable(updated, keepCountedWeek([...readCounted(open?.body), ...counted], now));
-  if (!open) {
+  const sweep = {
+    ...collection,
+    checkedAt: now.toISOString(),
+    lastSuccess: collection.complete
+      ? now.toISOString()
+      : (readSweep(previous?.body)?.lastSuccess ?? null),
+  };
+  const body = renderTable(
+    updated,
+    keepCountedWeek([...readCounted(previous?.body), ...counted], now),
+    sweep,
+  );
+  if (!previous) {
     const created = await github("/issues", { method: "POST", body: { title: ISSUE_TITLE, body } });
-    const started = await startFixRoutine({ added: failed, runUrl, fetchImpl, env });
+    const started = failed.length
+      ? await startFixRoutine({ added: failed, runUrl, fetchImpl, env })
+      : "No failing test to send to the fix routine.";
     return `Opened #${created.number} naming ${failed.length} tests. ${started}`;
   }
 
   const known = new Set(table.map((row) => row.name));
   const added = failed.filter((test) => !known.has(test.name));
-  if (!updated.length) {
-    await github(`/issues/${open.number}`, {
+  if (!updated.length && collection.complete) {
+    await github(`/issues/${previous.number}`, {
       method: "PATCH",
       body: { body, state: "closed", state_reason: "completed" },
     });
-    return `Closed #${open.number}: no browser test has failed for ${DAYS_KEPT} days.`;
+    return `Closed #${previous.number}: no browser test has failed for ${DAYS_KEPT} days.`;
   }
-  await github(`/issues/${open.number}`, { method: "PATCH", body: { body } });
+  await github(`/issues/${previous.number}`, {
+    method: "PATCH",
+    body: { body, ...(open ? {} : { state: "open" }) },
+  });
   if (!added.length) {
-    return `Updated #${open.number}: ${failed.length} tests failed, none new.`;
+    return `Updated #${previous.number}: ${failed.length} tests failed, none new.`;
   }
-  await github(`/issues/${open.number}/comments`, {
+  await github(`/issues/${previous.number}/comments`, {
     method: "POST",
     body: { body: renderNewTests(added, runUrl) },
   });
   const started = await startFixRoutine({ added, runUrl, fetchImpl, env });
-  return `Updated #${open.number}: ${failed.length} tests failed, ${added.length} new. ${started}`;
+  return `Updated #${previous.number}: ${failed.length} tests failed, ${added.length} new. ${started}`;
 }
 
 /** @typedef {ReturnType<typeof createGitHub>} GitHub */
@@ -495,23 +552,99 @@ export const readRunFailures = (directory, foundIn) =>
  * A try's artifacts, each in a folder of its own, downloaded by GitHub's CLI from the repository
  * GH_REPO names. Each is fetched by its id, since a run's tries name their artifacts alike.
  * @param {FlakyRun} run
+ * @param {{ deadline?: number, readTime?: () => number, executeFile?: typeof execFileSync }} [options]
  * @returns {string} the folder that holds them
  */
-function downloadRun({ id, artifacts }) {
+export function downloadRun(
+  { id, artifacts },
+  {
+    deadline = Date.now() + COLLECTION_TIMEOUT_MS,
+    readTime = Date.now,
+    executeFile = execFileSync,
+  } = {},
+) {
   const directory = mkdtempSync(join(tmpdir(), `ci-run-${id}-`));
-  for (const artifact of artifacts) {
-    const zipPath = join(directory, `${artifact.id}.zip`);
+  try {
+    for (const artifact of artifacts) {
+      const zipPath = join(directory, `${artifact.id}.zip`);
+      downloadArtifact(artifact.id, zipPath, { deadline, readTime, executeFile });
+      executeFile("unzip", ["-q", zipPath, "-d", join(directory, String(artifact.id))], {
+        timeout: Math.min(UNZIP_TIMEOUT_MS, readRemainingTime(deadline, readTime)),
+        killSignal: "SIGKILL",
+        stdio: ["ignore", "ignore", "pipe"],
+      });
+    }
+    return directory;
+  } catch (error) {
+    rmSync(directory, { recursive: true, force: true });
+    throw error;
+  }
+}
+
+/**
+ * @param {number} id
+ * @param {string} zipPath
+ * @param {{ deadline: number, readTime: () => number, executeFile: typeof execFileSync }} options
+ */
+function downloadArtifact(id, zipPath, { deadline, readTime, executeFile }) {
+  for (let attempt = 0; ; attempt += 1) {
     const zip = openSync(zipPath, "w");
     try {
-      execFileSync("gh", ["api", `repos/{owner}/{repo}/actions/artifacts/${artifact.id}/zip`], {
-        stdio: ["ignore", zip, "inherit"],
+      executeFile("gh", ["api", `repos/{owner}/{repo}/actions/artifacts/${id}/zip`], {
+        stdio: ["ignore", zip, "pipe"],
+        timeout: Math.min(ARTIFACT_TIMEOUT_MS, readRemainingTime(deadline, readTime)),
+        killSignal: "SIGKILL",
       });
+      return;
+    } catch (error) {
+      if (attempt || !isTransientDownload(error)) throw error;
     } finally {
       closeSync(zip);
     }
-    execFileSync("unzip", ["-q", zipPath, "-d", join(directory, String(artifact.id))]);
   }
-  return directory;
+}
+
+/** @param {unknown} error */
+function isTransientDownload(error) {
+  const failure = /** @type {Error & { stderr?: Buffer, code?: string }} */ (error);
+  const message = `${failure?.message ?? error} ${failure?.stderr ?? ""}`;
+  if (/HTTP 4\d\d|authenticat|forbidden|denied|policy|configuration/i.test(message)) return false;
+  return /HTTP 50[0234]|ECONNRESET|ETIMEDOUT|EAI_AGAIN|connection reset|TLS handshake timeout/i.test(
+    message,
+  );
+}
+
+/** @param {unknown} error */
+function describeCollectionFailure(error) {
+  const failure = /** @type {Error & { stderr?: Buffer }} */ (error);
+  return (
+    readFirstLine(failure?.stderr?.toString()) || readFirstLine(failure?.message ?? String(error))
+  );
+}
+
+/** @param {number} deadline @param {() => number} readTime */
+function readRemainingTime(deadline, readTime) {
+  const remaining = Math.floor(deadline - readTime());
+  if (remaining <= 0) throw new Error("collection deadline reached");
+  return remaining;
+}
+
+/** @param {GitHub} github @param {number} deadline @param {() => number} readTime @returns {GitHub} */
+function boundCollectionReads(github, deadline, readTime) {
+  return async (path, options) => {
+    const remaining = readRemainingTime(deadline, readTime);
+    let timer;
+    try {
+      return await Promise.race([
+        github(path, options),
+        new Promise((_, reject) => {
+          timer = setTimeout(() => reject(new Error("collection deadline reached")), remaining);
+        }),
+      ]);
+    } finally {
+      clearTimeout(timer);
+    }
+  };
 }
 
 /**
@@ -523,8 +656,10 @@ function downloadRun({ id, artifacts }) {
  * @param {GitHub} options.github
  * @param {{ url: string, now: Date }} options.night
  * @param {Ledger} options.ledger what the table counted before
- * @param {(run: FlakyRun) => string} [options.download]
- * @returns {Promise<{ failed: TestRuns[], counted: CountedArtifact[], skipped: FlakyRun[] }>}
+ * @param {(run: FlakyRun, options: { deadline: number, readTime: () => number }) => string} [options.download]
+ * @param {number} [options.deadline]
+ * @param {() => number} [options.readTime]
+ * @returns {Promise<{ failed: TestRuns[], counted: CountedArtifact[], skipped: FlakyRun[], problem?: string }>}
  */
 export async function collectFailedTests({
   nightReports,
@@ -532,36 +667,56 @@ export async function collectFailedTests({
   night,
   ledger,
   download = downloadRun,
+  deadline = Date.now() + COLLECTION_TIMEOUT_MS,
+  readTime = Date.now,
 }) {
-  const uncounted = await listUncountedArtifacts(github, {
-    counted: ledger.counted,
-    now: night.now,
-  });
-  /** @param {any} artifact */
-  const isCountedBefore = (artifact) => Date.parse(artifact.created_at) < ledger.countedBefore;
-  const runs = await listFlakyRuns(
-    github,
-    uncounted.filter((artifact) => !isCountedBefore(artifact)),
-  );
   const tonight = { url: night.url, at: night.now.toISOString() };
   /** @type {TestRuns[][]} */
   const failed = [listFailedTests(nightReports).map((test) => ({ ...test, foundIn: tonight }))];
-  const counted = uncounted.filter(isCountedBefore).map(({ id, created_at: at }) => ({ id, at }));
+  /** @type {CountedArtifact[]} */
+  const counted = [];
   /** @type {FlakyRun[]} */
   const skipped = [];
+  let runs;
+  try {
+    const read = boundCollectionReads(github, deadline, readTime);
+    const uncounted = await listUncountedArtifacts(read, {
+      counted: ledger.counted,
+      now: night.now,
+    });
+    /** @param {any} artifact */
+    const isCountedBefore = (artifact) => Date.parse(artifact.created_at) < ledger.countedBefore;
+    runs = await listFlakyRuns(
+      read,
+      uncounted.filter((artifact) => !isCountedBefore(artifact)),
+    );
+    counted.push(
+      ...uncounted.filter(isCountedBefore).map(({ id, created_at: at }) => ({ id, at })),
+    );
+  } catch (error) {
+    return {
+      failed: mergeFailedTests(failed),
+      counted,
+      skipped,
+      problem: describeCollectionFailure(error),
+    };
+  }
   for (const run of runs) {
     let directory;
     try {
-      directory = download(run);
+      readRemainingTime(deadline, readTime);
+      directory = download(run, { deadline, readTime });
+      failed.push(readRunFailures(directory, run.foundIn));
     } catch (error) {
-      const message = readFirstLine(error instanceof Error ? error.message : String(error));
+      const message = describeCollectionFailure(error);
       console.warn(
         `Could not download CI run ${run.id}'s artifacts (${run.artifacts.map(({ id }) => id).join(", ")}); leaving this try uncounted for a later night: ${message}`,
       );
       skipped.push(run);
       continue;
+    } finally {
+      if (directory) rmSync(directory, { recursive: true, force: true });
     }
-    failed.push(readRunFailures(directory, run.foundIn));
     counted.push(...run.artifacts.map(({ id, at }) => ({ id, at })));
   }
   return {
@@ -576,12 +731,31 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const runUrl = String(process.env.RUN_URL);
   const now = new Date();
   const github = createGitHub({ repository, fetchImpl: fetch, env: process.env });
-  const { failed, counted, skipped } = await collectFailedTests({
-    nightReports: process.argv.slice(2).map((path) => JSON.parse(readFileSync(path, "utf8"))),
-    github,
-    night: { url: runUrl, now },
-    ledger: readLedger(await findOpenIssue(github)),
-  });
-  console.log(await postReport({ repository, failed, counted, runUrl, now }));
-  if (skipped.length) process.exitCode = 1;
+  const nightReports = process.argv.slice(2).map((path) => JSON.parse(readFileSync(path, "utf8")));
+  const deadline = Date.now() + COLLECTION_TIMEOUT_MS;
+  let result;
+  try {
+    const read = boundCollectionReads(github, deadline, Date.now);
+    result = await collectFailedTests({
+      nightReports,
+      github,
+      night: { url: runUrl, now },
+      ledger: readLedger(await findReportIssue(read)),
+      deadline,
+    });
+  } catch (error) {
+    result = {
+      failed: listFailedTests(nightReports),
+      counted: [],
+      skipped: [],
+      problem: describeCollectionFailure(error),
+    };
+  }
+  const collection = {
+    complete: !result.skipped.length && !result.problem,
+    unavailable: result.skipped.flatMap((run) => run.artifacts.map(({ id }) => id)),
+    ...(result.problem ? { problem: result.problem } : {}),
+  };
+  console.log(await postReport({ repository, ...result, collection, runUrl, now: new Date() }));
+  if (!collection.complete) process.exitCode = 1;
 }
