@@ -206,24 +206,44 @@ export function exportReviewArtifact(folder, stage, env) {
   sealReviewArtifact(destination, stage, identity, names);
 }
 
+/** @param {string} input */
+function collectReviewArtifacts(input) {
+  /** @type {Map<string, string>} */
+  const artifacts = new Map();
+  listReviewFiles(input);
+  const isFlat = existsSync(join(input, "provenance.json"));
+  const folders = isFlat
+    ? [[readJson(join(input, "provenance.json")).stage, input]]
+    : readdirSync(input).map((name) => [name.replace(/^trusted-review-/, ""), join(input, name)]);
+  for (const [stage, path] of folders) {
+    if (
+      typeof stage !== "string" ||
+      !/^(?:plan|find-\d+|across|post)$/.test(stage) ||
+      (!isFlat && path !== join(input, `trusted-review-${stage}`))
+    )
+      throw new Error("Unexpected review artifact.");
+    artifacts.set(stage, path);
+  }
+  return artifacts;
+}
+
 /** @param {string} input @param {string} folder @param {NodeJS.ProcessEnv} env */
 export function importReviewArtifacts(input, folder, env) {
   const identity = readReviewIdentity(env);
-  const planFolder = join(input, "trusted-review-plan");
-  listReviewFiles(planFolder);
+  const artifacts = collectReviewArtifacts(input);
+  const planFolder = artifacts.get("plan");
+  if (!planFolder) throw new Error("Missing review plan artifact.");
   const plan = validateReviewPlan(readJson(join(planFolder, "plan.json")));
   const planFiles = listPlanFiles(plan);
   validateReviewArtifact(planFolder, "plan", identity, planFiles);
   copyReviewFiles(planFolder, folder, planFiles);
   const stages = ["plan", ...plan.areas.map((area) => `find-${area.area}`), "across", "post"];
-  for (const name of readdirSync(input)) {
-    const stage = name.replace(/^trusted-review-/, "");
-    if (!name.startsWith("trusted-review-") || !stages.includes(stage))
-      throw new Error("Unexpected review artifact.");
+  for (const [stage, source] of artifacts) {
+    if (!stages.includes(stage)) throw new Error("Unexpected review artifact.");
     if (stage === "plan") continue;
     const names = stageRecords(stage);
-    validateReviewArtifact(join(input, name), stage, identity, names);
-    copyReviewFiles(join(input, name), folder, names);
+    validateReviewArtifact(source, stage, identity, names);
+    copyReviewFiles(source, folder, names);
   }
   const records = [];
   for (const area of plan.areas) {
