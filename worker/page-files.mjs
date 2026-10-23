@@ -136,7 +136,7 @@ function addModulePreloads(files) {
     (element) => isScriptType(element, "module") && readAttribute(element, "src"),
   );
   if (!importMap || !entry) return files;
-  const { imports = {} } = JSON.parse(readElementText(page, importMap));
+  const { imports } = JSON.parse(readElementText(page, importMap));
   const links = listModules(files, readAttribute(entry, "src"), imports)
     .map((path) => html`  <link rel="modulepreload" href="${path}" />\n`.text)
     .join("");
@@ -230,12 +230,12 @@ function pinFileAttribute(element, folder) {
  * @param {string} folder
  */
 function pinImportMap(importMap, folder) {
-  const map = JSON.parse(importMap);
-  const pinned = Object.entries(map.imports ?? {}).map(([prefix, path]) => [
+  const { imports } = JSON.parse(importMap);
+  const pinned = Object.entries(imports).map(([prefix, path]) => [
     prefix,
     isRelative(path) ? `./${folder}${posix.normalize(path)}` : path,
   ]);
-  return `\n    ${JSON.stringify({ ...map, imports: Object.fromEntries(pinned) }).replaceAll("<", "\\u003c")}\n  `;
+  return `\n    ${JSON.stringify({ imports: Object.fromEntries(pinned) }).replaceAll("<", "\\u003c")}\n  `;
 }
 
 // The page and the access code's gate, which the page's address shows until the phone signs in.

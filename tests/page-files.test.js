@@ -181,6 +181,13 @@ function pinFixture(page) {
   return pinPageFiles(files, RELEASE)["index.html"].text;
 }
 
+function listParsedNodes(page) {
+  /** @type {import("parse5").DefaultTreeAdapterTypes.Node[]} */
+  const nodes = [parse(page)];
+  for (const node of nodes) if ("childNodes" in node) nodes.push(...node.childNodes);
+  return nodes;
+}
+
 for (const [tag, expected] of [
   ['<SCRIPT SRC="js/app.js"></SCRIPT>', '<SCRIPT src="release/abc1234/js/app.js"></SCRIPT>'],
   ["<ScRiPt src='js/app.js'></ScRiPt>", '<ScRiPt src="release/abc1234/js/app.js"></ScRiPt>'],
@@ -240,6 +247,7 @@ test("release guards and import maps use real HTML elements with any valid attri
     '<!-- <script src="shared/release-guard.js"></script> -->',
     "<script>const example = '<script src=\"shared/release-guard.js\">';</script>",
     '<template><script src="shared/release-guard.js"></script></template>',
+    '<p>Content</p><script src="shared/release-guard.js"></script>',
   ])
     assert.throws(() => pinFixture(page), /release-guard\.js/);
 });
@@ -265,9 +273,7 @@ test("rewriting import maps cannot turn a JSON string into a closing script tag"
   const pinned = pinFixture(
     '<script src="shared/release-guard.js"></script>\n<script type=importmap>{"imports":{"<\\/script>":"./shared/"}}</script>',
   );
-  /** @type {import("parse5").DefaultTreeAdapterTypes.Node[]} */
-  const nodes = [parse(pinned)];
-  for (const node of nodes) if ("childNodes" in node) nodes.push(...node.childNodes);
+  const nodes = listParsedNodes(pinned);
   const map = nodes.find(
     (node) =>
       "attrs" in node &&
@@ -276,6 +282,30 @@ test("rewriting import maps cannot turn a JSON string into a closing script tag"
   assert.ok(map && "childNodes" in map);
   const text = map.childNodes.map((node) => ("value" in node ? node.value : "")).join("");
   assert.deepEqual(JSON.parse(text), { imports: { "</script>": "./release/abc1234/shared/" } });
+});
+
+test("release import maps retain the existing imports-only contract", () => {
+  const page =
+    '<script src="shared/release-guard.js"></script>\n<script type=importmap>{"imports":{"#shared/":"./shared/"},"scopes":{"./":{"example":"./example.js"}}}</script>';
+  const pinned = pinFixture(page);
+  const nodes = listParsedNodes(pinned);
+  const map = nodes.find(
+    (node) =>
+      "attrs" in node &&
+      node.attrs.some(({ name, value }) => name === "type" && value === "importmap"),
+  );
+  assert.ok(map && "childNodes" in map);
+  assert.deepEqual(
+    JSON.parse(map.childNodes.map((node) => ("value" in node ? node.value : "")).join("")),
+    { imports: { "#shared/": "./release/abc1234/shared/" } },
+  );
+  assert.throws(
+    () =>
+      pinFixture(
+        '<script src="shared/release-guard.js"></script>\n<script type=importmap>{}</script>',
+      ),
+    TypeError,
+  );
 });
 
 test("every page at the folder's top is pinned, the gate too, and each must load the guard", () => {
@@ -305,9 +335,7 @@ for (const [app, page] of listApps().flatMap((app) => [
   test(`${app}: every file the built ${page} loads is in its release's folder and served`, async () => {
     const { default: files } = await import(`#page-files/${app}`);
     const pinned = pinPageFiles(files, RELEASE)[page].text;
-    /** @type {import("parse5").DefaultTreeAdapterTypes.Node[]} */
-    const nodes = [parse(pinned)];
-    for (const node of nodes) if ("childNodes" in node) nodes.push(...node.childNodes);
+    const nodes = listParsedNodes(pinned);
     const loaded = nodes.flatMap((node) => {
       if (!("tagName" in node)) return [];
       const attributes = Object.fromEntries(node.attrs.map(({ name, value }) => [name, value]));
