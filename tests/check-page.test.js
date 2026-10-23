@@ -352,6 +352,10 @@ test("known proxy and certificate-trust failures leave navigation unverified", a
     { code: "PROXY_CERTIFICATE_INVALID" },
     { code: "CERT_AUTHORITY_INVALID", proxy: { HTTPS_PROXY: "http://proxy.example:8080" } },
     { code: "CERT_AUTHORITY_INVALID", proxy: { HTTP_PROXY: "http://proxy.example:8080" } },
+    { code: "CERT_AUTHORITY_INVALID", proxy: { https_proxy: "http://proxy.example:8080" } },
+    { code: "CERT_AUTHORITY_INVALID", proxy: { http_proxy: "http://proxy.example:8080" } },
+    { code: "CERT_AUTHORITY_INVALID", proxy: { ALL_PROXY: "http://proxy.example:8080" } },
+    { code: "CERT_AUTHORITY_INVALID", proxy: { all_proxy: "http://proxy.example:8080" } },
   ]) {
     const { page } = openMovedPage(PAGE_URL);
     page.goto = async () => {

@@ -255,6 +255,13 @@ async function closeAfterPageCheck(close, check) {
   }
 }
 
+/** @param {NodeJS.ProcessEnv} env */
+function hasEnvironmentProxy(env) {
+  return Object.entries(env).some(
+    ([name, value]) => /^(?:https?|all)_proxy$/i.test(name) && !!value,
+  );
+}
+
 /**
  * @param {unknown} error
  * @param {boolean} isInfrastructureUnavailable
@@ -266,7 +273,7 @@ function judgePageFailure(error, isInfrastructureUnavailable, env) {
     /net::ERR_(?:PROXY_CONNECTION_FAILED|TUNNEL_CONNECTION_FAILED|NO_SUPPORTED_PROXIES|PROXY_CERTIFICATE_INVALID)/.test(
       message,
     ) ||
-    (!!(env.HTTPS_PROXY || env.HTTP_PROXY) && /net::ERR_CERT_AUTHORITY_INVALID/.test(message));
+    (hasEnvironmentProxy(env) && /net::ERR_CERT_AUTHORITY_INVALID/.test(message));
   const isPageFailure =
     (error instanceof Error && error.name === "TimeoutError") ||
     /net::ERR_|Page crashed|Target crashed|Execution context was destroyed|Failed to fetch/.test(
