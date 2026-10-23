@@ -1,0 +1,51 @@
+name: Mutation testing
+
+on:
+  schedule:
+    - cron: "17 9 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  mutation:
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ matrix.job-minutes }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: search-reading
+            test-minutes: 270
+            job-minutes: 285
+          - target: series-text
+            test-minutes: 10
+            job-minutes: 25
+          - target: season-days
+            test-minutes: 15
+            job-minutes: 30
+    env:
+      MUTATION_TARGET: ${{ matrix.target }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version-file: .nvmrc
+      - run: npm ci
+      - name: Test mutations
+        timeout-minutes: ${{ matrix.test-minutes }}
+        shell: bash
+        run: |
+          mkdir -p "reports/mutation/$MUTATION_TARGET"
+          npm run test:mutation 2>&1 | tee "reports/mutation/$MUTATION_TARGET/run.log"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        if: ${{ always() }}
+        timeout-minutes: 5
+        with:
+          name: mutation-report-${{ matrix.target }}
+          path: reports/mutation/
+          if-no-files-found: error
+          retention-days: 14

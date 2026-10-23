@@ -1,5 +1,5 @@
 name: Trusted review
-run-name: Review ${{ github.event.pull_request.number }} head ${{ github.event.pull_request.head.sha }} base ${{ github.event.pull_request.base.sha }}
+run-name: Review ${{ github.event.pull_request.number }} head ${{ github.event.pull_request.head.sha }} base ${{ github.event.pull_request.base.sha }} source ${{ github.sha }}
 
 on:
   pull_request_target:
@@ -22,7 +22,7 @@ concurrency:
 
 jobs:
   review-plan:
-    if: ${{ !cancelled() && github.event.pull_request.base.ref == 'main' }}
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -303,7 +303,7 @@ jobs:
     env:
       REVIEW_MERGE: ${{ needs.review-plan.outputs.merge }}
     needs: [review-plan, review-area, review-across, review-post]
-    if: ${{ !cancelled() && github.event.pull_request.base.ref == 'main' }}
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:

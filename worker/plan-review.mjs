@@ -1,11 +1,11 @@
 // Splits a pull request's change into areas by what its files are about, each test with the code
-// it tests, so CI's legacy review (ci.yml and review-area.yml) and trusted review (review.yml and
-// trusted-review-area.yml) each have one reviewer read each area in full. The first review reads
-// the whole change. A review after it reads only files the pull request still changes and the
-// pushes since the last full read changed. A push that only merges the base is read by no one,
-// but for how it resolved conflicts in files the pull request still changes. Neither is a run
-// on the head the last full read ended on. A test's recorded data, the lockfile, a binary file,
-// and a drawing or minified library a tool wrote go unread, named in the summary instead.
+// it tests, so trusted review (review.yml and trusted-review-area.yml) has one reviewer read
+// each area in full. The first review reads the whole change. A review after it reads only
+// files the pull request still changes and the pushes since the last full read changed.
+// A push that only merges the base is read by no one, but for how it resolved conflicts in files
+// the pull request still changes. Neither is a run on the head the last full read ended on.
+// A test's recorded data, the lockfile, a binary file, and a drawing or minified library a tool
+// wrote go unread, named in the summary instead.
 // Each file's diff is written in parts a reviewer reads whole, as is each rule file whose paths
 // match a file of its area, which judge-review.mjs checks.
 // Usage: node worker/plan-review.mjs <folder>, in a full checkout of the pull request's merge
@@ -590,7 +590,7 @@ function renderIndex(words, { areas, unread }) {
 // GitHub names a matrix's job by its values, and a skipped one, whose matrix it never reads, by
 // the job alone, so each area holds only the name its job shows, and the job looks up its number.
 /**
- * The review's matrix: its areas, each of which review-area.yml reviews on its own, each area's
+ * The review's matrix: its areas, each of which trusted-review-area.yml reviews on its own, each area's
  * number by its name, and how many there are.
  * @param {{ area: number, name: string }[]} areas
  */

@@ -113,7 +113,11 @@ test("trusted review pins workflow authority, source, Node and isolated artifact
   const main = readRepoFile(".github/workflows/review.yml");
   const area = readRepoFile(".github/workflows/trusted-review-area.yml");
   assert.match(main, / {2}pull_request_target:/);
-  assert.match(main, /base.ref == 'main'/);
+  assert.doesNotMatch(main, /base\.ref/);
+  assert.match(
+    main,
+    /^run-name: Review \$\{\{ github.event.pull_request.number \}\} head \$\{\{ github.event.pull_request.head.sha \}\} base \$\{\{ github.event.pull_request.base.sha \}\} source \$\{\{ github.sha \}\}$/m,
+  );
   let claude = 0;
   for (const workflow of [main, area]) {
     assert.doesNotMatch(workflow, /actions\/cache|npm ci|npx /);
@@ -185,6 +189,7 @@ test("Git retains proxy and CA trust while discarding credentials and executable
     HTTPS_PROXY: "https://example.com",
     SSL_CERT_FILE: "/tmp/ca.pem",
     REVIEW_BASE: SHA,
+    REVIEW_TRUSTED: SHA,
     GH_TOKEN: "example-token",
     ANTHROPIC_API_KEY: "example-key",
     NODE_OPTIONS: "--import /tmp/evil.mjs",
@@ -204,7 +209,19 @@ test("Git retains proxy and CA trust while discarding credentials and executable
     assert.equal(env[field], undefined, field);
   assert.equal(env.GIT_CONFIG_GLOBAL, "/dev/null");
   assert.equal(env.GIT_CONFIG_NOSYSTEM, "1");
-  assert.throws(() => createReviewGitEnvironment({ REVIEW_BASE: "main" }), /immutable base/);
+  for (const base of [SHA, "main", ""])
+    assert.throws(() => createReviewGitEnvironment({ REVIEW_BASE: base }), /immutable trusted/);
+  assert.equal(
+    createReviewGitEnvironment({ REVIEW_BASE: SHA, REVIEW_TRUSTED: ID_ENV.REVIEW_TRUSTED })
+      .GIT_ATTR_SOURCE,
+    ID_ENV.REVIEW_TRUSTED,
+  );
+  assert.equal(createReviewGitEnvironment({}).GIT_ATTR_SOURCE, undefined);
+  for (const trusted of ["main", "", "../stack", "a".repeat(39)])
+    assert.throws(
+      () => createReviewGitEnvironment({ REVIEW_BASE: SHA, REVIEW_TRUSTED: trusted }),
+      /immutable trusted/,
+    );
 });
 
 test("all artifact identity fields and exact file manifests are checked before use", () => {
@@ -477,26 +494,40 @@ test("pinned-action flat and nested extraction layouts work for zero, one and mu
   }
 });
 
-test("a hostile merge tree cannot replace trusted entrypoints, imports, Node or package configuration", async () => {
+/** @param {string} baseRef */
+async function verifyHostileReviewIsolation(baseRef) {
   const directory = createFolder();
   const trusted = join(directory, "trusted");
   mkdirSync(trusted);
-  for (const path of ["worker", "shared", "package.json", ".nvmrc", ".claude/rules"])
+  for (const path of [
+    "worker",
+    "shared",
+    "package.json",
+    ".nvmrc",
+    ".claude/rules",
+    ".github",
+    "AGENTS.md",
+    "REVIEW.md",
+  ])
     cpSync(new URL(path, REPO_ROOT), join(trusted, path), { recursive: true });
+  mkdirSync(join(trusted, ".claude/rules"), { recursive: true });
+  const trustedRule = '---\npaths:\n  - "worker/**"\n---\nTrusted rule must be read.\n';
+  writeFileSync(join(trusted, ".claude/rules/trust.md"), trustedRule);
   const hostile = join(directory, "hostile");
   mkdirSync(hostile);
+  cpSync(trusted, hostile, { recursive: true });
   readGit(hostile, ["init", "-b", "main"]);
   readGit(hostile, ["config", "user.name", "Example"]);
   readGit(hostile, ["config", "user.email", "example@example.com"]);
   writeFileSync(join(hostile, "a.js"), "base tracked text\n");
   readGit(hostile, ["add", "."]);
   readGit(hostile, ["commit", "-m", "base"]);
-  const base = readGit(hostile, ["rev-parse", "HEAD"]);
-  readGit(hostile, ["checkout", "-b", "change"]);
-  mkdirSync(join(hostile, "worker"));
+  const source = readGit(hostile, ["rev-parse", "HEAD"]);
+  readGit(hostile, ["checkout", "-b", baseRef === "stack" ? "stack" : "change"]);
   const marker = join(directory, "executed");
   const evil = `import {writeFileSync} from "node:fs";writeFileSync(${JSON.stringify(marker)},"executed");throw new Error("untrusted code");`;
   for (const path of [
+    "trusted-review.mjs",
     "review-git.mjs",
     "plan-review.mjs",
     "judge-review.mjs",
@@ -516,9 +547,6 @@ test("a hostile merge tree cannot replace trusted entrypoints, imports, Node or 
     join(hostile, "package.json"),
     '{"type":"module","imports":{"#shared/*":"./evil/*"}}',
   );
-  mkdirSync(join(trusted, ".claude/rules"), { recursive: true });
-  const trustedRule = '---\npaths:\n  - "worker/**"\n---\nTrusted rule must be read.\n';
-  writeFileSync(join(trusted, ".claude/rules/trust.md"), trustedRule);
   mkdirSync(join(hostile, ".claude/rules"), { recursive: true });
   writeFileSync(
     join(hostile, ".claude/rules/trust.md"),
@@ -528,17 +556,41 @@ test("a hostile merge tree cannot replace trusted entrypoints, imports, Node or 
   writeFileSync(join(hostile, ".gitattributes"), "worker/*.mjs binary\n");
   mkdirSync(join(hostile, ".review"));
   writeFileSync(join(hostile, ".review/find-1.json"), '{"isAnswered":true,"unread":[]}');
+  mkdirSync(join(hostile, ".github/workflows"), { recursive: true });
+  writeFileSync(
+    join(hostile, ".github/workflows/review.yml"),
+    `name: Hostile stack workflow\non: pull_request_target\njobs:\n  hostile:\n    runs-on: ubuntu-latest\n    steps:\n      - run: touch ${marker}\n`,
+  );
+  if (baseRef === "stack") {
+    readGit(hostile, ["add", "."]);
+    readGit(hostile, ["commit", "-m", "hostile stack base"]);
+    readGit(hostile, ["checkout", "-b", "change"]);
+  }
+  const base = readGit(hostile, ["rev-parse", "HEAD"]);
+  writeFileSync(join(hostile, "worker/stack-change.mjs"), evil);
   writeFileSync(join(hostile, "a.js"), "reviewed tracked text\n");
   readGit(hostile, ["add", "."]);
   readGit(hostile, ["commit", "-m", "hostile"]);
   const head = readGit(hostile, ["rev-parse", "HEAD"]);
-  readGit(hostile, ["checkout", "main"]);
+  readGit(hostile, ["checkout", baseRef]);
   readGit(hostile, ["merge", "--no-ff", "change", "-m", "merge"]);
   const merge = readGit(hostile, ["rev-parse", "HEAD"]);
   readGit(hostile, ["update-ref", "refs/pull/1/merge", merge]);
-  readGit(hostile, ["update-ref", "refs/heads/main", base]);
+  readGit(hostile, ["update-ref", `refs/heads/${baseRef}`, base]);
+  assert.equal(readGit(hostile, ["rev-parse", "main"]), source);
+  if (baseRef === "stack") assert.notEqual(base, source);
   const checkout = join(directory, "checkout");
-  readGit(directory, ["clone", "--no-local", "--single-branch", "--depth", "1", hostile, checkout]);
+  readGit(directory, [
+    "clone",
+    "--no-local",
+    "--single-branch",
+    "--branch",
+    "main",
+    "--depth",
+    "1",
+    hostile,
+    checkout,
+  ]);
   // The moving ref now names another commit; later jobs must fetch the originally planned SHA.
   readGit(hostile, ["update-ref", "refs/pull/1/merge", head]);
   const event = {
@@ -548,12 +600,27 @@ test("a hostile merge tree cannot replace trusted entrypoints, imports, Node or 
     PR: "1",
     REVIEW_HEAD: head,
     REVIEW_BASE: base,
+    REVIEW_TRUSTED: source,
+    GITHUB_WORKFLOW_REF: ID_ENV.GITHUB_WORKFLOW_REF,
     GITHUB_REPOSITORY: "example/repository",
   };
+  const identity = readReviewIdentity({ ...ID_ENV, ...event, REVIEW_MERGE: merge });
+  assert.equal(identity.base, base);
+  assert.equal(identity.trusted, source);
+  assert.throws(
+    () =>
+      readReviewIdentity({
+        ...ID_ENV,
+        ...event,
+        REVIEW_MERGE: merge,
+        GITHUB_WORKFLOW_REF: "example/repository/.github/workflows/review.yml@refs/heads/stack",
+      }),
+    /workflow authority/,
+  );
   const pull = {
     state: "open",
     head: { sha: head },
-    base: { ref: "main", sha: base },
+    base: { ref: baseRef, sha: base },
     merge_commit_sha: merge,
   };
   for (const initial of [undefined, head]) {
@@ -578,7 +645,7 @@ test("a hostile merge tree cannot replace trusted entrypoints, imports, Node or 
     assert.equal(waits, 1);
     assert.equal(
       readGit(checkout, ["rev-parse", "HEAD"]),
-      base,
+      source,
       "resolving never checks out reviewed code",
     );
   }
@@ -586,7 +653,6 @@ test("a hostile merge tree cannot replace trusted entrypoints, imports, Node or 
     { ...pull, state: "closed" },
     { ...pull, head: { sha: base } },
     { ...pull, base: { ...pull.base, sha: head } },
-    { ...pull, base: { ...pull.base, ref: "stack" } },
     { ...pull, mergeable: false },
   ]) {
     let reads = 0;
@@ -766,18 +832,38 @@ test("a hostile merge tree cannot replace trusted entrypoints, imports, Node or 
     ],
     {
       cwd: checkout,
-      env: { ...ENV, REVIEW_CHECKOUT: checkout, REVIEW_BASE: base },
+      env: { ...ENV, REVIEW_CHECKOUT: checkout, REVIEW_BASE: base, REVIEW_TRUSTED: source },
       encoding: "utf8",
     },
   );
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /a.js:1:reviewed tracked text/);
+  const workerSearch = spawnSync(
+    process.execPath,
+    [
+      join(trusted, "worker/review-git.mjs"),
+      "grep",
+      "-n",
+      "-F",
+      "-e",
+      "untrusted code",
+      "--",
+      "worker/stack-change.mjs",
+    ],
+    {
+      cwd: checkout,
+      env: { ...ENV, REVIEW_CHECKOUT: checkout, REVIEW_BASE: base, REVIEW_TRUSTED: source },
+      encoding: "utf8",
+    },
+  );
+  assert.equal(workerSearch.status, 0, workerSearch.stderr);
+  assert.match(workerSearch.stdout, /^worker\/stack-change.mjs:1:.*untrusted code/);
   const history = spawnSync(
     process.execPath,
     [join(trusted, "worker/review-git.mjs"), "show", "HEAD^1:a.js"],
     {
       cwd: checkout,
-      env: { ...ENV, REVIEW_CHECKOUT: checkout, REVIEW_BASE: base },
+      env: { ...ENV, REVIEW_CHECKOUT: checkout, REVIEW_BASE: base, REVIEW_TRUSTED: source },
       encoding: "utf8",
     },
   );
@@ -804,6 +890,7 @@ test("a hostile merge tree cannot replace trusted entrypoints, imports, Node or 
         ...ENV,
         REVIEW_RULE_ROOT: trusted,
         REVIEW_BASE: base,
+        REVIEW_TRUSTED: source,
         GITHUB_REPOSITORY: "example/repository",
         PR: "1",
       },
@@ -816,9 +903,12 @@ test("a hostile merge tree cannot replace trusted entrypoints, imports, Node or 
     readFileSync(join(planFolder, "plan.json"), "utf8"),
   ).areas.flatMap((area) => area.files);
   assert.ok(plannedFiles.includes("a.js"));
+  assert.ok(plannedFiles.includes("worker/stack-change.mjs"));
   assert.ok(
-    plannedFiles.includes("worker/plan-review.mjs"),
-    "PR attributes cannot mark changed source as unread binary",
+    baseRef === "stack"
+      ? !plannedFiles.includes("worker/plan-review.mjs")
+      : plannedFiles.includes("worker/plan-review.mjs"),
+    "review reads exactly the PR delta against its own base",
   );
   for (const reviewedBase of [head, base]) {
     const summary = `<!-- trusted-review-summary -->\n<!-- claude-review-state ${JSON.stringify({ head, base: reviewedBase })} -->`;
@@ -836,7 +926,7 @@ test("a hostile merge tree cannot replace trusted entrypoints, imports, Node or 
           ...ENV,
           REVIEW_RULE_ROOT: trusted,
           REVIEW_BASE: base,
-          REVIEW_TRUSTED: SHA,
+          REVIEW_TRUSTED: source,
           GITHUB_REPOSITORY: "example/repository",
           PR: "1",
         },
@@ -858,7 +948,7 @@ test("a hostile merge tree cannot replace trusted entrypoints, imports, Node or 
       "-e",
       `const m=await import(${JSON.stringify(join(trusted, "worker/review-state.mjs"))});console.log(m.SUMMARY_MARKER);console.log(m.findSummary([{user:{login:"github-actions[bot]"},body:"<!-- claude-review-summary -->"}]));`,
     ],
-    { cwd: checkout, env: { ...ENV, REVIEW_TRUSTED: SHA }, encoding: "utf8" },
+    { cwd: checkout, env: { ...ENV, REVIEW_TRUSTED: source }, encoding: "utf8" },
   );
   assert.equal(state.status, 0, state.stderr);
   assert.equal(state.stdout, "<!-- trusted-review-summary -->\nnull\n");
@@ -866,7 +956,11 @@ test("a hostile merge tree cannot replace trusted entrypoints, imports, Node or 
     () => prepareReviewCheckout({ ...ENV, GITHUB_EVENT_NAME: "pull_request" }),
     /workflow authority/,
   );
-});
+}
+
+for (const baseRef of ["main", "stack"])
+  test(`a hostile ${baseRef} merge tree cannot replace trusted entrypoints, imports, Node or package configuration`, () =>
+    verifyHostileReviewIsolation(baseRef));
 
 test("missing merge metadata leaves review owed without following a moving ref", () => {
   const output = join(createFolder(), "output");
@@ -877,14 +971,14 @@ test("missing merge metadata leaves review owed without following a moving ref",
 test("posting rechecks the open pull and head but retains its immutable reviewed base", async () => {
   const pull = { state: "open", head: { sha: SHA }, base: { sha: "f".repeat(40), ref: "main" } };
   const env = { ...ID_ENV, PR: "1" };
-  await verifyReviewEvent(env, async (path) => {
-    assert.equal(path, "/pulls/1");
-    return pull;
-  });
+  for (const ref of ["main", "stack"])
+    await verifyReviewEvent(env, async (path) => {
+      assert.equal(path, "/pulls/1");
+      return { ...pull, base: { ...pull.base, ref } };
+    });
   for (const changed of [
     { ...pull, state: "closed" },
     { ...pull, head: { sha: "e".repeat(40) } },
-    { ...pull, base: { ...pull.base, ref: "stack" } },
   ])
     await assert.rejects(() => verifyReviewEvent(env, async () => changed), /moved/);
 });
@@ -916,37 +1010,18 @@ test("equivalent internal answer paths normalize while external paths fail close
   );
 });
 
-test("stacked target runs skip both plan and final summary without publishing a result", () => {
+test("stacked target runs plan and summarize with the same owed and result gates", () => {
   const workflow = readRepoFile(".github/workflows/review.yml");
   for (const name of ["review-plan", "review"]) {
     const job = workflow.split(`  ${name}:\n`)[1].split(/^ {2}[a-z][\w-]*:/m)[0];
-    assert.match(
-      job,
-      /if: \$\{\{ !cancelled\(\) && github.event.pull_request.base.ref == 'main' \}\}/,
-    );
+    assert.match(job, /if: \$\{\{ !cancelled\(\) \}\}/);
+    assert.doesNotMatch(job, /base\.ref/);
   }
   assert.match(workflow, /id: result\n {8}if: .*steps.prepare.outputs.available == 'true'/);
   assert.doesNotMatch(workflow, /pattern: trusted-review-\*\n/);
 });
 
-test("bootstrap prompts and schemas stay in parity apart from trusted source paths", () => {
-  const prompts = (text) =>
-    [...text.matchAll(/ {10}prompt: \|\n((?:(?: {12}.*|)\n)+)/g)].map((match) => match[1]);
-  const normalize = (text) =>
-    text
-      .replaceAll("${{ runner.temp }}/trusted/worker/", "worker/")
-      .replaceAll("`.review/AGENTS.md`", "AGENTS.md");
-  for (const [legacyPath, trustedPath] of [
-    [".github/workflows/ci.yml", ".github/workflows/review.yml"],
-    [".github/workflows/review-area.yml", ".github/workflows/trusted-review-area.yml"],
-  ]) {
-    const legacy = readRepoFile(legacyPath);
-    const trusted = readRepoFile(trustedPath);
-    assert.deepEqual(prompts(trusted).map(normalize), prompts(legacy));
-    const schemas = (text) =>
-      [...text.matchAll(/--json-schema '([^']+)'/g)].map((match) => JSON.parse(match[1]));
-    assert.deepEqual(schemas(trusted), schemas(legacy));
-  }
+test("trusted prompts retain the authoritative reporting guide after bootstrap", () => {
   assert.match(
     readRepoFile(".github/workflows/review.yml"),
     /8\. Write each finding's body as the guide's "How to report" says[,.]/,
