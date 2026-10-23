@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { findRefusal } from "../worker/review-git.mjs";
-import { readRepoFile } from "./repo-files.js";
+import { REPO_ROOT, readRepoFile } from "./repo-files.js";
 
 const ROOT = "/repo";
 
@@ -165,7 +165,7 @@ test("search refuses pager commands and outside paths before invoking git", () =
 });
 
 test("runs git with no shell, and refuses before git runs", () => {
-  const script = fileURLToPath(new URL("../worker/review-git.mjs", import.meta.url));
+  const script = fileURLToPath(new URL("worker/review-git.mjs", REPO_ROOT));
   const subject = execFileSync("node", [script, "log", "-1", "--format=%s;$(false)"], {
     encoding: "utf8",
   });

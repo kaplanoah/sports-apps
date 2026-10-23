@@ -13,7 +13,7 @@ import {
   listPageStylesheets,
   readDiff,
 } from "../worker/red-change.mjs";
-import { readRepoFile } from "./repo-files.js";
+import { REPO_ROOT, readRepoFile } from "./repo-files.js";
 
 /**
  * A diff that adds `added` to `path` at line 10, after the lines it keeps, and takes out
@@ -1194,7 +1194,7 @@ test("the page stylesheets the gate reads beside a change are every page's, and 
   );
 });
 
-const GATE = fileURLToPath(new URL("../worker/red-change.mjs", import.meta.url));
+const GATE = fileURLToPath(new URL("worker/red-change.mjs", REPO_ROOT));
 
 /**
  * The gate's command line run on a diff with no labels, as CI's gate job runs it, with what it
