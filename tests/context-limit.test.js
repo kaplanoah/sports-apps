@@ -345,6 +345,32 @@ test("at 300,000 tokens heredoc input cannot supply API flags or block a handoff
     assert.equal(answerStopCommand(command), null, command);
 });
 
+test("at 300,000 tokens quoted digits before heredocs stay option values", () => {
+  for (const number of ["0", "1"])
+    for (const argument of [
+      `'${number}'`,
+      `"${number}"`,
+      `\\${number}`,
+      `''${number}`,
+      `${number}''`,
+    ]) {
+      const command = `gh api repos/o/r/git/refs/heads/beta -t ${argument}<<'EOF' -X DELETE\nx\nEOF`;
+      assert.ok(answerStopCommand(command), command);
+      const fetch = `git fetch -o ${argument}<<'EOF' --upload-pack=evil .\nx\nEOF`;
+      assert.ok(answerStopCommand(fetch), fetch);
+      assert.equal(
+        answerStopCommand(`gh api repos/o/r/issues -t ${argument}<<'EOF' -X GET\nx\nEOF`),
+        null,
+        argument,
+      );
+      assert.equal(
+        answerStopCommand(`git fetch -o ${argument}<<'EOF' -- origin\nx\nEOF`),
+        null,
+        argument,
+      );
+    }
+});
+
 for (const command of [
   "git diff --output=AGENTS.md origin/main",
   "git log --output=AGENTS.md",
@@ -478,6 +504,7 @@ test("the stop reason explains literal arguments and the placeholder and heredoc
   assert.match(reason ?? "", /leading ~/);
   assert.match(reason ?? "", /\{owner\}\/\{repo\}/);
   assert.match(reason ?? "", /quoted heredoc/);
+  assert.match(reason ?? "", /Quote arguments containing \{, \(, or \)/);
 });
 
 test("at 300,000 tokens fetch rejects the update-head-ok shorthand", () => {

@@ -38,8 +38,8 @@ paths:
   - `.claude/hooks/context-limit.mjs` hands a session off to a fresh one as its context grows.
     After its stop, commands run alone with literal arguments: no variables, glob or brace expansions,
     leading `~`, pipes, redirects, or command substitutions.
-    The literal `{owner}/{repo}` placeholders are allowed,
-    and a heredoc with a quoted delimiter on stdin can supply a commit message or PR body.
+    Quote arguments containing `{`, `(`, or `)`, except the literal `{owner}/{repo}` placeholders.
+    A heredoc with a quoted delimiter on stdin can supply a commit message or PR body.
   - `.claude/hooks/install-packages.mjs` runs `npm ci` as a session starts when `node_modules` is out of date.
   - `.claude/hooks/check-push.mjs` runs lint, format, types, and dead code before each `git push`.
 - A session runs `deploy:api`, `rollback`, and each `set-` script itself, in the cloud environment that holds the Cloudflare token,

@@ -62,6 +62,26 @@ test("literal arguments fail closed on unfinished input and shell operators", ()
     assert.equal(parseCommandWords(command), null, command);
 });
 
+test("only bare digits before a heredoc are file descriptors", () => {
+  for (const argument of ["'1'", '"1"', "\\1", "''1", "1''"])
+    assert.deepEqual(
+      parseCommandWords(`gh api -t ${argument}<<'EOF' repos/o/r/issues -X DELETE\nx\nEOF`),
+      ["gh", "api", "-t", "1", "repos/o/r/issues", "-X", "DELETE"],
+      argument,
+    );
+  assert.deepEqual(parseCommandWords("gh api 1\\\n<<'EOF' repos/o/r/pulls/1 -X PATCH\nx\nEOF"), [
+    "gh",
+    "api",
+    "repos/o/r/pulls/1",
+    "-X",
+    "PATCH",
+  ]);
+  assert.deepEqual(
+    parseCommandWords("gh api -H 'X: a' 1<<'EOF' repos/o/r/pulls/1 -X PATCH\nx\nEOF"),
+    ["gh", "api", "-H", "X: a", "repos/o/r/pulls/1", "-X", "PATCH"],
+  );
+});
+
 test("literal arguments share the scanner's quoted heredoc handling", () => {
   for (const operator of ["<<'EOF'", '<<"EOF"', "<<-'EOF'"])
     assert.deepEqual(parseCommandWords(`git commit -F - ${operator}\n$MESSAGE; a && b\nEOF`), [

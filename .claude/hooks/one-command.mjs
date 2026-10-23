@@ -120,11 +120,13 @@ function scanCommandText(text, subshellStarts) {
   const heredocs = [];
   let word = "";
   let hasWord = false;
+  let isWordQuoted = false;
   let hasExpansion = false;
   function finishWord() {
     if (hasWord) words.push(word);
     word = "";
     hasWord = false;
+    isWordQuoted = false;
   }
   for (let at = 0; at < text.length; at += 1) {
     const char = text[at];
@@ -143,6 +145,7 @@ function scanCommandText(text, subshellStarts) {
         if (next !== "\n") {
           word += next;
           hasWord = true;
+          isWordQuoted = true;
           if (parentheses.length > 0) hasSubstitutionWord = true;
         }
         at += 1;
@@ -171,6 +174,7 @@ function scanCommandText(text, subshellStarts) {
     if (char === "'" || char === '"') {
       quote = char;
       hasWord = true;
+      isWordQuoted = true;
       if (parentheses.length > 0) hasSubstitutionWord = true;
       scriptStart = SHELL_BEFORE_SCRIPT.test(text.slice(0, at)) ? at + 1 : -1;
       continue;
@@ -212,7 +216,7 @@ function scanCommandText(text, subshellStarts) {
     }
     const heredoc = text.startsWith("<<", at) ? readHeredoc(text, at) : null;
     if (heredoc) {
-      if (/^\d+$/.test(word)) {
+      if (!isWordQuoted && /^\d+$/.test(word)) {
         word = "";
         hasWord = false;
       } else finishWord();

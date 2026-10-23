@@ -354,7 +354,7 @@ const writeStopReason = (tokens) =>
   "merging a PR whose check passed, reading its Deploy runs, and get_session. " +
   "Run each command alone, with literal arguments: no variables, glob or brace expansions, " +
   "leading ~, pipes, redirects, or command substitutions. " +
-  "The literal {owner}/{repo} placeholders are allowed. " +
+  "Quote arguments containing {, (, or ), except the literal {owner}/{repo} placeholders. " +
   "Use a quoted heredoc on stdin for a commit message or PR body, as git commit -F - <<'EOF' does. " +
   HANDOFF_STEPS;
 
