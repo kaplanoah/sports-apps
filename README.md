@@ -284,6 +284,11 @@ To run the
 same checks yourself, run `npm ci` and `npx playwright install chromium` once,
 then `npm run check`. `npm run format` fixes formatting.
 
+After `git fetch origin main`, run `npm run rework` for a file-overlap estimate
+of follow-up fixes and their monthly share. It reads the locally fetched
+`origin/main`, so a stale fetch gives a stale report and a missing reference
+fails the command. Overlap does not prove an earlier PR caused a fix.
+
 Each app's Worker carries its page. Every deploy bundles both from the source it
 deploys, so there is nothing to rebuild by hand. `npm run build` writes each
 app's bundle to its `apps/<app>/worker/dist/`, which git ignores, if you want to
