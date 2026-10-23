@@ -14,5 +14,4 @@ Please do not open a public issue or pull request for a vulnerability.
 
 Include the app or service affected, its version or commit if known, the steps to reproduce, and what an attacker could do.
 
-I will reply within 7 days, and confirm when a fix is live.
-If you'd like public credit, please tell me in the report.
+I will reply within 7 days, and confirm when a fix is live. If you'd like public credit, please tell me in the report.
