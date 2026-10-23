@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createContext, runInContext } from "node:vm";
 import { listTrackedFiles, readRepoFile } from "./repo-files.js";
+import { chooseReAddNote } from "../shared/page/re-add-note.js";
 
 const MINUTE_MS = 60 * 1000;
 const NOW = Date.parse("2026-10-22T16:00:00Z");
@@ -24,7 +25,8 @@ function createStorage(entries = {}) {
 /**
  * The plain script as a page's head runs it, at `href`, with what pick-theme.js gives it.
  * @param {{ href?: string, stored?: Record<string, string>, isOnHomeScreen?: boolean,
- *   isAppleBrowser?: boolean, isMoving?: boolean, answer?: () => Promise<Response> }} [page]
+ *   isAppleBrowser?: boolean, isMoving?: boolean, phoneLook?: "light" | "dark",
+ *   answer?: () => Promise<Response> }} [page]
  */
 function loadPageMove({
   href = OLD_ADDRESS,
@@ -32,6 +34,7 @@ function loadPageMove({
   isOnHomeScreen = false,
   isAppleBrowser = true,
   isMoving = true,
+  phoneLook = "light",
   answer = async () => Response.json({ address: HANDOFF_ADDRESS, expiresInMs: 10 * MINUTE_MS }),
 } = {}) {
   const localStorage = createStorage(stored);
@@ -73,7 +76,7 @@ function loadPageMove({
     isLook: (value) => value === "light" || value === "dark",
     isOnHomeScreen: () => isOnHomeScreen,
     isAppleBrowser: () => isAppleBrowser,
-    readPhoneLook: () => "light",
+    readPhoneLook: () => phoneLook,
     readAppearanceChoice: (stored) => {
       try {
         return JSON.parse(stored);
@@ -89,7 +92,22 @@ function loadPageMove({
       leaveOldAddress, MAX_CARRIED_LENGTH })`,
     context,
   );
-  return { ...pageMove, localStorage, sessionStorage, location, requests };
+  function startTheme() {
+    Object.assign(context, {
+      navigator: { standalone: isOnHomeScreen },
+      matchMedia: (query) => ({
+        matches: query.includes("standalone") ? isOnHomeScreen : phoneLook === "dark",
+      }),
+      performance: { getEntriesByType: () => [{ type: "navigate" }] },
+    });
+    context.document.documentElement = { dataset: {} };
+    runInContext(readRepoFile(`${PAGE_CODE}pick-theme.js`), context);
+    return runInContext(
+      "({ choice: readPickedAppearance(), icon: readHomeScreenIcon() })",
+      context,
+    );
+  }
+  return { ...pageMove, localStorage, sessionStorage, location, requests, startTheme };
 }
 
 const CHOICES = {
@@ -217,6 +235,61 @@ test("the Home Screen app keeps its own choices over the carried ones", () => {
   assert.equal(page.isNotificationsAskKept(), false);
 });
 
+test("an older move's first address gives the Home Screen app the welcome's default icon", () => {
+  const page = loadPageMove({
+    href: addCarried(NEW_ADDRESS, writeCarried({ fromApp: true })),
+    isOnHomeScreen: true,
+  });
+  assert.equal(page.takeCarriedChoices(NOW), "dark");
+});
+
+test("launching an older move's original address keeps the chosen icon and shows no re-add note", () => {
+  for (const look of /** @type {const} */ (["light", "dark"])) {
+    const phoneLook = look === "dark" ? "light" : "dark";
+    const page = loadPageMove({
+      href: addCarried(
+        NEW_ADDRESS,
+        writeCarried({ fromApp: true, choices: { appearance: JSON.stringify(look) } }),
+      ),
+      isOnHomeScreen: true,
+      phoneLook,
+    });
+    const state = page.startTheme();
+    assert.equal(state.icon, look);
+    assert.equal(
+      chooseReAddNote({
+        ...state,
+        isIosApp: true,
+        phoneLook,
+        isSwitched: false,
+        isDismissed: false,
+      }),
+      null,
+    );
+  }
+});
+
+test("a move's explicit icon outranks its carried appearance", () => {
+  const page = loadPageMove({
+    href: addCarried(NEW_ADDRESS, writeCarried({ fromApp: true, icon: "light" })),
+    isOnHomeScreen: true,
+  });
+  assert.equal(page.takeCarriedChoices(NOW), "light");
+});
+
+test("reopening an older move repairs the icon recorded before the move was taken", () => {
+  const page = loadPageMove({
+    href: addCarried(NEW_ADDRESS, writeCarried({ fromApp: true })),
+    isOnHomeScreen: true,
+    stored: {
+      appearance: '"dark"',
+      homeScreenIcon: "light",
+      carriedChoicesTaken: String(NOW),
+    },
+  });
+  assert.equal(page.startTheme().icon, "dark");
+});
+
 test("the Home Screen app takes a move once, though it opens at the same address each time", () => {
   const page = loadPageMove({
     href: addCarried(NEW_ADDRESS, writeCarried({})),
@@ -331,4 +404,27 @@ test("a move from the Home Screen app carries notifications and where it left fr
   const carried = page.unpackCarried(address.searchParams.get("carried"));
   assert.equal(carried.notifications, true);
   assert.equal(carried.fromApp, true);
+});
+
+test("a Home Screen move's first handoff names its default icon before the browser opens", async () => {
+  const page = loadPageMove({ isOnHomeScreen: true, stored: CHOICES });
+  const address = await page.requestPageMove({ fromApp: true });
+  assert.equal(page.unpackCarried(address.searchParams.get("carried")).icon, "dark");
+});
+
+test("a System move carries the source phone's icon even if the destination phone's look differs", async () => {
+  const page = loadPageMove({
+    isOnHomeScreen: true,
+    phoneLook: "dark",
+    stored: { appearance: '"auto"' },
+  });
+  const address = await page.requestPageMove({ fromApp: true });
+  const carried = address.searchParams.get("carried");
+  assert.equal(page.unpackCarried(carried).icon, "dark");
+  const installed = loadPageMove({
+    href: addCarried(NEW_ADDRESS, carried),
+    isOnHomeScreen: true,
+    phoneLook: "light",
+  });
+  assert.equal(installed.takeCarriedChoices(NOW), "dark");
 });

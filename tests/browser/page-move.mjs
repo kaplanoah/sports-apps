@@ -337,6 +337,24 @@ async function openInBrowser(
   return browserPage;
 }
 
+/** @param {MovingApp} app @param {URL} handoff */
+async function openMovedHomeScreenApp({ browser, serve, pageHost }, handoff) {
+  const context = await browser.newContext({
+    ...IPHONE,
+    reducedMotion: "reduce",
+    colorScheme: "dark",
+  });
+  const page = await context.newPage();
+  await page.addInitScript(markOnHomeScreen);
+  await takeAwayPush(page);
+  await serve(page, { accessCode: ACCESS_CODE, pageHost });
+  await signIn(page, findNewAddress(pageHost));
+  const address = new URL(findNewAddress(pageHost));
+  address.searchParams.set("carried", handoff.searchParams.get("carried"));
+  await page.goto(address.href);
+  return page;
+}
+
 /**
  * Use new site, in a Home Screen app on a phone set to dark, opens the new site in the browser
  * with the app's choices and the move from the app, where the welcome's steps finish it: pick the
@@ -390,13 +408,21 @@ export async function checkMovingIconFollowsTheme(app) {
   const { page, looks } = app;
   await page.emulateMedia({ colorScheme: "dark" });
   const move = await tapUseNewSite(app, { appearance: "light" }, "dark");
-  expect(unpack(move.handoff.searchParams.get("carried")).icon).toBeUndefined();
+  expect(unpack(move.handoff.searchParams.get("carried")).icon).toBe("light");
   const safariPage = await openInBrowser(app, move);
   await expect(safariPage.locator("html")).toHaveAttribute("data-theme", "light");
   await expect(
     safariPage.locator(WELCOME).getByRole("radio", { name: looks.light, exact: true }),
   ).toBeChecked();
   await safariPage.context().close();
+  const installed = await openMovedHomeScreenApp(app, move.handoff);
+  await openSettings(installed);
+  expect(await installed.evaluate(() => localStorage.getItem("homeScreenIcon"))).toBe("light");
+  await expect(installed.locator("#appearanceNote")).toBeHidden();
+  await installed.reload();
+  await expect(installed.locator("#settingsDialog")).toBeVisible();
+  await expect(installed.locator("#appearanceNote")).toBeHidden();
+  await installed.context().close();
 }
 
 /**

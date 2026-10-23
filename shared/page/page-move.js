@@ -152,6 +152,11 @@ function readCarriedChoices() {
 
 const hasOwnChoices = () => Object.keys(readCarriedChoices()).length > 0;
 
+/** @param {Carried} carried */
+const resolveCarriedIcon = (carried) =>
+  carried.icon ??
+  (carried.fromApp ? showLookOf(readAppearanceChoice(carried.choices.appearance ?? "")) : null);
+
 /** @param {Record<string, string>} choices */
 function keepCarriedChoices(choices) {
   try {
@@ -167,7 +172,10 @@ function keepCarriedChoices(choices) {
  */
 function buildCarriedAddress(address, carried) {
   const url = new URL(address);
-  url.searchParams.set(CARRIED_PARAMETER, packCarried(carried));
+  url.searchParams.set(
+    CARRIED_PARAMETER,
+    packCarried({ ...carried, icon: resolveCarriedIcon(carried) }),
+  );
   return url;
 }
 
@@ -255,7 +263,7 @@ function takeIntoBrowser(carried, now) {
     if (carried.fromApp)
       keepPageMove({
         ...carried,
-        icon: carried.icon ?? showLookOf(readAppearanceChoice(carried.choices.appearance ?? "")),
+        icon: resolveCarriedIcon(carried),
       });
   }
   nameMoveInAddress();
@@ -274,6 +282,7 @@ function takeCarriedChoices(now = Date.now()) {
     address.searchParams.delete(CARRIED_PARAMETER);
     replaceAddress(address);
     if (carried) takeIntoHomeScreen(carried);
+    return carried ? resolveCarriedIcon(carried) : null;
   } else if (carried) takeIntoBrowser(carried, now);
   else nameMoveInAddress();
   return carried?.icon ?? null;
