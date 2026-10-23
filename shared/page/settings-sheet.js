@@ -9,6 +9,7 @@ import { joinWithSeparator, setHtml } from "./html.js";
 import { readPageRelease } from "./release.js";
 import { openSheet, wireSheet } from "./sheet.js";
 import { keepDialogFor } from "./sheet-memory.js";
+import { isSheetControlGesture } from "./sheet-swipe.js";
 
 /* global START_AFTER_AWAY_MS -- from long-away.js */
 
@@ -60,14 +61,12 @@ export function openSettings(key = null) {
 
 /**
  * Wires the settings button, the dialog's ways to close, and the sheet's swipe, and shows the
- * release. A touch that starts on a target `isOwnGesture` claims, like a drag handle or a picker,
- * never moves the sheet.
- * @param {{ isOwnGesture?: (target: EventTarget) => boolean }} [options]
+ * release. A touch that starts on a ranking grip or a picker never moves the sheet.
  */
-export function startSettingsSheet({ isOwnGesture } = {}) {
+export function startSettingsSheet() {
   const dialog = findDialog();
   findElement("settingsBtn").addEventListener("click", () => openSettings());
-  wireSheet(dialog, { isOwnGesture });
+  wireSheet(dialog, { isOwnGesture: isSheetControlGesture });
   keepDialogFor(dialog, START_AFTER_AWAY_MS);
   showRelease();
 }

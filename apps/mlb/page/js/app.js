@@ -30,7 +30,7 @@ import {
 import { readNewsChoices } from "#shared/news-choices.js";
 import { listShownStories } from "#shared/page-places.js";
 import { openPageTab, setTabStart, startPageTabs } from "#shared/page-tabs.js";
-import { isSettingShown, openSettings } from "#shared/settings-sheet.js";
+import { isSettingShown, openSettings, startSettingsSheet } from "#shared/settings-sheet.js";
 import { openGameSection, startGameSheet } from "./game-sheet.js";
 import { listFoundGameDays } from "./games-view.js";
 import { listSeasonGames } from "./season-games.js";
@@ -49,7 +49,6 @@ import {
   startSeasonData,
 } from "./season-data.js";
 import { composeState, session } from "./session.js";
-import { startSettings } from "./settings.js";
 import { startPlayerSheet } from "./player-sheet.js";
 import { fillRoster, readShownRoster, reopenRoster, startRosterSection } from "./roster-section.js";
 import { renderTeamSheet } from "./team-view.js";
@@ -201,7 +200,7 @@ function wireControls() {
   });
   startRosterSection({ showChange: refreshTeamSheet });
   startPlayerSheet();
-  startSettings();
+  startSettingsSheet();
   startChannelTag();
   startAppearance(LOOKS);
   startNewsRedraws(findNewsList(), drawNews, NEWS_LEAGUE);
