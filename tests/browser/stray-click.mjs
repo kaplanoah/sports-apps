@@ -86,11 +86,3 @@ export const sendScroll = (page, target) =>
   target
     ? target.evaluate((element) => element.dispatchEvent(new Event("scroll")))
     : page.evaluate(() => document.dispatchEvent(new Event("scroll")));
-
-/**
- * Holds the page's clock still, so a click sent after a finger comes as soon after its lift as
- * iOS sends it, however slow the machine.
- * @param {import("@playwright/test").Page} page
- */
-export const holdClock = async (page) =>
-  page.clock.pauseAt(await page.evaluate(() => Date.now() + 1000));
