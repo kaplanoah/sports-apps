@@ -16,24 +16,23 @@ import { closeSync, mkdtempSync, openSync, readdirSync, readFileSync, rmSync } f
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { createGitHub } from "./github-api.mjs";
+import { createGitHub, findInPages, readAllPages } from "./github-api.mjs";
 
 export const ISSUE_TITLE = "Flaky browser tests";
 
 const DAYS_KEPT = 7;
 const DAY_MS = 24 * 60 * 60 * 1000;
-const PAGE_SIZE = 100;
 const ARTIFACTS_SHOWN = 20;
 // CI keeps a run's report only when a test needed its retry or failed, and burn-in's list only when
 // it named a test.
 const RUN_ARTIFACT = /^(?:browser-report|burn-in-flaky)-/;
-const ROUTINE_TIMEOUT_MS = 10000;
+export const ROUTINE_TIMEOUT_MS = 10000;
 const FAILED_STATUSES = new Set(["failed", "timedOut"]);
 const STATE_PATTERN = /<!-- flaky-tests (.*?) -->/s;
 const COUNTED_PATTERN = /<!-- flaky-counted (.*?) -->/s;
 const SWEEP_PATTERN = /<!-- flaky-sweep (.*?) -->/s;
 export const COLLECTION_TIMEOUT_MS = 8 * 60 * 1000;
-const PUBLICATION_TIMEOUT_MS = 2 * 60 * 1000;
+export const PUBLICATION_TIMEOUT_MS = 2 * 60 * 1000;
 const ARTIFACT_TIMEOUT_MS = 30 * 1000;
 const UNZIP_TIMEOUT_MS = 10 * 1000;
 
@@ -354,13 +353,14 @@ export async function startFixRoutine({ added, runUrl, fetchImpl, env }) {
  * @param {GitHub} github
  */
 async function findReportIssue(github) {
-  for (let page = 1; ; page += 1) {
-    const issues = await github(
-      `/issues?state=all&sort=updated&direction=desc&per_page=${PAGE_SIZE}&page=${page}`,
-    );
-    const report = issues.find((issue) => issue.title === ISSUE_TITLE && !issue.pull_request);
-    if (report || issues.length < PAGE_SIZE) return report;
-  }
+  /** @param {any} issue */
+  const isReport = (issue) => issue.title === ISSUE_TITLE && !issue.pull_request;
+  const open = await findInPages(
+    github,
+    "/issues?state=open&sort=updated&direction=desc",
+    isReport,
+  );
+  return open ?? findInPages(github, "/issues?state=closed&sort=updated&direction=desc", isReport);
 }
 
 /**
@@ -483,12 +483,10 @@ const isArtifactToCount = (artifact, { since, counted }) =>
 export async function listUncountedArtifacts(github, { counted, now }) {
   const night = { since: findWeekStart(now), counted: new Set(counted.map(({ id }) => id)) };
   const found = new Map();
-  for (let page = 1; ; page += 1) {
-    const { artifacts } = await github(`/actions/artifacts?per_page=${PAGE_SIZE}&page=${page}`);
-    for (const artifact of artifacts)
-      if (isArtifactToCount(artifact, night)) found.set(artifact.id, artifact);
-    if (artifacts.length < PAGE_SIZE) return [...found.values()];
-  }
+  const artifacts = await readAllPages(github, "/actions/artifacts", (answer) => answer.artifacts);
+  for (const artifact of artifacts)
+    if (isArtifactToCount(artifact, night)) found.set(artifact.id, artifact);
+  return [...found.values()];
 }
 
 /**
@@ -708,6 +706,8 @@ export async function collectFailedTests({
   const counted = [];
   /** @type {FlakyRun[]} */
   const skipped = [];
+  /** @type {FlakyRun[] | undefined} */
+  let deferred;
   let runs;
   try {
     const read = boundGitHubRequests(github, deadline, readTime);
@@ -739,27 +739,15 @@ export async function collectFailedTests({
       directory = download(run, { deadline, readTime });
       failed.push(readRunFailures(directory, run.foundIn));
     } catch (error) {
-      if (error instanceof DeadlineError)
-        return {
-          failed: mergeFailedTests(failed),
-          counted,
-          skipped,
-          deferred: runs.slice(index),
-          problem: error.message,
-        };
+      if (error instanceof DeadlineError) {
+        deferred = runs.slice(index);
+        break;
+      }
       const message = describeCollectionFailure(error);
       console.warn(
         `Could not download CI run ${run.id}'s artifacts (${run.artifacts.map(({ id }) => id).join(", ")}); leaving this try uncounted for a later night: ${message}`,
       );
       skipped.push(run);
-      if (readTime() >= deadline)
-        return {
-          failed: mergeFailedTests(failed),
-          counted,
-          skipped,
-          deferred: runs.slice(index + 1),
-          problem: new DeadlineError("collection").message,
-        };
       continue;
     } finally {
       if (directory) rmSync(directory, { recursive: true, force: true });
@@ -770,6 +758,10 @@ export async function collectFailedTests({
     failed: mergeFailedTests(failed),
     counted,
     skipped,
+    ...(deferred ? { deferred } : {}),
+    ...(deferred || readTime() >= deadline
+      ? { problem: new DeadlineError("collection").message }
+      : {}),
   };
 }
 

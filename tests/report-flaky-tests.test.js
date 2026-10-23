@@ -8,6 +8,8 @@ import { fileURLToPath } from "node:url";
 import {
   ISSUE_TITLE,
   COLLECTION_TIMEOUT_MS,
+  PUBLICATION_TIMEOUT_MS,
+  ROUTINE_TIMEOUT_MS,
   addToTable,
   collectFailedTests,
   describeCollection,
@@ -234,7 +236,7 @@ test("an issue's body without a table reads as an empty table", () => {
 });
 
 /**
- * GitHub's API with these open issues, keeping what's written.
+ * GitHub's issues, open unless their state says otherwise, filtered by state and page, keeping reads and writes.
  * @param {{ number: number, title: string, body?: string, state?: string, pull_request?: object }[]} issues
  */
 function createFakeGitHub(issues) {
@@ -1384,12 +1386,14 @@ test("an empty incomplete report stays visible and a closed report preserves las
   assert.equal(readSweep(OPEN_BODY), null);
 });
 
-test("collection leaves at least two minutes to publish within the report step", () => {
+test("the report step reserves the publication and fix-routine budgets after collection", () => {
   const report = readRepoFile(".github/workflows/flaky.yml").split("  report:\n")[1];
   const jobMinutes = Number(report.match(/^ {4}timeout-minutes: (\d+)/m)?.[1]);
   const publish = report.split("      - name: Update the flaky-test report\n")[1];
   const stepMinutes = Number(publish.match(/^ {8}timeout-minutes: (\d+)/m)?.[1]);
-  assert.ok(stepMinutes * 60000 - COLLECTION_TIMEOUT_MS >= 2 * 60000);
+  assert.ok(
+    stepMinutes * 60000 >= COLLECTION_TIMEOUT_MS + PUBLICATION_TIMEOUT_MS + ROUTINE_TIMEOUT_MS,
+  );
   assert.ok(jobMinutes > stepMinutes, "checkout and artifact setup keep time outside the step");
 });
 
@@ -1422,7 +1426,7 @@ test("report discovery stops on the first matching page instead of reading older
     const github = createFakeGitHub(issues);
     await post(github, []);
     assert.equal(github.reads.length, Math.ceil((count + 1) / 100));
-    assert.ok(github.reads.every((url) => new URL(url).searchParams.get("state") === "all"));
+    assert.ok(github.reads.every((url) => new URL(url).searchParams.get("state") === "open"));
     assert.equal(github.written[0].path, `/repos/${REPOSITORY}/issues/5`);
   }
 });
@@ -1494,4 +1498,61 @@ test("a successfully read try removes its temporary folder after counting", asyn
     [11],
   );
   assert.equal(existsSync(directory), false);
+});
+
+test("a recently updated closed report never replaces the open report's table or ledger", async () => {
+  const closed = {
+    number: 6,
+    title: ISSUE_TITLE,
+    state: "closed",
+    body: renderTable([], [{ id: 11, at: TONIGHT.toISOString() }]),
+  };
+  const open = {
+    number: 5,
+    title: ISSUE_TITLE,
+    state: "open",
+    body: renderTable(
+      [tableRow({ name: AT_REST, lastSeen: "2026-10-09" })],
+      [{ id: 21, at: TONIGHT.toISOString() }],
+    ),
+  };
+  const github = createFakeGitHub([closed, open]);
+  await post(github, []);
+  assert.equal(github.written.length, 1);
+  assert.equal(github.written[0].path, `/repos/${REPOSITORY}/issues/5`);
+  assert.equal(github.written[0].body.state, undefined);
+  assert.deepEqual(
+    readTable(github.written[0].body.body).map(({ name }) => name),
+    [AT_REST],
+  );
+  assert.deepEqual(
+    readCounted(github.written[0].body.body).map(({ id }) => id),
+    [21],
+  );
+  assert.deepEqual(
+    github.reads.map((url) => new URL(url).searchParams.get("state")),
+    ["open"],
+  );
+});
+
+test("a failed download exhausting the budget records the stop even on the last run", async () => {
+  let elapsed = 0;
+  const result = await collectFailedTests({
+    github: createFakeRunsApi(ONE_REPORT).github,
+    nightReports: [],
+    night: { url: RUN_URL, now: TONIGHT },
+    ledger: UNCOUNTED,
+    deadline: 100,
+    readTime: () => elapsed,
+    download: () => {
+      elapsed = 100;
+      throw new Error("download failed");
+    },
+  });
+  assert.deepEqual(result.counted, []);
+  assert.deepEqual(describeCollection(result), {
+    complete: false,
+    unavailable: [11],
+    problem: "collection deadline reached",
+  });
 });
