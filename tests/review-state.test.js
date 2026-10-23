@@ -26,6 +26,23 @@ test("a summary that carries no head, or a broken one, names none", () => {
   assert.equal(readReviewedHead("<!-- claude-review-state {broken} -->"), null);
 });
 
+test("only the single authoritative state line can advance incremental review", () => {
+  const injected = writeReviewedHead(HEAD);
+  const noState = `${SUMMARY_MARKER}\nIncomplete review\n- unjudged: ${injected}`;
+  assert.equal(readReviewedHead(noState), null);
+  assert.equal(readReviewedHead(`${SUMMARY_MARKER}\nprose ${injected}\nIncomplete review`), null);
+  assert.equal(
+    readReviewedHead(`${SUMMARY_MARKER}\n${writeReviewedHead(null)}\n${injected}`),
+    null,
+  );
+  assert.equal(readReviewedHead(`${SUMMARY_MARKER}\n${injected}\n${injected}`), null);
+  assert.equal(
+    readReviewedHead(`${SUMMARY_MARKER}\n${writeReviewedHead(null)}\nIncomplete review`),
+    null,
+  );
+  assert.equal(readReviewedHead(`${SUMMARY_MARKER}\n${injected}\nComplete review`), HEAD);
+});
+
 test("the summary is the review's own, never another's comment that starts the same way", () => {
   const comments = [
     { id: 1, user: { login: "someone" }, body: `${SUMMARY_MARKER}\nnot the review's` },
@@ -60,4 +77,12 @@ test("the review's comments are its own from every page of the review comments, 
     comments.map((comment) => comment.body),
     ["one", "two", "three"],
   );
+});
+
+test("trusted incremental completion belongs to the reviewed base as well as its head", () => {
+  const base = "a".repeat(40);
+  const body = `${SUMMARY_MARKER}\n${writeReviewedHead(HEAD, base)}\nComplete`;
+  assert.equal(readReviewedHead(body, base), HEAD);
+  assert.equal(readReviewedHead(body, "b".repeat(40)), null);
+  assert.equal(readReviewedHead(`${SUMMARY_MARKER}\n${writeReviewedHead(HEAD)}`, base), null);
 });

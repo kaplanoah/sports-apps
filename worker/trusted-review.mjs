@@ -1,3 +1,4 @@
+// Executes trusted review controls from their preserved default-branch source.
 import { execFileSync } from "node:child_process";
 import {
   copyFileSync,
@@ -13,8 +14,9 @@ import {
 } from "node:fs";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
+import { WEIGHTS } from "./review-state.mjs";
 import { createGitHub } from "./github-api.mjs";
-import { createReviewGitEnvironment } from "./review-repository.mjs";
+import { createReviewGitEnvironment, isReviewRevision } from "./review-repository.mjs";
 import {
   readJson,
   nameFindRecord,
@@ -23,6 +25,9 @@ import {
   keepCandidates,
   keepAcross,
   gatherCandidates,
+  ACROSS_RECORD,
+  CANDIDATES_RECORD,
+  POST_RECORD,
 } from "./judge-review.mjs";
 import {
   copyReviewFiles,
@@ -36,6 +41,14 @@ import {
   validateReviewArtifact,
   validateReviewPlan,
 } from "./review-data.mjs";
+
+/** @param {string} stage */
+const stageRecords = (stage) =>
+  stage === "across"
+    ? [ACROSS_RECORD, CANDIDATES_RECORD]
+    : stage === "post"
+      ? [POST_RECORD]
+      : [`${stage}.json`];
 
 const SOURCE = fileURLToPath(new URL("..", import.meta.url));
 
@@ -52,8 +65,14 @@ export function prepareReviewCheckout(env) {
   if (env.GITHUB_EVENT_NAME !== "pull_request_target")
     throw new Error("Trusted review requires default-branch workflow authority.");
   const checkout = env.GITHUB_WORKSPACE;
-  readGit(["fetch", "--no-tags", "origin", `refs/pull/${Number(env.PR)}/merge`], checkout);
-  const merge = env.REVIEW_MERGE || readGit(["rev-parse", "FETCH_HEAD"], checkout);
+  const merge = env.REVIEW_MERGE;
+  if (!merge) {
+    console.log("::notice::No merge commit is available for this event; review remains owed.");
+    appendFileSync(env.GITHUB_OUTPUT, "available=false\n");
+    return;
+  }
+  if (!isReviewRevision(merge)) throw new Error("Review requires an immutable merge revision.");
+  readGit(["fetch", "--no-tags", "origin", merge], checkout);
   if (
     readGit(["rev-parse", `${merge}^1`], checkout) !== env.REVIEW_BASE ||
     readGit(["rev-parse", `${merge}^2`], checkout) !== env.REVIEW_HEAD
@@ -70,7 +89,7 @@ export function prepareReviewCheckout(env) {
     env.GITHUB_ENV,
     `REVIEW_CHECKOUT=${checkout}\nREVIEW_FOLDER=${view}\nREVIEW_DATA=${folder}\nREVIEW_UPLOAD=${output}\nREVIEW_MERGE=${merge}\nREVIEW_RULE_ROOT=${SOURCE}\n`,
   );
-  appendFileSync(env.GITHUB_OUTPUT, `merge=${merge}\n`);
+  appendFileSync(env.GITHUB_OUTPUT, `available=true\nmerge=${merge}\n`);
 }
 
 /** @param {string} script @param {string[]} args @param {NodeJS.ProcessEnv} env */
@@ -87,11 +106,7 @@ export function exportReviewArtifact(folder, stage, env) {
   const names =
     stage === "plan"
       ? listPlanFiles(validateReviewPlan(readJson(join(folder, "plan.json"))))
-      : stage === "across"
-        ? ["across.json", "candidates.json"]
-        : stage === "post"
-          ? ["post.json"]
-          : [`${stage}.json`];
+      : stageRecords(stage);
   const destination = join(env.REVIEW_UPLOAD, `trusted-review-${stage}`);
   mkdirSync(destination);
   copyReviewFiles(folder, destination, names);
@@ -129,7 +144,7 @@ export function importReviewArtifacts(input, folder, env) {
     if (!name.startsWith("trusted-review-") || !stages.includes(stage))
       throw new Error("Unexpected review artifact.");
     if (stage === "plan") continue;
-    const names = stage === "across" ? ["across.json", "candidates.json"] : [`${stage}.json`];
+    const names = stageRecords(stage);
     validateReviewArtifact(join(input, name), stage, identity, names);
     copyReviewFiles(join(input, name), folder, names);
   }
@@ -157,9 +172,7 @@ export function importReviewArtifacts(input, folder, env) {
     const post = readJson(join(folder, "post.json"));
     if (
       !Array.isArray(post.weights) ||
-      !post.weights.every((weight) =>
-        ["Important", "Unsure", "Nit", "Pre-existing"].includes(weight),
-      ) ||
+      !post.weights.every((weight) => WEIGHTS.includes(weight)) ||
       !Number.isSafeInteger(post.repeated) ||
       post.repeated < 0
     )
@@ -168,16 +181,13 @@ export function importReviewArtifacts(input, folder, env) {
   return plan;
 }
 
-/** @param {NodeJS.ProcessEnv} env */
-async function verifyReviewEvent(env) {
-  const callGitHub = createGitHub({ repository: env.GITHUB_REPOSITORY, env, fetchImpl: fetch });
+/** @param {NodeJS.ProcessEnv} env @param {(path: string) => Promise<any>} [callGitHub] */
+export async function verifyReviewEvent(
+  env,
+  callGitHub = createGitHub({ repository: env.GITHUB_REPOSITORY, env, fetchImpl: fetch }),
+) {
   const pull = await callGitHub(`/pulls/${env.PR}`);
-  if (
-    pull.state !== "open" ||
-    pull.head.sha !== env.REVIEW_HEAD ||
-    pull.base.sha !== env.REVIEW_BASE ||
-    pull.base.ref !== "main"
-  )
+  if (pull.state !== "open" || pull.head.sha !== env.REVIEW_HEAD || pull.base.ref !== "main")
     throw new Error("The pull request moved after this review started.");
 }
 
@@ -191,12 +201,15 @@ function writeTrustedReviewPlan(env) {
   exportReviewArtifact(folder, "plan", env);
 }
 
-/** @param {string | undefined} output */
-function readValidReviewerOutput(output) {
+/** @param {string | undefined} output @param {NodeJS.ProcessEnv} env */
+function readValidReviewerOutput(output, env) {
   if (!output) return undefined;
   try {
-    readReviewAnswer(output, "candidates");
-    return output;
+    const answer = readReviewAnswer(output, "candidates", {
+      checkout: env.REVIEW_CHECKOUT,
+      data: env.REVIEW_DATA,
+    });
+    return JSON.stringify({ candidates: answer.items, unjudged: answer.unjudged });
   } catch {
     console.error("The reviewer returned a malformed answer; this try counts as unanswered.");
     return undefined;
@@ -207,7 +220,7 @@ function readValidReviewerOutput(output) {
 function recordTrustedFindTry(area, env) {
   const record = recordFindTry(env.REVIEW_FOLDER, area, {
     ...env,
-    STRUCTURED_OUTPUT: readValidReviewerOutput(env.STRUCTURED_OUTPUT),
+    STRUCTURED_OUTPUT: readValidReviewerOutput(env.STRUCTURED_OUTPUT, env),
   });
   console.log(formatFindOutputs(record));
 }
@@ -224,8 +237,13 @@ function gatherTrustedCandidates(env) {
 /** @param {NodeJS.ProcessEnv} env */
 function keepTrustedAcross(env) {
   const folder = env.REVIEW_FOLDER;
-  readReviewAnswer(env.STRUCTURED_OUTPUT, "findings");
-  console.log(`unchecked=${keepAcross(folder, env.STRUCTURED_OUTPUT).length}`);
+  const answer = readReviewAnswer(env.STRUCTURED_OUTPUT, "findings", {
+    checkout: env.REVIEW_CHECKOUT,
+    data: env.REVIEW_DATA,
+  });
+  console.log(
+    `unchecked=${keepAcross(folder, JSON.stringify({ findings: answer.items, unjudged: answer.unjudged })).length}`,
+  );
   const plan = readJson(join(folder, "plan.json"));
   const records = plan.areas.map((area) => readJson(join(folder, nameFindRecord(area.area))));
   validateAcrossCandidates(

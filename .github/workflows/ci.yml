@@ -633,7 +633,7 @@ jobs:
             5. Merge candidates that are the same problem into one finding, in one area or across areas, whether they name one place or several, naming every id it merges: one problem is one finding, however many places it shows, in both apps too. Every candidate's id appears in exactly one finding, rejected ones too: a step after you checks.
             6. Look for what no one area could see: a change in one area that another area's files rely on, the same fix due in the other app or another view, one fact or rule now in two places across areas, and docs or comments a change makes wrong. Check each the same way, and add each you confirm or can't settle that no candidate already says as a finding of its own, with no ids.
             7. Weigh each as the guide says: Important for a bug, meaning a wrong result someone can see, wrong data kept, or a failure, and for a security hole or a broken rule from AGENTS.md or a rule file; Nit for something worth fixing that doesn't block; Pre-existing for a problem in code the change didn't make worse.
-            8. Write each finding's body as the guide's "How to report" says: what is wrong, when it goes wrong, and how to fix it, in a few sentences, without its weight, which a later step adds, naming every place it shows. Put it on the line the diff changes nearest its first place, naming that place if it's another.
+            8. Write each finding's body as the guide's "How to report" says. Put it on the line the diff changes nearest its first place, naming that place if it's another.
             9. Post nothing. End with your answer: every finding, rejected ones too, and anything you couldn't judge from the code, and why.
       - name: Keep the check's answer
         id: keep

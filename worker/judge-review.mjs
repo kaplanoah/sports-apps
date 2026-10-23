@@ -405,18 +405,19 @@ const describeNothingDue = (plan, sha) =>
  * read ended on has no summary of its own, so that read's stands.
  * @param {object} review
  * @param {string} review.sha the pull request's head
+ * @param {string} [review.base] the immutable base of a trusted review
  * @param {Plan} review.plan
  * @param {Map<string, any>} review.records the reviewers', the check across areas', and the
  *   posting step's records
  */
-export function judgeReview({ sha, plan, records }) {
+export function judgeReview({ sha, base, plan, records }) {
   if (plan.stage === "reviewed") return { isComplete: true, body: null };
   const judged = plan.areas.length ? judgeAreas(plan.areas, records) : null;
   const isComplete = !judged || (!judged.unreadFiles.length && !judged.missing.length);
   const reviewedHead = isComplete ? sha : plan.since;
   const lines = [
     SUMMARY_MARKER,
-    ...(reviewedHead ? [writeReviewedHead(reviewedHead)] : []),
+    writeReviewedHead(reviewedHead, base),
     ...(judged ? describeReview(judged, { plan, sha }) : [describeNothingDue(plan, sha), ""]),
     ...(plan.unread.length
       ? ["Left unread, as nothing to review:", ...plan.unread.map(listUnread)]
@@ -466,6 +467,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     const earlier = findSummary(await readAllPages(callGitHub, `/issues/${env.PR}/comments`));
     const { isComplete, body } = judgeReview({
       sha: env.SHA ?? "",
+      base: env.REVIEW_BASE,
       plan: readPlan(folder),
       records: readRecords(folder),
     });
