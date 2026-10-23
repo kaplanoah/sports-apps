@@ -56,7 +56,7 @@ This skill holds what "Shipping a change" in AGENTS.md leaves out, most of it un
   The deploy check reads labels live, so it sees a label change at once, even on a PR in conflict with `main`.
   GitHub starts no PR workflow for one in conflict, even after a push that leaves it in conflict.
   The workflow's label fixes and its comment wait for the next Beta run,
-  which a merge to `main` or a watched event on another same-repo PR starts.
+  which a merge to `main`, or a watched event on any same-repo PR not in conflict, this one included, starts.
 - Change a PR's labels one at a time, never by setting its whole list, which would drop `phone-ok` or `review`:
   `gh pr edit <number> --add-label beta` or `--remove-label beta`, and the same for `beta-wait`.
   See who holds beta with `gh pr list --label beta --state open`, and who waits with `gh pr list --label beta-wait --state open`.
