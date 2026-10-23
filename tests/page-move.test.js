@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { createContext, runInContext } from "node:vm";
 import { listTrackedFiles, readRepoFile } from "./repo-files.js";
 import { listApps } from "../worker/apps.mjs";
-import { loadThemeHead } from "./theme-head.js";
+import { createStorage, createHistory, loadThemeHead } from "./theme-head.js";
 
 const MINUTE_MS = 60 * 1000;
 const NOW = Date.parse("2026-10-22T16:00:00Z");
@@ -12,21 +12,11 @@ const OLD_ADDRESS = "https://mlb-app.example-subdomain.workers.dev/k3y/";
 const NEW_ADDRESS = "https://mlb.sports.example/";
 const HANDOFF_ADDRESS = `${NEW_ADDRESS}access/handoff?token=t0ken`;
 
-/** @param {Record<string, string>} entries */
-function createStorage(entries = {}) {
-  const items = new Map(Object.entries(entries));
-  return {
-    items,
-    getItem: (key) => items.get(key) ?? null,
-    setItem: (key, value) => items.set(key, String(value)),
-    removeItem: (key) => items.delete(key),
-  };
-}
-
 /**
  * The plain script as a page's head runs it, at `href`, with what pick-theme.js gives it.
  * @param {{ href?: string, stored?: Record<string, string>, isOnHomeScreen?: boolean,
- *   isAppleBrowser?: boolean, isMoving?: boolean, answer?: () => Promise<Response> }} [page]
+ *   isAppleBrowser?: boolean, isMoving?: boolean, phoneLook?: "light" | "dark",
+ *   answer?: () => Promise<Response> }} [page]
  */
 function loadPageMove({
   href = OLD_ADDRESS,
@@ -34,6 +24,7 @@ function loadPageMove({
   isOnHomeScreen = false,
   isAppleBrowser = true,
   isMoving = true,
+  phoneLook = "light",
   answer = async () => Response.json({ address: HANDOFF_ADDRESS, expiresInMs: 10 * MINUTE_MS }),
 } = {}) {
   const localStorage = createStorage(stored);
@@ -47,17 +38,13 @@ function loadPageMove({
     },
   };
   const requests = [];
-  const themeHead = loadThemeHead();
+  // Move tests drive startup themselves, with the theme head's phone setting under their control.
+  const themeHead = loadThemeHead({ phoneLook });
   const context = createContext({
     localStorage,
     sessionStorage,
     location,
-    history: {
-      state: null,
-      replaceState: (state, unused, address) => {
-        location.href = String(address);
-      },
-    },
+    history: createHistory(location),
     document: {
       querySelector: (selector) =>
         isMoving && selector === 'meta[name="moving-to-page-host"]'
@@ -86,7 +73,14 @@ function loadPageMove({
       leaveOldAddress, MAX_CARRIED_LENGTH })`,
     context,
   );
-  return { ...pageMove, localStorage, sessionStorage, location, requests };
+  return {
+    ...pageMove,
+    localStorage,
+    sessionStorage,
+    location,
+    requests,
+    setPhoneLook: themeHead.setPhoneLook,
+  };
 }
 
 const CHOICES = {
@@ -275,6 +269,17 @@ test("a move's icon starts on the theme the app showed, even where the browser k
   page.takeCarriedChoices(NOW);
   assert.equal(page.localStorage.getItem("appearance"), '"light"');
   assert.equal(page.readPageMove().icon, "dark");
+});
+
+test("a move on System resolves against the phone controlled by that page", () => {
+  const carried = writeCarried({ fromApp: true, choices: { appearance: '"auto"' } });
+  const page = loadPageMove({ href: addCarried(NEW_ADDRESS, carried), phoneLook: "dark" });
+  page.takeCarriedChoices(NOW);
+  assert.equal(page.readPageMove().icon, "dark");
+  page.setPhoneLook("light");
+  page.location.href = addCarried(NEW_ADDRESS, carried);
+  page.takeCarriedChoices(NOW);
+  assert.equal(page.readPageMove().icon, "light");
 });
 
 test("a browser off Safari keeps the icon picked in its address without loading again", () => {

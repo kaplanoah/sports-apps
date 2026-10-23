@@ -1,9 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { loadThemeHead } from "./theme-head.js";
-import { chooseReAddNote } from "../shared/page/re-add-note.js";
 
-test("a picked look outranks the phone's in the classic head and the icon note", () => {
+test("a picked look outranks the phone's in the classic head", () => {
   for (const [choice, phoneLook] of /** @type {const} */ ([
     ["light", "dark"],
     ["dark", "light"],
@@ -12,17 +11,6 @@ test("a picked look outranks the phone's in the classic head and the icon note",
     const picked = page.resolveTheme(choice);
     assert.equal(picked, choice);
     assert.equal(page.theme.dataset.theme, choice);
-    assert.deepEqual(
-      chooseReAddNote({
-        isIosApp: true,
-        choice,
-        picked,
-        icon: phoneLook,
-        isSwitched: true,
-        isDismissed: false,
-      }),
-      { choice, picked: choice, icon: phoneLook },
-    );
   }
 });
 

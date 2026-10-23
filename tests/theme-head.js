@@ -1,6 +1,27 @@
 import { createContext, runInContext } from "node:vm";
 import { readRepoFile } from "./repo-files.js";
 
+/** @param {Record<string, string>} [entries] */
+export function createStorage(entries = {}) {
+  const items = new Map(Object.entries(entries));
+  return {
+    items,
+    getItem: (key) => items.get(key) ?? null,
+    setItem: (key, value) => items.set(key, String(value)),
+    removeItem: (key) => items.delete(key),
+  };
+}
+
+/** @param {{ href: string }} location */
+export function createHistory(location) {
+  return {
+    state: null,
+    replaceState: (state, unused, address) => {
+      location.href = String(address);
+    },
+  };
+}
+
 /**
  * Runs both classic head scripts in their page order, before any page module can draw.
  * @param {{ choice?: string, phoneLook?: "light" | "dark", href?: string, now?: number }} [page]
@@ -11,23 +32,15 @@ export function loadThemeHead({
   href = "https://sports.example/",
   now = Date.now(),
 } = {}) {
-  const stored = new Map(choice === undefined ? [] : [["appearance", JSON.stringify(choice)]]);
-  const localStorage = {
-    getItem: (key) => stored.get(key) ?? null,
-    setItem: (key, value) => stored.set(key, String(value)),
-    removeItem: (key) => stored.delete(key),
-  };
+  const localStorage = createStorage(
+    choice === undefined ? {} : { appearance: JSON.stringify(choice) },
+  );
   const location = { href };
   const theme = { dataset: /** @type {Record<string, string>} */ ({}) };
   const context = createContext({
     localStorage,
     location,
-    history: {
-      state: null,
-      replaceState: (state, unused, address) => {
-        location.href = String(address);
-      },
-    },
+    history: createHistory(location),
     document: { documentElement: theme, querySelector: () => null },
     navigator: {},
     matchMedia: (query) => ({

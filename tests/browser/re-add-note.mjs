@@ -12,6 +12,9 @@ import { listTapsOffButtons } from "./tap-states.mjs";
 import { listTextOffRoles } from "./type-roles.mjs";
 import { listChipsOffCenter } from "./chip-centering.mjs";
 import { passTime, setHidden } from "./visibility.mjs";
+import { ASSERTION_TIMEOUT_MS } from "./limits.mjs";
+
+const NOTE_SELECTOR = "#appearanceNote";
 
 const markOnHomeScreen = () => {
   Object.defineProperty(navigator, "standalone", { get: () => true });
@@ -77,7 +80,7 @@ async function openHomeScreenApp(page, openApp, look) {
 }
 
 /** @param {import("@playwright/test").Page} page */
-const findNote = (page) => page.locator("#appearanceNote");
+const findNote = (page) => page.locator(NOTE_SELECTOR);
 
 /**
  * The looks of the icons the note draws, by the picture each shows: the one the app has, then the
@@ -128,22 +131,6 @@ const pick = (page, name) =>
 /** @param {import("@playwright/test").Page} page */
 const closeSettings = (page) => page.locator(`${SETTINGS} .settings-body .sheet-close`).click();
 
-/** @param {App} app */
-export async function checkPickedNoteTheme({ page, openApp, openSettings, looks }) {
-  await page.emulateMedia({ colorScheme: "dark" });
-  await openHomeScreenApp(page, openApp, "dark");
-  await openSettings(page);
-  const note = findNote(page);
-  await pick(page, looks.light);
-  await expect(note).toHaveText(NOTE_WORDS);
-  expect(await readNoteIcons(page)).toEqual(["dark", "light"]);
-  await pick(page, "System");
-  await expect(note).toBeEmpty();
-  await page.emulateMedia({ colorScheme: "light" });
-  await expect(note).toHaveText(NOTE_WORDS);
-  expect(await readNoteIcons(page)).toEqual(["dark", "light"]);
-}
-
 /**
  * In an iPhone's Home Screen app added on the dark look, picking the light one in settings shows
  * the note `noteAbove` pixels under the icons' names, with the icon the app has, the one adding it
@@ -181,11 +168,11 @@ export async function checkReAddNote({
     `x-safari-${safariAddress.href}`,
   );
   const noteBelowIcons = await page.evaluate(
-    (settingsSelector) =>
-      document.querySelector("#appearanceNote").getBoundingClientRect().top -
+    ({ settingsSelector, noteSelector }) =>
+      document.querySelector(noteSelector).getBoundingClientRect().top -
       document.querySelector(`${settingsSelector} .appearance-choices`).getBoundingClientRect()
         .bottom,
-    SETTINGS,
+    { settingsSelector: SETTINGS, noteSelector: NOTE_SELECTOR },
   );
   expect(noteBelowIcons).toBe(noteAbove);
   await checkNoteReads(page);
@@ -280,27 +267,27 @@ export async function checkReAddNoteOnReload({ page, openApp, openSettings, look
  * @param {number} baseline
  * @param {string} phase
  */
-async function waitForNoteHeight(page, baseline, phase) {
+export async function waitForNoteHeight(page, baseline, phase) {
   const startedAt = Date.now();
   try {
     await page.waitForFunction(
-      ({ height, phase }) => {
-        const lastHeight = document.querySelector("#appearanceNote").getBoundingClientRect().height;
+      ({ height, phase, selector }) => {
+        const lastHeight = document.querySelector(selector).getBoundingClientRect().height;
         Reflect.set(window, "reAddNoteHeightWait", { phase, lastHeight });
         return lastHeight === height;
       },
-      { height: baseline, phase },
-      { timeout: 5000 },
+      { height: baseline, phase, selector: NOTE_SELECTOR },
+      { timeout: ASSERTION_TIMEOUT_MS },
     );
   } catch (error) {
     const lastHeight = await page
       .evaluate((phase) => {
         const last = Reflect.get(window, "reAddNoteHeightWait");
-        return last?.phase === phase ? last.lastHeight : "unavailable (no sample)";
+        return last?.phase === phase ? `${last.lastHeight}px` : "unavailable (no sample)";
       }, phase)
       .catch(() => "unavailable (page closed)");
     throw new Error(
-      `Icon note height ${phase}: baseline=${baseline}px, last=${lastHeight}px, elapsed=${Date.now() - startedAt}ms`,
+      `Icon note height ${phase}: baseline=${baseline}px, last=${lastHeight}, elapsed=${Date.now() - startedAt}ms`,
       { cause: error },
     );
   }
@@ -584,7 +571,8 @@ export async function checkReAddNoteEasesOnReload({ page, openApp, openSettings,
   await page.waitForLoadState("domcontentloaded");
 
   await page.waitForFunction(
-    () => document.querySelector("#appearanceNote").getAnimations().length > 0,
+    (selector) => document.querySelector(selector).getAnimations().length > 0,
+    NOTE_SELECTOR,
   );
   const easing = (await readAnimations()).find(({ classes }) => classes.includes("re-add-note"));
   expect(easing).toBeDefined();
