@@ -140,7 +140,7 @@ This skill holds what "Shipping a change" in AGENTS.md leaves out, most of it un
   Once Trusted review's re-run passes, recover CI's join as below before `check` can pass.
 - CI's `review-join` waits for and verifies Trusted review's result; it runs no Claude.
   If it fails, read its log for an API error, a timeout, missing evidence, or a result for different code or source.
-  After Trusted review recovers by the preceding rule, re-run CI's join with `gh run rerun <CI-run-id> --job <review-join-job-id>`.
+  After Trusted review recovers by the preceding rule, re-run CI's join with `gh run rerun --job <review-join-job-id>`.
   This re-runs its downstream `check` too, even when the join succeeded with `owed=true` after a failed Trusted review.
   Re-running only failed jobs would reuse that successful join's owed result.
   Re-running the join starts no Claude; don't request another review merely to join a recovered result.
