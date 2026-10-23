@@ -176,7 +176,6 @@
   --radius-card: 3px;
   --radius-chip: 3px;
   /* Chivo Mono's capitals land its baseline on a whole pixel only in an even height. */
-  --chip-numbers-face: var(--numbers);
   --chip-numbers-height: 18px;
   --radius-control: 6px;
   --radius-tabs: 8px;

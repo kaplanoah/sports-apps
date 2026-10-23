@@ -38,7 +38,11 @@
       "Bash(gh pr edit * * --add-label beta)",
       "Bash(gh pr edit * * --remove-label beta)",
       "Bash(gh pr edit * * --add-label beta-wait)",
-      "Bash(gh pr edit * * --remove-label beta-wait)"
+      "Bash(gh pr edit * * --remove-label beta-wait)",
+      "Bash(gh pr edit -* --add-label beta)",
+      "Bash(gh pr edit -* --remove-label beta)",
+      "Bash(gh pr edit -* --add-label beta-wait)",
+      "Bash(gh pr edit -* --remove-label beta-wait)"
     ],
     "ask": [
       "Bash(npm run deploy:api)",

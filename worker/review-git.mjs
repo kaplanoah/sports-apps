@@ -1,14 +1,20 @@
-// The only command CI's reviewer may run: git log or git show with the options the review prompts
-// name, and revisions and paths inside the repo. The reviewer reads text anyone may have written,
+// The only command CI's reviewer may run: git grep, git log, or git show with an allowlist of
+// options, and revisions and paths inside the repo. The reviewer reads text anyone may have written,
 // so this allows what a review needs rather than refusing what's known to be harmful, since a
 // shell's quotes and backslashes have spelled each refused option past a rule that matched text.
 // By the time the arguments arrive here the shell has taken those out, and git runs with no shell.
 // Usage: node worker/review-git.mjs log|show [options] [revisions] [-- paths]
+// History options: -p --stat --name-only --name-status --follow --diff-merges=first-parent
+// --no-patch --oneline -n <number> -n<number> -<number> --format=<format> --pretty=<format>
+// -L<start>,<end>:<path> -L:<function>:<path>, or -L followed by the range and path.
+// Usage: node worker/review-git.mjs grep [options] -e <pattern> [-e <pattern> ...] [-- paths]
+// Search options: -n -l -i -w -F -E.
 import { execFileSync } from "node:child_process";
 import { isAbsolute, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const COMMANDS = new Set(["log", "show"]);
+const SEARCH_FLAGS = new Set(["-n", "-l", "-i", "-w", "-F", "-E"]);
 const FLAGS = new Set([
   "-p",
   "--stat",
@@ -70,13 +76,39 @@ function findPathRefusal(root, paths) {
 }
 
 /**
+ * Why a checkout search is refused, or null when it only searches tracked files inside the repo.
+ * @param {string[]} args
+ * @param {string} root
+ */
+function findSearchRefusal(args, root) {
+  let hasPattern = false;
+  for (let index = 0; index < args.length; index += 1) {
+    const argument = args[index];
+    if (argument === "--") {
+      if (!hasPattern) return "grep takes at least one -e pattern";
+      return findPathRefusal(root, args.slice(index + 1));
+    }
+    if (SEARCH_FLAGS.has(argument)) continue;
+    if (argument === "-e") {
+      index += 1;
+      if (args[index] === undefined) return "-e takes a pattern";
+      hasPattern = true;
+      continue;
+    }
+    return "a search argument isn't one the review uses";
+  }
+  return hasPattern ? null : "grep takes at least one -e pattern";
+}
+
+/**
  * Why the arguments are refused, or null when git may run them.
  * @param {string[]} args the subcommand and what follows it, as the shell passed them
  * @param {string} root the repo's root
  */
 export function findRefusal(args, root) {
   const [command, ...rest] = args;
-  if (!COMMANDS.has(command)) return "the first argument must be log or show";
+  if (command === "grep") return findSearchRefusal(rest, root);
+  if (!COMMANDS.has(command)) return "the first argument must be grep, log, or show";
   for (let index = 0; index < rest.length; index += 1) {
     const argument = rest[index];
     if (argument === "--") return findPathRefusal(root, rest.slice(index + 1));

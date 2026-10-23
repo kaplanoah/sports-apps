@@ -40,6 +40,16 @@ test("a change in one app's folder runs that app's browser tests", () => {
   assert.deepEqual(listApps(["apps/nhl/page/styles.css"]), [], "an app with no browser tests yet");
 });
 
+test("only the root's session folder skips every app's browser tests", () => {
+  for (const path of [
+    ".claude/settings.json",
+    ".claude/hooks/an-unlisted-hook.mjs",
+    ".claude/another-folder/nested/file.js",
+  ])
+    assert.deepEqual(listApps([path]), [], path);
+  assert.deepEqual(listApps(["shared/.claude/hooks/an-unlisted-hook.mjs"]), APPS);
+});
+
 test("shared code, a service, CI's own workflow, the dependencies, and an unknown file run every app's", () => {
   for (const path of [
     "shared/page/sheet.js",

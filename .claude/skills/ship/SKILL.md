@@ -49,11 +49,14 @@ This skill holds what "Shipping a change" in AGENTS.md leaves out, most of it un
 - Beta holds one PR at a time, while the owner tests it on the phone.
   A PR claims beta with the `beta` label, and of the open PRs labeled `beta`, the one labeled first holds it.
   A PR waiting for beta has the `beta-wait` label, and the one labeled first has waited longest.
-  On every PR event, the `Beta` workflow (`.github/workflows/beta.yml`) takes `beta` off a PR that closed, was pushed after its label, or got `phone-ok` after it,
+  On its watched same-repo PR events and each merge to `main`, the `Beta` workflow (`.github/workflows/beta.yml`) takes `beta` off a PR that closed, was pushed after its label, or got `phone-ok` after it,
   and off every PR but the one that holds beta, which it puts in line with `beta-wait`.
   Once beta is free, it comments on the PR that has waited longest, which wakes its session: "Beta is free, and this pull request has waited longest."
   A claim has no time limit, since the owner is the only tester.
-  GitHub starts no PR workflow for a PR in conflict with `main`, so a label change on one takes effect at the next merge to `main` or the PR's next push.
+  The deploy check reads labels live, so it sees a label change at once, even on a PR in conflict with `main`.
+  GitHub starts no PR workflow for one in conflict, even after a push that leaves it in conflict.
+  The workflow's label fixes and its comment wait for the next Beta run,
+  which a merge to `main`, or a watched event on any same-repo PR not in conflict, this one included, starts.
 - Change a PR's labels one at a time, never by setting its whole list, which would drop `phone-ok` or `review`:
   `gh pr edit <number> --add-label beta` or `--remove-label beta`, and the same for `beta-wait`.
   See who holds beta with `gh pr list --label beta --state open`, and who waits with `gh pr list --label beta-wait --state open`.
@@ -161,9 +164,12 @@ Wait for the Deploy runs for the merge commit to finish, then read their logs an
   A line before it saying "page check: skipped" names a page the deploy couldn't open, like one whose secrets are missing or out of date,
   and one saying "page check: ok, but" a page that opened without the code its environment holds:
   tell the user that too.
-- A service's lines say "health check: ok": every app that reports it says it answers at the new commit.
+- A service's lines say "health check: ok": every app that reports it says it answers at the uploaded commit,
+  or at its own live commit when the run didn't change the service.
   Saying "health check: skipped" because "no app reaches" it yet, no app's live version binds it, so the service went unchecked:
   tell the user, since the `Watch apps` workflow is the first to read it.
+- It says "The service didn't answer as the live version": the run failed without rolling back the unchanged service.
+  Inspect the service and the reporting apps' health, and tell the user what didn't answer.
 - It says "Nothing the Worker runs changed": the merge didn't need a deploy, or the first Deploy run already deployed it.
   Tell the user which.
 - It says "has moved on" and "whose deploy covers": another merge landed first, and CI passed on it, so its Deploy run covers this one.
@@ -180,7 +186,7 @@ Wait for the Deploy runs for the merge commit to finish, then read their logs an
   The line names the PR holding beta and when it took it, or else says no PR holds beta or GitHub couldn't say.
   Put the PR on beta by the steps under The beta channel above.
 - It says "No CLOUDFLARE_API_TOKEN": the channel's environment has no Cloudflare token, so nothing was deployed.
-  Tell the user.
+  The run fails: tell the user which channel needs its token restored.
 - The run failed: read the log.
   If it says "the earlier version is live again", the Worker rolled back and is unchanged.
   Tell the user what failed and recommend a fix.
