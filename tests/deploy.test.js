@@ -4,6 +4,7 @@ import { spawnSync } from "node:child_process";
 import { nameServiceBinding } from "../shared/worker/services.js";
 import { listApps, listServices } from "../worker/apps.mjs";
 import { readRepoFile } from "./repo-files.js";
+import { readStepScript } from "./workflow-step.js";
 
 const loadDeployModule = () => import("../worker/deploy.mjs");
 const ENV = { CLOUDFLARE_ACCOUNT_ID: "acct123", CLOUDFLARE_WORKERS_SUBDOMAIN: "example-subdomain" };
@@ -1047,15 +1048,13 @@ test("deploy:api runs the tests before it deploys, and sends its calls through a
 
 test("a missing channel token fails the deploy step before invoking the deploy", () => {
   const workflow = readRepoFile(".github/workflows/deploy.yml");
-  const script = workflow
-    .split("      - name: Deploy the Worker\n")[1]
-    .split("        run: |\n")[1]
-    .replace(/^ {10}/gm, "");
+  const laterStep = "      - name: Unrelated later step\n        run: exit 9\n";
+  const script = readStepScript(`${workflow}${laterStep}`, "Deploy the Worker");
   for (const channel of ["production", "beta"])
     for (const token of ["", "test-token"]) {
       const result = spawnSync(
         "bash",
-        ["-c", `node() { printf 'DEPLOY CALLED: %s\\n' "$*"; }\n${script}`],
+        ["-e", "-c", `node() { printf 'DEPLOY CALLED: %s\\n' "$*"; }\n${script}`],
         {
           env: { PATH: process.env.PATH, CHANNEL: channel, CLOUDFLARE_API_TOKEN: token },
           encoding: "utf8",

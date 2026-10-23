@@ -14,6 +14,7 @@ import { formatJobOutputs, listJobs as listPlanJobs } from "../worker/plan-revie
 import { findRefusal } from "../worker/review-git.mjs";
 import { escapePattern } from "../shared/page/escape-pattern.js";
 import { REPO_ROOT, readRepoFile } from "./repo-files.js";
+import { readStepScript } from "./workflow-step.js";
 
 const WORKFLOWS = readdirSync(new URL(".github/workflows/", REPO_ROOT)).filter((name) =>
   name.endsWith(".yml"),
@@ -465,14 +466,14 @@ test("check fails a ready pull request while a review of its code is owed", () =
  * @param {Record<string, string>} event the step's env, over a ready pull request's
  */
 function decideReview(event) {
-  const step = readJob("review-plan").match(
-    /- name: Decide whether to review\n(?:\s+.*\n)*?\s+run: \|\n((?: {10}.*\n)+)/,
+  const script = readStepScript(
+    readRepoFile(".github/workflows/ci.yml"),
+    "Decide whether to review",
   );
-  assert.ok(step, "review-plan decides whether to review in a script of its own");
   const outputs = mkdtempSync(join(tmpdir(), "ci-decision-"));
   const output = join(outputs, "output");
   writeFileSync(output, "");
-  const { status, stdout, stderr } = spawnSync("bash", ["-e", "-c", step[1]], {
+  const { status, stdout, stderr } = spawnSync("bash", ["-e", "-c", script], {
     encoding: "utf8",
     env: {
       PATH: process.env.PATH,
