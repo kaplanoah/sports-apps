@@ -76,6 +76,7 @@
     "tests/beta-claim.test.js",
     "tests/bracket-standings-log.test.js",
     "tests/bracket-standings.test.js",
+    "tests/browser-scope.test.js",
     "tests/build.test.js",
     "tests/catch-up-note.test.js",
     "tests/channel-tag.test.js",
