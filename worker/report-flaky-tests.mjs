@@ -1,4 +1,4 @@
-// Keeps one open issue that names each browser test that failed only some of the time, so it's
+// Keeps one report that names each browser test that failed only some of the time, so it's
 // found and fixed rather than retried past on pull requests. Each night it adds main's nightly run
 // (with no retry, .github/workflows/flaky.yml), and each report and burn-in list CI's runs made
 // that it hasn't counted yet: the reports of pull requests' runs where a retry passed, and
@@ -8,7 +8,7 @@
 // writes, so no two writes ever race, with the list of the artifacts it has counted, so none is
 // counted twice and none is lost; a comment names each test new to it, and starts the routine that
 // fixes the table's top test; a row goes once its test hasn't failed for a week, and the issue
-// closes once a complete sweep leaves no row.
+// closes once a complete sweep leaves no row; later failures or an incomplete sweep reopen it.
 // Usage: node worker/report-flaky-tests.mjs <the nightly run's report.json files>
 // with GH_TOKEN, GH_REPO, RUN_URL, and GITHUB_REPOSITORY set, as Actions sets the last.
 import { execFileSync } from "node:child_process";
@@ -16,13 +16,14 @@ import { closeSync, mkdtempSync, openSync, readdirSync, readFileSync, rmSync } f
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { createGitHub, readAllPages } from "./github-api.mjs";
+import { createGitHub } from "./github-api.mjs";
 
 export const ISSUE_TITLE = "Flaky browser tests";
 
 const DAYS_KEPT = 7;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const PAGE_SIZE = 100;
+const ARTIFACTS_SHOWN = 20;
 // CI keeps a run's report only when a test needed its retry or failed, and burn-in's list only when
 // it named a test.
 const RUN_ARTIFACT = /^(?:browser-report|burn-in-flaky)-/;
@@ -32,11 +33,19 @@ const STATE_PATTERN = /<!-- flaky-tests (.*?) -->/s;
 const COUNTED_PATTERN = /<!-- flaky-counted (.*?) -->/s;
 const SWEEP_PATTERN = /<!-- flaky-sweep (.*?) -->/s;
 export const COLLECTION_TIMEOUT_MS = 8 * 60 * 1000;
+const PUBLICATION_TIMEOUT_MS = 2 * 60 * 1000;
 const ARTIFACT_TIMEOUT_MS = 30 * 1000;
 const UNZIP_TIMEOUT_MS = 10 * 1000;
 
-/** @typedef {{ complete: boolean, unavailable: number[], problem?: string }} CollectionStatus */
+/** @typedef {{ complete: boolean, unavailable: number[], deferred?: number[], problem?: string }} CollectionStatus */
 /** @typedef {CollectionStatus & { checkedAt: string, lastSuccess: string | null }} Sweep */
+
+class DeadlineError extends Error {
+  /** @param {string} operation */
+  constructor(operation) {
+    super(`${operation} deadline reached`);
+  }
+}
 
 /** @param {string | null | undefined} body @returns {Sweep | null} */
 export function readSweep(body) {
@@ -181,7 +190,7 @@ export function readCounted(body) {
 }
 
 /**
- * What the open issue has counted: the artifacts its body lists, and the time before which every
+ * What the report has counted: the artifacts its body lists, and the time before which every
  * artifact counts as counted, for a table written before its body listed them.
  * @param {{ body?: string | null, updated_at: string } | undefined} issue
  * @returns {Ledger}
@@ -266,15 +275,22 @@ export const renderTable = (table, counted = [], sweep) =>
 
 /** @param {Sweep} sweep */
 function renderSweep(sweep) {
-  const unavailable = sweep.unavailable.slice(0, 20).join(", ");
-  const remaining =
-    sweep.unavailable.length > 20 ? ` (+${sweep.unavailable.length - 20} more)` : "";
   return [
     `Collection of completed CI tries: **${sweep.complete ? "complete" : "incomplete"}** (${formatSweepTime(sweep.checkedAt)}). Last complete sweep: ${sweep.lastSuccess ? formatSweepTime(sweep.lastSuccess) : "not recorded"}.`,
-    ...(unavailable ? [`Unavailable artifacts: ${unavailable}${remaining}.`] : []),
+    ...renderArtifactList("Unavailable artifacts", sweep.unavailable),
+    ...renderArtifactList("Deferred artifacts", sweep.deferred),
     ...(sweep.problem ? [`Collection stopped: ${escapeText(sweep.problem)}.`] : []),
     "",
   ];
+}
+
+/** @param {string} title @param {number[]} [artifacts] */
+function renderArtifactList(title, artifacts = []) {
+  if (!artifacts.length) return [];
+  const shown = artifacts.slice(0, ARTIFACTS_SHOWN).join(", ");
+  const remaining =
+    artifacts.length > ARTIFACTS_SHOWN ? ` (+${artifacts.length - ARTIFACTS_SHOWN} more)` : "";
+  return [`${title}: ${shown}${remaining}.`];
 }
 
 /** @param {string} value */
@@ -338,9 +354,13 @@ export async function startFixRoutine({ added, runUrl, fetchImpl, env }) {
  * @param {GitHub} github
  */
 async function findReportIssue(github) {
-  const issues = await readAllPages(github, "/issues?state=all&sort=updated&direction=desc");
-  const reports = issues.filter((issue) => issue.title === ISSUE_TITLE && !issue.pull_request);
-  return reports.find((issue) => issue.state !== "closed") ?? reports[0];
+  for (let page = 1; ; page += 1) {
+    const issues = await github(
+      `/issues?state=all&sort=updated&direction=desc&per_page=${PAGE_SIZE}&page=${page}`,
+    );
+    const report = issues.find((issue) => issue.title === ISSUE_TITLE && !issue.pull_request);
+    if (report || issues.length < PAGE_SIZE) return report;
+  }
 }
 
 /**
@@ -356,6 +376,8 @@ async function findReportIssue(github) {
  * @param {Date} [options.now]
  * @param {typeof fetch} [options.fetchImpl]
  * @param {NodeJS.ProcessEnv} [options.env]
+ * @param {number} [options.deadline]
+ * @param {() => number} [options.readTime]
  * @returns {Promise<string>} what it did, for the log
  */
 export async function postReport({
@@ -367,8 +389,15 @@ export async function postReport({
   now = new Date(),
   fetchImpl = fetch,
   env = process.env,
+  deadline = Date.now() + PUBLICATION_TIMEOUT_MS,
+  readTime = Date.now,
 }) {
-  const github = createGitHub({ repository, fetchImpl, env });
+  const github = boundGitHubRequests(
+    createGitHub({ repository, fetchImpl, env }),
+    deadline,
+    readTime,
+    "publication",
+  );
   const previous = await findReportIssue(github);
   const open = previous?.state === "closed" ? undefined : previous;
   if (!previous && !failed.length && collection.complete)
@@ -402,9 +431,11 @@ export async function postReport({
   if (!updated.length && collection.complete) {
     await github(`/issues/${previous.number}`, {
       method: "PATCH",
-      body: { body, state: "closed", state_reason: "completed" },
+      body: { body, ...(open ? { state: "closed", state_reason: "completed" } : {}) },
     });
-    return `Closed #${previous.number}: no browser test has failed for ${DAYS_KEPT} days.`;
+    return open
+      ? `Closed #${previous.number}: no browser test has failed for ${DAYS_KEPT} days.`
+      : `Refreshed closed report #${previous.number}: collection complete, no browser test failed.`;
   }
   await github(`/issues/${previous.number}`, {
     method: "PATCH",
@@ -622,23 +653,23 @@ function describeCollectionFailure(error) {
   );
 }
 
-/** @param {number} deadline @param {() => number} readTime */
-function readRemainingTime(deadline, readTime) {
+/** @param {number} deadline @param {() => number} readTime @param {string} [operation] */
+function readRemainingTime(deadline, readTime, operation = "collection") {
   const remaining = Math.floor(deadline - readTime());
-  if (remaining <= 0) throw new Error("collection deadline reached");
+  if (remaining <= 0) throw new DeadlineError(operation);
   return remaining;
 }
 
-/** @param {GitHub} github @param {number} deadline @param {() => number} readTime @returns {GitHub} */
-function boundCollectionReads(github, deadline, readTime) {
+/** @param {GitHub} github @param {number} deadline @param {() => number} readTime @param {string} [operation] @returns {GitHub} */
+function boundGitHubRequests(github, deadline, readTime, operation = "collection") {
   return async (path, options) => {
-    const remaining = readRemainingTime(deadline, readTime);
+    const remaining = readRemainingTime(deadline, readTime, operation);
     let timer;
     try {
       return await Promise.race([
         github(path, options),
         new Promise((_, reject) => {
-          timer = setTimeout(() => reject(new Error("collection deadline reached")), remaining);
+          timer = setTimeout(() => reject(new DeadlineError(operation)), remaining);
         }),
       ]);
     } finally {
@@ -659,7 +690,7 @@ function boundCollectionReads(github, deadline, readTime) {
  * @param {(run: FlakyRun, options: { deadline: number, readTime: () => number }) => string} [options.download]
  * @param {number} [options.deadline]
  * @param {() => number} [options.readTime]
- * @returns {Promise<{ failed: TestRuns[], counted: CountedArtifact[], skipped: FlakyRun[], problem?: string }>}
+ * @returns {Promise<CollectionResult>}
  */
 export async function collectFailedTests({
   nightReports,
@@ -679,7 +710,7 @@ export async function collectFailedTests({
   const skipped = [];
   let runs;
   try {
-    const read = boundCollectionReads(github, deadline, readTime);
+    const read = boundGitHubRequests(github, deadline, readTime);
     const uncounted = await listUncountedArtifacts(read, {
       counted: ledger.counted,
       now: night.now,
@@ -701,18 +732,34 @@ export async function collectFailedTests({
       problem: describeCollectionFailure(error),
     };
   }
-  for (const run of runs) {
+  for (const [index, run] of runs.entries()) {
     let directory;
     try {
       readRemainingTime(deadline, readTime);
       directory = download(run, { deadline, readTime });
       failed.push(readRunFailures(directory, run.foundIn));
     } catch (error) {
+      if (error instanceof DeadlineError)
+        return {
+          failed: mergeFailedTests(failed),
+          counted,
+          skipped,
+          deferred: runs.slice(index),
+          problem: error.message,
+        };
       const message = describeCollectionFailure(error);
       console.warn(
         `Could not download CI run ${run.id}'s artifacts (${run.artifacts.map(({ id }) => id).join(", ")}); leaving this try uncounted for a later night: ${message}`,
       );
       skipped.push(run);
+      if (readTime() >= deadline)
+        return {
+          failed: mergeFailedTests(failed),
+          counted,
+          skipped,
+          deferred: runs.slice(index + 1),
+          problem: new DeadlineError("collection").message,
+        };
       continue;
     } finally {
       if (directory) rmSync(directory, { recursive: true, force: true });
@@ -726,6 +773,20 @@ export async function collectFailedTests({
   };
 }
 
+/** @typedef {{ failed: TestRuns[], counted: CountedArtifact[], skipped: FlakyRun[], deferred?: FlakyRun[], problem?: string }} CollectionResult */
+
+/** @param {CollectionResult} result @returns {CollectionStatus} */
+export function describeCollection(result) {
+  return {
+    complete: !result.skipped.length && !result.deferred?.length && !result.problem,
+    unavailable: result.skipped.flatMap((run) => run.artifacts.map(({ id }) => id)),
+    ...(result.deferred?.length
+      ? { deferred: result.deferred.flatMap((run) => run.artifacts.map(({ id }) => id)) }
+      : {}),
+    ...(result.problem ? { problem: result.problem } : {}),
+  };
+}
+
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const repository = String(process.env.GITHUB_REPOSITORY);
   const runUrl = String(process.env.RUN_URL);
@@ -735,7 +796,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const deadline = Date.now() + COLLECTION_TIMEOUT_MS;
   let result;
   try {
-    const read = boundCollectionReads(github, deadline, Date.now);
+    const read = boundGitHubRequests(github, deadline, Date.now);
     result = await collectFailedTests({
       nightReports,
       github,
@@ -751,11 +812,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
       problem: describeCollectionFailure(error),
     };
   }
-  const collection = {
-    complete: !result.skipped.length && !result.problem,
-    unavailable: result.skipped.flatMap((run) => run.artifacts.map(({ id }) => id)),
-    ...(result.problem ? { problem: result.problem } : {}),
-  };
+  const collection = describeCollection(result);
   console.log(await postReport({ repository, ...result, collection, runUrl, now: new Date() }));
   if (!collection.complete) process.exitCode = 1;
 }
