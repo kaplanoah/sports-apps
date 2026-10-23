@@ -517,6 +517,7 @@ test("the Beta workflow runs main's rules on pull request events and merges to m
   );
   assert.doesNotMatch(workflow, /pull_request_target|schedule:/);
   const [, job = ""] = workflow.split(/^ {2}queue:\n/m);
+  assert.match(job, /\n {4}if: github\.event_name == 'push' \|\|/);
   assert.match(job, /\n {4}concurrency:\n {6}group: beta\n {6}cancel-in-progress: false/);
   assert.match(job, /ref: \$\{\{ github\.event\.repository\.default_branch \}\}/);
   assert.match(job, /run: node worker\/beta-claim\.mjs queue/);

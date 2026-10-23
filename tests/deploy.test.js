@@ -1079,11 +1079,15 @@ test("project settings ask before each change to a live Worker but beta's, and d
     "Bash(wrangler *)",
     // A branch's name has no spaces, so this keeps the beta push from naming any other branch too.
     "Bash(git push -f origin * *:beta)",
-    // A PR's number has no spaces, so each label edit can't carry another flag, like a phone-ok.
+    // Deny extra arguments and a flag in the PR number's place, including an omitted number.
     "Bash(gh pr edit * * --add-label beta)",
     "Bash(gh pr edit * * --remove-label beta)",
     "Bash(gh pr edit * * --add-label beta-wait)",
     "Bash(gh pr edit * * --remove-label beta-wait)",
+    "Bash(gh pr edit -* --add-label beta)",
+    "Bash(gh pr edit -* --remove-label beta)",
+    "Bash(gh pr edit -* --add-label beta-wait)",
+    "Bash(gh pr edit -* --remove-label beta-wait)",
   ]) {
     assert.ok(permissions.deny.includes(rule), rule);
   }
