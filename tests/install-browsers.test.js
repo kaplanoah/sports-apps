@@ -93,6 +93,7 @@ test("a permanent error before the retained output tail still forbids retry", as
   assert.equal(await installBrowsers(["webkit"], installer.options), 1);
   assert.equal(installer.invocations.length, 1);
   assert.doesNotMatch(installer.messages.join("\n"), /HTTP 403/);
+  assert.match(installer.messages.join("\n"), /permanent error.*403/);
 });
 
 test("deadline and cancellation stop the install's descendants", async () => {

@@ -40,7 +40,7 @@ function stopProcessGroup(processId, signal) {
 /**
  * @param {string[]} arguments_
  * @param {{ spawnImpl: InstallerSpawn, cleanupSpawn: CleanupSpawn, timeoutMs: number, signal?: AbortSignal }} options
- * @returns {Promise<{ code: number, output: string, timedOut: boolean, retryable: boolean }>}
+ * @returns {Promise<{ code: number, output: string, timedOut: boolean, retryable: boolean, permanentReason: string }>}
  */
 function installAttempt(arguments_, { spawnImpl, cleanupSpawn, timeoutMs, signal }) {
   return new Promise((resolve) => {
@@ -55,13 +55,13 @@ function installAttempt(arguments_, { spawnImpl, cleanupSpawn, timeoutMs, signal
     );
     let output = "";
     let timedOut = false;
-    let permanentFailure = false;
+    let permanentReason = "";
     let transientFailure = false;
     let finished = false;
     let cleanup;
     const keepOutput = (chunk) => {
       const combined = output + chunk.toString();
-      permanentFailure ||= PERMANENT_FAILURE.test(combined);
+      permanentReason ||= combined.match(PERMANENT_FAILURE)?.[0] ?? "";
       transientFailure ||= TRANSIENT_FAILURE.test(combined);
       output = combined.slice(-OUTPUT_LIMIT);
     };
@@ -75,7 +75,8 @@ function installAttempt(arguments_, { spawnImpl, cleanupSpawn, timeoutMs, signal
         code: timedOut ? 124 : (code ?? 1),
         output,
         timedOut,
-        retryable: transientFailure && !permanentFailure,
+        retryable: transientFailure && !permanentReason,
+        permanentReason,
       });
     };
     const forceStopChild = () => {
@@ -90,7 +91,7 @@ function installAttempt(arguments_, { spawnImpl, cleanupSpawn, timeoutMs, signal
           {
             encoding: "utf8",
             timeout: CLEANUP_TIMEOUT_MS,
-          killSignal: "SIGKILL",
+            killSignal: "SIGKILL",
             stdio: "pipe",
           },
         );
@@ -154,6 +155,8 @@ export async function installBrowsers(
         : `Browser installation failed (exit ${result.code}).`,
     );
     if (result.output.trim()) log(result.output.trim());
+    if (result.permanentReason)
+      log(`A permanent error was reported (${result.permanentReason}); no retry.`);
     if (attempt === MAX_ATTEMPTS || result.timedOut || !result.retryable) return result.code;
     log("Retrying browser installation once after a transient transport failure.");
   }
