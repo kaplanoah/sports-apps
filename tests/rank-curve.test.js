@@ -13,12 +13,15 @@ import {
   renderSpreadCurve,
 } from "../shared/page/rank-curve.js";
 
-test("a small sample's explanation names the players it would be compared with", () => {
+test("a small sample's explanation joins the named comparison only below a quarter of known progress", () => {
   for (const players of ["ranked players", "qualified starters", "qualified hitters"]) {
-    assert.equal(
-      describeSmallSample(players),
-      `too small a sample to fairly compare with ${players}`,
-    );
+    for (const progress of [0, 0.24])
+      assert.equal(
+        describeSmallSample(progress, players),
+        `, too small a sample to fairly compare with ${players}`,
+      );
+    for (const progress of [0.25, 0.5, 1, null, undefined])
+      assert.equal(describeSmallSample(progress, players), "");
   }
 });
 
