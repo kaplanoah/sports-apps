@@ -16,7 +16,7 @@ permissions:
 # rules.
 env:
   PHONE_CONTEXT: phone
-  # The label that asks CI to review a pull request again, which the review takes off.
+  # The label that requests Trusted review, which that workflow consumes.
   REVIEW_LABEL: review
 
 # A new push to a pull request stops the checks still running on the one before it. A label
@@ -412,20 +412,21 @@ jobs:
 
   # Review credentials and posting live only in the default-branch Trusted review workflow.
   # This PR workflow joins its authenticated result using read-only Actions access.
-  review-plan:
+  review-join:
     needs: passed
     if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: &review-join-timeout 120
     permissions:
       contents: read
       actions: read
     outputs:
       owed: ${{ steps.find.outputs.owed || steps.decision.outputs.owed || 'true' }}
+      tree: ${{ steps.verify.outputs.tree }}
     env:
       REVIEW_HEAD: ${{ github.event.pull_request.head.sha }}
       REVIEW_BASE: ${{ github.event.pull_request.base.sha }}
-      REVIEW_TRUSTED: ${{ github.event.pull_request.base.sha }}
+      REVIEW_TIMEOUT_MINUTES: *review-join-timeout
       PR: ${{ github.event.pull_request.number }}
     steps:
       - name: Decide whether to join trusted review
@@ -448,7 +449,6 @@ jobs:
       - if: steps.decision.outputs.review == 'true'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          ref: ${{ github.event.pull_request.merge_commit_sha }}
           fetch-depth: 2
           persist-credentials: false
       - if: steps.decision.outputs.review == 'true'
@@ -461,9 +461,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: node worker/find-trusted-review.mjs
-      - name: Read the reviewed merge identity
-        if: steps.find.outputs.run != ''
-        run: echo "REVIEW_MERGE=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
       - if: steps.find.outputs.run != ''
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
@@ -472,23 +469,13 @@ jobs:
           github-token: ${{ github.token }}
           path: ${{ runner.temp }}/trusted-review-result/
       - name: Validate the trusted result's code and producer identity
+        id: verify
         if: steps.find.outputs.run != ''
         env:
           REVIEW_RUN: ${{ steps.find.outputs.run }}
           REVIEW_TREE: ${{ steps.find.outputs.tree }}
+          REVIEW_TRUSTED: ${{ steps.find.outputs.source }}
         run: node worker/find-trusted-review.mjs verify "$RUNNER_TEMP/trusted-review-result"
-
-  review:
-    needs: review-plan
-    if: ${{ !cancelled() }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions: {}
-    steps:
-      - name: Require the read-only join to finish
-        env:
-          PLAN_RESULT: ${{ needs.review-plan.result }}
-        run: test "$PLAN_RESULT" = success
 
   # Records that every test passed on this code, independently of review and the gate, so label
   # changes on drafts or pull requests still owed a review skip the tests.
@@ -533,8 +520,7 @@ jobs:
   # skipped required check as passing.
   check:
     if: always()
-    needs:
-      [passed, gate, phone, checks, scope, browser, burn-in, webkit, tested, review-plan, review]
+    needs: [passed, gate, phone, checks, scope, browser, burn-in, webkit, tested, review-join]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -570,11 +556,23 @@ jobs:
         run: |
           git rev-parse HEAD > passed-commit.txt
           echo "tree=$(git rev-parse 'HEAD^{tree}')" >> "$GITHUB_OUTPUT"
+      - name: Require the recorded code to match trusted review
+        if: >-
+          github.event_name == 'pull_request' && needs.review-join.outputs.owed == 'false' &&
+          github.event.pull_request.user.login != 'dependabot[bot]'
+        env:
+          JOINED_TREE: ${{ needs.review-join.outputs.tree }}
+          RECORDED_TREE: ${{ steps.code.outputs.tree }}
+        run: |
+          if [ -z "$JOINED_TREE" ] || [ "$JOINED_TREE" != "$RECORDED_TREE" ]; then
+            echo "::error::Trusted review covers different code than this check."
+            exit 1
+          fi
       # A ready pull request's code merges only once a review of exactly that code passed, so a run
       # that wasn't asked to review, a push's or a label's, holds it until the review label asks.
       # A draft is reviewed once it's ready, so it isn't held.
       - name: Require a review of this code
-        if: needs.review-plan.outputs.owed == 'true' && !github.event.pull_request.draft
+        if: needs.review-join.outputs.owed == 'true' && !github.event.pull_request.draft
         run: |
           echo "::error::No review has passed on this code yet: add the $REVIEW_LABEL label to the pull request to have it reviewed."
           exit 1
@@ -589,7 +587,7 @@ jobs:
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         if: >-
           github.event_name == 'pull_request' && needs.gate.outputs.held != 'true' &&
-          needs.review-plan.outputs.owed == 'false' && needs.review.result == 'success'
+          needs.review-join.outputs.owed == 'false' && needs.review-join.result == 'success'
         with:
           name: ci-passed-${{ steps.code.outputs.tree }}
           path: passed-commit.txt

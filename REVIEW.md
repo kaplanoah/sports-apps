@@ -58,7 +58,8 @@ In order of what has mattered here.
    whether the review runs from main's copy or the pull request's own.
    Its controls include:
 
-   - the read-only join in `.github/workflows/ci.yml`
+   - the `review-join` job in `.github/workflows/ci.yml`,
+     its `check` hold on a review still owed or a different tree, and its `ci-passed` upload
    - the jobs in `.github/workflows/review.yml` and `.github/workflows/trusted-review-area.yml`
    - `worker/plan-review.mjs`
    - `worker/judge-review.mjs`

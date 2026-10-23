@@ -120,10 +120,10 @@ This skill holds what "Shipping a change" in AGENTS.md leaves out, most of it un
 
 ## Step 7: what CI's review does
 
-- CI reviews a PR once it's ready, when it's opened ready or marked ready, and again only when the `review` label asks, which the steward skill says when to add.
+- The Trusted review workflow reviews a PR once it's ready, when it's opened ready or marked ready, and again only when the `review` label asks, which the steward skill says when to add.
   Each review after the first reads only what changed since the last one that finished (the root's `worker/plan-review.mjs` and `worker/judge-review.mjs`).
   If the summary names something it couldn't judge, tell the user.
-- If `review` fails, read its summary and the log of the failed job, an area's `find` under `review-area`, or `review-across` or `review-post`.
+- If Trusted review's `review` fails, read its summary and the log of the failed job, an area's `find` under `review-area`, or `review-across` or `review-post`.
   An area's `find` and `review-across` show the action's own errors but not each try's turns and tool calls, since they'd be public,
   and `review-post` shows the errors of the root's `worker/post-review.mjs`.
   If an area's `find` or `review-across` stopped before Claude started, like an install that timed out, re-run the failed jobs once yourself.
@@ -132,6 +132,11 @@ This skill holds what "Shipping a change" in AGENTS.md leaves out, most of it un
   Tell the user what the log shows: an invalid or expired Claude credential secret, Claude unreachable,
   an error from `worker/post-review.mjs`, like a GitHub API call that failed, or a re-run that failed too.
   `check` can't pass until the job does.
+- CI's `review-join` waits for and verifies Trusted review's result; it runs no Claude.
+  If it fails, read its log for an API error, a timeout, missing evidence, or a result for different code or source.
+  Recover the Trusted review job by the preceding rule, then re-run CI's failed jobs once so the join can see that result.
+  Re-running CI alone never repeats Trusted review.
+  If the PR's head or base changed, follow the steward skill to request review of the current code instead.
 
 ## Step 8: a red PR
 

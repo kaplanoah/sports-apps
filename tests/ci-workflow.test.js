@@ -20,7 +20,7 @@ const WORKFLOWS = readdirSync(new URL(".github/workflows/", REPO_ROOT)).filter((
   name.endsWith(".yml"),
 );
 
-// The workflow ci.yml calls for each area of a review.
+// Trusted review calls its area workflow once for each review area.
 const REVIEW_WORKFLOW = "review.yml";
 const AREA_WORKFLOW = "trusted-review-area.yml";
 
@@ -308,7 +308,7 @@ test("a held red change waits on the phone status, and check holds it whenever m
   );
   assert.match(
     check,
-    /if: >-\n\s+github\.event_name == 'pull_request' && needs\.gate\.outputs\.held != 'true' &&\n\s+needs\.review-plan\.outputs\.owed == 'false' && needs\.review\.result == 'success'\n\s+with:\n\s+name: ci-passed-/,
+    /if: >-\n\s+github\.event_name == 'pull_request' && needs\.gate\.outputs\.held != 'true' &&\n\s+needs\.review-join\.outputs\.owed == 'false' && needs\.review-join\.result == 'success'\n\s+with:\n\s+name: ci-passed-/,
   );
 });
 
@@ -449,28 +449,61 @@ test("a label change skips tests once a run passed every test on the same code",
 });
 
 test("only validated trusted review can satisfy the CI review gate", () => {
-  const plan = readJob("review-plan");
+  const plan = readJob("review-join");
   assert.match(
     plan,
     /owed: \$\{\{ steps.find.outputs.owed \|\| steps.decision.outputs.owed \|\| 'true' \}\}/,
   );
-  assert.match(plan, /ref: \$\{\{ github.event.pull_request.merge_commit_sha \}\}/);
+  assert.doesNotMatch(plan, /merge_commit_sha/);
   assert.match(plan, /run: node worker\/find-trusted-review.mjs/);
   assert.match(plan, /run: node worker\/find-trusted-review.mjs verify/);
   assert.match(plan, /run-id: \$\{\{ steps.find.outputs.run \}\}/);
-  assert.match(readJob("review"), /PLAN_RESULT: \$\{\{ needs.review-plan.result \}\}/);
-  assert.deepEqual(readNeeds("review"), ["review-plan"]);
+  assert.match(plan, /tree: \$\{\{ steps.verify.outputs.tree \}\}/);
+  assert.match(plan, /REVIEW_TRUSTED: \$\{\{ steps.find.outputs.source \}\}/);
   assert.doesNotMatch(
     readRepoFile(".github/workflows/ci.yml"),
-    /ci-reviewed-|reviewed-run|CLAUDE_CODE_OAUTH_TOKEN|ANTHROPIC_API_KEY|anthropics\//,
+    /CLAUDE_CODE_OAUTH_TOKEN|ANTHROPIC_API_KEY|anthropics\//,
   );
   assert.match(
     readJob("check"),
-    /needs.review-plan.outputs.owed == 'false' && needs.review.result == 'success'/,
+    /needs.review-join.outputs.owed == 'false' && needs.review-join.result == 'success'/,
   );
 });
 
-test("the read-only join holds drafts and ready PRs without borrowing test or legacy review evidence", () => {
+test("CI's recovery message names the label Trusted review actually consumes", () => {
+  const label = (workflow) =>
+    readRepoFile(`.github/workflows/${workflow}`).match(/^ {2}REVIEW_LABEL: (\S+)$/m)?.[1];
+  assert.ok(label(REVIEW_WORKFLOW));
+  assert.equal(label("ci.yml"), label(REVIEW_WORKFLOW));
+});
+
+test("check rejects a joined tree different from its recorded code before publishing passing evidence", () => {
+  const check = readJob("check");
+  assert.match(check, /JOINED_TREE: \$\{\{ needs.review-join.outputs.tree \}\}/);
+  assert.match(check, /RECORDED_TREE: \$\{\{ steps.code.outputs.tree \}\}/);
+  assert.match(check, /github.event.pull_request.user.login != 'dependabot\[bot\]'/);
+  assert.ok(
+    check.indexOf("Require the recorded code to match trusted review") <
+      check.indexOf("name: ci-passed-"),
+  );
+  const script = readStepScript(
+    readRepoFile(".github/workflows/ci.yml"),
+    "Require the recorded code to match trusted review",
+  );
+  for (const [joined, recorded, status] of [
+    ["a", "a", 0],
+    ["a", "b", 1],
+    ["", "", 1],
+  ]) {
+    const result = spawnSync("bash", ["-e", "-c", script], {
+      env: { JOINED_TREE: String(joined), RECORDED_TREE: String(recorded) },
+      encoding: "utf8",
+    });
+    assert.equal(result.status, status);
+  }
+});
+
+test("the read-only join holds drafts and ready PRs without borrowing test evidence", () => {
   const script = readStepScript(
     readRepoFile(".github/workflows/ci.yml"),
     "Decide whether to join trusted review",
@@ -504,10 +537,6 @@ test("the read-only join holds drafts and ready PRs without borrowing test or le
     );
     assert.deepEqual(fields, expected);
   }
-  const verify = readJob("review").match(/^ {8}run: (.+)$/m)?.[1];
-  assert.ok(verify);
-  assert.equal(spawnSync("bash", ["-c", verify], { env: { PLAN_RESULT: "failure" } }).status, 1);
-  assert.equal(spawnSync("bash", ["-c", verify], { env: { PLAN_RESULT: "success" } }).status, 0);
 });
 
 // A ready pull request merges only once a review passed on exactly its code: a push, or a label
@@ -517,7 +546,7 @@ test("check fails a ready pull request while a review of its code is owed", () =
   const check = readJob("check");
   assert.match(
     check,
-    /- name: Require a review of this code\n\s+if: needs\.review-plan\.outputs\.owed == 'true' && !github\.event\.pull_request\.draft\n\s+run: \|\n\s+echo "::error::.*\$REVIEW_LABEL.*"\n\s+exit 1\n/,
+    /- name: Require a review of this code\n\s+if: needs\.review-join\.outputs\.owed == 'true' && !github\.event\.pull_request\.draft\n\s+run: \|\n\s+echo "::error::.*\$REVIEW_LABEL.*"\n\s+exit 1\n/,
   );
   assert.ok(
     check.indexOf("Require a review of this code") < check.indexOf("name: ci-passed-"),
@@ -526,7 +555,7 @@ test("check fails a ready pull request while a review of its code is owed", () =
 });
 
 /**
- * What review-plan's decision says for an event, by running its own script.
+ * What Trusted review's decision says for an event, by running its own script.
  * @param {Record<string, string>} event the step's env, over a ready pull request's
  */
 function decideReview(event) {
@@ -542,7 +571,7 @@ function decideReview(event) {
     env: {
       PATH: process.env.PATH,
       GITHUB_OUTPUT: output,
-      REVIEW_LABEL: readRepoFile(".github/workflows/ci.yml").match(/REVIEW_LABEL: (\S+)/)?.[1],
+      REVIEW_LABEL: readRepoFile(".github/workflows/review.yml").match(/REVIEW_LABEL: (\S+)/)?.[1],
       EVENT: "pull_request_target",
       ACTION: "opened",
       LABEL: "",
@@ -600,7 +629,7 @@ test("a pull request is reviewed when it's opened ready, marked ready, or labele
 });
 
 // Asking adds a label no run reads as a new ask once it's there, so each ask is a fresh label.
-// Only a draft still owes the review it skips; the rest never run one or already passed it.
+// Only a draft still owes the review it skips; Dependabot never runs one.
 test("every reason not to review holds when the review is asked for", () => {
   for (const [event, reason, owed] of /** @type {[Record<string, string>, RegExp, string][]} */ ([
     [{ IS_DRAFT: "true" }, /a draft is reviewed once it's ready/, "true"],
@@ -615,9 +644,8 @@ test("every reason not to review holds when the review is asked for", () => {
 });
 
 test("reusing tests never bypasses the authenticated trusted review join", () => {
-  const plan = readJob("review-plan");
+  const plan = readJob("review-join");
   assert.doesNotMatch(plan, /needs\.passed\.outputs\.run\b/);
-  assert.doesNotMatch(readJob("passed"), /reviewed-run|--reviewed/);
   assert.match(plan, /permissions:\n\s+contents: read\n\s+actions: read/);
   assert.match(plan, /path: \$\{\{ runner.temp \}\}\/trusted-review-result\//);
   assert.doesNotMatch(plan, /secrets\.|pull-requests: write|anthropics\//);
@@ -778,9 +806,8 @@ test("every Claude step keeps its transcript out of the log and reads only the c
     assert.equal(readStepInput(workflow, step, "show_full_output"), "false", name);
     const args = readStepInput(workflow, step, "claude_args");
     const tools = [...args.matchAll(/--allowedTools "([^"]*)"/g)].map(([, list]) => list);
-    const wrapper = ["review.yml", "trusted-review-area.yml"].includes(name)
-      ? "${{ runner.temp }}/trusted/worker/review-git.mjs"
-      : "worker/review-git.mjs";
+    assert.ok([REVIEW_WORKFLOW, AREA_WORKFLOW].includes(name));
+    const wrapper = "${{ runner.temp }}/trusted/worker/review-git.mjs";
     assert.deepEqual(tools, [`Bash(node ${wrapper}:*)`], name);
     assert.doesNotMatch(args, /--disallowedTools/, name);
     const sources = [...args.matchAll(/--setting-sources (\S+)/g)].map(([, list]) => list);

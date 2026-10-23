@@ -241,7 +241,8 @@ request, so merge once those pass and the pull request has no conflicts with
 `main`. The trusted `pull_request_target` workflow reviews pull requests into
 `main`, except Dependabot's, from main's copy of the controls. CI joins its result
 with read-only credentials and holds the merge until trusted review passes.
-It requires a `CLAUDE_CODE_OAUTH_TOKEN` or `ANTHROPIC_API_KEY` secret.
+Trusted review requires a `CLAUDE_CODE_OAUTH_TOKEN` or `ANTHROPIC_API_KEY` secret;
+without one, a ready pull request that needs review cannot pass `check`.
 Automatic asks are limited to branches in this repository and authors associated
 as OWNER, MEMBER or COLLABORATOR; other fork authors need a maintainer to add
 the `review` label. Review runs once a permitted pull request is ready, and again
