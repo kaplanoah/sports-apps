@@ -116,6 +116,7 @@
     "tests/plan-review.test.js",
     "tests/playwright-config.test.js",
     "tests/poll-schedule.test.js",
+    "tests/production-coverage.test.js",
     "tests/re-add-note-height.test.js",
     "tests/red-change.test.js",
     "tests/report-flaky-tests.test.js",
