@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createContext, runInContext } from "node:vm";
 import { readRepoFile } from "./repo-files.js";
+import { settle } from "./settle.js";
 
 const SCOPE = "https://mlb-app.example.workers.dev/k3y/";
 const OLD_ENDPOINT = "https://web.push.apple.com/old";
@@ -369,8 +370,7 @@ test("a phone gets its first copy as soon as the service worker starts", async (
 
   await worker.dispatch("activate", {});
 
-  for (let turn = 0; turn < 100 && !(await readCopy(worker)); turn++)
-    await new Promise((resolve) => setImmediate(resolve));
+  for (let turn = 0; turn < 100 && !(await readCopy(worker)); turn++) await settle();
   assert.deepEqual(listKept(worker), listReleaseFiles("a"));
 });
 
@@ -396,7 +396,7 @@ test("a page asking for a fresh copy hears whether the copy now holds the Worker
 
 /** Lets every read and write under way land. */
 async function settleWorker() {
-  for (let turn = 0; turn < 100; turn++) await new Promise((resolve) => setImmediate(resolve));
+  for (let turn = 0; turn < 100; turn++) await settle();
 }
 
 test("an open the copy can't answer yet, while the worker's first read is under way, leaves the copy whole", async () => {

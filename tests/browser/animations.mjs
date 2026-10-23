@@ -53,8 +53,8 @@ export const finishTimedAnimations = (page) =>
 
 /**
  * An animation the page played over time: the classes of the element it moves, its first and last
- * frames, and the way it plays them.
- * @typedef {{ classes: string[], first: Keyframe, last: Keyframe, direction: string }} PlayedAnimation
+ * frames.
+ * @typedef {{ classes: string[], first: Keyframe, last: Keyframe }} PlayedAnimation
  */
 
 /**
@@ -72,9 +72,8 @@ export async function listAnimations(page) {
     Element.prototype.animate = function (frames, options) {
       const animation = animate.call(this, frames, options);
       const [first, last] = /** @type {Keyframe[]} */ (frames);
-      const direction = (typeof options === "object" ? options.direction : undefined) ?? "normal";
       if (animation.timeline === document.timeline)
-        animations.push({ classes: [...this.classList], first, last, direction });
+        animations.push({ classes: [...this.classList], first, last });
       return animation;
     };
   });
