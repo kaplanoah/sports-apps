@@ -407,7 +407,8 @@ export async function checkMovingWelcome(app) {
 }
 
 /**
- * On an Android phone, the moving welcome's last step says how to remove the old site there.
+ * On Android, the moving welcome explains removal, and picking an icon updates the theme and
+ * Settings' Appearance choice.
  * @param {MovingApp} app
  */
 export async function checkMovingWelcomeOnAndroid(app) {

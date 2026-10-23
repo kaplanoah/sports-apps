@@ -73,7 +73,9 @@ function loadPageMove({
     context,
   );
   const themeSource = readRepoFile(`${PAGE_CODE}pick-theme.js`);
-  const startup = themeSource.indexOf("if (!isOnHomeScreen()) takeThemeFromApp();");
+  const marker = "if (!isOnHomeScreen()) takeThemeFromApp();";
+  const startup = themeSource.indexOf(marker);
+  assert.notEqual(startup, -1, `Theme startup marker missing: ${marker}`);
   runInContext(themeSource.slice(0, startup), context);
   function startTheme() {
     runInContext(themeSource.slice(startup), context);
@@ -470,7 +472,7 @@ test("a System move carries the source phone's icon even if the destination phon
   const page = loadPageMove({
     isOnHomeScreen: true,
     phoneLook: "dark",
-    stored: { appearance: '"auto"', carriedChoicesTaken: String(NOW - MINUTE_MS) },
+    stored: { appearance: '"auto"' },
   });
   const address = await page.requestPageMove({ fromApp: true });
   const carried = address.searchParams.get("carried");

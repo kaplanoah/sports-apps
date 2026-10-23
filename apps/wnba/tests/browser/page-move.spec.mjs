@@ -87,7 +87,7 @@ test.describe("from an Android phone's Home Screen app", () => {
     await checkMovingWelcome({ page, browser, ...MOVING_APP });
   });
 
-  test("the moving welcome says how to remove the old site on an Android phone", async ({
+  test("the moving welcome explains removal and saves the picked icon and theme on Android", async ({
     page,
     browser,
   }) => {

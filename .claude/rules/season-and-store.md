@@ -24,7 +24,7 @@ paths:
   what belongs to one device or browser, like the last tab, the Home Screen welcome's dismissal,
   or the Diagnostics, isn't a viewer choice and isn't made with it.
   An app moving to its own address carries the viewer's choices there, as many as fit, in one packed `?carried=` value,
-  which the new address keeps into storage with none of its own; a Home Screen move also replaces
-  the browser's appearance with the source app's current look.
+  which the new address keeps into storage with none of its own.
+  A Home Screen move also replaces the browser's appearance with the source app's current look.
   A browser accepts it only soon after it was packed, so an old copied link carries nobody's choices (`shared/page/page-move.js`).
   Its `CARRIED_CHOICES` names each choice, the most missed first, and the root's `tests/page-move.test.js` fails on one it leaves out.
