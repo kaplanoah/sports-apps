@@ -110,16 +110,15 @@ This skill holds what "Shipping a change" in AGENTS.md leaves out, most of it un
   A push after the label, a merge of `main` too, holds the PR again until the owner has used that commit on beta and labeled it again,
   so put it on beta again and ask.
 - One red change goes live per deploy.
-  While a red PR holds beta for its phone test, no other red PR merges.
-  Wait for a merged red PR's deploy to finish before merging another red PR.
-  The gate holds a red PR labeled `phone-ok` when its tested head lacks a red commit merged to `main` since the label was added.
-  Merge `main` into its branch, put it on beta by "The beta channel" above, and have the owner take `phone-ok` off and add it again after using that head.
-  It also holds an approved red PR while a red commit on `main` lacks a successful production deploy.
+  From a red PR's push to beta until it has merged and its deploy has finished, or it has closed unmerged, no other red PR merges.
+  This window outlasts the beta claim, which ends at `phone-ok`.
+  The gate holds an approved red PR when its tested head lacks any red commit on `main`, or when a red commit on `main` lacks verified production coverage.
+  For a missing red commit, follow the re-approval steps above after merging `main`.
   The Red approvals workflow refreshes phone statuses after a merge to `main` and a completed main Deploy run.
-  Those refreshes are asynchronous, so keep red merges serialized through deployment; a passing status is not an atomic merge lock.
-  A successful production upload/check records its actual target in a receipt retained for 90 days.
-  The gate reads the last ten successful main Deploy runs and stays held when none has an unexpired receipt, including legacy runs before receipts existed.
-  A successful production deploy with this workflow establishes that evidence; inspect the deploy runs rather than bypass the hold.
+  Those refreshes are asynchronous; a passing status is not an atomic merge lock.
+  A successful production deployment records its confirmed commit in a receipt retained for 90 days.
+  The gate reads the last ten successful main Deploy runs and stays held when none has an unexpired receipt.
+  A successful production deployment restores that evidence; inspect the deploy runs rather than bypass the hold.
 
 ## Step 4: conflicts
 

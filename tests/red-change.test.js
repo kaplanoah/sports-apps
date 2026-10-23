@@ -16,6 +16,7 @@ import {
   readRedApproval,
   readDeployedMain,
 } from "../worker/red-change.mjs";
+import { PHONE_CONTEXT } from "../worker/labeling.mjs";
 import { refreshRedApprovals } from "../worker/red-approval.mjs";
 import { findDeployedChanges } from "../worker/deploy-scope.mjs";
 import { REPO_ROOT, readRepoFile } from "./repo-files.js";
@@ -1817,9 +1818,8 @@ function createGateHistory(context) {
   readGit(["remote", "add", "origin", cwd]);
   writeFile("shared/page/sheet.js", "export const draw = 1;\n");
   const base = commit("2026-10-07T09:00:00Z");
-  /** @param {string} head @param {number} [addedAt] */
-  const findMissing = (head, addedAt = APPROVED_AT) =>
-    findMissingRedCommits({ cwd, head, main: "main", addedAt });
+  /** @param {string} head */
+  const findMissing = (head) => findMissingRedCommits({ cwd, head, main: "main" });
   return { cwd, readGit, writeFile, commit, base, findMissing };
 }
 
@@ -1833,7 +1833,7 @@ test("phone approval holds a tested head missing red main commits since the labe
   assert.deepEqual(missingRedCommits, [reverted, red]);
   const held = decideGate(RED_DIFF, { ...APPROVED, missingRedCommits });
   assert.equal(held.isHeld, true);
-  assert.match(held.message, /lacks a red change merged to main since the label/);
+  assert.match(held.message, /lacks a red change already merged to main/);
   assert.match(held.message, /Merge main into the branch/);
   assertSendsToBetaClaim(held.message);
   assert.match(held.message, /takes the label off and adds it again/);
@@ -1843,15 +1843,20 @@ test("phone approval holds a tested head missing red main commits since the labe
   );
 });
 
-test("non-red main commits and red commits before phone approval do not hold an approved head", (context) => {
+test("a pre-label red main commit missing from the tested head holds approval, while non-red history does not", (context) => {
   const history = createGateHistory(context);
-  history.writeFile("shared/page/sheet.js", "export const draw = 2;\n");
-  history.commit("2026-10-07T09:30:00Z");
   history.writeFile("README.md", "A description.\n");
   history.commit("2026-10-07T11:00:00Z");
+  assert.deepEqual(history.findMissing(history.base), []);
+  history.writeFile("shared/page/sheet.js", "export const draw = 2;\n");
+  const red = history.commit("2026-10-07T09:30:00Z");
   const missingRedCommits = history.findMissing(history.base);
-  assert.deepEqual(missingRedCommits, []);
-  assert.equal(decideGate(RED_DIFF, { ...APPROVED, missingRedCommits }).isHeld, false);
+  assert.deepEqual(missingRedCommits, [red]);
+  assert.equal(decideGate(RED_DIFF, { ...APPROVED, missingRedCommits }).isHeld, true);
+  assert.equal(
+    decideGate(RED_DIFF, { ...APPROVED, missingRedCommits: history.findMissing(red) }).isHeld,
+    false,
+  );
 });
 
 test("a merge classifies its first-parent diff even when its red branch commit predates approval", (context) => {
@@ -1880,9 +1885,8 @@ test("historical red classification reads styles and scripts from each commit, i
   assert.deepEqual(history.findMissing(tested), [removed, red]);
 });
 
-test("unreadable history or an unknown approval time fails closed", (context) => {
+test("unreadable history fails closed", (context) => {
   const history = createGateHistory(context);
-  assert.throws(() => history.findMissing(history.base, Number.NaN), /no readable time/);
   assert.throws(() => history.findMissing("unknown-revision"));
 });
 
@@ -1982,7 +1986,7 @@ test("the live gate holds a contained red merge until a successful production de
   assert.match(failed.message, /cannot be verified.*403/);
 });
 
-test("production evidence ignores beta, failed uploads, and successful workflows whose upload was skipped", async () => {
+test("production evidence ignores beta, missing receipts and displayed workflow SHAs", async () => {
   const requested = [];
   const sha = "a".repeat(40);
   const deployed = await readDeployedMain(async (path) => {
@@ -1996,7 +2000,7 @@ test("production evidence ignores beta, failed uploads, and successful workflows
             head_branch: "beta",
             conclusion: "success",
           },
-          ...[2, 3, 4].map((id) => ({
+          ...[2, 3].map((id) => ({
             id,
             path: ".github/workflows/deploy.yml",
             head_branch: "main",
@@ -2005,21 +2009,10 @@ test("production evidence ignores beta, failed uploads, and successful workflows
           })),
         ],
       };
-    if (path.endsWith("/artifacts?per_page=100&page=1"))
-      return { artifacts: [{ name: `production-checked-${sha}`, expired: false }] };
-    const conclusion = path.includes("/2/")
-      ? "skipped"
-      : path.includes("/3/")
-        ? "failure"
-        : "success";
     return {
-      jobs: [
-        {
-          name: "deploy",
-          conclusion: "success",
-          steps: [{ name: "Deploy the Worker", conclusion }],
-        },
-      ],
+      artifacts: path.includes("/3/")
+        ? [{ name: `production-checked-${sha}`, expired: false }]
+        : [],
     };
   });
   assert.equal(deployed, sha);
@@ -2027,7 +2020,7 @@ test("production evidence ignores beta, failed uploads, and successful workflows
     requested.some((path) => path.includes("/1/")),
     false,
   );
-  assert.equal(requested.length, 5);
+  assert.equal(requested.length, 3);
   await assert.rejects(
     readDeployedMain(async () => ({ workflow_runs: [] })),
     /No successful production/,
@@ -2061,7 +2054,7 @@ test("deploy evidence rejects expired or conflicting actual-target receipts", as
     readWith([{ name: `production-checked-${"a".repeat(40)}`, expired: true }]),
     /No successful production/,
   );
-  await assert.rejects(readWith([]), /legacy runs without receipts/);
+  await assert.rejects(readWith([]), /No successful production/);
   await assert.rejects(
     readWith([{ name: `production-checked-${"a".repeat(40)}` }]),
     /No successful production/,
@@ -2089,7 +2082,8 @@ test("trusted refresh invalidates an old phone status after a red merge and rest
     fresh.statuses.map(({ state }) => state),
     ["pending", "success"],
   );
-  history.writeFile("shared/page/sheet.js", "export const draw = 3;\n");
+  assert.ok(fresh.statuses.every(({ context }) => context === PHONE_CONTEXT));
+  history.writeFile("shared/page/side-swipe.js", "export const swipe = 3;\n");
   history.commit("2026-10-07T11:00:00Z");
   const stale = createApprovalApi(history, head, history.base);
   await refreshRedApprovals(stale);
@@ -2128,6 +2122,79 @@ test("CI's check needs the gate, which a label change runs again without a push"
   );
 });
 
+test("refresh classifies the current merged styles rather than clearing a head-only non-red change", async (context) => {
+  const history = createGateHistory(context);
+  history.writeFile("apps/mlb/page/styles.css", ".part { color: var(--layer); }\n");
+  history.writeFile("apps/mlb/page/js/view.js", "part.style.setProperty('--layer', '1');\n");
+  history.commit("2026-10-07T09:05:00Z");
+  history.readGit(["checkout", "-qb", "feature"]);
+  history.writeFile("apps/mlb/page/js/view.js", "part.style.setProperty('--layer', '2');\n");
+  const head = history.commit("2026-10-07T09:10:00Z");
+  history.readGit(["checkout", "main"]);
+  history.writeFile("apps/mlb/page/styles.css", ".part { z-index: var(--layer); }\n");
+  const red = history.commit("2026-10-07T09:30:00Z");
+  const api = createApprovalApi(history, head, red);
+  await refreshRedApprovals(api);
+  assert.deepEqual(
+    api.statuses.map(({ state }) => state),
+    ["pending"],
+  );
+});
+
+test("a failed pending status or malformed head does not stop later PR refreshes, and fails the job", async (context) => {
+  const history = createGateHistory(context);
+  history.readGit(["checkout", "-qb", "feature"]);
+  history.writeFile("shared/page/sheet.js", "export const draw = 2;\n");
+  const head = history.commit("2026-10-07T09:30:00Z");
+  history.readGit(["checkout", "main"]);
+  const api = createApprovalApi(history, head, history.base);
+  const originalFetch = api.fetchImpl;
+  let statusRequests = 0;
+  api.fetchImpl = async (input, options) => {
+    const url = new URL(String(input));
+    if (url.pathname.endsWith("/pulls"))
+      return new Response(
+        JSON.stringify(
+          [1, 2, 3].map((number) => ({
+            number,
+            head: {
+              sha: number === 1 ? "malformed" : head,
+              repo: { full_name: api.env.GITHUB_REPOSITORY },
+            },
+            labels: [{ name: "phone-ok" }],
+          })),
+        ),
+      );
+    if (url.pathname.includes("/statuses/") && ++statusRequests === 1)
+      return new Response("{}", { status: 502 });
+    return originalFetch(input, options);
+  };
+  await assert.rejects(
+    refreshRedApprovals(api),
+    (error) => error instanceof AggregateError && error.errors.length === 2,
+  );
+  assert.deepEqual(
+    api.statuses.map(({ state }) => state),
+    ["pending", "success"],
+  );
+});
+
+test("a conflicting current merge leaves approval pending and reports refresh failure", async (context) => {
+  const history = createGateHistory(context);
+  history.readGit(["checkout", "-qb", "feature"]);
+  history.writeFile("shared/page/sheet.js", "export const draw = 2;\n");
+  const head = history.commit("2026-10-07T09:30:00Z");
+  history.readGit(["checkout", "main"]);
+  history.writeFile("shared/page/sheet.js", "export const draw = 3;\n");
+  const main = history.commit("2026-10-07T11:00:00Z");
+  const api = createApprovalApi(history, head, main);
+  await assert.rejects(refreshRedApprovals(api), AggregateError);
+  assert.deepEqual(
+    api.statuses.map(({ state }) => state),
+    ["pending"],
+  );
+});
+
 test("approval refresh runs trusted main code after main and deploy changes, with no pull request execution", () => {
   const workflow = readRepoFile(".github/workflows/red-approvals.yml");
   assert.match(workflow, /push:\n\s+branches: \[main\]/);
@@ -2144,6 +2211,10 @@ test("approval refresh runs trusted main code after main and deploy changes, wit
     workflow,
     /pull_request_target|pull_request:|head_sha|actions\/cache|upload-artifact|download-artifact/,
   );
+  assert.equal(
+    readRepoFile(".github/workflows/ci.yml").match(/PHONE_CONTEXT: (\S+)/)?.[1],
+    PHONE_CONTEXT,
+  );
   const gate = readRepoFile(".github/workflows/ci.yml")
     .split("\n  gate:")[1]
     .split("\n  phone:")[0];
@@ -2154,22 +2225,15 @@ test("approval refresh runs trusted main code after main and deploy changes, wit
     [],
   );
   const deploy = readRepoFile(".github/workflows/deploy.yml");
-  assert.ok(
-    deploy.indexOf("- name: Record checked production commit") >
-      deploy.indexOf("- name: Deploy the Worker"),
-  );
+  const upload = deploy.indexOf("- name: Deploy the Worker");
+  const record = deploy.indexOf("- name: Record checked production commit");
+  assert.ok(upload !== -1 && record > upload);
   assert.match(
     deploy,
-    /name: Record checked production commit\n\s+if: env.CHANNEL == 'production' && \(github.event_name != 'push' \|\| steps.passed.outputs.run\)/,
+    /name: Record checked production commit\n\s+if: steps.deploy.outputs.checked-commit/,
   );
-  assert.match(
-    deploy,
-    /TARGET_SHA: \$\{\{ github.event.workflow_run.head_sha \|\| github.sha \}\}/,
-  );
-  assert.match(
-    deploy,
-    /name: production-checked-\$\{\{ github.event.workflow_run.head_sha \|\| github.sha \}\}/,
-  );
+  assert.match(deploy, /TARGET_SHA: \$\{\{ steps.deploy.outputs.checked-commit \}\}/);
+  assert.match(deploy, /name: production-checked-\$\{\{ steps.deploy.outputs.checked-commit \}\}/);
 });
 
 test("ordinary changes never read phone history or deployment evidence, even when labeled phone-ok", async () => {

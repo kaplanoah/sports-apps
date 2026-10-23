@@ -1,6 +1,6 @@
 // Uses Cloudflare's REST API, not wrangler, so it works when a proxy adds the token:
 // wrangler refuses to start without CLOUDFLARE_API_TOKEN in the environment.
-import { readFileSync } from "node:fs";
+import { appendFileSync, readFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { nameServiceBinding } from "../shared/worker/services.js";
@@ -736,16 +736,33 @@ export async function decideMovedOn({ commit, newer, channel }, readCiState) {
   return { isCovered: false, message: `${movedOn}, ${why}, so ${shortCommit} deploys.` };
 }
 
+/**
+ * A covered commit leaves no receipt: newer CI passing does not prove its deploy succeeded.
+ * @param {string[]} workers
+ * @param {{ channel: string, commit: string, newer: string | null }} release
+ * @param {{ readCiState?: typeof readMainCiState, deploy?: (workers: string[], release: { channel: string, commit: string }) => Promise<boolean>, env?: NodeJS.ProcessEnv }} [options]
+ */
+export async function deployCheckedRelease(
+  workers,
+  { channel, commit, newer },
+  { readCiState = readMainCiState, deploy = deployRelease, env = process.env } = {},
+) {
+  const { branch } = findChannel(channel);
+  if (newer) {
+    const { isCovered, message } = await decideMovedOn({ commit, newer, channel }, readCiState);
+    console.log(message);
+    if (isCovered) return true;
+  }
+  console.log(`Deploying ${branch} at ${commit.slice(0, 7)} to ${channel}`);
+  if (!(await deploy(workers, { channel, commit }))) return false;
+  if (channel === "production" && env.GITHUB_OUTPUT)
+    appendFileSync(env.GITHUB_OUTPUT, `checked-commit=${commit}\n`);
+  return true;
+}
+
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const { positionals, channel } = readCommandLineOrExit(process.argv.slice(2));
   const workers = listWorkersOrExit(positionals[0]);
-  const { branch } = findChannel(channel);
-  const { commit, newer } = readReleaseOrExit(channel);
-  if (newer) {
-    const { isCovered, message } = await decideMovedOn({ commit, newer, channel }, readMainCiState);
-    console.log(message);
-    if (isCovered) process.exit(0);
-  }
-  console.log(`Deploying ${branch} at ${commit.slice(0, 7)} to ${channel}`);
-  if (!(await deployRelease(workers, { channel, commit }))) process.exit(1);
+  const release = readReleaseOrExit(channel);
+  if (!(await deployCheckedRelease(workers, { ...release, channel }))) process.exit(1);
 }

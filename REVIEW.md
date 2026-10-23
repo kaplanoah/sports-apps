@@ -63,7 +63,8 @@ In order of what has mattered here.
    naming what the reviewer could newly read or write.
    So is a change to the red-change gate that lets less through,
    its `gate`, `phone`, or `check` job in `.github/workflows/ci.yml`,
-   `worker/red-change.mjs`, or `worker/red-change-styles.mjs`,
+   `worker/red-change.mjs`, `worker/red-change-styles.mjs`, `worker/red-approval.mjs`,
+   or `.github/workflows/red-approvals.yml`,
    naming what it no longer holds for the owner's phone,
    since the pull request's own copy of those jobs runs.
    So is a change to which tests a pull request runs, or which of their failures fail it,

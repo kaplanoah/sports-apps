@@ -260,8 +260,11 @@ since `main` merges only once every thread is resolved.
 
 A change that only an iPhone can test, like one to how the page's parts slide or
 layer, is a red change (`worker/red-change.mjs`). CI holds it on a `phone`
-status on its head commit, which stays pending until the owner has used it on
-the beta app and labeled the pull request `phone-ok`. The repo's ruleset for
+status on its head commit until the owner has tested that head on beta and
+added `phone-ok`, the head contains every red commit on `main`, and main's red
+changes have verified production coverage. The Red approvals workflow
+(`worker/red-approval.mjs`, `.github/workflows/red-approvals.yml`) refreshes
+that status after main or its deploy changes. The repo's ruleset for
 `main` (**Settings > Rules > Rulesets**) requires the `check` and `phone`
 statuses and every review thread resolved. Without `phone` in it, or for a pull
 request from a fork, whose token can't post the status, `check` holds a red

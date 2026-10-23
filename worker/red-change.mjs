@@ -15,14 +15,17 @@
 // phone-ok. Anyone who can label a pull request could add the label, so the gate reads who last
 // added it and lets the change through only from the repository's owner, and only when the label
 // came after the pull request's head commit reached GitHub, which the owner hasn't used on the
-// phone otherwise.
+// phone otherwise. It also requires the tested head to contain every red main commit and
+// preceding red changes to have verified production coverage. Red approvals refreshes the phone
+// status as main or its deployment changes; this remains asynchronous.
 // Usage: git diff --text --no-textconv --no-ext-diff --no-renames <base> |
 //   node worker/red-change.mjs '<labels as JSON>'
 // with PR, HEAD_SHA, GH_TOKEN, GITHUB_REPOSITORY, and GITHUB_REPOSITORY_OWNER set, as Actions sets
 // the last two. The diff shows every file's text, whatever .gitattributes says of it, and ends at
 // the files on disk, as CI's `<base> HEAD` in a clean checkout does, since a changed file before
 // the change is rebuilt from the file and the hunks. It writes whether the change is held to
-// $GITHUB_OUTPUT as held=true or held=false.
+// $GITHUB_OUTPUT as held=true or held=false. Approval checks require full history with origin/main
+// and GitHub actions: read in addition to the label/check-suite permissions.
 import { execFileSync } from "node:child_process";
 import { appendFileSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -851,31 +854,16 @@ function createGateGit(cwd) {
 }
 
 /**
- * Red commits on main since phone approval that the tested head does not contain.
+ * Red commits on main that the tested head does not contain.
  * Read every commit's own tree: later styles or scripts must not change its classification.
- * @param {{ addedAt: number, main?: string, head: string, cwd?: string }} options
+ * @param {{ main?: string, head: string, cwd?: string }} options
  */
-export function findMissingRedCommits({
-  addedAt,
-  main = "origin/main",
-  head,
-  cwd = process.cwd(),
-}) {
-  if (!Number.isFinite(addedAt)) throw new Error("The phone-ok label has no readable time.");
+export function findMissingRedCommits({ main = "origin/main", head, cwd = process.cwd() }) {
   const readGit = createGateGit(cwd);
   // Resolve caller-supplied revisions before putting them in other git argument positions.
   const mainSha = readGit(["rev-parse", "--verify", "--end-of-options", `${main}^{commit}`]).trim();
   const headSha = readGit(["rev-parse", "--verify", "--end-of-options", `${head}^{commit}`]).trim();
-  const commits = readGit([
-    "log",
-    "--first-parent",
-    `--since-as-filter=${new Date(addedAt).toISOString()}`,
-    "--format=%H",
-    mainSha,
-    "--not",
-    headSha,
-    "--",
-  ])
+  const commits = readGit(["log", "--first-parent", "--format=%H", mainSha, "--not", headSha, "--"])
     .trim()
     .split("\n")
     .filter(Boolean);
@@ -892,7 +880,7 @@ export function findMissingRedCommits({
 export function readCommitChange(base, head, cwd = process.cwd()) {
   const readGit = createGateGit(cwd);
   const baseSha = readGit(["rev-parse", "--verify", "--end-of-options", `${base}^{commit}`]).trim();
-  const headSha = readGit(["rev-parse", "--verify", "--end-of-options", `${head}^{commit}`]).trim();
+  const headSha = readGit(["rev-parse", "--verify", "--end-of-options", `${head}^{tree}`]).trim();
   const diff = readGit([
     "diff",
     "--text",
@@ -911,6 +899,25 @@ export function readCommitChange(base, head, cwd = process.cwd()) {
   /** @param {string} path */
   const readPageFile = (path) => (paths.has(path) ? readGit(["show", `${headSha}:${path}`]) : "");
   return { diff, readPageFile, listStylesheets: () => [...paths].filter(isPageStylesheet) };
+}
+
+/** @param {string} main @param {string} head @param {string} [cwd] */
+export function readMergedChange(main, head, cwd = process.cwd()) {
+  const readGit = createGateGit(cwd);
+  const mainSha = readGit(["rev-parse", "--verify", "--end-of-options", `${main}^{commit}`]).trim();
+  const headSha = readGit(["rev-parse", "--verify", "--end-of-options", `${head}^{commit}`]).trim();
+  const tree = readGit([
+    "-c",
+    "core.hooksPath=/dev/null",
+    "-c",
+    "merge.renormalize=false",
+    "merge-tree",
+    "--write-tree",
+    mainSha,
+    headSha,
+  ]).trim();
+  if (!/^[a-f0-9]{40}$/.test(tree)) throw new Error("The current merge tree could not be read.");
+  return readCommitChange(mainSha, tree, cwd);
 }
 
 /**
@@ -955,7 +962,7 @@ export function decideGate(
     return {
       isHeld: true,
       message:
-        `A red change labeled ${PHONE_OK_LABEL} whose phone-tested head lacks a red change merged to main since the label: ` +
+        `A red change labeled ${PHONE_OK_LABEL} whose phone-tested head lacks a red change already merged to main: ` +
         `${missingRedCommits.join(", ")}. Merge main into the branch. ${TO_BETA} ` +
         `The owner takes the label off and adds it again after using it on the beta app.\n${listed}`,
     };
@@ -971,8 +978,8 @@ export function decideGate(
 }
 
 /**
- * A successful workflow can have skipped its upload while waiting for CI on main.
- * Only a successful upload/check step witnesses a finished production deploy.
+ * A receipt records confirmed production coverage. Workflow success alone can also mean the
+ * deploy was superseded without uploading, so it never establishes coverage on its own.
  * @param {(path: string) => Promise<any>} github
  */
 export async function readDeployedMain(github) {
@@ -986,41 +993,30 @@ export async function readDeployedMain(github) {
       run.conclusion !== "success"
     )
       continue;
-    const jobs = await readAllPages(
+    const artifacts = await readAllPages(
       github,
-      `/actions/runs/${run.id}/jobs?filter=latest`,
-      (answer) => answer.jobs,
+      `/actions/runs/${run.id}/artifacts`,
+      (answer) => answer.artifacts,
     );
-    if (
-      jobs.some(
-        (job) =>
-          job.name === "deploy" &&
-          job.conclusion === "success" &&
-          job.steps?.some(
-            (step) => step.name === "Deploy the Worker" && step.conclusion === "success",
+    const commits = [
+      ...new Set(
+        artifacts
+          .filter((artifact) => artifact.expired === false)
+          .flatMap(
+            (artifact) => /^production-checked-([a-f0-9]{40})$/.exec(artifact.name)?.slice(1) ?? [],
           ),
-      )
-    ) {
-      const artifacts = await readAllPages(
-        github,
-        `/actions/runs/${run.id}/artifacts`,
-        (answer) => answer.artifacts,
-      );
-      const receipt = artifacts
-        .filter((artifact) => artifact.expired === false)
-        .map((artifact) => /^production-checked-([a-f0-9]{40})$/.exec(artifact.name)?.[1]);
-      const commits = [...new Set(receipt.filter(Boolean))];
-      if (commits.length === 1) return /** @type {string} */ (commits[0]);
-      if (commits.length > 1) throw new Error("Deploy returned conflicting checked commits.");
-    }
+      ),
+    ];
+    if (commits.length === 1) return commits[0];
+    if (commits.length > 1) throw new Error("Deploy returned conflicting checked commits.");
   }
   throw new Error(
-    "No successful production upload/check with an unexpired checked-commit receipt found in the last ten successful main Deploy runs; legacy runs without receipts cannot establish approval freshness.",
+    "No successful production deploy with an unexpired checked-commit receipt found in the last ten successful main Deploy runs.",
   );
 }
 
 /**
- * Read approval evidence only after the existing gate finds an owner-approved red change.
+ * Read approval evidence only for an owner-approved red change.
  * @param {object} options
  * @param {string} options.diff
  * @param {string[]} options.labels
@@ -1052,11 +1048,11 @@ export async function readRedApproval({
     const labeling = findLabeling(events, PHONE_OK_LABEL, headPushedAt);
     const labeled = decide({ labels, owner, labeling });
     if (labeled.isHeld) return labeled;
-    const missingRedCommits = findMissingRedCommits({ addedAt: labeling.addedAt, head, cwd });
+    const missingRedCommits = findMissingRedCommits({ head, cwd });
     const fresh = decide({ labels, owner, labeling, missingRedCommits });
     if (fresh.isHeld) return fresh;
     const deployed = await readDeployedMain(createGitHub({ repository, fetchImpl, env }));
-    const pendingRedCommits = findMissingRedCommits({ addedAt: 0, head: deployed, cwd });
+    const pendingRedCommits = findMissingRedCommits({ head: deployed, cwd });
     return decide({ labels, owner, labeling, pendingRedCommits });
   } catch (error) {
     return {

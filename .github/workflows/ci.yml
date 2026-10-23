@@ -12,7 +12,7 @@ on:
 permissions:
   contents: read
 
-# The status a held red change waits on, which the phone job sets and check looks for in main's
+# The phone job and trusted Red approvals refresh set this status; check looks for it in main's
 # rules.
 env:
   PHONE_CONTEXT: phone
@@ -115,7 +115,8 @@ jobs:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: git diff --text --no-textconv --no-ext-diff --no-renames HEAD^1 HEAD | node "$RUNNER_TEMP/base/worker/red-change.mjs" "$LABELS"
 
-  # The status a held red change waits on, pending until phone-ok, which main's rules require. It
+  # The status a red change waits on until phone approval, complete red history and verified
+  # production coverage, which main's rules require. It
   # runs none of the pull request's code, since its token can set the status. A fork's pull
   # request gets a token that can't, so it skips this and gets no phone status at all: check holds
   # its red change itself, and while main's rules require the status, it merges only past them.
@@ -127,13 +128,13 @@ jobs:
     permissions:
       statuses: write
     steps:
-      - name: Show on the head whether the owner's phone still has to try it
+      - name: Publish the red approval and production coverage status
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           STATE: ${{ needs.gate.outputs.held == 'true' && 'pending' || 'success' }}
-          DESCRIPTION: ${{ needs.gate.outputs.held == 'true' && 'A red change, waiting for phone-ok from beta' || 'Nothing left for the phone' }}
+          DESCRIPTION: ${{ needs.gate.outputs.held == 'true' && 'A red change, waiting for current phone approval and production coverage' || 'Nothing left for the phone' }}
         run: gh api --method POST "repos/$REPO/statuses/$HEAD_SHA" -f context="$PHONE_CONTEXT" -f state="$STATE" -f description="$DESCRIPTION"
 
   # The quick checks share one machine, which leaves more of the account's runners for the browser
