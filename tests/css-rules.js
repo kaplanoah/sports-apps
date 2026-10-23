@@ -1,9 +1,10 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { listApps } from "../worker/apps.mjs";
+import { REPO_ROOT } from "./repo-files.js";
 
-const SHARED = new URL("../shared/page/", import.meta.url);
-const APPS = new URL("../apps/", import.meta.url);
+const SHARED = new URL("shared/page/", REPO_ROOT);
+const APPS = new URL("apps/", REPO_ROOT);
 
 /** The path of each stylesheet the apps' pages share. */
 export const listSharedStylesheets = () =>
