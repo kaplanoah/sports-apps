@@ -1,3 +1,9 @@
+import {
+  ATTEMPT_TIMEOUT_MS,
+  MAX_ATTEMPTS,
+  CLEANUP_GRACE_MS,
+  CLEANUP_TIMEOUT_MS,
+} from "../worker/install-browsers.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
@@ -84,7 +90,8 @@ test("the nightly browser install has a step timeout that leaves time for the te
   assert.ok(install, "the nightly job installs its browsers");
   const timeout = Number(install.match(/\btimeout-minutes: (\d+)/)?.[1]);
   const jobTimeout = Number(browser.match(/^ {4}timeout-minutes: (\d+)/m)?.[1]);
-  assert.ok(timeout > 0 && timeout <= 10, "the install stops within ten minutes");
+  const budget = MAX_ATTEMPTS * (ATTEMPT_TIMEOUT_MS + CLEANUP_GRACE_MS + CLEANUP_TIMEOUT_MS);
+  assert.ok(timeout * 60000 > budget, "the workflow allows all bounded attempts and cleanup");
   assert.ok(timeout < jobTimeout, "the tests keep their own time after installation");
 });
 

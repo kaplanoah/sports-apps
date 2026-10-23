@@ -6,6 +6,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { installBrowsers } from "../worker/install-browsers.mjs";
 
+const CAN_ELEVATE =
+  process.platform === "linux" &&
+  process.getuid() !== 0 &&
+  spawnSync("sudo", ["-n", "true"]).status === 0;
+
 /** @param {string[]} scripts */
 function createInstaller(scripts) {
   const invocations = [];
@@ -41,7 +46,12 @@ test("the installed Playwright receives separate browser arguments without a she
 });
 
 test("a recognized transport failure gets one retry", async () => {
-  for (const reason of ["ECONNRESET", "EAI_AGAIN", "Download failed: server returned code 503"]) {
+  for (const reason of [
+    "ECONNRESET",
+    "EAI_AGAIN",
+    "Download failed: server returned code 503",
+    "E: Failed to fetch http://example.test/x.deb  503 Service Unavailable",
+  ]) {
     const installer = createInstaller([
       `console.error(${JSON.stringify(reason)}); process.exit(1)`,
       "process.exit(0)",
@@ -58,6 +68,16 @@ test("a second transport failure stops instead of retrying until green", async (
   assert.equal(installer.invocations.length, 2);
 });
 
+test("ordinary package progress cannot suppress a later transport retry", async () => {
+  const installer = createInstaller([
+    'console.log("Get:1 mirror package 1.2.403-1 [403 kB]; unsupported optional notice"); console.error("ECONNRESET"); process.exitCode = 1',
+    "process.exit(0)",
+  ]);
+  assert.equal(await installBrowsers(["webkit"], installer.options), 0);
+  assert.equal(installer.invocations.length, 2);
+  assert.doesNotMatch(installer.messages.join("\n"), /permanent error/);
+});
+
 test("authentication, policy, configuration and unknown failures never retry", async () => {
   for (const reason of [
     "HTTP 401",
@@ -72,7 +92,7 @@ test("authentication, policy, configuration and unknown failures never retry", a
     "https://example.test/builds/503/browser.zip: archive corrupt",
   ]) {
     const installer = createInstaller([
-      `console.error(${JSON.stringify(reason)}); process.exit(1)`,
+      `console.error("Error: " + ${JSON.stringify(reason)}); process.exit(1)`,
     ]);
     assert.equal(await installBrowsers(["webkit"], installer.options), 1, reason);
     assert.equal(installer.invocations.length, 1, reason);
@@ -83,7 +103,7 @@ test("a stalled install stops at its attempt deadline without retrying", async (
   const installer = createInstaller(['console.error("ECONNRESET"); setInterval(() => {}, 1000)']);
   assert.equal(await installBrowsers(["webkit"], { ...installer.options, timeoutMs: 150 }), 124);
   assert.equal(installer.invocations.length, 1);
-  assert.match(installer.messages.join("\n"), /three-minute attempt limit/);
+  assert.match(installer.messages.join("\n"), /0\.15-second attempt limit/);
 });
 
 test("a permanent error before the retained output tail still forbids retry", async () => {
@@ -92,7 +112,7 @@ test("a permanent error before the retained output tail still forbids retry", as
   ]);
   assert.equal(await installBrowsers(["webkit"], installer.options), 1);
   assert.equal(installer.invocations.length, 1);
-  assert.doesNotMatch(installer.messages.join("\n"), /HTTP 403/);
+  assert.equal(installer.messages[1].includes("HTTP 403"), false);
   assert.match(installer.messages.join("\n"), /permanent error.*403/);
 });
 
@@ -216,11 +236,10 @@ test(
   "Ubuntu cleanup stops a root-owned descendant that ignores termination",
   {
     skip:
-      process.platform !== "linux" ||
-      process.getuid() === 0 ||
-      spawnSync("sudo", ["-n", "true"]).status !== 0,
+      process.platform !== "linux" || process.getuid() === 0 || (!process.env.CI && !CAN_ELEVATE),
   },
   async () => {
+    assert.ok(CAN_ELEVATE, "Ubuntu CI must exercise privileged installer cleanup");
     const folder = mkdtempSync(join(tmpdir(), "browser-install-root-"));
     const marker = join(folder, "heartbeat");
     const rootScript = `process.on('SIGTERM', () => {}); const write = () => require('node:fs').writeFileSync(${JSON.stringify(marker)}, String(Date.now())); write(); console.log('ROOT READY'); setInterval(write, 30)`;

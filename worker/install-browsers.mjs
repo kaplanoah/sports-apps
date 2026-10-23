@@ -4,15 +4,15 @@ import { fileURLToPath } from "node:url";
 /** @typedef {(command: string, arguments_: string[], options: import("node:child_process").SpawnOptions) => import("node:child_process").ChildProcess} InstallerSpawn */
 /** @typedef {(command: string, arguments_: string[], options: import("node:child_process").SpawnSyncOptionsWithStringEncoding) => import("node:child_process").SpawnSyncReturns<string>} CleanupSpawn */
 
-const ATTEMPT_TIMEOUT_MS = 3 * 60 * 1000;
-const MAX_ATTEMPTS = 2;
-const CLEANUP_GRACE_MS = 1000;
-const CLEANUP_TIMEOUT_MS = 2000;
+export const ATTEMPT_TIMEOUT_MS = 3 * 60 * 1000;
+export const MAX_ATTEMPTS = 2;
+export const CLEANUP_GRACE_MS = 1000;
+export const CLEANUP_TIMEOUT_MS = 2000;
 const OUTPUT_LIMIT = 16 * 1024;
 const PERMANENT_FAILURE =
-  /\b(?:401|403|407)\b|certificate|permission denied|access denied|not allowed|blocked by|unable to locate package|no installation candidate|unknown option|unsupported|not found/i;
+  /\b(?:HTTP(?:\/\d(?:\.\d)?)?\s+|status(?: code)?\s*[:=]?\s*|server returned(?: code)?\s*[:=]?\s*)(?:401|403|407)\b|Failed to fetch \S+\s+(?:401|403|407)\b|^(?:E:|Error:|npm ERR!|fatal:)[^\n]*(?:certificate|permission denied|access denied|not allowed|blocked by|unable to locate package|no installation candidate|unknown option|unsupported|not found)/im;
 const TRANSIENT_FAILURE =
-  /ECONNRESET|ETIMEDOUT|EAI_AGAIN|ERR_CONNECTION_RESET|socket hang up|temporary failure resolving|connection timed out|connection reset|(?:server returned(?: code)?|status(?: code)?)\s*[:=]?\s*5\d\d\b|\bHTTP(?:\/\d(?:\.\d)?)?\s+5\d\d\b/i;
+  /ECONNRESET|ETIMEDOUT|EAI_AGAIN|ERR_CONNECTION_RESET|socket hang up|temporary failure resolving|connection timed out|connection reset|(?:server returned(?: code)?|status(?: code)?)\s*[:=]?\s*5\d\d\b|\bHTTP(?:\/\d(?:\.\d)?)?\s+5\d\d\b|Failed to fetch \S+\s+5\d\d\b/i;
 
 /** @param {number} processId */
 function isProcessGroupPresent(processId) {
@@ -137,9 +137,11 @@ export async function installBrowsers(
     log = console.log,
   } = {},
 ) {
+  let lastCode = 1;
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
     if (signal?.aborted) return 130;
     const result = await installAttempt(arguments_, { spawnImpl, cleanupSpawn, timeoutMs, signal });
+    lastCode = result.code;
     if (signal?.aborted) {
       log("Browser installation cancelled.");
       if (result.output.trim()) log(result.output.trim());
@@ -151,16 +153,17 @@ export async function installBrowsers(
     }
     log(
       result.timedOut
-        ? "Browser installation exceeded its three-minute attempt limit."
+        ? `Browser installation exceeded its ${timeoutMs / 1000}-second attempt limit.`
         : `Browser installation failed (exit ${result.code}).`,
     );
     if (result.output.trim()) log(result.output.trim());
     if (result.permanentReason)
       log(`A permanent error was reported (${result.permanentReason}); no retry.`);
-    if (attempt === MAX_ATTEMPTS || result.timedOut || !result.retryable) return result.code;
-    log("Retrying browser installation once after a transient transport failure.");
+    if (result.timedOut || !result.retryable) return result.code;
+    if (attempt < MAX_ATTEMPTS)
+      log("Retrying browser installation once after a transient transport failure.");
   }
-  return 1;
+  return lastCode;
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

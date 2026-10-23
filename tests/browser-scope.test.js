@@ -45,6 +45,7 @@ test("shared code, a service, CI's own workflow, the dependencies, and an unknow
     "shared/page/sheet.js",
     "services/accounts/worker/src/index.js",
     ".github/workflows/ci.yml",
+    "worker/install-browsers.mjs",
     "package-lock.json",
     "playwright.config.mjs",
     "tests/fixtures/new.json",

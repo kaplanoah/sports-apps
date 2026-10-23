@@ -60,12 +60,13 @@ export function listReachedFiles(entries, readText) {
  * @param {string} path
  * @param {Set<string>} reached
  */
+const BROWSER_SETUP_FILES = new Set([CI_WORKFLOW, "worker/install-browsers.mjs"]);
 const isUntested = (path, reached) =>
-  isDocument(path) ||
-  CONFIG_ONLY_FILES.has(path) ||
-  // CI's own workflow runs the browser tests, so a change to it runs them to show they still do.
-  (path !== CI_WORKFLOW && UNTESTED_FOLDERS.some((folder) => folder.test(path))) ||
-  (IMPORTED_ONLY.some((pattern) => pattern.test(path)) && !reached.has(path));
+  !BROWSER_SETUP_FILES.has(path) &&
+  (isDocument(path) ||
+    CONFIG_ONLY_FILES.has(path) ||
+    UNTESTED_FOLDERS.some((folder) => folder.test(path)) ||
+    (IMPORTED_ONLY.some((pattern) => pattern.test(path)) && !reached.has(path)));
 
 /** @param {string} path */
 const readAppFolder = (path) => path.match(/^apps\/([^/]+)\//)?.[1] ?? null;
