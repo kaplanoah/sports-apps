@@ -371,6 +371,24 @@ test("at 300,000 tokens quoted digits before heredocs stay option values", () =>
     }
 });
 
+test("at 300,000 tokens named heredoc descriptors cannot shift API or fetch options", () => {
+  for (const name of ["owner", "repo"])
+    for (const heredoc of ["<<'EOF'", '<<"EOF"', "<<-'EOF'"]) {
+      const descriptor = `{${name}}`;
+      for (const command of [
+        `gh api repos/o/r/git/refs/heads/beta -XDELETE -t ${descriptor}${heredoc} -XGET\nx\nEOF`,
+        `git fetch -o ${descriptor}${heredoc} --upload-pack=evil .\nx\nEOF`,
+      ])
+        assert.ok(answerStopCommand(command), command);
+      for (const argument of [`'${descriptor}'`, `"${descriptor}"`, `\\${descriptor}`])
+        for (const command of [
+          `gh api repos/o/r/git/refs/heads/beta -XDELETE -t ${argument}${heredoc} -XGET\nx\nEOF`,
+          `git fetch -o ${argument}${heredoc} -- origin\nx\nEOF`,
+        ])
+          assert.equal(answerStopCommand(command), null, command);
+    }
+});
+
 for (const command of [
   "git diff --output=AGENTS.md origin/main",
   "git log --output=AGENTS.md",

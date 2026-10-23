@@ -82,6 +82,36 @@ test("only bare digits before a heredoc are file descriptors", () => {
   );
 });
 
+test("named heredoc descriptors fail closed while literal placeholders stay arguments", () => {
+  for (const name of ["owner", "repo"])
+    for (const heredoc of ["<<'EOF'", '<<"EOF"', "<<-'EOF'"]) {
+      const descriptor = `{${name}}`;
+      assert.equal(parseCommandWords(`gh api -t ${descriptor}${heredoc}\nx\nEOF`), null);
+      for (const literal of [
+        `'${descriptor}'`,
+        `"${descriptor}"`,
+        `\\${descriptor}`,
+        `''${descriptor}`,
+        `${descriptor}''`,
+      ])
+        assert.deepEqual(
+          parseCommandWords(`gh api -t ${literal}${heredoc}\nx\nEOF`),
+          ["gh", "api", "-t", descriptor],
+          literal,
+        );
+      assert.deepEqual(parseCommandWords(`gh api -t ${descriptor} ${heredoc}\nx\nEOF`), [
+        "gh",
+        "api",
+        "-t",
+        descriptor,
+      ]);
+      assert.deepEqual(
+        parseCommandWords(`gh api repos/${descriptor}/example/pulls/1${heredoc} -X PATCH\nx\nEOF`),
+        ["gh", "api", `repos/${descriptor}/example/pulls/1`, "-X", "PATCH"],
+      );
+    }
+});
+
 test("literal arguments share the scanner's quoted heredoc handling", () => {
   for (const operator of ["<<'EOF'", '<<"EOF"', "<<-'EOF'"])
     assert.deepEqual(parseCommandWords(`git commit -F - ${operator}\n$MESSAGE; a && b\nEOF`), [

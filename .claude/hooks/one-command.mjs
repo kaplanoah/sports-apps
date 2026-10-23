@@ -216,6 +216,7 @@ function scanCommandText(text, subshellStarts) {
     }
     const heredoc = text.startsWith("<<", at) ? readHeredoc(text, at) : null;
     if (heredoc) {
+      if (!isWordQuoted && /^\{\w+\}$/.test(word)) hasExpansion = true;
       if (!isWordQuoted && /^\d+$/.test(word)) {
         word = "";
         hasWord = false;
