@@ -42,6 +42,10 @@ paths:
   and the owner approves each when `.claude/settings.json` asks.
   Never hand the owner one to run on their own computer, which has neither the token nor the account ID,
   unless they ask to.
+- `npm run rework` estimates follow-up fixes from overlapping files in merged PRs and reports their monthly share.
+  Run `git fetch origin main` first, since it reads the locally fetched `origin/main` and a stale fetch gives a stale report.
+  It fails if that reference is missing.
+  File overlap is an estimate, not proof that an earlier PR caused a fix.
 - `npm run rollback -- <worker>` puts an app's or a service's previous version back at all of its traffic and prints which commit was live and which is now.
   Run it only when the user asks.
 - `npm run set-app-key -- <app>` gives that app's Worker its `APP_KEY` and prints the page's address.
@@ -53,7 +57,7 @@ paths:
 - `npm run set-page-host -- <app> <host>` points a host on a domain in the Cloudflare account at that app's Worker and names it in the Worker's `PAGE_HOST` secret,
   so the page also opens there without its key, behind its access code, which it needs first; the user picks the host.
   The address with the key keeps working, and phones stay signed in there.
-  An app moving to its own address sends its fans on there with their choices,
+  While the Worker has both the host and a code, it marks the page under the key as moving and sends fans on with their choices,
   a browser at once and a Home Screen app from a card in its Updates box (`shared/page/page-move.js`).
   Keep the host out of the repo, as the Worker's own address is.
 - `npm run set-email-key` gives the accounts service the `EMAIL_KEY` secret it hashes each email under, made at random and never printed, with `-- --channel beta` for beta's.

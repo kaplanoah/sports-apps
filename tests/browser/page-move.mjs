@@ -78,13 +78,29 @@ const findNewAddress = (pageHost) => `https://${pageHost}/`;
  * @param {string} pageHost
  * @param {() => Promise<unknown>} leave
  */
-async function followHandoff(page, pageHost, leave) {
-  const handoff = page.waitForResponse(`${findNewAddress(pageHost)}access/handoff?**`);
-  await leave();
-  const response = await handoff;
-  const address = new URL(response.headers().location, response.url());
-  await page.goto(address.href);
-  return address;
+export async function followHandoff(page, pageHost, leave) {
+  const cancellation = new AbortController();
+  /** @param {import("@playwright/test").Frame} frame */
+  const isHandoffCommit = (frame) =>
+    frame === page.mainFrame() && frame.url() === "chrome-error://chromewebdata/";
+  // The un-routed redirect cannot serve the fixture host, so Chromium commits its error document.
+  const committed = page.waitForEvent("framenavigated", {
+    predicate: isHandoffCommit,
+    signal: cancellation.signal,
+  });
+  try {
+    const destination = page
+      .waitForResponse(`${findNewAddress(pageHost)}access/handoff?**`, {
+        signal: cancellation.signal,
+      })
+      .then((response) => new URL(response.headers().location, response.url()));
+    // Response headers (and even response.finished()) precede the redirected document's commit.
+    const [address] = await Promise.all([destination, committed, Promise.resolve().then(leave)]);
+    await page.goto(address.href);
+    return address;
+  } finally {
+    cancellation.abort();
+  }
 }
 
 /**
@@ -167,7 +183,7 @@ export async function checkSafariMoves({ page, serve, pageHost, oldHost }) {
 /**
  * Opens the Home Screen app at the old address, signed in, with `choices` kept, as it was added,
  * with the theme its address named then, if any.
- * @param {Pick<MovingApp, "page" | "serve" | "pageHost" | "oldHost">} app
+ * @param {Pick<MovingApp, "page" | "serve" | "oldHost"> & { pageHost?: string }} app
  * @param {Record<string, unknown>} [choices]
  * @param {string} [addedOnTheme]
  */
@@ -180,6 +196,16 @@ export async function openOldHomeScreenApp(
   await serve(page, { accessCode: ACCESS_CODE, pageHost });
   await signIn(page, findOldAddress(oldHost), choices);
   await page.goto(`${findOldAddress(oldHost)}${addedOnTheme ? `?theme=${addedOnTheme}` : ""}`);
+}
+
+/** @param {Pick<MovingApp, "page" | "serve" | "oldHost">} app */
+export async function checkHomeScreenWithoutPageHost({ page, serve, oldHost }) {
+  await openOldHomeScreenApp({ page, serve, oldHost });
+  await waitForLoadToSettle(page);
+  await expect(page.locator('meta[name="moving-to-page-host"]')).toHaveCount(0);
+  await expect(page.getByRole("button", { name: MOVE_BUTTON })).toHaveCount(0);
+  await expect(page.locator(".move-card-title")).toHaveCount(0);
+  await expect(page).toHaveURL(findOldAddress(oldHost));
 }
 
 /** @param {import("@playwright/test").Page} page */

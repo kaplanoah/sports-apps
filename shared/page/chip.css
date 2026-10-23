@@ -11,7 +11,7 @@
  * is even.
  *
  * A chip of numbers rather than words, like MLB's rank tag, adds .numbers, which sets them in the
- * Caption role, untracked and with no capitals, in the app's --chip-numbers-face and at its
+ * Caption role, untracked and with no capitals, in the app's --numbers and at its
  * --chip-numbers-height, the height that puts that face's baseline on a whole pixel.
  *
  * Its words are trimmed to their capitals and centered in its fixed height, so they sit in its
@@ -48,7 +48,7 @@
 }
 .chip.numbers {
   height: var(--chip-numbers-height);
-  font-family: var(--chip-numbers-face);
+  font-family: var(--numbers);
   font-size: var(--type-caption-size);
   font-weight: calc(var(--type-caption-weight) + 150);
   letter-spacing: 0;

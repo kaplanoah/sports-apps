@@ -1,6 +1,7 @@
 // Decides which apps' browser tests a change needs. A file the browser tests can't reach needs
-// none: the docs, the other workflows, the files that only configure the checks, and the tooling
-// and Node tests that no browser spec, helper, or the Playwright config imports. A file in an
+// none: the docs, the root's .claude/ settings, hooks, rules, and skills, the other workflows,
+// the files that only configure the checks, and the tooling and Node tests that no browser
+// spec, helper, or the Playwright config imports. A file in an
 // app's own folder needs that app's, if it has any. Anything else needs every app's, a service's
 // folder too, since every app binds every service, and a new kind of file runs them all until
 // it's known.
@@ -10,11 +11,11 @@ import { appendFileSync, existsSync, readFileSync, readdirSync } from "node:fs";
 import { join, posix } from "node:path";
 import { fileURLToPath } from "node:url";
 import { listAppsWithBrowserTests } from "./apps.mjs";
-import { CONFIG_ONLY_FILES, isDocument } from "./deploy-scope.mjs";
+import { CONFIG_ONLY_FILES, isDocument, isSessionPath } from "./deploy-scope.mjs";
 import { CI_WORKFLOW } from "./find-passed-ci.mjs";
 import { resolvePackageImport } from "./package-imports.mjs";
 
-const UNTESTED_FOLDERS = [/^\.claude\//, /^\.github\//, /^types\//];
+const UNTESTED_FOLDERS = [/^\.github\//, /^types\//];
 // Code here reaches the browser tests only by import, which the reached files list.
 const IMPORTED_ONLY = [
   /^worker\/[^/]+\.mjs$/,
@@ -64,6 +65,7 @@ const BROWSER_SETUP_FILES = new Set([CI_WORKFLOW, "worker/install-browsers.mjs"]
 const isUntested = (path, reached) =>
   !BROWSER_SETUP_FILES.has(path) &&
   (isDocument(path) ||
+    isSessionPath(path) ||
     CONFIG_ONLY_FILES.has(path) ||
     UNTESTED_FOLDERS.some((folder) => folder.test(path)) ||
     (IMPORTED_ONLY.some((pattern) => pattern.test(path)) && !reached.has(path)));

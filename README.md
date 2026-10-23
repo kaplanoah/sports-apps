@@ -178,8 +178,8 @@ one, and `--remove` stops asking. Never commit or post the code.
 To give the page an address of its own, on a domain in the Cloudflare account,
 run `npm run set-page-host -- <app> <host>` once the page has a code. It points
 `https://<host>/` at the Worker, which opens the page there without the key,
-behind the code alone. The address with the key keeps working, but an app that's
-moving to its own address sends its fans on there with their choices: a browser
+behind the code alone. The address with the key keeps working. While the Worker has both the host and
+a code, it marks the page there as moving and sends fans on with their choices: a browser
 at once, and a Home Screen app from a card in its Updates box. Keep the host out
 of the repo, as the Worker's own address is.
 
@@ -283,6 +283,11 @@ nothing a fork sends runs until the owner has read it and approved its run.
 To run the
 same checks yourself, run `npm ci` and `npx playwright install chromium` once,
 then `npm run check`. `npm run format` fixes formatting.
+
+After `git fetch origin main`, run `npm run rework` for a file-overlap estimate
+of follow-up fixes and their monthly share. It reads the locally fetched
+`origin/main`, so a stale fetch gives a stale report and a missing reference
+fails the command. Overlap does not prove an earlier PR caused a fix.
 
 Each app's Worker carries its page. Every deploy bundles both from the source it
 deploys, so there is nothing to rebuild by hand. `npm run build` writes each
