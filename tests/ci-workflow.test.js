@@ -62,12 +62,50 @@ test("mutation testing runs weekly and keeps its uncaught mutations in a report"
   assert.match(readStepScript(workflow, "Test mutations"), /npm run test:mutation/);
   assert.match(workflow, /path: reports\/mutation\//);
   assert.match(workflow, /if-no-files-found: error/);
-  const targets = workflow.match(/target: \[([^\]]+)\]/)?.[1].split(/,\s*/);
+  const targets = [...workflow.matchAll(/^ {10}- target: ([a-z-]+)$/gm)].map(
+    ([, target]) => target,
+  );
   assert.deepEqual(targets, MUTATION_TARGETS);
   assert.match(workflow, /fail-fast: false/);
   assert.match(workflow, /MUTATION_TARGET: \$\{\{ matrix.target \}\}/);
   assert.match(workflow, /if: \$\{\{ always\(\) \}\}/);
   assert.match(workflow, /name: mutation-report-\$\{\{ matrix.target \}\}/);
+});
+
+test("each mutation target leaves setup and report time below GitHub's six-hour limit", () => {
+  const workflow = readRepoFile(".github/workflows/mutation.yml");
+  assert.match(workflow, /^ {4}timeout-minutes: \$\{\{ matrix.job-minutes \}\}$/m);
+  const testStep = workflow
+    .split(/^ {6}- /m)
+    .find((step) => step.startsWith("name: Test mutations\n"));
+  assert.ok(testStep);
+  assert.match(testStep, /timeout-minutes: \$\{\{ matrix.test-minutes \}\}/);
+  const uploadStep = workflow
+    .split(/^ {6}- /m)
+    .find((step) => step.startsWith("uses: actions/upload-artifact@"));
+  assert.ok(uploadStep);
+  assert.match(uploadStep, /if: \$\{\{ always\(\) \}\}/);
+  const uploadMinutes = Number(uploadStep.match(/timeout-minutes: (\d+)/)?.[1]);
+  assert.ok(uploadMinutes > 0);
+  const budgets = [
+    ...workflow.matchAll(
+      /^ {10}- target: ([a-z-]+)\n {12}test-minutes: (\d+)\n {12}job-minutes: (\d+)$/gm,
+    ),
+  ];
+  assert.deepEqual(
+    budgets.map(([, target]) => target),
+    MUTATION_TARGETS,
+  );
+  for (const [, target, tests, job] of budgets) {
+    const testMinutes = Number(tests);
+    const jobMinutes = Number(job);
+    assert.ok(testMinutes > 0, `${target}: a finite mutation deadline`);
+    assert.ok(jobMinutes <= 360, `${target}: within GitHub's six-hour job limit`);
+    assert.ok(
+      jobMinutes - testMinutes >= 10 + uploadMinutes,
+      `${target}: setup and upload retain their time`,
+    );
+  }
 });
 
 test("the mutation workflow saves failed command output without hiding its exit status", (t) => {
@@ -77,7 +115,7 @@ test("the mutation workflow saves failed command output without hiding its exit 
     mode: 0o755,
   });
   const workflow = readRepoFile(".github/workflows/mutation.yml");
-  assert.match(workflow, /name: Test mutations\n\s+shell: bash/);
+  assert.match(workflow, /name: Test mutations\n\s+timeout-minutes: [^\n]+\n\s+shell: bash/);
   const script = readStepScript(workflow, "Test mutations");
   const result = spawnSync(
     "bash",
