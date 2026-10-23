@@ -14,8 +14,8 @@ const UNREACHABLE = "Can't reach the page's server right now";
 
 /** @type {ReturnType<typeof createSeasonReader> | null} */
 let reader = null;
-/** @type {(year: number) => Promise<import("#shared/season-reader.js").PickOutcome>} */
-let pickSeason = async () => ({ kind: "replaced" });
+/** @type {(year: number) => Promise<void>} */
+let pickSeason = async () => {};
 /** @type {number | null} */
 let scheduleYear = null;
 let unwatchSchedule = () => {};
@@ -73,6 +73,7 @@ const noteUnreachable = () => {
 export function startSeasonData({ showChange, showStamp, showCurrentYear, showUnreadable }) {
   reader = createSeasonReader({
     store: session.db,
+    readPick: () => session.pickedYear,
     version: SNAPSHOT_VERSION,
     showUnreadable,
     guessYear: (now) => readEasternDay(now).year,
@@ -99,7 +100,6 @@ export function startSeasonData({ showChange, showStamp, showCurrentYear, showUn
   });
   pickSeason = createSeasonPicks({
     reader,
-    readPick: () => session.pickedYear,
     keepPick: (year) => {
       session.pickedYear = year;
     },
@@ -120,9 +120,12 @@ export async function loadSeason() {
 
 /**
  * Shows the season picked, keeping it in `session.pickedYear` while its record is on its way.
- * @type {(year: number) => Promise<import("#shared/season-reader.js").PickOutcome>}
+ * @type {(year: number) => Promise<void>}
  */
 export const showYear = (year) => pickSeason(year);
+
+/** @param {(selection: import("#shared/season-reader.js").SeasonSelection) => void} watcher */
+export const watchSeasonSelection = (watcher) => reader?.watchSelection(watcher);
 
 /** The years of the seasons the store keeps, newest first. */
 export async function loadSeasonYears() {

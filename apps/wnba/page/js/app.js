@@ -55,7 +55,13 @@ import { listFoundGameDays, listListedGames, listSeasonDays } from "./games-view
 import { NEWS_LEAGUE } from "./news-league.js";
 import { refreshPlayerSheet, startPlayerSheet } from "./player-sheet.js";
 import { fillRoster, readShownRoster, reopenRoster, startRosterSection } from "./roster-section.js";
-import { loadSeason, loadSeasonYears, showYear, startSeasonData } from "./season-data.js";
+import {
+  loadSeason,
+  loadSeasonYears,
+  showYear,
+  startSeasonData,
+  watchSeasonSelection,
+} from "./season-data.js";
 import { isPastSeason, session } from "./session.js";
 import { SNAPSHOT_VERSION } from "./snapshot.js";
 import { isFieldSet, isPlayoffsOver } from "./series.js";
@@ -309,11 +315,6 @@ async function boot() {
   startChannelTag();
   startNewsRedraws(findElement("newsList"), drawNews, NEWS_LEAGUE);
   startHomeScreen();
-  watchSeasonPicks(findSeasonRow(), {
-    pick: showYear,
-    showPicked: drawPickedSeason,
-    showUnread: () => redrawEased(renderStamp),
-  });
   startBracket();
   startBracketStandings();
   session.db = createWorkerStore({ isShowing: hasDrawing });
@@ -329,6 +330,12 @@ async function boot() {
     showStamp: () => redrawEased(renderStamp),
     showCurrentYear: showNewCurrentYear,
     showUnreadable: reloadIfReplaced,
+  });
+  watchSeasonPicks(findSeasonRow(), {
+    pick: showYear,
+    watchSelection: watchSeasonSelection,
+    showPicked: drawPickedSeason,
+    showUnread: () => redrawEased(renderStamp),
   });
   const [years] = await Promise.all([readSeasonYears(), loadSeason()]);
   fillSeasonList(years);
