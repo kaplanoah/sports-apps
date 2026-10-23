@@ -1,9 +1,89 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
-import { findCommandProblem, findSeparator } from "../.claude/hooks/one-command.mjs";
+import {
+  findCommandProblem,
+  findSeparator,
+  parseCommandWords,
+} from "../.claude/hooks/one-command.mjs";
 
 const HOOK = `${import.meta.dirname}/../.claude/hooks/one-command.mjs`;
+
+test("literal arguments preserve quoting, escapes, descriptors, and word comments", () => {
+  assert.deepEqual(parseCommandWords('gh api -H "a\\b" repos/o/r/issues -X DELETE'), [
+    "gh",
+    "api",
+    "-H",
+    "a\\b",
+    "repos/o/r/issues",
+    "-X",
+    "DELETE",
+  ]);
+  assert.deepEqual(parseCommandWords("gh api repos/o/r/issues x#y # ignored -X DELETE"), [
+    "gh",
+    "api",
+    "repos/o/r/issues",
+    "x#y",
+  ]);
+  assert.deepEqual(parseCommandWords("gh api 0<<'EOF' repos/o/r/pulls/1 -X PATCH\nx\nEOF"), [
+    "gh",
+    "api",
+    "repos/o/r/pulls/1",
+    "-X",
+    "PATCH",
+  ]);
+  assert.deepEqual(parseCommandWords("git commit -m ''"), ["git", "commit", "-m", ""]);
+  assert.deepEqual(parseCommandWords('git commit -m "\\$name \\"quoted\\""'), [
+    "git",
+    "commit",
+    "-m",
+    '$name "quoted"',
+  ]);
+});
+
+test("literal arguments fail closed on unfinished input and shell operators", () => {
+  for (const command of [
+    "gh api repos/o/r/issues -X 'DELETE",
+    'gh api repos/o/r/issues -X "GET',
+    "git diff \\",
+    "gh api <<< '-X GET' repos/o/r/issues",
+    "git diff | cat",
+    "git diff &",
+    "git diff; git status",
+    "git diff ${OPTIONS}",
+    'git diff "$OPTIONS"',
+    "git diff {HEAD,main}",
+    "git diff {1..2}",
+    "git diff [ab]",
+    "git diff @(HEAD)",
+    "git commit -F - <<'EOF'",
+    "git commit -F - <<EOF\n${MESSAGE}\nEOF",
+  ])
+    assert.equal(parseCommandWords(command), null, command);
+});
+
+test("literal arguments share the scanner's quoted heredoc handling", () => {
+  for (const operator of ["<<'EOF'", '<<"EOF"', "<<-'EOF'"])
+    assert.deepEqual(parseCommandWords(`git commit -F - ${operator}\n$MESSAGE; a && b\nEOF`), [
+      "git",
+      "commit",
+      "-F",
+      "-",
+    ]);
+  assert.deepEqual(parseCommandWords("git commit -F - <<'A' <<'B'\na && b\nA\nc; d\nB"), [
+    "git",
+    "commit",
+    "-F",
+    "-",
+  ]);
+  assert.deepEqual(parseCommandWords("gh api repos/{owner}/{repo}/pulls/1 -X PATCH"), [
+    "gh",
+    "api",
+    "repos/{owner}/{repo}/pulls/1",
+    "-X",
+    "PATCH",
+  ]);
+});
 
 test("a call that starts with cd is blocked, and a word that only starts with cd isn't", () => {
   assert.match(findCommandProblem("cd apps/wnba") ?? "", /^It starts with cd\./);
@@ -78,6 +158,16 @@ test("parentheses inside $(...) nest, so what follows them is still inside it", 
 
 test("a heredoc's end lets the check go on to what follows it", () => {
   assert.equal(findSeparator("cat <<EOF\nbody;\nEOF\ngit push"), "a line break");
+});
+
+test("a heredoc's opening line is scanned before its body", () => {
+  for (const operator of ["&&", ";", "||", "&"])
+    assert.equal(
+      findSeparator(`git commit -F - <<'EOF' ${operator} git push -f origin main\nmsg\nEOF`),
+      operator,
+    );
+  assert.equal(findSeparator("cat <<'EOF' | cat\nbody && text\nEOF"), null);
+  assert.equal(findSeparator("cat <<'EOF' # ignored && text\nbody\nEOF"), null);
 });
 
 test("the hook blocks a broken call with exit code 2 and its reason, and passes one command", () => {

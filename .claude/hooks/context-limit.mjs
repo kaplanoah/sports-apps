@@ -5,7 +5,7 @@
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
-import { findPipeOrRedirect, findSeparator } from "./one-command.mjs";
+import { parseCommandWords } from "./one-command.mjs";
 
 const REMINDER_TOKENS = 200_000;
 const REMINDER_STEP_TOKENS = 10_000;
@@ -42,10 +42,8 @@ const HANDOFF_COMMANDS = [
   /^gh\s+pr\s+(?:view|checks|diff|create|edit|comment|merge)\b/,
   /^gh\s+run\s+(?:view|list|watch)\b/,
 ];
-const PUSH = /^git\s+push\b(.*)$/s;
 const PUSH_OPTIONS = new Set(["-u", "--set-upstream"]);
 const SHARED_BRANCHES = new Set(["main", "beta"]);
-const GH_API = /^gh\s+api\b(.*)$/s;
 const GH_API_VALUE_OPTIONS = new Set([
   "-X",
   "--method",
@@ -65,6 +63,19 @@ const GH_API_VALUE_OPTIONS = new Set([
   "-p",
   "--preview",
 ]);
+const FETCH_VALUE_OPTIONS = [
+  "--server-option",
+  "--jobs",
+  "--depth",
+  "--deepen",
+  "--shallow-since",
+  "--shallow-exclude",
+  "--negotiation-tip",
+  "--filter",
+  "--refmap",
+  "--submodule-prefix",
+  "--recurse-submodules-default",
+];
 // The PR, its comments and replies, and its merge: what a handoff writes through REST.
 const PULL_REQUEST_ENDPOINT =
   /^\/?repos\/[^/\s]+\/[^/\s]+\/(?:pulls(?:\/\d+(?:\/(?:merge|comments(?:\/\d+\/replies)?))?)?|issues\/\d+\/comments)(?:\?\S*)?$/;
@@ -151,14 +162,14 @@ const countReminderSteps = (tokens) =>
 /**
  * Whether a push's arguments push only the branch checked out, to its own name on origin, with
  * no force: `git push [-u] [origin] [HEAD | <branch>]`.
- * @param {string} pushArguments
+ * @param {string[]} pushArguments
  * @param {string} branch the branch checked out, or "" when it couldn't be read
  */
 function isOwnBranchPush(pushArguments, branch) {
   if (!branch || SHARED_BRANCHES.has(branch)) return false;
-  const [remote = "origin", target = branch, ...rest] = pushArguments
-    .split(/\s+/)
-    .filter((word) => word && !PUSH_OPTIONS.has(word));
+  const [remote = "origin", target = branch, ...rest] = pushArguments.filter(
+    (word) => !PUSH_OPTIONS.has(word),
+  );
   return remote === "origin" && (target === "HEAD" || target === branch) && rest.length === 0;
 }
 
@@ -168,6 +179,7 @@ function isOwnBranchPush(pushArguments, branch) {
  */
 function findApiEndpoint(words) {
   for (let index = 0; index < words.length; index += 1) {
+    if (words[index] === "--") return words[index + 1] ?? "";
     if (GH_API_VALUE_OPTIONS.has(words[index])) index += 1;
     else if (!words[index].startsWith("-")) return words[index];
   }
@@ -175,63 +187,51 @@ function findApiEndpoint(words) {
 }
 
 /**
- * A command's words with shell quotes and escapes removed, or null for unfinished quoting.
- * @param {string} command
+ * Separate gh's shorthand flags, stopping each cluster at its first value-taking flag.
+ * @param {string[]} words
+ * @returns {string[] | null}
  */
-function parseCommandWords(command) {
+function expandApiOptions(words) {
   /** @type {string[]} */
-  const words = [];
-  let word = "";
-  let quote = "";
-  let hasWord = false;
-  let isHeredocDelimiter = false;
-  function finishWord() {
-    if (!hasWord) return;
-    if (isHeredocDelimiter) isHeredocDelimiter = false;
-    else words.push(word);
-    word = "";
-    hasWord = false;
-  }
-  for (let index = 0; index < command.length; index += 1) {
-    const char = command[index];
-    if (char === "\\" && quote !== "'") {
-      const next = command[index + 1];
-      if (next === undefined) return null;
-      if (!quote || /[$`"\\\n]/.test(next)) {
-        if (next !== "\n") {
-          word += next;
-          hasWord = true;
-        }
-        index += 1;
-      } else {
-        word += char;
-        hasWord = true;
+  const expanded = [];
+  for (let index = 0; index < words.length; index += 1) {
+    const word = words[index];
+    if (word === "--") return expanded.concat(words.slice(index));
+    if (!word.startsWith("-") || word.startsWith("--") || word === "-") {
+      expanded.push(word);
+      if (GH_API_VALUE_OPTIONS.has(word)) expanded.push(words[++index] ?? "");
+      continue;
+    }
+    for (let at = 1; at < word.length; at += 1) {
+      const option = `-${word[at]}`;
+      if (GH_API_VALUE_OPTIONS.has(option)) {
+        const attached = word.slice(at + 1).replace(/^=/, "");
+        expanded.push(option, attached || (words[++index] ?? ""));
+        break;
       }
-    } else if (quote) {
-      if (char === quote) quote = "";
-      else word += char;
-    } else if (char === "'" || char === '"') {
-      quote = char;
-      hasWord = true;
-    } else if (command.startsWith("<<", index)) {
-      if (/^\d+$/.test(word)) {
-        word = "";
-        hasWord = false;
-      } else finishWord();
-      isHeredocDelimiter = true;
-      index += command[index + 2] === "-" ? 2 : 1;
-    } else if (char === "\n" || (char === "#" && !hasWord)) {
-      break;
-    } else if (/\s/.test(char)) {
-      finishWord();
-    } else {
-      word += char;
-      hasWord = true;
+      if (option !== "-i" && option !== "-h") return null;
+      expanded.push(option);
     }
   }
-  if (quote) return null;
-  finishWord();
-  return words;
+  return expanded;
+}
+
+/** @param {string[]} words */
+function isHandoffFetch(words) {
+  for (let index = 0; index < words.length; index += 1) {
+    const word = words[index];
+    if (word === "--") break;
+    const [option] = word.split("=");
+    if ((option.length >= 5 && "--upload-pack".startsWith(option)) || word.startsWith("-u"))
+      return false;
+    if (/^-[^-]/.test(word) && word.length > 2 && !/^-[oj]/.test(word)) return false;
+    const takesValue =
+      word === "-o" ||
+      word === "-j" ||
+      (option.startsWith("--") && FETCH_VALUE_OPTIONS.some((name) => name.startsWith(option)));
+    if (takesValue && !word.includes("=")) index += 1;
+  }
+  return true;
 }
 
 /**
@@ -244,30 +244,27 @@ function isHandoffGitCommand(words) {
   if (!HANDOFF_GIT_COMMANDS.has(command)) return false;
   const hasDiffOptions = command === "diff" || command === "log" || command === "show";
   const argumentsAfterCommand = words.slice(commandIndex + 1);
+  if (command === "fetch") return isHandoffFetch(argumentsAfterCommand);
   const endOfOptions = argumentsAfterCommand.indexOf("--");
   const options =
     endOfOptions < 0 ? argumentsAfterCommand : argumentsAfterCommand.slice(0, endOfOptions);
-  return !options.some(
-    (word) =>
-      (hasDiffOptions && /^--(?:output|ext-diff)(?:=|$)/.test(word)) ||
-      (command === "fetch" && /^(?:--upload-pack(?:=|$)|-u)/.test(word)),
-  );
+  return !options.some((word) => hasDiffOptions && /^--(?:output|ext-diff)(?:=|$)/.test(word));
 }
 
 /**
  * Whether a `gh api` call only reads, or writes only the PR: its description, comments, replies,
  * and merge. A call that sends fields and names no method posts them.
- * @param {string} apiArguments
+ * @param {string[]} apiArguments
  */
 function isHandoffApiCall(apiArguments) {
-  const words = parseCommandWords(apiArguments);
+  const words = expandApiOptions(apiArguments);
   if (!words) return false;
   let method;
   let hasFields = false;
   for (let index = 0; index < words.length; index += 1) {
     const word = words[index];
+    if (word === "--") break;
     if (word === "-X" || word === "--method") method = words[index + 1] ?? "";
-    else if (word.startsWith("-X")) method = word.slice(2);
     else if (word.startsWith("--method=")) method = word.slice("--method=".length);
     if (/^(?:-[fF]|--field|--raw-field|--input)/.test(word)) hasFields = true;
     if (GH_API_VALUE_OPTIONS.has(word)) index += 1;
@@ -284,16 +281,12 @@ function isHandoffApiCall(apiArguments) {
  * @param {string} branch
  */
 function isHandoffCommand(command, branch) {
-  const trimmed = command.trim();
-  if (findSeparator(trimmed) || findPipeOrRedirect(trimmed)) return false;
-  const push = PUSH.exec(trimmed);
-  if (push) return isOwnBranchPush(push[1], branch);
-  const api = GH_API.exec(trimmed);
-  if (api) return isHandoffApiCall(api[1]);
-  const words = parseCommandWords(trimmed);
+  const words = parseCommandWords(command);
   if (!words) return false;
+  if (words[0] === "git" && words[1] === "push") return isOwnBranchPush(words.slice(2), branch);
+  if (words[0] === "gh" && words[1] === "api") return isHandoffApiCall(words.slice(2));
   if (words[0] === "git") return isHandoffGitCommand(words);
-  return HANDOFF_COMMANDS.some((pattern) => pattern.test(trimmed));
+  return HANDOFF_COMMANDS.some((pattern) => pattern.test(words.join(" ")));
 }
 
 /**

@@ -20,7 +20,7 @@ const SUBSTITUTION = "a command substitution";
  * @param {number} at the index of `<<`
  */
 function readHeredoc(command, at) {
-  const match = /^<<-?\s*(['"]?)([\w.-]+)\1/.exec(command.slice(at));
+  const match = /^<<-?[ \t]*(['"]?)([\w.-]+)\1(?=[\s;&|<>]|$)/.exec(command.slice(at));
   if (!match || command[at + 2] === "<") return null;
   return { delimiter: match[2], end: at + match[0].length, isQuoted: match[1] !== "" };
 }
@@ -75,7 +75,7 @@ const SHELL_BEFORE_SCRIPT = /(?:^|[\s(|/])(?:ba|z|da)?sh\s+(?:-[\w-]+\s+)*-\w*c\
  * like a commit message, runs nothing. Also the first pipe, redirect, or command substitution
  * before that operator, which the shell runs inside double quotes and an unquoted heredoc too.
  * @param {string} command
- * @returns {{ separator: string | null, scripts: string[], pipeOrRedirect: string | null }}
+ * @returns {{ separator: string | null, scripts: string[], pipeOrRedirect: string | null, words: string[] | null }}
  */
 function scanCommand(command) {
   let quote = "";
@@ -85,26 +85,56 @@ function scanCommand(command) {
   let pipeOrRedirect = null;
   /** @type {string[]} */
   const scripts = [];
+  /** @type {string[]} */
+  const words = [];
+  /** @type {NonNullable<ReturnType<typeof readHeredoc>>[]} */
+  const heredocs = [];
+  let word = "";
+  let hasWord = false;
+  let hasExpansion = false;
+  function finishWord() {
+    if (hasWord) words.push(word);
+    word = "";
+    hasWord = false;
+  }
   const text = command.trim();
   for (let at = 0; at < text.length; at += 1) {
     const char = text[at];
+    if (char === "\\" && quote !== "'") {
+      const next = text[at + 1];
+      if (next === undefined) hasExpansion = true;
+      else if (!quote || /[$`"\\\n]/.test(next)) {
+        if (next !== "\n") {
+          word += next;
+          hasWord = true;
+        }
+        at += 1;
+        continue;
+      }
+    }
     if (quote) {
-      if (char === "\\" && quote === '"') at += 1;
-      else if (char === quote) {
+      if (char === quote) {
         if (scriptStart !== -1) scripts.push(text.slice(scriptStart, at));
         quote = "";
-      } else if (quote === '"' && isSubstitutionAt(text, at)) pipeOrRedirect ??= SUBSTITUTION;
-      continue;
-    }
-    if (char === "\\") {
-      at += 1;
+      } else {
+        word += char;
+        if (quote === '"' && char === "$") hasExpansion = true;
+        if (quote === '"' && isSubstitutionAt(text, at)) pipeOrRedirect ??= SUBSTITUTION;
+      }
       continue;
     }
     if (char === "'" || char === '"') {
       quote = char;
+      hasWord = true;
       scriptStart = SHELL_BEFORE_SCRIPT.test(text.slice(0, at)) ? at + 1 : -1;
       continue;
     }
+    if (char === "#" && !hasWord) {
+      const lineEnd = text.indexOf("\n", at);
+      at = lineEnd === -1 ? text.length : lineEnd - 1;
+      continue;
+    }
+    if (char === "$") hasExpansion = true;
     if (char === "$" && text[at + 1] === "(") {
       pipeOrRedirect ??= SUBSTITUTION;
       depth += 1;
@@ -118,17 +148,51 @@ function scanCommand(command) {
     }
     const heredoc = text.startsWith("<<", at) ? readHeredoc(text, at) : null;
     if (heredoc) {
-      const bodyEnd = skipHeredocBody(text, heredoc.end, heredoc.delimiter);
-      if (!heredoc.isQuoted && holdsSubstitution(text.slice(heredoc.end, bodyEnd)))
-        pipeOrRedirect ??= SUBSTITUTION;
+      if (/^\d+$/.test(word)) {
+        word = "";
+        hasWord = false;
+      } else finishWord();
+      heredocs.push(heredoc);
+      at = heredoc.end - 1;
+      continue;
+    }
+    if (char === "\n" && heredocs.length) {
+      finishWord();
+      let bodyEnd = at;
+      for (const pending of heredocs) {
+        const bodyStart = bodyEnd + 1;
+        bodyEnd = skipHeredocBody(text, bodyEnd, pending.delimiter);
+        if (!pending.isQuoted) {
+          const body = text.slice(bodyStart, bodyEnd);
+          if (holdsSubstitution(body)) pipeOrRedirect ??= SUBSTITUTION;
+          if (/[$`]/.test(body)) hasExpansion = true;
+        }
+      }
+      heredocs.length = 0;
       at = bodyEnd - 1;
       continue;
     }
     const separator = readSeparatorAt(text, at);
-    if (separator) return { separator, scripts, pipeOrRedirect };
+    if (separator) return { separator, scripts, pipeOrRedirect, words: null };
     pipeOrRedirect ??= readPipeOrRedirectAt(text, at);
+    if (/\s/.test(char)) finishWord();
+    else {
+      if (char === "{") {
+        const placeholder = /^\{(?:owner|repo)\}/.exec(text.slice(at));
+        if (!placeholder) hasExpansion = true;
+      }
+      if (/[?*[\]()]/.test(char) || (char === "~" && !hasWord)) hasExpansion = true;
+      word += char;
+      hasWord = true;
+    }
   }
-  return { separator: null, scripts, pipeOrRedirect };
+  finishWord();
+  return {
+    separator: null,
+    scripts,
+    pipeOrRedirect,
+    words: quote || hasExpansion || pipeOrRedirect || heredocs.length ? null : words,
+  };
 }
 
 /**
@@ -166,11 +230,11 @@ export function findSeparator(command) {
 }
 
 /**
- * The first pipe, redirect, or command substitution a single command holds, which hands what it
- * reads or writes to a file or another program, or null when it holds none.
+ * Literal arguments of one command, or null for operators, unfinished quotes, or unsupported
+ * expansions. Only the inert {owner}/{repo} placeholders are accepted as unquoted braces.
  * @param {string} command
  */
-export const findPipeOrRedirect = (command) => scanCommand(command).pipeOrRedirect;
+export const parseCommandWords = (command) => scanCommand(command).words;
 
 /**
  * Why a Bash command breaks the rule, or null when it keeps it.

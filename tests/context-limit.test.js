@@ -297,6 +297,12 @@ for (const command of [
   "gh api repos/o/r/issues '-ftitle=t'",
   "gh api repos/o/r/issues '--input=body.json'",
   "gh api repos/o/r/issues -X DELETE # -X GET",
+  "gh api -iXDELETE repos/o/r/git/refs/heads/beta",
+  "gh api -iX DELETE repos/o/r/git/refs/heads/beta",
+  "gh api -if ref=main repos/o/r/actions/workflows/deploy.yml/dispatches",
+  "gh api -iFref=main repos/o/r/actions/workflows/deploy.yml/dispatches",
+  "gh api -iX=DELETE repos/o/r/git/refs/heads/beta",
+  "gh api -iH 'X: -X GET' -iXDELETE repos/o/r/issues",
 ]) {
   test(`at 300,000 tokens parsed API arguments deny ${command}`, () => {
     assert.ok(answerStopCommand(command), command);
@@ -314,6 +320,12 @@ test("at 300,000 tokens API methods use the last value and ignore options inside
     "gh api -H 'X: --method=DELETE -f title=t' repos/o/r/issues",
     "gh api -X \\\nGET repos/o/r/issues",
     "gh api repos/o/r/issues # -X DELETE",
+    "gh api -iXDELETE -iX GET repos/o/r/issues",
+    "gh api -iH '-X DELETE' repos/o/r/issues",
+    "gh api -iq '-X DELETE' repos/o/r/issues",
+    "gh api -it '-X DELETE' repos/o/r/issues",
+    "gh api -ip '-X DELETE' repos/o/r/issues",
+    "gh api -iXPATCH repos/{owner}/{repo}/pulls/1 -if body=handoff",
   ])
     assert.equal(answerStopCommand(command), null, command);
 });
@@ -344,16 +356,107 @@ for (const command of [
   "git show --ext-diff",
   "git fetch --upload-pack=x .",
   "git fetch --upload-pack x .",
-  "git fetch -u x .",
-  "git fetch -ux .",
   "git fetch '--upload-pack=x' .",
-  "git fetch '-ux' .",
+  "git fetch --upl=x .",
+  "git fetch --upload=x .",
+  "git fetch --upl x .",
+  "git fetch -o -- --upload-pack=x origin",
+  "git fetch --server-option -- --upload=x origin",
+  "git fetch --server-o -- --upl=x origin",
+  "git fetch --depth -- --upload-pack=x origin",
+  "git fetch -j -- --upload-pack=x origin",
+  "git fetch -vo -- --upload-pack=x origin",
   "git -C /repo diff --output=AGENTS.md",
 ]) {
   test(`at 300,000 tokens git cannot write output or launch a helper: ${command}`, () => {
     assert.ok(answerStopCommand(command), command);
   });
 }
+
+test("at 300,000 tokens fetch consumes option values before its literal operands", () => {
+  for (const command of [
+    "git fetch -o -- -- origin",
+    "git fetch -o-- origin",
+    "git fetch --server-option=-- origin",
+    "git fetch --depth 1 origin main",
+    "git fetch -- origin '--upload-pack=notes'",
+    "git fetch --prune -- origin '--upload-pack=notes'",
+  ])
+    assert.equal(answerStopCommand(command), null, command);
+});
+
+test("at 300,000 tokens fetch rejects the update-head-ok shorthand", () => {
+  for (const command of ["git fetch -u origin", "git fetch -ux .", "git fetch '-ux' ."])
+    assert.ok(answerStopCommand(command), command);
+});
+
+test("at 300,000 tokens each fetch value option consumes a literal double dash", () => {
+  for (const option of [
+    "-o",
+    "-j",
+    "--server-option",
+    "--jobs",
+    "--depth",
+    "--deepen",
+    "--shallow-since",
+    "--shallow-exclude",
+    "--negotiation-tip",
+    "--filter",
+    "--refmap",
+    "--submodule-prefix",
+    "--recurse-submodules-default",
+  ]) {
+    assert.ok(answerStopCommand(`git fetch ${option} -- --upload-pack=x origin`), option);
+    assert.equal(answerStopCommand(`git fetch ${option} -- -- origin`), null, option);
+  }
+});
+
+test("at 300,000 tokens unsupported shell expansions fail closed", () => {
+  for (const command of [
+    "git diff {--output=AGENTS.md,HEAD}",
+    "git diff ${X:---output=AGENTS.md}",
+    'git diff "${X:---output=AGENTS.md}"',
+    "git fetch {--upload-pack=x,.}",
+    "gh api -X GET repos/o/r/git/refs/heads/beta {-X,DELETE}",
+    "git diff {1..3}",
+    "git diff $OPTIONS",
+    "git diff $'--output=AGENTS.md'",
+    "git diff *",
+    "git diff ?",
+    "git diff [ab]",
+    "git diff ~",
+    "git push $REMOTE HEAD",
+    "gh pr view $NUMBER",
+  ])
+    assert.ok(answerStopCommand(command), command);
+  for (const command of [
+    "git commit -m '${X} {a,b} {1..3}'",
+    'git commit -m "\\$OPTIONS"',
+    "gh api repos/{owner}/{repo}/pulls/1/comments/2/replies -f body=handoff",
+  ])
+    assert.equal(answerStopCommand(command), null, command);
+});
+
+test("at 300,000 tokens quotes, escapes, descriptors, and word comments keep their meanings", () => {
+  for (const command of [
+    "gh api repos/o/r/issues -X 'DELETE",
+    "gh api 0<<'EOF' repos/o/r/git/refs/heads/beta -X DELETE\nx\nEOF",
+    'gh api -H "a\\b" repos/o/r/issues -X DELETE',
+    "gh api repos/o/r/issues -X DELETE x#y",
+    "gh api repos/o/r/issues -X DELETE \\",
+    "gh api repos/o/r/issues <<< '-X GET' -X DELETE",
+  ])
+    assert.ok(answerStopCommand(command), command);
+  assert.equal(answerStopCommand("gh api 0<<'EOF' repos/o/r/pulls/1 -X PATCH\nx\nEOF"), null);
+});
+
+test("at 300,000 tokens a heredoc cannot hide a joined force push", () => {
+  for (const operator of ["&&", ";", "|", "||", "&"])
+    assert.ok(
+      answerStopCommand(`git commit -F - <<'EOF' ${operator} git push -f origin main\nmsg\nEOF`),
+      operator,
+    );
+});
 
 test("at 300,000 tokens a handoff's command can't pipe, redirect, or substitute another in", () => {
   for (const command of [
