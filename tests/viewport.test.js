@@ -1,15 +1,16 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readdirSync, readFileSync } from "node:fs";
+import { readdirSync } from "node:fs";
 import { listApps } from "../worker/apps.mjs";
+import { REPO_ROOT, readRepoFile } from "./repo-files.js";
 
 const listPages = (app) => {
-  const folder = new URL(`../apps/${app}/page/`, import.meta.url);
-  return readdirSync(folder)
+  const folder = `apps/${app}/page/`;
+  return readdirSync(new URL(folder, REPO_ROOT))
     .filter((name) => name.endsWith(".html"))
     .map((name) => ({
       name: `${app}/${name}`,
-      markup: readFileSync(new URL(name, folder), "utf8"),
+      markup: readRepoFile(`${folder}${name}`),
     }));
 };
 

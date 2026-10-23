@@ -1,3 +1,4 @@
+import { finishSeries, WILD_CARD_SERIES, DIVISION_SERIES } from "./bracket-rounds.mjs";
 import { test, expect, openApp } from "./harness.mjs";
 import { expectReloadOpensOn, RELOAD_STATES } from "../../../../tests/browser/reload-states.mjs";
 import {
@@ -51,22 +52,15 @@ test("a reload two minutes or more after the page left the Games list on another
 });
 
 /**
- * Has the store finish each of the series `ids`, won by its first club in `wins` games, as the
- * Worker saves them.
  * @param {Awaited<ReturnType<typeof openApp>>} app
  * @param {string[]} ids
  * @param {number} wins
  */
-async function finishSeries(app, ids, wins) {
-  const season = await app.readDocument(SEASON_PATH);
-  const series = { ...season.series };
-  for (const id of ids) series[id] = { ...series[id], winsA: wins, started: true };
-  await app.writeFromWorker(SEASON_PATH, { ...season, series });
+async function finishStoredSeries(app, ids, wins) {
+  const path = "seasons/2026";
+  const season = await app.readDocument(path);
+  await app.writeFromWorker(path, finishSeries(season, ids, wins));
 }
-
-const SEASON_PATH = "seasons/2026";
-const WILD_CARD_SERIES = ["AL_WC1", "AL_WC2", "NL_WC1", "NL_WC2"];
-const DIVISION_SERIES = ["AL_DS1", "AL_DS2", "NL_DS1", "NL_DS2"];
 
 test.describe("on a short phone", () => {
   test.use({ viewport: SHORT_PHONE });
@@ -77,11 +71,11 @@ test.describe("on a short phone", () => {
     page,
   }) => {
     const app = await openApp(page);
-    await finishSeries(app, WILD_CARD_SERIES, 2);
+    await finishStoredSeries(app, WILD_CARD_SERIES, 2);
     await expect(page.locator("#bracketWrap .nscore", { hasText: "2" })).toHaveCount(4);
     await expectOpeningRoundAfterReload(page, {
       sideways: SIDEWAYS,
-      changeWhileAway: () => finishSeries(app, DIVISION_SERIES, 3),
+      changeWhileAway: () => finishStoredSeries(app, DIVISION_SERIES, 3),
     });
   });
 

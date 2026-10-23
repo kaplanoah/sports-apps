@@ -2,7 +2,8 @@ import { test, expect, openApp } from "./harness.mjs";
 import { turnOnDiagnostics } from "../../../../tests/browser/diagnostics-switch.mjs";
 import { openSettings } from "../../../../tests/browser/settings.mjs";
 import { setHidden } from "../../../../tests/browser/visibility.mjs";
-import { RECORD_MS, findRecords, reloadAndRecord, reloadToRecord } from "./diagnostics-records.mjs";
+import { findRecords } from "../../../../tests/browser/diagnostics-records.mjs";
+import { RECORD_MS, reloadAndRecord, reloadToRecord } from "./diagnostics-records.mjs";
 
 test.use({
   viewport: { width: 390, height: 844 },

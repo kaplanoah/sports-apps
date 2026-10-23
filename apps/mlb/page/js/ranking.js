@@ -2,14 +2,13 @@ import { describeTeamStatus } from "./bracket.js";
 import {
   describeDrought,
   listRankedOrder,
-  nameTeam,
   renderPlainClub,
   renderStatusChip,
   renderTitleSummary,
 } from "./clubs.js";
 import { html, setHtml } from "#shared/html.js";
 import { session } from "./session.js";
-import { TEAMS } from "./teams.js";
+import { nameTeam, TEAMS } from "./teams.js";
 
 export const REORDER_EVENT = "rankingreorder";
 

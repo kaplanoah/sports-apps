@@ -78,7 +78,8 @@ export function createTestStore(
 /**
  * What a test does on the Worker's side of `testStore`: run the update its alarm runs on its own
  * schedule, pass time while the page sleeps, which brings its next update due, and count the
- * sockets it has accepted, each once it has told the page whether an update is coming.
+ * sockets it has accepted, each once it has told the page whether an update is coming, and send
+ * every page socket a frame of the test's own.
  * @param {ReturnType<typeof createTestStore>} testStore
  */
 export const createWorkerControls = (testStore) => ({
@@ -86,6 +87,11 @@ export const createWorkerControls = (testStore) => ({
   /** @param {number} ms */
   passTimeAtWorker: (ms) => testStore.passTime(ms),
   countWatchersHeard: () => testStore.countAccepted(),
+  /** @param {unknown} message */
+  sendSocketMessage: (message) => {
+    for (const socket of testStore.context.ctx.getWebSockets())
+      socket.send(JSON.stringify(message));
+  },
 });
 
 // Routes match with patterns rather than functions: Playwright checks a pattern itself, but asks the
@@ -205,6 +211,17 @@ export async function loadPageAt(page, now, { isShowingWelcome = false } = {}) {
     await page.addInitScript(() => localStorage.setItem("homeScreenWelcomeClosed", "closed"));
   await page.clock.install({ time: new Date(now) });
   await page.goto("/");
+}
+
+/**
+ * Holds the page's clock still, so its frames and timers move only as the test moves them,
+ * however slow the machine. The second's lead keeps the clock from passing the pause before it holds.
+ * @param {import("@playwright/test").Page} page
+ */
+export async function holdClock(page) {
+  const now = await page.evaluate(() => Date.now());
+  await page.clock.pauseAt(now + 1000);
+  return now;
 }
 
 const PAGE_KEY = "test-key";

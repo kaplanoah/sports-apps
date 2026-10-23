@@ -10,7 +10,7 @@ import {
   POST_RECORD,
   nameFindRecord,
 } from "../worker/judge-review.mjs";
-import { formatJobOutputs, listJobs as listPlanJobs } from "../worker/plan-review.mjs";
+import { formatJobOutputs, listJobs as listPlanJobs, writeReview } from "../worker/plan-review.mjs";
 import { findRefusal } from "../worker/review-git.mjs";
 import { escapePattern } from "../shared/page/escape-pattern.js";
 import { REPO_ROOT, readRepoFile } from "./repo-files.js";
@@ -58,6 +58,18 @@ test("no workflow runs its browsers from an image that pins Playwright's version
 // failed in the issue Flaky browser tests.
 test("the nightly run of the browser tests runs every test however many fail", () => {
   assert.match(readRepoFile(".github/workflows/flaky.yml"), /--max-failures=0\b/);
+});
+
+test("the nightly browser install has a step timeout that leaves time for the tests", () => {
+  const browser = readJob("browser", "flaky.yml");
+  const install = browser
+    .split(/^ {6}- /m)
+    .find((step) => /run: npx playwright install\b/.test(step));
+  assert.ok(install, "the nightly job installs its browsers");
+  const timeout = Number(install.match(/\btimeout-minutes: (\d+)/)?.[1]);
+  const jobTimeout = Number(browser.match(/^ {4}timeout-minutes: (\d+)/m)?.[1]);
+  assert.ok(timeout > 0 && timeout <= 10, "the install stops within ten minutes");
+  assert.ok(timeout < jobTimeout, "the tests keep their own time after installation");
 });
 
 test("the nightly run's report can start the routine that fixes flaky tests", () => {
@@ -201,7 +213,7 @@ test("burn-in runs only when a pull request has a browser spec to repeat, and ch
   );
   assert.match(burnIn, /SPECS: \$\{\{ needs\.scope\.outputs\.specs \}\}/);
   assert.match(
-    readJob("check"),
+    readJob("tested"),
     /\(needs\.scope\.outputs\.specs == '' \|\| needs\.burn-in\.result == 'success'\)/,
   );
 });
@@ -224,7 +236,7 @@ test("the browser and WebKit jobs run only the apps the change reaches, and chec
     assert.match(text, /npm run test:browser -- .*"\$\{projects\[@\]\}"/, job);
   }
   assert.match(
-    readJob("check"),
+    readJob("tested"),
     /\(needs\.scope\.outputs\.apps == '' \|\| \(needs\.browser\.result == 'success' &&\n\s+needs\.webkit\.result == 'success'\)\)/,
   );
 });
@@ -392,9 +404,9 @@ test("every checkout leaves no credentials behind", () => {
 });
 
 // A label change, like adding phone-ok, brings no new code: once a run passed every test on
-// exactly this code, only the gate runs again, and the label waits for a run still going rather
-// than stopping it.
-test("a label change runs only the gate again once a run passed every test on the same code", () => {
+// exactly this code, the tests are skipped. The label waits for a run still going rather than
+// stopping it, while a separate record decides whether a review is still owed.
+test("a label change skips tests once a run passed every test on the same code", () => {
   const workflow = readRepoFile(".github/workflows/ci.yml");
   assert.match(
     workflow,
@@ -410,12 +422,12 @@ test("a label change runs only the gate again once a run passed every test on th
     /SEARCH: \$\{\{ github\.event_name == 'pull_request' && '--tested' \|\| '' \}\}/,
   );
   assert.match(readJob("scope"), /needs: passed\n.*!needs\.passed\.outputs\.run/);
-  const check = readJob("check");
+  const tested = readJob("tested");
   assert.match(
-    check,
-    /github\.event_name == 'pull_request' && steps\.tested\.outputs\.tested == 'true' &&\n\s+steps\.tested\.outputs\.reviewed == 'true'\n.*\n\s+name: ci-tested-/,
+    tested,
+    /if: github\.event_name == 'pull_request' && steps\.tests\.outputs\.tested == 'true'\n.*\n\s+name: ci-tested-/,
   );
-  assert.ok(check.indexOf("name: ci-tested-") < check.indexOf("Require every job to pass"));
+  assert.match(readJob("check"), /TESTED: \$\{\{ needs\.tested\.outputs\.tested == 'true' \}\}/);
 });
 
 // A run that wasn't asked to review, like a push's or a draft's, leaves a review owed on its
@@ -424,7 +436,11 @@ test("a label change runs only the gate again once a run passed every test on th
 test("a run that leaves a review owed never records its code as reviewed", () => {
   assert.match(
     readJob("check"),
-    /REVIEWED: >-\n\s+\$\{\{ needs\.passed\.outputs\.run != '' \|\| needs\.review-plan\.outputs\.owed == 'false' \}\}/,
+    /REVIEWED: >-\n\s+\$\{\{ needs\.passed\.outputs\.reviewed-run != '' \|\|\n\s+\(needs\.review-plan\.outputs\.owed == 'false' && needs\.review\.result == 'success'\) \}\}/,
+  );
+  assert.match(
+    readJob("check"),
+    /github\.event_name == 'pull_request' && steps\.tested\.outputs\.reviewed == 'true'\n.*\n\s+name: ci-reviewed-/,
   );
   assert.match(readJob("review-plan"), /\n {6}owed: \$\{\{ steps\.decision\.outputs\.owed \}\}\n/);
 });
@@ -465,7 +481,7 @@ function decideReview(event) {
       EVENT: "pull_request",
       ACTION: "opened",
       LABEL: "",
-      PASSED_RUN: "",
+      REVIEWED_RUN: "",
       IS_DRAFT: "false",
       AUTHOR: "someone",
       CLAUDE_CODE_OAUTH_TOKEN: "token",
@@ -522,7 +538,7 @@ test("a pull request is reviewed when it's opened ready, marked ready, or labele
 // Only a draft still owes the review it skips; the rest never run one or already passed it.
 test("every reason not to review holds when the review is asked for", () => {
   for (const [event, reason, owed] of /** @type {[Record<string, string>, RegExp, string][]} */ ([
-    [{ PASSED_RUN: "7" }, /already passed its review/, "false"],
+    [{ REVIEWED_RUN: "7" }, /already passed its review/, "false"],
     [{ IS_DRAFT: "true" }, /a draft is reviewed once it's ready/, "true"],
     [{ AUTHOR: "dependabot[bot]" }, /Dependabot/, "false"],
     [{ CLAUDE_CODE_OAUTH_TOKEN: "" }, /no CLAUDE_CODE_OAUTH_TOKEN or ANTHROPIC_API_KEY/, "false"],
@@ -533,16 +549,57 @@ test("every reason not to review holds when the review is asked for", () => {
     assert.equal(asked.labeled, "true", "a label that asks comes off however the run decides");
     assert.match(asked.notice, reason);
   }
-  assert.match(readJob("review-plan"), /PASSED_RUN: \$\{\{ needs\.passed\.outputs\.run \}\}/);
+  assert.match(
+    readJob("review-plan"),
+    /REVIEWED_RUN: \$\{\{ needs\.passed\.outputs\.reviewed-run \}\}/,
+  );
 });
 
 // The owner's phone-ok comes after the review passed on the same code, so check, which holds a
 // ready pull request while a review is owed, lets it through.
 test("a label on code a run already passed the review on owes no review", () => {
-  const phoneOk = decideReview({ ACTION: "labeled", LABEL: "phone-ok", PASSED_RUN: "7" });
+  const phoneOk = decideReview({ ACTION: "labeled", LABEL: "phone-ok", REVIEWED_RUN: "7" });
   assert.equal(phoneOk.review, "false");
   assert.equal(phoneOk.owed, "false");
   assert.match(phoneOk.notice, /already passed its review/);
+});
+
+test("reusing tests on a draft never waives the review when it becomes ready or is requested", () => {
+  const plan = readJob("review-plan");
+  assert.doesNotMatch(plan, /needs\.passed\.outputs\.run\b/);
+  assert.match(readJob("passed"), /reviewed-run: \$\{\{ steps\.reviewed\.outputs\.run \}\}/);
+  assert.match(readJob("passed"), /run: node worker\/find-passed-ci\.mjs --reviewed/);
+  for (const label of ["beta", "beta-wait", "phone-ok"]) {
+    for (const action of ["labeled", "unlabeled"]) {
+      const draft = decideReview({ ACTION: action, LABEL: label, IS_DRAFT: "true" });
+      assert.equal(draft.review, "false");
+      assert.equal(draft.owed, "true");
+      const ready = decideReview({ ACTION: action, LABEL: label });
+      assert.equal(ready.owed, "true");
+    }
+  }
+  for (const event of [{ ACTION: "ready_for_review" }, { ACTION: "labeled", LABEL: "review" }]) {
+    const decision = decideReview({ ...event });
+    assert.equal(decision.review, "true");
+    assert.equal(decision.owed, "false");
+  }
+});
+
+test("the tests-only record depends only on test jobs, even when review fails or is owed", () => {
+  const tested = readJob("tested");
+  assert.deepEqual(readNeeds("tested"), [
+    "passed",
+    "checks",
+    "scope",
+    "browser",
+    "burn-in",
+    "webkit",
+  ]);
+  assert.doesNotMatch(tested, /review|gate/);
+  for (const job of ["checks", "scope", "browser", "webkit", "burn-in"])
+    assert.ok(tested.includes(`needs.${job}.result`), job);
+  assert.match(tested, /name: ci-tested-\$\{\{ steps\.code\.outputs\.tree \}\}/);
+  assert.match(tested, /tested: \$\{\{ steps\.tests\.outputs\.tested \}\}/);
 });
 
 // Each ask is a fresh label, which GitHub sends only when the label isn't on the pull request, so
@@ -774,12 +831,9 @@ const listClaudeSteps = (names) =>
       .map((step) => ({ name, workflow, step }));
   });
 
-// The repo is public, so a Claude step's transcript stays out of its log, and the reviewer, which
-// reads text anyone may have written, can reach nothing but the checkout and its history: Read,
-// Grep, and Glob need no rule within the checkout and are refused outside it, the only command it
-// may run is worker/review-git.mjs, whose allowed options can't read or write outside the
-// checkout, as a shell's quoting could spell an option past a rule refusing it, and the repo's own
-// settings, whose allow list and hooks are for sessions, aren't loaded.
+// The repo is public, so transcripts stay out of logs. Read reaches only the checkout, and
+// search and history use review-git.mjs, whose allowlist checks parsed arguments after the shell
+// removes quotes. Session settings and hooks aren't loaded into CI's reviewer.
 test("every Claude step keeps its transcript out of the log and reads only the checkout and its history", () => {
   const steps = listClaudeSteps(WORKFLOWS);
   assert.ok(steps.length >= 3);
@@ -791,6 +845,10 @@ test("every Claude step keeps its transcript out of the log and reads only the c
     assert.doesNotMatch(args, /--disallowedTools/, name);
     const sources = [...args.matchAll(/--setting-sources (\S+)/g)].map(([, list]) => list);
     assert.deepEqual(sources, ["user"], name);
+    const prompt = readStepInput(workflow, step, "prompt");
+    assert.match(prompt, /\bRead\b/, name);
+    assert.doesNotMatch(prompt, /\b(?:Grep|Glob)\b/, name);
+    assert.match(prompt, /node worker\/review-git\.mjs grep -n -F -e <text> -- <path>/, name);
   }
 });
 
@@ -807,29 +865,116 @@ test("every reviewer reads AGENTS.md whole along with the review guide", () => {
     );
 });
 
-// Each reviewer learns the same forms of review-git.mjs, and the script allows each of them, so
-// no prompt drifts from another or names a form the script refuses.
-test("every reviewer prompt names the same forms of review-git.mjs, each one it allows", () => {
+/** @param {string} text */
+const listReviewForms = (text) =>
+  [...text.matchAll(/`node worker\/review-git\.mjs ([^`]+)`/g)].map(([, form]) =>
+    form
+      .replaceAll("<path>", "README.md")
+      .replaceAll("<start>,<end>", "1,2")
+      .replaceAll("<function>", "main")
+      .replaceAll("<text>", "example")
+      .replaceAll("<pattern>", "example.*")
+      .split(" "),
+  );
+
+/**
+ * @param {string} text
+ * @param {string} name
+ */
+function readReviewOptions(text, name) {
+  const declaration = text.match(
+    new RegExp(`^const ${name} = (?:new Set\\()?\\[([\\s\\S]*?)\\]`, "m"),
+  );
+  assert.ok(declaration, `the reviewer declares ${name} as a literal allowlist`);
+  return [...declaration[1].matchAll(/"([^"]+)"/g)].map(([, option]) => option);
+}
+
+test("the review usage and prompt search options match their allowlists", () => {
+  const source = readRepoFile("worker/review-git.mjs");
+  const search = readReviewOptions(source, "SEARCH_FLAGS");
+  const searchUsage = source.match(/^\/\/ Search options: (.+)\.$/m);
+  assert.ok(searchUsage);
+  assert.deepEqual(searchUsage[1].split(" ").toSorted(), search.toSorted());
+
+  const historyUsage = source.match(/^\/\/ History options:([\s\S]*?)(?=^\/\/ Usage:)/m);
+  assert.ok(historyUsage);
+  const historyOptions = [...historyUsage[1].matchAll(/(?:^|\s)(-{1,2}\S+)/g)].map(([, option]) =>
+    option.replace(/[,.;]$/, ""),
+  );
+  const valued = readReviewOptions(source, "VALUED_FLAGS").map((prefix) => `${prefix}<format>`);
+  const specialForms = [
+    "-n <number>",
+    "-n<number>",
+    "-<number>",
+    "-L<start>,<end>:<path>",
+    "-L:<function>:<path>",
+    "-L <start>,<end>:<path>",
+  ];
+  const permitted = [
+    ...readReviewOptions(source, "FLAGS"),
+    ...valued,
+    ...specialForms.map((form) => form.split(" ")[0]),
+  ];
+  assert.deepEqual([...new Set(historyOptions)].toSorted(), [...new Set(permitted)].toSorted());
+  for (const form of specialForms) {
+    const args = form
+      .replaceAll("<number>", "3")
+      .replaceAll("<start>,<end>", "1,2")
+      .replaceAll("<path>", "README.md")
+      .replaceAll("<function>", "main")
+      .split(" ");
+    assert.equal(findRefusal(["log", ...args], "/repo"), null, form);
+  }
+
+  for (const { name, workflow, step } of listClaudeSteps(["ci.yml", AREA_WORKFLOW])) {
+    const prompt = readStepInput(workflow, step, "prompt");
+    const options = prompt.match(/Search takes (.+?) arguments;/)?.[1];
+    assert.ok(options, name);
+    const named = [...options.matchAll(/`([^`]+)`/g)].map(([, option]) => option.split(" ")[0]);
+    assert.deepEqual(named.toSorted(), [...search, "-e"].toSorted(), name);
+  }
+});
+
+// The prompts and the generated review index must never name a form the script refuses.
+test("every reviewer prompt names the same permitted forms, including the generated index command", () => {
   const steps = listClaudeSteps(["ci.yml", AREA_WORKFLOW]);
   const sentences = steps.map(
     ({ workflow, step }) =>
       readStepInput(workflow, step, "prompt").match(
-        /History comes from [^\n]*?outside this checkout\./,
+        /Search and history come from [^\n]*?outside this checkout\./,
       )?.[0],
   );
   assert.equal(sentences.length, 3);
   assert.ok(sentences[0]);
   for (const sentence of sentences) assert.equal(sentence, sentences[0]);
-  const forms = [...sentences[0].matchAll(/`node worker\/review-git\.mjs ([^`]+)`/g)].map(
-    ([, form]) =>
-      form
-        .replaceAll("<path>", "README.md")
-        .replaceAll("<start>,<end>", "1,2")
-        .replaceAll("<function>", "main")
-        .split(" "),
-  );
-  assert.equal(forms.length, 4);
-  for (const form of forms) assert.equal(findRefusal(form, "/repo"), null, form.join(" "));
+  assert.match(sentences[0], /It refuses options other than those its usage lists/);
+  const forms = listReviewForms(sentences[0]);
+  assert.equal(forms.length, 7);
+  const folder = mkdtempSync(join(tmpdir(), "review-prompt-index-"));
+  writeReview(folder, {
+    choice: { stage: "push", files: ["README.md"] },
+    since: "a".repeat(40),
+    pushed: ["previous", "HEAD"],
+    readDiff: () => ({
+      numstat: "1\t0\tREADME.md\n",
+      diff: "diff --git a/README.md b/README.md\n--- a/README.md\n+++ b/README.md\n@@ -0,0 +1 @@\n+example\n",
+    }),
+    repoFiles: [],
+    listStale: () => [],
+    rules: [],
+  });
+  const indexForms = listReviewForms(readFileSync(join(folder, "push.md"), "utf8"));
+  assert.equal(indexForms.length, 1);
+  assert.deepEqual(indexForms[0], [
+    "show",
+    "--diff-merges=first-parent",
+    "HEAD",
+    "--",
+    "README.md",
+  ]);
+  assert.ok(forms.some((form) => JSON.stringify(form) === JSON.stringify(indexForms[0])));
+  for (const form of [...forms, ...indexForms])
+    assert.equal(findRefusal(form, "/repo"), null, form.join(" "));
 });
 
 // Each review job runs only once the jobs whose records it reads have finished.
