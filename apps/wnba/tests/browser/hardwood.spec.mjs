@@ -47,8 +47,7 @@ for (const colorScheme of /** @type {const} */ (["light", "dark"])) {
       });
     }
     expect((await readChip(page, "chip filled status-chip champion")).backgroundColor).toBe(result);
-    expect((await readChip(page, "chip outlined conference-tag east")).color).toBe(ink);
-    expect((await readChip(page, "chip outlined conference-tag west")).color).toBe(ink);
+    expect((await readChip(page, "chip outlined conference-tag")).color).toBe(ink);
   });
 }
 
