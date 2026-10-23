@@ -25,7 +25,7 @@ export function verifyTrustedReviewResult(folder, env) {
 }
 
 /**
- * REST pull_requests can be empty for fork runs and changes as the PR advances. The trusted
+ * REST pull_requests can be empty for fork runs and may change as the PR advances. The trusted
  * workflow's fixed run-name binds the event's PR/head/base; its sealed result verifies the code.
  * @param {any} run @param {{ repository: string, head: string, base: string, pull: string }} expected
  */

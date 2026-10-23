@@ -215,7 +215,6 @@ test("an unrelated fork PR on the same head cannot supply a trusted review resul
   });
 });
 
-
 test("the join rejects changed content and extra files even when result identity fields match", () => {
   const env = { ...ID_ENV, REVIEW_RUN: "7", REVIEW_TREE: SHA };
   const result = { identity: IDENTITY, tree: SHA, passed: true };

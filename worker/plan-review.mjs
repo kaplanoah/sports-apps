@@ -1,11 +1,11 @@
 // Splits a pull request's change into areas by what its files are about, each test with the code
 // it tests, so trusted review (review.yml and trusted-review-area.yml) has one reviewer read
-// each area in full. The first review reads
-// the whole change. A review after it reads only files the pull request still changes and the
-// pushes since the last full read changed. A push that only merges the base is read by no one,
-// but for how it resolved conflicts in files the pull request still changes. Neither is a run
-// on the head the last full read ended on. A test's recorded data, the lockfile, a binary file,
-// and a drawing or minified library a tool wrote go unread, named in the summary instead.
+// each area in full. The first review reads the whole change. A review after it reads only
+// files the pull request still changes and the pushes since the last full read changed.
+// A push that only merges the base is read by no one, but for how it resolved conflicts in files
+// the pull request still changes. Neither is a run on the head the last full read ended on.
+// A test's recorded data, the lockfile, a binary file, and a drawing or minified library a tool
+// wrote go unread, named in the summary instead.
 // Each file's diff is written in parts a reviewer reads whole, as is each rule file whose paths
 // match a file of its area, which judge-review.mjs checks.
 // Usage: node worker/plan-review.mjs <folder>, in a full checkout of the pull request's merge
