@@ -181,83 +181,116 @@ async function verifyReviewEvent(env) {
     throw new Error("The pull request moved after this review started.");
 }
 
+/** @param {NodeJS.ProcessEnv} env */
+function writeTrustedReviewPlan(env) {
+  const folder = env.REVIEW_FOLDER;
+  invokeReviewScript("plan-review.mjs", [folder], env);
+  invokeReviewScript("review-context.mjs", [folder], env);
+  for (const name of ["REVIEW.md", "AGENTS.md"])
+    copyFileSync(join(SOURCE, name), join(folder, name));
+  exportReviewArtifact(folder, "plan", env);
+}
+
+/** @param {string | undefined} output */
+function readValidReviewerOutput(output) {
+  if (!output) return undefined;
+  try {
+    readReviewAnswer(output, "candidates");
+    return output;
+  } catch {
+    console.error("The reviewer returned a malformed answer; this try counts as unanswered.");
+    return undefined;
+  }
+}
+
+/** @param {number} area @param {NodeJS.ProcessEnv} env */
+function recordTrustedFindTry(area, env) {
+  const record = recordFindTry(env.REVIEW_FOLDER, area, {
+    ...env,
+    STRUCTURED_OUTPUT: readValidReviewerOutput(env.STRUCTURED_OUTPUT),
+  });
+  console.log(formatFindOutputs(record));
+}
+
+/** @param {NodeJS.ProcessEnv} env */
+function gatherTrustedCandidates(env) {
+  const folder = env.REVIEW_FOLDER;
+  const plan = readJson(join(folder, "plan.json"));
+  if (!plan.areas.every((area) => existsSync(join(folder, nameFindRecord(area.area)))))
+    throw new Error("An area's review is missing.");
+  keepCandidates(folder);
+}
+
+/** @param {NodeJS.ProcessEnv} env */
+function keepTrustedAcross(env) {
+  const folder = env.REVIEW_FOLDER;
+  readReviewAnswer(env.STRUCTURED_OUTPUT, "findings");
+  console.log(`unchecked=${keepAcross(folder, env.STRUCTURED_OUTPUT).length}`);
+  const plan = readJson(join(folder, "plan.json"));
+  const records = plan.areas.map((area) => readJson(join(folder, nameFindRecord(area.area))));
+  validateAcrossCandidates(
+    records,
+    readJson(join(folder, "across.json")),
+    gatherCandidates(records),
+  );
+  exportReviewArtifact(folder, "across", env);
+}
+
+/** @param {string} folder */
+function requireCompleteReviewCoverage(folder) {
+  const plan = readJson(join(folder, "plan.json"));
+  const complete = plan.areas.every((area) => {
+    const record = recomputeReviewCoverage(
+      readJson(join(folder, nameFindRecord(area.area))),
+      area,
+      folder,
+    );
+    return record.isAnswered && record.unread.length === 0;
+  });
+  if (!complete) throw new Error("Incomplete coverage cannot authorize posting findings.");
+}
+
+/** @param {"post" | "summary"} command @param {NodeJS.ProcessEnv} env */
+async function postTrustedReview(command, env) {
+  const folder = env.REVIEW_FOLDER;
+  if (command === "post") requireCompleteReviewCoverage(folder);
+  await verifyReviewEvent(env);
+  invokeReviewScript(
+    command === "post" ? "post-review.mjs" : "judge-review.mjs",
+    command === "post" ? [folder] : ["summary", folder],
+    { ...env, SHA: env.REVIEW_HEAD },
+  );
+  if (command === "post") exportReviewArtifact(folder, "post", env);
+}
+
+/** @param {NodeJS.ProcessEnv} env */
+function recordTrustedResult(env) {
+  if (env.REVIEW_OWED !== "false") throw new Error("A review is still owed on this code.");
+  const tree = readGit(["rev-parse", "HEAD^{tree}"], env.REVIEW_CHECKOUT);
+  const destination = join(env.REVIEW_UPLOAD, "trusted-review-result");
+  mkdirSync(destination);
+  const identity = readReviewIdentity(env);
+  writeFileSync(join(destination, "result.json"), JSON.stringify({ identity, tree, passed: true }));
+  sealReviewArtifact(destination, "result", identity, ["result.json"]);
+  appendFileSync(env.GITHUB_OUTPUT, `tree=${tree}\n`);
+}
+
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const [command, argument] = process.argv.slice(2);
   const { env } = process;
-  const folder = env.REVIEW_FOLDER;
-  if (command === "prepare") prepareReviewCheckout(env);
-  else {
-    readReviewIdentity(env);
-    if (command === "plan") {
-      invokeReviewScript("plan-review.mjs", [folder], env);
-      invokeReviewScript("review-context.mjs", [folder], env);
-      for (const name of ["REVIEW.md", "AGENTS.md"])
-        copyFileSync(join(SOURCE, name), join(folder, name));
-      exportReviewArtifact(folder, "plan", env);
-    } else if (command === "import") importReviewArtifacts(argument, folder, env);
-    else if (command === "find") {
-      let structuredOutput = env.STRUCTURED_OUTPUT;
-      if (structuredOutput) {
-        try {
-          readReviewAnswer(structuredOutput, "candidates");
-        } catch {
-          structuredOutput = undefined;
-          console.error("The reviewer returned a malformed answer; this try counts as unanswered.");
-        }
-      }
-      console.log(
-        formatFindOutputs(
-          recordFindTry(folder, Number(argument), { ...env, STRUCTURED_OUTPUT: structuredOutput }),
-        ),
-      );
-    } else if (command === "candidates") {
-      const plan = readJson(join(folder, "plan.json"));
-      if (!plan.areas.every((area) => existsSync(join(folder, nameFindRecord(area.area)))))
-        throw new Error("An area's review is missing.");
-      keepCandidates(folder);
-    } else if (command === "across") {
-      readReviewAnswer(env.STRUCTURED_OUTPUT, "findings");
-      console.log(`unchecked=${keepAcross(folder, env.STRUCTURED_OUTPUT).length}`);
-      const plan = readJson(join(folder, "plan.json"));
-      const records = plan.areas.map((area) => readJson(join(folder, nameFindRecord(area.area))));
-      validateAcrossCandidates(
-        records,
-        readJson(join(folder, "across.json")),
-        gatherCandidates(records),
-      );
-      exportReviewArtifact(folder, "across", env);
-    } else if (command === "export") exportReviewArtifact(folder, argument, env);
-    else if (command === "post" || command === "summary") {
-      if (command === "post") {
-        const plan = readJson(join(folder, "plan.json"));
-        const complete = plan.areas.every((area) => {
-          const record = recomputeReviewCoverage(
-            readJson(join(folder, nameFindRecord(area.area))),
-            area,
-            folder,
-          );
-          return record.isAnswered && record.unread.length === 0;
-        });
-        if (!complete) throw new Error("Incomplete coverage cannot authorize posting findings.");
-      }
-      await verifyReviewEvent(env);
-      invokeReviewScript(
-        command === "post" ? "post-review.mjs" : "judge-review.mjs",
-        command === "post" ? [folder] : ["summary", folder],
-        { ...env, SHA: env.REVIEW_HEAD },
-      );
-      if (command === "post") exportReviewArtifact(folder, "post", env);
-    } else if (command === "result") {
-      if (env.REVIEW_OWED !== "false") throw new Error("A review is still owed on this code.");
-      const tree = readGit(["rev-parse", "HEAD^{tree}"], env.REVIEW_CHECKOUT);
-      const destination = join(env.REVIEW_UPLOAD, "trusted-review-result");
-      mkdirSync(destination);
-      writeFileSync(
-        join(destination, "result.json"),
-        JSON.stringify({ identity: readReviewIdentity(env), tree, passed: true }),
-      );
-      sealReviewArtifact(destination, "result", readReviewIdentity(env), ["result.json"]);
-      appendFileSync(env.GITHUB_OUTPUT, `tree=${tree}\n`);
-    } else throw new Error("Unknown trusted review command.");
-  }
+  const commands = {
+    prepare: () => prepareReviewCheckout(env),
+    plan: () => writeTrustedReviewPlan(env),
+    import: () => importReviewArtifacts(argument, env.REVIEW_FOLDER, env),
+    find: () => recordTrustedFindTry(Number(argument), env),
+    candidates: () => gatherTrustedCandidates(env),
+    across: () => keepTrustedAcross(env),
+    export: () => exportReviewArtifact(env.REVIEW_FOLDER, argument, env),
+    post: () => postTrustedReview("post", env),
+    summary: () => postTrustedReview("summary", env),
+    result: () => recordTrustedResult(env),
+  };
+  if (!Object.hasOwn(commands, command)) throw new Error("Unknown trusted review command.");
+  if (command !== "prepare") readReviewIdentity(env);
+  await commands[command]();
 }
