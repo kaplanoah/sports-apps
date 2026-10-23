@@ -11,9 +11,7 @@ import {
 import { dirname, isAbsolute, join, relative } from "node:path";
 import { isReviewRevision } from "./review-repository.mjs";
 import { findUnreadParts, gatherCandidates, readAnswer } from "./judge-review.mjs";
-
-/** @param {unknown} value */
-const isObject = (value) => Boolean(value) && typeof value === "object" && !Array.isArray(value);
+import { isObject } from "./review-json.mjs";
 
 /** @param {unknown} path */
 export const isReviewPath = (path) =>
