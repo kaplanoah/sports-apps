@@ -1,6 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { formatRework, readMergedPrs, summarizeRework } from "../worker/rework.mjs";
+import {
+  formatRework,
+  readMergedHistory,
+  readMergedPrs,
+  summarizeRework,
+} from "../worker/rework.mjs";
 
 /** @param {{ date: string, subject: string, files: string[] }[]} commits */
 const createLog = (commits) =>
@@ -67,6 +72,66 @@ test("one scoped fix can name multiple earlier PRs and files, but counts once", 
   assert.match(formatRework(summary), /Earlier #1: a, b/);
   assert.match(formatRework(summary), /2026-02 \| 1 \| 1 \| 100\.0%/);
   assert.match(formatRework(summary), /not causal proof/);
+  assert.match(formatRework(summary), /within 14 days/);
+});
+
+test("a follow-up fix uses the release title parser's types and scope spelling", () => {
+  /** @type {[string, boolean][]} */
+  const cases = [
+    ["fix: Plain (#2)", true],
+    ["fix!: Breaking (#2)", true],
+    ["fix(mlb)!: Scoped (#2)", true],
+    ["fix(league-1)!: Scoped (#2)", true],
+    ["fix(Some Scope): Invalid (#2)", false],
+    ["fix(MLB)!: Invalid (#2)", false],
+    ["fix(league_one)!: Invalid (#2)", false],
+    ["fix:  Extra space (#2)", false],
+    ["feat: Another feature (#2)", false],
+  ];
+  for (const [subject, isFix] of cases) {
+    const prs = readMergedPrs(
+      createLog([
+        { date: "2026-01-01T12:00:00Z", subject: "feat: Original (#1)", files: ["a"] },
+        { date: "2026-01-02T12:00:00Z", subject, files: ["a"] },
+      ]),
+    );
+    assert.equal(summarizeRework(prs).fixes.length, isFix ? 1 : 0, String(subject));
+  }
+});
+
+test("main's log keeps first-parent order, merge changes, rename endpoints, and NUL-delimited names", () => {
+  const calls = [];
+  const prs = readMergedHistory((args) => {
+    calls.push(args);
+    return LOG;
+  });
+  assert.deepEqual(calls, [
+    [
+      "log",
+      "--first-parent",
+      "--reverse",
+      "--format=\x1e%cI%x00%s",
+      "--name-only",
+      "--no-renames",
+      "--diff-merges=first-parent",
+      "-z",
+      "origin/main",
+    ],
+  ]);
+  assert.deepEqual(
+    prs.map(({ number }) => number),
+    [1, 2, 3, 4],
+  );
+});
+
+test("a missing main reference fails rather than reporting an empty history", () => {
+  assert.throws(
+    () =>
+      readMergedHistory(() => {
+        throw new Error("origin/main missing");
+      }),
+    /origin\/main missing/,
+  );
 });
 
 test("direct commits and malformed records do not count as merged PRs", () => {

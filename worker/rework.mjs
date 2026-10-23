@@ -2,8 +2,10 @@
 // change for unrelated reasons, so a match identifies a candidate, never proof of a regression.
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { readTitleType, RECORD_SEPARATOR } from "./release.mjs";
 
-const WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
+const WINDOW_DAYS = 14;
+const WINDOW_MS = WINDOW_DAYS * 24 * 60 * 60 * 1000;
 
 /** @typedef {{ date: string, subject: string, number: number, files: string[] }} MergedPr */
 
@@ -14,7 +16,7 @@ const WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
  */
 export function readMergedPrs(log) {
   return log
-    .split("\x1e")
+    .split(RECORD_SEPARATOR)
     .slice(1)
     .flatMap((record) => {
       const [date, subject, ...paths] = record.split("\0");
@@ -28,7 +30,7 @@ export function readMergedPrs(log) {
 }
 
 /**
- * Every earlier PR whose files a fix overlaps within the preceding fourteen days.
+ * Every earlier PR whose files a fix overlaps within the report's window.
  * @param {MergedPr} fix
  * @param {MergedPr[]} earlier
  */
@@ -55,7 +57,7 @@ export function summarizeRework(prs) {
     const month = new Date(pr.date).toISOString().slice(0, 7);
     const count = months.get(month) ?? { month, merged: 0, followUps: 0 };
     count.merged += 1;
-    const overlaps = /^fix(?:\([^()]+\))?!?: /.test(pr.subject) ? listOverlaps(pr, earlier) : [];
+    const overlaps = readTitleType(pr.subject)?.type === "fix" ? listOverlaps(pr, earlier) : [];
     if (overlaps.length) {
       fixes.push({ ...pr, overlaps });
       count.followUps += 1;
@@ -77,7 +79,7 @@ export function summarizeRework(prs) {
 /** @param {ReturnType<typeof summarizeRework>} summary */
 export function formatRework(summary) {
   const lines = [
-    "File-overlap estimate: fixes touching another PR's files within 14 days.",
+    `File-overlap estimate: fixes touching another PR's files within ${WINDOW_DAYS} days.`,
     "Overlap is not causal proof. Months use UTC merge dates.",
     "",
     "Month | Follow-up fixes | Merged PRs | Share",
@@ -96,21 +98,33 @@ export function formatRework(summary) {
   return lines.join("\n");
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const log = execFileSync(
-    "git",
-    [
+/** @param {string[]} args */
+const readGit = (args) =>
+  execFileSync("git", args, {
+    cwd: new URL("../", import.meta.url),
+    encoding: "utf8",
+    maxBuffer: 64 * 1024 * 1024,
+  });
+
+/**
+ * Merged PRs on the locally fetched main branch, oldest first.
+ * @param {(args: string[]) => string} [git]
+ */
+export const readMergedHistory = (git = readGit) =>
+  readMergedPrs(
+    git([
       "log",
       "--first-parent",
       "--reverse",
-      "--format=%x1e%cI%x00%s",
+      `--format=${RECORD_SEPARATOR}%cI%x00%s`,
       "--name-only",
       "--no-renames",
       "--diff-merges=first-parent",
       "-z",
       "origin/main",
-    ],
-    { cwd: new URL("../", import.meta.url), encoding: "utf8", maxBuffer: 64 * 1024 * 1024 },
+    ]),
   );
-  console.log(formatRework(summarizeRework(readMergedPrs(log))));
+
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  console.log(formatRework(summarizeRework(readMergedHistory())));
 }
