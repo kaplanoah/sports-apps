@@ -27,9 +27,18 @@ export function verifyTrustedReviewResult(folder, env) {
 export const isTrustedReviewRun = (run, expected) =>
   run.path === ".github/workflows/review.yml" &&
   run.event === "pull_request_target" &&
-  run.head_branch === "main" &&
-  run.head_sha === expected.base &&
+  run.head_sha === expected.head &&
   run.repository?.full_name === expected.repository &&
+  Number.isSafeInteger(run.repository?.id) &&
+  Array.isArray(run.pull_requests) &&
+  run.pull_requests.some(
+    (pull) =>
+      String(pull.number) === expected.pull &&
+      pull.head?.sha === expected.head &&
+      pull.base?.sha === expected.base &&
+      pull.base?.ref === "main" &&
+      pull.base?.repo?.id === run.repository.id,
+  ) &&
   run.display_title === `Review ${expected.pull} head ${expected.head} base ${expected.base}`;
 
 /**
@@ -77,10 +86,12 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
       pull: env.PR,
     });
     if (!result.pending) break;
-    if (Date.now() - started >= 85 * 60 * 1000)
+    if (Date.now() - started >= 110 * 60 * 1000)
       throw new Error("Timed out waiting for trusted review.");
     await new Promise((resume) => setTimeout(resume, 20000));
   } while (result.pending);
   const output = `run=${result.run ?? ""}\nowed=${result.run === null}\ntree=${tree}\n`;
+  if (result.run === null)
+    console.log("No successful trusted review covers this head and base; review remains owed.");
   appendFileSync(env.GITHUB_OUTPUT, output);
 }

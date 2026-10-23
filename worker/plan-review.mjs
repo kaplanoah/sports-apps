@@ -1,5 +1,5 @@
 // Splits a pull request's change into areas by what its files are about, each test with the code
-// it tests, so CI's review (the review jobs in ci.yml, and review-area.yml for each area) has one
+// it tests, so CI's review (review.yml, and trusted-review-area.yml for each area) has one
 // reviewer read each area in full. The first review reads the whole change. A review after it
 // reads only files the pull request still changes and the pushes since the last full read
 // changed. A push that only merges the base is read by no one, but for how it resolved conflicts
