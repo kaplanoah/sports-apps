@@ -1,5 +1,4 @@
 import { nameSeries } from "./bracket.js";
-import { nameTeam } from "./clubs.js";
 import { html, joinItems, joinNames } from "#shared/html.js";
 import { formatOrdinal } from "#shared/ordinal.js";
 import {
@@ -8,7 +7,7 @@ import {
   describeSeriesWin,
   renderSeriesWins,
 } from "#shared/series-text.js";
-import { TEAMS } from "./teams.js";
+import { nameTeam, TEAMS } from "./teams.js";
 import { describeGame, findCommonGames, isResult, listResults } from "./update-groups.js";
 
 // The sentence for an update. The page shows each club as a chip and a notification as its

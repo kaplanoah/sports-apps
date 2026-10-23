@@ -12,7 +12,8 @@ import { describeFewestFirst, rankAmong, renderRankRow } from "#shared/rank-curv
 import { renderRetryBlock } from "#shared/retry.js";
 import { renderSheetPart } from "#shared/sheet-part.js";
 import { renderTeamStats } from "#shared/team-sheet.js";
-import { nameTeam, renderTeamDot } from "./clubs.js";
+import { renderTeamDot } from "./clubs.js";
+import { nameTeam } from "./teams.js";
 import { renderPitchMix } from "./pitch-mix.js";
 import {
   describeInningsToQualify,

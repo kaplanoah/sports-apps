@@ -26,6 +26,7 @@ import { normalizeSpaces, stripTags } from "../../../tests/text.js";
 import { readFontFaces } from "../../../tests/css-rules.js";
 import { EASTERN, checkInTimeZone, useTimeZone } from "../../../tests/time-zone.js";
 import { dropSavedStorage, useKeptChoices } from "../../../tests/saved-storage.js";
+import { WILD_CARD_SERIES } from "./browser/bracket-rounds.mjs";
 import { TWO_UPDATES, readUpdateBox } from "./update-box.js";
 
 // The expected times below are what a viewer in Eastern time sees.
@@ -1745,7 +1746,6 @@ test("games list: a game under way shows its outs as two lights beside the innin
 const SERIES_IDS = ["WC1", "WC2", "DS1", "DS2", "CS"]
   .flatMap((round) => [`AL_${round}`, `NL_${round}`])
   .concat("WS");
-const WILD_CARD_IDS = ["AL_WC1", "AL_WC2", "NL_WC1", "NL_WC2"];
 
 /**
  * The evening's season, with these series and today's games added to what MLB had.
@@ -1883,7 +1883,7 @@ test("bracket: a card's next game reads its day and time by the viewer's own clo
  */
 function showWildCardsAt(start, slateGame, game = 1) {
   const series = Object.fromEntries(
-    WILD_CARD_IDS.map((id) => [
+    WILD_CARD_SERIES.map((id) => [
       id,
       { ...eveningSnapshot.series[id], next: nextGame(start, start.slice(0, 10), false, game) },
     ]),
@@ -1902,7 +1902,7 @@ test("bracket: under a card whose series already counts the game, the next game 
       2,
     );
     assert.deepEqual(
-      readCardNotes(WILD_CARD_IDS),
+      readCardNotes(WILD_CARD_SERIES),
       Array(4).fill({ text: "Tomorrow•7:08 PM", classes: ["card-note"] }),
     );
   }));
@@ -1912,7 +1912,7 @@ test("bracket: more than a half hour before first pitch, a card shows its next g
     const start = "2026-09-25T01:20:00Z";
     showWildCardsAt(start, { ...NYY_AT_BOS, start });
     assert.deepEqual(
-      readCardNotes(WILD_CARD_IDS),
+      readCardNotes(WILD_CARD_SERIES),
       Array(4).fill({ text: "Today•9:20 PM", classes: ["card-note"] }),
     );
   }));
@@ -1921,7 +1921,7 @@ test("bracket: past its start, a game still before its first pitch reads as warm
   checkAt(eveningFixture.now, () => {
     const start = "2026-09-25T00:40:00Z";
     showWildCardsAt(start, { ...NYY_AT_BOS, start });
-    const warmups = readCardNotes(WILD_CARD_IDS).filter((note) => note.text === "Warmup");
+    const warmups = readCardNotes(WILD_CARD_SERIES).filter((note) => note.text === "Warmup");
     assert.deepEqual(warmups, [{ text: "Warmup", classes: ["card-note", "live"] }]);
   }));
 
@@ -1929,7 +1929,7 @@ test("bracket: a delayed start shows its delay instead of a countdown", () =>
   checkAt(eveningFixture.now, () => {
     const start = "2026-09-25T01:02:00Z";
     showWildCardsAt(start, { ...NYY_AT_BOS, start, delay: "Delayed: Rain" });
-    const delayed = readCardNotes(WILD_CARD_IDS).filter((note) => note.classes.includes("live"));
+    const delayed = readCardNotes(WILD_CARD_SERIES).filter((note) => note.classes.includes("live"));
     assert.deepEqual(delayed, [
       { text: "Delayed: Rain", classes: ["card-note", "live", "delayed"] },
     ]);
