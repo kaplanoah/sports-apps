@@ -860,6 +860,14 @@ test("only asked plans prepare PR code and consume their label even without a me
     workflow,
     /name: Leave an unavailable merge's review owed\n {8}if: needs.review-plan.outputs.available == 'false'/,
   );
+  const unavailable = spawnSync(
+    "bash",
+    ["-c", readStepScript(workflow, "Leave an unavailable merge's review owed")],
+    { encoding: "utf8" },
+  );
+  assert.equal(unavailable.status, 1);
+  assert.match(unavailable.stdout, /^::error::.*review-plan notice/);
+  assert.doesNotMatch(unavailable.stdout, /Re-add the review label/);
   const output = join(createFolder(), "sync-output");
   const result = spawnSync("bash", ["-c", readStepScript(workflow, "Decide whether to review")], {
     env: {
