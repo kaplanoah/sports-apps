@@ -34,6 +34,16 @@ const NEARLY_RANKED_SHARE = 0.25;
 export const isNearlyRanked = (progress) => progress != null && progress >= NEARLY_RANKED_SHARE;
 
 /**
+ * An ending explaining a missing mark, or nothing once the sample is near enough or unknown.
+ * @param {number | null | undefined} progress the player's share of what qualifying takes
+ * @param {string} players who the player would be compared with
+ */
+export const describeSmallSample = (progress, players) =>
+  progress == null || isNearlyRanked(progress)
+    ? ""
+    : `, too small a sample to fairly compare with ${players}`;
+
+/**
  * How wide each player's number spreads on the curve, by Silverman's rule of thumb.
  * @param {number[]} values
  */

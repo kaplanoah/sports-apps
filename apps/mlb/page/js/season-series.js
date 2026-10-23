@@ -3,7 +3,8 @@
 
 import { readCalendarDate } from "#shared/days.js";
 import { renderSeasonSeries as renderSeries } from "#shared/season-series.js";
-import { nameTeam, renderClub } from "./clubs.js";
+import { renderClub } from "./clubs.js";
+import { nameTeam } from "./teams.js";
 import { sortInScheduleOrder } from "./schedule-order.js";
 import { listCountedGames } from "./season-games.js";
 

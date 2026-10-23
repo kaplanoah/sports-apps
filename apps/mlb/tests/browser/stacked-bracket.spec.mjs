@@ -1,3 +1,4 @@
+import { finishSeries, WILD_CARD_SERIES } from "./bracket-rounds.mjs";
 import {
   test,
   expect,
@@ -238,8 +239,7 @@ test("on a phone, a bracket opening on the Division Series keeps its byes' seed 
 }) => {
   await page.setViewportSize(PHONE);
   const snapshot = buildFixtureSnapshot(EVENING_FIXTURE);
-  for (const id of ["AL_WC1", "AL_WC2", "NL_WC1", "NL_WC2"])
-    snapshot.series[id] = { winsA: 2, winsB: 0, started: true };
+  finishSeries(snapshot, WILD_CARD_SERIES, 2);
   await openBracket(page, { snapshots: { [EVENING_FIXTURE.season]: snapshot } });
 
   const division = page.locator('.box[data-round="DS"]').first();
