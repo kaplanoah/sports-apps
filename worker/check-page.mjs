@@ -249,11 +249,9 @@ async function launchChromium(env) {
 async function closeAfterPageCheck(close, check) {
   try {
     await close();
-    return true;
   } catch (error) {
     // Cleanup cannot undo a confirmed broken-page result.
     if (check.status !== "broken") throw error;
-    return false;
   }
 }
 
@@ -263,8 +261,8 @@ async function closeAfterPageCheck(close, check) {
  */
 function judgePageFailure(error, isInfrastructureUnavailable) {
   const message = error instanceof Error ? error.message : String(error);
-  const isProxyFailure =
-    /net::ERR_(?:PROXY_CONNECTION_FAILED|TUNNEL_CONNECTION_FAILED|NO_SUPPORTED_PROXIES)/.test(
+  const isVerificationFailure =
+    /net::ERR_(?:PROXY_CONNECTION_FAILED|TUNNEL_CONNECTION_FAILED|NO_SUPPORTED_PROXIES|CERT_AUTHORITY_INVALID|PROXY_CERTIFICATE_INVALID)/.test(
       message,
     );
   const isPageFailure =
@@ -272,7 +270,7 @@ function judgePageFailure(error, isInfrastructureUnavailable) {
     /net::ERR_|Page crashed|Target crashed|Execution context was destroyed|Failed to fetch/.test(
       message,
     );
-  return !isInfrastructureUnavailable && !isProxyFailure && isPageFailure
+  return !isInfrastructureUnavailable && !isVerificationFailure && isPageFailure
     ? markBroken(`the page didn't load: ${message}`)
     : markUnchecked(`the page check failed: ${message}`);
 }
@@ -316,6 +314,7 @@ export async function checkAppPage({
     try {
       for (let attempt = 0; attempt < attempts; attempt += 1) {
         if (attempt > 0) await waitFor(pauseMs);
+        // A service worker would answer the next try from what the last one kept.
         const context = await browser.newContext({ serviceWorkers: "block" });
         let isContextClosed = false;
         context.on("close", () => {
@@ -327,7 +326,7 @@ export async function checkAppPage({
         );
         landedUrl = page.url();
         check = hideAddress(opened, access.pageUrl, landedUrl, access.accessCode);
-        if (!(await closeAfterPageCheck(() => context.close(), check))) break;
+        await closeAfterPageCheck(() => context.close(), check);
         if (check.status !== "broken") break;
       }
       return check;

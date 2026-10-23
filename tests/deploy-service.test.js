@@ -6,9 +6,6 @@ import { createServiceRoots } from "./service-roots.js";
 const ENV = {
   CLOUDFLARE_ACCOUNT_ID: "acct123",
   CLOUDFLARE_WORKERS_SUBDOMAIN: "example-subdomain",
-  MLB_PAGE_URL: "https://mlb-app.example-subdomain.workers.dev/k3y/",
-  WNBA_PAGE_URL: "https://wnba-app.example-subdomain.workers.dev/k3y/",
-  ACCESS_CODE: "LAYUP",
 };
 const API = "https://api.cloudflare.com/client/v4";
 const NEW_COMMIT = "2".repeat(40);

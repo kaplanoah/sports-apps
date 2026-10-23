@@ -344,11 +344,13 @@ test("browser infrastructure failures mask the redirected page host and access c
   );
 });
 
-test("known proxy failures leave navigation unverified while the browser remains available", async () => {
+test("known proxy and certificate-trust failures leave navigation unverified", async () => {
   for (const code of [
     "PROXY_CONNECTION_FAILED",
     "TUNNEL_CONNECTION_FAILED",
     "NO_SUPPORTED_PROXIES",
+    "CERT_AUTHORITY_INVALID",
+    "PROXY_CERTIFICATE_INVALID",
   ]) {
     const { page } = openMovedPage(PAGE_URL);
     page.goto = async () => {
@@ -375,9 +377,8 @@ test("known proxy failures leave navigation unverified while the browser remains
   }
 });
 
-test("a closed page alone cannot establish that its release broke", async () => {
+test("a closed-target error leaves the page unchecked without a retry", async () => {
   const { page } = openMovedPage(PAGE_URL);
-  page.isClosed = () => true;
   let checks = 0;
   page.goto = async () => {
     checks += 1;
@@ -400,6 +401,74 @@ test("a closed page alone cannot establish that its release broke", async () => 
   });
   assert.equal(check.status, "unchecked");
   assert.equal(checks, 1);
+});
+
+test("returned page failures mask the access code inside the attempt", async () => {
+  for (const [message, status] of [
+    ["Target closed for LAYUP", "unchecked"],
+    ["net::ERR_FAILED for LAYUP", "broken"],
+  ]) {
+    const { page } = openMovedPage(PAGE_URL);
+    page.goto = async () => {
+      throw new Error(`${message} at ${PAGE_URL}`);
+    };
+    const context = { on: () => {}, newPage: async () => page, close: async () => {} };
+    const browser = {
+      isConnected: () => true,
+      newContext: async () => context,
+      close: async () => {},
+    };
+    const check = await checkAppPage({
+      app: "wnba",
+      channel: "production",
+      env: { WNBA_PAGE_URL: PAGE_URL, ACCESS_CODE: "LAYUP" },
+      attempts: 1,
+      launchBrowser: async () =>
+        /** @type {import("@playwright/test").Browser} */ (/** @type {unknown} */ (browser)),
+    });
+    assert.equal(check.status, status);
+    assert.ok(check.status !== "drawn");
+    assert.match(check.reason, /for <access code> at <page>\//);
+    assert.doesNotMatch(check.reason, /LAYUP/);
+  }
+});
+
+test("a broken first attempt can recover after its context cleanup fails", async () => {
+  const first = openMovedPage(PAGE_URL).page;
+  first.goto = /** @type {typeof first.goto} */ (
+    async () => ({
+      ok: () => false,
+      status: () => 500,
+    })
+  );
+  const second = openMovedPage(PAGE_URL).page;
+  const pages = [first, second];
+  let opened = 0;
+  const browser = {
+    isConnected: () => true,
+    newContext: async () => {
+      const index = opened++;
+      return {
+        on: () => {},
+        newPage: async () => pages[index],
+        close: async () => {
+          if (index === 0) throw new Error("Target closed during cleanup");
+        },
+      };
+    },
+    close: async () => {},
+  };
+  const check = await checkAppPage({
+    app: "wnba",
+    channel: "production",
+    env: { WNBA_PAGE_URL: PAGE_URL, ACCESS_CODE: "LAYUP" },
+    attempts: 2,
+    pauseMs: 0,
+    launchBrowser: async () =>
+      /** @type {import("@playwright/test").Browser} */ (/** @type {unknown} */ (browser)),
+  });
+  assert.deepEqual(check, { status: "drawn" });
+  assert.equal(opened, 2);
 });
 
 test("a drawn page without an access route reports that it opened without a code", async () => {

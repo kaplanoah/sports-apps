@@ -325,7 +325,7 @@ export const listAppWorkers = (channel, subdomain, roots) =>
  * @property {NodeJS.ProcessEnv} [env]
  * @property {typeof console.log} [log]
  * @property {(milliseconds: number) => Promise<unknown>} [pause]
- * @property {typeof checkAppPage} [checkPage] Opens the new version's page.
+ * @property {typeof checkAppPage} [checkPage] Opens the app's live page.
  * @property {(commit: string, of: string) => boolean} [isEarlier] Whether a commit comes
  *   before another in main's history.
  */

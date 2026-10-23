@@ -25,7 +25,7 @@ A Cloudflare Worker serves the page and reads the WNBA's own feeds on its own, e
 
 ### Sharing a page
 
-To share either page, give it an access code. Anyone who opens the link types the code once, and the phone remembers it.
+Pages deployed with this repo's tooling require an access code, which the deploy's check also uses. Each phone types it once and remembers it, whether the page is private or shared.
 
 ## Setup (for humans)
 
@@ -71,11 +71,11 @@ Set an access code for every app: have the user pick one and run `npm run set-ac
 
 Have the user add `<APP>_PAGE_URL=<page address>` and `ACCESS_CODE=<chosen code>` to the cloud environment's **Environment variables**, then **Save changes**. Replace `<APP>` with the app's uppercase name, such as `MLB` or `WNBA`. These settings apply to new sessions, which receive them for future manual deploys. Finish this initial setup with step 4's manual page check; it needs no GitHub deployment workflow.
 
-To give the page an address of its own, on a domain in the Cloudflare account, run `npm run set-page-host -- <app> <host>` once the page has a code. It points `https://<host>/` at the Worker, which opens the page there without the key, behind the code alone. The address with the key keeps working. While the Worker has both the host and a code, it marks the page there as moving and sends fans on with their choices: a browser at once, and a Home Screen app from a card in its Updates box. Keep the host out of the repo, as the Worker's own address is.
+To give the page an address of its own, on a domain in the Cloudflare account, run `npm run set-page-host -- <app> <host>` once the page has a code. It points `https://<host>/` at the Worker, which opens the page there without the key, behind the code alone. The address with the key keeps working. While the Worker has both the host and a code, it marks the page there as moving and sends fans on with their choices: a browser at once, and a Home Screen app from a card in its Updates box. Add that host to the session's **Network access** too, so its browser can follow the move. Keep the host out of the repo, as the Worker's own address is.
 
 Each app's news needs an Anthropic API key, as its Worker's `ANTHROPIC_API_KEY` secret. Have the user add it themselves in the Cloudflare dashboard (the Worker's **Settings**, then **Variables and Secrets**, as a **Secret**), never in chat. Without it, the Worker still reads the feeds but keeps no story. `<address>store/news/status` says what the last run couldn't do, and counts Claude's calls and tokens by day.
 
-**4. Check the page.** Have the user open the address, enter its code, and confirm the season appears. The first visit also starts the Worker's own updates. Then have them open `<address>store/live/status` in that signed-in browser. If `data.error` and `data.write` are empty, it works. If not, `error` says why the Worker couldn't read the league, and `write` names the save that failed.
+**4. Check the page.** Have the user open the address, enter its code if it asks for one, and confirm the season appears. The first visit also starts the Worker's own updates. Then have them open `<address>store/live/status` in that signed-in browser. If `data.error` and `data.write` are empty, it works. If not, `error` says why the Worker couldn't read the league, and `write` names the save that failed.
 
 **5. Save it to the home screen.** On an iPhone, have them open the address in Safari and choose **Share > Add to Home Screen**. It then opens full screen with its own icon. On a phone, the page shows these steps itself, in a welcome over the whole screen until the page is added or the viewer goes on in the browser, and at the top of settings, and on Android its **Install** button opens Chrome's own install dialog.
 
@@ -144,7 +144,7 @@ Each app also has a beta Worker, `<app>-app-beta`, named in the `[env.beta]` of 
 
 A pull request gives beta up as it closes or merges, as its branch is pushed, and as it's labeled `phone-ok`.
 
-Before the first beta deploy, create each app's beta Worker, `<app>-app-beta`, and each service's in Cloudflare's dashboard, as "Deploying on merge" says, since the `beta` token can change only the Workers it names, then create the `beta` environment as "Deploying on merge" says, with its token limited to them. After the first one, give each beta Worker its key with `npm run set-app-key -- <app> --channel beta`, which prints its address. Give every beta app the code in the `beta` environment's `ACCESS_CODE` with `npm run set-access-code -- <app> <code> --channel beta`. Add the address to the `beta` environment's secrets, and add the page to the Home Screen from that address. `npm run deploy:api -- <worker> --channel beta` deploys beta by hand, from a checkout of `origin/beta`, with the [tooling rules' session verification requirements](.claude/rules/tooling.md), and `npm run rollback -- <worker> --channel beta` rolls it back.
+Before the first beta deploy, create each app's beta Worker, `<app>-app-beta`, and each service's in Cloudflare's dashboard, as "Deploying on merge" says, since the `beta` token can change only the Workers it names, then create the `beta` environment as "Deploying on merge" says, with its token limited to them. After the first one, give each beta Worker its key with `npm run set-app-key -- <app> --channel beta`, which prints its address. Give every beta app the code in the `beta` environment's `ACCESS_CODE` with `npm run set-access-code -- <app> <code> --channel beta`. Add the address to the `beta` environment's secrets, and add the page to the Home Screen from that address. `npm run deploy:api -- <worker> --channel beta` deploys beta by hand, from a checkout of `origin/beta`, with the session's `ACCESS_CODE` set to beta's code and the [tooling rules' session verification requirements](.claude/rules/tooling.md) met, and `npm run rollback -- <worker> --channel beta` rolls it back.
 
 ## License
 

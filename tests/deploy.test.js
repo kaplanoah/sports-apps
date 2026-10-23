@@ -1471,9 +1471,9 @@ test("an unrelated unchanged app still skips page verification", async () => {
   assert.ok(!describeCalls(cloudflare.calls).some((call) => /^(PUT|POST) /.test(call)));
 });
 
-test("automatic push and workflow-run deploys do not recheck a commit already live", async () => {
+test("first automatic and hand attempts do not recheck a commit already live", async () => {
   const { deploy } = await loadDeployModule();
-  for (const event of ["push", "workflow_run"]) {
+  for (const attempt of [undefined, "1"]) {
     const cloudflare = createFakeCloudflare({ liveCommit: NEW_COMMIT });
     const lines = [];
     assert.equal(
@@ -1482,12 +1482,12 @@ test("automatic push and workflow-run deploys do not recheck a commit already li
         script: "",
         commit: NEW_COMMIT,
         fetchImpl: cloudflare.fetchImpl,
-        env: { ...ENV, GITHUB_EVENT_NAME: event, GITHUB_RUN_ATTEMPT: "1" },
+        env: { ...ENV, GITHUB_RUN_ATTEMPT: attempt },
         findChanges: () => [],
         log: (line) => lines.push(line),
         pause: skipPause,
         checkPage: async () => {
-          assert.fail("automatic follow-ups keep the no-change skip");
+          assert.fail("first attempts keep the no-change skip");
         },
       }),
       null,
