@@ -61,8 +61,12 @@ const SKIPPED_FILES = new Set([
   "worker/worker-secrets.mjs",
 ]);
 const TEST_FOLDERS = [/^tests\//, /^(?:apps|services)\/[^/]+\/tests\//];
-// Claude Code's settings, hooks, rules, and skills, which only sessions run.
-const SESSION_FOLDER = /^\.claude\//;
+
+/**
+ * Whether a path holds settings, hooks, rules, or skills that only sessions run.
+ * @param {string} path
+ */
+export const isSessionPath = (path) => path.startsWith(".claude/");
 
 /**
  * Whether a path is in the root's tests or a Worker's.
@@ -78,7 +82,7 @@ export const isDocument = (path) => path.endsWith(".md");
 
 /** @param {string} path */
 const isSkipped = (path) =>
-  isDocument(path) || SKIPPED_FILES.has(path) || isTestPath(path) || SESSION_FOLDER.test(path);
+  isDocument(path) || SKIPPED_FILES.has(path) || isTestPath(path) || isSessionPath(path);
 
 /**
  * The Worker whose folder a path is in, an app's or a service's, or null for a path outside every
