@@ -290,7 +290,10 @@ export function startAppearance(looks) {
   // follows its choices wherever they are now, after the welcome keeps an icon picked for a move.
   document.addEventListener("change", (event) => {
     const choice = /** @type {HTMLInputElement} */ (event.target);
-    if (choice.name === "welcomeIcon") showChosenTheme();
+    if (choice.name === "welcomeIcon") {
+      checkSavedChoice(findAppearanceChoices());
+      showChosenTheme();
+    }
     if (!choice.matches(APPEARANCE_CHOICES)) return;
     if (isIosApp()) keepLookSwitched();
     appearance.keep(choice.value);

@@ -56,10 +56,7 @@ export function loadThemeHead({
   for (const name of ["page-move", "pick-theme"])
     runInContext(readRepoFile(`shared/page/${name}.js`), context);
   return {
-    ...runInContext(
-      "({ isLook, readAppearanceChoice, resolveTheme, showTheme, readPageMove, packCarried })",
-      context,
-    ),
+    ...runInContext("({ resolveTheme, showTheme, readPageMove, packCarried })", context),
     theme,
     setPhoneLook: (/** @type {"light" | "dark"} */ look) => {
       phoneLook = look;
