@@ -532,6 +532,7 @@ async function verifyHostileReviewIsolation(baseRef) {
   for (const path of [
     "trusted-review.mjs",
     "review-diagnostics.mjs",
+    "review-json.mjs",
     "review-git.mjs",
     "plan-review.mjs",
     "judge-review.mjs",

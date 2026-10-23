@@ -1,4 +1,5 @@
 import { appendFileSync, closeSync, constants, fstatSync, openSync, readFileSync } from "node:fs";
+import { isObject } from "./review-json.mjs";
 
 const ASSISTANT_ERRORS = [
   "authentication_failed",
@@ -23,11 +24,9 @@ const RESULT_SUBTYPES = [
   "error_max_structured_output_retries",
 ];
 
-/** @param {unknown} value @param {string[]} choices */
-const selectValue = (value, choices) => choices.find((choice) => choice === value) ?? "unknown";
-
-/** @param {unknown} value */
-const isObject = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
+/** @param {unknown} value @param {string[]} choices @param {string} [fallback] */
+const selectValue = (value, choices, fallback = "unknown") =>
+  choices.find((choice) => choice === value) ?? fallback;
 
 /** @param {unknown} value */
 function nameValueType(value) {
@@ -90,7 +89,7 @@ function collectDiagnostics(env) {
   const result = execution.messages.findLast((message) => message.type === "result");
   const assistantErrors = execution.messages
     .filter((message) => message.type === "assistant" && Object.hasOwn(message, "error"))
-    .map((message) => selectValue(message.error, ASSISTANT_ERRORS));
+    .map((message) => selectValue(message.error, ASSISTANT_ERRORS, "unlisted"));
   return {
     event: "claude_review_diagnostics",
     version: 1,

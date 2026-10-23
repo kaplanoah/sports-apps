@@ -60,6 +60,7 @@ const SKIPPED_FILES = new Set([
   "worker/review-data.mjs",
   "worker/review-diagnostics.mjs",
   "worker/review-git.mjs",
+  "worker/review-json.mjs",
   "worker/review-repository.mjs",
   "worker/review-state.mjs",
   "worker/rework.mjs",

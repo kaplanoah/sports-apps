@@ -206,7 +206,7 @@ test("hostile unknown fields and malformed metadata cannot leak through logs or 
   assert.equal(data.result_is_error, null);
   assert.equal(data.num_turns, null);
   assert.equal(data.duration_ms, null);
-  assert.deepEqual(data.assistant_error_codes, ["unknown"]);
+  assert.deepEqual(data.assistant_error_codes, ["unlisted"]);
   assert.equal(data.result_structured_output, "string");
 });
 
@@ -256,5 +256,9 @@ test("each Claude attempt is immediately followed by always-run trusted diagnost
     }
   }
   assert.equal(attempts, 3);
-  assert.doesNotMatch(readRepoFile("worker/review-diagnostics.mjs"), /from "(?!node:)/);
+  assert.doesNotMatch(
+    readRepoFile("worker/review-diagnostics.mjs").replace('from "./review-json.mjs"', ""),
+    /from "(?!node:)/,
+  );
+  assert.doesNotMatch(readRepoFile("worker/review-json.mjs"), /^\s*import\b/m);
 });
