@@ -436,6 +436,11 @@ test("pinned-action flat and nested extraction layouts work for zero, one and mu
       stages.push(stage);
     }
     if (count) {
+      const findsOnly = downloadReviewArtifacts(upload, stages.slice(1));
+      assert.throws(
+        () => importReviewArtifacts(findsOnly, createFolder(), env),
+        /Missing review plan artifact/,
+      );
       const acrossDownload = downloadReviewArtifacts(upload, stages);
       const destination = createFolder();
       const result = spawnSync(

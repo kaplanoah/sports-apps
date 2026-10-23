@@ -216,11 +216,7 @@ function collectReviewArtifacts(input) {
     ? [[readJson(join(input, "provenance.json")).stage, input]]
     : readdirSync(input).map((name) => [name.replace(/^trusted-review-/, ""), join(input, name)]);
   for (const [stage, path] of folders) {
-    if (
-      typeof stage !== "string" ||
-      !/^(?:plan|find-\d+|across|post)$/.test(stage) ||
-      (!isFlat && path !== join(input, `trusted-review-${stage}`))
-    )
+    if (!isFlat && path !== join(input, `trusted-review-${stage}`))
       throw new Error("Unexpected review artifact.");
     artifacts.set(stage, path);
   }
