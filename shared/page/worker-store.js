@@ -4,6 +4,7 @@
 import { reloadWhenSignedOut } from "./access.js";
 import { UPDATING_WAIT_MS } from "./catch-up-note.js";
 import { noteStep } from "./diagnostics.js";
+import { isStoreDocumentPath } from "./store-path.js";
 import { readWorkerError } from "./worker-error.js";
 
 const RECONNECT_FIRST_MS = 1000;
@@ -56,12 +57,7 @@ function readSocketMessage(data) {
       return null;
     return { kind: "updating", updating: message.updating };
   }
-  if (
-    typeof message.path !== "string" ||
-    !/^[^/]+\/[^/]+$/.test(message.path) ||
-    !("data" in message)
-  )
-    return null;
+  if (!isStoreDocumentPath(message.path) || !("data" in message)) return null;
   return { kind: "push", path: message.path, data: message.data };
 }
 
@@ -419,7 +415,10 @@ export function createWorkerStore({
     });
     opened.addEventListener("message", (event) => {
       const message = readSocketMessage(event.data);
-      if (!message) return;
+      if (!message) {
+        noteStep("Store sent a message it couldn't read");
+        return;
+      }
       if (message.kind === "push") receivePush(message);
       else if (socket === opened) noteUpdating(message.updating);
     });

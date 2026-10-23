@@ -274,6 +274,8 @@ test("malformed socket messages leave watches unchanged and allow the next push 
       { path: "seasons/", data: { inning: 99 } },
       { path: "/2026", data: { inning: 99 } },
       { path: "seasons/2026/extra", data: { inning: 99 } },
+      { path: "seasons/not valid", data: { inning: 99 } },
+      { path: `seasons/${"a".repeat(65)}`, data: { inning: 99 } },
       { path: "seasons/2026" },
       { updating: false, path: "seasons/2026", data: { inning: 99 } },
     ].map((message) => JSON.stringify(message)),

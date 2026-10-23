@@ -86,6 +86,11 @@ export const createWorkerControls = (testStore) => ({
   /** @param {number} ms */
   passTimeAtWorker: (ms) => testStore.passTime(ms),
   countWatchersHeard: () => testStore.countAccepted(),
+  /** @param {unknown} message */
+  sendSocketMessage: (message) => {
+    for (const socket of testStore.context.ctx.getWebSockets())
+      socket.send(JSON.stringify(message));
+  },
 });
 
 // Routes match with patterns rather than functions: Playwright checks a pattern itself, but asks the
