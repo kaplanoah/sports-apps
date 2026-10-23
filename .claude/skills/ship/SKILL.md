@@ -49,11 +49,14 @@ This skill holds what "Shipping a change" in AGENTS.md leaves out, most of it un
 - Beta holds one PR at a time, while the owner tests it on the phone.
   A PR claims beta with the `beta` label, and of the open PRs labeled `beta`, the one labeled first holds it.
   A PR waiting for beta has the `beta-wait` label, and the one labeled first has waited longest.
-  On every PR event, the `Beta` workflow (`.github/workflows/beta.yml`) takes `beta` off a PR that closed, was pushed after its label, or got `phone-ok` after it,
+  On its watched same-repo PR events and each merge to `main`, the `Beta` workflow (`.github/workflows/beta.yml`) takes `beta` off a PR that closed, was pushed after its label, or got `phone-ok` after it,
   and off every PR but the one that holds beta, which it puts in line with `beta-wait`.
   Once beta is free, it comments on the PR that has waited longest, which wakes its session: "Beta is free, and this pull request has waited longest."
   A claim has no time limit, since the owner is the only tester.
-  GitHub starts no PR workflow for a PR in conflict with `main`, so a label change on one takes effect at the next merge to `main` or the PR's next push.
+  The deploy check reads labels live, so it sees a label change at once, even on a PR in conflict with `main`.
+  GitHub starts no PR workflow for one in conflict, even after a push that leaves it in conflict.
+  The workflow's label fixes and its comment wait for the next Beta run,
+  which a merge to `main`, or a watched event on any same-repo PR not in conflict, this one included, starts.
 - Change a PR's labels one at a time, never by setting its whole list, which would drop `phone-ok` or `review`:
   `gh pr edit <number> --add-label beta` or `--remove-label beta`, and the same for `beta-wait`.
   See who holds beta with `gh pr list --label beta --state open`, and who waits with `gh pr list --label beta-wait --state open`.
