@@ -78,13 +78,29 @@ const findNewAddress = (pageHost) => `https://${pageHost}/`;
  * @param {string} pageHost
  * @param {() => Promise<unknown>} leave
  */
-async function followHandoff(page, pageHost, leave) {
-  const handoff = page.waitForResponse(`${findNewAddress(pageHost)}access/handoff?**`);
-  await leave();
-  const response = await handoff;
-  const address = new URL(response.headers().location, response.url());
-  await page.goto(address.href);
-  return address;
+export async function followHandoff(page, pageHost, leave) {
+  const cancellation = new AbortController();
+  /** @param {import("@playwright/test").Frame} frame */
+  const isHandoffCommit = (frame) =>
+    frame === page.mainFrame() && frame.url() === "chrome-error://chromewebdata/";
+  // The un-routed redirect cannot serve the fixture host, so Chromium commits its error document.
+  const committed = page.waitForEvent("framenavigated", {
+    predicate: isHandoffCommit,
+    signal: cancellation.signal,
+  });
+  try {
+    const destination = page
+      .waitForResponse(`${findNewAddress(pageHost)}access/handoff?**`, {
+        signal: cancellation.signal,
+      })
+      .then((response) => new URL(response.headers().location, response.url()));
+    // Response headers (and even response.finished()) precede the redirected document's commit.
+    const [address] = await Promise.all([destination, committed, Promise.resolve().then(leave)]);
+    await page.goto(address.href);
+    return address;
+  } finally {
+    cancellation.abort();
+  }
 }
 
 /**

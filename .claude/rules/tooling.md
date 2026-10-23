@@ -21,10 +21,14 @@ paths:
   and the one code every app asks for as `ACCESS_CODE`.
   A beta deploy reads them from the `beta` environment's, with `_BETA` after the app's name in each address's.
 - Services: each deploy uploads every service before any app, since an app binds each service, by its name in capitals, to its Worker on the app's channel (`listServiceBindings` in the root's `worker/deploy.mjs`).
-  A service has no workers.dev address, so its deploy reads what each app's `health` says of it,
+  After all app deploys settle, the deploy checks every service, including unchanged services an app can newly bind.
+  A service has no workers.dev address, so the check reads what each app's `health` says of it,
   in a field of its own, `services.<name>`, apart from the app's own status,
   and puts the service's earlier version back unless every app that reports it says it's ok at the new commit (`worker/check-service.mjs`).
-  No app reports a service until its live version binds it, so a service's first deploy logs that the check was skipped.
+  An unchanged service is checked at its own live commit and isn't rolled back.
+  A service with a known release is skipped only when no app's live version binds it.
+  A manual `deploy:api` that names one app fails if a service has no recorded live commit,
+  even when no app binds it yet; deploy all Workers to upload that service first.
   The service reads its release from its `VERSION` binding, which the upload's `workers/tag` sets to the short commit.
   The `Watch apps` workflow checks each service the same way, keeping one open issue for each that isn't answering, which closes once it answers again.
   Each channel's Cloudflare token edits only the Workers it names, so before a service's first deploy on a channel,
@@ -38,6 +42,10 @@ paths:
   and the owner approves each when `.claude/settings.json` asks.
   Never hand the owner one to run on their own computer, which has neither the token nor the account ID,
   unless they ask to.
+- `npm run rework` estimates follow-up fixes from overlapping files in merged PRs and reports their monthly share.
+  Run `git fetch origin main` first, since it reads the locally fetched `origin/main` and a stale fetch gives a stale report.
+  It fails if that reference is missing.
+  File overlap is an estimate, not proof that an earlier PR caused a fix.
 - `npm run rollback -- <worker>` puts an app's or a service's previous version back at all of its traffic and prints which commit was live and which is now.
   Run it only when the user asks.
 - `npm run set-app-key -- <app>` gives that app's Worker its `APP_KEY` and prints the page's address.

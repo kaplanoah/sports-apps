@@ -64,6 +64,7 @@ test("a merge of only docs, tests, and tooling skips the deploy", () => {
     "worker/review-context.mjs",
     "worker/review-git.mjs",
     "worker/review-state.mjs",
+    "worker/rework.mjs",
     "worker/rule-files.mjs",
     "worker/set-app-key.mjs",
     ".claude/rules/page-look.md",

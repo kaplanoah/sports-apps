@@ -1,12 +1,9 @@
 import { expect } from "./harness.mjs";
 import { RECORD_MS } from "../../../../shared/page/diagnostics.js";
 
-// The Diagnostics records in settings, and a reload that records what the page draws.
+// Reloading to record what the WNBA page draws.
 
 export { RECORD_MS };
-
-/** @param {import("@playwright/test").Page} page */
-export const findRecords = (page) => page.locator("#diagnostics");
 
 /**
  * Reloads the page and waits until it shows the season's bracket, while its record is under way.

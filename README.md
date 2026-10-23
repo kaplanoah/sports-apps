@@ -284,6 +284,11 @@ To run the
 same checks yourself, run `npm ci` and `npx playwright install chromium` once,
 then `npm run check`. `npm run format` fixes formatting.
 
+After `git fetch origin main`, run `npm run rework` for a file-overlap estimate
+of follow-up fixes and their monthly share. It reads the locally fetched
+`origin/main`, so a stale fetch gives a stale report and a missing reference
+fails the command. Overlap does not prove an earlier PR caused a fix.
+
 Each app's Worker carries its page. Every deploy bundles both from the source it
 deploys, so there is nothing to rebuild by hand. `npm run build` writes each
 app's bundle to its `apps/<app>/worker/dist/`, which git ignores, if you want to
@@ -386,7 +391,9 @@ service by it, but no other service;
 once CI has passed on the newer merge, whose deploy covers it, and deploys until then, in case that
 CI fails. A merge's deploy never puts back code older than the live version's; a push to beta
 replaces whatever beta held, but only with the head of the pull request that holds beta, as
-"Trying a change on the phone" says. Without the token, merges deploy nothing.
+"Trying a change on the phone" says. Without the channel's token, each Deploy run
+fails with a missing-token error and deploys nothing. This failure is expected in
+a repository that has not configured deployment on merge.
 Redeploy by hand with `npm run deploy:api`, or `npm run deploy:api -- <worker>` for
 one app or service. `npm run rollback -- <worker>` puts its previous version back at all
 of its traffic and prints which commit was live and which is now; it refuses
