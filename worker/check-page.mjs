@@ -7,7 +7,7 @@ const DRAW_TIMEOUT_MS = 30 * 1000;
 const RELEASE_FOLDER = /\/release\/([^/]+)\//;
 
 /**
- * @typedef {{ status: "drawn", note?: string }
+ * @typedef {{ status: "drawn", isOpenWithoutCode?: boolean }
  *   | { status: "broken", reason: string }
  *   | { status: "unchecked", reason: string }} PageCheck
  */
@@ -67,7 +67,6 @@ const sendAccessCode = (page, pageUrl, accessCode) =>
 
 // A Worker that asks for no code answers its code's route 404, and its page opens as it is.
 const NO_CODE_ASKED = 404;
-const NO_CODE_NOTE = "the page asks for no code, so its access code secret isn't needed";
 
 /**
  * A refused code means the secret is out of date, not that the page is broken.
@@ -86,11 +85,11 @@ function judgeSignIn(status) {
  * @param {import("@playwright/test").Page} page
  * @param {string} pageUrl
  * @param {string} accessCode
- * @returns {Promise<{ problem?: PageCheck, note?: string }>}
+ * @returns {Promise<{ problem?: PageCheck, isOpenWithoutCode?: boolean }>}
  */
 async function signInWithCode(page, pageUrl, accessCode) {
   const status = await sendAccessCode(page, pageUrl, accessCode);
-  if (status === NO_CODE_ASKED) return { note: NO_CODE_NOTE };
+  if (status === NO_CODE_ASKED) return { isOpenWithoutCode: true };
   const problem = judgeSignIn(status);
   if (problem) return { problem };
   await page.goto(pageUrl);
@@ -184,7 +183,9 @@ export async function checkPage(
   if (commit && !isFromRelease(await listScriptSources(page), commit))
     return markBroken("the page is still the version before");
   if (await waitForDrawing(page, timeoutMs))
-    return signIn.note ? { status: "drawn", note: signIn.note } : { status: "drawn" };
+    return signIn.isOpenWithoutCode
+      ? { status: "drawn", isOpenWithoutCode: true }
+      : { status: "drawn" };
   if (errors.length) return markBroken(`the page threw: ${errors[0]}`);
   const serverProblem = await readServerProblem(page);
   if (serverProblem) return markBroken(`the page says "${serverProblem}"`);
@@ -259,16 +260,14 @@ async function closeAfterPageCheck(close, check) {
 /**
  * @param {unknown} error
  * @param {boolean} isInfrastructureUnavailable
- * @param {boolean} isPageClosed
  */
-function judgePageFailure(error, isInfrastructureUnavailable, isPageClosed) {
+function judgePageFailure(error, isInfrastructureUnavailable) {
   const message = error instanceof Error ? error.message : String(error);
   const isProxyFailure =
     /net::ERR_(?:PROXY_CONNECTION_FAILED|TUNNEL_CONNECTION_FAILED|NO_SUPPORTED_PROXIES)/.test(
       message,
     );
   const isPageFailure =
-    isPageClosed ||
     (error instanceof Error && error.name === "TimeoutError") ||
     /net::ERR_|Page crashed|Target crashed|Execution context was destroyed|Failed to fetch/.test(
       message,
@@ -281,8 +280,8 @@ function judgePageFailure(error, isInfrastructureUnavailable, isPageClosed) {
 /**
  * Opens an app's page, retrying page failures up to `attempts` times.
  * Missing access settings and refused or rate-limited codes return unchecked.
- * Unavailable page operations return unchecked; browser or context setup and cleanup failures
- * throw with access details masked.
+ * Unavailable page operations return unchecked; browser or context setup failures throw with
+ * access details masked. Cleanup errors preserve a confirmed broken result; otherwise they throw.
  * @param {object} options
  * @param {string} options.app
  * @param {string} options.channel
@@ -324,7 +323,7 @@ export async function checkAppPage({
         });
         const page = await context.newPage();
         const opened = await checkPage(page, { ...access, commit }).catch((error) =>
-          judgePageFailure(error, isContextClosed || !browser.isConnected(), page.isClosed()),
+          judgePageFailure(error, isContextClosed || !browser.isConnected()),
         );
         landedUrl = page.url();
         check = hideAddress(opened, access.pageUrl, landedUrl, access.accessCode);

@@ -165,6 +165,9 @@ Wait for the Deploy runs for the merge commit to finish, then read their logs an
   Tell the user it is verified.
   For a service, read its preceding health-check result below;
   this line alone does not establish verification.
+- It says "The recorded live version is unverified": no upload happened in this run,
+  and verification of the already-live version failed.
+  Tell the user the recorded version is still live and what blocked verification.
 - It says "The new version is live but unverified": the upload went live, but the run failed verification without rolling it back.
   The verification limits are listed in `.claude/rules/tooling.md`.
   Tell the user what prevented verification and recommend repairing that check before treating the release as verified.
@@ -178,8 +181,8 @@ Wait for the Deploy runs for the merge commit to finish, then read their logs an
 - It says "Nothing the Worker runs changed": this run left the Worker unchanged because the merge didn't need a deploy,
   or an earlier run already deployed it.
   Tell the user which; this line alone establishes no new verification.
-  When the requested commit is already live, read any verification lines after it:
-  the rerun checks that version without uploading or rolling it back.
+  For bootstrap verification and superseded runs,
+  follow `.claude/rules/tooling.md`.
 - It says "has moved on" and "whose deploy covers": another merge landed first, and CI passed on it, so its Deploy run covers this one.
   This run is superseded; read that run's log for its verified outcome.
   Saying "hasn't passed on it" instead, it deploys this merge while the newer one's CI is still to pass, so read on in this run's log.

@@ -149,7 +149,8 @@ When a step says to go back to an earlier step, continue in order from there.
 9. Don't deploy.
    Merging starts the Deploy workflow at once, and CI on `main`.
 10. Read the Deploy runs for the merge commit as the `ship` skill says, and tell the user what went live.
-11. Run `npm run deploy:api` yourself only when step 10 found no successful deploy and the user agrees.
+11. Run `npm run deploy:api` yourself only when step 10 found no successful deploy and the user agrees,
+    following `.claude/rules/tooling.md`'s session verification requirements.
     Say why the automatic deploy didn't happen and recommend whether to deploy by hand.
     Never deploy any other way, but for a new league's sandbox Worker (the `add-league` skill).
 12. A PR does one thing the owner could name in a sentence, and the `ship` skill says how to keep it to that and when to stack.

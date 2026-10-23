@@ -18,8 +18,14 @@ paths:
   Missing page or access-code settings, refused or rate-limited codes,
   a page that opens without asking for its code,
   and unavailable browser checks fail verification while leaving the uploaded version live but unverified.
-  Re-running a deploy whose requested commit is already live checks that version again without uploading or rolling it back.
-  Other unchanged apps keep their normal skip.
+  An explicit GitHub rerun (`GITHUB_RUN_ATTEMPT > 1`) checks an unchanged app only when its requested commit is the recorded live commit,
+  without uploading or rolling it back.
+  Automatic follow-up runs and other unchanged apps keep their normal skip.
+  A rerun still needs the current channel head and beta claim;
+  a superseded run checks nothing.
+  Complete a new league's beta settings and verification before pushing another commit.
+  After production's deploy has been superseded,
+  use the next `Watch apps` run to verify its page instead of waiting for a skipped deploy's check.
   The `Watch apps` workflow opens each page the same way every 15 minutes,
   keeping one open issue for each app that isn't opening, which closes once it opens again,
   and one for each that opens without asking for its code, which closes once it asks again (`watch-apps.mjs`).
@@ -44,6 +50,9 @@ paths:
   - `.claude/hooks/context-limit.mjs` hands a session off to a fresh one as its context grows.
   - `.claude/hooks/install-packages.mjs` runs `npm ci` as a session starts when `node_modules` is out of date.
   - `.claude/hooks/check-push.mjs` runs lint, format, types, and dead code before each `git push`.
+- A hand deploy needs the session's page URL and access code settings to verify its app.
+  Without them, an upload can stay live but fail verification;
+  finish setup and use the applicable GitHub rerun or production `Watch apps` check described above.
 - A session runs `deploy:api`, `rollback`, and each `set-` script itself, in the cloud environment that holds the Cloudflare token,
   and the owner approves each when `.claude/settings.json` asks.
   Never hand the owner one to run on their own computer, which has neither the token nor the account ID,
@@ -58,7 +67,8 @@ paths:
   `--rotate` replaces the key, which changes the address; do that only when the user asks.
 - `npm run set-access-code -- <app> <code>` sets the code an app's page asks for, with a new random `ACCESS_SIGNING_KEY`; the user picks the code.
   Every app on a channel takes the same code, since the deploy and the workflow sign each in with the environment's one `ACCESS_CODE`.
-  A new code signs every phone out, and `--remove` stops asking.
+  A new code signs every phone out, and `--remove` stops asking,
+  which makes later app deploys fail verification.
   Never commit, log, or post the code.
 - `npm run set-page-host -- <app> <host>` points a host on a domain in the Cloudflare account at that app's Worker and names it in the Worker's `PAGE_HOST` secret,
   so the page also opens there without its key, behind its access code, which it needs first; the user picks the host.

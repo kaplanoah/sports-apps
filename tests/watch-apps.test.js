@@ -115,7 +115,7 @@ test("an app that can't be checked warns in the run and touches no issue", async
 /** @type {import("../worker/check-page.mjs").PageCheck} */
 const OPEN_WITHOUT_CODE = {
   status: "drawn",
-  note: "the page asks for no code, so its access code secret isn't needed",
+  isOpenWithoutCode: true,
 };
 
 test("an app that opens without asking for its code gets an issue of its own, and warns in the run", async () => {
@@ -273,7 +273,6 @@ test("page navigation failures retain the recheck and open the watch's outage is
     const page = {
       on: () => {},
       url: () => pageUrl,
-      isClosed: () => false,
       goto: async () => {
         opened += 1;
         throw Object.assign(new Error(message), { name });

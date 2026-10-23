@@ -7,7 +7,7 @@ import { nameServiceBinding } from "../shared/worker/services.js";
 import { findWorkerRoot, isService, listApps, listServices, listWorkersOrExit } from "./apps.mjs";
 import { buildWorker } from "./build.mjs";
 import { findChannel, readCommandLine } from "./channels.mjs";
-import { checkAppPage, hideAddress, readPageAccess } from "./check-page.mjs";
+import { checkAppPage } from "./check-page.mjs";
 import { checkService } from "./check-service.mjs";
 import { CHECK_INTERVAL_MS, CHECK_TIMEOUT_MS, waitFor } from "./check-timing.mjs";
 import { decideDeploy, listChangedFiles } from "./deploy-scope.mjs";
@@ -391,6 +391,10 @@ export async function deploy({
     return isNeeded;
   }
 
+  function isSameReleaseRetry(liveCommit) {
+    return !!liveCommit && liveCommit === commit && Number(env.GITHUB_RUN_ATTEMPT) > 1;
+  }
+
   async function readMigrationTag() {
     const scripts = await callCloudflare("migration tag", `${base}/scripts`, { method: "GET" });
     return scripts.find((stored) => stored.id === name)?.migration_tag;
@@ -455,8 +459,11 @@ export async function deploy({
   }
 
   /** @returns {never} */
-  function rejectUnverifiedPage(reason) {
-    throw new Error(`The new version is live but unverified: ${reason}.`);
+  function rejectUnverifiedPage(reason, isUploaded) {
+    const state = isUploaded
+      ? "The new version is live but unverified"
+      : "The recorded live version is unverified";
+    throw new Error(`${state}: ${reason}.`);
   }
 
   async function confirmPageDraws(previousVersions, isUploaded) {
@@ -466,23 +473,13 @@ export async function deploy({
       commit,
       env,
       isAccessCodeRequired: true,
-    }).catch((error) => {
-      const access = readPageAccess(worker, channel, env);
-      if (!access)
-        return { status: /** @type {const} */ ("unchecked"), reason: "the page check failed" };
-      return hideAddress(
-        {
-          status: /** @type {const} */ ("unchecked"),
-          reason: `the page check failed: ${error instanceof Error ? error.message : error}`,
-        },
-        access.pageUrl,
-        access.pageUrl,
-        access.accessCode,
-      );
-    });
-    if (check.status === "unchecked") rejectUnverifiedPage(check.reason);
-    if (check.status === "drawn" && check.note)
-      rejectUnverifiedPage("the page opened without asking for its access code");
+    }).catch((error) => ({
+      status: /** @type {const} */ ("unchecked"),
+      reason: `the page check failed: ${error instanceof Error ? error.message : error}`,
+    }));
+    if (check.status === "unchecked") rejectUnverifiedPage(check.reason, isUploaded);
+    if (check.status === "drawn" && check.isOpenWithoutCode)
+      rejectUnverifiedPage("the page opened without asking for its access code", isUploaded);
     if (check.status === "broken")
       await rejectFailedCheck(
         `The page didn't draw as ${isUploaded ? "the new version" : "its recorded live version"}: ${check.reason}`,
@@ -546,7 +543,7 @@ export async function deploy({
     previousVersions && (await deployments.readCommit(previousVersions, "live commit"));
   if (isCheckOnly || !isDeployNeeded(liveCommit)) {
     if (isPageless) await scheduleServiceCheck(previousVersions, liveCommit, false);
-    else if (liveCommit && liveCommit === commit) await confirmAppAnswers(previousVersions, false);
+    else if (isSameReleaseRetry(liveCommit)) await confirmAppAnswers(previousVersions, false);
     return null;
   }
   const migrations = listPendingMigrations(await readMigrationTag(), storeClass);

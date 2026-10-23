@@ -677,9 +677,13 @@ test("a thrown page check leaves the upload live but unverified and masks its ac
       findChanges: () => ["apps/mlb/page/js/app.js"],
       log: (line) => lines.push(line),
       pause: skipPause,
-      checkPage: async () => {
-        throw new Error(`Target closed at ${ENV.MLB_PAGE_URL} with ${ENV.ACCESS_CODE}`);
-      },
+      checkPage: (options) =>
+        checkAppPage({
+          ...options,
+          launchBrowser: async () => {
+            throw new Error(`Target closed at ${ENV.MLB_PAGE_URL} with ${ENV.ACCESS_CODE}`);
+          },
+        }),
     }),
     /^Error: The new version is live but unverified: the page check failed: Target closed at <page>\/ with <access code>\.$/,
   );
@@ -700,7 +704,6 @@ function createCleanupFailureBrowser(cleanup, result) {
     on: () => {},
     goto: async () => ({ ok: () => result !== "broken response", status: () => 500 }),
     url: () => ENV.MLB_PAGE_URL,
-    isClosed: () => false,
     evaluate: async () => 204,
     locator: () => ({
       evaluateAll: async () => [
@@ -985,7 +988,7 @@ test("missing page URL or code fails after upload, leaving first and existing re
 test("unchecked or unauthenticated drawing pages fail verification without rollback", async () => {
   const { deploy } = await loadDeployModule();
   for (const check of [
-    { status: "drawn", note: "the page asks for no code, so its access code secret isn't needed" },
+    { status: "drawn", isOpenWithoutCode: true },
     { status: "unchecked", reason: "the Worker refused the access code" },
     { status: "unchecked", reason: "the Worker had too many tries at the access code" },
   ]) {
@@ -1390,7 +1393,7 @@ test("a bootstrap rerun verifies its already-live commit after access settings a
     script: "",
     commit: NEW_COMMIT,
     fetchImpl: rerun.fetchImpl,
-    env: ENV,
+    env: { ...ENV, GITHUB_RUN_ATTEMPT: "2" },
     findChanges: () => [],
     log: (line) => lines.push(line),
     pause: skipPause,
@@ -1420,7 +1423,11 @@ test("unchanged verification fails visibly for the wrong release or unavailable 
         script: "",
         commit: NEW_COMMIT,
         fetchImpl: cloudflare.fetchImpl,
-        env: failure === "access code" ? { ...ENV, ACCESS_CODE: "" } : ENV,
+        env: {
+          ...ENV,
+          GITHUB_RUN_ATTEMPT: "2",
+          ...(failure === "access code" ? { ACCESS_CODE: "" } : {}),
+        },
         findChanges: () => [],
         log: (line) => lines.push(line),
         pause: skipPause,
@@ -1434,7 +1441,7 @@ test("unchanged verification fails visibly for the wrong release or unavailable 
               ),
       }),
       failure === "access code"
-        ? /live but unverified: no ACCESS_CODE secret/
+        ? /The recorded live version is unverified: no ACCESS_CODE secret/
         : /no version was uploaded or rolled back/,
     );
     assert.ok(!describeCalls(cloudflare.calls).some((call) => /^(PUT|POST) /.test(call)));
@@ -1451,7 +1458,7 @@ test("an unrelated unchanged app still skips page verification", async () => {
       script: "",
       commit: NEW_COMMIT,
       fetchImpl: cloudflare.fetchImpl,
-      env: ENV,
+      env: { ...ENV, GITHUB_RUN_ATTEMPT: "2" },
       findChanges: () => [],
       log: () => {},
       pause: skipPause,
@@ -1462,4 +1469,30 @@ test("an unrelated unchanged app still skips page verification", async () => {
     null,
   );
   assert.ok(!describeCalls(cloudflare.calls).some((call) => /^(PUT|POST) /.test(call)));
+});
+
+test("automatic push and workflow-run deploys do not recheck a commit already live", async () => {
+  const { deploy } = await loadDeployModule();
+  for (const event of ["push", "workflow_run"]) {
+    const cloudflare = createFakeCloudflare({ liveCommit: NEW_COMMIT });
+    const lines = [];
+    assert.equal(
+      await deploy({
+        worker: "mlb",
+        script: "",
+        commit: NEW_COMMIT,
+        fetchImpl: cloudflare.fetchImpl,
+        env: { ...ENV, GITHUB_EVENT_NAME: event, GITHUB_RUN_ATTEMPT: "1" },
+        findChanges: () => [],
+        log: (line) => lines.push(line),
+        pause: skipPause,
+        checkPage: async () => {
+          assert.fail("automatic follow-ups keep the no-change skip");
+        },
+      }),
+      null,
+    );
+    assert.ok(!lines.includes("worker check: ok"));
+    assert.ok(!describeCalls(cloudflare.calls).some((call) => /^(PUT|POST) /.test(call)));
+  }
 });

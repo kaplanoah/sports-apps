@@ -143,7 +143,13 @@ export async function reportCheck({ app, check, openIssues, github, runUrl }) {
   const issue = findOpenIssue(openIssues, nameNoCodeIssue(app));
   return [
     await reportOpening({ app, outage, github, runUrl }),
-    ...(await reportNoCode({ app, isOpenWithoutCode: !!check.note, issue, github, runUrl })),
+    ...(await reportNoCode({
+      app,
+      isOpenWithoutCode: !!check.isOpenWithoutCode,
+      issue,
+      github,
+      runUrl,
+    })),
   ];
 }
 

@@ -154,7 +154,9 @@ themselves, see "If they deploy it themselves" below.
 
 **2. Deploy the Worker.** Run `npm ci`, then `npm run deploy:api -- <app>`. It
 runs the tests, deploys the app from `main` exactly as it is on GitHub, and
-checks that the Worker answers. It keeps the Worker's address out of its output, because GitHub's
+checks that the Worker answers. The first upload can fail as live but unverified
+until the page settings exist; continue to step 3 in that case, then complete the
+[tooling rules' verification steps](.claude/rules/tooling.md). It keeps the Worker's address out of its output, because GitHub's
 deploy logs are public; step 3 prints it. It refuses uncommitted changes and anything that isn't `main`'s latest commit.
 The session's own branch works once it matches `main`. It sets
 `NODE_USE_ENV_PROXY=1` so Node sends its requests through the session's
@@ -168,12 +170,13 @@ data answer only there. Give the user the address and tell them to keep it
 private: anyone who has it can see and change the page. Never pass
 `--rotate` unless they ask. It replaces the key, which changes the address.
 
-To share the page beyond the user, have them pick an access code and run
+Set an access code for every app: have the user pick one and run
 `npm run set-access-code -- <app> <code>`, with the same code for every app on
 a channel, since the deploy's check signs each in with its environment's one. The page then asks for it before it
 opens, and each phone types it once. Case, spaces, and hyphens don't count.
 Running it again with a new code signs every phone out until it types the new
-one, and `--remove` stops asking. Never commit or post the code.
+one. See the [tooling rules](.claude/rules/tooling.md) before using `--remove`,
+which changes deployment verification. Never commit or post the code.
 
 To give the page an address of its own, on a domain in the Cloudflare account,
 run `npm run set-page-host -- <app> <host>` once the page has a code. It points
@@ -372,14 +375,13 @@ Each app deploy checks its Worker's release and opens its page as a phone does,
 signed in with its code. The [tooling rules](.claude/rules/tooling.md) distinguish
 broken releases that roll back from unavailable verification that fails the run
 while leaving the upload live but unverified. After configuring a new app's key,
-code, and page URL, rerun its Deploy run: when that commit is already live,
-the run verifies it without uploading or rolling it back. Other unchanged apps
-keep their normal skip.
+code, and page URL, complete the bootstrap verification steps in those rules.
 
 Every 15 minutes, the **Watch apps** workflow opens each production app's page
 the same way and keeps one open issue for each app that isn't opening, which
-closes itself once the app opens again. Missing page settings or a refused code
-leave that check unchecked and produce a warning. A page that opens without asking
+closes itself once the app opens again. A missing page URL, or a refused or
+rate-limited code, leaves the check unchecked with a warning. Without ACCESS_CODE,
+the watch opens the page without signing in. A page that opens without asking
 for its code gets an issue of its own, which closes once the page asks again or
 the environment holds no `ACCESS_CODE`. A service has no address of its own, so
 each deploy and the workflow ask each app's health of it; the workflow keeps one
@@ -398,7 +400,7 @@ replaces whatever beta held, but only with the head of the pull request that hol
 fails with a missing-token error and deploys nothing. This failure is expected in
 a repository that has not configured deployment on merge.
 Redeploy by hand with `npm run deploy:api`, or `npm run deploy:api -- <worker>` for
-one app or service. `npm run rollback -- <worker>` puts its previous version back at all
+one app or service, following the [tooling rules' session verification requirements](.claude/rules/tooling.md). `npm run rollback -- <worker>` puts its previous version back at all
 of its traffic and prints which commit was live and which is now; it refuses
 when there's no earlier version. A rollback keeps the Worker's secrets as they
 are.
@@ -446,11 +448,12 @@ Before the first beta deploy, create each app's beta Worker, `<app>-app-beta`,
 and each service's in Cloudflare's dashboard, as "Deploying on merge" says, since the `beta` token can change only the Workers it
 names, then create the `beta` environment as "Deploying on merge" says, with its
 token limited to them. After the first one, give each beta Worker its key with
-`npm run set-app-key -- <app> --channel beta`, which prints its address, and,
-if the real page asks for a code, give it the code in the `beta` environment's
+`npm run set-app-key -- <app> --channel beta`, which prints its address.
+Give every beta app the code in the `beta` environment's
 `ACCESS_CODE` with `npm run set-access-code -- <app> <code> --channel beta`. Add the address to the `beta`
 environment's secrets, and add the page to the Home Screen from that address. `npm run deploy:api -- <worker> --channel beta`
-deploys beta by hand, from a checkout of `origin/beta`, and
+deploys beta by hand, from a checkout of `origin/beta`, with the
+[tooling rules' session verification requirements](.claude/rules/tooling.md), and
 `npm run rollback -- <worker> --channel beta` rolls it back.
 
 ## License

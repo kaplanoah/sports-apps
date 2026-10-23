@@ -104,8 +104,7 @@ Delete it once the app's first PR merges.
    then run `npm run set-access-code -- <app> <code> --channel beta` yourself, which the owner approves when `.claude/settings.json` asks.
    Ask the owner to add the address as `<APP>_BETA_PAGE_URL` in the `beta` environment's secrets,
    beside its `ACCESS_CODE`.
-   Rerun that Deploy run after the secrets are saved;
-   it checks the already-live commit without uploading or rolling it back.
+   Complete the bootstrap verification steps in `.claude/rules/tooling.md` after the secrets are saved.
    Wait for this app's `worker check: ok` before asking the owner to add the page to the Home Screen and use it,
    then ask them to label the PR `phone-ok`.
    The merge's deploy then replaces `<app>-app`, which `npm run set-app-key -- <app>` gives its key in the same way.
@@ -115,6 +114,5 @@ Delete it once the app's first PR merges.
    then run `npm run set-access-code -- <app> <code>` yourself, which the owner approves when `.claude/settings.json` asks.
    The owner adds its address as `<APP>_PAGE_URL`, beside the `production` environment's `ACCESS_CODE`,
    so each deploy and the `Watch apps` workflow open its page.
-   Rerun that Deploy run and wait for this app's `worker check: ok` to verify the already-live commit.
-   The `Watch apps` workflow also checks production's page after setup,
-   but a successful upload alone is not verification.
+   Complete the bootstrap verification steps in `.claude/rules/tooling.md`;
+   a successful upload alone is not verification.
