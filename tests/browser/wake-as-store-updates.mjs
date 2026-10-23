@@ -2,6 +2,7 @@
 // update, never the copy the store held while it was away (shared/page/worker-store.js).
 
 import { expect } from "@playwright/test";
+import { holdClock } from "./harness.mjs";
 import { trackTextChanges } from "./text-changes.mjs";
 
 const MINUTE_MS = 60 * 1000;
@@ -70,8 +71,7 @@ export async function wakeAsStoreUpdates(page, app, { changeWhileAway, onWake = 
   // suspends it does, so its wait for the store's update outlasts however long the store takes
   // to run it on a slow machine.
   const readsOut = trackStoreReads(page);
-  const asleepAt = await page.evaluate(() => Date.now());
-  await page.clock.pauseAt(asleepAt + 1000);
+  const asleepAt = await holdClock(page);
   await page.clock.setSystemTime(asleepAt + 31 * MINUTE_MS);
   // A read the page started while asleep has its answer before the phone wakes.
   await expect.poll(readsOut).toBeLessThan(1);
