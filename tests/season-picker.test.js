@@ -1,11 +1,26 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  isSeasonPickerShown,
   keepSeasonYears,
   listSeasonOptions,
   listSeasonYears,
   watchSeasonPicks,
 } from "../shared/page/season-picker.js";
+
+test("beta shows a picker with one season", () => {
+  assert.equal(isSeasonPickerShown(1, "beta"), true);
+  assert.equal(isSeasonPickerShown(0, "beta"), false);
+});
+
+test("production hides a picker with only one season", () => {
+  assert.equal(isSeasonPickerShown(1, null), false);
+  assert.equal(isSeasonPickerShown(0, null), false);
+});
+
+test("production shows a picker with two seasons", () => {
+  assert.equal(isSeasonPickerShown(2, null), true);
+});
 
 /**
  * A stand-in for the picker's row: its select's options, the one chosen and the one its markup

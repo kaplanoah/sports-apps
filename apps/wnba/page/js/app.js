@@ -30,6 +30,7 @@ import { watchPresses } from "#shared/press.js";
 import { startNotifications } from "#shared/notifications.js";
 import { openPageTab, setTabStart, startPageTabs } from "#shared/page-tabs.js";
 import { reloadIfReplaced, watchReturns } from "#shared/resume.js";
+import { readPageRelease } from "#shared/release.js";
 import { fillSeasonPicker, keepSeasonYears, watchSeasonPicks } from "#shared/season-picker.js";
 import { isReadableSeason } from "#shared/season-reader.js";
 import { startServiceWorker } from "#shared/service-worker.js";
@@ -181,7 +182,12 @@ const readSeasonYears = keepSeasonYears(loadSeasonYears);
 const fillSeasonList = (years) =>
   fillSeasonPicker(
     findSeasonRow(),
-    { years, pickedYear: session.pickedYear, currentYear: session.currentYear },
+    {
+      years,
+      pickedYear: session.pickedYear,
+      currentYear: session.currentYear,
+      releaseLabel: readPageRelease()?.label ?? null,
+    },
     LEAGUE_WORDS,
   );
 

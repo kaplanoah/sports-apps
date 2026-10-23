@@ -61,6 +61,7 @@ import { refreshTeamSheet, startTeamSheet } from "#shared/team-sheet.js";
 import { createWorkerStore } from "#shared/worker-store.js";
 import { isReadableSeason } from "#shared/season-reader.js";
 import { fillSeasonPicker, keepSeasonYears, watchSeasonPicks } from "#shared/season-picker.js";
+import { readPageRelease } from "#shared/release.js";
 import { startAppearance } from "#shared/appearance.js";
 import { showSeasonPart, startBracketStandings } from "#shared/bracket-standings.js";
 import { LOOKS } from "./looks.js";
@@ -89,7 +90,12 @@ const readSeasonYears = keepSeasonYears(loadSeasonList);
 const fillYearPicker = (years) =>
   fillSeasonPicker(
     findSeasonRow(),
-    { years, pickedYear: session.activeYear, currentYear: session.currentSeason },
+    {
+      years,
+      pickedYear: session.activeYear,
+      currentYear: session.currentSeason,
+      releaseLabel: readPageRelease()?.label ?? null,
+    },
     LEAGUE_WORDS,
   );
 
