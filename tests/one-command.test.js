@@ -283,6 +283,35 @@ test("arithmetic commands preserve following separators and shell comment bounda
   assert.equal(parseCommandWords("(( 1 ))"), null);
 });
 
+test("an unclosed arithmetic pair falls back to nested subshell separators", () => {
+  for (const [command, separator] of [
+    ["((git status); git push)", ";"],
+    ["((echo a) && git push)", "&&"],
+    ["((echo a) || git push)", "||"],
+    ["((echo a) & git status)", "&"],
+    ["((echo a)\ngit status)", "a line break"],
+    ["((echo a); (git status))", ";"],
+    ["((echo ')'); git status)", ";"],
+    ["((echo a) # ignored ; and ))\n)", "a line break"],
+    ["((git status; git push", ";"],
+    ["((echo a) ) | ((echo b) ); git status", ";"],
+    ["((echo a) ) | (( 1 #)); git status", ";"],
+    ["echo $( ((echo a); git push) ); git status", ";"],
+  ]) {
+    assert.equal(findSeparator(command), separator, command);
+    assert.match(findCommandProblem(command) ?? "", /^It joins commands with /, command);
+    assert.equal(parseCommandWords(command), null, command);
+  }
+  for (const command of [
+    "((echo a) )",
+    "echo $( ((echo a); git push) )",
+    "echo '((git status); git push)'",
+    'echo "((git status); git push)"',
+  ])
+    assert.equal(findSeparator(command), null, command);
+  assert.equal(parseCommandWords("((echo a) )"), null);
+});
+
 test("a heredoc's end lets the check go on to what follows it", () => {
   assert.equal(findSeparator("cat <<EOF\nbody;\nEOF\ngit push"), "a line break");
 });

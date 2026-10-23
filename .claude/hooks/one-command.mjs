@@ -85,10 +85,29 @@ const SHELL_BEFORE_SCRIPT = /(?:^|[ \t\n(|/])(?:ba|z|da)?sh[ \t]+(?:-[\w-]+[ \t]
  * @returns {{ separator: string | null, scripts: string[], pipeOrRedirect: string | null, words: string[] | null }}
  */
 function scanCommand(command) {
+  const text = command.replace(/^[ \t\n]+|[ \t\n]+$/g, "");
+  const subshellStarts = new Set();
+  for (;;) {
+    const result = scanCommandText(text, subshellStarts);
+    if (typeof result !== "number") return result;
+    subshellStarts.add(result);
+  }
+}
+
+/**
+ * Bash retries `((` as nested subshells when the inner group doesn't end with `))`.
+ * Returning its index lets the same scanner retry with shell comments and separators enabled.
+ * @param {string} text
+ * @param {Set<number>} subshellStarts
+ * @returns {{ separator: string | null, scripts: string[], pipeOrRedirect: string | null, words: string[] | null } | number}
+ */
+function scanCommandText(text, subshellStarts) {
   let quote = "";
   let scriptStart = -1;
   /** @type {("substitution" | "arithmetic" | "arithmetic-command" | "group")[]} */
   const parentheses = [];
+  /** @type {number[]} */
+  const arithmeticStarts = [];
   let isInBackticks = false;
   let hasSubstitutionWord = false;
   /** @type {string | null} */
@@ -107,7 +126,6 @@ function scanCommand(command) {
     word = "";
     hasWord = false;
   }
-  const text = command.replace(/^[ \t\n]+|[ \t\n]+$/g, "");
   for (let at = 0; at < text.length; at += 1) {
     const char = text[at];
     const hasCurrentWord = parentheses.length > 0 ? hasSubstitutionWord : hasWord;
@@ -165,8 +183,14 @@ function scanCommand(command) {
       at += 1;
       continue;
     }
-    if (text.startsWith("((", at) && !hasCurrentWord && !isInArithmetic) {
+    if (
+      text.startsWith("((", at) &&
+      !hasCurrentWord &&
+      !isInArithmetic &&
+      !subshellStarts.has(at)
+    ) {
       parentheses.push("arithmetic-command", "group");
+      arithmeticStarts.push(at);
       hasExpansion = true;
       hasSubstitutionWord = false;
       at += 1;
@@ -178,6 +202,9 @@ function scanCommand(command) {
         hasSubstitutionWord = false;
       } else if (char === ")") {
         const kind = parentheses.pop();
+        if (kind === "group" && parentheses.at(-1) === "arithmetic-command" && text[at + 1] !== ")")
+          return arithmeticStarts[arithmeticStarts.length - 1];
+        if (kind === "arithmetic-command") arithmeticStarts.pop();
         hasSubstitutionWord = kind === "substitution" || kind === "arithmetic";
       } else hasSubstitutionWord = !/[ \t\n;&|<>]/.test(char);
       if (parentheses.length === 0) hasWord = hasSubstitutionWord;
@@ -223,6 +250,7 @@ function scanCommand(command) {
       hasWord = true;
     }
   }
+  if (arithmeticStarts.length) return arithmeticStarts[0];
   finishWord();
   return {
     separator: null,
