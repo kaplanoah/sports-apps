@@ -59,6 +59,7 @@ test("every changed spec burns in with no earlier burn-in, or once what every sp
     "package-lock.json",
     ".nvmrc",
     ".github/workflows/ci.yml",
+    "worker/install-browsers.mjs",
   ])
     assert.deepEqual(listSpecs([SHEETS, PAGE], [shared]), [SHEETS, PAGE], shared);
 });
