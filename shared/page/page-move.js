@@ -157,7 +157,8 @@ const hasOwnChoices = () => Object.keys(readCarriedChoices()).length > 0;
 /** @param {Carried} carried */
 function resolveCarriedAppearance(carried) {
   if (!carried.fromApp) return carried;
-  const icon = carried.icon ?? resolveTheme(readAppearanceChoice(carried.choices.appearance ?? ""));
+  const choice = readAppearanceChoice(carried.choices.appearance ?? "");
+  const icon = carried.icon ?? resolveTheme(choice);
   return {
     ...carried,
     icon,
@@ -237,13 +238,21 @@ function keepPageMoveIcon(icon) {
   if (!move) return;
   keepPageMove(resolveCarriedAppearance({ ...move, icon }));
   nameMoveInAddress();
-  keepPickedAppearance(icon);
+  keepPickedAppearance(icon, true);
+}
+
+function hasTakenCarriedChoices() {
+  try {
+    return localStorage.getItem(CARRIED_TAKEN_KEY) !== null;
+  } catch {
+    return false;
+  }
 }
 
 /** @param {Carried} carried */
 function takeIntoHomeScreen(carried) {
   try {
-    if (localStorage.getItem(CARRIED_TAKEN_KEY) !== null) return;
+    if (hasTakenCarriedChoices()) return;
     localStorage.setItem(CARRIED_TAKEN_KEY, String(carried.at));
     if (!hasOwnChoices()) keepCarriedChoices(carried.choices);
     if (carried.notifications) sessionStorage.setItem(NOTIFICATIONS_ASK_KEY, "ask");
@@ -252,8 +261,8 @@ function takeIntoHomeScreen(carried) {
   }
 }
 
-// The welcome starts on the icon of the theme the app showed as the fan moved, the look they picked
-// most recently, even where the browser kept a theme of its own.
+// A Home Screen move replaces the browser's appearance with the source app's look, so the
+// welcome's theme and selected icon match even where the browser kept another theme.
 /**
  * @param {Carried} carried
  * @param {number} now
@@ -278,7 +287,14 @@ function takeCarriedChoices(now = Date.now()) {
   const address = new URL(location.href);
   if (!address.searchParams.has(CARRIED_PARAMETER)) return null;
   const unpacked = unpackCarried(address.searchParams.get(CARRIED_PARAMETER));
-  const carried = unpacked ? resolveCarriedAppearance(unpacked) : null;
+  // Older System links cannot tell us the installed icon after the phone changes its look.
+  const keepInstalledIcon =
+    isOnHomeScreen() &&
+    unpacked &&
+    !unpacked.icon &&
+    !isLook(readAppearanceChoice(unpacked.choices.appearance ?? "")) &&
+    hasTakenCarriedChoices();
+  const carried = unpacked && !keepInstalledIcon ? resolveCarriedAppearance(unpacked) : unpacked;
   if (isOnHomeScreen()) {
     address.searchParams.delete(CARRIED_PARAMETER);
     replaceAddress(address);

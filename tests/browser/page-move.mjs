@@ -396,7 +396,10 @@ export async function checkMovingWelcome(app) {
   await expect(welcome.getByRole("button", { name: "Continue in browser" })).toBeVisible();
   await expect(welcome.getByRole("button", { name: "Install" })).toHaveCount(0);
   for (const look of /** @type {const} */ (["light", "dark"])) {
-    await welcome.getByRole("radio", { name: looks[look], exact: true }).check();
+    await Promise.all([
+      safariPage.waitForURL((url) => url.searchParams.get("theme") === look),
+      welcome.getByRole("radio", { name: looks[look], exact: true }).check(),
+    ]);
     await expect(safariPage.locator("html")).toHaveAttribute("data-theme", look);
     await checkCardReads(safariPage);
   }
@@ -408,9 +411,21 @@ export async function checkMovingWelcome(app) {
  * @param {MovingApp} app
  */
 export async function checkMovingWelcomeOnAndroid(app) {
-  const browserPage = await openInBrowser(app, await tapUseNewSite(app, {}), ANDROID_PHONE);
+  const browserPage = await openInBrowser(
+    app,
+    await tapUseNewSite(app, { appearance: "dark" }),
+    ANDROID_PHONE,
+  );
   const deleteStep = browserPage.locator(WELCOME).locator(".welcome-steps > li").last();
   await expect(deleteStep.locator(".welcome-note")).toHaveText("Press and hold, then remove it");
+  await browserPage
+    .locator(WELCOME)
+    .getByRole("radio", { name: app.looks.light, exact: true })
+    .check();
+  await expect(browserPage.locator("html")).toHaveAttribute("data-theme", "light");
+  await browserPage.locator(WELCOME).getByRole("button", { name: "Close", exact: true }).click();
+  await openSettings(browserPage);
+  await expect(browserPage.locator('input[name="appearance"][value="light"]')).toBeChecked();
   await browserPage.context().close();
 }
 
@@ -451,7 +466,10 @@ export async function checkMovingIconPick(app) {
   const safariPage = await openInBrowser(app, await tapUseNewSite(app, { appearance: "dark" }));
   const icon = safariPage.locator("#homeScreenIcon");
   const darkIcon = await icon.getAttribute("href");
-  await safariPage.locator(WELCOME).getByRole("radio", { name: looks.light, exact: true }).check();
+  await Promise.all([
+    safariPage.waitForURL((url) => url.searchParams.get("theme") === "light"),
+    safariPage.locator(WELCOME).getByRole("radio", { name: looks.light, exact: true }).check(),
+  ]);
   await expect(icon).not.toHaveAttribute("href", darkIcon);
   await expect(safariPage.locator("html")).toHaveAttribute("data-theme", "light");
   expect(await safariPage.evaluate(() => localStorage.getItem("appearance"))).toBe('"light"');
