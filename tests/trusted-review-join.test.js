@@ -31,41 +31,33 @@ test("the join accepts results only from successful trusted workflow runs on the
     head_branch: "change",
     head_sha: expected.head,
     repository: { full_name: expected.repository, id: 1 },
-    pull_requests: [
-      {
-        number: 1,
-        head: { sha: expected.head },
-        base: { ref: "main", sha: expected.base, repo: { id: 1 } },
-      },
-    ],
+    pull_requests: [],
     display_title: `Review 1 head ${SHA} base ${expected.base}`,
     conclusion: "success",
     status: "completed",
   };
   assert.ok(isTrustedReviewRun(run, expected));
+  // GitHub omits REST associations for fork-triggered runs.
+  assert.deepEqual(run.pull_requests, []);
+  // The REST association may also describe a later PR head/base; it is not event authority.
+  assert.ok(
+    isTrustedReviewRun(
+      {
+        ...run,
+        pull_requests: [
+          { number: 1, head: { sha: "e".repeat(40) }, base: { sha: "f".repeat(40) } },
+        ],
+      },
+      expected,
+    ),
+  );
   for (const change of [
     { event: "pull_request" },
     { path: ".github/workflows/ci.yml" },
     { head_sha: expected.base },
-    { pull_requests: [] },
-    { pull_requests: [{ ...run.pull_requests[0], head: { sha: expected.base } }] },
-    {
-      pull_requests: [
-        { ...run.pull_requests[0], base: { ...run.pull_requests[0].base, sha: expected.head } },
-      ],
-    },
     { repository: { full_name: expected.repository, id: 1.5 } },
-    { pull_requests: [{ ...run.pull_requests[0], number: 2 }] },
-    {
-      pull_requests: [
-        { ...run.pull_requests[0], base: { ...run.pull_requests[0].base, ref: "change" } },
-      ],
-    },
-    {
-      pull_requests: [
-        { ...run.pull_requests[0], base: { ...run.pull_requests[0].base, repo: { id: 2 } } },
-      ],
-    },
+    { display_title: `Review 2 head ${SHA} base ${expected.base}` },
+    { display_title: `Review 1 head ${SHA} base ${SHA}` },
     { display_title: "another head" },
     { repository: { full_name: "other/repository", id: 1 } },
   ])
@@ -102,6 +94,11 @@ test("the read-only join validates result content and producer identity before c
     () => verifyTrustedReviewResult(folder, { ...env, REVIEW_RUN: "8" }),
     /stale or foreign/,
   );
+  for (const field of ["REVIEW_HEAD", "REVIEW_BASE"])
+    assert.throws(
+      () => verifyTrustedReviewResult(folder, { ...env, [field]: "e".repeat(40) }),
+      /stale or foreign/,
+    );
   assert.throws(
     () => verifyTrustedReviewResult(folder, { ...env, REVIEW_TREE: "b".repeat(40) }),
     /does not match/,
@@ -173,4 +170,47 @@ test("the join searches every artifact page and filters run listings to the immu
   const listings = calls.filter((path) => path.includes("workflows/review.yml/runs?"));
   assert.ok(listings.some((path) => path.includes("page=2")));
   assert.ok(listings.every((path) => path.includes(`head_sha=${SHA}`)));
+});
+
+test("an unrelated fork PR on the same head cannot supply a trusted review result", async () => {
+  const expected = {
+    repository: "example/repository",
+    head: SHA,
+    base: "b".repeat(40),
+    pull: "1",
+    tree: SHA,
+  };
+  const run = {
+    id: 7,
+    path: ".github/workflows/review.yml",
+    event: "pull_request_target",
+    head_sha: SHA,
+    repository: { full_name: expected.repository, id: 1 },
+    pull_requests: [],
+    display_title: `Review 2 head ${SHA} base ${expected.base}`,
+    conclusion: "success",
+    status: "completed",
+  };
+  const requested = [];
+  const readGitHub = async (path) => {
+    requested.push(path);
+    if (path.includes("artifacts?")) return { artifacts: [{ workflow_run: { id: 7 } }] };
+    if (path.includes("/runs/7")) return run;
+    return { workflow_runs: [run] };
+  };
+  assert.deepEqual(await findTrustedReviewRun({ ...expected, readGitHub }), {
+    run: null,
+    pending: true,
+  });
+  assert.ok(requested.some((path) => path.includes(`head_sha=${SHA}`)));
+  run.display_title = `Review 1 head ${SHA} base ${SHA}`;
+  assert.deepEqual(await findTrustedReviewRun({ ...expected, readGitHub }), {
+    run: null,
+    pending: true,
+  });
+  run.display_title = `Review 1 head ${SHA} base ${expected.base}`;
+  assert.deepEqual(await findTrustedReviewRun({ ...expected, readGitHub }), {
+    run: 7,
+    pending: false,
+  });
 });

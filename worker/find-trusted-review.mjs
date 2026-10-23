@@ -24,22 +24,17 @@ export function verifyTrustedReviewResult(folder, env) {
     throw new Error("The trusted review result does not match this code.");
 }
 
-/** @param {any} run @param {{ repository: string, head: string, base: string, pull: string }} expected */
+/**
+ * REST pull_requests can be empty for fork runs and changes as the PR advances. The trusted
+ * workflow's fixed run-name binds the event's PR/head/base; its sealed result verifies the code.
+ * @param {any} run @param {{ repository: string, head: string, base: string, pull: string }} expected
+ */
 export const isTrustedReviewRun = (run, expected) =>
   run.path === ".github/workflows/review.yml" &&
   run.event === "pull_request_target" &&
   run.head_sha === expected.head &&
   run.repository?.full_name === expected.repository &&
   Number.isSafeInteger(run.repository?.id) &&
-  Array.isArray(run.pull_requests) &&
-  run.pull_requests.some(
-    (pull) =>
-      String(pull.number) === expected.pull &&
-      pull.head?.sha === expected.head &&
-      pull.base?.sha === expected.base &&
-      pull.base?.ref === "main" &&
-      pull.base?.repo?.id === run.repository.id,
-  ) &&
   run.display_title === `Review ${expected.pull} head ${expected.head} base ${expected.base}`;
 
 /**
