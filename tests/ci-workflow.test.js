@@ -548,6 +548,7 @@ function decideReview(event) {
       LABEL: "",
       IS_DRAFT: "false",
       AUTHOR: "someone",
+      ASSOCIATION: "OWNER",
       CLAUDE_CODE_OAUTH_TOKEN: "token",
       ANTHROPIC_API_KEY: "",
       ...event,
@@ -593,7 +594,7 @@ test("a pull request is reviewed when it's opened ready, marked ready, or labele
     assert.equal(review, "false", JSON.stringify(event));
     assert.equal(owed, "true", JSON.stringify(event));
     assert.equal(labeled, "false", JSON.stringify(event));
-    assert.match(notice, /^::notice::Nothing was reviewed: a pull request is reviewed once/);
+    assert.match(notice, /^::notice::Nothing was reviewed: there is no authorized review request/);
   }
   assert.equal(decideReview({ EVENT: "push", ACTION: "" }).review, "false");
 });
