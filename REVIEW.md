@@ -115,6 +115,7 @@ and a step posts what it confirmed or left unsure.
   If it would matter and still can't be settled, post it as **Unsure** with what would settle it.
 - Each finding goes on the line it's about, the first place's for one that names several.
   Say what is wrong, when it goes wrong (the input or state that shows it), and how to fix it, in a few sentences.
+  For a finding that a rule from AGENTS.md or a rule file is broken, quote the rule, name its file, and show how the changed code violates it.
 - Start each with its weight:
   **Important** for a bug, meaning a wrong result someone can see, wrong data kept, or a failure,
   for a security hole, or for a broken rule from AGENTS.md or a rule file;
