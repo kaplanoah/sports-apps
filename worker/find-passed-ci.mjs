@@ -1,9 +1,9 @@
-// Finds a pull request's CI run that passed on exactly some code. A pull request's CI tests it
-// merged into its base branch as that branch was then, and records that code's git tree: once
-// every check passed and the gate didn't hold the change, so that main can deploy without waiting
-// for CI to run again, since when the base is main and nothing else merged first, the squash merge
-// has the same tree; and once every test passed, whatever the gate said, so that a label change,
-// which brings no new code, runs only the gate again.
+// Finds three independent CI records for exactly a git tree. A pull request's CI tests its head
+// merged into its base branch as that branch was then, and records that code's tree:
+// ci-passed means every check and the gate passed, so main can deploy at once on the same tree;
+// ci-tested means every test passed, so a label change skips the tests;
+// ci-reviewed means the review was satisfied, so a label change owes no review on that tree.
+// A squash merge has the tested tree when the base is main and nothing else merged first.
 import { appendFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";

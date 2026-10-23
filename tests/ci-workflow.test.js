@@ -392,9 +392,9 @@ test("every checkout leaves no credentials behind", () => {
 });
 
 // A label change, like adding phone-ok, brings no new code: once a run passed every test on
-// exactly this code, only the gate runs again, and the label waits for a run still going rather
-// than stopping it.
-test("a label change runs only the gate again once a run passed every test on the same code", () => {
+// exactly this code, the tests are skipped. The label waits for a run still going rather than
+// stopping it, while a separate record decides whether a review is still owed.
+test("a label change skips tests once a run passed every test on the same code", () => {
   const workflow = readRepoFile(".github/workflows/ci.yml");
   assert.match(
     workflow,

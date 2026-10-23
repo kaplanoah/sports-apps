@@ -728,7 +728,8 @@ jobs:
           SHA: ${{ github.event.pull_request.head.sha }}
         run: node worker/judge-review.mjs summary .review
 
-  # Records tests before the review finishes, so a draft's label changes can reuse them too.
+  # Records that every test passed on this code, independently of review and the gate, so label
+  # changes on drafts or pull requests still owed a review skip the tests.
   tested:
     needs: [passed, checks, scope, browser, burn-in, webkit]
     if: ${{ !cancelled() }}
