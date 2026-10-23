@@ -15,4 +15,3 @@ paths:
 - Tests pass in any `TZ`: a test that asserts a time picks its zone with the root's `tests/time-zone.js` or `test.use({ timezoneId })`.
 - Keep date/time tests in `tests/time-zone-sensitive.json` when the native Date/Intl coverage guard asks for them.
   CI repeats that list and changed Node tests in Honolulu.
-  The nightly run repeats the same list.

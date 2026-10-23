@@ -17,9 +17,6 @@ paths:
   Tests in the manifest's `fixed` list import `tests/eastern-time-zone.js` first,
   so their initialization and assertions use Eastern whatever zone they inherit.
   They are left out of the Honolulu run.
-  The nightly Flaky tests workflow repeats the sensitive list independently of its browser job.
-  A Node failure fails the workflow separately from the browser-flake issue.
-  Manual runs reproduce browser tests without repeating Node tests.
 - Tooling: the root `worker/` builds, versions, deploys, and rolls back every Worker, each app's and each service's, tells a red change for CI's gate,
   and keeps beta to one pull request at a time, as the `ship` skill's "The beta channel" says.
   `ls worker/` lists its modules, and its tests are in the root `tests/`.

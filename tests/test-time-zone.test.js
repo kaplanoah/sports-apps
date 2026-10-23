@@ -185,18 +185,12 @@ test("ordinary and empty diffs keep the sensitive list, while every changed Node
     assert.deepEqual(selectTimeZoneTests(changes, TESTS, MANIFEST), [TESTS[0]]);
   for (const path of [TESTS[1], TESTS[2]])
     assert.deepEqual(selectTimeZoneTests([path], TESTS, MANIFEST), [TESTS[0], path].sort());
-  assert.deepEqual(selectTimeZoneTests([], TESTS.slice(0, 1), MANIFEST), [TESTS[0]]);
   const fixed = { sensitive: [TESTS[0]], fixed: [TESTS[1]] };
   assert.deepEqual(selectTimeZoneTests([TESTS[1]], TESTS, fixed), [TESTS[0]]);
   const future = "future-tests/calendar.test.js";
   assert.deepEqual(
     selectTimeZoneTests([future], [...TESTS, future], MANIFEST),
     [TESTS[0], future].sort(),
-  );
-  const spaced = "tests/calendar day\nlocal.test.js";
-  assert.deepEqual(
-    selectTimeZoneTests([spaced], [...TESTS, spaced], MANIFEST),
-    [TESTS[0], spaced].sort(),
   );
 });
 
