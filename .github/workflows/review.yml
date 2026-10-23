@@ -100,7 +100,9 @@ jobs:
       - name: Prepare a fresh reviewed checkout
         id: prepare
         if: steps.decision.outputs.review == 'true'
-        run: node "$RUNNER_TEMP/trusted/worker/trusted-review.mjs" prepare
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node "$RUNNER_TEMP/trusted/worker/trusted-review.mjs" prepare-plan
       # The review guide comes from the default branch, so a pull request can't change what its
       # reviewers look for.
       - name: Split the change into areas, and write what the reviewers read
@@ -288,8 +290,8 @@ jobs:
           retention-days: 14
           overwrite: true
 
-  # Fails a review that left anything due unread or unchecked, naming it in the one summary comment
-  # it keeps up to date on the pull request. A run a newer push cancelled leaves the summary as it
+  # Fails when no matching merge is available or anything due remains unread or unchecked.
+  # The summary names unfinished review work on the pull request. A run a newer push cancelled leaves the summary as it
   # was, until the review label asks again.
   review:
     env:
@@ -310,7 +312,7 @@ jobs:
       - name: Leave an unavailable merge's review owed
         if: needs.review-plan.outputs.available == 'false'
         run: |
-          echo "::notice::No matching merge was available, so review remains owed. Re-add the review label when the PR can merge."
+          echo "::error::No matching merge was available. See the review-plan notice."
           exit 1
       - *trusted-checkout
       - *trusted-node

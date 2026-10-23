@@ -14,6 +14,7 @@ import {
 } from "node:fs";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
+import { setTimeout as waitForMerge } from "node:timers/promises";
 import { WEIGHTS } from "./review-state.mjs";
 import { createGitHub } from "./github-api.mjs";
 import { createReviewGitEnvironment, isReviewRevision } from "./review-repository.mjs";
@@ -60,28 +61,72 @@ const readGit = (args, cwd) =>
     env: createReviewGitEnvironment(),
   }).trim();
 
+const MERGE_READS = 5;
+const MERGE_RETRY_MS = 2000;
+const REVIEW_OWED_NOTICE =
+  "::notice::No matching merge is available; review remains owed. Re-add the review label when the PR can merge.";
+
 /** @param {NodeJS.ProcessEnv} env */
-export function prepareReviewCheckout(env) {
+function requireReviewAuthority(env) {
   if (env.GITHUB_EVENT_NAME !== "pull_request_target")
     throw new Error("Trusted review requires default-branch workflow authority.");
+}
+
+/** @param {string | undefined | null} merge @param {NodeJS.ProcessEnv} env */
+function matchesReviewMerge(merge, env) {
+  if (!merge) return false;
+  if (!isReviewRevision(merge)) throw new Error("Review requires an immutable merge revision.");
+  readGit(["fetch", "--no-tags", "origin", merge], env.GITHUB_WORKSPACE);
+  return (
+    readGit(["show", "--no-patch", "--format=%P", merge], env.GITHUB_WORKSPACE) ===
+    `${env.REVIEW_BASE} ${env.REVIEW_HEAD}`
+  );
+}
+
+/** @param {any} pull @param {NodeJS.ProcessEnv} env */
+const isCurrentReviewPull = (pull, env) =>
+  pull.state === "open" && pull.head.sha === env.REVIEW_HEAD && pull.base.ref === "main";
+
+/**
+ * GitHub computes mergeability after emitting the event. Refresh only the event's immutable
+ * head/base pair; later stages consume the selected SHA without resolving a moving reference.
+ * @param {NodeJS.ProcessEnv} env
+ * @param {{ readPull?: (path: string) => Promise<any>, wait?: (ms: number) => Promise<unknown> }} [options]
+ */
+export async function resolveReviewMerge(
+  env,
+  {
+    readPull = createGitHub({ repository: env.GITHUB_REPOSITORY, env, fetchImpl: fetch }),
+    wait = waitForMerge,
+  } = {},
+) {
+  requireReviewAuthority(env);
+  if (matchesReviewMerge(env.REVIEW_MERGE, env)) return env.REVIEW_MERGE;
+  const rejected = new Set([env.REVIEW_MERGE]);
+  for (let attempt = 0; attempt < MERGE_READS; attempt += 1) {
+    const pull = await readPull(`/pulls/${env.PR}`);
+    if (!isCurrentReviewPull(pull, env) || pull.base.sha !== env.REVIEW_BASE) return null;
+    const merge = pull.merge_commit_sha;
+    if (!rejected.has(merge) && matchesReviewMerge(merge, env)) return merge;
+    rejected.add(merge);
+    if (attempt < MERGE_READS - 1) await wait(MERGE_RETRY_MS);
+  }
+  return null;
+}
+
+/** @param {NodeJS.ProcessEnv} env */
+async function prepareReviewPlanCheckout(env) {
+  const merge = await resolveReviewMerge(env);
+  prepareReviewCheckout({ ...env, REVIEW_MERGE: merge ?? undefined });
+}
+
+/** @param {NodeJS.ProcessEnv} env */
+export function prepareReviewCheckout(env) {
+  requireReviewAuthority(env);
   const checkout = env.GITHUB_WORKSPACE;
   const merge = env.REVIEW_MERGE;
-  if (!merge) {
-    console.log(
-      "::notice::No merge commit is available for this event; review remains owed. Re-add the review label when the PR can merge.",
-    );
-    appendFileSync(env.GITHUB_OUTPUT, "available=false\n");
-    return;
-  }
-  if (!isReviewRevision(merge)) throw new Error("Review requires an immutable merge revision.");
-  readGit(["fetch", "--no-tags", "origin", merge], checkout);
-  if (
-    readGit(["rev-parse", `${merge}^1`], checkout) !== env.REVIEW_BASE ||
-    readGit(["rev-parse", `${merge}^2`], checkout) !== env.REVIEW_HEAD
-  ) {
-    console.log(
-      "::notice::The event's merge is stale; review remains owed. Re-add the review label when the PR can merge.",
-    );
+  if (!matchesReviewMerge(merge, env)) {
+    console.log(REVIEW_OWED_NOTICE);
     appendFileSync(env.GITHUB_OUTPUT, "available=false\n");
     return;
   }
@@ -194,7 +239,7 @@ export async function verifyReviewEvent(
   callGitHub = createGitHub({ repository: env.GITHUB_REPOSITORY, env, fetchImpl: fetch }),
 ) {
   const pull = await callGitHub(`/pulls/${env.PR}`);
-  if (pull.state !== "open" || pull.head.sha !== env.REVIEW_HEAD || pull.base.ref !== "main")
+  if (!isCurrentReviewPull(pull, env))
     throw new Error("The pull request moved after this review started.");
 }
 
@@ -305,6 +350,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const { env } = process;
   const commands = {
     prepare: () => prepareReviewCheckout(env),
+    "prepare-plan": () => prepareReviewPlanCheckout(env),
     plan: () => writeTrustedReviewPlan(env),
     import: () => importReviewArtifacts(argument, env.REVIEW_FOLDER, env),
     find: () => recordTrustedFindTry(Number(argument), env),
@@ -316,6 +362,6 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     result: () => recordTrustedResult(env),
   };
   if (!Object.hasOwn(commands, command)) throw new Error("Unknown trusted review command.");
-  if (command !== "prepare") readReviewIdentity(env);
+  if (!["prepare", "prepare-plan"].includes(command)) readReviewIdentity(env);
   await commands[command]();
 }

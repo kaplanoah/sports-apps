@@ -238,9 +238,10 @@ something doesn't match, point them to Cloudflare's
 GitHub lints, checks formatting and types, looks for unused code, and runs the
 Node tests, and the browser tests of the apps a change reaches, on every pull
 request, so merge once those pass and the pull request has no conflicts with
-`main`. If the repo has a `CLAUDE_CODE_OAUTH_TOKEN` or `ANTHROPIC_API_KEY`
-secret, Claude also reviews each pull request, as [REVIEW.md](REVIEW.md) says,
-once it's ready for review, and again only when it's labeled `review`, never on
+`main`. The trusted `pull_request_target` workflow reviews each pull request
+from main's copy of the review controls, as [REVIEW.md](REVIEW.md) says.
+It requires a `CLAUDE_CODE_OAUTH_TOKEN` or `ANTHROPIC_API_KEY` secret and reviews
+once the pull request is ready, and again only when it's labeled `review`, never on
 a push alone. It splits the change into areas by what the files are about, and
 has one reviewer read each area in full, with the rule files in `.claude/rules/`
 whose paths match its files. REVIEW.md's [How to report](REVIEW.md#how-to-report)
@@ -268,13 +269,16 @@ can't let the pull request's own red change through; a change to the workflow's
 `gate`, `phone`, or `check` job is the review's to weigh, which `REVIEW.md`
 counts as Important when it lets less through.
 
-A pull request from a fork runs without the repo's secrets, so Claude can't review
-it, and it runs the fork's own copy of the workflows, which its author can change
-to pass. The repo's **Settings > Actions > General**, under **Approval for
+A fork's build and test workflows run without the repo's secrets, using its own
+workflow definitions, which its author can change to pass. Trusted review also
+reviews fork pull requests: it uses main's controls and review credentials, and
+reads fork files as data without executing their code, imports, or configuration.
+The repo's **Settings > Actions > General**, under **Approval for
 running fork pull request workflows from contributors**, is set to **Require
 approval for first-time contributors**. GitHub counts anyone without a commit
 merged into the repo as a first-time contributor, and only the owner merges, so
-nothing a fork sends runs until the owner has read it and approved its run.
+a first-time contributor's build and test workflows wait for the owner's approval.
+Trusted review runs separately from those workflows.
 
 To run the
 same checks yourself, run `npm ci` and `npx playwright install chromium` once,
