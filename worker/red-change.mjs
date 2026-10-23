@@ -33,8 +33,6 @@ import { findChannel } from "./channels.mjs";
 import { PHONE_OK_LABEL, findLabeling, readPushTime, readTimeline } from "./labeling.mjs";
 import { createGitHub } from "./github-api.mjs";
 import { readDeployedMain } from "./production-coverage.mjs";
-
-export { readDeployedMain };
 import { isGitObjectId } from "./git-object.mjs";
 import {
   LAYER_PROPERTIES,
@@ -1001,7 +999,7 @@ export async function readRedApproval({
   /** @param {Parameters<typeof decideGate>[1]} pull */
   const decide = (pull) => decideGate(diff, pull, files?.readPageFile, files?.listStylesheets);
   const initial = decide({ labels, owner });
-  if (initial.message === "Not a red change." || !labels.includes(PHONE_OK_LABEL)) return initial;
+  if (!initial.isHeld || !labels.includes(PHONE_OK_LABEL)) return initial;
   const repository = env.GITHUB_REPOSITORY ?? "";
   const head = env.HEAD_SHA ?? "";
   try {

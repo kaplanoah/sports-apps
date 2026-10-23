@@ -402,8 +402,14 @@ export async function deploy({
     return isNeeded;
   }
 
-  function isSameReleaseRetry(liveCommit) {
-    return !!liveCommit && liveCommit === commit && Number(env.GITHUB_RUN_ATTEMPT) > 1;
+  function shouldRecheckLive(liveCommit) {
+    if (!liveCommit || !commit || !(Number(env.GITHUB_RUN_ATTEMPT) > 1)) return false;
+    if (liveCommit === commit) return true;
+    return (
+      !isForcePushed &&
+      isEarlier(liveCommit, commit) &&
+      !decideDeploy(findChanges(liveCommit), worker).isNeeded
+    );
   }
 
   async function readMigrationTag() {
@@ -456,10 +462,11 @@ export async function deploy({
   }
 
   // Deploy logs are public, and the address names the account's workers.dev subdomain.
-  async function confirmWorkerAnswers(url, previousVersions, isUploaded) {
+  async function confirmWorkerAnswers(url, previousVersions, isUploaded, expectedCommit) {
     if (!previousVersions) log("worker check: waiting for the new workers.dev address to resolve");
     const attempts = previousVersions ? CHECK_ATTEMPTS : FIRST_DEPLOY_CHECK_ATTEMPTS;
-    if (await isWorkerAnswering(url, { fetchImpl, pause, commit, attempts })) return;
+    if (await isWorkerAnswering(url, { fetchImpl, pause, commit: expectedCommit, attempts }))
+      return;
     await rejectFailedCheck(
       isUploaded
         ? "The Worker didn't answer as the new version"
@@ -477,11 +484,11 @@ export async function deploy({
     throw new Error(`${state}: ${reason}.`);
   }
 
-  async function confirmPageDraws(previousVersions, isUploaded) {
+  async function confirmPageDraws(previousVersions, isUploaded, expectedCommit) {
     const check = await checkPage({
       app: worker,
       channel,
-      commit,
+      commit: expectedCommit,
       env,
       isAccessCodeRequired: true,
     }).catch((error) => ({
@@ -500,9 +507,14 @@ export async function deploy({
     log("page check: ok");
   }
 
-  async function confirmAppAnswers(previousVersions, isUploaded) {
-    await confirmWorkerAnswers(formatWorkerUrl(name, subdomain), previousVersions, isUploaded);
-    await confirmPageDraws(previousVersions, isUploaded);
+  async function confirmAppAnswers(previousVersions, isUploaded, expectedCommit) {
+    await confirmWorkerAnswers(
+      formatWorkerUrl(name, subdomain),
+      previousVersions,
+      isUploaded,
+      expectedCommit,
+    );
+    await confirmPageDraws(previousVersions, isUploaded, expectedCommit);
     logWorkerCheck();
     onCovered?.();
   }
@@ -561,7 +573,8 @@ export async function deploy({
     previousVersions && (await deployments.readCommit(previousVersions, "live commit"));
   if (isCheckOnly || !isDeployNeeded(liveCommit)) {
     if (isPageless) await scheduleServiceCheck(previousVersions, liveCommit, false);
-    else if (isSameReleaseRetry(liveCommit)) await confirmAppAnswers(previousVersions, false);
+    else if (shouldRecheckLive(liveCommit))
+      await confirmAppAnswers(previousVersions, false, liveCommit);
     else if (
       checkedCommit &&
       !isLiveNewer(liveCommit) &&
@@ -577,7 +590,7 @@ export async function deploy({
   if (isPageless) {
     await scheduleServiceCheck(previousVersions, commit, true);
   } else {
-    await confirmAppAnswers(previousVersions, true);
+    await confirmAppAnswers(previousVersions, true, commit);
   }
   return deployed;
 }
@@ -814,8 +827,8 @@ async function readPreviousCheckedCommit(env, fetchImpl) {
 }
 
 /**
- * A receipt covers every repository Worker, including unchanged ones only when their runtime
- * matches earlier verified coverage. A successful no-op alone proves no page was verified.
+ * A receipt covers every repository Worker through fresh verification or equivalent previously
+ * verified runtime. A successful no-op alone proves no page was verified.
  * @param {string[]} workers
  * @param {{ channel: string, commit: string, newer: string | null }} release
  * @param {{ readCiState?: typeof readMainCiState, deploy?: typeof deployRelease, env?: NodeJS.ProcessEnv, fetchImpl?: typeof fetch, readCheckedCommit?: typeof readPreviousCheckedCommit, requiredWorkers?: string[] }} [options]

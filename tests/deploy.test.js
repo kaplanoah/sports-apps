@@ -1504,26 +1504,30 @@ test("unchanged verification fails visibly for the wrong release or unavailable 
   }
 });
 
-test("an unrelated unchanged app still skips page verification", async () => {
+test("unchanged recovery requires proven production ancestry and cannot cross a beta force push", async () => {
   const { deploy } = await loadDeployModule();
-  const cloudflare = createFakeCloudflare({ liveCommit: LIVE_COMMIT });
-  assert.equal(
-    await deploy({
-      worker: "mlb",
-      script: "",
-      commit: NEW_COMMIT,
-      fetchImpl: cloudflare.fetchImpl,
-      env: { ...ENV, GITHUB_RUN_ATTEMPT: "2" },
-      findChanges: () => [],
-      log: () => {},
-      pause: skipPause,
-      checkPage: async () => {
-        assert.fail("an unrelated app keeps its skip");
-      },
-    }),
-    null,
-  );
-  assert.ok(!describeCalls(cloudflare.calls).some((call) => /^(PUT|POST) /.test(call)));
+  for (const channel of ["production", "beta"]) {
+    const cloudflare = createFakeCloudflare({ liveCommit: LIVE_COMMIT });
+    assert.equal(
+      await deploy({
+        worker: "mlb",
+        channel,
+        script: "",
+        commit: NEW_COMMIT,
+        fetchImpl: cloudflare.fetchImpl,
+        env: { ...ENV, GITHUB_RUN_ATTEMPT: "2" },
+        findChanges: () => [],
+        isEarlier: () => channel === "beta",
+        log: () => {},
+        pause: skipPause,
+        checkPage: async () => {
+          assert.fail("an unrelated or unproven live release keeps its skip");
+        },
+      }),
+      null,
+    );
+    assert.ok(!describeCalls(cloudflare.calls).some((call) => /^(PUT|POST) /.test(call)));
+  }
 });
 
 test("first automatic and hand attempts do not recheck a commit already live", async () => {

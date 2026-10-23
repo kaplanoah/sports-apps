@@ -14,7 +14,6 @@ import {
   listPageStylesheets,
   readDiff,
   readRedApproval,
-  readDeployedMain,
 } from "../worker/red-change.mjs";
 import { PHONE_CONTEXT } from "../worker/labeling.mjs";
 import { refreshRedApprovals } from "../worker/red-approval.mjs";
@@ -1974,96 +1973,6 @@ test("the live gate holds a contained red merge until a successful production de
   });
   assert.equal(failed.isHeld, true);
   assert.match(failed.message, /cannot be verified.*403/);
-});
-
-test("production evidence ignores beta, missing receipts and displayed workflow SHAs", async () => {
-  const requested = [];
-  const sha = "a".repeat(40);
-  const deployed = await readDeployedMain(async (path) => {
-    requested.push(path);
-    if (path.includes("deploy.yml/runs"))
-      return {
-        workflow_runs: [
-          {
-            id: 1,
-            path: ".github/workflows/deploy.yml",
-            head_branch: "beta",
-            conclusion: "success",
-          },
-          ...[2, 3].map((id) => ({
-            id,
-            path: ".github/workflows/deploy.yml",
-            head_branch: "main",
-            conclusion: "success",
-            head_sha: "b".repeat(40),
-          })),
-        ],
-      };
-    return {
-      artifacts: path.includes("/3/")
-        ? [{ name: `production-checked-${sha}`, expired: false }]
-        : [],
-    };
-  });
-  assert.equal(deployed, sha);
-  assert.equal(
-    requested.some((path) => path.includes("/1/")),
-    false,
-  );
-  assert.equal(requested.length, 3);
-  await assert.rejects(
-    readDeployedMain(async () => ({ workflow_runs: [] })),
-    /No successful production/,
-  );
-});
-
-test("deploy evidence rejects expired or conflicting actual-target receipts", async () => {
-  const run = {
-    id: 1,
-    path: ".github/workflows/deploy.yml",
-    head_branch: "main",
-    conclusion: "success",
-    head_sha: "a".repeat(40),
-  };
-  /** @param {object[]} artifacts */
-  const readWith = (artifacts) =>
-    readDeployedMain(async (path) => {
-      if (path.includes("deploy.yml/runs")) return { workflow_runs: [run] };
-      if (path.includes("/artifacts")) return { artifacts };
-      throw new Error(`Unexpected request: ${path}`);
-    });
-  await assert.rejects(
-    readWith([{ name: `production-checked-${"a".repeat(40)}`, expired: true }]),
-    /No successful production/,
-  );
-  await assert.rejects(readWith([]), /No successful production/);
-  await assert.rejects(
-    readWith([{ name: `production-checked-${"z".repeat(40)}`, expired: false }]),
-    /No successful production/,
-  );
-  await assert.rejects(
-    readWith([{ name: `not-a-valid-prefix-${"a".repeat(40)}`, expired: false }]),
-    /No successful production/,
-  );
-  for (const size of [39, 41])
-    await assert.rejects(
-      readWith([{ name: `production-checked-${"a".repeat(size)}`, expired: false }]),
-      /No successful production/,
-    );
-
-  await assert.rejects(
-    readWith([{ name: `production-checked-${"a".repeat(40)}` }]),
-    /No successful production/,
-  );
-  await assert.rejects(
-    readWith(
-      ["a", "b"].map((letter) => ({
-        name: `production-checked-${letter.repeat(40)}`,
-        expired: false,
-      })),
-    ),
-    /conflicting checked commits/,
-  );
 });
 
 test("trusted refresh invalidates an old phone status after a red merge and restores a current approval", async (context) => {

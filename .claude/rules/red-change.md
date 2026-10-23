@@ -4,6 +4,9 @@ paths:
   - "shared/page/**"
   - "worker/red-change.mjs"
   - "worker/red-change-styles.mjs"
+  - "worker/red-approval.mjs"
+  - "worker/production-coverage.mjs"
+  - ".github/workflows/red-approvals.yml"
   - ".github/workflows/ci.yml"
 ---
 

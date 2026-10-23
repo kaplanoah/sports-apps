@@ -9,7 +9,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { dirname, isAbsolute, join, relative } from "node:path";
-import { isReviewRevision } from "./review-repository.mjs";
+import { isGitObjectId } from "./git-object.mjs";
 import { findUnreadParts, gatherCandidates, readAnswer } from "./judge-review.mjs";
 import { isObject } from "./review-json.mjs";
 
@@ -101,7 +101,7 @@ export function validateReviewPlan(plan) {
     isObject(plan) && ["first", "push", "none", "reviewed"].includes(plan.stage),
     "plan stage",
   );
-  requireData(plan.since === null || isReviewRevision(plan.since), "reviewed revision");
+  requireData(plan.since === null || isGitObjectId(plan.since), "reviewed revision");
   requireData(Array.isArray(plan.areas) && Array.isArray(plan.unread), "plan lists");
   for (const unread of plan.unread)
     requireData(isObject(unread) && isReviewPath(unread.path) && isText(unread.why), "unread file");
@@ -186,7 +186,7 @@ export function readReviewIdentity(env) {
   );
   requireData(
     [identity.head, identity.base, identity.merge, identity.trusted].every((sha) =>
-      isReviewRevision(sha),
+      isGitObjectId(sha),
     ),
     "revision identity",
   );

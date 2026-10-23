@@ -17,7 +17,8 @@ import { fileURLToPath } from "node:url";
 import { readPullMerge } from "./pull-merge.mjs";
 import { WEIGHTS } from "./review-state.mjs";
 import { createGitHub } from "./github-api.mjs";
-import { createReviewGitEnvironment, isReviewRevision } from "./review-repository.mjs";
+import { createReviewGitEnvironment } from "./review-repository.mjs";
+import { isGitObjectId } from "./git-object.mjs";
 import {
   readJson,
   nameFindRecord,
@@ -73,7 +74,7 @@ function requireReviewAuthority(env) {
 /** @param {string | undefined | null} merge @param {NodeJS.ProcessEnv} env */
 function matchesReviewMerge(merge, env) {
   if (!merge) return false;
-  if (!isReviewRevision(merge)) throw new Error("Review requires an immutable merge revision.");
+  if (!isGitObjectId(merge)) throw new Error("Review requires an immutable merge revision.");
   readGit(["fetch", "--no-tags", "origin", merge], env.GITHUB_WORKSPACE);
   return (
     readGit(["show", "--no-patch", "--format=%P", merge], env.GITHUB_WORKSPACE) ===
@@ -88,7 +89,7 @@ function matchesAvailableReviewMerge(merge, env) {
   } catch (error) {
     const failure = /** @type {{ status?: number, stderr?: string | Buffer }} */ (error);
     const unavailable =
-      isReviewRevision(merge) &&
+      isGitObjectId(merge) &&
       failure.status === 128 &&
       new RegExp(
         `(?:not our ref|couldn't find remote ref|unadvertised object) ${merge}(?:\\s|$)`,
