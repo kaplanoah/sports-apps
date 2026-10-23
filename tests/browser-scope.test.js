@@ -40,6 +40,7 @@ test("a change to the docs, the other workflows, or the tooling no browser test 
       "apps/wnba/tests/search.test.js",
       "services/accounts/tests/health.test.js",
       "knip.json",
+      "stryker.config.mjs",
       "types/globals.d.ts",
     ]),
     [],

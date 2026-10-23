@@ -20,11 +20,17 @@ export function buildNodeTestArgs(tests) {
   return ["--import", "./tests/no-network.js", "--test", ...tests];
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const result = spawnSync(process.execPath, buildNodeTestArgs(listNodeTests()), {
-    cwd: root,
+/**
+ * @param {string[]} tests
+ * @param {URL} [folder]
+ */
+export function testNodeFiles(tests, folder = root) {
+  const result = spawnSync(process.execPath, buildNodeTestArgs(tests), {
+    cwd: folder,
     stdio: "inherit",
   });
   if (result.error) throw result.error;
   process.exitCode = result.status ?? 1;
 }
+
+if (process.argv[1] === fileURLToPath(import.meta.url)) testNodeFiles(listNodeTests());

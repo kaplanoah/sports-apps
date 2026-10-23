@@ -20,6 +20,7 @@ export const CONFIG_ONLY_FILES = new Set([
   ".prettierignore",
   "eslint.config.mjs",
   "knip.json",
+  "stryker.config.mjs",
   "tsconfig.json",
 ]);
 const SKIPPED_FILES = new Set([
@@ -35,7 +36,6 @@ const SKIPPED_FILES = new Set([
   ".github/workflows/trusted-review-area.yml",
   ".github/workflows/watch.yml",
   "playwright.config.mjs",
-  "stryker.config.mjs",
   "types/globals.d.ts",
   "worker/beta-claim.mjs",
   "worker/browser-scope.mjs",

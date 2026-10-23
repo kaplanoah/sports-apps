@@ -89,13 +89,13 @@ export function listTestedApps(paths, { apps, reached }) {
   return apps.filter((app) => tested.has(app));
 }
 
-const root = fileURLToPath(new URL("../", import.meta.url));
+const root = new URL("../", import.meta.url);
 
 /**
  * @param {string} path from the repo's root
  * @param {URL} [folder]
  */
-export const readRepoText = (path, folder = new URL("../", import.meta.url)) => {
+export const readRepoText = (path, folder = root) => {
   const file = new URL(path, folder);
   return existsSync(file) ? readFileSync(file, "utf8") : null;
 };
@@ -106,7 +106,7 @@ const listBrowserTestFiles = () =>
     "tests/browser",
     ...listAppsWithBrowserTests().map((app) => `apps/${app}/tests/browser`),
   ].flatMap((folder) =>
-    readdirSync(join(root, folder), { recursive: true, encoding: "utf8" })
+    readdirSync(join(fileURLToPath(root), folder), { recursive: true, encoding: "utf8" })
       .filter((path) => /\.m?js$/.test(path))
       .map((path) => posix.join(folder, path)),
   );

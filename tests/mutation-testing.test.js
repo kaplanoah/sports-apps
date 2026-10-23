@@ -1,12 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { spawnSync } from "node:child_process";
 import { ESLint } from "eslint";
-import { buildMutationTestArgs, listMutationTests } from "../worker/mutation-tests.mjs";
+import { listMutationTests } from "../worker/mutation-tests.mjs";
 import { MUTATION_TARGETS, readMutationTarget } from "../worker/mutation-targets.mjs";
 import { buildNodeTestArgs, listNodeTests } from "../worker/node-tests.mjs";
 import { REPO_ROOT, readRepoFile } from "./repo-files.js";
@@ -140,16 +140,14 @@ test("mutation discovery includes both typing sweeps and the focused module test
   );
 });
 
-test("mutation runner passes discovered paths as arguments and refuses an empty full-suite fallback", () => {
+test("Node runner arguments preserve paths and refuse an empty full-suite fallback", () => {
   const tests = ["tests/one.test.js", "apps/future/tests/two words.test.js"];
-  assert.deepEqual(buildMutationTestArgs(tests), buildNodeTestArgs(tests));
   assert.deepEqual(buildNodeTestArgs(tests), [
     "--import",
     "./tests/no-network.js",
     "--test",
     ...tests,
   ]);
-  assert.throws(() => buildMutationTestArgs([]), /No Node tests reach the mutated modules/);
   assert.throws(() => buildNodeTestArgs([]), /No Node tests were found/);
 });
 
@@ -179,6 +177,35 @@ const invokeRunner = (folder, args = ["--target", "search-reading"]) =>
     env: fixtureEnv,
   });
 
+/** @param {string} folder */
+function copyOrdinaryRunner(folder) {
+  mkdirSync(join(folder, "worker"), { recursive: true });
+  const runner = join(folder, "worker/node-tests.mjs");
+  writeFileSync(runner, readRepoFile("worker/node-tests.mjs"));
+  return runner;
+}
+
+/** @param {string} folder */
+const listCliFixtures = (folder) => [
+  { runner: RUNNER, args: ["--target", "search-reading", "--root", folder] },
+  { runner: copyOrdinaryRunner(folder), args: [] },
+];
+
+/**
+ * @param {string} folder
+ * @param {string} runner
+ * @param {string} executable
+ * @param {string[]} [args]
+ */
+function invokeLauncher(folder, runner, executable, args = []) {
+  const script = `process.execPath = ${JSON.stringify(executable)};
+    process.argv = ${JSON.stringify(["node", runner, ...args])};
+    await import(${JSON.stringify(pathToFileURL(runner).href)});`;
+  const launcher = join(folder, "launcher.mjs");
+  writeFileSync(launcher, script);
+  return spawnSync(process.execPath, [launcher], { encoding: "utf8", env: fixtureEnv });
+}
+
 test("the mutation CLI propagates a selected test's failure and excludes unrelated tests", (t) => {
   const folder = makeRunnerFixture(t);
   const passing = invokeRunner(folder);
@@ -204,29 +231,60 @@ test("the mutation CLI keeps the network guard and refuses invalid or empty sele
   );
   const empty = invokeRunner(folder, ["--target", "series-text"]);
   assert.notEqual(empty.status, 0);
-  assert.match(empty.stderr, /No Node tests reach/);
+  assert.match(empty.stderr, /No Node tests were found/);
   const invalid = invokeRunner(folder, ["--target", "../search-reading"]);
   assert.notEqual(invalid.status, 0);
   assert.match(invalid.stderr, /Choose MUTATION_TARGET/);
 });
 
-test("the mutation CLI exposes a child process startup failure", (t) => {
+test("both Node CLIs expose a child process startup failure", (t) => {
   const folder = makeRunnerFixture(t);
-  const script = `process.execPath = ${JSON.stringify(join(folder, "missing-node"))};
-    process.argv = ["node", ${JSON.stringify(RUNNER)}, "--target", "search-reading", "--root", ${JSON.stringify(folder)}];
-    await import(${JSON.stringify(pathToFileURL(RUNNER).href)});`;
-  const launcher = join(folder, "launcher.mjs");
-  writeFileSync(launcher, script);
-  const result = spawnSync(process.execPath, [launcher], { encoding: "utf8", env: fixtureEnv });
-  assert.notEqual(result.status, 0);
-  assert.match(result.stderr, /ENOENT/);
+  for (const { runner, args } of listCliFixtures(folder)) {
+    const result = invokeLauncher(folder, runner, join(folder, "missing-node"), args);
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /ENOENT/);
+  }
+});
+
+test("both Node CLIs fail when their child is terminated by a signal", (t) => {
+  const folder = makeRunnerFixture(t);
+  const executable = join(folder, "signaled-node");
+  writeFileSync(executable, "#!/bin/sh\nkill -TERM $$\n", { mode: 0o755 });
+  for (const { runner, args } of listCliFixtures(folder)) {
+    const result = invokeLauncher(folder, runner, executable, args);
+    assert.equal(result.status, 1, result.stderr + result.stdout);
+  }
+});
+
+test("both Node CLIs pass the exact selected arguments and working directory to their child", (t) => {
+  const folder = makeRunnerFixture(t);
+  const executable = join(folder, "record-node.mjs");
+  const record = join(folder, "command.json");
+  writeFileSync(
+    executable,
+    `#!/usr/bin/env node
+    import { writeFileSync } from "node:fs";
+    writeFileSync(${JSON.stringify(record)}, JSON.stringify({ args: process.argv.slice(2), cwd: process.cwd() }));
+  `,
+    { mode: 0o755 },
+  );
+  for (const { runner, args } of listCliFixtures(folder)) {
+    const result = invokeLauncher(folder, runner, executable, args);
+    assert.equal(result.status, 0, result.stderr + result.stdout);
+    const tests =
+      runner === RUNNER
+        ? ["tests/selected.test.js"]
+        : ["tests/selected.test.js", "tests/unrelated.test.js"];
+    assert.deepEqual(JSON.parse(readFileSync(record, "utf8")), {
+      args: buildNodeTestArgs(tests),
+      cwd: folder,
+    });
+  }
 });
 
 test("the ordinary Node runner uses the same discovery and propagates fixture failures", (t) => {
   const folder = makeRunnerFixture(t);
-  mkdirSync(join(folder, "worker"));
-  const runner = join(folder, "worker/node-tests.mjs");
-  writeFileSync(runner, readRepoFile("worker/node-tests.mjs"));
+  const runner = copyOrdinaryRunner(folder);
   const failed = spawnSync(process.execPath, [runner], { encoding: "utf8", env: fixtureEnv });
   assert.equal(failed.status, 1);
   assert.match(failed.stdout + failed.stderr, /UNRELATED_TEST_RAN/);
