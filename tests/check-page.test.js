@@ -435,12 +435,10 @@ test("returned page failures mask the access code inside the attempt", async () 
 
 test("a broken first attempt can recover after its context cleanup fails", async () => {
   const first = openMovedPage(PAGE_URL).page;
-  first.goto = /** @type {typeof first.goto} */ (
-    async () => ({
-      ok: () => false,
-      status: () => 500,
-    })
-  );
+  first.goto = async () =>
+    /** @type {import("@playwright/test").Response} */ (
+      /** @type {unknown} */ ({ ok: () => false, status: () => 500 })
+    );
   const second = openMovedPage(PAGE_URL).page;
   const pages = [first, second];
   let opened = 0;
