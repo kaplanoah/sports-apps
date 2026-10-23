@@ -37,6 +37,7 @@ test("a change to the docs, the other workflows, or the tooling no browser test 
       ".github/workflows/flaky.yml",
       "worker/plan-review.mjs",
       "tests/plan-review.test.js",
+      "tests/time-zone-sensitive.json",
       "apps/wnba/tests/search.test.js",
       "services/accounts/tests/health.test.js",
       "knip.json",

@@ -279,7 +279,36 @@ test("each Node test step prints its failures at the end of the run", () => {
   );
   assert.equal(steps.length, 2);
   for (const step of steps)
-    assert.match(step, /NODE_OPTIONS: --test-reporter=dot|env: \*test-reporter/);
+    assert.match(step, /NODE_OPTIONS: --test-reporter=dot|run: node worker\/test-time-zone\.mjs/);
+});
+
+test("CI always runs the complete ordinary-zone suite and scopes only its alternate-zone repeat", () => {
+  const checks = readJob("checks");
+  assert.match(
+    checks,
+    /- name: Test\n\s+if: \$\{\{ !cancelled\(\) \}\}\n\s+env:\n\s+NODE_OPTIONS: --test-reporter=dot\n\s+TZ: UTC\n\s+run: npm test\n/,
+  );
+  assert.match(
+    checks,
+    /- name: Test in another time zone\n\s+if: \$\{\{ !cancelled\(\) \}\}\n\s+run: node worker\/test-time-zone\.mjs --changed\n/,
+  );
+});
+
+test("only the nightly run repeats the focused Honolulu Node list", () => {
+  const workflow = readRepoFile(".github/workflows/flaky.yml");
+  assert.match(workflow, /schedule:\n\s+- cron:/);
+  assert.match(workflow, /workflow_dispatch:/);
+  const node = readJob("node", "flaky.yml");
+  assert.ok(node);
+  assert.match(node, /^ {4}if: github.event_name == 'schedule'$/m);
+  assert.doesNotMatch(node, /^ {4}needs:/m);
+  assert.doesNotMatch(node, /inputs\.ref/);
+  assert.match(node, /node-version-file: \.nvmrc/);
+  assert.match(node, /run: npm ci\n/);
+  assert.match(node, /run: node worker\/test-time-zone\.mjs\n/);
+  assert.doesNotMatch(node, /--full|run: npm test/);
+  assert.match(node, /path: node_modules/);
+  assert.match(node, /if: steps\.modules\.outputs\.cache-hit != 'true'/);
 });
 
 test("the browser job's traces leave out the page at each step, which burn-in's keep", () => {
