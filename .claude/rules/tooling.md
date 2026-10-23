@@ -13,7 +13,8 @@ paths:
   `ls worker/` lists its modules, and its tests are in the root `tests/`.
   It opens each app's live page as a phone does, signed in with its code, and says whether it drew what its store sent (`check-page.mjs`).
   It checks the page where a browser lands, which for an app moving to its own address is that address.
-  Each deploy does this for its new version, putting the one before back when it doesn't.
+  Each deploy checks its new version and restores the previous version for a confirmed broken page or wrong release.
+  Missing page or access-code configuration, refused or rate-limited codes, absent Worker authentication, and unavailable browser checks fail verification while leaving the uploaded version live but unverified.
   The `Watch apps` workflow does it every 15 minutes,
   keeping one open issue for each app that isn't opening, which closes once it opens again,
   and one for each that opens without asking for its code, which closes once it asks again (`watch-apps.mjs`).

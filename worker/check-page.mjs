@@ -238,6 +238,21 @@ async function launchChromium(env) {
 }
 
 /**
+ * @param {() => Promise<void>} close
+ * @param {PageCheck} check
+ */
+async function closeAfterPageCheck(close, check) {
+  try {
+    await close();
+    return true;
+  } catch (error) {
+    // Cleanup cannot undo evidence that the uploaded page is broken.
+    if (check.status !== "broken") throw error;
+    return false;
+  }
+}
+
+/**
  * Opens an app's live page in a browser of its own, trying again after `pauseMs` while it's
  * broken, up to `attempts` times. A page with no address, or whose access code the Worker refuses
  * or rate-limits, goes unchecked. Browser infrastructure failures cannot verify a release;
@@ -265,9 +280,8 @@ export async function checkAppPage({
   const access = readPageAccess(app, channel, env);
   if (!access) return markUnchecked(`no ${nameAccessSecrets(app, channel).pageUrl} secret`);
   const browser = await launchBrowser(env);
+  let check = markUnchecked("the page wasn't opened");
   try {
-    /** @type {PageCheck} */
-    let check = markBroken("the page wasn't opened");
     for (let attempt = 0; attempt < attempts; attempt += 1) {
       if (attempt > 0) await waitFor(pauseMs);
       // A service worker would answer the next try from what the last one kept.
@@ -277,11 +291,11 @@ export async function checkAppPage({
         markUnchecked(`the page check failed: ${error instanceof Error ? error.message : error}`),
       );
       check = hideAddress(opened, access.pageUrl, page.url());
-      await context.close();
+      if (!(await closeAfterPageCheck(() => context.close(), check))) break;
       if (check.status !== "broken") break;
     }
     return check;
   } finally {
-    await browser.close();
+    await closeAfterPageCheck(() => browser.close(), check);
   }
 }

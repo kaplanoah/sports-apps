@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { nameServiceBinding } from "../shared/worker/services.js";
+import { checkAppPage } from "../worker/check-page.mjs";
 import { listApps, listServices } from "../worker/apps.mjs";
 import { readRepoFile } from "./repo-files.js";
 import { readStepScript } from "./workflow-step.js";
@@ -686,6 +687,97 @@ test("a thrown page check leaves the upload live but unverified, without exposin
     ),
   );
   assert.ok(!lines.some((line) => /worker check: ok|page check: ok|LAYUP|k3y/.test(line)));
+});
+
+/**
+ * @param {"context" | "browser"} cleanup
+ * @param {"broken response" | "wrong release" | "drawn"} result
+ */
+function createCleanupFailureBrowser(cleanup, result) {
+  const page = {
+    on: () => {},
+    goto: async () => ({ ok: () => result !== "broken response", status: () => 500 }),
+    url: () => ENV.MLB_PAGE_URL,
+    evaluate: async () => 204,
+    locator: () => ({
+      evaluateAll: async () => [
+        `${ENV.MLB_PAGE_URL}release/${(result === "wrong release" ? LIVE_COMMIT : NEW_COMMIT).slice(0, 7)}/js/app.js`,
+      ],
+    }),
+    waitForFunction: async () => {},
+  };
+  const closed = [];
+  const closeResource = async (name) => {
+    closed.push(name);
+    if (name === cleanup) throw new Error("Target closed during cleanup");
+  };
+  const context = { newPage: async () => page, close: () => closeResource("context") };
+  const browser = { newContext: async () => context, close: () => closeResource("browser") };
+  return {
+    browser: /** @type {import("@playwright/test").Browser} */ (/** @type {unknown} */ (browser)),
+    closed,
+  };
+}
+
+test("confirmed broken pages and wrong releases still roll back when browser cleanup fails", async () => {
+  const { deploy } = await loadDeployModule();
+  for (const cleanup of /** @type {const} */ (["context", "browser"])) {
+    for (const result of /** @type {const} */ (["broken response", "wrong release"])) {
+      const { browser, closed } = createCleanupFailureBrowser(cleanup, result);
+      const cloudflare = createFakeCloudflare();
+      const lines = [];
+      await assert.rejects(
+        deploy({
+          worker: "mlb",
+          fetchImpl: cloudflare.fetchImpl,
+          env: ENV,
+          script: "",
+          commit: NEW_COMMIT,
+          log: (line) => lines.push(line),
+          pause: skipPause,
+          checkPage: (options) =>
+            checkAppPage({ ...options, pauseMs: 0, launchBrowser: async () => browser }),
+        }),
+        /The page didn't draw as the new version: .*so the earlier version is live again/,
+      );
+      assert.equal(
+        describeCalls(cloudflare.calls).at(-1),
+        "POST /accounts/acct123/workers/scripts/mlb-app/deployments",
+      );
+      assert.ok(closed.includes("context"));
+      assert.equal(closed.at(-1), "browser");
+      assert.ok(!lines.includes("worker check: ok"));
+    }
+  }
+});
+
+test("cleanup failures without a confirmed broken page remain unverified without rollback", async () => {
+  const { deploy } = await loadDeployModule();
+  for (const cleanup of /** @type {const} */ (["context", "browser"])) {
+    const { browser, closed } = createCleanupFailureBrowser(cleanup, "drawn");
+    const cloudflare = createFakeCloudflare();
+    const lines = [];
+    await assert.rejects(
+      deploy({
+        worker: "mlb",
+        fetchImpl: cloudflare.fetchImpl,
+        env: ENV,
+        script: "",
+        commit: NEW_COMMIT,
+        log: (line) => lines.push(line),
+        pause: skipPause,
+        checkPage: (options) => checkAppPage({ ...options, launchBrowser: async () => browser }),
+      }),
+      /The new version is live but unverified: the page check failed/,
+    );
+    assert.ok(
+      !describeCalls(cloudflare.calls).some(
+        (call) => call.startsWith("POST ") && call.endsWith("/deployments"),
+      ),
+    );
+    assert.equal(closed.at(-1), "browser");
+    assert.ok(!lines.includes("worker check: ok"));
+  }
 });
 
 test("a merge whose live version already has it isn't deployed, but a push to beta is", async () => {
