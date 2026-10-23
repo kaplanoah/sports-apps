@@ -19,6 +19,7 @@ import { createGitHub } from "./github-api.mjs";
 import { ACROSS_RECORD, POST_RECORD, readJson } from "./judge-review.mjs";
 import {
   OFF_DIFF_HEADING,
+  escapeReviewText,
   UNSURE,
   WEIGHTS,
   listFindingMarks,
@@ -130,7 +131,7 @@ export const nameFinding = ({ path, body }) =>
  * @param {string} [shown]
  */
 const writeBody = (finding, head, shown = finding.body) =>
-  `**${finding.weight}** ${shown}\n\n${writeFindingMark(nameFinding(finding), head)}`;
+  `**${finding.weight}** ${escapeReviewText(shown)}\n\n${writeFindingMark(nameFinding(finding), head)}`;
 
 /**
  * A finding as an item of the checklist of a review's Nits, naming where it is, each line after
@@ -140,7 +141,7 @@ const writeBody = (finding, head, shown = finding.body) =>
  */
 const writeItem = (finding, head) =>
   [
-    `- [ ] \`${nameSpot(finding)}\`: **${finding.weight}** ${finding.body}`,
+    escapeReviewText(`- [ ] \`${nameSpot(finding)}\`: **${finding.weight}** ${finding.body}`),
     writeFindingMark(nameFinding(finding), head),
   ]
     .join("\n")
@@ -152,7 +153,7 @@ const writeItem = (finding, head) =>
  * @param {string} head
  */
 const writeOffDiffEntry = (finding, head) =>
-  `- \`${nameSpot(finding)}\`: ${writeBody(finding, head)}`;
+  `- \`${escapeReviewText(nameSpot(finding))}\`: ${writeBody(finding, head)}`;
 
 /**
  * Findings in order, gathered under a heading into as few comments as keep each under GitHub's

@@ -864,14 +864,17 @@ test("every Claude step keeps its transcript out of the log and reads only the c
     assert.equal(readStepInput(workflow, step, "show_full_output"), "false", name);
     const args = readStepInput(workflow, step, "claude_args");
     const tools = [...args.matchAll(/--allowedTools "([^"]*)"/g)].map(([, list]) => list);
-    assert.deepEqual(tools, ["Bash(node worker/review-git.mjs:*)"], name);
+    const wrapper = ["review.yml", "trusted-review-area.yml"].includes(name)
+      ? "${{ runner.temp }}/trusted/worker/review-git.mjs"
+      : "worker/review-git.mjs";
+    assert.deepEqual(tools, [`Bash(node ${wrapper}:*)`], name);
     assert.doesNotMatch(args, /--disallowedTools/, name);
     const sources = [...args.matchAll(/--setting-sources (\S+)/g)].map(([, list]) => list);
     assert.deepEqual(sources, ["user"], name);
     const prompt = readStepInput(workflow, step, "prompt");
     assert.match(prompt, /\bRead\b/, name);
     assert.doesNotMatch(prompt, /\b(?:Grep|Glob)\b/, name);
-    assert.match(prompt, /node worker\/review-git\.mjs grep -n -F -e <text> -- <path>/, name);
+    assert.ok(prompt.includes(`node ${wrapper} grep -n -F -e <text> -- <path>`), name);
   }
 });
 

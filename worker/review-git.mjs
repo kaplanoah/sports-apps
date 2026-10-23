@@ -9,9 +9,11 @@
 // -L<start>,<end>:<path> -L:<function>:<path>, or -L followed by the range and path.
 // Usage: node worker/review-git.mjs grep [options] -e <pattern> [-e <pattern> ...] [-- paths]
 // Search options: -n -l -i -w -F -E.
+// REVIEW_CHECKOUT selects the reviewed tree while this module and its imports stay trusted.
 import { execFileSync } from "node:child_process";
 import { isAbsolute, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
+import { createReviewGitEnvironment } from "./review-repository.mjs";
 
 const COMMANDS = new Set(["log", "show"]);
 const SEARCH_FLAGS = new Set(["-n", "-l", "-i", "-w", "-F", "-E"]);
@@ -133,7 +135,7 @@ export function findRefusal(args, root) {
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const root = fileURLToPath(new URL("..", import.meta.url));
+  const root = process.env.REVIEW_CHECKOUT ?? fileURLToPath(new URL("..", import.meta.url));
   const args = process.argv.slice(2);
   const refusal = findRefusal(args, root);
   if (refusal) {
@@ -141,7 +143,11 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     process.exit(2);
   }
   try {
-    execFileSync("git", args, { cwd: root, stdio: "inherit" });
+    execFileSync("git", ["--no-pager", "-c", "core.hooksPath=/dev/null", ...args], {
+      cwd: root,
+      stdio: "inherit",
+      env: createReviewGitEnvironment(),
+    });
   } catch (error) {
     process.exitCode = /** @type {{ status?: number }} */ (error).status ?? 1;
   }
