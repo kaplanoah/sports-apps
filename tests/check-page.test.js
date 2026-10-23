@@ -94,7 +94,7 @@ function openMovedPage(landedUrl, { thrown } = {}) {
       return 204;
     },
     waitForFunction: async () => {
-      if (thrown) throw new Error("Timeout exceeded");
+      if (thrown) throw Object.assign(new Error("Timeout exceeded"), { name: "TimeoutError" });
     },
   };
   return {
@@ -118,8 +118,12 @@ test("a failed check never names the host the page's old address sent it on to",
   const { page } = openMovedPage("https://wnba.sports.example/", {
     thrown: "Failed to fetch https://wnba.sports.example/store/live",
   });
-  const context = { newPage: async () => page, close: async () => {} };
-  const browser = { newContext: async () => context, close: async () => {} };
+  const context = { on: () => {}, newPage: async () => page, close: async () => {} };
+  const browser = {
+    isConnected: () => true,
+    newContext: async () => context,
+    close: async () => {},
+  };
 
   const check = await checkAppPage({
     app: "wnba",
@@ -199,5 +203,282 @@ test("a page that never left the blank page hides only its own address", () => {
   assert.deepEqual(hideAddress({ status: "broken", reason }, PAGE_URL, "about:blank"), {
     status: "broken",
     reason: "the page didn't load: net::ERR_FAILED at <page>/",
+  });
+});
+
+test("thrown check infrastructure failures leave the page unchecked and mask its address", async () => {
+  for (const step of ["goto", "evaluate", "waitForFunction"]) {
+    const { page } = openMovedPage(PAGE_URL);
+    page[step] = async () => {
+      throw new Error(`Target closed at ${PAGE_URL}`);
+    };
+    const context = { on: () => {}, newPage: async () => page, close: async () => {} };
+    const browser = {
+      isConnected: () => true,
+      newContext: async () => context,
+      close: async () => {},
+    };
+    const check = await checkAppPage({
+      app: "wnba",
+      channel: "production",
+      env: { WNBA_PAGE_URL: PAGE_URL, ACCESS_CODE: "LAYUP" },
+      attempts: 1,
+      launchBrowser: async () =>
+        /** @type {import("@playwright/test").Browser} */ (/** @type {unknown} */ (browser)),
+    });
+    assert.deepEqual(check, {
+      status: "unchecked",
+      reason: "the page check failed: Target closed at <page>/",
+    });
+  }
+});
+
+test("a refused or rate-limited code cannot verify the authenticated page", async () => {
+  for (const [status, reason] of [
+    [401, "the Worker refused the access code"],
+    [429, "the Worker had too many tries at the access code"],
+  ]) {
+    const { page } = openMovedPage(PAGE_URL);
+    page.evaluate = /** @type {typeof page.evaluate} */ (async () => status);
+    assert.deepEqual(await checkPage(page, { pageUrl: PAGE_URL, accessCode: "LAYUP" }), {
+      status: "unchecked",
+      reason,
+    });
+  }
+});
+
+test("page navigation failures and renderer crashes remain broken and retry", async () => {
+  for (const [name, message, step = "goto"] of [
+    ["TimeoutError", "page.goto: Timeout exceeded"],
+    ["Error", "page.goto: net::ERR_TOO_MANY_REDIRECTS"],
+    ["Error", "page.goto: net::ERR_CONNECTION_REFUSED"],
+    ["TargetClosedError", "page.waitForFunction: Page crashed", "waitForFunction"],
+    ["Error", "Target crashed", "waitForFunction"],
+    ["Error", "Execution context was destroyed", "evaluate"],
+    ["TypeError", "page.evaluate: TypeError: Failed to fetch", "evaluate"],
+  ]) {
+    let opened = 0;
+    const { page } = openMovedPage(PAGE_URL);
+    page[step] = async () => {
+      opened += 1;
+      throw Object.assign(new Error(message), { name });
+    };
+    const context = { on: () => {}, newPage: async () => page, close: async () => {} };
+    const browser = {
+      isConnected: () => true,
+      newContext: async () => context,
+      close: async () => {},
+    };
+    const check = await checkAppPage({
+      app: "wnba",
+      channel: "production",
+      env: { WNBA_PAGE_URL: PAGE_URL, ACCESS_CODE: "LAYUP" },
+      attempts: 2,
+      pauseMs: 0,
+      launchBrowser: async () =>
+        /** @type {import("@playwright/test").Browser} */ (/** @type {unknown} */ (browser)),
+    });
+    assert.deepEqual(check, { status: "broken", reason: `the page didn't load: ${message}` });
+    assert.equal(opened, 2);
+  }
+});
+
+test("a disconnected browser or closed context cannot establish a broken page", async () => {
+  for (const isDisconnected of [true, false]) {
+    const { page } = openMovedPage(PAGE_URL);
+    let closeContext;
+    page.goto = async () => {
+      if (!isDisconnected) closeContext();
+      throw Object.assign(new Error("page.goto: Timeout exceeded"), { name: "TimeoutError" });
+    };
+    const context = {
+      on: (_, listener) => {
+        closeContext = listener;
+      },
+      newPage: async () => page,
+      close: async () => {},
+    };
+    const browser = {
+      isConnected: () => !isDisconnected,
+      newContext: async () => context,
+      close: async () => {},
+    };
+    const check = await checkAppPage({
+      app: "wnba",
+      channel: "production",
+      env: { WNBA_PAGE_URL: PAGE_URL },
+      attempts: 1,
+      launchBrowser: async () =>
+        /** @type {import("@playwright/test").Browser} */ (/** @type {unknown} */ (browser)),
+    });
+    assert.deepEqual(check, {
+      status: "unchecked",
+      reason: "the page check failed: page.goto: Timeout exceeded",
+    });
+  }
+});
+
+test("browser infrastructure failures mask the redirected page host and access code", async () => {
+  const { page } = openMovedPage("https://wnba.sports.example/");
+  const context = {
+    on: () => {},
+    newPage: async () => page,
+    close: async () => {
+      throw new Error("Target closed at https://wnba.sports.example/ for LAYUP");
+    },
+  };
+  const browser = {
+    isConnected: () => true,
+    newContext: async () => context,
+    close: async () => {},
+  };
+  await assert.rejects(
+    checkAppPage({
+      app: "wnba",
+      channel: "production",
+      env: { WNBA_PAGE_URL: PAGE_URL, ACCESS_CODE: "LAYUP" },
+      launchBrowser: async () =>
+        /** @type {import("@playwright/test").Browser} */ (/** @type {unknown} */ (browser)),
+    }),
+    /Target closed at <page host>\/ for <access code>/,
+  );
+});
+
+test("known proxy and certificate-trust failures leave navigation unverified", async () => {
+  for (const { code, proxy = {} } of [
+    { code: "PROXY_CONNECTION_FAILED" },
+    { code: "TUNNEL_CONNECTION_FAILED" },
+    { code: "NO_SUPPORTED_PROXIES" },
+    { code: "PROXY_CERTIFICATE_INVALID" },
+    { code: "CERT_AUTHORITY_INVALID", proxy: { HTTPS_PROXY: "http://proxy.example:8080" } },
+    { code: "CERT_AUTHORITY_INVALID", proxy: { HTTP_PROXY: "http://proxy.example:8080" } },
+    { code: "CERT_AUTHORITY_INVALID", proxy: { https_proxy: "http://proxy.example:8080" } },
+    { code: "CERT_AUTHORITY_INVALID", proxy: { http_proxy: "http://proxy.example:8080" } },
+    { code: "CERT_AUTHORITY_INVALID", proxy: { ALL_PROXY: "http://proxy.example:8080" } },
+    { code: "CERT_AUTHORITY_INVALID", proxy: { all_proxy: "http://proxy.example:8080" } },
+  ]) {
+    const { page } = openMovedPage(PAGE_URL);
+    page.goto = async () => {
+      throw new Error(`net::ERR_${code} at ${PAGE_URL}`);
+    };
+    const context = { on: () => {}, newPage: async () => page, close: async () => {} };
+    const browser = {
+      isConnected: () => true,
+      newContext: async () => context,
+      close: async () => {},
+    };
+    const check = await checkAppPage({
+      app: "wnba",
+      channel: "production",
+      env: { WNBA_PAGE_URL: PAGE_URL, ...proxy },
+      attempts: 1,
+      launchBrowser: async () =>
+        /** @type {import("@playwright/test").Browser} */ (/** @type {unknown} */ (browser)),
+    });
+    assert.deepEqual(check, {
+      status: "unchecked",
+      reason: `the page check failed: net::ERR_${code} at <page>/`,
+    });
+  }
+});
+
+test("a closed-target error leaves the page unchecked without a retry", async () => {
+  const { page } = openMovedPage(PAGE_URL);
+  let checks = 0;
+  page.goto = async () => {
+    checks += 1;
+    throw new Error("Target page, context or browser has been closed");
+  };
+  const context = { on: () => {}, newPage: async () => page, close: async () => {} };
+  const browser = {
+    isConnected: () => true,
+    newContext: async () => context,
+    close: async () => {},
+  };
+  const check = await checkAppPage({
+    app: "wnba",
+    channel: "production",
+    env: { WNBA_PAGE_URL: PAGE_URL },
+    attempts: 2,
+    pauseMs: 0,
+    launchBrowser: async () =>
+      /** @type {import("@playwright/test").Browser} */ (/** @type {unknown} */ (browser)),
+  });
+  assert.equal(check.status, "unchecked");
+  assert.equal(checks, 1);
+});
+
+test("returned page failures mask the access code inside the attempt", async () => {
+  for (const [message, status] of [
+    ["Target closed for LAYUP", "unchecked"],
+    ["net::ERR_FAILED for LAYUP", "broken"],
+  ]) {
+    const { page } = openMovedPage(PAGE_URL);
+    page.goto = async () => {
+      throw new Error(`${message} at ${PAGE_URL}`);
+    };
+    const context = { on: () => {}, newPage: async () => page, close: async () => {} };
+    const browser = {
+      isConnected: () => true,
+      newContext: async () => context,
+      close: async () => {},
+    };
+    const check = await checkAppPage({
+      app: "wnba",
+      channel: "production",
+      env: { WNBA_PAGE_URL: PAGE_URL, ACCESS_CODE: "LAYUP" },
+      attempts: 1,
+      launchBrowser: async () =>
+        /** @type {import("@playwright/test").Browser} */ (/** @type {unknown} */ (browser)),
+    });
+    assert.equal(check.status, status);
+    assert.ok(check.status !== "drawn");
+    assert.match(check.reason, /for <access code> at <page>\//);
+    assert.doesNotMatch(check.reason, /LAYUP/);
+  }
+});
+
+test("a broken first attempt can recover after its context cleanup fails", async () => {
+  const first = openMovedPage(PAGE_URL).page;
+  first.goto = async () =>
+    /** @type {import("@playwright/test").Response} */ (
+      /** @type {unknown} */ ({ ok: () => false, status: () => 500 })
+    );
+  const second = openMovedPage(PAGE_URL).page;
+  const pages = [first, second];
+  let opened = 0;
+  const browser = {
+    isConnected: () => true,
+    newContext: async () => {
+      const index = opened++;
+      return {
+        on: () => {},
+        newPage: async () => pages[index],
+        close: async () => {
+          if (index === 0) throw new Error("Target closed during cleanup");
+        },
+      };
+    },
+    close: async () => {},
+  };
+  const check = await checkAppPage({
+    app: "wnba",
+    channel: "production",
+    env: { WNBA_PAGE_URL: PAGE_URL, ACCESS_CODE: "LAYUP" },
+    attempts: 2,
+    pauseMs: 0,
+    launchBrowser: async () =>
+      /** @type {import("@playwright/test").Browser} */ (/** @type {unknown} */ (browser)),
+  });
+  assert.deepEqual(check, { status: "drawn" });
+  assert.equal(opened, 2);
+});
+
+test("a drawn page without an access route reports that it opened without a code", async () => {
+  const { page } = openMovedPage(PAGE_URL);
+  page.evaluate = /** @type {typeof page.evaluate} */ (async () => 404);
+  assert.deepEqual(await checkPage(page, { pageUrl: PAGE_URL, accessCode: "LAYUP" }), {
+    status: "drawn",
+    isOpenWithoutCode: true,
   });
 });

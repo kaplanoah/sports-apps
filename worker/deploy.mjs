@@ -325,7 +325,7 @@ export const listAppWorkers = (channel, subdomain, roots) =>
  * @property {NodeJS.ProcessEnv} [env]
  * @property {typeof console.log} [log]
  * @property {(milliseconds: number) => Promise<unknown>} [pause]
- * @property {typeof checkAppPage} [checkPage] Opens the new version's page.
+ * @property {typeof checkAppPage} [checkPage] Opens the app's live page.
  * @property {(commit: string, of: string) => boolean} [isEarlier] Whether a commit comes
  *   before another in main's history.
  */
@@ -391,6 +391,10 @@ export async function deploy({
     return isNeeded;
   }
 
+  function isSameReleaseRetry(liveCommit) {
+    return !!liveCommit && liveCommit === commit && Number(env.GITHUB_RUN_ATTEMPT) > 1;
+  }
+
   async function readMigrationTag() {
     const scripts = await callCloudflare("migration tag", `${base}/scripts`, { method: "GET" });
     return scripts.find((stored) => stored.id === name)?.migration_tag;
@@ -425,8 +429,6 @@ export async function deploy({
     await callCloudflare("upload", `${base}/scripts/${name}`, { method: "PUT", body: form });
   }
 
-  // The upload makes the new version live, so anything that goes wrong after it puts the
-  // earlier one back.
   /** @returns {Promise<never>} */
   async function restoreAfter(problem, previousVersions) {
     if (!previousVersions) throw new Error(`${problem}, and no earlier version exists.`);
@@ -436,29 +438,61 @@ export async function deploy({
     throw new Error(`${problem}, so the earlier version is live again.`);
   }
 
+  /** @returns {Promise<never>} */
+  async function rejectFailedCheck(problem, previousVersions, isUploaded) {
+    if (!isUploaded) throw new Error(`${problem}; no version was uploaded or rolled back.`);
+    return restoreAfter(problem, previousVersions);
+  }
+
   // Deploy logs are public, and the address names the account's workers.dev subdomain.
-  async function confirmWorkerAnswers(url, previousVersions) {
+  async function confirmWorkerAnswers(url, previousVersions, isUploaded) {
     if (!previousVersions) log("worker check: waiting for the new workers.dev address to resolve");
     const attempts = previousVersions ? CHECK_ATTEMPTS : FIRST_DEPLOY_CHECK_ATTEMPTS;
     if (await isWorkerAnswering(url, { fetchImpl, pause, commit, attempts })) return;
-    await restoreAfter("The Worker didn't answer as the new version", previousVersions);
+    await rejectFailedCheck(
+      isUploaded
+        ? "The Worker didn't answer as the new version"
+        : "The Worker didn't answer as its recorded live version",
+      previousVersions,
+      isUploaded,
+    );
   }
 
-  // A Worker can answer while its page throws or never draws, which a phone would show. A check
-  // that itself fails is no proof the page draws.
-  async function confirmPageDraws(previousVersions) {
-    const check = await checkPage({ app: worker, channel, commit, env }).catch((error) => ({
-      status: /** @type {const} */ ("broken"),
+  /** @returns {never} */
+  function rejectUnverifiedPage(reason, isUploaded) {
+    const state = isUploaded
+      ? "The new version is live but unverified"
+      : "The recorded live version is unverified";
+    throw new Error(`${state}: ${reason}.`);
+  }
+
+  async function confirmPageDraws(previousVersions, isUploaded) {
+    const check = await checkPage({
+      app: worker,
+      channel,
+      commit,
+      env,
+      isAccessCodeRequired: true,
+    }).catch((error) => ({
+      status: /** @type {const} */ ("unchecked"),
       reason: `the page check failed: ${error instanceof Error ? error.message : error}`,
     }));
-    if (check.status === "drawn")
-      log(check.note ? `::notice::page check: ok, but ${check.note}` : "page check: ok");
-    if (check.status === "unchecked") log(`::notice::page check: skipped, ${check.reason}`);
+    if (check.status === "unchecked") rejectUnverifiedPage(check.reason, isUploaded);
+    if (check.status === "drawn" && check.isOpenWithoutCode)
+      rejectUnverifiedPage("the page opened without asking for its access code", isUploaded);
     if (check.status === "broken")
-      await restoreAfter(
-        `The page didn't draw as the new version: ${check.reason}`,
+      await rejectFailedCheck(
+        `The page didn't draw as ${isUploaded ? "the new version" : "its recorded live version"}: ${check.reason}`,
         previousVersions,
+        isUploaded,
       );
+    log("page check: ok");
+  }
+
+  async function confirmAppAnswers(previousVersions, isUploaded) {
+    await confirmWorkerAnswers(formatWorkerUrl(name, subdomain), previousVersions, isUploaded);
+    await confirmPageDraws(previousVersions, isUploaded);
+    logWorkerCheck();
   }
 
   // A service faces only the apps, through their bindings, so it has no address of its own.
@@ -509,6 +543,7 @@ export async function deploy({
     previousVersions && (await deployments.readCommit(previousVersions, "live commit"));
   if (isCheckOnly || !isDeployNeeded(liveCommit)) {
     if (isPageless) await scheduleServiceCheck(previousVersions, liveCommit, false);
+    else if (isSameReleaseRetry(liveCommit)) await confirmAppAnswers(previousVersions, false);
     return null;
   }
   const migrations = listPendingMigrations(await readMigrationTag(), storeClass);
@@ -518,9 +553,7 @@ export async function deploy({
   if (isPageless) {
     await scheduleServiceCheck(previousVersions, commit, true);
   } else {
-    await confirmWorkerAnswers(deployed, previousVersions);
-    await confirmPageDraws(previousVersions);
-    logWorkerCheck();
+    await confirmAppAnswers(previousVersions, true);
   }
   return deployed;
 }
@@ -593,8 +626,9 @@ async function deployGroup(workers, deployWorker, logError) {
 
 /**
  * Deploys every service at once, then every app at once, since an app's binding to a service needs
- * the service to exist. One Worker's failed deploy doesn't hold back the others; each puts its own
- * earlier version back. Services are checked only once all app deploys have settled.
+ * the service to exist. One Worker's failed deploy doesn't hold back the others.
+ * Broken versions and route failures restore earlier versions; unavailable verification leaves
+ * the upload live. Services are checked only once all app deploys have settled.
  * @param {string[]} workers
  * @param {(worker: string, options: ServiceDeploymentOptions) => Promise<unknown>} deployWorker
  * @param {{ logError?: (line: string) => void, isServiceWorker?: (worker: string) => boolean, serviceWorkers?: string[] }} [options]

@@ -32,7 +32,7 @@ test("a code the Worker refuses leaves the page unchecked, not broken", async ({
   expect(check).toEqual({ status: "unchecked", reason: "the Worker refused the access code" });
 });
 
-test("a page that asks for no code passes once it draws, saying its code isn't needed", async ({
+test("a page that asks for no code draws and reports that it opened without a code", async ({
   page,
   baseURL,
 }) => {
@@ -43,7 +43,7 @@ test("a page that asks for no code passes once it draws, saying its code isn't n
 
   expect(check).toEqual({
     status: "drawn",
-    note: "the page asks for no code, so its access code secret isn't needed",
+    isOpenWithoutCode: true,
   });
 });
 
