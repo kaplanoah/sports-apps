@@ -78,7 +78,7 @@ jobs:
             echo "::error::Required review credentials are missing."
             exit 1
           elif [ "$asked" != "true" ]; then
-            reason="a pull request is reviewed once it's ready, and again only when it's labeled $REVIEW_LABEL"
+            reason="there is no authorized review request; a maintainer can add the $REVIEW_LABEL label"
             owed=true
           elif [ "$IS_DRAFT" = "true" ]; then
             reason="a draft is reviewed once it's ready for review"

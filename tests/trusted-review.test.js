@@ -890,20 +890,26 @@ test("only asked plans prepare PR code and consume their label even without a me
 
 test("Dependabot remains excluded when no checkout or merge was prepared", () => {
   const workflow = readRepoFile(".github/workflows/review.yml");
-  const output = join(createFolder(), "dependabot-output");
-  const result = spawnSync("bash", ["-c", readStepScript(workflow, "Decide whether to review")], {
-    env: {
-      PATH: process.env.PATH,
-      GITHUB_OUTPUT: output,
-      EVENT: "pull_request_target",
-      ACTION: "opened",
-      AUTHOR: "dependabot[bot]",
-      REVIEW_LABEL: "review",
-    },
-    encoding: "utf8",
-  });
-  assert.equal(result.status, 0, result.stderr);
-  assert.match(readFileSync(output, "utf8"), /owed=false\nreview=false/);
+  for (const action of ["opened", "labeled"]) {
+    const output = join(createFolder(), "dependabot-output");
+    const result = spawnSync("bash", ["-c", readStepScript(workflow, "Decide whether to review")], {
+      env: {
+        PATH: process.env.PATH,
+        GITHUB_OUTPUT: output,
+        EVENT: "pull_request_target",
+        ACTION: action,
+        LABEL: "review",
+        AUTHOR: "dependabot[bot]",
+        ASSOCIATION: "OWNER",
+        HEAD_REPOSITORY: "owner/repository",
+        REPOSITORY: "owner/repository",
+        REVIEW_LABEL: "review",
+      },
+      encoding: "utf8",
+    });
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(readFileSync(output, "utf8"), /owed=false\nreview=false/);
+  }
   assert.match(
     workflow,
     /id: result\n {8}if: needs.review-plan.outputs.owed == 'false' && steps.prepare.outputs.available == 'true'/,
@@ -950,6 +956,10 @@ test("external forks need a fresh review label before spending review credential
       );
       assert.equal(result.status, 0, result.stderr);
       assert.match(readFileSync(output, "utf8"), /labeled=false\nowed=true\nreview=false/);
+      assert.match(
+        result.stdout,
+        /no authorized review request; a maintainer can add the review label/,
+      );
     }
   }
   for (const overrides of [
