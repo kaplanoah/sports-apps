@@ -1,8 +1,8 @@
 // The Worker's routing: the page, its store, and its sheets' reads, only under the page's key, or
 // without it at the address PAGE_HOST names, behind the access code (access-gate.js), and
-// robots.txt and health with neither (health.js). An app can move its page from under the key to the
-// PAGE_HOST address. Each release's files are served from a folder named for its commit, which
-// browsers keep for good.
+// robots.txt and health with neither (health.js). With PAGE_HOST and ACCESS_CODE configured, the
+// Worker moves the keyed page to PAGE_HOST. Each release's files have a folder named for its
+// commit. Browsers keep its code and styles for good, but always revalidate index.html.
 
 import {
   ACCESS_PATH,
@@ -24,7 +24,7 @@ const PAGE_HEADERS = {
   "referrer-policy": "no-referrer",
   "x-content-type-options": "nosniff",
 };
-// No other release uses a release folder's addresses, so a browser keeps its files for good.
+// No other release uses these addresses, so a browser keeps release files except index.html for good.
 const RELEASE_FILE_HEADERS = {
   ...PAGE_HEADERS,
   "cache-control": "public, max-age=31536000, immutable",
@@ -136,8 +136,8 @@ function writeBody({ path, body }, request, isMoving) {
  */
 function createPageServer(pageFiles, releaseFolder) {
   const files = decodePageFiles(pageFiles);
-  // Every load asks again for a file outside the release's folder, and a browser that already has
-  // it gets a 304 instead of the file.
+  // Every load revalidates index.html and files outside the release's folder. An unchanged
+  // rendered body gets a 304 instead of the file.
   return async function servePageFile(request, pagePath, isMoving = false) {
     if (request.method !== "GET" && request.method !== "HEAD")
       return respondText("GET only.\n", 405, { allow: "GET, HEAD" });
