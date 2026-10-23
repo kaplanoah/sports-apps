@@ -67,7 +67,9 @@ export function prepareReviewCheckout(env) {
   const checkout = env.GITHUB_WORKSPACE;
   const merge = env.REVIEW_MERGE;
   if (!merge) {
-    console.log("::notice::No merge commit is available for this event; review remains owed.");
+    console.log(
+      "::notice::No merge commit is available for this event; review remains owed. Re-add the review label when the PR can merge.",
+    );
     appendFileSync(env.GITHUB_OUTPUT, "available=false\n");
     return;
   }
@@ -76,8 +78,13 @@ export function prepareReviewCheckout(env) {
   if (
     readGit(["rev-parse", `${merge}^1`], checkout) !== env.REVIEW_BASE ||
     readGit(["rev-parse", `${merge}^2`], checkout) !== env.REVIEW_HEAD
-  )
-    throw new Error("The reviewed merge no longer matches this event's head and base.");
+  ) {
+    console.log(
+      "::notice::The event's merge is stale; review remains owed. Re-add the review label when the PR can merge.",
+    );
+    appendFileSync(env.GITHUB_OUTPUT, "available=false\n");
+    return;
+  }
   readGit(["checkout", "--detach", merge], checkout);
   const folder = mkdtempSync(join(env.RUNNER_TEMP, "review-data-"));
   const view = join(checkout, ".review");

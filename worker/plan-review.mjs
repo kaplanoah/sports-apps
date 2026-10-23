@@ -1,18 +1,18 @@
-// REVIEW_RULE_ROOT selects preserved trusted rule files; REVIEW_BASE binds saved completion to the base.
 // Splits a pull request's change into areas by what its files are about, each test with the code
-// it tests, so CI's review (review.yml, and trusted-review-area.yml for each area) has one
-// reviewer read each area in full. The first review reads the whole change. A review after it
-// reads only files the pull request still changes and the pushes since the last full read
-// changed. A push that only merges the base is read by no one, but for how it resolved conflicts
-// in files the pull request still changes. Neither is a run on the head the last full read ended
-// on. A test's recorded data, the lockfile, a binary file, and a drawing or minified library a tool
-// wrote go unread, named in the summary instead.
+// it tests, so trusted review (review.yml and trusted-review-area.yml) has one reviewer read
+// each area in full. The first review reads
+// the whole change. A review after it reads only files the pull request still changes and the
+// pushes since the last full read changed. A push that only merges the base is read by no one,
+// but for how it resolved conflicts in files the pull request still changes. Neither is a run
+// on the head the last full read ended on. A test's recorded data, the lockfile, a binary file,
+// and a drawing or minified library a tool wrote go unread, named in the summary instead.
 // Each file's diff is written in parts a reviewer reads whole, as is each rule file whose paths
 // match a file of its area, which judge-review.mjs checks.
 // Usage: node worker/plan-review.mjs <folder>, in a full checkout of the pull request's merge
 // commit, whose first parent is the base branch and second the pull request's head, with GH_TOKEN,
 // GITHUB_REPOSITORY, and PR set to read the last review's summary. It prints the stage, its areas,
-// and their count for $GITHUB_OUTPUT.
+// and their count for $GITHUB_OUTPUT. REVIEW_RULE_ROOT selects preserved trusted rules;
+// REVIEW_BASE binds completion reuse, while the reviewed head selects the incremental range.
 import { execFileSync } from "node:child_process";
 import { mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
@@ -22,7 +22,7 @@ import { isTestPath } from "./deploy-scope.mjs";
 import { createGitHub, readAllPages } from "./github-api.mjs";
 import { resolvePackageImport } from "./package-imports.mjs";
 import { createReviewGitEnvironment } from "./review-repository.mjs";
-import { findSummary, readReviewedHead } from "./review-state.mjs";
+import { findSummary, readReviewedState } from "./review-state.mjs";
 import { RULES_FOLDER, listRulesFor, readRuleFiles, readRulePaths } from "./rule-files.mjs";
 
 const AREA_LINES = 2000;
@@ -314,13 +314,14 @@ export function listPushedFiles(pushed, readDiff) {
  * @param {object} review
  * @param {string | null} review.reviewedHead the head the last full read ended on
  * @param {string} review.head the pull request's head
+ * @param {boolean} [review.isSameBase] whether a trusted review completed on the current base
  * @param {boolean} review.isOnBranch whether that head is still in the pull request's history
  * @param {() => string[]} review.listChanged the files both the pull request and the pushes since changed
  * @returns {{ stage: "first" | "reviewed" | "none" } | { stage: "push", files: string[] }}
  */
-export function chooseStage({ reviewedHead, head, isOnBranch, listChanged }) {
+export function chooseStage({ reviewedHead, head, isSameBase = true, isOnBranch, listChanged }) {
   if (!reviewedHead || !isOnBranch) return { stage: "first" };
-  if (reviewedHead === head) return { stage: "reviewed" };
+  if (reviewedHead === head && isSameBase) return { stage: "reviewed" };
   const files = listChanged();
   return files.length ? { stage: "push", files } : { stage: "none" };
 }
@@ -764,19 +765,20 @@ export const isReviewedOnBranch = (reviewedHead, head, git) =>
 export const readPullHead = (git) => git(["rev-parse", PULL_HEAD]).trim();
 
 /** @param {NodeJS.ProcessEnv} env */
-async function readLastReviewedHead(env) {
+async function readLastReview(env) {
   const callGitHub = createGitHub({
     repository: env.GITHUB_REPOSITORY ?? "",
     fetchImpl: fetch,
     env,
   });
   const comments = await readAllPages(callGitHub, `/issues/${env.PR}/comments`);
-  return readReviewedHead(findSummary(comments)?.body, env.REVIEW_BASE);
+  return readReviewedState(findSummary(comments)?.body);
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const folder = process.argv[2];
-  const reviewedHead = await readLastReviewedHead(process.env);
+  const reviewed = await readLastReview(process.env);
+  const reviewedHead = reviewed?.head ?? null;
   const head = readPullHead(runGit);
   const isOnBranch = isReviewedOnBranch(reviewedHead, head, tryGit);
   /** @type {Map<string, { numstat: string, diff: string }>} */
@@ -816,6 +818,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const choice = chooseStage({
     reviewedHead,
     head,
+    isSameBase: !process.env.REVIEW_BASE || reviewed?.base === process.env.REVIEW_BASE,
     isOnBranch,
     listChanged: () => listPushedFiles(readPushedRange(), readDiff),
   });

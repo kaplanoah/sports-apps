@@ -1,4 +1,3 @@
-// REVIEW_CHECKOUT selects the reviewed tree while this module and its imports stay trusted.
 // The only command CI's reviewer may run: git grep, git log, or git show with an allowlist of
 // options, and revisions and paths inside the repo. The reviewer reads text anyone may have written,
 // so this allows what a review needs rather than refusing what's known to be harmful, since a
@@ -10,6 +9,7 @@
 // -L<start>,<end>:<path> -L:<function>:<path>, or -L followed by the range and path.
 // Usage: node worker/review-git.mjs grep [options] -e <pattern> [-e <pattern> ...] [-- paths]
 // Search options: -n -l -i -w -F -E.
+// REVIEW_CHECKOUT selects the reviewed tree while this module and its imports stay trusted.
 import { execFileSync } from "node:child_process";
 import { isAbsolute, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";

@@ -6,6 +6,7 @@ import {
   listFindingMarks,
   readReviewComments,
   readReviewedHead,
+  readReviewedState,
   writeFindingMark,
   writeReviewedHead,
 } from "../worker/review-state.mjs";
@@ -79,10 +80,18 @@ test("the review's comments are its own from every page of the review comments, 
   );
 });
 
-test("trusted incremental completion belongs to the reviewed base as well as its head", () => {
+test("trusted state retains the reviewed head and base for incremental planning", () => {
   const base = "a".repeat(40);
   const body = `${SUMMARY_MARKER}\n${writeReviewedHead(HEAD, base)}\nComplete`;
-  assert.equal(readReviewedHead(body, base), HEAD);
-  assert.equal(readReviewedHead(body, "b".repeat(40)), null);
-  assert.equal(readReviewedHead(`${SUMMARY_MARKER}\n${writeReviewedHead(HEAD)}`, base), null);
+  assert.deepEqual(readReviewedState(body), { head: HEAD, base });
+  assert.equal(readReviewedHead(body), HEAD);
+  assert.deepEqual(readReviewedState(`${SUMMARY_MARKER}\n${writeReviewedHead(HEAD)}`), {
+    head: HEAD,
+  });
+  assert.equal(
+    readReviewedState(
+      `${SUMMARY_MARKER}\n<!-- claude-review-state {"head":"${HEAD}","base":"main"} -->`,
+    ),
+    null,
+  );
 });

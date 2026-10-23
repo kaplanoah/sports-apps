@@ -214,3 +214,19 @@ test("an unrelated fork PR on the same head cannot supply a trusted review resul
     pending: false,
   });
 });
+
+
+test("the join rejects changed content and extra files even when result identity fields match", () => {
+  const env = { ...ID_ENV, REVIEW_RUN: "7", REVIEW_TREE: SHA };
+  const result = { identity: IDENTITY, tree: SHA, passed: true };
+  const changed = createFolder();
+  writeJson(changed, "result.json", result);
+  sealReviewArtifact(changed, "result", IDENTITY, ["result.json"]);
+  writeJson(changed, "result.json", { ...result, extra: "changed after sealing" });
+  assert.throws(() => verifyTrustedReviewResult(changed, env), /content changed/);
+  const extra = createFolder();
+  writeJson(extra, "result.json", result);
+  sealReviewArtifact(extra, "result", IDENTITY, ["result.json"]);
+  writeJson(extra, "extra.json", {});
+  assert.throws(() => verifyTrustedReviewResult(extra, env), /unexpected or missing/);
+});

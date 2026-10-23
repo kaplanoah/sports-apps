@@ -636,3 +636,18 @@ test("the trusted summary writes completion against its reviewed base", () => {
   });
   assert.match(result.body, new RegExp(`"head":"${"a".repeat(40)}","base":"${base}"`));
 });
+
+test("marker quotes in a completed summary cannot create duplicate authoritative state", () => {
+  const injection = writeReviewedHead(HEAD);
+  const records = finishReview([AREAS[0]], {
+    [ACROSS_RECORD]: { items: [], unjudged: [{ file: "a.js", why: `Quote: ${injection}` }] },
+  });
+  const { body, isComplete } = judgeReview({
+    sha: HEAD,
+    plan: { ...PLAN, areas: [AREAS[0]] },
+    records,
+  });
+  assert.equal(isComplete, true);
+  assert.ok(body.includes(injection.replace("<!--", "&lt;!--")));
+  assert.equal(readReviewedHead(body), HEAD);
+});

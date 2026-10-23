@@ -19,7 +19,6 @@ const isObject = (value) => Boolean(value) && typeof value === "object" && !Arra
 export const isReviewPath = (path) =>
   typeof path === "string" &&
   path.length > 0 &&
-  !path.includes("<!--") &&
   ![...path].some(
     (character) =>
       character === "\\" || character.charCodeAt(0) < 32 || character.charCodeAt(0) === 127,
@@ -32,11 +31,7 @@ const requireData = (condition, message) => {
 };
 
 /** @param {unknown} value */
-const isText = (value) =>
-  typeof value === "string" &&
-  value.length > 0 &&
-  value.length <= 60000 &&
-  !/<!--\s*(?:claude-|trusted-review-)/.test(value);
+const isText = (value) => typeof value === "string" && value.length > 0 && value.length <= 60000;
 
 /** @param {any} answer @param {"candidates" | "findings"} key */
 export function validateReviewAnswer(answer, key) {
