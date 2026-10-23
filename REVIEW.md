@@ -58,7 +58,8 @@ In order of what has mattered here.
    whether the review runs from main's copy or the pull request's own.
    Its controls include:
 
-   - the jobs in `.github/workflows/ci.yml` and `.github/workflows/review-area.yml`
+   - the `review-join` job in `.github/workflows/ci.yml`,
+     its `check` hold on a review still owed or a different tree, and its `ci-passed` upload
    - the jobs in `.github/workflows/review.yml` and `.github/workflows/trusted-review-area.yml`
    - `worker/plan-review.mjs`
    - `worker/judge-review.mjs`
@@ -69,6 +70,7 @@ In order of what has mattered here.
    - `worker/trusted-review.mjs`
    - `worker/review-data.mjs`
    - `worker/review-repository.mjs`
+   - `worker/find-trusted-review.mjs`
    - their imports, like `shared/page/escape-pattern.js`
    - guard tests
 

@@ -1021,24 +1021,7 @@ test("stacked target runs plan and summarize with the same owed and result gates
   assert.doesNotMatch(workflow, /pattern: trusted-review-\*\n/);
 });
 
-test("bootstrap prompts and schemas stay in parity apart from trusted source paths", () => {
-  const prompts = (text) =>
-    [...text.matchAll(/ {10}prompt: \|\n((?:(?: {12}.*|)\n)+)/g)].map((match) => match[1]);
-  const normalize = (text) =>
-    text
-      .replaceAll("${{ runner.temp }}/trusted/worker/", "worker/")
-      .replaceAll("`.review/AGENTS.md`", "AGENTS.md");
-  for (const [legacyPath, trustedPath] of [
-    [".github/workflows/ci.yml", ".github/workflows/review.yml"],
-    [".github/workflows/review-area.yml", ".github/workflows/trusted-review-area.yml"],
-  ]) {
-    const legacy = readRepoFile(legacyPath);
-    const trusted = readRepoFile(trustedPath);
-    assert.deepEqual(prompts(trusted).map(normalize), prompts(legacy));
-    const schemas = (text) =>
-      [...text.matchAll(/--json-schema '([^']+)'/g)].map((match) => JSON.parse(match[1]));
-    assert.deepEqual(schemas(trusted), schemas(legacy));
-  }
+test("trusted prompts retain the authoritative reporting guide after bootstrap", () => {
   assert.match(
     readRepoFile(".github/workflows/review.yml"),
     /8\. Write each finding's body as the guide's "How to report" says[,.]/,

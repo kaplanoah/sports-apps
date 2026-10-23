@@ -238,12 +238,12 @@ something doesn't match, point them to Cloudflare's
 GitHub lints, checks formatting and types, looks for unused code, and runs the
 Node tests, and the browser tests of the apps a change reaches, on every pull
 request, so merge once those pass and the pull request has no conflicts with
-`main`. During the trusted-review bootstrap, CI's legacy review still feeds
-`check`, while the trusted `pull_request_target` workflow runs beside it from
-main's copy of the controls. Trusted review handles every pull request except
-Dependabot's, each against its own base, including stacked pull requests.
-It does not gate merges until phase two adds the read-only join.
-It requires a `CLAUDE_CODE_OAUTH_TOKEN` or `ANTHROPIC_API_KEY` secret.
+`main`. The trusted `pull_request_target` workflow reviews pull requests against
+their current base, including stacked pull requests, except Dependabot's, from
+main's copy of the controls. CI joins its result
+with read-only credentials and holds the merge until trusted review passes.
+Trusted review requires a `CLAUDE_CODE_OAUTH_TOKEN` or `ANTHROPIC_API_KEY` secret;
+without one, a ready pull request that needs review cannot pass `check`.
 Automatic asks are limited to branches in this repository and authors associated
 as OWNER, MEMBER or COLLABORATOR; other fork authors need a maintainer to add
 the `review` label. Review runs once a permitted pull request is ready, and again
@@ -253,10 +253,9 @@ has one reviewer read each area in full, with the rule files in `.claude/rules/`
 whose paths match its files. REVIEW.md's [How to report](REVIEW.md#how-to-report)
 section says how the review checks and posts what it finds. The first review
 reads the whole change, and each review after it reads what changed since the
-last review that finished. During bootstrap, these gating claims apply to the
-legacy review, which forks skip because it has no review credentials. A
-ready pull request's `check` fails until that review has passed on the code that
-merges, the pull request merged into `main`. A review that can't run, that left
+last review that finished. A ready pull request's `check` fails until trusted
+review has passed on the code that
+merges, the pull request merged into its target branch. A review that can't run, that left
 a changed file or a rule file unread, or whose reviewers, check across areas, or
 posting step didn't finish, blocks the merge. Its findings don't fail the check;
 answer and resolve every finding as the [steward skill](.claude/skills/steward/SKILL.md)
