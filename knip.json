@@ -1,5 +1,6 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
+  "stryker": false,
   "entry": [
     "apps/*/page/js/app.js",
     "shared/page/pick-theme.js",

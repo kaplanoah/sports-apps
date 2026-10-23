@@ -43,6 +43,19 @@ test("every install skips npm's audit", () => {
   assert.match(readRepoFile(".npmrc"), /^audit=false$/m);
 });
 
+test("mutation testing runs weekly and keeps its uncaught mutations in a report", () => {
+  const workflow = readRepoFile(".github/workflows/mutation.yml");
+  const cron = workflow.match(/cron: "([^"]+)"/)?.[1].split(" ");
+  assert.equal(cron?.length, 5);
+  assert.match(cron?.[0] ?? "", /^(?:[0-5]?\d)$/);
+  assert.match(cron?.[1] ?? "", /^(?:[01]?\d|2[0-3])$/);
+  assert.deepEqual(cron?.slice(2, 4), ["*", "*"]);
+  assert.match(cron?.[4] ?? "", /^[0-6]$/);
+  assert.match(workflow, /run: npm run test:mutation/);
+  assert.match(workflow, /path: reports\/mutation\//);
+  assert.match(workflow, /if-no-files-found: error/);
+});
+
 // An image holds only the browsers its own Playwright version runs, and Dependabot moves the
 // lockfile's Playwright without it, so each job installs its browsers from the installed one.
 test("no workflow runs its browsers from an image that pins Playwright's version", () => {
