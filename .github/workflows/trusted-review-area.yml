@@ -93,6 +93,15 @@ jobs:
             4. Read what else you need to judge them: the files as the pull request leaves them, other areas' diffs, callers, and copies, with Read, which reaches only this checkout. Search and history come from `node ${{ runner.temp }}/trusted/worker/review-git.mjs`, which runs git grep, git log, or git show: `node ${{ runner.temp }}/trusted/worker/review-git.mjs grep -n -F -e <text> -- <path>` finds text in tracked checkout files, and `node ${{ runner.temp }}/trusted/worker/review-git.mjs grep -l -i -w -E -e <pattern> -- <path>` lists matching files. Search takes `-n`, `-l`, `-i`, `-w`, `-F`, `-E`, and one or more `-e <pattern>` arguments; paths follow `--`. History's base is HEAD^1: `node ${{ runner.temp }}/trusted/worker/review-git.mjs log -p -- <path>` for a file's changes, `node ${{ runner.temp }}/trusted/worker/review-git.mjs log -L<start>,<end>:<path>` or `node ${{ runner.temp }}/trusted/worker/review-git.mjs log -L:<function>:<path>` for a range's or a function's, `node ${{ runner.temp }}/trusted/worker/review-git.mjs show HEAD^1:<path>` for the base's copy, and `node ${{ runner.temp }}/trusted/worker/review-git.mjs show --diff-merges=first-parent HEAD -- <path>` for a file's whole change. It refuses options other than those its usage lists and any path outside this checkout. The whole history is here. Run each command on its own, with no pipes or redirects. For each new helper, constant, rule, or wording, search the repo for one that already does the same, starting from `.review/stale-names.md`, which lists the first places that still name each thing the change removed. For each change to behavior, find the test that would fail without it, or report that none does.
             5. List every problem you find, not a sample, each once, naming every place it shows, in both apps too. Include one you're unsure of, with your confidence: the check across areas confirms each against the code before anything is posted. Leave out one a thread already raised, unless its reply is wrong or a fix it claims didn't hold, and then say so.
             6. Post nothing. End with your answer: each problem, on the line the diff changes nearest its first place, naming that place if it's another; and each file of your area you read but couldn't judge from the code, and why.
+      - name: Diagnose the find attempt
+        continue-on-error: true
+        if: ${{ always() && (steps.review.outcome == 'success' || steps.review.outcome == 'failure' || steps.review.outcome == 'cancelled') }}
+        env:
+          REVIEW_ATTEMPT: find
+          CLAUDE_OUTCOME: ${{ steps.review.outcome }}
+          EXECUTION_FILE: ${{ steps.review.outputs.execution_file }}
+          CLAUDE_OUTPUT_PRESENT: ${{ steps.review.outputs.structured_output != '' }}
+        run: node "$RUNNER_TEMP/trusted/worker/review-diagnostics.mjs"
       - name: Find what the review left unread
         id: first
         if: ${{ !cancelled() }}
@@ -121,6 +130,15 @@ jobs:
             3. Read what else you need, with Read, which reaches only this checkout. Search and history come from `node ${{ runner.temp }}/trusted/worker/review-git.mjs`, which runs git grep, git log, or git show: `node ${{ runner.temp }}/trusted/worker/review-git.mjs grep -n -F -e <text> -- <path>` finds text in tracked checkout files, and `node ${{ runner.temp }}/trusted/worker/review-git.mjs grep -l -i -w -E -e <pattern> -- <path>` lists matching files. Search takes `-n`, `-l`, `-i`, `-w`, `-F`, `-E`, and one or more `-e <pattern>` arguments; paths follow `--`. History's base is HEAD^1: `node ${{ runner.temp }}/trusted/worker/review-git.mjs log -p -- <path>` for a file's changes, `node ${{ runner.temp }}/trusted/worker/review-git.mjs log -L<start>,<end>:<path>` or `node ${{ runner.temp }}/trusted/worker/review-git.mjs log -L:<function>:<path>` for a range's or a function's, `node ${{ runner.temp }}/trusted/worker/review-git.mjs show HEAD^1:<path>` for the base's copy, and `node ${{ runner.temp }}/trusted/worker/review-git.mjs show --diff-merges=first-parent HEAD -- <path>` for a file's whole change. It refuses options other than those its usage lists and any path outside this checkout. Run each command on its own, with no pipes or redirects. `.review/stale-names.md` lists the first places that still name each thing the change removed.
             4. List every problem you find in what you judge, each once, naming every place it shows, unsure ones too, with your confidence. Leave out one a thread already raised, unless its reply is wrong or a fix it claims didn't hold.
             5. Post nothing. End with your answer: each problem, on the line the diff changes nearest its first place, and each file you read but couldn't judge from the code, and why.
+      - name: Diagnose the retry attempt
+        continue-on-error: true
+        if: ${{ always() && (steps.again.outcome == 'success' || steps.again.outcome == 'failure' || steps.again.outcome == 'cancelled') }}
+        env:
+          REVIEW_ATTEMPT: retry
+          CLAUDE_OUTCOME: ${{ steps.again.outcome }}
+          EXECUTION_FILE: ${{ steps.again.outputs.execution_file }}
+          CLAUDE_OUTPUT_PRESENT: ${{ steps.again.outputs.structured_output != '' }}
+        run: node "$RUNNER_TEMP/trusted/worker/review-diagnostics.mjs"
       - name: Find what's still unread
         id: last
         if: *retry-due
