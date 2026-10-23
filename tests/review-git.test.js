@@ -9,6 +9,7 @@ import { findRefusal } from "../worker/review-git.mjs";
 import { REPO_ROOT, readRepoFile } from "./repo-files.js";
 
 const ROOT = "/repo";
+const GIT_ENV = { ...process.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1" };
 
 // Each spelling a shell turns into --output= before the script sees it, as `--out''put=x`,
 // `--out"put"=x`, and `--out\put=x` all arrive.
@@ -106,30 +107,34 @@ test("search flags find tracked checkout text, never untracked files or a symlin
   const outside = join(directory, "outside.txt");
   writeFileSync(outside, "SearchExample outside\n");
   symlinkSync(outside, join(checkout, "outside-link.txt"));
-  execFileSync("git", ["init", "--quiet", checkout]);
-  execFileSync("git", ["-C", checkout, "add", "--", "tracked.txt", "outside-link.txt"]);
+  execFileSync("git", ["init", "--quiet", checkout], { env: GIT_ENV });
+  execFileSync("git", ["-C", checkout, "add", "--", "tracked.txt", "outside-link.txt"], {
+    env: GIT_ENV,
+  });
   const lines = execFileSync(
     process.execPath,
     [script, "grep", "-n", "-F", "-e", "SearchExample"],
     {
       encoding: "utf8",
+      env: GIT_ENV,
     },
   );
   assert.equal(lines, "tracked.txt:1:SearchExample first\ntracked.txt:2:SearchExample second\n");
   const files = execFileSync(
     process.execPath,
     [script, "grep", "-l", "-i", "-w", "-E", "-e", "searchexample (first|second)", "--", "."],
-    { encoding: "utf8" },
+    { encoding: "utf8", env: GIT_ENV },
   );
   assert.equal(files, "tracked.txt\n");
   const patterns = execFileSync(
     process.execPath,
     [script, "grep", "-n", "-F", "-e", "first", "-e", "second", "--", "tracked.txt"],
-    { encoding: "utf8" },
+    { encoding: "utf8", env: GIT_ENV },
   );
   assert.equal(patterns, lines);
   const missing = spawnSync(process.execPath, [script, "grep", "-F", "-e", "--no-index"], {
     encoding: "utf8",
+    env: GIT_ENV,
   });
   assert.equal(missing.status, 1);
   assert.equal(missing.stdout, "");
@@ -145,7 +150,7 @@ test("search refuses pager commands and outside paths before invoking git", () =
     `#!${process.execPath}\nrequire("node:fs").writeFileSync(${JSON.stringify(invoked)}, "called");\n`,
     { mode: 0o755 },
   );
-  const script = fileURLToPath(new URL("../worker/review-git.mjs", import.meta.url));
+  const script = fileURLToPath(new URL("worker/review-git.mjs", REPO_ROOT));
   for (const args of [
     [`-Otouch ${output}`, "-e", "text"],
     [`--open-files-in-pager=touch ${output}`, "-e", "text"],
@@ -155,7 +160,7 @@ test("search refuses pager commands and outside paths before invoking git", () =
   ]) {
     const result = spawnSync(process.execPath, [script, "grep", ...args], {
       encoding: "utf8",
-      env: { ...process.env, PATH: directory },
+      env: { ...GIT_ENV, PATH: directory },
     });
     assert.equal(result.status, 2, result.stderr);
     assert.match(result.stderr, /review-git: refused:/);
@@ -168,11 +173,16 @@ test("runs git with no shell, and refuses before git runs", () => {
   const script = fileURLToPath(new URL("worker/review-git.mjs", REPO_ROOT));
   const subject = execFileSync("node", [script, "log", "-1", "--format=%s;$(false)"], {
     encoding: "utf8",
+    env: GIT_ENV,
   });
   assert.match(subject, /;\$\(false\)\n$/);
   const output = join(mkdtempSync(join(tmpdir(), "review-git-")), "out");
   assert.throws(
-    () => execFileSync("node", [script, "show", `--output=${output}`, "HEAD"], { stdio: "pipe" }),
+    () =>
+      execFileSync("node", [script, "show", `--output=${output}`, "HEAD"], {
+        stdio: "pipe",
+        env: GIT_ENV,
+      }),
     (/** @type {any} */ error) =>
       error.status === 2 && /refused: an option isn't one the review uses/.test(error.stderr),
   );

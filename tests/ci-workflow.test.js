@@ -832,6 +832,64 @@ const listReviewForms = (text) =>
       .split(" "),
   );
 
+/**
+ * @param {string} text
+ * @param {string} name
+ */
+function readReviewOptions(text, name) {
+  const declaration = text.match(
+    new RegExp(`^const ${name} = (?:new Set\\()?\\[([\\s\\S]*?)\\]`, "m"),
+  );
+  assert.ok(declaration, `the reviewer declares ${name} as a literal allowlist`);
+  return [...declaration[1].matchAll(/"([^"]+)"/g)].map(([, option]) => option);
+}
+
+test("the review usage and prompt search options match their allowlists", () => {
+  const source = readRepoFile("worker/review-git.mjs");
+  const search = readReviewOptions(source, "SEARCH_FLAGS");
+  const searchUsage = source.match(/^\/\/ Search options: (.+)\.$/m);
+  assert.ok(searchUsage);
+  assert.deepEqual(searchUsage[1].split(" ").toSorted(), search.toSorted());
+
+  const historyUsage = source.match(/^\/\/ History options:([\s\S]*?)(?=^\/\/ Usage:)/m);
+  assert.ok(historyUsage);
+  const historyOptions = [...historyUsage[1].matchAll(/(?:^|\s)(-{1,2}\S+)/g)].map(([, option]) =>
+    option.replace(/[,.;]$/, ""),
+  );
+  const valued = readReviewOptions(source, "VALUED_FLAGS").map((prefix) => `${prefix}<format>`);
+  const specialForms = [
+    "-n <number>",
+    "-n<number>",
+    "-<number>",
+    "-L<start>,<end>:<path>",
+    "-L:<function>:<path>",
+    "-L <start>,<end>:<path>",
+  ];
+  const permitted = [
+    ...readReviewOptions(source, "FLAGS"),
+    ...valued,
+    ...specialForms.map((form) => form.split(" ")[0]),
+  ];
+  assert.deepEqual([...new Set(historyOptions)].toSorted(), [...new Set(permitted)].toSorted());
+  for (const form of specialForms) {
+    const args = form
+      .replaceAll("<number>", "3")
+      .replaceAll("<start>,<end>", "1,2")
+      .replaceAll("<path>", "README.md")
+      .replaceAll("<function>", "main")
+      .split(" ");
+    assert.equal(findRefusal(["log", ...args], "/repo"), null, form);
+  }
+
+  for (const { name, workflow, step } of listClaudeSteps(["ci.yml", AREA_WORKFLOW])) {
+    const prompt = readStepInput(workflow, step, "prompt");
+    const options = prompt.match(/Search takes (.+?) arguments;/)?.[1];
+    assert.ok(options, name);
+    const named = [...options.matchAll(/`([^`]+)`/g)].map(([, option]) => option.split(" ")[0]);
+    assert.deepEqual(named.toSorted(), [...search, "-e"].toSorted(), name);
+  }
+});
+
 // The prompts and the generated review index must never name a form the script refuses.
 test("every reviewer prompt names the same permitted forms, including the generated index command", () => {
   const steps = listClaudeSteps(["ci.yml", AREA_WORKFLOW]);
