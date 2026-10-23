@@ -360,7 +360,7 @@ async function findReportIssue(github) {
     "/issues?state=open&sort=updated&direction=desc",
     isReport,
   );
-  return open ?? findInPages(github, "/issues?state=closed&sort=updated&direction=desc", isReport);
+  return open ?? findInPages(github, "/issues?state=closed&sort=created&direction=desc", isReport);
 }
 
 /**
@@ -748,6 +748,10 @@ export async function collectFailedTests({
         `Could not download CI run ${run.id}'s artifacts (${run.artifacts.map(({ id }) => id).join(", ")}); leaving this try uncounted for a later night: ${message}`,
       );
       skipped.push(run);
+      if (readTime() >= deadline) {
+        deferred = runs.slice(index + 1);
+        break;
+      }
       continue;
     } finally {
       if (directory) rmSync(directory, { recursive: true, force: true });
@@ -758,10 +762,8 @@ export async function collectFailedTests({
     failed: mergeFailedTests(failed),
     counted,
     skipped,
-    ...(deferred ? { deferred } : {}),
-    ...(deferred || readTime() >= deadline
-      ? { problem: new DeadlineError("collection").message }
-      : {}),
+    ...(deferred?.length ? { deferred } : {}),
+    ...(deferred ? { problem: new DeadlineError("collection").message } : {}),
   };
 }
 

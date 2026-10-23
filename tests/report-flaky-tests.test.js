@@ -236,8 +236,8 @@ test("an issue's body without a table reads as an empty table", () => {
 });
 
 /**
- * GitHub's issues, open unless their state says otherwise, filtered by state and page, keeping reads and writes.
- * @param {{ number: number, title: string, body?: string, state?: string, pull_request?: object }[]} issues
+ * GitHub's issues, open unless their state says otherwise, filtered by state and page and sorted by the query, keeping reads and writes.
+ * @param {{ number: number, title: string, body?: string, state?: string, pull_request?: object, created_at?: string, updated_at?: string }[]} issues
  */
 function createFakeGitHub(issues) {
   /** @type {string[]} */
@@ -253,6 +253,14 @@ function createFakeGitHub(issues) {
       const state = searchParams.get("state") ?? "open";
       const filtered = issues.filter(
         (issue) => state === "all" || (issue.state ?? "open") === state,
+      );
+      const sort = searchParams.get("sort");
+      const direction = searchParams.get("direction") === "asc" ? 1 : -1;
+      /** @param {typeof issues[number]} issue */
+      const readSortTime = (issue) =>
+        (sort === "created" ? issue.created_at : issue.updated_at) ?? "";
+      filtered.sort(
+        (first, second) => readSortTime(first).localeCompare(readSortTime(second)) * direction,
       );
       const size = Number(searchParams.get("per_page") ?? 100);
       const page = Number(searchParams.get("page") ?? 1);
@@ -1555,4 +1563,88 @@ test("a failed download exhausting the budget records the stop even on the last 
     unavailable: [11],
     problem: "collection deadline reached",
   });
+});
+
+test("a fully counted last try stays complete when it finishes at or after the deadline", async () => {
+  for (const finishedAt of [100, 101]) {
+    let elapsed = 0;
+    const { download } = createFakeDownloads({ 11: RETRY_PASSED_REPORT });
+    const result = await collectFailedTests({
+      github: createFakeRunsApi(ONE_REPORT).github,
+      nightReports: [],
+      night: { url: RUN_URL, now: TONIGHT },
+      ledger: UNCOUNTED,
+      deadline: 100,
+      readTime: () => elapsed,
+      download: (run) => {
+        const directory = download(run);
+        elapsed = finishedAt;
+        return directory;
+      },
+    });
+    assert.deepEqual(
+      result.counted.map(({ id }) => id),
+      [11],
+    );
+    assert.deepEqual(describeCollection(result), { complete: true, unavailable: [] });
+  }
+});
+
+test("an empty artifact listing completing at the deadline is a complete sweep", async () => {
+  let elapsed = 0;
+  const result = await collectFailedTests({
+    github: async () => {
+      elapsed = 100;
+      return { artifacts: [] };
+    },
+    nightReports: [],
+    night: { url: RUN_URL, now: TONIGHT },
+    ledger: UNCOUNTED,
+    deadline: 100,
+    readTime: () => elapsed,
+  });
+  assert.deepEqual(result.counted, []);
+  assert.deepEqual(describeCollection(result), { complete: true, unavailable: [] });
+});
+
+test("the newest created closed report retains its ledger despite comments on an older report", async () => {
+  const lastSuccess = "2026-10-09T07:40:00.000Z";
+  const github = createFakeGitHub([
+    {
+      number: 5,
+      title: ISSUE_TITLE,
+      state: "closed",
+      created_at: "2026-10-01T07:40:00Z",
+      updated_at: "2026-10-10T07:00:00Z",
+      body: renderTable([]),
+    },
+    {
+      number: 6,
+      title: ISSUE_TITLE,
+      state: "closed",
+      created_at: "2026-10-08T07:40:00Z",
+      updated_at: lastSuccess,
+      body: renderTable([], [{ id: 21, at: lastSuccess }], {
+        complete: true,
+        unavailable: [],
+        checkedAt: lastSuccess,
+        lastSuccess,
+      }),
+    },
+  ]);
+  await postReport({
+    repository: REPOSITORY,
+    failed: [],
+    runUrl: RUN_URL,
+    now: TONIGHT,
+    collection: { complete: false, unavailable: [11] },
+    fetchImpl: github.fetchImpl,
+    env: { GH_TOKEN: "token" },
+  });
+  assert.equal(github.written.length, 1);
+  const [updated] = github.written;
+  assert.equal(updated.path, `/repos/${REPOSITORY}/issues/6`);
+  assert.equal(updated.body.state, "open");
+  assert.deepEqual(readCounted(updated.body.body), [{ id: 21, at: lastSuccess }]);
+  assert.equal(readSweep(updated.body.body).lastSuccess, lastSuccess);
 });
