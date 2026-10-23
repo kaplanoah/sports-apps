@@ -240,9 +240,10 @@ Node tests, and the browser tests of the apps a change reaches, on every pull
 request, so merge once those pass and the pull request has no conflicts with
 `main`. During the trusted-review bootstrap, CI's legacy review still feeds
 `check`, while the trusted `pull_request_target` workflow runs beside it from
-main's copy of the controls. Trusted review handles pull requests into `main`,
-except Dependabot's, and does not gate merges until phase two adds the read-only
-join. It requires a `CLAUDE_CODE_OAUTH_TOKEN` or `ANTHROPIC_API_KEY` secret.
+main's copy of the controls. Trusted review handles every pull request except
+Dependabot's, each against its own base, including stacked pull requests.
+It does not gate merges until phase two adds the read-only join.
+It requires a `CLAUDE_CODE_OAUTH_TOKEN` or `ANTHROPIC_API_KEY` secret.
 Automatic asks are limited to branches in this repository and authors associated
 as OWNER, MEMBER or COLLABORATOR; other fork authors need a maintainer to add
 the `review` label. Review runs once a permitted pull request is ready, and again
