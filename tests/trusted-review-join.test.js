@@ -67,7 +67,7 @@ test("the join accepts results only from successful trusted workflow runs on the
       ],
     },
     { display_title: "another head" },
-    { repository: { full_name: "other/repository" } },
+    { repository: { full_name: "other/repository", id: 1 } },
   ])
     assert.equal(isTrustedReviewRun({ ...run, ...change }, expected), false);
   const readGitHub = async (path) =>
