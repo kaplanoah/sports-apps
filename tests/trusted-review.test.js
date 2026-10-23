@@ -670,6 +670,6 @@ test("bootstrap prompts and schemas stay in parity apart from trusted source pat
   }
   assert.match(
     readRepoFile(".github/workflows/review.yml"),
-    /8\. Write each finding's body as the guide's "How to report" says[,\.]/,
+    /8\. Write each finding's body as the guide's "How to report" says[,.]/,
   );
 });
