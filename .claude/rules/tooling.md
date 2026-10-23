@@ -42,6 +42,10 @@ paths:
   and the owner approves each when `.claude/settings.json` asks.
   Never hand the owner one to run on their own computer, which has neither the token nor the account ID,
   unless they ask to.
+- `npm run rework` estimates follow-up fixes from overlapping files in merged PRs and reports their monthly share.
+  Run `git fetch origin main` first, since it reads the locally fetched `origin/main` and a stale fetch gives a stale report.
+  It fails if that reference is missing.
+  File overlap is an estimate, not proof that an earlier PR caused a fix.
 - `npm run rollback -- <worker>` puts an app's or a service's previous version back at all of its traffic and prints which commit was live and which is now.
   Run it only when the user asks.
 - `npm run set-app-key -- <app>` gives that app's Worker its `APP_KEY` and prints the page's address.

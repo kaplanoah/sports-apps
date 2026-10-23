@@ -36,7 +36,7 @@ const formatGamesBack = (gamesBack) => (gamesBack ? gamesBack.toFixed(1) : "-");
  */
 function renderTeamTag(row, view) {
   if (view === "League") {
-    return html`<span class="chip outlined conference-tag ${row.conference.toLowerCase()}">${row.conference.charAt(0)}</span>`;
+    return html`<span class="chip outlined conference-tag">${row.conference.charAt(0)}</span>`;
   }
   return isAboveLine(row) ? html`<span class="seed-note">${row.place} seed</span>` : "";
 }
