@@ -9,13 +9,19 @@ import { joinWithSeparator, setHtml } from "./html.js";
 import { readPageRelease } from "./release.js";
 import { openSheet, wireSheet } from "./sheet.js";
 import { keepDialogFor } from "./sheet-memory.js";
-import { isSheetControlGesture } from "./sheet-swipe.js";
 
 /* global START_AFTER_AWAY_MS -- from long-away.js */
 
 const findElement = (id) => /** @type {HTMLElement} */ (document.getElementById(id));
 const findDialog = () =>
   /** @type {HTMLDialogElement} */ (document.getElementById("settingsDialog"));
+
+/**
+ * @param {EventTarget} target
+ * @param {(target: EventTarget) => boolean} [isOwnGesture]
+ */
+export const isSettingsControlGesture = (target, isOwnGesture) =>
+  (target instanceof Element && !!target.closest("select")) || !!isOwnGesture?.(target);
 
 // A version the build couldn't work out leaves the commit in its place.
 /** @param {import("./release.js").Release} release */
@@ -61,12 +67,13 @@ export function openSettings(key = null) {
 
 /**
  * Wires the settings button, the dialog's ways to close, and the sheet's swipe, and shows the
- * release. A touch that starts on a ranking grip or a picker never moves the sheet.
+ * release. A touch that starts on a picker or a target the app claims never moves the sheet.
+ * @param {{ isOwnGesture?: (target: EventTarget) => boolean }} [options]
  */
-export function startSettingsSheet() {
+export function startSettingsSheet({ isOwnGesture } = {}) {
   const dialog = findDialog();
   findElement("settingsBtn").addEventListener("click", () => openSettings());
-  wireSheet(dialog, { isOwnGesture: isSheetControlGesture });
+  wireSheet(dialog, { isOwnGesture: (target) => isSettingsControlGesture(target, isOwnGesture) });
   keepDialogFor(dialog, START_AFTER_AWAY_MS);
   showRelease();
 }

@@ -15,10 +15,6 @@ const SWIPE_START_PX = 6;
 // A phone's layout, where dialogs are sheets.
 const isSheetLayout = () => matchMedia(PHONE_WIDTH_QUERY).matches;
 
-/** @param {EventTarget} target */
-export const isSheetControlGesture = (target) =>
-  target instanceof Element && !!target.closest(".grip, select");
-
 /**
  * Moves a sheet from where a finger left it to `to`, which its style holds from the start.
  * @param {HTMLElement} dialog

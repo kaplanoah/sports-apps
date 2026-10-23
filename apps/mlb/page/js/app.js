@@ -30,7 +30,7 @@ import {
 import { readNewsChoices } from "#shared/news-choices.js";
 import { listShownStories } from "#shared/page-places.js";
 import { openPageTab, setTabStart, startPageTabs } from "#shared/page-tabs.js";
-import { isSettingShown, openSettings, startSettingsSheet } from "#shared/settings-sheet.js";
+import { isSettingShown, openSettings } from "#shared/settings-sheet.js";
 import { openGameSection, startGameSheet } from "./game-sheet.js";
 import { listFoundGameDays } from "./games-view.js";
 import { listSeasonGames } from "./season-games.js";
@@ -50,6 +50,7 @@ import {
   watchSeasonSelection,
 } from "./season-data.js";
 import { composeState, session } from "./session.js";
+import { startSettings } from "./settings.js";
 import { startPlayerSheet } from "./player-sheet.js";
 import { fillRoster, readShownRoster, reopenRoster, startRosterSection } from "./roster-section.js";
 import { renderTeamSheet } from "./team-view.js";
@@ -62,7 +63,6 @@ import { refreshTeamSheet, startTeamSheet } from "#shared/team-sheet.js";
 import { createWorkerStore } from "#shared/worker-store.js";
 import { isReadableSeason } from "#shared/season-reader.js";
 import { fillSeasonPicker, keepSeasonYears, watchSeasonPicks } from "#shared/season-picker.js";
-import { readPageRelease } from "#shared/release.js";
 import { startAppearance } from "#shared/appearance.js";
 import { showSeasonPart, startBracketStandings } from "#shared/bracket-standings.js";
 import { LOOKS } from "./looks.js";
@@ -91,12 +91,7 @@ const readSeasonYears = keepSeasonYears(loadSeasonList);
 const fillYearPicker = (years) =>
   fillSeasonPicker(
     findSeasonRow(),
-    {
-      years,
-      pickedYear: session.activeYear,
-      currentYear: session.currentSeason,
-      releaseLabel: readPageRelease()?.label ?? null,
-    },
+    { years, pickedYear: session.activeYear, currentYear: session.currentSeason },
     LEAGUE_WORDS,
   );
 
@@ -207,7 +202,7 @@ function wireControls() {
   });
   startRosterSection({ showChange: refreshTeamSheet });
   startPlayerSheet();
-  startSettingsSheet();
+  startSettings();
   startChannelTag();
   startAppearance(LOOKS);
   startNewsRedraws(findNewsList(), drawNews, NEWS_LEAGUE);

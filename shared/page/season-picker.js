@@ -2,16 +2,9 @@ import { forgetWrittenMarkup, html, setHtml } from "./html.js";
 import { nameSeason } from "./league-words.js";
 
 // The settings' Season picker: the seasons the store keeps, or those it last listed, newest first,
-// with the current one and the picked one always among them. Production shows it only once
-// there's another season to pick; beta also shows a single season so its gestures can be tested.
-// Its row is drawn whole, so a reload shows it as it was before the page's code arrives.
-
-/**
- * @param {number} optionCount
- * @param {string | null} releaseLabel
- */
-export const isSeasonPickerShown = (optionCount, releaseLabel) =>
-  optionCount > 1 || (optionCount === 1 && releaseLabel === "beta");
+// with the current one and the picked one always among them. It shows only once there's another
+// season to pick. Its row is drawn whole, so a reload shows it as it was before the page's code
+// arrives.
 
 /**
  * The years of the seasons the store keeps, newest first.
@@ -79,10 +72,10 @@ const readListedYears = (row) =>
  * pick, from the store or its last showing, it leaves the row as drawn, since the page never picks
  * a season by its own clock.
  * @param {HTMLElement} row the picker's row, `#seasonRow`, whose select is `#seasonPicker`
- * @param {{ years: string[] | null, pickedYear: number | null, currentYear: number | null, releaseLabel: string | null }} seasons
+ * @param {{ years: string[] | null, pickedYear: number | null, currentYear: number | null }} seasons
  * @param {Pick<import("./league-words.js").LeagueWords, "seasonSpansYears">} words
  */
-export function fillSeasonPicker(row, { years, pickedYear, currentYear, releaseLabel }, words) {
+export function fillSeasonPicker(row, { years, pickedYear, currentYear }, words) {
   if (pickedYear === null) return;
   const listed = listSeasonOptions(
     years ?? readListedYears(row),
@@ -100,7 +93,7 @@ export function fillSeasonPicker(row, { years, pickedYear, currentYear, releaseL
         ${options}
       </select>`,
   );
-  row.hidden = !isSeasonPickerShown(listed.length, releaseLabel);
+  row.hidden = listed.length < 2;
 }
 
 // The picker's markup marks the season picked as it's picked, as its choice does, since the page

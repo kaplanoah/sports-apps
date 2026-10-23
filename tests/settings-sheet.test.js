@@ -1,7 +1,6 @@
 import { mock, test } from "node:test";
 import assert from "node:assert/strict";
-import { describeRelease } from "../shared/page/settings-sheet.js";
-import { isSheetControlGesture } from "../shared/page/sheet-swipe.js";
+import { describeRelease, isSettingsControlGesture } from "../shared/page/settings-sheet.js";
 import { normalizeSpaces, stripTags } from "./text.js";
 import { EASTERN, checkInTimeZone } from "./time-zone.js";
 
@@ -15,32 +14,24 @@ const RELEASE = {
 class FakeElement extends EventTarget {
   /**
    * @param {string} tag
-   * @param {string} [className]
    * @param {FakeElement | null} [parentElement]
    */
-  constructor(tag, className = "", parentElement = null) {
+  constructor(tag, parentElement = null) {
     super();
     this.tag = tag;
-    this.className = className;
     this.parentElement = parentElement;
   }
 
   /**
-   * @param {string} selectors
+   * @param {string} tag
    * @returns {FakeElement | null}
    */
-  closest(selectors) {
-    const matches = selectors.split(",").some((selector) => {
-      const name = selector.trim();
-      return name.startsWith(".")
-        ? this.className.split(/\s+/).includes(name.slice(1))
-        : this.tag === name;
-    });
-    return matches ? this : (this.parentElement?.closest(selectors) ?? null);
+  closest(tag) {
+    return this.tag === tag ? this : (this.parentElement?.closest(tag) ?? null);
   }
 }
 
-test("settings leave a select, a ranking grip, and their children in charge of their own gestures", (context) => {
+test("settings claim pickers and their children while preserving the app's own gesture claims", (context) => {
   const originalElement = globalThis.Element;
   globalThis.Element = /** @type {any} */ (FakeElement);
   context.after(() => {
@@ -48,16 +39,20 @@ test("settings leave a select, a ranking grip, and their children in charge of t
     else Reflect.deleteProperty(globalThis, "Element");
   });
   const select = new FakeElement("select");
-  const grip = new FakeElement("button", "grip");
-  for (const target of [
-    select,
-    new FakeElement("option", "", select),
-    grip,
-    new FakeElement("svg", "", grip),
-  ])
-    assert.equal(isSheetControlGesture(target), true);
+  for (const target of [select, new FakeElement("option", select)])
+    assert.equal(isSettingsControlGesture(target), true);
   for (const target of [new FakeElement("label"), new FakeElement("button"), new EventTarget()])
-    assert.equal(isSheetControlGesture(target), false);
+    assert.equal(isSettingsControlGesture(target), false);
+
+  const grip = new FakeElement("button");
+  const isOwnGesture = (target) => target === grip;
+  assert.equal(isSettingsControlGesture(grip), false);
+  assert.equal(isSettingsControlGesture(grip, isOwnGesture), true);
+  assert.equal(
+    isSettingsControlGesture(select, () => false),
+    true,
+  );
+  assert.equal(isSettingsControlGesture(new EventTarget(), isOwnGesture), false);
 });
 
 /** @param {import("../shared/page/release.js").Release} release */

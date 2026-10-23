@@ -38,10 +38,10 @@ async function trackSettingsFrames(page) {
 
 /**
  * A drag starting on the Season picker leaves settings still on every frame and after release,
- * and the picker can still choose a season when `nextYear` names another option.
+ * and the picker can still choose another season.
  * @param {import("@playwright/test").Page} page
  * @param {number} distance how far the finger moves down, or up when negative
- * @param {string | null} [nextYear] another season to choose, or null for a single-season store
+ * @param {string} [nextYear] another season to choose
  */
 export async function checkSeasonPickerDrag(page, distance, nextYear = "2025") {
   await openSettings(page);
@@ -76,14 +76,9 @@ export async function checkSeasonPickerDrag(page, distance, nextYear = "2025") {
   expect(frames[0].isDragged).toBe(false);
   for (const frame of frames) expect(frame).toEqual(frames[0]);
   await expect(settings).toBeVisible();
-  if (nextYear === null) {
-    await expect(picker.locator("option")).toHaveCount(1);
-    await expect(picker).toHaveValue("2026");
-  } else {
-    await picker.selectOption(nextYear);
-    await expect(page.locator("#titleYear")).toHaveText(nextYear);
-    await expect(picker).toHaveValue(nextYear);
-  }
+  await picker.selectOption(nextYear);
+  await expect(page.locator("#titleYear")).toHaveText(nextYear);
+  await expect(picker).toHaveValue(nextYear);
 }
 
 /**
