@@ -257,7 +257,7 @@ jobs:
       # config leaves out the WebKit projects, which run in the webkit job.
       - &install-browsers
         if: steps.browsers.outputs.cache-hit != 'true'
-        run: npx playwright install --only-shell chromium
+        run: node worker/install-browsers.mjs --only-shell chromium
       # A failed try's trace leaves out the page at each step, a sixth of every test's time, which
       # burn-in and the nightly run keep.
       - shell: bash
@@ -318,7 +318,7 @@ jobs:
           key: *browsers-key
       - *install-browsers
       - if: contains(needs.scope.outputs.specs, 'at-rest.spec.mjs')
-        run: npx playwright install --with-deps webkit
+        run: node worker/install-browsers.mjs --with-deps webkit
       # Every test runs all ten times, however many fail, and the next step decides which
       # failures fail the pull request, so a failed test doesn't fail this one.
       - name: Repeat each browser spec scope lists
@@ -360,7 +360,7 @@ jobs:
       - *setup-node
       - *restore-modules
       - *install-modules
-      - run: npx playwright install --with-deps webkit
+      - run: node worker/install-browsers.mjs --with-deps webkit
       - shell: bash
         env:
           APPS: ${{ needs.scope.outputs.apps }}
