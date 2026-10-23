@@ -10,14 +10,11 @@ paths:
   - The Worker reads:
     - the league's own feeds (`page/js/snapshot.js` says which), with the browser headers they require (`worker/src/wnba.js`)
     - ESPN's scoreboard, for where each game is on
-    - ESPN's scores and clocks only while the league's scoreboard isn't answering,
-      or for a game the league's schedule still holds as under way once its scoreboard no longer lists it,
-      reading the schedule again every five minutes until it catches up
+    - ESPN's scores and clocks only while the league's scoreboard isn't answering, or for a game the league's schedule still holds as under way once its scoreboard no longer lists it, reading the schedule again every five minutes until it catches up
   - The page saves nothing to the store.
   - The settings pick any season the store keeps, once it keeps more than one.
 - A team's sheet:
-  - It opens on cards of its last game, the one it's playing, and its next,
-    from the whole season, regular season and all (`page/js/nearest-games.js`).
+  - It opens on cards of its last game, the one it's playing, and its next, from the whole season, regular season and all (`page/js/nearest-games.js`).
     - Each card opens the game's sheet.
     - The store keeps all of them with the season and reads ahead like the playoffs'.
   - It shows its roster under its Roster pill, beside its stats under its Team pill.
@@ -26,56 +23,43 @@ paths:
     - Each team's roster for any season comes from the league's roster of that season and its list of every player it has had.
     - It shows each player's averages.
     - With ESPN's injury report, it marks each player who is out, only while the team still plays (see Injuries below).
-    - The store keeps the averages apart from the season,
-      worked out once for the Roster, the leaders, and her sheet.
+    - The store keeps the averages apart from the season, worked out once for the Roster, the leaders, and her sheet.
   - Each player's sheet (`worker/src/player.js`, `page/js/player-sheet.js`, and `player-view.js`):
     - A tap on her name in a roster, a box score, or a list of leaders opens it over the sheet it's in.
     - It shows her facts from that roster.
     - Then, while she is out, it shows a box saying why (see Injuries below).
     - It shows her last game and her points in each playoff game, from every player's game logs.
-    - It shows her regular season's averages, ranked among the players who meet the WNBA's rule for its leaders,
-      from every player's totals.
+    - It shows her regular season's averages, ranked among the players who meet the WNBA's rule for its leaders, from every player's totals.
   - The store keeps the game logs and the totals (`worker/src/player-updater.js`):
-    - It keeps both for the current season and each one it keeps from before,
-      reading the league as a game ends, so a sheet reads only the store.
+    - It keeps both for the current season and each one it keeps from before, reading the league as a game ends, so a sheet reads only the store.
     - It saves how each run went, with how often a sheet still had to read the league, in `players/status`.
 - Injuries:
   - ESPN's injury report, read once for the whole league, says who is out and why (`worker/src/injuries.js`).
   - On her sheet, while a player is out, the box saying why carries RotoWire's sentence on it.
-  - The box doesn't show when the box score that opened her shows her playing in a game under way or ended today,
-    which the injury report hasn't caught up with (the shared `playing-now.js`).
+  - The box doesn't show when the box score that opened her shows her playing in a game under way or ended today, which the injury report hasn't caught up with (the shared `playing-now.js`).
 - Games and the game sheet:
   - The Games tab (`page/js/games-view.js` and `worker/src/season-updater.js`):
     - It lists every game of the season, the All-Star Game too, from its first day to its last, under a strip of its days.
     - It opens on today, or on a past season's last day.
     - It reads from the season's whole schedule, with each game's arena.
-    - The store keeps the schedule apart from its record in `schedules/<year>`,
-      and saves it again only as a game ends or the schedule changes.
+    - The store keeps the schedule apart from its record in `schedules/<year>`, and saves it again only as a game ends or the schedule changes.
   - Scores show in scoreboard digits (`page/js/scoreboard.js`).
   - The game sheet:
     - The Worker serves each game's box score and preview for the game sheet (`worker/src/box-score.js` and `preview.js`).
-    - The store reads a live game's box score and lead with each update while a page has its sheet open,
-      and pushes them to that page (`worker/src/watched-games.js`).
-    - The store keeps each finished game's box score and lead for good,
-      read as it ends and once more after the league and ESPN catch up,
-      and a few at a time back through each season it keeps (`worker/src/game-details-updater.js`).
-    - The store keeps each upcoming game's meetings from the schedule each update reads,
-      so the sheet's routes read the league only for what the store doesn't keep (the shared `store-reads.js`).
-    - From ESPN's game summary, the Worker reads the score through each game for the sheet's lead chart (`worker/src/lead.js` and `page/js/lead-chart.js`),
-      and when each game it saw live ended (`worker/src/game-ends.js`).
+    - The store reads a live game's box score and lead with each update while a page has its sheet open, and pushes them to that page (`worker/src/watched-games.js`).
+    - The store keeps each finished game's box score and lead for good, read as it ends and once more after the league and ESPN catch up, and a few at a time back through each season it keeps (`worker/src/game-details-updater.js`).
+    - The store keeps each upcoming game's meetings from the schedule each update reads, so the sheet's routes read the league only for what the store doesn't keep (the shared `store-reads.js`).
+    - From ESPN's game summary, the Worker reads the score through each game for the sheet's lead chart (`worker/src/lead.js` and `page/js/lead-chart.js`), and when each game it saw live ended (`worker/src/game-ends.js`).
   - Highlights (`worker/src/highlights.js` and `highlights-updater.js`):
     - Once a game is over, its game sheet has pills that slide between its box score and its Highlights.
-    - The Highlights are ESPN's recap video, its story, and its clips, from ESPN's game summary,
-      each leaving once ESPN takes it down.
+    - The Highlights are ESPN's recap video, its story, and its clips, from ESPN's game summary, each leaving once ESPN takes it down.
     - The store keeps them for each of the current season's finals, read as it ends and again over the hours after.
 - Search, a round button beside the tab bar:
-  - It finds the season's games from the words a fan types,
-    like teams, a city or arena, a day or time, a round, or a team's next game.
+  - It finds the season's games from the words a fan types, like teams, a city or arena, a day or time, a round, or a team's next game.
   - It suggests as they type, from the league's names for its teams, places, and rounds (`page/js/search-terms.js`).
   - It also finds the app's own pages (`page/js/search-pages.js`):
     - each team's sheet and its Roster
-    - each player on a roster of the season shown,
-      from the list of its players the store keeps beside its rosters (`worker/src/player-index.js`)
+    - each player on a roster of the season shown, from the list of its players the store keeps beside its rosters (`worker/src/player-index.js`)
     - the latest final's Highlights
     - the bracket and the News tab
     - the standings' lists
@@ -91,20 +75,15 @@ paths:
       - one that adds to it goes under its lead, at a higher bar for each story the card has
     - has Claude judge every story again when its prompt changes (`news-prompts.js`, built with the shared `composeLabelPrompt`)
     - saves the cards in `news/cards` (the shared `news-updater.js`, which `worker/src/news-updater.js` hands its outlets, prompt, and teams)
-    - saves with each card its photo's size and, for one taller than 3:2, where Claude says its subject is,
-      each read once (`shared/worker/news-photos.js`)
-  - The News tab (`shared/page/news.js`, `news-picks.js`, `news-view.js`, and `news-choices.js`,
-    which `page/js/news-league.js` hands its teams and the switches for its outlets):
+    - saves with each card its photo's size and, for one taller than 3:2, where Claude says its subject is, each read once (`shared/worker/news-photos.js`)
+  - The News tab (`shared/page/news.js`, `news-picks.js`, `news-view.js`, and `news-choices.js`, which `page/js/news-league.js` hands its teams and the switches for its outlets):
     - It shows the cards newest lead first.
     - It shows each photo in its own shape from 16:9 to 3:2 (`shared/page/news-photo.js`).
     - It shows the stories under each lead in a quiet More on this list.
     - It shows them from the outlets the settings' News switches include, kept per device.
 - Themes:
-  - The page follows the phone's dark (Walnut) or light (Maple) setting,
-    unless the viewer picks one in settings or the Home Screen welcome (the shared `appearance.js`, kept per device,
-    and `pick-theme.js`, which the browser's address names it in for the Home Screen app).
+  - The page follows the phone's dark (Walnut) or light (Maple) setting, unless the viewer picks one in settings or the Home Screen welcome (the shared `appearance.js`, kept per device, and `pick-theme.js`, which the browser's address names it in for the Home Screen app).
   - It uses its own self-hosted fonts.
 - The Updates box (`page/js/updates.js`):
   - The page lists each playoff final in an Updates box only on phones and tablets, and only for the current season.
-  - Each device keeps when its box counts from, its first look or last dismissal,
-    and a final counts as new by when the Worker first found it.
+  - Each device keeps when its box counts from, its first look or last dismissal, and a final counts as new by when the Worker first found it.
