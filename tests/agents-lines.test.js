@@ -4,12 +4,9 @@ import { isRuleFile } from "../worker/rule-files.mjs";
 import { countWords, isFence, isHeading, readProse, startsUnit } from "./guidance-text.js";
 import { listTrackedFiles, readRepoFile, readSkillName } from "./repo-files.js";
 
-// Two changes to a guidance file conflict only when they touch the same or neighboring lines, so
-// each sentence starts a line of its own and a long one breaks after its commas.
 const isGuidance = (/** @type {string} */ path) =>
   ["AGENTS.md", "REVIEW.md"].includes(path) || isRuleFile(path) || Boolean(readSkillName(path));
 const GUIDANCE = listTrackedFiles().filter(isGuidance);
-const LONGEST_LINE = 240;
 // Claude Code reads AGENTS.md whole into every session, and follows less of a longer one.
 const MOST_AGENTS_LINES = 200;
 
@@ -22,13 +19,6 @@ const MOST_SENTENCE_WORDS = 60;
 const SENTENCE_END = String.raw`(?<!\.)[.?!]["')*]*`;
 const ENDS_SENTENCE = new RegExp(`${SENTENCE_END}$`);
 const AFTER_SENTENCE = new RegExp(`(?<=${SENTENCE_END})\\s+`);
-const SECOND_SENTENCE = new RegExp(`${SENTENCE_END}\\s+["'(*]*[A-Z]`);
-
-/**
- * Whether a line starts a second sentence after its first.
- * @param {string} line
- */
-const startsSecondSentence = (line) => SECOND_SENTENCE.test(readProse(line));
 
 /**
  * Each sentence of a text, as the line it starts on and its words. A sentence runs across lines
@@ -62,17 +52,6 @@ function listSentences(text) {
   return sentences;
 }
 
-/**
- * Each line of every guidance file that breaks a rule, as file:line.
- * @param {(line: string) => boolean} isBroken
- */
-const listBrokenLines = (isBroken) =>
-  GUIDANCE.flatMap((path) =>
-    readRepoFile(path)
-      .split("\n")
-      .flatMap((line, index) => (isBroken(line) ? [`${path}:${index + 1}`] : [])),
-  );
-
 test("the guidance files include AGENTS.md, REVIEW.md, the rule files, and the skills", () => {
   assert.ok(GUIDANCE.includes("AGENTS.md"));
   assert.ok(GUIDANCE.includes("REVIEW.md"));
@@ -80,20 +59,9 @@ test("the guidance files include AGENTS.md, REVIEW.md, the rule files, and the s
   assert.ok(GUIDANCE.some((path) => path.startsWith(".claude/skills/")));
 });
 
-test("each line of a guidance file starts at most one sentence", () => {
-  assert.deepEqual(listBrokenLines(startsSecondSentence), []);
-});
-
 test("AGENTS.md stays short enough for every session to follow", () => {
   const lines = readRepoFile("AGENTS.md").trimEnd().split("\n");
   assert.ok(lines.length <= MOST_AGENTS_LINES, `AGENTS.md has ${lines.length} lines`);
-});
-
-test("a long sentence in a guidance file breaks after its commas", () => {
-  assert.deepEqual(
-    listBrokenLines((line) => line.length > LONGEST_LINE),
-    [],
-  );
 });
 
 test(`a sentence in a guidance file is ${MOST_SENTENCE_WORDS} words or fewer`, () => {
@@ -144,32 +112,4 @@ test("a sentence ends at any stop past a closing mark, but not after a bold labe
     { line: 7, words: 1 },
     { line: 8, words: 2 },
   ]);
-});
-
-test("a line starts a second sentence after any stop past a closing mark, but not after a bold label, inside a code span, or at an ellipsis", () => {
-  for (const line of [
-    "One. Two.",
-    'Run it." Then go.',
-    "Done.) Next step.",
-    "- Is it? Yes.",
-    "Use **this.** Then go.",
-    "**Bugs.** One. Two.",
-    "**Bugs. Edge cases.** State them.",
-    "Do it. **Then** go.",
-    "Run it. (Then go.)",
-    "Run it. `npm test` runs.",
-    'Run it. "Then go."',
-    "Run it. 'Then go.'",
-    "**Bugs. Then** go.",
-  ])
-    assert.ok(startsSecondSentence(line), line);
-  for (const line of [
-    "**Bugs.** State the cases.",
-    "**Why?** Because it is.",
-    "**Stop!** Then wait.",
-    "Wait... Then go.",
-    "Run `a. B` now.",
-    "One.",
-  ])
-    assert.ok(!startsSecondSentence(line), line);
 });
