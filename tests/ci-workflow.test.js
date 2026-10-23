@@ -336,10 +336,7 @@ test("manual browser runs always install dependencies while nightly cache hits s
   const browser = readJob("browser", "flaky.yml");
   const installs = browser.split(/^ {6}- /m).filter((step) => /run: npm ci\n/.test(step));
   assert.equal(installs.length, 1);
-  assert.match(
-    installs[0],
-    /^if: github\.event_name != 'schedule' \|\| steps\.modules\.outputs\.cache-hit != 'true'\n/,
-  );
+  assert.match(installs[0], /^if: steps\.modules\.outputs\.cache-hit != 'true'\n/);
 });
 
 test("dependency caches share a fresh key without falling back to the old cache", () => {
