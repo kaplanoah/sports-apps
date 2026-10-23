@@ -92,4 +92,4 @@ Follow these steps in order, with the `ship` skill loaded, which adds to most of
 
 README and anything user-facing: be clear, direct, and concise.
 
-In this file, the rule files, the skills, and `REVIEW.md`, keep each sentence to 60 words or fewer, and write a long catalog as a list. Keep this file to 200 lines, so a rule only some work needs goes in its rule file or skill (the root's `tests/agents-lines.test.js`). Each rule file's `paths` match files in the repo (the root's `tests/rule-files.test.js`).
+In this file, the rule files, the skills, and `REVIEW.md`, keep each sentence to 60 words or fewer, and write a long catalog as a list. Keep guidance lines to at most 1,800 characters so an agent can read them whole. Keep this file to at most 16,000 characters, so a rule only some work needs goes in its rule file or skill (the root's `tests/agents-lines.test.js`). Each rule file's `paths` match files in the repo (the root's `tests/rule-files.test.js`).

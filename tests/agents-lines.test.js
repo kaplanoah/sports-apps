@@ -7,8 +7,10 @@ import { listTrackedFiles, readRepoFile, readSkillName } from "./repo-files.js";
 const isGuidance = (/** @type {string} */ path) =>
   ["AGENTS.md", "REVIEW.md"].includes(path) || isRuleFile(path) || Boolean(readSkillName(path));
 const GUIDANCE = listTrackedFiles().filter(isGuidance);
+// Read truncates a line at 2,000 characters, so leave room for its line prefix.
+const MOST_GUIDANCE_LINE_CHARACTERS = 1800;
 // Claude Code reads AGENTS.md whole into every session, and follows less of a longer one.
-const MOST_AGENTS_LINES = 200;
+const MOST_AGENTS_CHARACTERS = 16000;
 
 // Past about this many words a reader loses a sentence's subject, so a long catalog is a list.
 const MOST_SENTENCE_WORDS = 60;
@@ -60,8 +62,21 @@ test("the guidance files include AGENTS.md, REVIEW.md, the rule files, and the s
 });
 
 test("AGENTS.md stays short enough for every session to follow", () => {
-  const lines = readRepoFile("AGENTS.md").trimEnd().split("\n");
-  assert.ok(lines.length <= MOST_AGENTS_LINES, `AGENTS.md has ${lines.length} lines`);
+  const text = readRepoFile("AGENTS.md").trimEnd();
+  assert.ok(text.length <= MOST_AGENTS_CHARACTERS, `AGENTS.md has ${text.length} characters`);
+});
+
+test("guidance lines fit within the agent's read limit", () => {
+  const long = GUIDANCE.flatMap((path) =>
+    readRepoFile(path)
+      .split("\n")
+      .flatMap((line, index) =>
+        line.length > MOST_GUIDANCE_LINE_CHARACTERS
+          ? [`${path}:${index + 1} (${line.length} characters)`]
+          : [],
+      ),
+  );
+  assert.deepEqual(long, []);
 });
 
 test(`a sentence in a guidance file is ${MOST_SENTENCE_WORDS} words or fewer`, () => {
