@@ -57,7 +57,8 @@
   They are `page-look.md` and `page-code.md` for the pages, `worker.md` for the Workers,
   `season-and-store.md` for the current season and the store, and `red-change.md` for what only a phone can test.
   They are also `shared-modules.md` for what each shared module does, `mlb.md` and `wnba.md` for what each app holds,
-  `tests.md` and `browser-tests.md` for tests, and `tooling.md` for the root's `worker/` and `.github/`.
+  `tests.md` and `browser-tests.md` for tests,
+  and `tooling.md` for the root's `worker/`, `.github/`, and the hooks.
   The `ship` skill holds the rest of shipping a change, the `steward` skill how to answer CI's review, and the `add-league` skill how to add a league.
 - Shared code: `shared/page/` and `shared/worker/` hold what every app uses, which `.claude/rules/shared-modules.md` lists.
   A change there reaches every app, so shared code never imports an app's modules: an app hands it what it needs, as `watchReturns({ isBusy, catchUp })` does.
