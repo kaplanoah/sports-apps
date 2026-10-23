@@ -11,7 +11,7 @@
 // in the head before pick-theme.js, which takes the choices first, before it keeps a theme the
 // address names.
 
-/* global isLook, isOnHomeScreen, readPhoneLook -- from pick-theme.js */
+/* global isLook, isOnHomeScreen, resolveTheme -- from pick-theme.js */
 /* global readAppearanceChoice -- from pick-theme.js */
 /* global keepPickedAppearance -- from pick-theme.js */
 
@@ -157,7 +157,7 @@ const hasOwnChoices = () => Object.keys(readCarriedChoices()).length > 0;
 /** @param {Carried} carried */
 function resolveCarriedAppearance(carried) {
   if (!carried.fromApp) return carried;
-  const icon = carried.icon ?? showLookOf(readAppearanceChoice(carried.choices.appearance ?? ""));
+  const icon = carried.icon ?? resolveTheme(readAppearanceChoice(carried.choices.appearance ?? ""));
   return {
     ...carried,
     icon,
@@ -251,9 +251,6 @@ function takeIntoHomeScreen(carried) {
     /* without storage, the app starts on its own choices */
   }
 }
-
-/** @param {string} choice */
-const showLookOf = (choice) => (isLook(choice) ? choice : readPhoneLook());
 
 // The welcome starts on the icon of the theme the app showed as the fan moved, the look they picked
 // most recently, even where the browser kept a theme of its own.
