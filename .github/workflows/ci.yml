@@ -81,6 +81,8 @@ jobs:
       # A pull request's timeline is an issue's, which the issues scope reads.
       issues: read
       checks: read
+      # To verify that a previous red merge completed its production deploy.
+      actions: read
     outputs:
       held: ${{ steps.hold.outputs.held }}
       # Whether the pull request comes from a fork, whose token can't post the phone status.
@@ -88,7 +90,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          fetch-depth: 2
+          fetch-depth: 0
           persist-credentials: false
       - name: Check out the base's gate
         run: git worktree add "$RUNNER_TEMP/base" HEAD^1
