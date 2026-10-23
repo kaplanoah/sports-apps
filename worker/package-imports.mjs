@@ -15,7 +15,7 @@ export function resolvePackageImport(specifier) {
   for (const [pattern, target] of Object.entries(IMPORTS)) {
     const prefix = pattern.replace(/\*$/, "");
     if (specifier.startsWith(prefix))
-      return target.replace(/^\.\//, "").replace("*", () => specifier.slice(prefix.length));
+      return target.replace(/^\.\//, "").replaceAll("*", () => specifier.slice(prefix.length));
   }
   return null;
 }

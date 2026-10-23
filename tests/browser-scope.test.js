@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -114,6 +114,34 @@ test("package imports keep literal dollar sequences in filenames as Node does", 
         import.meta.resolve(specifier),
       );
     }
+});
+
+test("every wildcard in a package import target resolves as Node does", async (t) => {
+  const folder = mkdtempSync(join(tmpdir(), "package-imports-"));
+  t.after(() => rmSync(folder, { recursive: true, force: true }));
+  mkdirSync(join(folder, "worker"));
+  copyFileSync(
+    new URL("../worker/package-imports.mjs", import.meta.url),
+    join(folder, "worker/package-imports.mjs"),
+  );
+  writeFileSync(
+    join(folder, "package.json"),
+    JSON.stringify({ imports: { "#fixture/*": "./shared/*/copy/*.js" } }),
+  );
+  writeFileSync(
+    join(folder, "resolve.mjs"),
+    "export const resolveWithNode = (specifier) => import.meta.resolve(specifier);",
+  );
+  const { resolvePackageImport } = await import(
+    pathToFileURL(join(folder, "worker/package-imports.mjs")).href
+  );
+  const { resolveWithNode } = await import(pathToFileURL(join(folder, "resolve.mjs")).href);
+  for (const name of ["file", "$&", "$$", "$'", "$`"]) {
+    const specifier = `#fixture/${name}`;
+    const resolved = resolvePackageImport(specifier);
+    assert.ok(resolved);
+    assert.equal(new URL(resolved, pathToFileURL(`${folder}/`)).href, resolveWithNode(specifier));
+  }
 });
 
 test("browser scope includes tooling reached through import filenames with literal dollar sequences", () => {
