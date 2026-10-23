@@ -26,6 +26,7 @@ import {
   renderTable,
 } from "../worker/report-flaky-tests.mjs";
 import { readRepoFile } from "./repo-files.js";
+import { normalizeSpaces } from "./text.js";
 
 const REPOSITORY = "owner/sports-apps";
 const RUN_URL = "https://github.com/owner/sports-apps/actions/runs/1";
@@ -1380,7 +1381,9 @@ test("the sweep text shows Eastern times, missing history and bounded artifact l
   };
   const body = renderTable([], [], sweep);
   assert.equal(
-    body.split("\n").find((line) => line.startsWith("Collection of completed CI tries:")),
+    normalizeSpaces(
+      body.split("\n").find((line) => line.startsWith("Collection of completed CI tries:")),
+    ),
     "Collection of completed CI tries: **incomplete** (Oct 23, 2026, 8:00:00 AM EDT). Last complete sweep: Jan 23, 2026, 7:00:00 AM EST.",
   );
   assert.ok(
