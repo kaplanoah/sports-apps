@@ -6,16 +6,16 @@ description: How a session answers CI's review on a pull request in this repo
 Answer every review finding, a Nit or Pre-existing one too, as below; the `ship` skill says what to do when the `review` job fails.
 
 - Answer every finding from the first review, including Nits and Pre-existing findings.
-  Fix each Important finding and each Unsure finding confirmed as a bug, or reply on its thread explaining why it will not be fixed.
+  Fix each Important finding and each Unsure finding confirmed as a bug, or reply on its thread explaining why it will not be fixed,
+  linking the issue that holds it when it is left for later.
   Fix a genuine nonblocking Nit in a push already needed for the PR, defer substantive unrelated work to a focused issue, or decline it with a reason.
   Replies and deferrals of nonblocking Nits or Pre-existing findings require no push or re-review of their own.
-  Every behavior-changing fix still needs the tests and review that apply to it.
+  A finding that demonstrates a broken rule is Important under REVIEW.md; answer it as Important even if it was labeled Nit.
+  After a fix, go back to step 2 of "Shipping a change" in AGENTS.md.
 - From the second round on, answer Important and Unsure findings the same way.
-  End a push fixing an Important finding, or an Unsure finding confirmed as a bug, by adding the `review` label.
   Answer Nits and Pre-existing findings on their threads; fix them only in a push already needed for the PR.
-- After a first-round push changes code that needs review, add the `review` label.
-  A reply-only disposition leaves the existing review result in place; it cannot stand in for review of changed behavior.
-- The `review` label asks CI to review what the push changed, and takes the label off itself, so the next ask is a fresh label.
+- After any push to a ready PR, add the `review` label.
+  It asks CI to review what the push changed, and takes the label off itself, so the next ask is a fresh label.
   Add it once the push's own CI run has started on the PR's head, since that run stops a label's run queued before it.
   A push stops a review still running or waiting, and a label change stops one still waiting.
   Whenever `check` says no review has passed on the code that merges, as after a stopped run or once `main` moved after the last review,
