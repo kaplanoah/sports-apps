@@ -56,8 +56,10 @@ test("production receipts require successful deployment; superseded, failed and 
   const env = { GITHUB_OUTPUT: output };
   let deployments = 0;
   const release = { channel: "production", commit: NEW_COMMIT, newer: "3".repeat(40) };
-  const deploy = async () => {
+  /** @type {typeof import("../worker/deploy.mjs").deployRelease} */
+  const deploy = async (workers, options) => {
     deployments += 1;
+    workers.forEach((worker) => options?.onCovered?.(worker));
     return true;
   };
   const covered = await deployCheckedRelease(["mlb"], release, {
@@ -89,7 +91,10 @@ test("production receipts require successful deployment; superseded, failed and 
     true,
   );
   assert.equal(readFileSync(output, "utf8"), "");
-  assert.equal(await deployCheckedRelease(["mlb"], current, { env, deploy }), true);
+  assert.equal(
+    await deployCheckedRelease(["mlb"], current, { env, deploy, requiredWorkers: ["mlb"] }),
+    true,
+  );
   assert.equal(readFileSync(output, "utf8"), `checked-commit=${NEW_COMMIT}\n`);
 });
 

@@ -4,7 +4,14 @@ import { appendFileSync, readFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { nameServiceBinding } from "../shared/worker/services.js";
-import { findWorkerRoot, isService, listApps, listServices, listWorkersOrExit } from "./apps.mjs";
+import {
+  findWorkerRoot,
+  isService,
+  listApps,
+  listServices,
+  listWorkers,
+  listWorkersOrExit,
+} from "./apps.mjs";
 import { buildWorker } from "./build.mjs";
 import { findChannel, readCommandLine } from "./channels.mjs";
 import { checkAppPage } from "./check-page.mjs";
@@ -13,6 +20,7 @@ import { CHECK_INTERVAL_MS, CHECK_TIMEOUT_MS, waitFor } from "./check-timing.mjs
 import { decideDeploy, listChangedFiles } from "./deploy-scope.mjs";
 import { createGitHub } from "./github-api.mjs";
 import { isGitObjectId } from "./git-object.mjs";
+import { readDeployedMain } from "./production-coverage.mjs";
 
 export const API = "https://api.cloudflare.com/client/v4";
 const root = new URL("../", import.meta.url);
@@ -319,6 +327,8 @@ export const listAppWorkers = (channel, subdomain, roots) =>
  * @property {import("./apps.mjs").WorkerRoots} [roots] Where the apps and services are.
  * @property {string} script The bundled Worker to upload.
  * @property {string} [commit] The commit the bundle was built from, recorded on the version.
+ * @property {string | null} [checkedCommit] Previously verified production coverage.
+ * @property {() => void} [onCovered] Reports fresh verification or equivalent verified runtime.
  * @property {(since: string) => string[] | null} [findChanges] Files changed since a commit.
  * @property {typeof fetch} [fetchImpl]
  * @property {NodeJS.ProcessEnv} [env]
@@ -342,6 +352,8 @@ export async function deploy({
   roots,
   script,
   commit,
+  checkedCommit,
+  onCovered,
   findChanges = listChangedFiles,
   fetchImpl = fetch,
   env = process.env,
@@ -492,6 +504,7 @@ export async function deploy({
     await confirmWorkerAnswers(formatWorkerUrl(name, subdomain), previousVersions, isUploaded);
     await confirmPageDraws(previousVersions, isUploaded);
     logWorkerCheck();
+    onCovered?.();
   }
 
   // A service faces only the apps, through their bindings, so it has no address of its own.
@@ -529,6 +542,12 @@ export async function deploy({
       await restoreAfter(problem, previousVersions);
     }
     if (isUploaded) logWorkerCheck();
+    // An unbound service is safely excluded only after every app health answered.
+    if (
+      isUploaded ||
+      (expectedCommit && !decideDeploy(findChanges(expectedCommit), worker).isNeeded)
+    )
+      onCovered?.();
   }
 
   async function scheduleServiceCheck(previousVersions, expectedCommit, isUploaded) {
@@ -543,6 +562,12 @@ export async function deploy({
   if (isCheckOnly || !isDeployNeeded(liveCommit)) {
     if (isPageless) await scheduleServiceCheck(previousVersions, liveCommit, false);
     else if (isSameReleaseRetry(liveCommit)) await confirmAppAnswers(previousVersions, false);
+    else if (
+      checkedCommit &&
+      !isLiveNewer(liveCommit) &&
+      !decideDeploy(findChanges(checkedCommit), worker).isNeeded
+    )
+      onCovered?.();
     return null;
   }
   const migrations = listPendingMigrations(await readMigrationTag(), storeClass);
@@ -667,6 +692,8 @@ export async function deployWorkers(
  * @param {object} [options]
  * @param {string} [options.channel]
  * @param {string} [options.commit]
+ * @param {string | null} [options.checkedCommit]
+ * @param {(worker: string) => void} [options.onCovered]
  * @param {import("./apps.mjs").WorkerRoots} [options.roots]
  * @param {typeof buildWorker} [options.buildWorkerImpl]
  * @param {typeof deploy} [options.deployWorkerImpl]
@@ -678,6 +705,8 @@ export async function deployRelease(
   {
     channel = "production",
     commit,
+    checkedCommit,
+    onCovered,
     roots,
     buildWorkerImpl = buildWorker,
     deployWorkerImpl = deploy,
@@ -693,6 +722,8 @@ export async function deployRelease(
       roots,
       script: options.isCheckOnly ? "" : await buildWorkerImpl(worker, { channel }),
       commit,
+      checkedCommit,
+      onCovered: () => onCovered?.(worker),
       log: createWorkerLog(worker),
     });
   return deployWorkers(workers, deployWorker, {
@@ -769,16 +800,37 @@ export async function decideMovedOn({ commit, newer, channel }, readCiState) {
   return { isCovered: false, message: `${movedOn}, ${why}, so ${shortCommit} deploys.` };
 }
 
+/** @param {NodeJS.ProcessEnv} env @param {typeof fetch} fetchImpl */
+async function readPreviousCheckedCommit(env, fetchImpl) {
+  if (!env.GITHUB_REPOSITORY) return null;
+  try {
+    return await readDeployedMain(
+      createGitHub({ repository: env.GITHUB_REPOSITORY, fetchImpl, env }),
+    );
+  } catch {
+    console.log("::notice::No previous checked production coverage could be verified.");
+    return null;
+  }
+}
+
 /**
- * A covered commit leaves no receipt: newer CI passing does not prove its deploy succeeded.
+ * A receipt covers every repository Worker, including unchanged ones only when their runtime
+ * matches earlier verified coverage. A successful no-op alone proves no page was verified.
  * @param {string[]} workers
  * @param {{ channel: string, commit: string, newer: string | null }} release
- * @param {{ readCiState?: typeof readMainCiState, deploy?: (workers: string[], release: { channel: string, commit: string }) => Promise<boolean>, env?: NodeJS.ProcessEnv }} [options]
+ * @param {{ readCiState?: typeof readMainCiState, deploy?: typeof deployRelease, env?: NodeJS.ProcessEnv, fetchImpl?: typeof fetch, readCheckedCommit?: typeof readPreviousCheckedCommit, requiredWorkers?: string[] }} [options]
  */
 export async function deployCheckedRelease(
   workers,
   { channel, commit, newer },
-  { readCiState = readMainCiState, deploy = deployRelease, env = process.env } = {},
+  {
+    readCiState = readMainCiState,
+    deploy = deployRelease,
+    env = process.env,
+    fetchImpl = fetch,
+    readCheckedCommit = readPreviousCheckedCommit,
+    requiredWorkers = listWorkers(),
+  } = {},
 ) {
   const { branch } = findChannel(channel);
   if (newer) {
@@ -786,10 +838,24 @@ export async function deployCheckedRelease(
     console.log(message);
     if (isCovered) return true;
   }
+  const needsReceipt = channel === "production" && !!env.GITHUB_OUTPUT;
+  const checkedCommit = needsReceipt ? await readCheckedCommit(env, fetchImpl) : null;
+  const covered = new Set();
   console.log(`Deploying ${branch} at ${commit.slice(0, 7)} to ${channel}`);
-  if (!(await deploy(workers, { channel, commit }))) return false;
-  if (channel === "production" && env.GITHUB_OUTPUT)
-    appendFileSync(env.GITHUB_OUTPUT, `checked-commit=${commit}\n`);
+  if (
+    !(await deploy(workers, {
+      channel,
+      commit,
+      checkedCommit,
+      onCovered: (worker) => covered.add(worker),
+    }))
+  )
+    return false;
+  if (needsReceipt) {
+    if (requiredWorkers.length && requiredWorkers.every((worker) => covered.has(worker)))
+      appendFileSync(env.GITHUB_OUTPUT, `checked-commit=${commit}\n`);
+    else console.log("::notice::No production receipt: some Workers lack verified coverage.");
+  }
   return true;
 }
 

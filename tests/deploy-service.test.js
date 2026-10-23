@@ -200,6 +200,7 @@ async function deployServiceAndApps({
 } = {}) {
   const { roots, remove } = createServiceRoots();
   const events = [];
+  const covered = [];
   const errors = [];
   const lines = [];
   const calls = [];
@@ -269,6 +270,7 @@ async function deployServiceAndApps({
     const isDeployed = await deployRelease(workers, {
       roots,
       commit: NEW_COMMIT,
+      onCovered: (worker) => covered.push({ worker, events: [...events] }),
       buildWorkerImpl: async () => "export default {}",
       deployWorkerImpl: (options) =>
         deploy({
@@ -293,7 +295,7 @@ async function deployServiceAndApps({
         }),
       logError: (line) => errors.push(line),
     });
-    return { isDeployed, events, errors, lines, calls, previousVersions };
+    return { isDeployed, events, covered, errors, lines, calls, previousVersions };
   } finally {
     remove();
   }
@@ -350,7 +352,7 @@ test("an app-only release builds only its app and checks every service on its ch
 });
 
 test("a first service deploy is checked through newly bound apps after both pages settle", async () => {
-  const { isDeployed, events, lines } = await deployServiceAndApps({ isServiceNew: true });
+  const { isDeployed, events, covered, lines } = await deployServiceAndApps({ isServiceNew: true });
   assert.equal(isDeployed, true);
   assert.equal(events[0], "upload accounts");
   assert.deepEqual(events.slice(-2), ["health mlb", "health wnba"]);
@@ -358,6 +360,16 @@ test("a first service deploy is checked through newly bound apps after both page
   assert.ok(events.indexOf("page wnba") < events.indexOf("health mlb"));
   assert.ok(lines.includes("accounts: health check: ok"));
   assert.ok(!lines.some((line) => line.includes("skipped")));
+  assert.deepEqual(covered.find(({ worker }) => worker === "accounts").events.slice(-2), [
+    "health mlb",
+    "health wnba",
+  ]);
+});
+
+test("checking an older service does not cover a changed target omitted from the upload", async () => {
+  const { isDeployed, covered } = await deployServiceAndApps({ isAppOnly: true });
+  assert.equal(isDeployed, true);
+  assert.deepEqual(covered.map(({ worker }) => worker).sort(), ["mlb", "wnba"]);
 });
 
 test("a service found broken or at the wrong release after apps settle restores its original traffic split", async () => {
