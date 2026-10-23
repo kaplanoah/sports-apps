@@ -52,6 +52,7 @@ test("a merge of only docs, tests, and tooling skips the deploy", () => {
     ".github/workflows/review.yml",
     ".github/workflows/trusted-review-area.yml",
     "worker/trusted-review.mjs",
+    "worker/pull-merge.mjs",
     "worker/review-data.mjs",
     "worker/review-repository.mjs",
     "worker/find-trusted-review.mjs",
