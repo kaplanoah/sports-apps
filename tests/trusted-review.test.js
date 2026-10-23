@@ -366,10 +366,115 @@ test("sealed stage import rejects PR-seeded or unexpected records and preserves 
   writeFileSync(join(seeded, "plan.json"), "seed");
   assert.throws(() => importReviewArtifacts(upload, seeded, env), /EEXIST/);
   mkdirSync(join(upload, "trusted-review-find-2"));
+  writeFileSync(join(upload, "trusted-review-find-2/unexpected"), "unexpected");
   assert.throws(
     () => importReviewArtifacts(upload, createFolder(), env),
     /Unexpected review artifact/,
   );
+});
+
+/** @param {string} upload @param {string[]} stages */
+function downloadReviewArtifacts(upload, stages) {
+  const destination = createFolder();
+  for (const stage of stages) {
+    const name = `trusted-review-${stage}`;
+    // The pinned download action flattens even a pattern's single match.
+    cpSync(join(upload, name), stages.length === 1 ? destination : join(destination, name), {
+      recursive: true,
+    });
+  }
+  return destination;
+}
+
+test("pinned-action flat and nested extraction layouts work for zero, one and multiple areas", () => {
+  const workflow = readRepoFile(".github/workflows/review.yml");
+  const across = workflow.split("  review-across:\n")[1].split("  review-post:\n")[0];
+  assert.match(across, /pattern: trusted-review-@\(plan\|find-\*\)/);
+  assert.equal([...across.matchAll(/uses: actions\/download-artifact@/g)].length, 1);
+  for (const count of [0, 1, 2]) {
+    const source = createFolder();
+    const upload = createFolder();
+    const env = { ...ID_ENV, REVIEW_UPLOAD: upload };
+    writePlanFiles(source);
+    const plan = /** @type {import("../worker/plan-review.mjs").Plan} */ (createPlan());
+    if (count === 0) {
+      plan.stage = "none";
+      plan.areas = [];
+    } else if (count === 2) {
+      plan.areas.push({
+        area: 2,
+        name: "two",
+        files: ["b.js"],
+        rules: [],
+        partsByFile: { "b.js": ["first/b.js.diff"] },
+      });
+      writeFileSync(join(source, "first/b.js.diff"), "first\nsecond\n");
+    }
+    writeJson(source, "plan.json", plan);
+    exportReviewArtifact(source, "plan", env);
+    const planDownload = downloadReviewArtifacts(upload, ["plan"]);
+    assert.deepEqual(importReviewArtifacts(planDownload, createFolder(), env), plan);
+    const unnamed = createFolder();
+    cpSync(planDownload, join(unnamed, "plan"), { recursive: true });
+    assert.throws(
+      () => importReviewArtifacts(unnamed, createFolder(), env),
+      /Unexpected review artifact/,
+    );
+    assert.throws(
+      () => importReviewArtifacts(planDownload, createFolder(), { ...env, REVIEW_BASE: SHA }),
+      /stale or foreign/,
+    );
+    const stages = ["plan"];
+    for (const area of plan.areas) {
+      const stage = `find-${area.area}`;
+      const part = Object.values(area.partsByFile).flat()[0];
+      writeJson(source, `${stage}.json`, {
+        area: area.area,
+        tries: [{ reads: [[join(source, part), [[1, 2]]]], answer: { items: [], unjudged: [] } }],
+      });
+      exportReviewArtifact(source, stage, env);
+      stages.push(stage);
+    }
+    if (count) {
+      const findsOnly = downloadReviewArtifacts(upload, stages.slice(1));
+      assert.throws(
+        () => importReviewArtifacts(findsOnly, createFolder(), env),
+        /Missing review plan artifact/,
+      );
+      const acrossDownload = downloadReviewArtifacts(upload, stages);
+      const destination = createFolder();
+      const result = spawnSync(
+        process.execPath,
+        [new URL("worker/trusted-review.mjs", REPO_ROOT).pathname, "import", acrossDownload],
+        { env: { ...ENV, ...env, REVIEW_FOLDER: destination }, encoding: "utf8" },
+      );
+      assert.equal(result.status, 0, result.stderr);
+      for (const stage of stages.slice(1)) {
+        const record = JSON.parse(readFileSync(join(destination, `${stage}.json`), "utf8"));
+        assert.deepEqual(record.unread, []);
+        assert.equal(record.isAnswered, true);
+      }
+      writeJson(source, "across.json", { items: [], unjudged: [] });
+      writeJson(source, "candidates.json", []);
+      exportReviewArtifact(source, "across", env);
+      writeJson(source, "post.json", { weights: [], repeated: 0 });
+      exportReviewArtifact(source, "post", env);
+      stages.push("across", "post");
+    }
+    const combined = downloadReviewArtifacts(upload, stages);
+    assert.deepEqual(importReviewArtifacts(combined, createFolder(), env), plan);
+    writeFileSync(join(planDownload, "AGENTS.md"), "changed after sealing");
+    assert.throws(
+      () => importReviewArtifacts(planDownload, createFolder(), env),
+      /artifact content changed/,
+    );
+    cpSync(join(upload, "trusted-review-plan/AGENTS.md"), join(planDownload, "AGENTS.md"));
+    writeFileSync(join(planDownload, "unexpected.json"), "{}");
+    assert.throws(
+      () => importReviewArtifacts(planDownload, createFolder(), env),
+      /unexpected or missing artifact files/,
+    );
+  }
 });
 
 test("a hostile merge tree cannot replace trusted entrypoints, imports, Node or package configuration", async () => {
