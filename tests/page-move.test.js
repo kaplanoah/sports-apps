@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { createContext, runInContext } from "node:vm";
 import { listTrackedFiles, readRepoFile } from "./repo-files.js";
 import { listApps } from "../worker/apps.mjs";
+import { loadThemeHead } from "./theme-head.js";
 
 const MINUTE_MS = 60 * 1000;
 const NOW = Date.parse("2026-10-22T16:00:00Z");
@@ -46,6 +47,7 @@ function loadPageMove({
     },
   };
   const requests = [];
+  const themeHead = loadThemeHead();
   const context = createContext({
     localStorage,
     sessionStorage,
@@ -71,17 +73,11 @@ function loadPageMove({
       requests.push({ path, method: init?.method });
       return answer();
     },
-    isLook: (value) => value === "light" || value === "dark",
+    isLook: themeHead.isLook,
     isOnHomeScreen: () => isOnHomeScreen,
     isAppleBrowser: () => isAppleBrowser,
-    readPhoneLook: () => "light",
-    readAppearanceChoice: (stored) => {
-      try {
-        return JSON.parse(stored);
-      } catch {
-        return "auto";
-      }
-    },
+    resolveTheme: themeHead.resolveTheme,
+    readAppearanceChoice: themeHead.readAppearanceChoice,
   });
   runInContext(readRepoFile(`${PAGE_CODE}page-move.js`), context);
   const pageMove = runInContext(

@@ -8,7 +8,7 @@
 
 // Every page that loads this runs pick-theme.js first.
 /* global buildSafariAddress, checkPickedChoice, isAppearanceChoice, isLook, openThemeAddress,
-   readHomeScreenIcon, readPhoneLook -- from pick-theme.js */
+   readHomeScreenIcon, resolveTheme -- from pick-theme.js */
 /* global readPageMoveIcon -- from page-move.js */
 
 import { isIos, isOnHomeScreen } from "./device.js";
@@ -37,12 +37,6 @@ const findElement = (id) => /** @type {HTMLElement} */ (document.getElementById(
 const appearance = createViewerChoice("appearance", (stored) =>
   typeof stored === "string" && isAppearanceChoice(stored) ? stored : "auto",
 );
-
-/**
- * @param {string} choice
- * @returns {"light" | "dark"}
- */
-const resolveTheme = (choice) => (isLook(choice) ? choice : readPhoneLook());
 
 // A phone keeps the icon a page offers at the moment it's added to the home screen, so the page
 // offers the one that matches the theme showing, or, while a move is being finished, the one

@@ -36,6 +36,14 @@ function readPhoneLook() {
 }
 
 /**
+ * @param {string} choice
+ * @returns {"light" | "dark"}
+ */
+function resolveTheme(choice) {
+  return isLook(choice) ? choice : readPhoneLook();
+}
+
+/**
  * Checks the Appearance choice that names the look picked, among settings' or the welcome's.
  * @param {Iterable<HTMLInputElement>} choices
  * @param {string} picked
@@ -195,7 +203,7 @@ function keepThemeFromAddress() {
 
 /** @param {string} choice */
 function showTheme(choice) {
-  document.documentElement.dataset.theme = isLook(choice) ? choice : readPhoneLook();
+  document.documentElement.dataset.theme = resolveTheme(choice);
 }
 
 /** @param {string} choice */

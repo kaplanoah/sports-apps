@@ -5,6 +5,7 @@ import {
   checkHandoffRenewal,
   checkIconKeptOnlyOnOpen,
   checkNoteWithoutIcon,
+  checkPickedNoteTheme,
   checkReAddHandoff,
   checkReAddNote,
   checkReAddNoteDismissal,
@@ -22,6 +23,12 @@ test.use({ contextOptions: { reducedMotion: "reduce" } });
 test.describe("in an iPhone's Home Screen app", () => {
   test.use({ userAgent: IPHONE_AGENT });
   const looks = { light: "Maple", dark: "Walnut" };
+
+  test("the icon note uses the picked look over the phone's and follows the phone on System", async ({
+    page,
+  }) => {
+    await checkPickedNoteTheme({ page, openApp, openSettings, looks });
+  });
 
   test("while the look picked, or on System the phone's, isn't the icon's, settings shows both icons and how to update it, linking to Safari on the choice picked, which the browser and Android leave out", async ({
     page,

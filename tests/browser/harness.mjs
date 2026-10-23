@@ -198,13 +198,13 @@ export async function connectToStore(page, testStore) {
  * closed, so a page not about it starts with it closed.
  * @param {import("@playwright/test").Page} page
  * @param {string} now
- * @param {{ isShowingWelcome?: boolean }} [options]
+ * @param {{ isShowingWelcome?: boolean, path?: string }} [options]
  */
-export async function loadPageAt(page, now, { isShowingWelcome = false } = {}) {
+export async function loadPageAt(page, now, { isShowingWelcome = false, path = "/" } = {}) {
   if (!isShowingWelcome)
     await page.addInitScript(() => localStorage.setItem("homeScreenWelcomeClosed", "closed"));
   await page.clock.install({ time: new Date(now) });
-  await page.goto("/");
+  await page.goto(path);
 }
 
 const PAGE_KEY = "test-key";

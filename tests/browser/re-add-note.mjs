@@ -59,7 +59,7 @@ const NOTE_WORDS =
 /**
  * @typedef {{
  *   page: import("@playwright/test").Page,
- *   openApp: (page: import("@playwright/test").Page) => Promise<unknown>,
+ *   openApp: (page: import("@playwright/test").Page, options?: { path: string }) => Promise<unknown>,
  *   openSettings: (page: import("@playwright/test").Page) => Promise<unknown>,
  *   looks: { light: string, dark: string },
  * }} App
@@ -73,8 +73,7 @@ const NOTE_WORDS =
  */
 async function openHomeScreenApp(page, openApp, look) {
   await page.addInitScript(markOnHomeScreen);
-  await openApp(page);
-  await page.goto(`/?theme=${look}`);
+  await openApp(page, { path: `/?theme=${look}` });
 }
 
 /** @param {import("@playwright/test").Page} page */
@@ -128,6 +127,22 @@ const pick = (page, name) =>
 
 /** @param {import("@playwright/test").Page} page */
 const closeSettings = (page) => page.locator(`${SETTINGS} .settings-body .sheet-close`).click();
+
+/** @param {App} app */
+export async function checkPickedNoteTheme({ page, openApp, openSettings, looks }) {
+  await page.emulateMedia({ colorScheme: "dark" });
+  await openHomeScreenApp(page, openApp, "dark");
+  await openSettings(page);
+  const note = findNote(page);
+  await pick(page, looks.light);
+  await expect(note).toHaveText(NOTE_WORDS);
+  expect(await readNoteIcons(page)).toEqual(["dark", "light"]);
+  await pick(page, "System");
+  await expect(note).toBeEmpty();
+  await page.emulateMedia({ colorScheme: "light" });
+  await expect(note).toHaveText(NOTE_WORDS);
+  expect(await readNoteIcons(page)).toEqual(["dark", "light"]);
+}
 
 /**
  * In an iPhone's Home Screen app added on the dark look, picking the light one in settings shows
@@ -242,12 +257,12 @@ export async function checkReAddNoteOnReload({ page, openApp, openSettings, look
   await expect(page.locator(SETTINGS)).toBeVisible();
   await expect(note).toHaveText(NOTE_WORDS);
   expect(await readNoteIcons(page)).toEqual(["dark", "light"]);
-  await expect.poll(readHeight).toBe(height);
+  await waitForNoteHeight(page, height, "before app code");
 
   release();
   await page.waitForLoadState("domcontentloaded");
   await expect(note).toHaveText(NOTE_WORDS);
-  await expect.poll(readHeight).toBe(height);
+  await waitForNoteHeight(page, height, "after app code");
 
   // The page's code, not the copy put back, decides: a look another tab picked while the page
   // was away takes the note away once the code runs.
@@ -258,6 +273,37 @@ export async function checkReAddNoteOnReload({ page, openApp, openSettings, look
   releaseAgain();
   await page.waitForLoadState("domcontentloaded");
   await expect(note).toBeEmpty();
+}
+
+/**
+ * @param {import("@playwright/test").Page} page
+ * @param {number} baseline
+ * @param {string} phase
+ */
+async function waitForNoteHeight(page, baseline, phase) {
+  const startedAt = Date.now();
+  try {
+    await page.waitForFunction(
+      ({ height, phase }) => {
+        const lastHeight = document.querySelector("#appearanceNote").getBoundingClientRect().height;
+        Reflect.set(window, "reAddNoteHeightWait", { phase, lastHeight });
+        return lastHeight === height;
+      },
+      { height: baseline, phase },
+      { timeout: 5000 },
+    );
+  } catch (error) {
+    const lastHeight = await page
+      .evaluate((phase) => {
+        const last = Reflect.get(window, "reAddNoteHeightWait");
+        return last?.phase === phase ? last.lastHeight : "unavailable (no sample)";
+      }, phase)
+      .catch(() => "unavailable (page closed)");
+    throw new Error(
+      `Icon note height ${phase}: baseline=${baseline}px, last=${lastHeight}px, elapsed=${Date.now() - startedAt}ms`,
+      { cause: error },
+    );
+  }
 }
 
 /**
