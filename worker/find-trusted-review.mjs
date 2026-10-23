@@ -48,8 +48,11 @@ export const isTrustedReviewRun = (run, expected) =>
  */
 export async function findTrustedReviewRun(options) {
   const { readGitHub, tree } = options;
-  const artifacts = await readAllPages(readGitHub,
-    `/actions/artifacts?name=trusted-review-passed-${tree}`, (answer) => answer.artifacts);
+  const artifacts = await readAllPages(
+    readGitHub,
+    `/actions/artifacts?name=trusted-review-passed-${tree}`,
+    (answer) => answer.artifacts,
+  );
 
   for (const artifact of artifacts) {
     if (artifact.expired) continue;
@@ -57,8 +60,11 @@ export async function findTrustedReviewRun(options) {
     if (isTrustedReviewRun(run, options) && run.conclusion === "success")
       return { run: run.id, pending: false };
   }
-  const runs = await readAllPages(readGitHub,
-    `/actions/workflows/review.yml/runs?event=pull_request_target&head_sha=${options.head}`, (answer) => answer.workflow_runs);
+  const runs = await readAllPages(
+    readGitHub,
+    `/actions/workflows/review.yml/runs?event=pull_request_target&head_sha=${options.head}`,
+    (answer) => answer.workflow_runs,
+  );
 
   const matching = runs.filter((run) => isTrustedReviewRun(run, options));
   return {

@@ -651,5 +651,8 @@ test("stacked target runs skip both plan and final summary without publishing a 
 });
 
 test("trusted prompts retain the authoritative reporting guide after bootstrap", () => {
-  assert.match(readRepoFile(".github/workflows/review.yml"), /8\. Write each finding's body as the guide's "How to report" says\./);
+  assert.match(
+    readRepoFile(".github/workflows/review.yml"),
+    /8\. Write each finding's body as the guide's "How to report" says\./,
+  );
 });
