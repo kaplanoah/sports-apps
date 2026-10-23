@@ -360,7 +360,7 @@ async function findReportIssue(github) {
     "/issues?state=open&sort=updated&direction=desc",
     isReport,
   );
-  return open ?? findInPages(github, "/issues?state=closed&sort=updated&direction=desc", isReport);
+  return open ?? findInPages(github, "/issues?state=closed&sort=created&direction=desc", isReport);
 }
 
 /**
@@ -708,6 +708,7 @@ export async function collectFailedTests({
   const skipped = [];
   /** @type {FlakyRun[] | undefined} */
   let deferred;
+  let deadlineReached = false;
   let runs;
   try {
     const read = boundGitHubRequests(github, deadline, readTime);
@@ -741,6 +742,7 @@ export async function collectFailedTests({
     } catch (error) {
       if (error instanceof DeadlineError) {
         deferred = runs.slice(index);
+        deadlineReached = true;
         break;
       }
       const message = describeCollectionFailure(error);
@@ -748,6 +750,7 @@ export async function collectFailedTests({
         `Could not download CI run ${run.id}'s artifacts (${run.artifacts.map(({ id }) => id).join(", ")}); leaving this try uncounted for a later night: ${message}`,
       );
       skipped.push(run);
+      if (readTime() >= deadline) deadlineReached = true;
       continue;
     } finally {
       if (directory) rmSync(directory, { recursive: true, force: true });
@@ -759,9 +762,7 @@ export async function collectFailedTests({
     counted,
     skipped,
     ...(deferred ? { deferred } : {}),
-    ...(deferred || readTime() >= deadline
-      ? { problem: new DeadlineError("collection").message }
-      : {}),
+    ...(deadlineReached ? { problem: new DeadlineError("collection").message } : {}),
   };
 }
 

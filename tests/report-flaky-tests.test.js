@@ -237,7 +237,7 @@ test("an issue's body without a table reads as an empty table", () => {
 
 /**
  * GitHub's issues, open unless their state says otherwise, filtered by state and page, keeping reads and writes.
- * @param {{ number: number, title: string, body?: string, state?: string, pull_request?: object }[]} issues
+ * @param {{ number: number, title: string, body?: string, state?: string, pull_request?: object, created_at?: string, updated_at?: string }[]} issues
  */
 function createFakeGitHub(issues) {
   /** @type {string[]} */
@@ -254,6 +254,15 @@ function createFakeGitHub(issues) {
       const filtered = issues.filter(
         (issue) => state === "all" || (issue.state ?? "open") === state,
       );
+      const sort = searchParams.get("sort");
+      if (sort === "created" || sort === "updated") {
+        const key = sort === "created" ? "created_at" : "updated_at";
+        const direction = searchParams.get("direction") === "asc" ? 1 : -1;
+        filtered.sort(
+          (left, right) =>
+            direction * ((Date.parse(left[key] ?? "") || 0) - (Date.parse(right[key] ?? "") || 0)),
+        );
+      }
       const size = Number(searchParams.get("per_page") ?? 100);
       const page = Number(searchParams.get("page") ?? 1);
       return Response.json(filtered.slice((page - 1) * size, page * size));
@@ -1555,4 +1564,91 @@ test("a failed download exhausting the budget records the stop even on the last 
     unavailable: [11],
     problem: "collection deadline reached",
   });
+});
+
+test("the final successful download finishing at the deadline leaves collection complete", async () => {
+  let elapsed = 0;
+  const { download } = createFakeDownloads({ 11: RETRY_PASSED_REPORT });
+  const result = await collectFailedTests({
+    github: createFakeRunsApi(ONE_REPORT).github,
+    nightReports: [],
+    night: { url: RUN_URL, now: TONIGHT },
+    ledger: UNCOUNTED,
+    deadline: 100,
+    readTime: () => elapsed,
+    download: (run) => {
+      const directory = download(run);
+      elapsed = 100;
+      return directory;
+    },
+  });
+  assert.deepEqual(
+    result.counted.map(({ id }) => id),
+    [11],
+  );
+  assert.deepEqual(describeCollection(result), { complete: true, unavailable: [] });
+});
+
+test("an empty final listing finishing at the deadline leaves collection complete", async () => {
+  let elapsed = 0;
+  const result = await collectFailedTests({
+    github: async () => {
+      elapsed = 100;
+      return { artifacts: [] };
+    },
+    nightReports: [],
+    night: { url: RUN_URL, now: TONIGHT },
+    ledger: UNCOUNTED,
+    deadline: 100,
+    readTime: () => elapsed,
+    download: () => {
+      throw new Error("An empty listing must download nothing");
+    },
+  });
+  assert.deepEqual(result.counted, []);
+  assert.deepEqual(describeCollection(result), { complete: true, unavailable: [] });
+});
+
+test("closed history uses the newest created report despite comments on older reports", async () => {
+  /** @param {number} id @param {string} lastSuccess */
+  const renderClosedBody = (id, lastSuccess) =>
+    renderTable([], [{ id, at: TONIGHT.toISOString() }], {
+      complete: true,
+      unavailable: [],
+      checkedAt: lastSuccess,
+      lastSuccess,
+    });
+  const github = createFakeGitHub([
+    {
+      number: 5,
+      title: ISSUE_TITLE,
+      state: "closed",
+      created_at: "2026-10-08T00:00:00Z",
+      updated_at: "2026-10-11T00:00:00Z",
+      body: renderClosedBody(11, "2026-10-08T00:00:00Z"),
+    },
+    {
+      number: 6,
+      title: ISSUE_TITLE,
+      state: "closed",
+      created_at: "2026-10-09T00:00:00Z",
+      updated_at: "2026-10-09T00:00:00Z",
+      body: renderClosedBody(21, TONIGHT.toISOString()),
+    },
+  ]);
+  await postReport({
+    repository: REPOSITORY,
+    failed: [],
+    collection: { complete: false, unavailable: [99] },
+    runUrl: RUN_URL,
+    now: NEXT_NIGHT,
+    fetchImpl: github.fetchImpl,
+    env: { GH_TOKEN: "token" },
+  });
+  assert.equal(github.written[0].path, `/repos/${REPOSITORY}/issues/6`);
+  assert.deepEqual(
+    readCounted(github.written[0].body.body).map(({ id }) => id),
+    [21],
+  );
+  assert.equal(readSweep(github.written[0].body.body).lastSuccess, TONIGHT.toISOString());
 });
