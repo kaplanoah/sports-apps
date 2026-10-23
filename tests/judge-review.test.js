@@ -51,6 +51,19 @@ test("each Read is the lines it returned, and a Read that failed returned none",
       { file_path: "/w/c.diff", isError: true },
     ]),
     { type: "assistant", message: { content: [{ type: "tool_use", id: "g", name: "Grep" }] } },
+    {
+      type: "assistant",
+      message: {
+        content: [
+          {
+            type: "tool_use",
+            id: "unfinished",
+            name: "Read",
+            input: { file_path: "/w/unfinished.diff" },
+          },
+        ],
+      },
+    },
   ]);
   assert.deepEqual(
     [...reads],

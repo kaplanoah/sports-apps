@@ -5,7 +5,9 @@
 // one.
 import { readAllPages } from "./github-api.mjs";
 
-export const SUMMARY_MARKER = "<!-- claude-review-summary -->";
+export const SUMMARY_MARKER = process.env.REVIEW_TRUSTED
+  ? "<!-- trusted-review-summary -->"
+  : "<!-- claude-review-summary -->";
 // The posting and summary steps post with the run's own token.
 export const REVIEWER = "github-actions[bot]";
 // What a finding the check across areas couldn't settle is posted as, in place of its weight.

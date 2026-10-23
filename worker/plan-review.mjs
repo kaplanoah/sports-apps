@@ -13,13 +13,14 @@
 // GITHUB_REPOSITORY, and PR set to read the last review's summary. It prints the stage, its areas,
 // and their count for $GITHUB_OUTPUT.
 import { execFileSync } from "node:child_process";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { escapePattern } from "../shared/page/escape-pattern.js";
 import { isTestPath } from "./deploy-scope.mjs";
 import { createGitHub, readAllPages } from "./github-api.mjs";
 import { resolvePackageImport } from "./package-imports.mjs";
+import { createReviewGitEnvironment } from "./review-repository.mjs";
 import { findSummary, readReviewedHead } from "./review-state.mjs";
 import { RULES_FOLDER, listRulesFor, readRuleFiles, readRulePaths } from "./rule-files.mjs";
 
@@ -677,6 +678,7 @@ export function writeReview(
 const runGit = (args) =>
   execFileSync("git", ["-c", "core.quotePath=false", ...args], {
     encoding: "utf8",
+    env: createReviewGitEnvironment(),
     maxBuffer: 1 << 30,
   });
 
@@ -784,8 +786,25 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     const paths = files.length ? ["--", ...files] : [];
     if (!diffs.has(key))
       diffs.set(key, {
-        numstat: runGit(["diff", "--numstat", "--no-renames", ...range, ...paths]),
-        diff: runGit(["diff", "--no-renames", ...range, ...paths]),
+        numstat: runGit([
+          "diff",
+          "--numstat",
+          "--text",
+          "--no-textconv",
+          "--no-ext-diff",
+          "--no-renames",
+          ...range,
+          ...paths,
+        ]),
+        diff: runGit([
+          "diff",
+          "--text",
+          "--no-textconv",
+          "--no-ext-diff",
+          "--no-renames",
+          ...range,
+          ...paths,
+        ]),
       });
     return /** @type {{ numstat: string, diff: string }} */ (diffs.get(key));
   };
@@ -813,7 +832,18 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
         (pattern, isWord) => grepRepo(pattern, isWord, tryGit),
         listDeletedFiles(runGit),
       ),
-    rules: readRuleFiles(repoFiles, (path) => readFileSync(path, "utf8")),
+    rules: readRuleFiles(
+      process.env.REVIEW_RULE_ROOT
+        ? readdirSync(join(process.env.REVIEW_RULE_ROOT, RULES_FOLDER)).map(
+            (name) => `${RULES_FOLDER}${name}`,
+          )
+        : repoFiles,
+      (path) =>
+        readFileSync(
+          process.env.REVIEW_RULE_ROOT ? join(process.env.REVIEW_RULE_ROOT, path) : path,
+          "utf8",
+        ),
+    ),
   });
   console.log(`stage=${plan.stage}`);
   console.log(formatJobOutputs(listJobs(plan.areas)));
