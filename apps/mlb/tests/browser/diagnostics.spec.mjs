@@ -1,10 +1,11 @@
+import { holdClock } from "../../../../tests/browser/harness.mjs";
 import { test, expect, openApp, openSettings } from "./harness.mjs";
 import { LAPTOP, PHONE } from "./screen-sizes.mjs";
 import { drag } from "../../../../tests/browser/touch.mjs";
 import { openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
 import { findSeasonPart, scrollSeasonPart } from "../../../../tests/browser/season-scroll.mjs";
 import { waitForScrollEnd } from "../../../../tests/browser/scroll-end.mjs";
-import { holdClock, sendClick, sendFinger } from "../../../../tests/browser/stray-click.mjs";
+import { sendClick, sendFinger } from "../../../../tests/browser/stray-click.mjs";
 import {
   findDiagnosticsSwitch,
   turnOnDiagnostics,
