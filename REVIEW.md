@@ -54,14 +54,14 @@ In order of what has mattered here.
    In a workflow: untrusted text (a title, branch name, or comment) put into `run:` through `${{ }}`,
    wider `permissions` than the job needs, an action not pinned to a commit,
    and a pull request's own code run with a secret.
-   A change to the review itself, its jobs in `.github/workflows/ci.yml`,
+   A change that lets the review catch less is Important, naming what it no longer catches.
+   Its controls include jobs in `.github/workflows/ci.yml`,
    `.github/workflows/review.yml`, and `.github/workflows/trusted-review-area.yml`,
    `worker/plan-review.mjs`, `worker/judge-review.mjs`, `worker/post-review.mjs`,
    `worker/review-context.mjs`, `worker/review-state.mjs`, `worker/rule-files.mjs`,
    `worker/trusted-review.mjs`, `worker/review-data.mjs`, `worker/review-repository.mjs`,
-   or `worker/find-trusted-review.mjs`, and the modules they import, like `shared/page/escape-pattern.js`, or to a guard test,
-   that lets less through is Important, naming what it no longer catches,
-   whether it changes the trusted controls or a check defined by the pull request itself.
+   or `worker/find-trusted-review.mjs`, and the modules they import, like `shared/page/escape-pattern.js`, and guard tests.
+   This applies to trusted controls and checks defined by the pull request itself.
    So is a change to `worker/review-git.mjs`, the reviewer's only command, that lets it run more,
    naming what the reviewer could newly read or write.
    So is a change to the red-change gate that lets less through,
