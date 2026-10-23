@@ -1,6 +1,6 @@
 import { mock, test } from "node:test";
 import assert from "node:assert/strict";
-import { describeRelease } from "../shared/page/settings-sheet.js";
+import { describeRelease, isSettingsControlGesture } from "../shared/page/settings-sheet.js";
 import { normalizeSpaces, stripTags } from "./text.js";
 import { EASTERN, checkInTimeZone } from "./time-zone.js";
 
@@ -10,6 +10,50 @@ const RELEASE = {
   builtAt: "2026-09-24T15:00:00Z",
   label: null,
 };
+
+class FakeElement extends EventTarget {
+  /**
+   * @param {string} tag
+   * @param {FakeElement | null} [parentElement]
+   */
+  constructor(tag, parentElement = null) {
+    super();
+    this.tag = tag;
+    this.parentElement = parentElement;
+  }
+
+  /**
+   * @param {string} tag
+   * @returns {FakeElement | null}
+   */
+  closest(tag) {
+    return this.tag === tag ? this : (this.parentElement?.closest(tag) ?? null);
+  }
+}
+
+test("settings claim pickers and their children while preserving the app's own gesture claims", (context) => {
+  const originalElement = globalThis.Element;
+  globalThis.Element = /** @type {any} */ (FakeElement);
+  context.after(() => {
+    if (originalElement) globalThis.Element = originalElement;
+    else Reflect.deleteProperty(globalThis, "Element");
+  });
+  const select = new FakeElement("select");
+  for (const target of [select, new FakeElement("option", select)])
+    assert.equal(isSettingsControlGesture(target), true);
+  for (const target of [new FakeElement("label"), new FakeElement("button"), new EventTarget()])
+    assert.equal(isSettingsControlGesture(target), false);
+
+  const grip = new FakeElement("button");
+  const isOwnGesture = (target) => target === grip;
+  assert.equal(isSettingsControlGesture(grip), false);
+  assert.equal(isSettingsControlGesture(grip, isOwnGesture), true);
+  assert.equal(
+    isSettingsControlGesture(select, () => false),
+    true,
+  );
+  assert.equal(isSettingsControlGesture(new EventTarget(), isOwnGesture), false);
+});
 
 /** @param {import("../shared/page/release.js").Release} release */
 const readReleaseLine = (release) =>
