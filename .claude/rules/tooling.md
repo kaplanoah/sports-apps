@@ -8,7 +8,7 @@ paths:
 
 # Tooling
 
-- CI runs every Node test once in the runner's zone, then repeats the explicit `tests/time-zone-sensitive.json` sensitive list and changed Node tests in Honolulu (`worker/test-time-zone.mjs`).
+- CI runs every Node test once in UTC, then repeats the explicit `tests/time-zone-sensitive.json` sensitive list and changed Node tests in Honolulu (`worker/test-time-zone.mjs`).
   `worker/time-zone-scope.mjs` verifies native Date/Intl coverage with `listReachedFiles` in `worker/browser-scope.mjs`; missing coverage or unreadable changes fail instead of silently narrowing the run.
   The manifest's two `browserOnly` adapters already run only in browser tests; a new native time API source without a Node import path needs a test before CI can pass.
   Only the two search sweeps use the manifest's fixed list; they import Eastern setup before their tested modules, so their initialization and assertions have the same zone in either run.

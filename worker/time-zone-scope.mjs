@@ -111,6 +111,7 @@ export function verifyTimeZoneCoverage(tests, manifest, readText, sources = []) 
       } catch (error) {
         throw new Error(
           `Cannot inventory ${path}: ${error instanceof Error ? error.message : String(error)}`,
+          { cause: error },
         );
       }
     }
