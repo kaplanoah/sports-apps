@@ -1,3 +1,4 @@
+import { holdClock } from "../../../../tests/browser/harness.mjs";
 import { test, expect, openApp, NOW, matchPath } from "./harness.mjs";
 import { holdRequests } from "../../../../tests/browser/hold-requests.mjs";
 import { listLowContrastText } from "../../../../tests/browser/contrast.mjs";
@@ -5,7 +6,6 @@ import { listTextOffRoles } from "../../../../tests/browser/type-roles.mjs";
 import { listChipsOffCenter } from "../../../../tests/browser/chip-centering.mjs";
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
 import { SETTINGS } from "../../../../tests/browser/settings.mjs";
-import { holdClock } from "../../../../tests/browser/stray-click.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 

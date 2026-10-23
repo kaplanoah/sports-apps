@@ -1,3 +1,4 @@
+import { holdClock } from "../../../../tests/browser/harness.mjs";
 import { test, expect, openApp } from "./harness.mjs";
 import { drag } from "../../../../tests/browser/touch.mjs";
 import { findCenter } from "../../../../tests/browser/season-scroll.mjs";
@@ -5,7 +6,6 @@ import { findSeasonPill, openSeasonPart } from "../../../../tests/browser/season
 import { SETTINGS, openSettings } from "../../../../tests/browser/settings.mjs";
 import { turnOnDiagnostics } from "../../../../tests/browser/diagnostics-switch.mjs";
 import {
-  holdClock,
   sendClick,
   sendFinger,
   sendScroll,
