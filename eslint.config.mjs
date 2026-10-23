@@ -77,6 +77,7 @@ export default [
   {
     ignores: [
       ".claude/worktrees/",
+      ".stryker-tmp/",
       "apps/*/worker/dist/",
       "services/*/worker/dist/",
       "apps/*/page/js/sortable.min.js",

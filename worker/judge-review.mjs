@@ -14,10 +14,16 @@
 // $GITHUB_OUTPUT. Last: node worker/judge-review.mjs summary <folder>, with GH_TOKEN,
 // GITHUB_REPOSITORY, PR, and SHA set, which fails when anything due went unread or unchecked.
 import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createGitHub, readAllPages } from "./github-api.mjs";
-import { SUMMARY_MARKER, WEIGHTS, findSummary, writeReviewedHead } from "./review-state.mjs";
+import {
+  SUMMARY_MARKER,
+  WEIGHTS,
+  findSummary,
+  writeReviewedHead,
+  escapeReviewText,
+} from "./review-state.mjs";
 
 // What Claude Code's Read returns when it's given no limit.
 const READ_LINES = 2000;
@@ -31,15 +37,15 @@ const READ_LINES = 2000;
  */
 export function listReads(messages) {
   const blocks = messages.flatMap((message) => message?.message?.content ?? []);
-  const failed = new Set(
+  const returned = new Set(
     blocks
-      .filter((block) => block?.type === "tool_result" && block.is_error)
+      .filter((block) => block?.type === "tool_result" && !block.is_error)
       .map((block) => block.tool_use_id),
   );
   /** @type {Map<string, [number, number][]>} */
   const reads = new Map();
   for (const block of blocks) {
-    if (block?.type !== "tool_use" || block.name !== "Read" || failed.has(block.id)) continue;
+    if (block?.type !== "tool_use" || block.name !== "Read" || !returned.has(block.id)) continue;
     const { file_path: path, offset = 1, limit = READ_LINES } = block.input ?? {};
     if (typeof path !== "string") continue;
     const first = Math.max(1, Number(offset));
@@ -166,7 +172,12 @@ export function recordFindTry(folder, area, env) {
   const recordPath = join(folder, nameFindRecord(area));
   const record = existsSync(recordPath) ? readJson(recordPath) : { area, tries: [] };
   record.tries.push({
-    reads: [...listReads(readExecution(env.EXECUTION_FILE ?? "")).entries()],
+    reads: [...listReads(readExecution(env.EXECUTION_FILE ?? "")).entries()].map(
+      ([path, ranges]) => {
+        const part = env.REVIEW_DATA ? relative(env.REVIEW_DATA, path) : null;
+        return [part !== null && !part.startsWith("..") ? resolve(folder, part) : path, ranges];
+      },
+    ),
     answer: readAnswer(env.STRUCTURED_OUTPUT, "candidates"),
   });
   record.unread = findUnreadParts(
@@ -400,24 +411,28 @@ const describeNothingDue = (plan, sha) =>
  * read ended on has no summary of its own, so that read's stands.
  * @param {object} review
  * @param {string} review.sha the pull request's head
+ * @param {string} [review.base] the immutable base of a trusted review
  * @param {Plan} review.plan
  * @param {Map<string, any>} review.records the reviewers', the check across areas', and the
  *   posting step's records
  */
-export function judgeReview({ sha, plan, records }) {
+export function judgeReview({ sha, base, plan, records }) {
   if (plan.stage === "reviewed") return { isComplete: true, body: null };
   const judged = plan.areas.length ? judgeAreas(plan.areas, records) : null;
   const isComplete = !judged || (!judged.unreadFiles.length && !judged.missing.length);
   const reviewedHead = isComplete ? sha : plan.since;
   const lines = [
     SUMMARY_MARKER,
-    ...(reviewedHead ? [writeReviewedHead(reviewedHead)] : []),
+    writeReviewedHead(reviewedHead, base),
     ...(judged ? describeReview(judged, { plan, sha }) : [describeNothingDue(plan, sha), ""]),
     ...(plan.unread.length
       ? ["Left unread, as nothing to review:", ...plan.unread.map(listUnread)]
       : []),
   ];
-  return { isComplete, body: lines.join("\n").trimEnd() };
+  return {
+    isComplete,
+    body: [...lines.slice(0, 2), ...lines.slice(2).map(escapeReviewText)].join("\n").trimEnd(),
+  };
 }
 
 /**
@@ -461,6 +476,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     const earlier = findSummary(await readAllPages(callGitHub, `/issues/${env.PR}/comments`));
     const { isComplete, body } = judgeReview({
       sha: env.SHA ?? "",
+      base: env.REVIEW_BASE,
       plan: readPlan(folder),
       records: readRecords(folder),
     });

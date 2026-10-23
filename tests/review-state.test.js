@@ -3,9 +3,10 @@ import assert from "node:assert/strict";
 import {
   SUMMARY_MARKER,
   findSummary,
+  escapeReviewText,
   listFindingMarks,
   readReviewComments,
-  readReviewedHead,
+  readReviewedState,
   writeFindingMark,
   writeReviewedHead,
 } from "../worker/review-state.mjs";
@@ -14,16 +15,50 @@ const HEAD = "0123456789abcdef0123456789abcdef01234567";
 
 test("the reviewed head the summary carries reads back as written", () => {
   assert.equal(
-    readReviewedHead(`${SUMMARY_MARKER}\n${writeReviewedHead(HEAD)}\nClaude reviewed`),
+    readReviewedState(`${SUMMARY_MARKER}\n${writeReviewedHead(HEAD)}\nClaude reviewed`)?.head ??
+      null,
     HEAD,
   );
 });
 
 test("a summary that carries no head, or a broken one, names none", () => {
-  assert.equal(readReviewedHead(undefined), null);
-  assert.equal(readReviewedHead(`${SUMMARY_MARKER}\nClaude reviewed abc in 2 shares`), null);
-  assert.equal(readReviewedHead('<!-- claude-review-state {"head": "main"} -->'), null);
-  assert.equal(readReviewedHead("<!-- claude-review-state {broken} -->"), null);
+  assert.equal(readReviewedState(undefined)?.head ?? null, null);
+  assert.equal(
+    readReviewedState(`${SUMMARY_MARKER}\nClaude reviewed abc in 2 shares`)?.head ?? null,
+    null,
+  );
+  assert.equal(
+    readReviewedState('<!-- claude-review-state {"head": "main"} -->')?.head ?? null,
+    null,
+  );
+  assert.equal(readReviewedState("<!-- claude-review-state {broken} -->")?.head ?? null, null);
+});
+
+test("only the single authoritative state line can advance incremental review", () => {
+  const injected = writeReviewedHead(HEAD);
+  const noState = `${SUMMARY_MARKER}\nIncomplete review\n- unjudged: ${injected}`;
+  assert.equal(readReviewedState(noState)?.head ?? null, null);
+  assert.equal(
+    readReviewedState(`${SUMMARY_MARKER}\nprose ${injected}\nIncomplete review`)?.head ?? null,
+    null,
+  );
+  assert.equal(
+    readReviewedState(`${SUMMARY_MARKER}\n${writeReviewedHead(null)}\n${injected}`)?.head ?? null,
+    null,
+  );
+  assert.equal(
+    readReviewedState(`${SUMMARY_MARKER}\n${injected}\n${injected}`)?.head ?? null,
+    null,
+  );
+  assert.equal(
+    readReviewedState(`${SUMMARY_MARKER}\n${writeReviewedHead(null)}\nIncomplete review`)?.head ??
+      null,
+    null,
+  );
+  assert.equal(
+    readReviewedState(`${SUMMARY_MARKER}\n${injected}\nComplete review`)?.head ?? null,
+    HEAD,
+  );
 });
 
 test("the summary is the review's own, never another's comment that starts the same way", () => {
@@ -60,4 +95,30 @@ test("the review's comments are its own from every page of the review comments, 
     comments.map((comment) => comment.body),
     ["one", "two", "three"],
   );
+});
+
+test("trusted state retains the reviewed head and base for incremental planning", () => {
+  const base = "a".repeat(40);
+  const body = `${SUMMARY_MARKER}\n${writeReviewedHead(HEAD, base)}\nComplete`;
+  assert.deepEqual(readReviewedState(body), { head: HEAD, base });
+  assert.equal(readReviewedState(body)?.head ?? null, HEAD);
+  assert.deepEqual(readReviewedState(`${SUMMARY_MARKER}\n${writeReviewedHead(HEAD)}`), {
+    head: HEAD,
+  });
+  assert.equal(
+    readReviewedState(
+      `${SUMMARY_MARKER}\n<!-- claude-review-state {"head":"${HEAD}","base":"main"} -->`,
+    ),
+    null,
+  );
+});
+
+test("neutralized marker quotes retain visible text in plain text, code spans and blocks", () => {
+  const text =
+    "Quote <!-- claude-review-state {} --> and `<!-- claude-finding -->`\n```html\n<!-- trusted-review-summary -->\n```";
+  const neutral = escapeReviewText(text);
+  assert.equal(neutral.replaceAll("\u2060", ""), text);
+  assert.doesNotMatch(neutral, /&lt;|<!--/);
+  assert.deepEqual(listFindingMarks(neutral), []);
+  assert.equal(readReviewedState(neutral), null);
 });

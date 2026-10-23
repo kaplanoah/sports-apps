@@ -124,7 +124,7 @@ When a step says to go back to an earlier step, continue in order from there.
    If that brought in anything new, go back to step 2.
    Then commit, push, and open a draft PR into `main`, or a stacked draft PR into the branch it builds on.
    If the PR is already open, the push updates it.
-   Mark it ready for review once step 2 passes and you've read its whole diff against `main`, which is when CI reviews it.
+   Mark it ready for review once step 2 passes and you've read its whole diff against `main`, which is when Trusted review reviews it.
    If `git diff --text --no-textconv --no-ext-diff --no-renames origin/main | node worker/red-change.mjs` says the change is red, ship it by the `ship` skill's steps for one.
 4. Check whether the PR has merge conflicts with its base branch.
    GitHub runs no CI on a PR with conflicts, so waiting on one would never end.
@@ -137,10 +137,10 @@ When a step says to go back to an earlier step, continue in order from there.
 6. If a CI job failed, read its log and reproduce the failure locally.
    Fix it and go back to step 2.
    If you can't reproduce or fix it, tell the user which job failed, what its log says, what you tried, and what you recommend.
-7. CI's review reads the PR by the root's `REVIEW.md` as `main` has it.
+7. Trusted review reads the PR by the root's `REVIEW.md` as `main` has it.
    After the first review, it reads only what changed since the last full read in files the PR still changes.
-   Answer its findings as the `steward` skill says, and read a failed `review` job as the `ship` skill says.
-   Add the `review` label to the PR, which asks CI to review it again, only when the `steward` skill says to.
+   Answer its findings as the `steward` skill says, and read a failed Trusted review `review` or CI `review-join` job as the `ship` skill says.
+   Add the `review` label to the PR, which asks Trusted review to review it again, only when the `steward` skill says to.
    A push alone starts no review, and `check` fails on a ready PR until a review passes on the code that merges, the PR merged into `main`.
    `main` merges a PR only once every thread on it is resolved.
 8. Squash-merge the PR once all of these are true:
