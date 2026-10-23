@@ -1,7 +1,7 @@
 // Decides which apps' browser tests a change needs. A file the browser tests can't reach needs
 // none: the docs, the root's .claude/ settings, hooks, rules, and skills, the other workflows,
 // the files that only configure the checks, and the tooling and Node tests that no browser
-// spec, helper, or the Playwright config imports. A file in an
+// spec, helper, or the Playwright config imports. Browser setup files run every app's tests. A file in an
 // app's own folder needs that app's, if it has any. Anything else needs every app's, a service's
 // folder too, since every app binds every service, and a new kind of file runs them all until
 // it's known.
@@ -57,17 +57,20 @@ export function listReachedFiles(entries, readText) {
   return reached;
 }
 
+// Changes to how browsers install or run need the tests to show setup still works.
+export const BROWSER_SETUP_FILES = new Set([CI_WORKFLOW, "worker/install-browsers.mjs"]);
+
 /**
  * @param {string} path
  * @param {Set<string>} reached
  */
 const isUntested = (path, reached) =>
-  isDocument(path) ||
-  isSessionPath(path) ||
-  CONFIG_ONLY_FILES.has(path) ||
-  // CI's own workflow runs the browser tests, so a change to it runs them to show they still do.
-  (path !== CI_WORKFLOW && UNTESTED_FOLDERS.some((folder) => folder.test(path))) ||
-  (IMPORTED_ONLY.some((pattern) => pattern.test(path)) && !reached.has(path));
+  !BROWSER_SETUP_FILES.has(path) &&
+  (isDocument(path) ||
+    isSessionPath(path) ||
+    CONFIG_ONLY_FILES.has(path) ||
+    UNTESTED_FOLDERS.some((folder) => folder.test(path)) ||
+    (IMPORTED_ONLY.some((pattern) => pattern.test(path)) && !reached.has(path)));
 
 /** @param {string} path */
 const readAppFolder = (path) => path.match(/^apps\/([^/]+)\//)?.[1] ?? null;

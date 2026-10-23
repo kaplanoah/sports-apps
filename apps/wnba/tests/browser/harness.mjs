@@ -275,7 +275,7 @@ async function prepareUpdatesBox(page, updatesBox) {
  * A past season's record is built from the afternoon's by its change in `pastSeasons`, by year.
  * The store keeps the afternoon's list of the season's games, its playoffs', or every game of the
  * season, regular season and all, for `isWholeSeason`.
- * @param {{ league?: Parameters<typeof listLeagueAnswers>[0], isLeagueDownForPage?: boolean, updatesBox?: UpdatesBoxStart, isShowingWelcome?: boolean, pastSeasons?: Record<number, (season: any) => any>, isWholeSeason?: boolean }} [options]
+ * @param {{ league?: Parameters<typeof listLeagueAnswers>[0], isLeagueDownForPage?: boolean, updatesBox?: UpdatesBoxStart, isShowingWelcome?: boolean, pastSeasons?: Record<number, (season: any) => any>, isWholeSeason?: boolean, path?: string }} [options]
  */
 export async function openApp(
   page,
@@ -284,6 +284,7 @@ export async function openApp(
     isLeagueDownForPage = false,
     updatesBox = "dismissed",
     isShowingWelcome = false,
+    path = "/",
     pastSeasons = {},
     isWholeSeason = false,
   } = {},
@@ -328,7 +329,7 @@ export async function openApp(
   await page.route(matchPath("/player"), (route) =>
     answerFromWorker(route, (url) => players.servePlayer(url, readDoc)),
   );
-  await loadPageAt(page, NOW, { isShowingWelcome });
+  await loadPageAt(page, NOW, { isShowingWelcome, path });
 
   return {
     countOpenSockets: () => openSockets.length,

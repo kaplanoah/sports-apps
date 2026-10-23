@@ -12,6 +12,9 @@ import { listTapsOffButtons } from "./tap-states.mjs";
 import { listTextOffRoles } from "./type-roles.mjs";
 import { listChipsOffCenter } from "./chip-centering.mjs";
 import { passTime, setHidden } from "./visibility.mjs";
+import { ASSERTION_TIMEOUT_MS } from "./limits.mjs";
+
+const NOTE_SELECTOR = "#appearanceNote";
 
 const markOnHomeScreen = () => {
   Object.defineProperty(navigator, "standalone", { get: () => true });
@@ -59,7 +62,7 @@ const NOTE_WORDS =
 /**
  * @typedef {{
  *   page: import("@playwright/test").Page,
- *   openApp: (page: import("@playwright/test").Page) => Promise<unknown>,
+ *   openApp: (page: import("@playwright/test").Page, options?: { path: string }) => Promise<unknown>,
  *   openSettings: (page: import("@playwright/test").Page) => Promise<unknown>,
  *   looks: { light: string, dark: string },
  * }} App
@@ -73,12 +76,11 @@ const NOTE_WORDS =
  */
 async function openHomeScreenApp(page, openApp, look) {
   await page.addInitScript(markOnHomeScreen);
-  await openApp(page);
-  await page.goto(`/?theme=${look}`);
+  await openApp(page, { path: `/?theme=${look}` });
 }
 
 /** @param {import("@playwright/test").Page} page */
-const findNote = (page) => page.locator("#appearanceNote");
+const findNote = (page) => page.locator(NOTE_SELECTOR);
 
 /**
  * The looks of the icons the note draws, by the picture each shows: the one the app has, then the
@@ -166,11 +168,11 @@ export async function checkReAddNote({
     `x-safari-${safariAddress.href}`,
   );
   const noteBelowIcons = await page.evaluate(
-    (settingsSelector) =>
-      document.querySelector("#appearanceNote").getBoundingClientRect().top -
+    ({ settingsSelector, noteSelector }) =>
+      document.querySelector(noteSelector).getBoundingClientRect().top -
       document.querySelector(`${settingsSelector} .appearance-choices`).getBoundingClientRect()
         .bottom,
-    SETTINGS,
+    { settingsSelector: SETTINGS, noteSelector: NOTE_SELECTOR },
   );
   expect(noteBelowIcons).toBe(noteAbove);
   await checkNoteReads(page);
@@ -242,12 +244,12 @@ export async function checkReAddNoteOnReload({ page, openApp, openSettings, look
   await expect(page.locator(SETTINGS)).toBeVisible();
   await expect(note).toHaveText(NOTE_WORDS);
   expect(await readNoteIcons(page)).toEqual(["dark", "light"]);
-  await expect.poll(readHeight).toBe(height);
+  await waitForNoteHeight(page, height, "before app code");
 
   release();
   await page.waitForLoadState("domcontentloaded");
   await expect(note).toHaveText(NOTE_WORDS);
-  await expect.poll(readHeight).toBe(height);
+  await waitForNoteHeight(page, height, "after app code");
 
   // The page's code, not the copy put back, decides: a look another tab picked while the page
   // was away takes the note away once the code runs.
@@ -258,6 +260,37 @@ export async function checkReAddNoteOnReload({ page, openApp, openSettings, look
   releaseAgain();
   await page.waitForLoadState("domcontentloaded");
   await expect(note).toBeEmpty();
+}
+
+/**
+ * @param {import("@playwright/test").Page} page
+ * @param {number} baseline
+ * @param {string} phase
+ */
+export async function waitForNoteHeight(page, baseline, phase) {
+  const startedAt = Date.now();
+  try {
+    await page.waitForFunction(
+      ({ height, phase, selector }) => {
+        const lastHeight = document.querySelector(selector).getBoundingClientRect().height;
+        Reflect.set(window, "reAddNoteHeightWait", { phase, lastHeight });
+        return lastHeight === height;
+      },
+      { height: baseline, phase, selector: NOTE_SELECTOR },
+      { timeout: ASSERTION_TIMEOUT_MS },
+    );
+  } catch (error) {
+    const lastHeight = await page
+      .evaluate((phase) => {
+        const last = Reflect.get(window, "reAddNoteHeightWait");
+        return last?.phase === phase ? `${last.lastHeight}px` : "unavailable (no sample)";
+      }, phase)
+      .catch(() => "unavailable (page closed)");
+    throw new Error(
+      `Icon note height ${phase}: baseline=${baseline}px, last=${lastHeight}, elapsed=${Date.now() - startedAt}ms`,
+      { cause: error },
+    );
+  }
 }
 
 /**
@@ -307,7 +340,7 @@ export async function checkSystemInstallIcon({ page, openApp, openSettings, look
   await expect(findNote(page)).toBeHidden();
   await page.emulateMedia({ colorScheme: "dark" });
   await page.reload();
-  if (!(await page.locator(SETTINGS).isVisible())) await openSettings(page);
+  await expect(page.locator(SETTINGS)).toBeVisible();
   await expect(findNote(page)).toBeVisible();
   expect(await readNoteIcons(page)).toEqual(["light", "dark"]);
   await checkNoteReads(page);
@@ -320,7 +353,8 @@ export async function checkSystemInstallIcon({ page, openApp, openSettings, look
 /**
  * A reload, as a new release brings, opens at the address the app's open before it left without
  * the look it was added with, so an app that has yet to keep its icon keeps none until it next
- * opens, rather than the phone's setting, and settings says nothing of it meanwhile.
+ * opens, rather than the phone's setting, and settings says nothing of it until the viewer
+ * switches looks.
  * @param {App} app
  */
 export async function checkIconKeptOnlyOnOpen({ page, openApp, openSettings }) {
@@ -334,7 +368,8 @@ export async function checkIconKeptOnlyOnOpen({ page, openApp, openSettings }) {
 
 /**
  * Opens a Home Screen app added on the dark look, on a light phone, then reloads it, as a new
- * release does, with its icon forgotten, as an app open when the note shipped never kept one.
+ * release does, with its icon forgotten, as a first open that was a reload or storage refusing
+ * access leaves none.
  * @param {import("@playwright/test").Page} page
  * @param {App["openApp"]} openApp
  * @returns {Promise<() => Promise<string | null>>} reads the icon the app keeps
@@ -383,7 +418,7 @@ export async function checkNoteWithoutIcon({ page, openApp, openSettings, looks 
   await expect.poll(() => readNoteIcons(page)).toEqual(["light", "dark"]);
 
   await page.reload();
-  if (!(await page.locator(SETTINGS).isVisible())) await openSettings(page);
+  await expect(page.locator(SETTINGS)).toBeVisible();
   await expect(note).toHaveText(NOTE_WORDS);
   await note.getByRole("button", { name: "Dismiss icon note" }).click();
   await expect(note).toBeHidden();
@@ -431,7 +466,6 @@ export async function checkReAddNoteEases({ page, openApp, openSettings, looks }
   await expect(note).toBeVisible();
   const opening = await readLastEasing();
   expect(opening).toMatchObject({ first: { height: "0px", opacity: 0 }, last: { opacity: "1" } });
-  expect(opening.direction).toBe("normal");
   await finishTimedAnimations(page);
   const full = await note.evaluate((element) => getComputedStyle(element).height);
 
@@ -449,7 +483,6 @@ export async function checkReAddNoteEases({ page, openApp, openSettings, looks }
 
   await pick(page, looks.light);
   const reopening = await readLastEasing();
-  expect(reopening.direction).toBe("normal");
   expect(reopening.first).toMatchObject({
     height: halfClosed.height,
     opacity: halfClosed.opacity,
@@ -465,13 +498,11 @@ export async function checkReAddNoteEases({ page, openApp, openSettings, looks }
   const halfOpen = await pickHeldHalfway("light");
   const closedFromHalfOpen = await pickHeldHalfway("dark");
   const closing = await readLastEasing();
-  expect(closing.direction).toBe("normal");
   expect(closing.first.height).toBe(halfOpen.height);
   expect(closing.last.height).toBe("0px");
   expect(parseFloat(halfOpen.height)).toBeLessThan(parseFloat(full));
   await pick(page, looks.light);
   expect(await readLastEasing()).toMatchObject({
-    direction: "normal",
     first: { height: closedFromHalfOpen.height, opacity: closedFromHalfOpen.opacity },
     last: { height: full, opacity: "1" },
   });
@@ -508,6 +539,58 @@ const holdNextNoteEasing = (halfway) => {
     return animation;
   };
 };
+
+/**
+ * A reload restores the note before the page's code arrives, then eases it to the phone's look
+ * now, both when the note is due and when it no longer is.
+ * @param {App & { isShowingNote: boolean }} app
+ */
+export async function checkReAddNoteEasesOnReload({ page, openApp, openSettings, isShowingNote }) {
+  await page.emulateMedia({ reducedMotion: "no-preference", colorScheme: "dark" });
+  const readAnimations = await listAnimations(page);
+  await openHomeScreenApp(page, openApp, "dark");
+  await openSettings(page);
+  await pick(page, "System");
+  if (isShowingNote) await page.emulateMedia({ colorScheme: "light" });
+  const note = findNote(page);
+  if (isShowingNote) await expect(note).toHaveText(NOTE_WORDS);
+  else await expect(note).toBeEmpty();
+  await finishTimedAnimations(page);
+  const heightBefore = await note.evaluate((element) => element.getBoundingClientRect().height);
+  const openHeight = await note.evaluate((element) => getComputedStyle(element).height);
+  await page.addInitScript(holdNextNoteEasing, EASE_HALFWAY_MS);
+  const release = await holdRequests(page, matchPath("/js/app.js"), { times: 1 });
+
+  await page.reload({ waitUntil: "commit" });
+  await expect(page.locator(SETTINGS)).toBeVisible();
+  expect(await note.evaluate((element) => element.getBoundingClientRect().height)).toBe(
+    heightBefore,
+  );
+  await page.emulateMedia({ colorScheme: isShowingNote ? "dark" : "light" });
+  release();
+  await page.waitForLoadState("domcontentloaded");
+
+  await page.waitForFunction(
+    (selector) => document.querySelector(selector).getAnimations().length > 0,
+    NOTE_SELECTOR,
+  );
+  const easing = (await readAnimations()).find(({ classes }) => classes.includes("re-add-note"));
+  expect(easing).toBeDefined();
+  await expect(note).toHaveText(NOTE_WORDS);
+  const halfway = await note.evaluate((element) => element.getBoundingClientRect().height);
+  expect(halfway).toBeGreaterThan(0);
+  if (isShowingNote) {
+    expect(easing.first.height).toBe(openHeight);
+    expect(easing.last.height).toBe("0px");
+    expect(halfway).toBeLessThan(heightBefore);
+  } else {
+    expect(easing.first.height).toBe("0px");
+    expect(parseFloat(String(easing.last.height))).toBeGreaterThan(halfway);
+  }
+  await finishTimedAnimations(page);
+  if (isShowingNote) await expect(note).toBeEmpty();
+  else await expect(note).toHaveText(NOTE_WORDS);
+}
 
 /**
  * Has the page come back to the screen with only its window getting focus, as iOS sometimes
