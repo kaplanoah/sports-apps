@@ -1,11 +1,12 @@
-// What CI's review keeps on a pull request: one summary comment, which carries the last head the
-// review read in full so the next review reads only what changed since, and the findings it
-// posts, each by its weight and marked with what it says and the head it was posted on, so no try
-// posts one twice and the review can tell a finding an earlier head's review posted from a new
-// one.
+// Keeps one summary per legacy or trusted review mode. Its authoritative state carries the last
+// completed head and, for trusted review, its base. Finding marks identify what each review
+// posted so retries do not duplicate it.
+import { isReviewRevision } from "./review-repository.mjs";
 import { readAllPages } from "./github-api.mjs";
 
-export const SUMMARY_MARKER = "<!-- claude-review-summary -->";
+export const SUMMARY_MARKER = process.env.REVIEW_TRUSTED
+  ? "<!-- trusted-review-summary -->"
+  : "<!-- claude-review-summary -->";
 // The posting and summary steps post with the run's own token.
 export const REVIEWER = "github-actions[bot]";
 // What a finding the check across areas couldn't settle is posted as, in place of its weight.
@@ -16,7 +17,8 @@ export const WEIGHTS = ["Important", UNSURE, "Nit", "Pre-existing"];
 // The comment that holds the findings on files a pull request doesn't change, which GitHub takes
 // on no line.
 export const OFF_DIFF_HEADING = "Findings on files this pull request doesn't change:";
-const STATE = /<!-- claude-review-state (\{.*?\}) -->/;
+const STATE_PREFIX = "<!-- claude-review-state ";
+const STATE = /^<!-- claude-review-state (\{.*?\}) -->$/;
 const FINDING_MARK = /<!-- claude-finding ([0-9a-f]{16}) ([0-9a-f]{40}) -->/g;
 
 /**
@@ -30,23 +32,32 @@ export const findSummary = (comments) =>
   ) ?? null;
 
 /**
- * The head the summary says was last reviewed in full, or null when it names none, as a summary
- * from before the review kept one doesn't.
+ * The summary's single authoritative state, or null for old, malformed or duplicate state.
  * @param {string | undefined} body
- * @returns {string | null}
+ * @returns {{ head: string | null, base?: string } | null}
  */
-export function readReviewedHead(body) {
+export function readReviewedState(body) {
   try {
-    const head = JSON.parse(body?.match(STATE)?.[1] ?? "{}").head;
-    return typeof head === "string" && /^[0-9a-f]{40}$/.test(head) ? head : null;
+    const lines = body?.split("\n") ?? [];
+    if (lines[0] !== SUMMARY_MARKER || body.split(STATE_PREFIX).length !== 2) return null;
+    const state = JSON.parse(lines[1]?.match(STATE)?.[1] ?? "{}");
+    const keys = Object.keys(state).join(",");
+    if (keys !== "head" && keys !== "head,base") return null;
+    if (state.head !== null && !isReviewRevision(state.head)) return null;
+    if (keys === "head,base" && !isReviewRevision(state.base)) return null;
+    return state;
   } catch {
     return null;
   }
 }
 
-/** @param {string} head */
-export const writeReviewedHead = (head) =>
-  `<!-- claude-review-state ${JSON.stringify({ head })} -->`;
+// Model quotes remain readable without becoming authoritative review control marks.
+/** @param {string} text */
+export const escapeReviewText = (text) => text.replaceAll("<!--", "<\u2060!--");
+
+/** @param {string | null} head @param {string} [base] */
+export const writeReviewedHead = (head, base) =>
+  `<!-- claude-review-state ${JSON.stringify({ head, ...(base ? { base } : {}) })} -->`;
 
 /**
  * The mark a finding's comment carries, the same in every form it's posted in.

@@ -36,6 +36,14 @@ function readPhoneLook() {
 }
 
 /**
+ * @param {string} choice
+ * @returns {"light" | "dark"}
+ */
+function resolveTheme(choice) {
+  return isLook(choice) ? choice : readPhoneLook();
+}
+
+/**
  * Checks the Appearance choice that names the look picked, among settings' or the welcome's.
  * @param {Iterable<HTMLInputElement>} choices
  * @param {string} picked
@@ -89,11 +97,11 @@ function nameThemeInAddress(choice) {
 
 // Safari takes the Home Screen app's address, and the color of its own bars, from the page as it
 // loaded, so a pick it keeps loads the page again at the address that names it.
-/** @param {string} choice */
-function openThemeAddress(choice) {
+/** @param {string} choice @param {boolean} [reload] */
+function openThemeAddress(choice, reload = false) {
   const address = buildThemeAddress(choice);
   const isKept = readPickedAppearance() === choice;
-  if (isOnHomeScreen() || address.href === location.href) return;
+  if (isOnHomeScreen() || (address.href === location.href && !reload)) return;
   if (isAppleBrowser() && isKept) location.replace(address);
   else nameThemeInAddress(choice);
 }
@@ -163,7 +171,8 @@ function keepHomeScreenIcon(carriedIcon) {
     else if (!isReload() && localStorage.getItem(HOME_SCREEN_ICON_KEY) === null)
       localStorage.setItem(HOME_SCREEN_ICON_KEY, readPhoneLook());
   } catch {
-    /* without storage, settings can't tell the icon, and says nothing of it */
+    /* Without storage, settings can't tell the icon, and shows the note only once the viewer
+       switches looks. */
   }
 }
 
@@ -194,18 +203,18 @@ function keepThemeFromAddress() {
 
 /** @param {string} choice */
 function showTheme(choice) {
-  document.documentElement.dataset.theme = isLook(choice) ? choice : readPhoneLook();
+  document.documentElement.dataset.theme = resolveTheme(choice);
 }
 
-/** @param {string} choice */
-function keepPickedAppearance(choice) {
+/** @param {string} choice @param {boolean} [reload] */
+function keepPickedAppearance(choice, reload = false) {
   try {
     localStorage.setItem("appearance", JSON.stringify(choice));
   } catch {
     /* appearance.js keeps it for as long as the page is open */
   }
   showTheme(choice);
-  openThemeAddress(choice);
+  openThemeAddress(choice, reload);
 }
 
 if (!isOnHomeScreen()) takeThemeFromApp();

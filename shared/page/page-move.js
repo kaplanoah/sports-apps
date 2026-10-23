@@ -3,15 +3,17 @@
 // address leaves for the new one at once, and a Home Screen app there offers the move in its
 // Updates box (move-cards.js). Either carries the viewer's choices in the new address, packed in
 // one value, since a Home Screen app keeps its storage apart from the browser's and opens at the
-// address it was added from. The browser keeps them only where it has none of its own, and only
-// soon after they were packed, so a copied link carries nobody's choices into another browser. A
+// address it was added from. Soon after they were packed, the browser keeps them where it has none
+// of its own; a Home Screen move also replaces its appearance to match the source app. A
 // move from the Home Screen app opens the welcome's steps for finishing it, whose pick of the icon
-// rides in the address too. The new app's first open keeps the choices into its empty storage,
-// with the icon and whether to ask about notifications. This plain script loads in the head before
-// pick-theme.js, which takes the choices first, before it keeps a theme the address names.
+// and its matching theme ride in the address too. The new app's first open keeps the choices into
+// its empty storage, with the icon and whether to ask about notifications. This plain script loads
+// in the head before pick-theme.js, which takes the choices first, before it keeps a theme the
+// address names.
 
-/* global isAppleBrowser, isLook, isOnHomeScreen, readPhoneLook -- from pick-theme.js */
+/* global isLook, isOnHomeScreen, resolveTheme -- from pick-theme.js */
 /* global readAppearanceChoice -- from pick-theme.js */
+/* global keepPickedAppearance -- from pick-theme.js */
 
 const CARRIED_PARAMETER = "carried";
 
@@ -152,6 +154,18 @@ function readCarriedChoices() {
 
 const hasOwnChoices = () => Object.keys(readCarriedChoices()).length > 0;
 
+/** @param {Carried} carried */
+function resolveCarriedAppearance(carried) {
+  if (!carried.fromApp) return carried;
+  const choice = readAppearanceChoice(carried.choices.appearance ?? "");
+  const icon = carried.icon ?? resolveTheme(choice);
+  return {
+    ...carried,
+    icon,
+    choices: { ...carried.choices, appearance: JSON.stringify(icon) },
+  };
+}
+
 /** @param {Record<string, string>} choices */
 function keepCarriedChoices(choices) {
   try {
@@ -167,7 +181,7 @@ function keepCarriedChoices(choices) {
  */
 function buildCarriedAddress(address, carried) {
   const url = new URL(address);
-  url.searchParams.set(CARRIED_PARAMETER, packCarried(carried));
+  url.searchParams.set(CARRIED_PARAMETER, packCarried(resolveCarriedAppearance(carried)));
   return url;
 }
 
@@ -222,16 +236,23 @@ function forgetPageMove() {
 function keepPageMoveIcon(icon) {
   const move = readPageMove();
   if (!move) return;
-  keepPageMove({ ...move, icon });
-  const address = buildCarriedAddress(location.href, { ...move, icon });
-  if (isAppleBrowser()) location.replace(address);
-  else replaceAddress(address);
+  keepPageMove(resolveCarriedAppearance({ ...move, icon }));
+  nameMoveInAddress();
+  keepPickedAppearance(icon, true);
+}
+
+function hasTakenCarriedChoices() {
+  try {
+    return localStorage.getItem(CARRIED_TAKEN_KEY) !== null;
+  } catch {
+    return false;
+  }
 }
 
 /** @param {Carried} carried */
 function takeIntoHomeScreen(carried) {
   try {
-    if (localStorage.getItem(CARRIED_TAKEN_KEY) !== null) return;
+    if (hasTakenCarriedChoices()) return;
     localStorage.setItem(CARRIED_TAKEN_KEY, String(carried.at));
     if (!hasOwnChoices()) keepCarriedChoices(carried.choices);
     if (carried.notifications) sessionStorage.setItem(NOTIFICATIONS_ASK_KEY, "ask");
@@ -240,11 +261,8 @@ function takeIntoHomeScreen(carried) {
   }
 }
 
-/** @param {string} choice */
-const showLookOf = (choice) => (isLook(choice) ? choice : readPhoneLook());
-
-// The welcome starts on the icon of the theme the app showed as the fan moved, the look they picked
-// most recently, even where the browser kept a theme of its own.
+// A Home Screen move replaces the browser's appearance with the source app's look, so the
+// welcome's theme and selected icon match even where the browser kept another theme.
 /**
  * @param {Carried} carried
  * @param {number} now
@@ -252,11 +270,10 @@ const showLookOf = (choice) => (isLook(choice) ? choice : readPhoneLook());
 function takeIntoBrowser(carried, now) {
   if (Math.abs(now - carried.at) < CARRIED_FRESH_MS) {
     if (!hasOwnChoices()) keepCarriedChoices(carried.choices);
-    if (carried.fromApp)
-      keepPageMove({
-        ...carried,
-        icon: carried.icon ?? showLookOf(readAppearanceChoice(carried.choices.appearance ?? "")),
-      });
+    if (carried.fromApp) {
+      keepCarriedChoices({ appearance: carried.choices.appearance });
+      keepPageMove(carried);
+    }
   }
   nameMoveInAddress();
 }
@@ -269,7 +286,15 @@ function takeIntoBrowser(carried, now) {
 function takeCarriedChoices(now = Date.now()) {
   const address = new URL(location.href);
   if (!address.searchParams.has(CARRIED_PARAMETER)) return null;
-  const carried = unpackCarried(address.searchParams.get(CARRIED_PARAMETER));
+  const unpacked = unpackCarried(address.searchParams.get(CARRIED_PARAMETER));
+  // Older System links cannot tell us the installed icon after the phone changes its look.
+  const keepInstalledIcon =
+    isOnHomeScreen() &&
+    unpacked &&
+    !unpacked.icon &&
+    !isLook(readAppearanceChoice(unpacked.choices.appearance ?? "")) &&
+    hasTakenCarriedChoices();
+  const carried = unpacked && !keepInstalledIcon ? resolveCarriedAppearance(unpacked) : unpacked;
   if (isOnHomeScreen()) {
     address.searchParams.delete(CARRIED_PARAMETER);
     replaceAddress(address);
