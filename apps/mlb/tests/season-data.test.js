@@ -8,12 +8,10 @@ import {
   startSeasonData,
 } from "../page/js/season-data.js";
 import { session } from "../page/js/session.js";
-import { createFakeStore } from "../../../tests/fake-store.js";
+import { createFakeStore, settle } from "../../../tests/fake-store.js";
 import { checkSeasonFailureReports } from "../../../tests/season-failure-check.js";
 
 const STARTING_YEARS = { activeYear: session.activeYear, currentSeason: session.currentSeason };
-
-const settle = () => new Promise((resolve) => setImmediate(resolve));
 
 const RECORD_2026 = {
   year: 2026,
@@ -123,6 +121,33 @@ test("a reload during a pending past pick restores the season actually shown", a
   await Promise.all([picked, reloaded]);
   assert.deepEqual([session.activeYear, session.season], [2026, RECORD_2026]);
 });
+
+for (const firstFailure of [null, "live/current", "seasons/2026"]) {
+  test(`before any record loads, a pending pick cannot choose a reload after ${firstFailure ?? "no initial load"}`, async () => {
+    const unreadable = firstFailure ? [firstFailure] : [];
+    const { holdReads } = startReading(
+      {
+        "live/current": { season: 2026 },
+        "seasons/2026": RECORD_2026,
+        "seasons/2024": { ...RECORD_2026, year: 2024 },
+      },
+      { unreadable },
+    );
+    if (firstFailure) {
+      await loadSeason();
+      assert.notEqual(session.problem, "");
+      unreadable.length = 0;
+    }
+    const release = holdReads("seasons/2024");
+    const picked = showYear(2024);
+    const reloaded = loadSeason();
+    await settle();
+    release();
+    await Promise.all([picked, reloaded]);
+    assert.deepEqual([session.activeYear, session.season], [2026, RECORD_2026]);
+    assert.equal(session.problem, "");
+  });
+}
 
 test("each failed load, pick or current-season advance reports its problem and stamp once", async () => {
   const unreadable = [];

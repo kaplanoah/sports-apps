@@ -2,7 +2,7 @@ import test, { beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { loadSeason, showYear, startSeasonData } from "../page/js/season-data.js";
 import { session } from "../page/js/session.js";
-import { createFakeStore } from "../../../tests/fake-store.js";
+import { createFakeStore, settle } from "../../../tests/fake-store.js";
 import { checkSeasonFailureReports } from "../../../tests/season-failure-check.js";
 
 const STARTING_YEARS = {
@@ -12,7 +12,6 @@ const STARTING_YEARS = {
 };
 
 const SEASON_2026 = { season: 2026, games: [], series: [], standings: [] };
-const settle = () => new Promise((resolve) => setImmediate(resolve));
 
 /**
  * @param {{ unreadable?: string[] }} [options]
@@ -89,6 +88,30 @@ test("a reload during a pending past pick restores the season actually shown", a
   await Promise.all([picked, reloaded]);
   assert.deepEqual([session.year, session.pickedYear, session.season], [2026, 2026, SEASON_2026]);
 });
+
+for (const firstFailure of [null, "live/current", "seasons/2026"]) {
+  test(`before any record loads, a pending pick cannot choose a reload after ${firstFailure ?? "no initial load"}`, async () => {
+    const unreadable = firstFailure ? [firstFailure] : [];
+    const { holdReads } = startReading(
+      { unreadable },
+      { "seasons/2024": { ...SEASON_2026, season: 2024 } },
+    );
+    Object.assign(session, { pickedYear: 2026, currentYear: 2026 });
+    if (firstFailure) {
+      await loadSeason();
+      assert.notEqual(session.problem, "");
+      unreadable.length = 0;
+    }
+    const release = holdReads("seasons/2024");
+    const picked = showYear(2024);
+    const reloaded = loadSeason();
+    await settle();
+    release();
+    await Promise.all([picked, reloaded]);
+    assert.deepEqual([session.year, session.pickedYear, session.season], [2026, 2026, SEASON_2026]);
+    assert.equal(session.problem, "");
+  });
+}
 
 test("each failed load, pick or current-season advance reports its problem and stamp once", async () => {
   const unreadable = [];

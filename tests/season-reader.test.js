@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createSeasonPicks, createSeasonReader } from "../shared/page/season-reader.js";
-import { createFakeStore } from "./fake-store.js";
+import { createFakeStore, settle } from "./fake-store.js";
 
 const SEASON_2026 = { year: 2026, games: ["opener"] };
 const SEASON_2027 = { year: 2027, games: ["next opener"] };
@@ -33,8 +33,6 @@ function startReader(documents, options = {}) {
   });
   return { reader, shown, deliver, holdReads };
 }
-
-const settle = () => new Promise((resolve) => setImmediate(resolve));
 
 test("the page loads the season the store says is current, without redrawing for it", async () => {
   const { reader, shown } = startReader({
@@ -263,13 +261,12 @@ test("two picks that can't be read, the older failing first, leave the season sh
 });
 
 /**
- * A viewer's picks with the reader, kept as an app keeps them, and how often each said the store
- * can't be reached.
+ * A viewer's selection and unread publications, independent of the reader's failure reports.
  * @param {ReturnType<typeof startReader>["reader"]} reader
  * @param {number | null} pickBefore
  */
 function startPicks(reader, pickBefore) {
-  const picks = { picked: pickBefore, unreachable: 0 };
+  const picks = { picked: pickBefore, unread: 0 };
   const pickSeason = createSeasonPicks({
     reader,
     keepPick: (year) => {
@@ -277,13 +274,13 @@ function startPicks(reader, pickBefore) {
     },
   });
   reader.watchSelection(({ kind }) => {
-    if (kind === "unread") picks.unreachable++;
+    if (kind === "unread") picks.unread++;
   });
   return { picks, pickSeason };
 }
 
 test("a pick that can't be read keeps the season shown, and says the store can't be reached", async () => {
-  const { reader } = startReader(
+  const { reader, shown } = startReader(
     { "live/current": { season: 2026 }, "seasons/2026": SEASON_2026 },
     { unreadable: ["seasons/2025"] },
   );
@@ -292,20 +289,25 @@ test("a pick that can't be read keeps the season shown, and says the store can't
 
   await pickSeason(2025);
 
-  assert.deepEqual(picks, { picked: 2026, unreachable: 1 });
+  assert.deepEqual(picks, { picked: 2026, unread: 1 });
+  assert.equal(shown.failures, 1);
 });
 
 test("before any season has loaded, a pick that can't be read keeps the pick before it", async () => {
-  const { reader } = startReader({}, { unreadable: ["seasons/2025"] });
+  const { reader, shown } = startReader({}, { unreadable: ["seasons/2025"] });
   const { picks, pickSeason } = startPicks(reader, null);
 
   await pickSeason(2025);
 
-  assert.deepEqual(picks, { picked: null, unreachable: 1 });
+  assert.deepEqual(picks, { picked: null, unread: 1 });
+  assert.equal(shown.failures, 1);
 });
 
 test("before any season has loaded, two picks that can't be read keep the pick before both", async () => {
-  const { reader, holdReads } = startReader({}, { unreadable: ["seasons/2025", "seasons/2024"] });
+  const { reader, shown, holdReads } = startReader(
+    {},
+    { unreadable: ["seasons/2025", "seasons/2024"] },
+  );
   const { picks, pickSeason } = startPicks(reader, null);
   const releaseOlder = holdReads("seasons/2025");
   const releaseNewer = holdReads("seasons/2024");
@@ -317,7 +319,8 @@ test("before any season has loaded, two picks that can't be read keep the pick b
   releaseNewer();
   await newer;
 
-  assert.deepEqual(picks, { picked: null, unreachable: 1 });
+  assert.deepEqual(picks, { picked: null, unread: 1 });
+  assert.equal(shown.failures, 1);
 });
 
 test("a page whose picked season's read is out stays on the pick when the store moves on", async () => {
@@ -359,7 +362,7 @@ test("a pick that fails after a newer one replaced it changes nothing", async ()
   release();
 
   await replaced;
-  assert.deepEqual(picks, { picked: 2024, unreachable: 0 });
+  assert.deepEqual(picks, { picked: 2024, unread: 0 });
 });
 
 test("an answer for a season the page has moved off is dropped", async () => {
@@ -486,10 +489,10 @@ for (const fails of [false, true]) {
     await settle();
     releasePick();
     await picked;
-    assert.deepEqual([shown.year, picks.picked, picks.unreachable], [2026, 2026, 0]);
+    assert.deepEqual([shown.year, picks.picked, picks.unread], [2026, 2026, 0]);
     releaseReload();
     await reloaded;
-    assert.deepEqual([shown.year, picks.picked, picks.unreachable], [2026, 2026, 0]);
+    assert.deepEqual([shown.year, picks.picked, picks.unread], [2026, 2026, 0]);
   });
 }
 
@@ -508,7 +511,7 @@ test("a failed pick answering after a successful reload never reports an unreach
   await reader.loadSeason();
   release();
   await picked;
-  assert.deepEqual([shown.year, picks.picked, picks.unreachable], [2026, 2026, 0]);
+  assert.deepEqual([shown.year, picks.picked, picks.unread], [2026, 2026, 0]);
 });
 
 test("a newer pick publishes its selection while an older read is still stuck", async () => {
@@ -543,8 +546,37 @@ test("a newer pick finishes while an older reload is still finding the current s
   const release = holdReads("live/current");
   const reloaded = reader.loadSeason();
   await pickSeason(2025);
-  assert.deepEqual([shown.year, picks.picked, picks.unreachable], [2025, 2025, 0]);
+  assert.deepEqual([shown.year, picks.picked, picks.unread], [2025, 2025, 0]);
   release();
   await reloaded;
-  assert.deepEqual([shown.year, picks.picked, picks.unreachable], [2025, 2025, 0]);
+  assert.deepEqual([shown.year, picks.picked, picks.unread], [2025, 2025, 0]);
 });
+
+for (const restoredYear of [null, 2025, 2026]) {
+  test(`before a first record, reload uses the restored ${restoredYear ?? "current"} choice rather than a pending pick`, async () => {
+    let pickedYear = restoredYear;
+    const { reader, shown, holdReads } = startReader(
+      {
+        "live/current": { season: 2026 },
+        "seasons/2026": SEASON_2026,
+        "seasons/2025": { year: 2025 },
+        "seasons/2024": { year: 2024 },
+      },
+      { readPick: () => pickedYear },
+    );
+    const pick = createSeasonPicks({
+      reader,
+      keepPick: (year) => {
+        pickedYear = year;
+      },
+    });
+    const release = holdReads("seasons/2024");
+    const picked = pick(2024);
+    const reloaded = reader.reloadSeason(pickedYear, 2026);
+    await settle();
+    release();
+    await Promise.all([picked, reloaded]);
+    const expectedYear = restoredYear === 2025 ? 2025 : 2026;
+    assert.deepEqual([shown.year, pickedYear, shown.failures], [expectedYear, expectedYear, 0]);
+  });
+}

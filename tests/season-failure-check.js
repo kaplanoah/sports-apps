@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { settle } from "./fake-store.js";
 
 /**
  * Counts the app's problem reports and stamp redraws for each failed way of selecting a season.
@@ -38,7 +39,7 @@ export async function checkSeasonFailureReports({
       async () => {
         unreadable.push("seasons/2027");
         deliver("live/current", { season: 2027 });
-        await new Promise((resolve) => setImmediate(resolve));
+        await settle();
       },
     ]) {
       reports = 0;

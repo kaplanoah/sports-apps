@@ -76,3 +76,5 @@ export function createFakeStore(documents, { unreadable = [] } = {}) {
   };
   return { store, deliver, holdReads };
 }
+
+export const settle = () => new Promise((resolve) => setImmediate(resolve));

@@ -283,7 +283,7 @@ export function createSeasonReader({
      * @param {number | null} lastCurrentYear
      */
     reloadSeason: (lastShownYear, lastCurrentYear) => {
-      const year = shownYear ?? loadedPastYear ?? lastShownYear;
+      const year = shownYear ?? loadedPastYear ?? (isSelectionLoading ? pickBefore : lastShownYear);
       return loadSeason(isEarlierSeason(year, currentYear ?? lastCurrentYear) ? year : null);
     },
     /** @param {number} year */
