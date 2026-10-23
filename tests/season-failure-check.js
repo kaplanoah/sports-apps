@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { settle } from "./fake-store.js";
+import { settle } from "./settle.js";
 
 /**
  * Counts the app's problem reports and stamp redraws for each failed way of selecting a season.

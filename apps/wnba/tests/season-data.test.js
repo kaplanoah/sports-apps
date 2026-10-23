@@ -2,7 +2,8 @@ import test, { beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { loadSeason, showYear, startSeasonData } from "../page/js/season-data.js";
 import { session } from "../page/js/session.js";
-import { createFakeStore, settle } from "../../../tests/fake-store.js";
+import { createFakeStore } from "../../../tests/fake-store.js";
+import { settle } from "../../../tests/settle.js";
 import { checkSeasonFailureReports } from "../../../tests/season-failure-check.js";
 
 const STARTING_YEARS = {
@@ -109,6 +110,31 @@ for (const firstFailure of [null, "live/current", "seasons/2026"]) {
     release();
     await Promise.all([picked, reloaded]);
     assert.deepEqual([session.year, session.pickedYear, session.season], [2026, 2026, SEASON_2026]);
+    assert.equal(session.problem, "");
+  });
+}
+
+for (const firstFailure of ["live/current", "seasons/2026"]) {
+  test(`a reload during a held current-season advance recovers after the first ${firstFailure} read failed`, async () => {
+    const unreadable = [firstFailure];
+    const season2027 = { ...SEASON_2026, season: 2027 };
+    const { deliver, holdReads } = startReading({ unreadable }, { "seasons/2027": season2027 });
+    Object.assign(session, { pickedYear: 2026, currentYear: 2026 });
+    await loadSeason();
+    assert.notEqual(session.problem, "");
+    unreadable.length = 0;
+    const release = holdReads("seasons/2027");
+    deliver("live/current", { season: 2027 });
+    await settle();
+    const reloaded = loadSeason();
+    await settle();
+    release();
+    await reloaded;
+    await settle();
+    assert.deepEqual(
+      [session.year, session.pickedYear, session.currentYear, session.season],
+      [2027, 2027, 2027, season2027],
+    );
     assert.equal(session.problem, "");
   });
 }
