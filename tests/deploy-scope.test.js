@@ -49,7 +49,6 @@ test("a merge of only docs, tests, and tooling skips the deploy", () => {
     ".github/workflows/beta.yml",
     ".github/workflows/ci.yml",
     ".github/workflows/flaky.yml",
-    ".github/workflows/review-area.yml",
     ".github/workflows/review.yml",
     ".github/workflows/trusted-review-area.yml",
     "worker/trusted-review.mjs",

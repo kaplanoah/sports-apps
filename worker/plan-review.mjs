@@ -589,7 +589,7 @@ function renderIndex(words, { areas, unread }) {
 // GitHub names a matrix's job by its values, and a skipped one, whose matrix it never reads, by
 // the job alone, so each area holds only the name its job shows, and the job looks up its number.
 /**
- * The review's matrix: its areas, each of which review-area.yml reviews on its own, each area's
+ * The review's matrix: its areas, each of which trusted-review-area.yml reviews on its own, each area's
  * number by its name, and how many there are.
  * @param {{ area: number, name: string }[]} areas
  */
