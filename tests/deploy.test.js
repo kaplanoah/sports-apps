@@ -1092,6 +1092,7 @@ test("project settings ask before each change to a live Worker but beta's, and d
     "Bash(gh issue create *)",
     "Bash(gh issue comment *)",
     "Bash(gh issue close *)",
+    "Bash(gh workflow run flaky.yml *)",
     "Bash(gh pr list --label beta --state open)",
     "Bash(gh pr list --label beta-wait --state open)",
     "Bash(gh pr edit * --add-label beta)",
