@@ -385,6 +385,66 @@ test("at 300,000 tokens fetch consumes option values before its literal operands
     assert.equal(answerStopCommand(command), null, command);
 });
 
+test("at 300,000 tokens an attached equals sign is a short option's value", () => {
+  for (const option of ["-t=", "-q=", "-p=", "-H=", "-it=", "-iq=", "-ip=", "-iH="])
+    for (const method of ["-X DELETE", "-XDELETE"])
+      assert.ok(
+        answerStopCommand(`gh api repos/o/r/git/refs/heads/beta ${option} ${method}`),
+        `${option} ${method}`,
+      );
+  assert.equal(answerStopCommand("gh api repos/o/r/issues -X= -XGET"), null);
+  assert.equal(answerStopCommand("gh api repos/o/r/issues -t= -XGET"), null);
+  assert.equal(answerStopCommand("gh api repos/o/r/issues -t=x -XGET"), null);
+});
+
+test("at 300,000 tokens only ASCII shell whitespace separates API options", () => {
+  for (const whitespace of ["\u00a0", "\ufeff", "\u2028", "\u2029", "\v", "\f", "\r"])
+    for (const option of ["-t x", "-H X:a"])
+      assert.ok(
+        answerStopCommand(
+          `gh api repos/o/r/git/refs/heads/beta -X DELETE ${option}${whitespace}-X${whitespace}GET`,
+        ),
+        JSON.stringify({ whitespace, option }),
+      );
+  assert.equal(answerStopCommand("gh\tapi\trepos/o/r/issues\t-X\tGET"), null);
+});
+
+test("at 300,000 tokens exact optional fetch flags do not consume the next word", () => {
+  for (const option of ["--recurse-submodules", "--recurse-submodules=on-demand"])
+    for (const helper of ["--upload-pack=x", "--upl=x"])
+      assert.ok(answerStopCommand(`git fetch ${option} ${helper} .`), `${option} ${helper}`);
+  assert.equal(
+    answerStopCommand("git fetch --recurse-submodules -- origin --upload-pack=notes"),
+    null,
+  );
+  assert.ok(answerStopCommand("git fetch --recurse-submodules-default -- --upload-pack=x origin"));
+});
+
+test("at 300,000 tokens no-index diff mode is outside the handoff grammar", () => {
+  for (const command of [
+    "git diff --no-index -S -- --output=AGENTS.md a b",
+    "git diff --no-index -G -- --output=AGENTS.md a b",
+    "git diff --no-index -O -- --output=AGENTS.md a b",
+    "git diff --no-index --anchored -- --output=AGENTS.md a b",
+    "git diff --no-index a b",
+    "git -C /repo diff --no-index -S -- --output=AGENTS.md a b",
+  ])
+    assert.ok(answerStopCommand(command), command);
+  assert.equal(answerStopCommand("git diff origin/main -- --no-index"), null);
+});
+
+test("the stop reason explains literal arguments and the placeholder and heredoc exceptions", () => {
+  const reason =
+    answerStopCommand("gh pr view $NUMBER")?.hookSpecificOutput.permissionDecisionReason;
+  assert.match(reason ?? "", /literal arguments/);
+  assert.match(reason ?? "", /variables/);
+  assert.match(reason ?? "", /glob/);
+  assert.match(reason ?? "", /brace/);
+  assert.match(reason ?? "", /leading ~/);
+  assert.match(reason ?? "", /\{owner\}\/\{repo\}/);
+  assert.match(reason ?? "", /quoted heredoc/);
+});
+
 test("at 300,000 tokens fetch rejects the update-head-ok shorthand", () => {
   for (const command of ["git fetch -u origin", "git fetch -ux .", "git fetch '-ux' ."])
     assert.ok(answerStopCommand(command), command);

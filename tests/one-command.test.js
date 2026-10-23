@@ -85,6 +85,37 @@ test("literal arguments share the scanner's quoted heredoc handling", () => {
   ]);
 });
 
+test("shell word boundaries exclude non-ASCII and control whitespace", () => {
+  for (const whitespace of ["\u00a0", "\ufeff", "\u2028", "\u2029", "\v", "\f", "\r"]) {
+    assert.deepEqual(parseCommandWords(`gh api -H X:a${whitespace}-X${whitespace}GET`), [
+      "gh",
+      "api",
+      "-H",
+      `X:a${whitespace}-X${whitespace}GET`,
+    ]);
+    assert.deepEqual(parseCommandWords(`${whitespace}git status${whitespace}`), [
+      `${whitespace}git`,
+      `status${whitespace}`,
+    ]);
+    assert.equal(findCommandProblem(`cd${whitespace}apps`), null);
+    assert.equal(findSeparator(`bash${whitespace}-c "a; b"`), null);
+    assert.equal(parseCommandWords(`gh api <<'EOF'${whitespace} -X GET\nx\nEOF`), null);
+  }
+  assert.deepEqual(parseCommandWords(" \tgh\tapi\t'hello world'\t "), ["gh", "api", "hello world"]);
+});
+
+test("heredoc delimiters keep literal whitespace and strip tabs only when requested", () => {
+  assert.equal(findSeparator("cat <<'EOF'\n\u00a0EOF\nnot a delimiter; text\nEOF"), null);
+  assert.equal(findSeparator("cat <<'EOF'\n\tEOF\nnot a delimiter; text\nEOF"), null);
+  assert.equal(findSeparator("cat <<-'EOF'\nbody\n\tEOF\ngit status"), "a line break");
+  assert.deepEqual(parseCommandWords("git commit -F - <<-'EOF'\nbody\n\tEOF"), [
+    "git",
+    "commit",
+    "-F",
+    "-",
+  ]);
+});
+
 test("a call that starts with cd is blocked, and a word that only starts with cd isn't", () => {
   assert.match(findCommandProblem("cd apps/wnba") ?? "", /^It starts with cd\./);
   assert.match(findCommandProblem("  cd") ?? "", /^It starts with cd\./);
@@ -154,6 +185,22 @@ test("parentheses inside $(...) nest, so what follows them is still inside it", 
   assert.equal(findSeparator("echo $(f (x); g)"), null);
   assert.equal(findSeparator("echo $(f $(g; h) (i); j)"), null);
   assert.equal(findSeparator("echo $(f (x)); git status"), ";");
+});
+
+test("comments inside substitutions cannot hide a following separator", () => {
+  for (const substitution of ["$(echo a #b)", "`x #y`", "$(f $(g #h))", '"`x #y`"'])
+    for (const operator of [";", "&&", "||", "&", "\n"]) {
+      const command = `echo ${substitution}${operator} git status`;
+      assert.equal(findSeparator(command), operator === "\n" ? "a line break" : operator, command);
+      assert.equal(parseCommandWords(command), null, command);
+    }
+  for (const substitution of ["$(echo a)", "`x`"])
+    assert.equal(findSeparator(`echo ${substitution}#literal; git status`), ";");
+  assert.equal(findSeparator("echo `x #y` # actual comment; git status"), null);
+  assert.equal(findSeparator("echo $(echo a) # actual comment; git status"), null);
+  assert.equal(findSeparator("echo '`x #y`; text'"), null);
+  assert.equal(findSeparator("echo `x \\` #y`; git status"), ";");
+  assert.equal(findSeparator("echo `a; b`"), null);
 });
 
 test("a heredoc's end lets the check go on to what follows it", () => {

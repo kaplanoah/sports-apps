@@ -205,8 +205,9 @@ function expandApiOptions(words) {
     for (let at = 1; at < word.length; at += 1) {
       const option = `-${word[at]}`;
       if (GH_API_VALUE_OPTIONS.has(option)) {
-        const attached = word.slice(at + 1).replace(/^=/, "");
-        expanded.push(option, attached || (words[++index] ?? ""));
+        const attached = word.slice(at + 1);
+        const value = attached.length > 1 && attached[0] === "=" ? attached.slice(1) : attached;
+        expanded.push(option, attached ? value : (words[++index] ?? ""));
         break;
       }
       if (option !== "-i" && option !== "-h") return null;
@@ -225,6 +226,7 @@ function isHandoffFetch(words) {
     if ((option.length >= 5 && "--upload-pack".startsWith(option)) || word.startsWith("-u"))
       return false;
     if (/^-[^-]/.test(word) && word.length > 2 && !/^-[oj]/.test(word)) return false;
+    if (option === "--recurse-submodules") continue;
     const takesValue =
       word === "-o" ||
       word === "-j" ||
@@ -248,7 +250,11 @@ function isHandoffGitCommand(words) {
   const endOfOptions = argumentsAfterCommand.indexOf("--");
   const options =
     endOfOptions < 0 ? argumentsAfterCommand : argumentsAfterCommand.slice(0, endOfOptions);
-  return !options.some((word) => hasDiffOptions && /^--(?:output|ext-diff)(?:=|$)/.test(word));
+  return !options.some(
+    (word) =>
+      (hasDiffOptions && /^--(?:output|ext-diff)(?:=|$)/.test(word)) ||
+      (command === "diff" && /^--no-index(?:=|$)/.test(word)),
+  );
 }
 
 /**
@@ -334,8 +340,10 @@ const writeStopReason = (tokens) =>
   "committing, pushing the branch you're on to its own name without force, " +
   "opening the PR or updating its description, replying on it and resolving its threads, " +
   "merging a PR whose check passed, reading its Deploy runs, and get_session. " +
-  "Run each command alone, with no pipe, redirect, or $(...): " +
-  "hand a commit message or PR body in on stdin, as git commit -F - <<'EOF' does. " +
+  "Run each command alone, with literal arguments: no variables, glob or brace expansions, " +
+  "leading ~, pipes, redirects, or command substitutions. " +
+  "The literal {owner}/{repo} placeholders are allowed. " +
+  "Use a quoted heredoc on stdin for a commit message or PR body, as git commit -F - <<'EOF' does. " +
   HANDOFF_STEPS;
 
 /**

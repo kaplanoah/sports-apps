@@ -20,9 +20,14 @@ const SUBSTITUTION = "a command substitution";
  * @param {number} at the index of `<<`
  */
 function readHeredoc(command, at) {
-  const match = /^<<-?[ \t]*(['"]?)([\w.-]+)\1(?=[\s;&|<>]|$)/.exec(command.slice(at));
+  const match = /^<<-?[ \t]*(['"]?)([\w.-]+)\1(?=[ \t\n;&|<>]|$)/.exec(command.slice(at));
   if (!match || command[at + 2] === "<") return null;
-  return { delimiter: match[2], end: at + match[0].length, isQuoted: match[1] !== "" };
+  return {
+    delimiter: match[2],
+    end: at + match[0].length,
+    isQuoted: match[1] !== "",
+    stripsTabs: command[at + 2] === "-",
+  };
 }
 
 /**
@@ -43,14 +48,16 @@ const isSubstitutionAt = (text, at) => text.startsWith("$(", at) || text[at] ===
  * @param {string} command
  * @param {number} from
  * @param {string} delimiter
+ * @param {boolean} stripsTabs
  */
-function skipHeredocBody(command, from, delimiter) {
+function skipHeredocBody(command, from, delimiter, stripsTabs) {
   let lineStart = command.indexOf("\n", from) + 1;
   if (lineStart === 0) return command.length;
   while (lineStart < command.length) {
     const lineEnd = command.indexOf("\n", lineStart);
     const end = lineEnd === -1 ? command.length : lineEnd;
-    if (command.slice(lineStart, end).trim() === delimiter) return end;
+    const line = command.slice(lineStart, end);
+    if ((stripsTabs ? line.replace(/^\t+/, "") : line) === delimiter) return end;
     lineStart = end + 1;
   }
   return command.length;
@@ -66,10 +73,10 @@ const isBackgroundAmpersand = (text, at) =>
   text[at] === "&" && !/[<>|]/.test(text[at - 1] ?? "") && text[at + 1] !== ">";
 
 // A shell handed its commands as one quoted string, as `bash -c "a; b"` is, still runs each.
-const SHELL_BEFORE_SCRIPT = /(?:^|[\s(|/])(?:ba|z|da)?sh\s+(?:-[\w-]+\s+)*-\w*c\w*\s+$/;
+const SHELL_BEFORE_SCRIPT = /(?:^|[ \t\n(|/])(?:ba|z|da)?sh[ \t]+(?:-[\w-]+[ \t]+)*-\w*c\w*[ \t]+$/;
 
 /**
- * The first operator outside quotes, heredocs, and `$(...)` that starts another command: `&&`,
+ * The first operator outside quotes, heredocs, and substitutions that starts another command: `&&`,
  * `||`, `;`, a lone `&`, or a line break, or null when the command is one, and each quoted
  * script the command hands a shell before it. Text inside other quotes or a heredoc's body,
  * like a commit message, runs nothing. Also the first pipe, redirect, or command substitution
@@ -81,6 +88,7 @@ function scanCommand(command) {
   let quote = "";
   let scriptStart = -1;
   let depth = 0;
+  let isInBackticks = false;
   /** @type {string | null} */
   let pipeOrRedirect = null;
   /** @type {string[]} */
@@ -97,7 +105,7 @@ function scanCommand(command) {
     word = "";
     hasWord = false;
   }
-  const text = command.trim();
+  const text = command.replace(/^[ \t\n]+|[ \t\n]+$/g, "");
   for (let at = 0; at < text.length; at += 1) {
     const char = text[at];
     if (char === "\\" && quote !== "'") {
@@ -112,6 +120,13 @@ function scanCommand(command) {
         continue;
       }
     }
+    if (char === "`" && quote !== "'") {
+      pipeOrRedirect ??= SUBSTITUTION;
+      isInBackticks = !isInBackticks;
+      hasWord = true;
+      continue;
+    }
+    if (isInBackticks) continue;
     if (quote) {
       if (char === quote) {
         if (scriptStart !== -1) scripts.push(text.slice(scriptStart, at));
@@ -129,11 +144,6 @@ function scanCommand(command) {
       scriptStart = SHELL_BEFORE_SCRIPT.test(text.slice(0, at)) ? at + 1 : -1;
       continue;
     }
-    if (char === "#" && !hasWord) {
-      const lineEnd = text.indexOf("\n", at);
-      at = lineEnd === -1 ? text.length : lineEnd - 1;
-      continue;
-    }
     if (char === "$") hasExpansion = true;
     if (char === "$" && text[at + 1] === "(") {
       pipeOrRedirect ??= SUBSTITUTION;
@@ -144,6 +154,12 @@ function scanCommand(command) {
     if (depth > 0) {
       if (char === "(") depth += 1;
       if (char === ")") depth -= 1;
+      if (depth === 0) hasWord = true;
+      continue;
+    }
+    if (char === "#" && !hasWord) {
+      const lineEnd = text.indexOf("\n", at);
+      at = lineEnd === -1 ? text.length : lineEnd - 1;
       continue;
     }
     const heredoc = text.startsWith("<<", at) ? readHeredoc(text, at) : null;
@@ -161,7 +177,7 @@ function scanCommand(command) {
       let bodyEnd = at;
       for (const pending of heredocs) {
         const bodyStart = bodyEnd + 1;
-        bodyEnd = skipHeredocBody(text, bodyEnd, pending.delimiter);
+        bodyEnd = skipHeredocBody(text, bodyEnd, pending.delimiter, pending.stripsTabs);
         if (!pending.isQuoted) {
           const body = text.slice(bodyStart, bodyEnd);
           if (holdsSubstitution(body)) pipeOrRedirect ??= SUBSTITUTION;
@@ -175,7 +191,7 @@ function scanCommand(command) {
     const separator = readSeparatorAt(text, at);
     if (separator) return { separator, scripts, pipeOrRedirect, words: null };
     pipeOrRedirect ??= readPipeOrRedirectAt(text, at);
-    if (/\s/.test(char)) finishWord();
+    if (char === " " || char === "\t") finishWord();
     else {
       if (char === "{") {
         const placeholder = /^\{(?:owner|repo)\}/.exec(text.slice(at));
@@ -241,7 +257,7 @@ export const parseCommandWords = (command) => scanCommand(command).words;
  * @param {string} command
  */
 export function findCommandProblem(command) {
-  if (/^[\s(]*cd(\s|\)|$)/.test(command)) return `It starts with cd. ${RULE}`;
+  if (/^[ \t\n(]*cd([ \t\n]|\)|$)/.test(command)) return `It starts with cd. ${RULE}`;
   const separator = findSeparator(command);
   return separator ? `It joins commands with ${separator}. ${RULE}` : null;
 }
