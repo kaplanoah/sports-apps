@@ -208,12 +208,15 @@ export async function loadPageAt(page, now, { isShowingWelcome = false } = {}) {
 }
 
 /**
- * Holds the page's clock a second ahead of its current time, so a slow load never puts the
- * pause in the past.
+ * Holds the page's clock still, so its frames and timers move only as the test moves them,
+ * however slow the machine. The second's lead keeps the clock from passing the pause before it holds.
  * @param {import("@playwright/test").Page} page
  */
-export const holdClock = async (page) =>
-  page.clock.pauseAt(await page.evaluate(() => Date.now() + 1000));
+export async function holdClock(page) {
+  const now = await page.evaluate(() => Date.now());
+  await page.clock.pauseAt(now + 1000);
+  return now;
+}
 
 const PAGE_KEY = "test-key";
 
