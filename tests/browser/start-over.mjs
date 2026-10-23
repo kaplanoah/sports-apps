@@ -10,6 +10,7 @@ import { matchPath } from "./harness.mjs";
 import { holdRequests } from "./hold-requests.mjs";
 import { findSeasonPart, readSeasonRide, scrollSeasonPartToEnd } from "./season-scroll.mjs";
 import { findSeasonPill, findSeasonTab } from "./season-tab.mjs";
+import { writeUnreadableLastSeen } from "./unreadable-last-seen.mjs";
 import { passTime, setHidden } from "./visibility.mjs";
 
 /** A screen short enough for the bracket to scroll, and narrow enough for it to scroll sideways. */
@@ -221,9 +222,7 @@ export async function expectOpeningRoundAfterReload(page, { sideways, changeWhil
 
   const release = await reloadAfter(page, 2 * MINUTE_MS);
   await changeWhileAway();
-  await page.evaluate(() =>
-    localStorage.setItem("lastSeen", JSON.stringify({ year: 2026, season: { series: 5 } })),
-  );
+  await page.evaluate(writeUnreadableLastSeen);
 
   await expect(page.locator("#standingsWrap table").first()).toBeAttached();
   await expect.poll(readLeft).toBe(start.bracketLeft);

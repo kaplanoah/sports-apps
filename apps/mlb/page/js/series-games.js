@@ -3,7 +3,7 @@
 
 import { describeSeriesAfterWin, describeSeriesLead } from "#shared/series-text.js";
 import { nameSeries } from "./bracket.js";
-import { nameTeam } from "./clubs.js";
+import { nameTeam } from "./teams.js";
 import { listCountedGames } from "./season-games.js";
 import { countWinsNeeded } from "./snapshot.js";
 

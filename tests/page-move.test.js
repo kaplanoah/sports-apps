@@ -1,13 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { createContext, runInContext } from "node:vm";
 import { listTrackedFiles, readRepoFile } from "./repo-files.js";
 import { listApps } from "../worker/apps.mjs";
 
 const MINUTE_MS = 60 * 1000;
 const NOW = Date.parse("2026-10-22T16:00:00Z");
-const PAGE_CODE = new URL("../shared/page/", import.meta.url);
+const PAGE_CODE = "shared/page/";
 const OLD_ADDRESS = "https://mlb-app.example-subdomain.workers.dev/k3y/";
 const NEW_ADDRESS = "https://mlb.sports.example/";
 const HANDOFF_ADDRESS = `${NEW_ADDRESS}access/handoff?token=t0ken`;
@@ -84,7 +83,7 @@ function loadPageMove({
       }
     },
   });
-  runInContext(readFileSync(new URL("page-move.js", PAGE_CODE), "utf8"), context);
+  runInContext(readRepoFile(`${PAGE_CODE}page-move.js`), context);
   const pageMove = runInContext(
     `({ isOldAddress, packCarried, unpackCarried, takeCarriedChoices, readPageMove,
       keepPageMoveIcon, forgetPageMove, isNotificationsAskKept, requestPageMove,
@@ -178,7 +177,7 @@ test("a value that isn't a move unpacks to nothing, and unknown choices drop", (
 });
 
 test("the carried choices are the ones each device keeps with createViewerChoice", () => {
-  const source = readFileSync(new URL("page-move.js", PAGE_CODE), "utf8");
+  const source = readRepoFile(`${PAGE_CODE}page-move.js`);
   const carried = JSON.parse(
     source
       .match(/const CARRIED_CHOICES = (\[[^\]]*\])/)[1]
@@ -336,8 +335,7 @@ test("a move from the Home Screen app carries notifications and where it left fr
 });
 
 test("every app moves to its own address, page and Worker alike", () => {
-  const readApp = (app, file) =>
-    readFileSync(new URL(`../apps/${app}/${file}`, import.meta.url), "utf8");
+  const readApp = (app, file) => readRepoFile(`apps/${app}/${file}`);
   const meta = '<meta name="moving-to-page-host" content="true"';
   for (const app of listApps()) {
     assert.ok(readApp(app, "page/index.html").includes(meta), app);

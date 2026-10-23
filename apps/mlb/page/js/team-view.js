@@ -22,7 +22,6 @@ import {
   describeDrought,
   listTitles,
   nameClubFully,
-  nameTeam,
   renderClub,
   renderStatusChip,
   renderTeamDot,
@@ -46,7 +45,7 @@ import { isFieldSet, session } from "./session.js";
 import { listSlateGames } from "./slate.js";
 import { countSeasonGames } from "./snapshot.js";
 import { describeDivisionLead } from "./standings.js";
-import { TEAMS } from "./teams.js";
+import { nameTeam, TEAMS } from "./teams.js";
 
 /** @typedef {import("#shared/html.js").Markup} Markup */
 /** @typedef {import("#shared/team-numbers.js").PhaseStats} PhaseStats */

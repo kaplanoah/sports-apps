@@ -356,3 +356,7 @@ const CLUB_BY_ESPN_ID = new Map(Object.entries(TEAMS).map(([club, team]) => [tea
 
 /** @param {string | number} espnId */
 export const findClubByEspnId = (espnId) => CLUB_BY_ESPN_ID.get(Number(espnId)) ?? null;
+
+export function nameTeam(id) {
+  return TEAMS[id] ? TEAMS[id].name : "?";
+}
