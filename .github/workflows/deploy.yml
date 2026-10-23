@@ -95,7 +95,7 @@ jobs:
           WNBA_BETA_PAGE_URL: ${{ secrets.WNBA_BETA_PAGE_URL }}
         run: |
           if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
-            echo "::notice::No CLOUDFLARE_API_TOKEN in the $CHANNEL environment, so nothing was deployed."
-            exit 0
+            echo "::error::No CLOUDFLARE_API_TOKEN in the $CHANNEL environment, so nothing was deployed."
+            exit 1
           fi
           node worker/deploy.mjs --channel "$CHANNEL"
