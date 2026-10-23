@@ -4,6 +4,7 @@
 // posts one twice and the review can tell a finding an earlier head's review posted from a new
 // one.
 import { readAllPages } from "./github-api.mjs";
+import { isGitObjectId } from "./git-object.mjs";
 
 export const SUMMARY_MARKER = "<!-- claude-review-summary -->";
 // The posting and summary steps post with the run's own token.
@@ -38,7 +39,7 @@ export const findSummary = (comments) =>
 export function readReviewedHead(body) {
   try {
     const head = JSON.parse(body?.match(STATE)?.[1] ?? "{}").head;
-    return typeof head === "string" && /^[0-9a-f]{40}$/.test(head) ? head : null;
+    return isGitObjectId(head) ? head : null;
   } catch {
     return null;
   }
