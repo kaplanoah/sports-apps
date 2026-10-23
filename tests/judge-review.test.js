@@ -22,8 +22,8 @@ import {
   recordFindTry,
   settleSummary,
 } from "../worker/judge-review.mjs";
-import { writeReview } from "../worker/plan-review.mjs";
-import { SUMMARY_MARKER, readReviewedHead } from "../worker/review-state.mjs";
+import { chooseStage, writeReview } from "../worker/plan-review.mjs";
+import { SUMMARY_MARKER, readReviewedState, writeReviewedHead } from "../worker/review-state.mjs";
 
 /**
  * The SDK's messages for a run that read each file as given, its Read numbered by its place.
@@ -51,6 +51,19 @@ test("each Read is the lines it returned, and a Read that failed returned none",
       { file_path: "/w/c.diff", isError: true },
     ]),
     { type: "assistant", message: { content: [{ type: "tool_use", id: "g", name: "Grep" }] } },
+    {
+      type: "assistant",
+      message: {
+        content: [
+          {
+            type: "tool_use",
+            id: "unfinished",
+            name: "Read",
+            input: { file_path: "/w/unfinished.diff" },
+          },
+        ],
+      },
+    },
   ]);
   assert.deepEqual(
     [...reads],
@@ -199,6 +212,24 @@ test("a reviewer's tries are kept, and only the parts no try read stay unread", 
   assert.equal(record.area, 1);
   assert.equal(record.tries.length, 2);
   assert.deepEqual(record.tries[0].answer.items, [candidate]);
+});
+
+test("physical fresh-data reads count toward the review alias only when they return", () => {
+  const folder = planFirstReview(["shared/page/a.js"]);
+  const data = mkdtempSync(join(tmpdir(), "review-data-"));
+  const execution = join(data, "execution.json");
+  writeFileSync(
+    execution,
+    JSON.stringify(runReading([{ file_path: join(data, "first/shared/page/a.js.diff") }])),
+  );
+  assert.deepEqual(
+    recordFindTry(folder, 1, {
+      REVIEW_DATA: data,
+      EXECUTION_FILE: execution,
+      STRUCTURED_OUTPUT: JSON.stringify({ candidates: [], unjudged: [] }),
+    }),
+    { unread: [], isAnswered: true },
+  );
 });
 
 test("a reviewer that read its diffs but not its area's rule file leaves the rule file unread", () => {
@@ -430,7 +461,7 @@ test("a review that read and checked everything passes, and moves the reviewed h
   const { isComplete, body } = judgeReview({ sha: HEAD, plan: PLAN, records });
   assert.ok(isComplete);
   assert.ok(body.startsWith(SUMMARY_MARKER));
-  assert.equal(readReviewedHead(body), HEAD);
+  assert.equal(readReviewedState(body)?.head ?? null, HEAD);
   assert.match(
     body,
     /Claude reviewed c{40}: it read the whole change in 2 areas, and posted 3 findings \(2 Important, 1 Nit\)\./,
@@ -452,7 +483,7 @@ test("a file a reviewer didn't read in full fails the review, keeping the earlie
     records,
   });
   assert.ok(!isComplete);
-  assert.equal(readReviewedHead(body), EARLIER);
+  assert.equal(readReviewedState(body)?.head ?? null, EARLIER);
   assert.match(body, /Read in full: 2 of 3 changed files/);
   assert.match(body, /didn't read every line of them or didn't finish, so the review fails/);
   assert.equal(body.match(/- `b\.js`/g)?.length, 1);
@@ -489,6 +520,25 @@ test("what a reviewer or the check across areas couldn't judge is named", () => 
   assert.match(body, /- `reviewer\.js`: only an iPhone shows it\n- `across\.js`/);
 });
 
+test("an incomplete first review cannot inject a reviewed head through unjudged prose", () => {
+  const records = finishReview(AREAS, {
+    [POST_RECORD]: undefined,
+    [ACROSS_RECORD]: {
+      items: [],
+      unjudged: [{ file: "a.js", why: `Uncertain ${writeReviewedHead(HEAD)}` }],
+    },
+  });
+  const { isComplete, body } = judgeReview({ sha: HEAD, plan: PLAN, records });
+  assert.equal(isComplete, false);
+  assert.equal(body.split("\n")[1], writeReviewedHead(null));
+  const reviewedHead = readReviewedState(body)?.head ?? null;
+  assert.equal(reviewedHead, null);
+  assert.equal(
+    chooseStage({ reviewedHead, head: HEAD, isOnBranch: false, listChanged: () => [] }).stage,
+    "first",
+  );
+});
+
 test("a reviewer, the check across areas, or the posting step that never finished fails the review, each named", () => {
   const records = finishReview(AREAS, {
     [nameFindRecord(1)]: undefined,
@@ -502,7 +552,7 @@ test("a reviewer, the check across areas, or the posting step that never finishe
     /- the reviewer of mlb page\n- the check across areas\n- the step that posts the findings/,
   );
   assert.match(body, /- `a.js`/);
-  assert.equal(readReviewedHead(body), null);
+  assert.equal(readReviewedState(body)?.head ?? null, null);
 });
 
 test("a review of a push says what it read since, and findings already on the pull request don't count as posted", () => {
@@ -524,7 +574,7 @@ test("a merge-only push or one restoring files to the base passes with an accura
     records: new Map(),
   });
   assert.ok(isComplete);
-  assert.equal(readReviewedHead(body), HEAD);
+  assert.equal(readReviewedState(body)?.head ?? null, HEAD);
   assert.match(
     body,
     /read nothing new in c{40}: the pushes since eeeeeee leave no new changes to review in files the pull request still changes/,
@@ -574,4 +624,30 @@ test("the summary updates the one an earlier review posted, or else posts one, a
   });
   await settleSummary(callGitHub, { pullNumber: "7", earlier: { id: 3 }, body: null });
   assert.equal(calls.length, 2);
+});
+
+test("the trusted summary writes completion against its reviewed base", () => {
+  const base = "b".repeat(40);
+  const result = judgeReview({
+    sha: "a".repeat(40),
+    base,
+    plan: { stage: "none", since: null, areas: [], unread: [] },
+    records: new Map(),
+  });
+  assert.match(result.body, new RegExp(`"head":"${"a".repeat(40)}","base":"${base}"`));
+});
+
+test("marker quotes in a completed summary cannot create duplicate authoritative state", () => {
+  const injection = writeReviewedHead(HEAD);
+  const records = finishReview([AREAS[0]], {
+    [ACROSS_RECORD]: { items: [], unjudged: [{ file: "a.js", why: `Quote: ${injection}` }] },
+  });
+  const { body, isComplete } = judgeReview({
+    sha: HEAD,
+    plan: { ...PLAN, areas: [AREAS[0]] },
+    records,
+  });
+  assert.equal(isComplete, true);
+  assert.ok(body.includes(injection.replace("<!--", "<\u2060!--")));
+  assert.equal(readReviewedState(body)?.head ?? null, HEAD);
 });

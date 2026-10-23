@@ -48,12 +48,16 @@ const flag = (github, waits = []) =>
   });
 
 test("a pull request a merge to main left in conflict gets a comment saying no CI runs until main is merged in", async () => {
+  const waits = [];
   const github = createFakeGitHub([
     { number: 1, head: "b".repeat(40), mergeable: [false] },
     { number: 2, head: "c".repeat(40), mergeable: [true] },
   ]);
 
-  assert.deepEqual(await flag(github), [1]);
+  assert.deepEqual(await flag(github, waits), [1]);
+  assert.equal(github.reads.get(1), 1);
+  assert.equal(github.reads.get(2), 1);
+  assert.deepEqual(waits, []);
 
   assert.equal(github.posted.length, 1);
   assert.equal(github.posted[0].number, 1);

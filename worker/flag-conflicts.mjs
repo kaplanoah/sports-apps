@@ -5,10 +5,7 @@
 import { fileURLToPath } from "node:url";
 import { waitFor } from "./check-timing.mjs";
 import { createGitHub, readAllPages } from "./github-api.mjs";
-
-// GitHub works out whether a pull request merges cleanly only once asked, a moment later.
-const MERGEABLE_TRIES = 6;
-const MERGEABLE_WAIT_MS = 5000;
+import { readPullMerge } from "./pull-merge.mjs";
 
 /** @param {string} head */
 export const nameConflictMarker = (head) => `<!-- merge-conflict:${head} -->`;
@@ -24,20 +21,6 @@ const renderConflictComment = (head, mainCommit) =>
     "",
     nameConflictMarker(head),
   ].join("\n");
-
-/**
- * Whether the pull request merges cleanly, once GitHub has worked it out, or null if it hasn't.
- * @param {(path: string) => Promise<any>} readJson
- * @param {number} number
- * @param {(ms: number) => Promise<void>} wait
- */
-async function readMergeable(readJson, number, wait) {
-  for (let attempt = 1; ; attempt += 1) {
-    const pull = await readJson(`/pulls/${number}`);
-    if (pull.mergeable !== null || attempt === MERGEABLE_TRIES) return pull;
-    await wait(MERGEABLE_WAIT_MS);
-  }
-}
 
 /**
  * @param {object} options
@@ -59,7 +42,7 @@ export async function flagConflicts({
   const pulls = await readAllPages(github, "/pulls?state=open&base=main");
   const flagged = [];
   for (const { number } of pulls) {
-    const pull = await readMergeable(github, number, wait);
+    const pull = await readPullMerge(github, number, { wait });
     if (pull.mergeable !== false) continue;
     const comments = await readAllPages(github, `/issues/${number}/comments`);
     const marker = nameConflictMarker(pull.head.sha);

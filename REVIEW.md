@@ -54,12 +54,27 @@ In order of what has mattered here.
    In a workflow: untrusted text (a title, branch name, or comment) put into `run:` through `${{ }}`,
    wider `permissions` than the job needs, an action not pinned to a commit,
    and a pull request's own code run with a secret.
-   A change to the review itself, its jobs in `.github/workflows/ci.yml` and `.github/workflows/review-area.yml`,
-   `worker/plan-review.mjs`, `worker/judge-review.mjs`, `worker/post-review.mjs`,
-   `worker/review-context.mjs`, `worker/review-state.mjs`, or `worker/rule-files.mjs`, and the modules they import, like `shared/page/escape-pattern.js`, or to a guard test,
-   that lets less through is Important, naming what it no longer catches,
-   since the pull request's own copy of them runs its review.
-   So is a change to `worker/review-git.mjs`, the reviewer's only command, that lets it run more,
+   A change that lets the review catch less is Important, naming what it no longer catches,
+   whether the review runs from main's copy or the pull request's own.
+   Its controls include:
+
+   - the `review-join` job in `.github/workflows/ci.yml`,
+     its `check` hold on a review still owed or a different tree, and its `ci-passed` upload
+   - the jobs in `.github/workflows/review.yml` and `.github/workflows/trusted-review-area.yml`
+   - `worker/plan-review.mjs`
+   - `worker/judge-review.mjs`
+   - `worker/post-review.mjs`
+   - `worker/review-context.mjs`
+   - `worker/review-state.mjs`
+   - `worker/rule-files.mjs`
+   - `worker/trusted-review.mjs`
+   - `worker/review-data.mjs`
+   - `worker/review-repository.mjs`
+   - `worker/find-trusted-review.mjs`
+   - their imports, like `shared/page/escape-pattern.js`
+   - guard tests
+
+   A change to `worker/review-git.mjs`, the reviewer's only command, that lets it run more is Important,
    naming what the reviewer could newly read or write.
    So is a change to the red-change gate that lets less through,
    its `gate`, `phone`, or `check` job in `.github/workflows/ci.yml`,
@@ -72,6 +87,7 @@ In order of what has mattered here.
    like `worker/deploy-scope.mjs` and `worker/package-imports.mjs`, and `worker/judge-burn-in.mjs`.
    The finding names which browser tests or burn-in specs no longer run or fail,
    since the pull request's own copy of those jobs and modules picks its own tests.
+
 6. **Red changes.**
    A property that gives a part a layer of its own or changes how it takes a touch,
    that `worker/red-change-styles.mjs` doesn't list yet.
@@ -112,6 +128,7 @@ and a step posts what it confirmed or left unsure.
   If it would matter and still can't be settled, post it as **Unsure** with what would settle it.
 - Each finding goes on the line it's about, the first place's for one that names several.
   Say what is wrong, when it goes wrong (the input or state that shows it), and how to fix it, in a few sentences.
+  For a finding that a rule from AGENTS.md or a rule file is broken, quote the rule, name its file, and show how the changed code violates it.
 - Start each with its weight:
   **Important** for a bug, meaning a wrong result someone can see, wrong data kept, or a failure,
   for a security hole, or for a broken rule from AGENTS.md or a rule file;

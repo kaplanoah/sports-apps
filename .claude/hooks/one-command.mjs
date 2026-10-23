@@ -20,9 +20,14 @@ const SUBSTITUTION = "a command substitution";
  * @param {number} at the index of `<<`
  */
 function readHeredoc(command, at) {
-  const match = /^<<-?\s*(['"]?)([\w.-]+)\1/.exec(command.slice(at));
+  const match = /^<<-?[ \t]*(['"]?)([\w.-]+)\1(?=[ \t\n;&|<>]|$)/.exec(command.slice(at));
   if (!match || command[at + 2] === "<") return null;
-  return { delimiter: match[2], end: at + match[0].length, isQuoted: match[1] !== "" };
+  return {
+    delimiter: match[2],
+    end: at + match[0].length,
+    isQuoted: match[1] !== "",
+    stripsTabs: command[at + 2] === "-",
+  };
 }
 
 /**
@@ -43,14 +48,16 @@ const isSubstitutionAt = (text, at) => text.startsWith("$(", at) || text[at] ===
  * @param {string} command
  * @param {number} from
  * @param {string} delimiter
+ * @param {boolean} stripsTabs
  */
-function skipHeredocBody(command, from, delimiter) {
+function skipHeredocBody(command, from, delimiter, stripsTabs) {
   let lineStart = command.indexOf("\n", from) + 1;
   if (lineStart === 0) return command.length;
   while (lineStart < command.length) {
     const lineEnd = command.indexOf("\n", lineStart);
     const end = lineEnd === -1 ? command.length : lineEnd;
-    if (command.slice(lineStart, end).trim() === delimiter) return end;
+    const line = command.slice(lineStart, end);
+    if ((stripsTabs ? line.replace(/^\t+/, "") : line) === delimiter) return end;
     lineStart = end + 1;
   }
   return command.length;
@@ -66,69 +73,196 @@ const isBackgroundAmpersand = (text, at) =>
   text[at] === "&" && !/[<>|]/.test(text[at - 1] ?? "") && text[at + 1] !== ">";
 
 // A shell handed its commands as one quoted string, as `bash -c "a; b"` is, still runs each.
-const SHELL_BEFORE_SCRIPT = /(?:^|[\s(|/])(?:ba|z|da)?sh\s+(?:-[\w-]+\s+)*-\w*c\w*\s+$/;
+const SHELL_BEFORE_SCRIPT = /(?:^|[ \t\n(|/])(?:ba|z|da)?sh[ \t]+(?:-[\w-]+[ \t]+)*-\w*c\w*[ \t]+$/;
 
 /**
- * The first operator outside quotes, heredocs, and `$(...)` that starts another command: `&&`,
+ * The first operator outside quotes, heredocs, and substitutions that starts another command: `&&`,
  * `||`, `;`, a lone `&`, or a line break, or null when the command is one, and each quoted
  * script the command hands a shell before it. Text inside other quotes or a heredoc's body,
  * like a commit message, runs nothing. Also the first pipe, redirect, or command substitution
  * before that operator, which the shell runs inside double quotes and an unquoted heredoc too.
  * @param {string} command
- * @returns {{ separator: string | null, scripts: string[], pipeOrRedirect: string | null }}
+ * @returns {{ separator: string | null, scripts: string[], pipeOrRedirect: string | null, words: string[] | null }}
  */
 function scanCommand(command) {
+  const text = command.replace(/^[ \t\n]+|[ \t\n]+$/g, "");
+  const subshellStarts = new Set();
+  for (;;) {
+    const result = scanCommandText(text, subshellStarts);
+    if (typeof result !== "number") return result;
+    subshellStarts.add(result);
+  }
+}
+
+/**
+ * Bash retries `((` as nested subshells when the inner group doesn't end with `))`.
+ * Returning its index lets the same scanner retry with shell comments and separators enabled.
+ * @param {string} text
+ * @param {Set<number>} subshellStarts
+ * @returns {{ separator: string | null, scripts: string[], pipeOrRedirect: string | null, words: string[] | null } | number}
+ */
+function scanCommandText(text, subshellStarts) {
   let quote = "";
   let scriptStart = -1;
-  let depth = 0;
+  /** @type {("substitution" | "arithmetic" | "arithmetic-command" | "group")[]} */
+  const parentheses = [];
+  /** @type {number[]} */
+  const arithmeticStarts = [];
+  let isInBackticks = false;
+  let hasSubstitutionWord = false;
   /** @type {string | null} */
   let pipeOrRedirect = null;
   /** @type {string[]} */
   const scripts = [];
-  const text = command.trim();
+  /** @type {string[]} */
+  const words = [];
+  /** @type {NonNullable<ReturnType<typeof readHeredoc>>[]} */
+  const heredocs = [];
+  let word = "";
+  let hasWord = false;
+  let isWordQuoted = false;
+  let hasExpansion = false;
+  function finishWord() {
+    if (hasWord) words.push(word);
+    word = "";
+    hasWord = false;
+    isWordQuoted = false;
+  }
   for (let at = 0; at < text.length; at += 1) {
     const char = text[at];
-    if (quote) {
-      if (char === "\\" && quote === '"') at += 1;
-      else if (char === quote) {
-        if (scriptStart !== -1) scripts.push(text.slice(scriptStart, at));
-        quote = "";
-      } else if (quote === '"' && isSubstitutionAt(text, at)) pipeOrRedirect ??= SUBSTITUTION;
+    const hasCurrentWord = parentheses.length > 0 ? hasSubstitutionWord : hasWord;
+    const isInArithmetic =
+      parentheses.findLast((kind) => kind !== "group")?.startsWith("arithmetic") ?? false;
+    if (!quote && !isInBackticks && char === "#" && !hasCurrentWord && !isInArithmetic) {
+      const lineEnd = text.indexOf("\n", at);
+      at = lineEnd === -1 ? text.length : lineEnd - 1;
       continue;
     }
-    if (char === "\\") {
-      at += 1;
+    if (char === "\\" && quote !== "'") {
+      const next = text[at + 1];
+      if (next === undefined) hasExpansion = true;
+      else if (!quote || /[$`"\\\n]/.test(next)) {
+        if (next !== "\n") {
+          word += next;
+          hasWord = true;
+          isWordQuoted = true;
+          if (parentheses.length > 0) hasSubstitutionWord = true;
+        }
+        at += 1;
+        continue;
+      }
+    }
+    if (char === "`" && quote !== "'") {
+      pipeOrRedirect ??= SUBSTITUTION;
+      isInBackticks = !isInBackticks;
+      hasWord = true;
+      if (parentheses.length > 0) hasSubstitutionWord = true;
+      continue;
+    }
+    if (isInBackticks) continue;
+    if (quote) {
+      if (char === quote) {
+        if (scriptStart !== -1) scripts.push(text.slice(scriptStart, at));
+        quote = "";
+      } else {
+        word += char;
+        if (quote === '"' && char === "$") hasExpansion = true;
+        if (quote === '"' && isSubstitutionAt(text, at)) pipeOrRedirect ??= SUBSTITUTION;
+      }
       continue;
     }
     if (char === "'" || char === '"') {
       quote = char;
+      hasWord = true;
+      isWordQuoted = true;
+      if (parentheses.length > 0) hasSubstitutionWord = true;
       scriptStart = SHELL_BEFORE_SCRIPT.test(text.slice(0, at)) ? at + 1 : -1;
       continue;
     }
+    if (char === "$") hasExpansion = true;
     if (char === "$" && text[at + 1] === "(") {
       pipeOrRedirect ??= SUBSTITUTION;
-      depth += 1;
+      parentheses.push(text[at + 2] === "(" ? "arithmetic" : "substitution");
+      hasSubstitutionWord = false;
       at += 1;
       continue;
     }
-    if (depth > 0) {
-      if (char === "(") depth += 1;
-      if (char === ")") depth -= 1;
+    if (
+      text.startsWith("((", at) &&
+      !hasCurrentWord &&
+      !isInArithmetic &&
+      !subshellStarts.has(at)
+    ) {
+      parentheses.push("arithmetic-command", "group");
+      arithmeticStarts.push(at);
+      hasExpansion = true;
+      hasSubstitutionWord = false;
+      at += 1;
+      continue;
+    }
+    if (parentheses.length > 0) {
+      if (char === "(") {
+        parentheses.push("group");
+        hasSubstitutionWord = false;
+      } else if (char === ")") {
+        const kind = parentheses.pop();
+        if (kind === "group" && parentheses.at(-1) === "arithmetic-command" && text[at + 1] !== ")")
+          return arithmeticStarts[arithmeticStarts.length - 1];
+        if (kind === "arithmetic-command") arithmeticStarts.pop();
+        hasSubstitutionWord = kind === "substitution" || kind === "arithmetic";
+      } else hasSubstitutionWord = !/[ \t\n;&|<>]/.test(char);
+      if (parentheses.length === 0) hasWord = hasSubstitutionWord;
       continue;
     }
     const heredoc = text.startsWith("<<", at) ? readHeredoc(text, at) : null;
     if (heredoc) {
-      const bodyEnd = skipHeredocBody(text, heredoc.end, heredoc.delimiter);
-      if (!heredoc.isQuoted && holdsSubstitution(text.slice(heredoc.end, bodyEnd)))
-        pipeOrRedirect ??= SUBSTITUTION;
+      if (!isWordQuoted && /^\{\w+\}$/.test(word)) hasExpansion = true;
+      if (!isWordQuoted && /^\d+$/.test(word)) {
+        word = "";
+        hasWord = false;
+      } else finishWord();
+      heredocs.push(heredoc);
+      at = heredoc.end - 1;
+      continue;
+    }
+    if (char === "\n" && heredocs.length) {
+      finishWord();
+      let bodyEnd = at;
+      for (const pending of heredocs) {
+        const bodyStart = bodyEnd + 1;
+        bodyEnd = skipHeredocBody(text, bodyEnd, pending.delimiter, pending.stripsTabs);
+        if (!pending.isQuoted) {
+          const body = text.slice(bodyStart, bodyEnd);
+          if (holdsSubstitution(body)) pipeOrRedirect ??= SUBSTITUTION;
+          if (/[$`]/.test(body)) hasExpansion = true;
+        }
+      }
+      heredocs.length = 0;
       at = bodyEnd - 1;
       continue;
     }
     const separator = readSeparatorAt(text, at);
-    if (separator) return { separator, scripts, pipeOrRedirect };
+    if (separator) return { separator, scripts, pipeOrRedirect, words: null };
     pipeOrRedirect ??= readPipeOrRedirectAt(text, at);
+    if (char === " " || char === "\t") finishWord();
+    else {
+      if (char === "{") {
+        const placeholder = /^\{(?:owner|repo)\}/.exec(text.slice(at));
+        if (!placeholder) hasExpansion = true;
+      }
+      if (/[?*[\]()]/.test(char) || (char === "~" && !hasWord)) hasExpansion = true;
+      word += char;
+      hasWord = true;
+    }
   }
-  return { separator: null, scripts, pipeOrRedirect };
+  if (arithmeticStarts.length) return arithmeticStarts[0];
+  finishWord();
+  return {
+    separator: null,
+    scripts,
+    pipeOrRedirect,
+    words: quote || hasExpansion || pipeOrRedirect || heredocs.length ? null : words,
+  };
 }
 
 /**
@@ -166,18 +300,18 @@ export function findSeparator(command) {
 }
 
 /**
- * The first pipe, redirect, or command substitution a single command holds, which hands what it
- * reads or writes to a file or another program, or null when it holds none.
+ * Literal arguments of one command, or null for operators, unfinished quotes, or unsupported
+ * expansions. Only the inert {owner}/{repo} placeholders are accepted as unquoted braces.
  * @param {string} command
  */
-export const findPipeOrRedirect = (command) => scanCommand(command).pipeOrRedirect;
+export const parseCommandWords = (command) => scanCommand(command).words;
 
 /**
  * Why a Bash command breaks the rule, or null when it keeps it.
  * @param {string} command
  */
 export function findCommandProblem(command) {
-  if (/^[\s(]*cd(\s|\)|$)/.test(command)) return `It starts with cd. ${RULE}`;
+  if (/^[ \t\n(]*cd([ \t\n]|\)|$)/.test(command)) return `It starts with cd. ${RULE}`;
   const separator = findSeparator(command);
   return separator ? `It joins commands with ${separator}. ${RULE}` : null;
 }

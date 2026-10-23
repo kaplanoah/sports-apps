@@ -238,25 +238,28 @@ something doesn't match, point them to Cloudflare's
 GitHub lints, checks formatting and types, looks for unused code, and runs the
 Node tests, and the browser tests of the apps a change reaches, on every pull
 request, so merge once those pass and the pull request has no conflicts with
-`main`. If the repo has a `CLAUDE_CODE_OAUTH_TOKEN` or `ANTHROPIC_API_KEY`
-secret, Claude also reviews each pull request, as [REVIEW.md](REVIEW.md) says,
-once it's ready for review, and again only when it's labeled `review`, never on
-a push alone. It splits the change into areas by what the files are about, and
+`main`. The trusted `pull_request_target` workflow reviews pull requests against
+their current base, including stacked pull requests, except Dependabot's, from
+main's copy of the controls. CI joins its result
+with read-only credentials and holds the merge until trusted review passes.
+Trusted review requires a `CLAUDE_CODE_OAUTH_TOKEN` or `ANTHROPIC_API_KEY` secret;
+without one, a ready pull request that needs review cannot pass `check`.
+Automatic asks are limited to branches in this repository and authors associated
+as OWNER, MEMBER or COLLABORATOR; other fork authors need a maintainer to add
+the `review` label. Review runs once a permitted pull request is ready, and again
+only when it's labeled `review`, never on a push alone.
+As [REVIEW.md](REVIEW.md) says, it splits the change into areas by what the files are about, and
 has one reviewer read each area in full, with the rule files in `.claude/rules/`
 whose paths match its files. REVIEW.md's [How to report](REVIEW.md#how-to-report)
 section says how the review checks and posts what it finds. The first review
 reads the whole change, and each review after it reads what changed since the
-last review that finished. The review is one of the checks that must pass. A
-ready pull request's `check` fails until a review has passed on the code that
-merges, the pull request merged into `main`. A review that can't run, that left
+last review that finished. A ready pull request's `check` fails until trusted
+review has passed on the code that
+merges, the pull request merged into its target branch. A review that can't run, that left
 a changed file or a rule file unread, or whose reviewers, check across areas, or
 posting step didn't finish, blocks the merge. Its findings don't fail the check;
-answer all of the first review's findings in one push, by fixing each or
-replying why not, then add the `review` label to have it reviewed again, which
-takes the label off. From the second review on, only a fix for an Important
-finding, or an Unsure one that proved a real bug, gets a push and the label: a
-Nit or Pre-existing finding gets a reply on its thread. Resolve each thread,
-since `main` merges only once every thread is resolved.
+answer and resolve every finding as the [steward skill](.claude/skills/steward/SKILL.md)
+says. `main` merges only once every review thread is resolved.
 
 A change that only an iPhone can test, like one to how the page's parts slide or
 layer, is a red change (`worker/red-change.mjs`). CI holds it on a `phone`
@@ -272,13 +275,16 @@ can't let the pull request's own red change through; a change to the workflow's
 `gate`, `phone`, or `check` job is the review's to weigh, which `REVIEW.md`
 counts as Important when it lets less through.
 
-A pull request from a fork runs without the repo's secrets, so Claude can't review
-it, and it runs the fork's own copy of the workflows, which its author can change
-to pass. The repo's **Settings > Actions > General**, under **Approval for
+A fork's build and test workflows run without the repo's secrets, using its own
+workflow definitions, which its author can change to pass. Trusted review can
+review fork pull requests after the maintainer gate above: it uses main's controls and review credentials, and
+reads fork files as data without executing their code, imports, or configuration.
+The repo's **Settings > Actions > General**, under **Approval for
 running fork pull request workflows from contributors**, is set to **Require
 approval for first-time contributors**. GitHub counts anyone without a commit
 merged into the repo as a first-time contributor, and only the owner merges, so
-nothing a fork sends runs until the owner has read it and approved its run.
+a first-time contributor's build and test workflows wait for the owner's approval.
+Trusted review runs separately from those workflows.
 
 To run the
 same checks yourself, run `npm ci` and `npx playwright install chromium` once,

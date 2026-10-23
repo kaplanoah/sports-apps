@@ -87,7 +87,7 @@ test.describe("from an Android phone's Home Screen app", () => {
     await checkMovingWelcome({ page, browser, ...MOVING_APP });
   });
 
-  test("the moving welcome says how to remove the old site on an Android phone", async ({
+  test("the moving welcome explains removal and saves the picked icon and theme on Android", async ({
     page,
     browser,
   }) => {
@@ -108,7 +108,10 @@ test.describe("from an Android phone's Home Screen app", () => {
     await checkMovingIconFollowsTheme({ page, browser, ...MOVING_APP });
   });
 
-  test("a pick in the moving welcome changes only the icon", async ({ page, browser }) => {
+  test("a pick in the moving welcome saves the icon and its matching theme", async ({
+    page,
+    browser,
+  }) => {
     await checkMovingIconPick({ page, browser, ...MOVING_APP });
   });
 
