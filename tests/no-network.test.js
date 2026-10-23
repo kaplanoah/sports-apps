@@ -1,9 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { REPO_ROOT, readRepoFile } from "./repo-files.js";
 
-const GUARD = new URL("./no-network.js", import.meta.url).href;
+const GUARD = new URL("tests/no-network.js", REPO_ROOT).href;
 const FEED = "https://example.com/feed";
 
 /** @param {string} script run as a module with the guard loaded first, as every Node test is */
@@ -32,6 +32,6 @@ test("a run that reads only its fakes passes", () => {
 });
 
 test("every Node test run loads the guard first", () => {
-  const { scripts } = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
+  const { scripts } = JSON.parse(readRepoFile("package.json"));
   assert.match(scripts.test, /^node --import \.\/tests\/no-network\.js --test /);
 });

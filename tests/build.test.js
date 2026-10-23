@@ -199,6 +199,21 @@ test("each app's Worker loads without what Cloudflare refuses while a Worker loa
   }
 });
 
+test("each app's Worker bundles no page sheet or step log modules", async (context) => {
+  for (const app of listApps()) {
+    await context.test(app, async () => {
+      const built = await buildWorker(app, { release: RELEASE });
+      const modules = [...built.matchAll(/^\/\/ shared\/page\/(.+)$/gm)].map(([, file]) => file);
+      const forbidden = ["sheet.js", "team-sheet.js", "step-log.js"];
+      assert.deepEqual(
+        modules.filter((file) => forbidden.includes(file)),
+        [],
+        app,
+      );
+    });
+  }
+});
+
 test("a service's Worker loads its packages as a Worker resolves them, importing only the runtime", async () => {
   for (const service of listServices()) {
     const built = await buildWorker(service, { release: RELEASE });

@@ -4,6 +4,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { readThemeToken } from "./css-rules.js";
 import { readPngPixels } from "./png-pixels.js";
+import { REPO_ROOT, readRepoFile } from "./repo-files.js";
 import {
   describeChannel,
   listNetworkLogos,
@@ -15,7 +16,7 @@ import {
 const listLogos = (names) =>
   /** @type {import("../shared/page/network-logos.js").NetworkLogo[]} */ (listNetworkLogos(names));
 
-const LOGO_FOLDER = new URL("../shared/page/networks/", import.meta.url);
+const LOGO_FOLDER = "shared/page/networks/";
 
 /** @param {string[]} networks */
 const renderNetworksLine = (networks) => String(renderNetworks(networks));
@@ -66,28 +67,28 @@ test("a square badge is drawn taller than a long wordmark, so the two look about
 
 test("every logo the table names is in its folder, and every file there is one it names", () => {
   const named = NETWORK_LOGOS.flatMap((logo) => [logo.file, logo.darkFile ?? []].flat()).sort();
-  assert.deepEqual(named, readdirSync(LOGO_FOLDER).sort());
+  assert.deepEqual(named, readdirSync(new URL(LOGO_FOLDER, REPO_ROOT)).sort());
 });
 
 test("every logo is a PNG or a plain drawing: no scripts, links, or anything it would load", () => {
   const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
-  for (const file of readdirSync(LOGO_FOLDER)) {
+  for (const file of readdirSync(new URL(LOGO_FOLDER, REPO_ROOT))) {
     if (file.endsWith(".png")) {
       assert.deepEqual(
-        readFileSync(new URL(file, LOGO_FOLDER)).subarray(0, 8),
+        readFileSync(new URL(`${LOGO_FOLDER}${file}`, REPO_ROOT)).subarray(0, 8),
         PNG_SIGNATURE,
         file,
       );
       continue;
     }
-    const svg = readFileSync(new URL(file, LOGO_FOLDER), "utf8");
+    const svg = readRepoFile(`${LOGO_FOLDER}${file}`);
     assert.match(svg, /^<svg[^>]*viewBox=/, file);
     assert.doesNotMatch(svg, /<script|\son\w+=|href="(?!#)|url\((?!#)|@import/i, file);
   }
 });
 
 const WALNUT_INK = readThemeToken(
-  fileURLToPath(new URL("../apps/wnba/page/styles.css", import.meta.url)),
+  fileURLToPath(new URL("apps/wnba/page/styles.css", REPO_ROOT)),
   "dark",
   "--ink",
 );
@@ -96,7 +97,7 @@ const WALNUT_INK = readThemeToken(
 const listDrawingColors = (file) =>
   new Set(
     [
-      ...readFileSync(new URL(file, LOGO_FOLDER), "utf8").matchAll(
+      ...readRepoFile(`${LOGO_FOLDER}${file}`).matchAll(
         /(?:fill|stroke|stop-color)\s*[=:]\s*"?(#[0-9a-f]{3,6})/gi,
       ),
     ].map(([, color]) => color.toLowerCase()),
@@ -118,7 +119,7 @@ const isOpaque = (pixel) => pixel[3] === 255;
  */
 function readMainColor(file) {
   const counts = new Map();
-  for (const pixel of readPngPixels(new URL(file, LOGO_FOLDER)).filter(isOpaque)) {
+  for (const pixel of readPngPixels(new URL(`${LOGO_FOLDER}${file}`, REPO_ROOT)).filter(isOpaque)) {
     const color = formatHex(pixel);
     counts.set(color, (counts.get(color) ?? 0) + 1);
   }
@@ -126,7 +127,9 @@ function readMainColor(file) {
 }
 
 test("every color a dark drawing of a logo adds to its light one is the WNBA's Walnut ink", () => {
-  for (const file of readdirSync(LOGO_FOLDER).filter((name) => name.endsWith("-dark.svg"))) {
+  for (const file of readdirSync(new URL(LOGO_FOLDER, REPO_ROOT)).filter((name) =>
+    name.endsWith("-dark.svg"),
+  )) {
     const light = listDrawingColors(file.replace("-dark", ""));
     const added = [...listDrawingColors(file)].filter((color) => !light.has(color));
     assert.deepEqual(added, [WALNUT_INK], file);
@@ -142,12 +145,16 @@ function isNearBlack(color) {
 }
 
 test("no dark drawing of a logo keeps a near-black, which would vanish on a dark page", () => {
-  for (const file of readdirSync(LOGO_FOLDER).filter((name) => name.endsWith("-dark.svg")))
+  for (const file of readdirSync(new URL(LOGO_FOLDER, REPO_ROOT)).filter((name) =>
+    name.endsWith("-dark.svg"),
+  ))
     assert.deepEqual([...listDrawingColors(file)].filter(isNearBlack), [], file);
 });
 
 test("every dark picture of a logo draws its cream, its main color, in the WNBA's Walnut ink", () => {
-  for (const file of readdirSync(LOGO_FOLDER).filter((name) => name.endsWith("-dark.png")))
+  for (const file of readdirSync(new URL(LOGO_FOLDER, REPO_ROOT)).filter((name) =>
+    name.endsWith("-dark.png"),
+  ))
     assert.equal(readMainColor(file), WALNUT_INK, file);
 });
 
