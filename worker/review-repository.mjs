@@ -1,6 +1,11 @@
+// Runs Git against reviewed data without inheriting credentials or executable Git configuration.
+/** @param {unknown} value */
+export const isReviewRevision = (value) =>
+  typeof value === "string" && /^[0-9a-f]{40}$/.test(value);
+
 /** @param {NodeJS.ProcessEnv} [env] */
 export function createReviewGitEnvironment(env = process.env) {
-  if (env.REVIEW_BASE && !/^[0-9a-f]{40}$/.test(env.REVIEW_BASE))
+  if (env.REVIEW_BASE && !isReviewRevision(env.REVIEW_BASE))
     throw new Error("Review attributes require an immutable base revision.");
   return {
     PATH: env.PATH,

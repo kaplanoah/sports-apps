@@ -1,3 +1,4 @@
+// REVIEW_RULE_ROOT selects preserved trusted rule files; REVIEW_BASE binds saved completion to the base.
 // Splits a pull request's change into areas by what its files are about, each test with the code
 // it tests, so CI's review (review.yml, and trusted-review-area.yml for each area) has one
 // reviewer read each area in full. The first review reads the whole change. A review after it
@@ -770,7 +771,7 @@ async function readLastReviewedHead(env) {
     env,
   });
   const comments = await readAllPages(callGitHub, `/issues/${env.PR}/comments`);
-  return readReviewedHead(findSummary(comments)?.body);
+  return readReviewedHead(findSummary(comments)?.body, env.REVIEW_BASE);
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

@@ -12,6 +12,7 @@ env:
   REVIEW_LABEL: review
   REVIEW_HEAD: ${{ github.event.pull_request.head.sha }}
   REVIEW_BASE: ${{ github.event.pull_request.base.sha }}
+  REVIEW_MERGE: ${{ github.event.pull_request.merge_commit_sha }}
   REVIEW_TRUSTED: ${{ github.sha }}
   PR: ${{ github.event.pull_request.number }}
 
@@ -35,6 +36,7 @@ jobs:
       area-numbers: ${{ steps.plan.outputs.area-numbers }}
       count: ${{ steps.plan.outputs.count }}
       merge: ${{ steps.prepare.outputs.merge }}
+      available: ${{ steps.prepare.outputs.available }}
     steps:
       - name: Decide whether to review
         id: decision
@@ -103,15 +105,14 @@ jobs:
       # reviewers look for.
       - name: Split the change into areas, and write what the reviewers read
         id: plan
-        if: steps.decision.outputs.review == 'true'
+        if: steps.decision.outputs.review == 'true' && steps.prepare.outputs.available == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
-          PR: ${{ github.event.pull_request.number }}
           TITLE: ${{ github.event.pull_request.title }}
           DESCRIPTION: ${{ github.event.pull_request.body }}
         run: |
           node "$RUNNER_TEMP/trusted/worker/trusted-review.mjs" plan >> "$GITHUB_OUTPUT"
-      - if: steps.decision.outputs.review == 'true'
+      - if: steps.decision.outputs.review == 'true' && steps.prepare.outputs.available == 'true'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: trusted-review-plan
@@ -125,7 +126,7 @@ jobs:
   # the pull request. A label already gone is what it wants, so a 404 passes.
   review-label:
     needs: review-plan
-    if: ${{ !cancelled() && needs.review-plan.result == 'success' && needs.review-plan.outputs.labeled == 'true' }}
+    if: ${{ !cancelled() && needs.review-plan.result == 'success' && needs.review-plan.outputs.labeled == 'true' && needs.review-plan.outputs.available == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -135,7 +136,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
-          PR: ${{ github.event.pull_request.number }}
         run: |
           if ! gh api --method DELETE "repos/$REPO/issues/$PR/labels/$REVIEW_LABEL" --silent 2> removal-error.txt; then
             cat removal-error.txt
@@ -269,15 +269,13 @@ jobs:
       - *prepare-reviewed
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          pattern: trusted-review-*
+          pattern: trusted-review-@(plan|find-*|across|post)
           path: ${{ runner.temp }}/review-input/
       - name: Validate the artifacts before posting
         run: node "$RUNNER_TEMP/trusted/worker/trusted-review.mjs" import "$RUNNER_TEMP/review-input"
       - name: Post the findings
         env:
           GH_TOKEN: ${{ github.token }}
-          PR: ${{ github.event.pull_request.number }}
-          SHA: ${{ github.event.pull_request.head.sha }}
         run: node "$RUNNER_TEMP/trusted/worker/trusted-review.mjs" post
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
@@ -293,7 +291,7 @@ jobs:
     env:
       REVIEW_MERGE: ${{ needs.review-plan.outputs.merge }}
     needs: [review-plan, review-area, review-across, review-post]
-    if: ${{ !cancelled() }}
+    if: ${{ !cancelled() && github.event.pull_request.base.ref == 'main' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -312,7 +310,7 @@ jobs:
       - if: needs.review-plan.outputs.count != ''
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          pattern: trusted-review-*
+          pattern: trusted-review-@(plan|find-*|across|post)
           path: ${{ runner.temp }}/review-input/
       - name: Validate the artifacts before summarizing
         if: needs.review-plan.outputs.count != ''
@@ -321,12 +319,10 @@ jobs:
         if: needs.review-plan.outputs.count != ''
         env:
           GH_TOKEN: ${{ github.token }}
-          PR: ${{ github.event.pull_request.number }}
-          SHA: ${{ github.event.pull_request.head.sha }}
         run: node "$RUNNER_TEMP/trusted/worker/trusted-review.mjs" summary
       - name: Record the trusted review result
         id: result
-        if: needs.review-plan.outputs.owed == 'false'
+        if: needs.review-plan.outputs.owed == 'false' && steps.prepare.outputs.available == 'true'
         env:
           REVIEW_OWED: ${{ needs.review-plan.outputs.owed }}
         run: node "$RUNNER_TEMP/trusted/worker/trusted-review.mjs" result

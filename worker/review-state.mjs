@@ -1,8 +1,10 @@
-// What CI's review keeps on a pull request: one summary comment, which carries the last head the
+// What CI's review keeps on a pull request: one summary comment for each legacy or trusted mode,
+// which carries the last head and, for trusted review, its base that the
 // review read in full so the next review reads only what changed since, and the findings it
 // posts, each by its weight and marked with what it says and the head it was posted on, so no try
 // posts one twice and the review can tell a finding an earlier head's review posted from a new
 // one.
+import { isReviewRevision } from "./review-repository.mjs";
 import { readAllPages } from "./github-api.mjs";
 
 export const SUMMARY_MARKER = process.env.REVIEW_TRUSTED
@@ -18,7 +20,8 @@ export const WEIGHTS = ["Important", UNSURE, "Nit", "Pre-existing"];
 // The comment that holds the findings on files a pull request doesn't change, which GitHub takes
 // on no line.
 export const OFF_DIFF_HEADING = "Findings on files this pull request doesn't change:";
-const STATE = /<!-- claude-review-state (\{.*?\}) -->/;
+const STATE_PREFIX = "<!-- claude-review-state ";
+const STATE = /^<!-- claude-review-state (\{.*?\}) -->$/;
 const FINDING_MARK = /<!-- claude-finding ([0-9a-f]{16}) ([0-9a-f]{40}) -->/g;
 
 /**
@@ -35,20 +38,26 @@ export const findSummary = (comments) =>
  * The head the summary says was last reviewed in full, or null when it names none, as a summary
  * from before the review kept one doesn't.
  * @param {string | undefined} body
+ * @param {string} [base] require completion against this base for trusted reviews
  * @returns {string | null}
  */
-export function readReviewedHead(body) {
+export function readReviewedHead(body, base) {
   try {
-    const head = JSON.parse(body?.match(STATE)?.[1] ?? "{}").head;
-    return typeof head === "string" && /^[0-9a-f]{40}$/.test(head) ? head : null;
+    const lines = body?.split("\n") ?? [];
+    if (lines[0] !== SUMMARY_MARKER || body.split(STATE_PREFIX).length !== 2) return null;
+    const state = JSON.parse(lines[1]?.match(STATE)?.[1] ?? "{}");
+    if (Object.keys(state).join(",") !== (base ? "head,base" : "head")) return null;
+    if (base && state.base !== base) return null;
+    const { head } = state;
+    return isReviewRevision(head) ? head : null;
   } catch {
     return null;
   }
 }
 
-/** @param {string} head */
-export const writeReviewedHead = (head) =>
-  `<!-- claude-review-state ${JSON.stringify({ head })} -->`;
+/** @param {string | null} head @param {string} [base] */
+export const writeReviewedHead = (head, base) =>
+  `<!-- claude-review-state ${JSON.stringify({ head, ...(base ? { base } : {}) })} -->`;
 
 /**
  * The mark a finding's comment carries, the same in every form it's posted in.

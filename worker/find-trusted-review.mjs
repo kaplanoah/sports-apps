@@ -1,7 +1,8 @@
+// Joins a code-bound result from the trusted review workflow using read-only Actions access.
 import { execFileSync } from "node:child_process";
 import { appendFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { createGitHub } from "./github-api.mjs";
+import { createGitHub, readAllPages } from "./github-api.mjs";
 import { readReviewIdentity, validateReviewArtifact } from "./review-data.mjs";
 import { readJson } from "./judge-review.mjs";
 import { join } from "node:path";
@@ -47,18 +48,18 @@ export const isTrustedReviewRun = (run, expected) =>
  */
 export async function findTrustedReviewRun(options) {
   const { readGitHub, tree } = options;
-  const { artifacts } = await readGitHub(
-    `/actions/artifacts?name=trusted-review-passed-${tree}&per_page=100`,
-  );
+  const artifacts = await readAllPages(readGitHub,
+    `/actions/artifacts?name=trusted-review-passed-${tree}`, (answer) => answer.artifacts);
+
   for (const artifact of artifacts) {
     if (artifact.expired) continue;
     const run = await readGitHub(`/actions/runs/${artifact.workflow_run.id}`);
     if (isTrustedReviewRun(run, options) && run.conclusion === "success")
       return { run: run.id, pending: false };
   }
-  const { workflow_runs: runs } = await readGitHub(
-    "/actions/workflows/review.yml/runs?event=pull_request_target&per_page=100",
-  );
+  const runs = await readAllPages(readGitHub,
+    `/actions/workflows/review.yml/runs?event=pull_request_target&head_sha=${options.head}`, (answer) => answer.workflow_runs);
+
   const matching = runs.filter((run) => isTrustedReviewRun(run, options));
   return {
     run: null,

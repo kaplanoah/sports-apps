@@ -1,3 +1,4 @@
+// Validates review answers, coverage and sealed stage artifacts before trusted controls use them.
 import { createHash } from "node:crypto";
 import {
   copyFileSync,
@@ -8,6 +9,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { dirname, isAbsolute, join, relative } from "node:path";
+import { isReviewRevision } from "./review-repository.mjs";
 import { findUnreadParts, gatherCandidates, readAnswer } from "./judge-review.mjs";
 
 /** @param {unknown} value */
@@ -17,6 +19,7 @@ const isObject = (value) => Boolean(value) && typeof value === "object" && !Arra
 export const isReviewPath = (path) =>
   typeof path === "string" &&
   path.length > 0 &&
+  !path.includes("<!--") &&
   ![...path].some(
     (character) =>
       character === "\\" || character.charCodeAt(0) < 32 || character.charCodeAt(0) === 127,
@@ -29,7 +32,11 @@ const requireData = (condition, message) => {
 };
 
 /** @param {unknown} value */
-const isText = (value) => typeof value === "string" && value.length > 0 && value.length <= 60000;
+const isText = (value) =>
+  typeof value === "string" &&
+  value.length > 0 &&
+  value.length <= 60000 &&
+  !/<!--\s*(?:claude-|trusted-review-)/.test(value);
 
 /** @param {any} answer @param {"candidates" | "findings"} key */
 export function validateReviewAnswer(answer, key) {
@@ -69,16 +76,30 @@ export function validateReviewAnswer(answer, key) {
   return answer;
 }
 
-/** @param {string | undefined} text @param {"candidates" | "findings"} key */
-export function readReviewAnswer(text, key) {
+/** @param {string | undefined} text @param {"candidates" | "findings"} key
+ * @param {{ checkout?: string, data?: string }} [roots]
+ */
+export function readReviewAnswer(text, key, roots = {}) {
   const parsed = JSON.parse(text ?? "null");
   requireData(
     isObject(parsed) && Array.isArray(parsed[key]) && Array.isArray(parsed.unjudged),
     "structured answer",
   );
+  /** @param {unknown} path */
+  const normalizePath = (path) => {
+    if (typeof path !== "string") return path;
+    if (isAbsolute(path)) {
+      if (roots.data && isReviewPath(relative(roots.data, path)))
+        return `.review/${relative(roots.data, path)}`;
+      return roots.checkout ? relative(roots.checkout, path) : path;
+    }
+    return path.startsWith("./") ? path.slice(2) : path;
+  };
+  for (const item of parsed[key]) if (isObject(item)) item.path = normalizePath(item.path);
+  for (const item of parsed.unjudged) if (isObject(item)) item.file = normalizePath(item.file);
   // Validate before readAnswer's normalization can discard malformed entries.
   validateReviewAnswer({ items: parsed[key], unjudged: parsed.unjudged }, key);
-  return readAnswer(text, key);
+  return readAnswer(JSON.stringify(parsed), key);
 }
 
 /** @param {any} plan */
@@ -87,7 +108,7 @@ export function validateReviewPlan(plan) {
     isObject(plan) && ["first", "push", "none", "reviewed"].includes(plan.stage),
     "plan stage",
   );
-  requireData(plan.since === null || /^[0-9a-f]{40}$/.test(plan.since), "reviewed revision");
+  requireData(plan.since === null || isReviewRevision(plan.since), "reviewed revision");
   requireData(Array.isArray(plan.areas) && Array.isArray(plan.unread), "plan lists");
   for (const unread of plan.unread)
     requireData(isObject(unread) && isReviewPath(unread.path) && isText(unread.why), "unread file");
@@ -172,7 +193,7 @@ export function readReviewIdentity(env) {
   );
   requireData(
     [identity.head, identity.base, identity.merge, identity.trusted].every((sha) =>
-      /^[0-9a-f]{40}$/.test(sha ?? ""),
+      isReviewRevision(sha),
     ),
     "revision identity",
   );
