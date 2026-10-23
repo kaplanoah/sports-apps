@@ -1,6 +1,6 @@
 import { findSeries } from "../../page/js/bracket.js";
 import { describeKey, isFoundEntry } from "../../page/js/changes.js";
-import { nameTeam } from "../../page/js/clubs.js";
+import { nameTeam } from "../../page/js/teams.js";
 import { describeUpdate } from "../../page/js/entry-text.js";
 import { groupUpdates } from "../../page/js/update-groups.js";
 import {
