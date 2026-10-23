@@ -1,14 +1,15 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { isRuleFile } from "../worker/rule-files.mjs";
+import { LONGEST_READ_LINE } from "../worker/plan-review.mjs";
 import { countWords, isFence, isHeading, readProse, startsUnit } from "./guidance-text.js";
 import { listTrackedFiles, readRepoFile, readSkillName } from "./repo-files.js";
 
 const isGuidance = (/** @type {string} */ path) =>
   ["AGENTS.md", "REVIEW.md"].includes(path) || isRuleFile(path) || Boolean(readSkillName(path));
 const GUIDANCE = listTrackedFiles().filter(isGuidance);
-// Read truncates a line at 2,000 characters, so leave room for its line prefix.
-const MOST_GUIDANCE_LINE_CHARACTERS = 1800;
+// Leave ten percent headroom below Read's source-line cutoff for guidance.
+const MOST_GUIDANCE_LINE_CHARACTERS = Math.floor(LONGEST_READ_LINE * 0.9);
 // Claude Code reads AGENTS.md whole into every session, and follows less of a longer one.
 const MOST_AGENTS_CHARACTERS = 16000;
 

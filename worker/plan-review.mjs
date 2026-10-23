@@ -34,7 +34,7 @@ const MOST_AREAS = 12;
 export const PART_LINES = 1000;
 export const PART_BYTES = 48000;
 // Read cuts a longer line short, so a part holds a longer line in pieces, each marked as going on.
-const LONGEST_READ_LINE = 2000;
+export const LONGEST_READ_LINE = 2000;
 const CONTINUED = "(cont.) ";
 
 // From the base to the pull request merged onto it: the whole change, as the merge would make it.
