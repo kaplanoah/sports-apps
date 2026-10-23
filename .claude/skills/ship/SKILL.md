@@ -110,6 +110,7 @@ This skill holds what "Shipping a change" in AGENTS.md leaves out, most of it un
   A push after the label, a merge of `main` too, holds the PR again until the owner has used that commit on beta and labeled it again,
   so put it on beta again and ask.
 - One red change goes live per deploy.
+  While a red PR holds beta for its phone test, no other red PR merges.
   Wait for a merged red PR's deploy to finish before merging another red PR.
   The gate holds a red PR labeled `phone-ok` when its tested head lacks a red commit merged to `main` since the label was added.
   Merge `main` into its branch, put it on beta by "The beta channel" above, and have the owner take `phone-ok` off and add it again after using that head.
