@@ -7,6 +7,9 @@ export const isReviewRevision = (value) =>
 export function createReviewGitEnvironment(env = process.env) {
   if (env.REVIEW_BASE && !isReviewRevision(env.REVIEW_BASE))
     throw new Error("Review attributes require an immutable base revision.");
+  if (env.REVIEW_TRUSTED !== undefined && !isReviewRevision(env.REVIEW_TRUSTED))
+    throw new Error("Review attributes require an immutable trusted revision.");
+  const attributeRevision = env.REVIEW_TRUSTED ?? env.REVIEW_BASE;
   return {
     PATH: env.PATH,
     LANG: "C.UTF-8",
@@ -24,6 +27,6 @@ export function createReviewGitEnvironment(env = process.env) {
     GIT_CONFIG_GLOBAL: "/dev/null",
     GIT_CONFIG_NOSYSTEM: "1",
     GIT_ATTR_NOSYSTEM: "1",
-    ...(env.REVIEW_BASE ? { GIT_ATTR_SOURCE: env.REVIEW_BASE } : {}),
+    ...(attributeRevision ? { GIT_ATTR_SOURCE: attributeRevision } : {}),
   };
 }
