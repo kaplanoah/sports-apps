@@ -151,7 +151,7 @@ jobs:
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: node_modules
-          key: &modules-key node-modules-${{ runner.os }}-${{ steps.node.outputs.node-version }}-${{ hashFiles('package-lock.json') }}
+          key: &modules-key node-modules-v2-${{ runner.os }}-${{ steps.node.outputs.node-version }}-${{ hashFiles('package-lock.json') }}
       - &install-modules
         if: steps.modules.outputs.cache-hit != 'true'
         run: npm ci

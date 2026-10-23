@@ -12,44 +12,12 @@ paths:
 
 # Browser tests
 
-- In a browser test, wait for what the page shows with `expect(locator)`,
-  for what it keeps inside the page with `page.waitForFunction`, as the root's `tests/browser/at-rest.mjs` does for catching up,
-  and for what the test counts, or what no locator reads, with `expect.poll`,
-  never for a fixed time or for the network to go quiet; lint rejects `waitForTimeout`, `setTimeout`, and `networkidle`.
-  An `expect.poll` over `page.evaluate` takes a trace snapshot each time it asks, which can take CI's WebKit seconds on a whole season's page,
-  so it may ask only a few times before its timeout.
-  Get past the page's timers and animation frames by moving its fake clock with `page.clock.runFor`,
-  and past a scroll by waiting for its `scroll` or `scrollend` event.
-- A browser test that passes only some of the time has a bug to find and fix, in the page or the test, in its own PR.
-  CI retries a failed browser test once and runs only the apps a change reaches (the root's `playwright.config.mjs` and `worker/browser-scope.mjs`).
-- CI's `burn-in` runs each spec a pull request adds or changes 10 times, so a spec holds at most 30 tests,
-  which the root's `tests/browser-spec-size.test.js` checks (`worker/burn-in-specs.mjs` and `worker/judge-burn-in.mjs`).
-- Each night, main's browser tests run three times over, and each test that failed goes in the issue Flaky browser tests (`.github/workflows/flaky.yml`).
-  The nightly workflow also repeats the date/time-sensitive Node list in Honolulu.
-  Its Node job fails the workflow separately from browser-flake reporting.
-  Manual runs reproduce browser tests without repeating Node tests.
-  To reproduce a flaky test, or to show a fix holds, run that workflow by hand with the tests,
-  the project, the branch, and how many times to run each: it runs on the machine CI uses, WebKit included, which a cloud session doesn't have.
-- After a reload whose page code a test holds, the copy the page puts back has already taken the load note away,
-  so the test waits for `domcontentloaded` to know the code has run.
-- Route a browser test's requests by a pattern, like the root's `matchPath` in `tests/browser/harness.mjs`,
-  never a function, which makes Playwright ask the test about every request the page makes and slows each load; lint rejects one.
-  To unroute one of two routes with the same pattern, name its handler too.
+- In a browser test, wait for what the page shows with `expect(locator)`, for what it keeps inside the page with `page.waitForFunction`, as the root's `tests/browser/at-rest.mjs` does for catching up, and for what the test counts, or what no locator reads, with `expect.poll`, never for a fixed time or for the network to go quiet; lint rejects `waitForTimeout`, `setTimeout`, and `networkidle`. An `expect.poll` over `page.evaluate` takes a trace snapshot each time it asks, which can take CI's WebKit seconds on a whole season's page, so it may ask only a few times before its timeout. Get past the page's timers and animation frames by moving its fake clock with `page.clock.runFor`, and past a scroll by waiting for its `scroll` or `scrollend` event.
+- A browser test that passes only some of the time has a bug to find and fix, in the page or the test, in its own PR. CI retries a failed browser test once and runs only the apps a change reaches (the root's `playwright.config.mjs` and `worker/browser-scope.mjs`).
+- CI's `burn-in` runs each spec a pull request adds or changes 10 times, so a spec holds at most 30 tests, which the root's `tests/browser-spec-size.test.js` checks (`worker/burn-in-specs.mjs` and `worker/judge-burn-in.mjs`).
+- Each night, main's browser tests run three times over, and each test that failed goes in the issue Flaky browser tests (`.github/workflows/flaky.yml`). The nightly workflow also repeats the date/time-sensitive Node list in Honolulu. Its Node job fails the workflow separately from browser-flake reporting. Manual runs reproduce browser tests without repeating Node tests. To reproduce a flaky test, or to show a fix holds, run that workflow by hand with the tests, the project, the branch, and how many times to run each: it runs on the machine CI uses, WebKit included, which a cloud session doesn't have. Select the branch in GitHub's "Run workflow" picker, or with `gh workflow run flaky.yml --ref <branch>`. The workflow checks out that run's own ref, so branch code never runs in main's cache context.
+- After a reload whose page code a test holds, the copy the page puts back has already taken the load note away, so the test waits for `domcontentloaded` to know the code has run.
+- Route a browser test's requests by a pattern, like the root's `matchPath` in `tests/browser/harness.mjs`, never a function, which makes Playwright ask the test about every request the page makes and slows each load; lint rejects one. To unroute one of two routes with the same pattern, name its handler too.
 - Before a test changes what the page reads next, wait until the page shows its last read, or the change races the read still on its way.
-- A browser test that isn't about motion asks for reduced motion,
-  with `page.emulateMedia({ reducedMotion: "reduce" })` or, for a whole file,
-  `test.use({ contextOptions: { reducedMotion: "reduce" } })`, so it doesn't wait out eased scrolls and springs.
-  Each animation keeps a full-motion test of its own.
-  A gesture, like a swipe, is tested both ways too: its full-motion test drives it with the root's `tests/browser/touch.mjs`,
-  as a finger does, and checks what moves and what doesn't once the finger lifts,
-  since a motion that replays or jumps then shows only in full motion.
-  A drag's moves come as a flick unless its `durationMs` spreads their times out, so a test of a drag that comes to rest before the finger lifts gives one.
-  Its moves still go out within a frame or two, so a test that checks a drag on each frame also passes `isFrameByFrame`,
-  which spaces their times a frame apart too, so it sets the drag's speed with `durationMs`,
-  as the root's `tests/browser/home-screen-help.mjs` does for the welcome's swipe down.
-  A swipe is checked frame by frame: where what it moves is on each frame,
-  never stepping back, and that the page changes nothing while the finger moves it but where that is,
-  as the WNBA's `sheet-stack.spec.mjs` does for a sheet's swipe back.
-- The browser tests run in CI on Chromium's headless shell, which behaves differently from full Chromium; for example, it denies notification permission.
-  If you set `CHROMIUM_PATH`, point it at the headless shell.
-  Set `BROWSER_TEST_PORT` to run a second checkout's browser tests alongside another's, on that port and the next.
+- A browser test that isn't about motion asks for reduced motion, with `page.emulateMedia({ reducedMotion: "reduce" })` or, for a whole file, `test.use({ contextOptions: { reducedMotion: "reduce" } })`, so it doesn't wait out eased scrolls and springs. Each animation keeps a full-motion test of its own. A gesture, like a swipe, is tested both ways too: its full-motion test drives it with the root's `tests/browser/touch.mjs`, as a finger does, and checks what moves and what doesn't once the finger lifts, since a motion that replays or jumps then shows only in full motion. A drag's moves come as a flick unless its `durationMs` spreads their times out, so a test of a drag that comes to rest before the finger lifts gives one. Its moves still go out within a frame or two, so a test that checks a drag on each frame also passes `isFrameByFrame`, which spaces their times a frame apart too, so it sets the drag's speed with `durationMs`, as the root's `tests/browser/home-screen-help.mjs` does for the welcome's swipe down. A swipe is checked frame by frame: where what it moves is on each frame, never stepping back, and that the page changes nothing while the finger moves it but where that is, as the WNBA's `sheet-stack.spec.mjs` does for a sheet's swipe back.
+- The browser tests run in CI on Chromium's headless shell, which behaves differently from full Chromium; for example, it denies notification permission. If you set `CHROMIUM_PATH`, point it at the headless shell. Set `BROWSER_TEST_PORT` to run a second checkout's browser tests alongside another's, on that port and the next.

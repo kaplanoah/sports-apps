@@ -3,7 +3,10 @@ import assert from "node:assert/strict";
 import { deploy, deployRelease, deployWorkers } from "../worker/deploy.mjs";
 import { createServiceRoots } from "./service-roots.js";
 
-const ENV = { CLOUDFLARE_ACCOUNT_ID: "acct123", CLOUDFLARE_WORKERS_SUBDOMAIN: "example-subdomain" };
+const ENV = {
+  CLOUDFLARE_ACCOUNT_ID: "acct123",
+  CLOUDFLARE_WORKERS_SUBDOMAIN: "example-subdomain",
+};
 const API = "https://api.cloudflare.com/client/v4";
 const NEW_COMMIT = "2".repeat(40);
 const LIVE_COMMIT = "1".repeat(40);

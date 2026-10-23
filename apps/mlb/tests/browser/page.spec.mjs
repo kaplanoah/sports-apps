@@ -15,6 +15,7 @@ import { waitForTimedAnimations } from "../../../../tests/browser/animations.mjs
 import { waitForLoadToSettle } from "../../../../tests/browser/at-rest.mjs";
 import { readCapitals } from "../../../../tests/browser/capitals.mjs";
 import { listFontsNotPreloaded } from "../../../../tests/browser/font-loads.mjs";
+import { showTheme } from "../../../../tests/browser/theme-layout.mjs";
 import { listLowContrastText } from "../../../../tests/browser/contrast.mjs";
 import { listTextOffRoles, readRole } from "../../../../tests/browser/type-roles.mjs";
 import { listChipsOffCenter } from "../../../../tests/browser/chip-centering.mjs";
@@ -716,16 +717,35 @@ test("every font the page's views draw with is preloaded", async ({ page }) => {
   expect(await listFontsNotPreloaded(page)).toEqual([]);
 });
 
-test("the header's words are in Libre Franklin and its times in Chivo Mono, both at the detail's size, on whole-pixel lines", async ({
+test("the header's words, times, and days are in Libre Franklin at the detail's size, on whole-pixel lines", async ({
   page,
 }) => {
   await openApp(page);
   const stamp = page.locator("#stamp");
   await expect(stamp).toBeVisible();
   const detail = `${(await readRole(page, "detail")).size}px`;
-  await expect(stamp).toHaveCSS("font-family", /^"Libre Franklin"/);
-  await expect(stamp).toHaveCSS("font-size", detail);
-  await expect(stamp).toHaveCSS("line-height", "18px");
-  await expect(stamp.locator("b:not(.now)").first()).toHaveCSS("font-family", /^"Chivo Mono"/);
-  await expect(stamp.locator("b:not(.now)").first()).toHaveCSS("font-size", detail);
+  const caption = `${(await readRole(page, "caption")).size}px`;
+  const times = stamp.locator("b:not(.now)");
+  await expect(times.first()).toBeVisible();
+  for (const viewport of [PHONE, WIDE_SCREEN]) {
+    await page.setViewportSize(viewport);
+    for (const theme of /** @type {const} */ (["light", "dark"])) {
+      await showTheme(page, theme);
+      await expect(stamp).toHaveCSS("font-family", /^"Libre Franklin"/);
+      await expect(stamp).toHaveCSS("font-size", detail);
+      await expect(stamp).toHaveCSS("line-height", "18px");
+      const ink = await readColor(page, "--ink-mid");
+      for (const time of await times.all()) {
+        await expect(time).toHaveCSS("font-family", /^"Libre Franklin"/);
+        await expect(time).toHaveCSS("font-size", detail);
+        await expect(time).toHaveCSS("font-weight", "400");
+        await expect(time).toHaveCSS("color", ink);
+        await expect(time).toHaveCSS("line-height", "18px");
+      }
+      for (const meridiem of await stamp.locator(".ap").all()) {
+        await expect(meridiem).toHaveCSS("font-size", caption);
+        await expect(meridiem).toHaveCSS("font-weight", "350");
+      }
+    }
+  }
 });

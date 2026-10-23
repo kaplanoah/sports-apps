@@ -136,7 +136,10 @@ test("trusted review pins workflow authority, source, Node and isolated artifact
         assert.doesNotMatch(step, /merge-multiple|run-id:/);
       }
       if (/run:.*node /.test(step)) {
-        assert.match(step, /node "\$RUNNER_TEMP\/trusted\/worker\/trusted-review\.mjs"/);
+        assert.match(
+          step,
+          /node "\$RUNNER_TEMP\/trusted\/worker\/(?:trusted-review|review-diagnostics)\.mjs"/,
+        );
         assert.doesNotMatch(step, /npm |npx |node worker\//);
       }
       if (/uses: anthropics\//.test(step)) {
@@ -528,6 +531,8 @@ async function verifyHostileReviewIsolation(baseRef) {
   const evil = `import {writeFileSync} from "node:fs";writeFileSync(${JSON.stringify(marker)},"executed");throw new Error("untrusted code");`;
   for (const path of [
     "trusted-review.mjs",
+    "review-diagnostics.mjs",
+    "review-json.mjs",
     "review-git.mjs",
     "plan-review.mjs",
     "judge-review.mjs",
@@ -839,6 +844,17 @@ async function verifyHostileReviewIsolation(baseRef) {
   );
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /a.js:1:reviewed tracked text/);
+  const diagnostics = spawnSync(
+    process.execPath,
+    [join(trusted, "worker/review-diagnostics.mjs")],
+    {
+      cwd: checkout,
+      env: { ...ENV, REVIEW_ATTEMPT: "across", CLAUDE_OUTCOME: "failure", EXECUTION_FILE: "" },
+      encoding: "utf8",
+    },
+  );
+  assert.equal(diagnostics.status, 0, diagnostics.stderr);
+  assert.equal(JSON.parse(diagnostics.stdout).execution_status, "unknown");
   const workerSearch = spawnSync(
     process.execPath,
     [

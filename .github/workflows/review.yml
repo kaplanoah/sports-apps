@@ -211,7 +211,7 @@ jobs:
         id: across
         continue-on-error: true
         timeout-minutes: 30
-        uses: anthropics/claude-code-action@1d6de8cb0c237e7c15e9e1bdf973826ebae490cc # v1.0.248
+        uses: anthropics/claude-code-action@e4a6faad497d33dbc7144135c75e41f82f0bf6c0 # v1.0.255
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -240,6 +240,15 @@ jobs:
             7. Weigh each as the guide's "How to report" says.
             8. Write each finding's body as the guide's "How to report" says, without its weight, which a later step adds, naming every place it shows. Put it on the line the diff changes nearest its first place, naming that place if it's another.
             9. Post nothing. End with your answer: every finding, rejected ones too, and anything you couldn't judge from the code, and why.
+      - name: Diagnose the across attempt
+        continue-on-error: true
+        if: ${{ always() && (steps.across.outcome == 'success' || steps.across.outcome == 'failure' || steps.across.outcome == 'cancelled') }}
+        env:
+          REVIEW_ATTEMPT: across
+          CLAUDE_OUTCOME: ${{ steps.across.outcome }}
+          EXECUTION_FILE: ${{ steps.across.outputs.execution_file }}
+          CLAUDE_OUTPUT_PRESENT: ${{ steps.across.outputs.structured_output != '' }}
+        run: node "$RUNNER_TEMP/trusted/worker/review-diagnostics.mjs"
       - name: Keep the check's answer
         id: keep
         if: steps.across.outcome == 'success'
