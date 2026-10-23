@@ -279,6 +279,82 @@ test("at 300,000 tokens gh api reads anything but writes only the PR, its commen
   assert.equal(answerStopCommand("gh api repos/o/r/contents/AGENTS.md"), null);
 });
 
+for (const command of [
+  "gh api -X GET -X DELETE repos/o/r/git/refs/heads/beta",
+  "gh api -X 'DELETE' repos/o/r/git/refs/heads/beta",
+  'gh api --method="DELETE" repos/o/r/git/refs/heads/beta',
+  "gh api -XDELETE repos/o/r/git/refs/heads/beta",
+  "gh api repos/o/r/actions/workflows/deploy.yml/dispatches -fref=main",
+  "gh api repos/o/r/issues -f title=t -H 'X: -X GET'",
+  "gh api repos/o/r/issues -Ftitle=t",
+  "gh api repos/o/r/issues --field=title=t",
+  "gh api repos/o/r/issues --raw-field=title=t",
+  "gh api repos/o/r/issues --input=body.json",
+  "gh api -H 'X: --method=GET' -X DELETE repos/o/r/issues",
+  "gh api -H '-f title=t' repos/o/r/issues -X DELETE",
+  "gh api '-X' 'GET' '--method=DELETE' repos/o/r/git/refs/heads/beta",
+  "gh api -X D\\ELETE repos/o/r/git/refs/heads/beta",
+  "gh api repos/o/r/issues '-ftitle=t'",
+  "gh api repos/o/r/issues '--input=body.json'",
+  "gh api repos/o/r/issues -X DELETE # -X GET",
+]) {
+  test(`at 300,000 tokens parsed API arguments deny ${command}`, () => {
+    assert.ok(answerStopCommand(command), command);
+  });
+}
+
+test("at 300,000 tokens API methods use the last value and ignore options inside headers", () => {
+  for (const command of [
+    "gh api -X DELETE -X 'GET' repos/o/r/issues",
+    'gh api -XDELETE --method="GET" repos/o/r/issues',
+    "gh api -H 'X: -X DELETE -f title=t' repos/o/r/issues",
+    "gh api --method='PATCH' -Fbody=@handoff.md repos/o/r/pulls/1",
+    "gh api repos/o/r/pulls/1 --method=PATCH --raw-field='body=handoff notes'",
+    "gh api -X DELETE --method='GET' repos/o/r/issues --field title=t",
+    "gh api -H 'X: --method=DELETE -f title=t' repos/o/r/issues",
+    "gh api -X \\\nGET repos/o/r/issues",
+    "gh api repos/o/r/issues # -X DELETE",
+  ])
+    assert.equal(answerStopCommand(command), null, command);
+});
+
+test("at 300,000 tokens heredoc input cannot supply API flags or block a handoff's literal message", () => {
+  for (const command of [
+    "gh api repos/o/r/issues --input - <<'EOF'\n-X GET\nEOF",
+    "gh api -X DELETE repos/o/r/git/refs/heads/beta <<'EOF'\n--method=GET\nEOF",
+  ])
+    assert.ok(answerStopCommand(command), command);
+  for (const command of [
+    "git commit -F - <<'EOF'\n--output=AGENTS.md --ext-diff\nEOF",
+    "git commit -m '--output=AGENTS.md'",
+    "gh api repos/o/r/pulls/1 --input - <<'EOF'\n-X DELETE\nEOF",
+    "gh api <<'EOF' repos/o/r/pulls/1 --method PATCH --input -\n-X GET\nEOF",
+  ])
+    assert.equal(answerStopCommand(command), null, command);
+});
+
+for (const command of [
+  "git diff --output=AGENTS.md origin/main",
+  "git log --output=AGENTS.md",
+  "git show --output=AGENTS.md",
+  "git diff --output AGENTS.md",
+  "git diff '--output=AGENTS.md'",
+  "git diff --ext-diff",
+  "git log '--ext-diff'",
+  "git show --ext-diff",
+  "git fetch --upload-pack=x .",
+  "git fetch --upload-pack x .",
+  "git fetch -u x .",
+  "git fetch -ux .",
+  "git fetch '--upload-pack=x' .",
+  "git fetch '-ux' .",
+  "git -C /repo diff --output=AGENTS.md",
+]) {
+  test(`at 300,000 tokens git cannot write output or launch a helper: ${command}`, () => {
+    assert.ok(answerStopCommand(command), command);
+  });
+}
+
 test("at 300,000 tokens a handoff's command can't pipe, redirect, or substitute another in", () => {
   for (const command of [
     "git status > AGENTS.md",
@@ -296,8 +372,19 @@ test("at 300,000 tokens a handoff's command can't pipe, redirect, or substitute 
     assert.ok(answerStopCommand(command), command);
 });
 
-test("a git command run with -C another folder is judged as the command it runs", () => {
+test("at 300,000 tokens quoted git folders and literal file names keep their argument meanings", () => {
+  assert.equal(answerStopCommand("git -C '/repo folder' diff origin/main"), null);
+  assert.equal(answerStopCommand("git -C /repo\\ folder status"), null);
+  assert.equal(answerStopCommand("git diff origin/main -- '--output=notes.md'"), null);
+  assert.ok(answerStopCommand("git -C '/repo folder' diff '--output=AGENTS.md'"));
+  assert.ok(answerStopCommand("git -C '/repo folder' fetch '--upload-pack=x' ."));
+  assert.ok(answerStopCommand("git -C '/repo folder' push"));
+});
+
+test("at 300,000 tokens git -C lets a listed read or commit through, but never a push", () => {
   assert.equal(answerStopCommand("git -C /repo status"), null);
+  assert.equal(answerStopCommand("git -C /repo commit -m handoff"), null);
+  assert.ok(answerStopCommand("git -C /repo push"));
   assert.ok(answerStopCommand("git -C /repo reset --hard"));
 });
 

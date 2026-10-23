@@ -28,8 +28,17 @@ const HANDOFF_TOOLS = new Set([
   "mcp__github__merge_pull_request",
 ]);
 const READ_ONLY_GITHUB_TOOL = /^mcp__github__(?:get|list|search)_/;
+const HANDOFF_GIT_COMMANDS = new Set([
+  "status",
+  "log",
+  "diff",
+  "show",
+  "fetch",
+  "rev-parse",
+  "add",
+  "commit",
+]);
 const HANDOFF_COMMANDS = [
-  /^git\s+(?:-C\s+\S+\s+)?(?:status|log|diff|show|fetch|rev-parse|add|commit)\b/,
   /^gh\s+pr\s+(?:view|checks|diff|create|edit|comment|merge)\b/,
   /^gh\s+run\s+(?:view|list|watch)\b/,
 ];
@@ -56,8 +65,6 @@ const GH_API_VALUE_OPTIONS = new Set([
   "-p",
   "--preview",
 ]);
-const GH_API_METHOD = /(?:^|\s)(?:-X\s*|--method[\s=]+)(\w+)/;
-const GH_API_FIELD = /(?:^|\s)(?:-[fF]|--raw-field|--field|--input)(?:[\s=]|$)/;
 // The PR, its comments and replies, and its merge: what a handoff writes through REST.
 const PULL_REQUEST_ENDPOINT =
   /^\/?repos\/[^/\s]+\/[^/\s]+\/(?:pulls(?:\/\d+(?:\/(?:merge|comments(?:\/\d+\/replies)?))?)?|issues\/\d+\/comments)(?:\?\S*)?$/;
@@ -168,16 +175,105 @@ function findApiEndpoint(words) {
 }
 
 /**
+ * A command's words with shell quotes and escapes removed, or null for unfinished quoting.
+ * @param {string} command
+ */
+function parseCommandWords(command) {
+  /** @type {string[]} */
+  const words = [];
+  let word = "";
+  let quote = "";
+  let hasWord = false;
+  let isHeredocDelimiter = false;
+  function finishWord() {
+    if (!hasWord) return;
+    if (isHeredocDelimiter) isHeredocDelimiter = false;
+    else words.push(word);
+    word = "";
+    hasWord = false;
+  }
+  for (let index = 0; index < command.length; index += 1) {
+    const char = command[index];
+    if (char === "\\" && quote !== "'") {
+      const next = command[index + 1];
+      if (next === undefined) return null;
+      if (!quote || /[$`"\\\n]/.test(next)) {
+        if (next !== "\n") {
+          word += next;
+          hasWord = true;
+        }
+        index += 1;
+      } else {
+        word += char;
+        hasWord = true;
+      }
+    } else if (quote) {
+      if (char === quote) quote = "";
+      else word += char;
+    } else if (char === "'" || char === '"') {
+      quote = char;
+      hasWord = true;
+    } else if (command.startsWith("<<", index)) {
+      if (/^\d+$/.test(word)) {
+        word = "";
+        hasWord = false;
+      } else finishWord();
+      isHeredocDelimiter = true;
+      index += command[index + 2] === "-" ? 2 : 1;
+    } else if (char === "\n" || (char === "#" && !hasWord)) {
+      break;
+    } else if (/\s/.test(char)) {
+      finishWord();
+    } else {
+      word += char;
+      hasWord = true;
+    }
+  }
+  if (quote) return null;
+  finishWord();
+  return words;
+}
+
+/**
+ * Whether Git reads or commits without writing a read's output or starting a helper.
+ * @param {string[]} words
+ */
+function isHandoffGitCommand(words) {
+  const commandIndex = words[1] === "-C" ? 3 : 1;
+  const command = words[commandIndex];
+  if (!HANDOFF_GIT_COMMANDS.has(command)) return false;
+  const hasDiffOptions = command === "diff" || command === "log" || command === "show";
+  const argumentsAfterCommand = words.slice(commandIndex + 1);
+  const endOfOptions = argumentsAfterCommand.indexOf("--");
+  const options =
+    endOfOptions < 0 ? argumentsAfterCommand : argumentsAfterCommand.slice(0, endOfOptions);
+  return !options.some(
+    (word) =>
+      (hasDiffOptions && /^--(?:output|ext-diff)(?:=|$)/.test(word)) ||
+      (command === "fetch" && /^(?:--upload-pack(?:=|$)|-u)/.test(word)),
+  );
+}
+
+/**
  * Whether a `gh api` call only reads, or writes only the PR: its description, comments, replies,
  * and merge. A call that sends fields and names no method posts them.
  * @param {string} apiArguments
  */
 function isHandoffApiCall(apiArguments) {
-  const method =
-    GH_API_METHOD.exec(apiArguments)?.[1].toUpperCase() ??
-    (GH_API_FIELD.test(apiArguments) ? "POST" : "GET");
-  const endpoint = findApiEndpoint(apiArguments.trim().split(/\s+/));
-  return method === "GET" || PULL_REQUEST_ENDPOINT.test(endpoint);
+  const words = parseCommandWords(apiArguments);
+  if (!words) return false;
+  let method;
+  let hasFields = false;
+  for (let index = 0; index < words.length; index += 1) {
+    const word = words[index];
+    if (word === "-X" || word === "--method") method = words[index + 1] ?? "";
+    else if (word.startsWith("-X")) method = word.slice(2);
+    else if (word.startsWith("--method=")) method = word.slice("--method=".length);
+    if (/^(?:-[fF]|--field|--raw-field|--input)/.test(word)) hasFields = true;
+    if (GH_API_VALUE_OPTIONS.has(word)) index += 1;
+  }
+  const resolvedMethod = method?.toUpperCase() ?? (hasFields ? "POST" : "GET");
+  return resolvedMethod === "GET" || PULL_REQUEST_ENDPOINT.test(findApiEndpoint(words));
 }
 
 /**
@@ -194,6 +290,9 @@ function isHandoffCommand(command, branch) {
   if (push) return isOwnBranchPush(push[1], branch);
   const api = GH_API.exec(trimmed);
   if (api) return isHandoffApiCall(api[1]);
+  const words = parseCommandWords(trimmed);
+  if (!words) return false;
+  if (words[0] === "git") return isHandoffGitCommand(words);
   return HANDOFF_COMMANDS.some((pattern) => pattern.test(trimmed));
 }
 
