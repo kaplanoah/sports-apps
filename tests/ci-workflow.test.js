@@ -1,3 +1,9 @@
+import {
+  ATTEMPT_TIMEOUT_MS,
+  MAX_ATTEMPTS,
+  CLEANUP_GRACE_MS,
+  CLEANUP_TIMEOUT_MS,
+} from "../worker/install-browsers.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
@@ -44,6 +50,21 @@ test("every install skips npm's audit", () => {
   assert.match(readRepoFile(".npmrc"), /^audit=false$/m);
 });
 
+test("every workflow browser install uses the bounded installer", () => {
+  for (const workflow of WORKFLOWS)
+    assert.doesNotMatch(
+      readRepoFile(`.github/workflows/${workflow}`),
+      /(?:npx playwright|node_modules\/.*playwright.*cli\.js) install\b/,
+      workflow,
+    );
+  for (const workflow of ["ci.yml", "flaky.yml", "deploy.yml", "watch.yml"])
+    assert.match(
+      readRepoFile(`.github/workflows/${workflow}`),
+      /node worker\/install-browsers\.mjs /,
+      workflow,
+    );
+});
+
 // An image holds only the browsers its own Playwright version runs, and Dependabot moves the
 // lockfile's Playwright without it, so each job installs its browsers from the installed one.
 test("no workflow runs its browsers from an image that pins Playwright's version", () => {
@@ -65,11 +86,12 @@ test("the nightly browser install has a step timeout that leaves time for the te
   const browser = readJob("browser", "flaky.yml");
   const install = browser
     .split(/^ {6}- /m)
-    .find((step) => /run: npx playwright install\b/.test(step));
+    .find((step) => /run: node worker\/install-browsers\.mjs\b/.test(step));
   assert.ok(install, "the nightly job installs its browsers");
   const timeout = Number(install.match(/\btimeout-minutes: (\d+)/)?.[1]);
   const jobTimeout = Number(browser.match(/^ {4}timeout-minutes: (\d+)/m)?.[1]);
-  assert.ok(timeout > 0 && timeout <= 10, "the install stops within ten minutes");
+  const budget = MAX_ATTEMPTS * (ATTEMPT_TIMEOUT_MS + CLEANUP_GRACE_MS + CLEANUP_TIMEOUT_MS);
+  assert.ok(timeout * 60000 > budget, "the workflow allows all bounded attempts and cleanup");
   assert.ok(timeout < jobTimeout, "the tests keep their own time after installation");
 });
 
@@ -146,7 +168,7 @@ test("each job that runs the at-rest specs in WebKit installs WebKit with its sy
   ])
     assert.match(
       readJob(job, workflow),
-      /run: npx playwright install --with-deps .*\bwebkit\b/,
+      /run: node worker\/install-browsers\.mjs --with-deps .*\bwebkit\b/,
       `${workflow}: ${job}`,
     );
   const webkitSpec = readRepoFile("playwright.config.mjs").match(/testMatch: "([^"]+)"/)?.[1];
@@ -154,7 +176,7 @@ test("each job that runs the at-rest specs in WebKit installs WebKit with its sy
   assert.match(
     readJob("burn-in"),
     new RegExp(
-      `- if: contains\\(needs\\.scope\\.outputs\\.specs, '${escapePattern(webkitSpec)}'\\)\\n\\s+run: npx playwright install --with-deps webkit\\n`,
+      `- if: contains\\(needs\\.scope\\.outputs\\.specs, '${escapePattern(webkitSpec)}'\\)\\n\\s+run: node worker/install-browsers.mjs --with-deps webkit\\n`,
     ),
     "burn-in installs WebKit whenever a spec the config's WebKit projects run is among the ones it repeats",
   );

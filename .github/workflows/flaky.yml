@@ -49,8 +49,8 @@ jobs:
           key: node-modules-${{ runner.os }}-${{ steps.node.outputs.node-version }}-${{ hashFiles('package-lock.json') }}
       - if: steps.modules.outputs.cache-hit != 'true'
         run: npm ci
-      - run: npx playwright install --with-deps --only-shell chromium webkit
-        timeout-minutes: 10
+      - run: node worker/install-browsers.mjs --with-deps --only-shell chromium webkit
+        timeout-minutes: 7
       # Every test runs to the end, however many fail, so the issue names each flaky one.
       - name: Run the browser tests over and over
         shell: bash
