@@ -1,3 +1,4 @@
+import { holdClock } from "../../../../tests/browser/harness.mjs";
 import { test, expect, expectDayAtTop } from "./harness.mjs";
 import {
   describeTimedAnimations,
@@ -136,7 +137,7 @@ test("a tap on Today flies the list there on a spring, never stepping back, and 
   await page.clock.runFor(1000);
   await expectDayAtTop(page, "2026-09-29");
   // Each frame comes only as the test moves the clock, however slow the machine draws.
-  await page.clock.pauseAt((await page.evaluate(() => Date.now())) + 1000);
+  await holdClock(page);
   await page.evaluate(() => {
     const tops = /** @type {number[]} */ ([]);
     const note = () => {
@@ -170,7 +171,7 @@ test("a key pressed while the list flies to a day stops it where it is, and the 
   await page.clock.runFor(1000);
   await expectDayAtTop(page, "2026-09-29");
   // Each frame comes only as the test moves the clock, however slow the machine draws.
-  await page.clock.pauseAt((await page.evaluate(() => Date.now())) + 1000);
+  await holdClock(page);
 
   await page.locator("#seasonGames .go-today").click();
   await page.clock.runFor(50);
@@ -193,7 +194,7 @@ test("a key pressed before the list takes its first step to today leaves the lis
   await expectDayAtTop(page, "2026-09-29");
   const top = await findList(page).evaluate((list) => list.scrollTop);
   // Each frame comes only as the test moves the clock, so the list sends no scroll after the key.
-  await page.clock.pauseAt((await page.evaluate(() => Date.now())) + 1000);
+  await holdClock(page);
 
   await page.locator("#seasonGames .go-today").click();
   await page.keyboard.press("Shift");
@@ -214,7 +215,7 @@ test("a tap on Games while a flick of the list still slides the dates to today e
     (today) => /** @type {HTMLElement} */ (today.previousElementSibling).dataset.day,
   );
   // Each frame comes only as the test moves the clock, however slow the machine draws.
-  await page.clock.pauseAt((await page.evaluate(() => Date.now())) + 1000);
+  await holdClock(page);
   // The list chooses its top day from its scroll event, which comes when the browser draws, so the
   // clock moves on only once it has. A wheel's turn that moves nothing puts the list in hand.
   /**

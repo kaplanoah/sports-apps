@@ -1,3 +1,4 @@
+import { holdClock } from "../../../../tests/browser/harness.mjs";
 import { test, expect, openApp } from "./harness.mjs";
 import {
   EASE_HALFWAY_MS,
@@ -22,12 +23,7 @@ import {
 } from "../../../../tests/browser/season-scroll.mjs";
 import { openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
 import { fillNews, moveNewsOffTop } from "../../../../tests/browser/start-over.mjs";
-import {
-  holdClock,
-  sendClick,
-  sendFinger,
-  sendScroll,
-} from "../../../../tests/browser/stray-click.mjs";
+import { sendClick, sendFinger, sendScroll } from "../../../../tests/browser/stray-click.mjs";
 import { drag } from "../../../../tests/browser/touch.mjs";
 import { readRole } from "../../../../tests/browser/type-roles.mjs";
 import { dismissUpdatesBox } from "../../../../tests/browser/updates-box.mjs";
