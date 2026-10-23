@@ -1,4 +1,5 @@
 import { isSameJson } from "../page/compare.js";
+import { isStoreDocumentPath, isStoreName } from "../page/store-path.js";
 import { createPushService } from "./push.js";
 import { describeError, respondError, respondJson, respondMethodNotAllowed } from "./responses.js";
 
@@ -62,7 +63,6 @@ import { describeError, respondError, respondJson, respondMethodNotAllowed } fro
  *   build
  */
 
-const NAME_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
 const MAX_LISTED = 100;
 const STATUS_KEY = "live/status";
 // Which season the league's updates are for, so pages never go by their own clocks.
@@ -105,8 +105,8 @@ function readPath(pathname) {
   const [, root, collection, id, ...rest] = pathname.split("/");
   const isValid =
     root === "store" &&
-    NAME_PATTERN.test(collection || "") &&
-    (id === undefined || NAME_PATTERN.test(id)) &&
+    isStoreName(collection) &&
+    (id === undefined || isStoreName(id)) &&
     !rest.length;
   return isValid ? { collection, id } : null;
 }
@@ -116,8 +116,8 @@ const isSameStatus = (stored, current) =>
   !!stored && Object.entries(current).every(([field, value]) => (stored[field] ?? "") === value);
 
 const isWatchedPath = (path) => {
-  const [collection, id, ...rest] = String(path).split("/");
-  return NAME_PATTERN.test(collection) && (id === "" || NAME_PATTERN.test(id)) && !rest.length;
+  const text = String(path);
+  return isStoreDocumentPath(text) || (text.endsWith("/") && isStoreName(text.slice(0, -1)));
 };
 
 // What a page says it watches: documents by path, and collections by name and a slash.
@@ -259,7 +259,7 @@ export function createSeasonStore(league) {
       if (request.method !== "POST") return respondMethodNotAllowed(["POST"]);
       const [, , job, name, ...rest] = pathname.split("/");
       const isJob = Object.hasOwn(league.backgroundJobs ?? {}, job);
-      if (!isJob || !NAME_PATTERN.test(name ?? "") || rest.length)
+      if (!isJob || !isStoreName(name) || rest.length)
         return respondError(404, "not_found", "No such count.");
       const storage = this.createJobStorage(job);
       const count = ((await storage.get(nameCountKey(name))) ?? 0) + 1;

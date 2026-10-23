@@ -38,9 +38,10 @@ function startStore({ isShowing } = {}) {
   );
   const store = createWorkerStore({ baseUrl: new URL("https://mlb-app.example/k3y/"), isShowing });
   const openSocket = () => sockets.at(-1).listeners.open();
+  const hearData = (data) => sockets.at(-1).listeners.message({ data });
   /** @param {unknown} message what the Worker sends down the open socket */
-  const hear = (message) => sockets.at(-1).listeners.message({ data: JSON.stringify(message) });
-  return { store, reads, sockets, openSocket, hear };
+  const hear = (message) => hearData(JSON.stringify(message));
+  return { store, reads, sockets, openSocket, hear, hearData };
 }
 
 const START = Date.parse("2026-10-04T21:00:00Z");
@@ -222,6 +223,103 @@ test("a document the Worker removes leaves a watched collection, and its listene
     .at(-1)
     .listeners.message({ data: JSON.stringify({ path: "schedules-2026/2026-11", data: null }) });
   assert.deepEqual(seen, [["2026-10", "2026-11"], ["2026-10"]]);
+});
+
+async function startWatchingSeason() {
+  const started = startStore();
+  const documents = [];
+  const collections = [];
+  started.store.doc("seasons/2026").onSnapshot((snapshot) => documents.push(snapshot.data()));
+  started.store
+    .collection("seasons")
+    .limit(10)
+    .onSnapshot(({ docs }) => collections.push(docs.map((doc) => doc.data())));
+  started.openSocket();
+  started.reads[0].answer({ data: { inning: 3 } });
+  started.reads[1].answer({ docs: [{ id: "2026", data: { inning: 3 } }] });
+  await settle();
+  return { ...started, documents, collections };
+}
+
+test("an unknown socket message leaves watched documents and collections unchanged, and the following push arrives", async () => {
+  const { hear, documents, collections } = await startWatchingSeason();
+
+  assert.doesNotThrow(() => hear({ connected: true }));
+  assert.deepEqual(documents, [{ inning: 3 }]);
+  assert.deepEqual(collections, [[{ inning: 3 }]]);
+
+  hear({ path: "seasons/2026", data: { inning: 4 } });
+  assert.deepEqual(documents, [{ inning: 3 }, { inning: 4 }]);
+  assert.deepEqual(collections, [[{ inning: 3 }], [{ inning: 4 }]]);
+});
+
+test("malformed socket messages leave watches unchanged and allow the next push on the same socket", async () => {
+  const { hearData, documents, collections, sockets } = await startWatchingSeason();
+  const malformed = [
+    "{",
+    "",
+    ...[
+      null,
+      false,
+      1,
+      "seasons/2026",
+      [],
+      {},
+      { data: { inning: 99 } },
+      { path: null, data: { inning: 99 } },
+      { path: 2026, data: { inning: 99 } },
+      { path: [], data: { inning: 99 } },
+      { path: "", data: { inning: 99 } },
+      { path: "seasons", data: { inning: 99 } },
+      { path: "seasons/", data: { inning: 99 } },
+      { path: "/2026", data: { inning: 99 } },
+      { path: "seasons/2026/extra", data: { inning: 99 } },
+      { path: "seasons/not valid", data: { inning: 99 } },
+      { path: `seasons/${"a".repeat(65)}`, data: { inning: 99 } },
+      { path: "seasons/2026" },
+      { updating: false, path: "seasons/2026", data: { inning: 99 } },
+    ].map((message) => JSON.stringify(message)),
+    new ArrayBuffer(0),
+    new Blob(["{}"]),
+  ];
+
+  for (const [index, data] of malformed.entries()) {
+    const previousDocuments = [...documents];
+    const previousCollections = [...collections];
+    assert.doesNotThrow(() => hearData(data), `malformed message ${index}`);
+    assert.deepEqual(documents, previousDocuments);
+    assert.deepEqual(collections, previousCollections);
+
+    const next = { inning: index + 4 };
+    hearData(JSON.stringify({ path: "seasons/2026", data: next }));
+    assert.deepEqual(documents, [...previousDocuments, next]);
+    assert.deepEqual(collections, [...previousCollections, [next]]);
+  }
+  assert.equal(sockets.length, 1);
+  assert.equal(sockets[0].isClosed, false);
+});
+
+test("a push without data cannot discard an outstanding document or collection read", async () => {
+  const { store, reads, openSocket, hear } = startStore();
+  const documents = [];
+  const collections = [];
+  store.doc("seasons/2026").onSnapshot((snapshot) => documents.push(snapshot.data()));
+  store
+    .collection("seasons")
+    .limit(10)
+    .onSnapshot(({ docs }) => collections.push(docs.map((doc) => doc.data())));
+  openSocket();
+
+  assert.doesNotThrow(() => hear({ path: "seasons/2026" }));
+  reads[0].answer({ data: { inning: 3 } });
+  reads[1].answer({ docs: [{ id: "2026", data: { inning: 3 } }] });
+  await settle();
+  assert.deepEqual(documents, [{ inning: 3 }]);
+  assert.deepEqual(collections, [[{ inning: 3 }]]);
+
+  hear({ path: "seasons/2026", data: { inning: 4 } });
+  assert.deepEqual(documents, [{ inning: 3 }, { inning: 4 }]);
+  assert.deepEqual(collections, [[{ inning: 3 }], [{ inning: 4 }]]);
 });
 
 test("catching up reads every watched document once, as the new socket opens", () => {
@@ -604,6 +702,23 @@ async function startComingBack() {
   await settle();
   return { ...started, seen, changes };
 }
+
+test("malformed update messages cannot release held documents or finish catching up", async () => {
+  const { hear, seen, changes } = await startComingBack();
+  for (const updating of [null, 0, "", "false", [], {}]) {
+    assert.doesNotThrow(() => hear({ updating }));
+    assert.deepEqual(seen, [3]);
+    assert.deepEqual(changes, [true, false]);
+  }
+  hear({ updating: false, path: "seasons/2026", data: { inning: 99 } });
+  assert.deepEqual(seen, [3]);
+  assert.deepEqual(changes, [true, false]);
+
+  hear({ path: "seasons/2026", data: { inning: 9 } });
+  hear({ updating: false });
+  assert.deepEqual(seen, [3, 9]);
+  assert.deepEqual(changes, [true, false, true]);
+});
 
 test("a page coming back with a drawing holds what the store held until the store's update is done, then catches up with the latest at once", async () => {
   const { seen, changes, hear } = await startComingBack();

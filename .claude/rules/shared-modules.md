@@ -170,6 +170,7 @@ but for the tuning panel's, which only a channel off production serves, and only
 - `worker-fetch.js`: reading from the app's own Worker, sharing a recent read
 - `worker-error.js`: reading the Worker's error answers
 - `worker-store.js`: the store client
+- `store-path.js`: names and document paths shared by the store client and Worker
 - `season-reader.js`: reading the current season, its record, and the store's status
 - `season-doc-follower.js`: following a document the store keeps for the season shown
 - `poll-schedule.js`: how long a league's next update waits
