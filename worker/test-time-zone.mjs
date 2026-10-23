@@ -1,8 +1,9 @@
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { join } from "node:path";
-import { NODE_TEST, TIME_ZONE_SOURCE, verifyTimeZoneCoverage } from "./time-zone-scope.mjs";
+import { TIME_ZONE_SOURCE, verifyTimeZoneCoverage } from "./time-zone-scope.mjs";
+import { readRepoText } from "./browser-scope.mjs";
+import { buildNodeTestArgs, listNodeTests } from "./node-tests.mjs";
 
 /** @typedef {(command: string, arguments_: string[], options: import("node:child_process").SpawnSyncOptionsWithStringEncoding) => import("node:child_process").SpawnSyncReturns<string>} TimeZoneSpawn */
 
@@ -11,8 +12,7 @@ const ROOT = new URL("../", import.meta.url);
 export const TIME_ZONE_MANIFEST = JSON.parse(
   readFileSync(new URL("../tests/time-zone-sensitive.json", import.meta.url), "utf8"),
 );
-const TEST_SCRIPT =
-  "node --import ./tests/no-network.js --test tests/*.test.js apps/*/tests/*.test.js services/*/tests/*.test.js";
+const TEST_SCRIPT = "node worker/node-tests.mjs";
 
 /** @param {string} text git diff --name-status --no-renames -z */
 export function parseTimeZoneChanges(text) {
@@ -36,7 +36,7 @@ export function parseTimeZoneChanges(text) {
 export function selectTimeZoneTests(changes, availableTests, manifest = TIME_ZONE_MANIFEST) {
   const selected = new Set(manifest.sensitive);
   for (const { path, status } of changes)
-    if (status !== "D" && NODE_TEST.test(path) && !manifest.fixed.includes(path))
+    if (status !== "D" && availableTests.includes(path) && !manifest.fixed.includes(path))
       selected.add(path);
   return [...selected].filter((path) => availableTests.includes(path)).sort();
 }
@@ -49,14 +49,8 @@ const readGit = (arguments_) =>
     stdio: ["ignore", "pipe", "pipe"],
   });
 
-/** @param {string} path */
-const readRepoText = (path) =>
-  existsSync(join(fileURLToPath(ROOT), path))
-    ? readFileSync(join(fileURLToPath(ROOT), path), "utf8")
-    : null;
-
 /**
- * @param {{ changed?: boolean, git?: typeof readGit, spawnImpl?: TimeZoneSpawn, log?: (message: string) => void, readText?: typeof readRepoText, manifest?: typeof TIME_ZONE_MANIFEST }} [options]
+ * @param {{ changed?: boolean, git?: typeof readGit, spawnImpl?: TimeZoneSpawn, log?: (message: string) => void, readText?: typeof readRepoText, listTests?: typeof listNodeTests, manifest?: typeof TIME_ZONE_MANIFEST }} [options]
  */
 export function testInTimeZone({
   changed = false,
@@ -64,6 +58,7 @@ export function testInTimeZone({
   spawnImpl = spawnSync,
   log = console.log,
   readText = readRepoText,
+  listTests = listNodeTests,
   manifest = TIME_ZONE_MANIFEST,
 } = {}) {
   const scripts = JSON.parse(readText("package.json")).scripts;
@@ -72,7 +67,7 @@ export function testInTimeZone({
       "Update the protected time-zone command and its inventory for package.json's test script.",
     );
   const tracked = git(["ls-files", "-z"]).split("\0");
-  const available = tracked.filter((path) => NODE_TEST.test(path) && readText(path) !== null);
+  const available = listTests();
   const sources = tracked.filter(
     (path) => TIME_ZONE_SOURCE.test(path) && !path.endsWith(".min.js"),
   );
@@ -84,16 +79,12 @@ export function testInTimeZone({
   if (!files.length)
     throw new Error("No sensitive tests were found; refusing an empty Honolulu run.");
   log(`Honolulu: ${files.length} date/time-sensitive or changed Node test files.`);
-  const result = spawnImpl(
-    process.execPath,
-    ["--import", "./tests/no-network.js", "--test-reporter=dot", "--test", ...files],
-    {
-      cwd: ROOT,
-      encoding: "utf8",
-      env: { ...process.env, TZ: "Pacific/Honolulu" },
-      stdio: "inherit",
-    },
-  );
+  const result = spawnImpl(process.execPath, ["--test-reporter=dot", ...buildNodeTestArgs(files)], {
+    cwd: ROOT,
+    encoding: "utf8",
+    env: { ...process.env, TZ: "Pacific/Honolulu" },
+    stdio: "inherit",
+  });
   if (result.error) log(`Could not start the alternate-zone tests: ${result.error.message}`);
   return result.status ?? 1;
 }

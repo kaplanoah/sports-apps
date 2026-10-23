@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -12,12 +12,13 @@ import {
   testInTimeZone,
 } from "../worker/test-time-zone.mjs";
 import {
-  NODE_TEST,
   TIME_ZONE_SOURCE,
   inspectTimeZoneCode,
   verifyTimeZoneCoverage,
 } from "../worker/time-zone-scope.mjs";
 import { REPO_ROOT, listTrackedFiles, readRepoFile } from "./repo-files.js";
+import { readRepoText } from "../worker/browser-scope.mjs";
+import { listNodeTests } from "../worker/node-tests.mjs";
 
 const SCRIPT = JSON.parse(readRepoFile("package.json")).scripts.test;
 const TESTS = [
@@ -39,12 +40,11 @@ const readFixture = (path) =>
 
 test("the explicit manifest covers native time APIs in every current Node test and its imports", () => {
   const tracked = listTrackedFiles();
-  const tests = tracked.filter((path) => NODE_TEST.test(path));
-  const read = (path) => (existsSync(new URL(path, REPO_ROOT)) ? readRepoFile(path) : null);
+  const tests = listNodeTests();
   const sources = tracked.filter(
     (path) => TIME_ZONE_SOURCE.test(path) && !path.endsWith(".min.js"),
   );
-  verifyTimeZoneCoverage(tests, TIME_ZONE_MANIFEST, read, sources);
+  verifyTimeZoneCoverage(tests, TIME_ZONE_MANIFEST, readRepoText, sources);
   assert.deepEqual(TIME_ZONE_MANIFEST.sensitive, [...TIME_ZONE_MANIFEST.sensitive].sort());
   assert.equal(TIME_ZONE_MANIFEST.fixed.length, 2);
   assert.ok(TIME_ZONE_MANIFEST.fixed.every((path) => path.endsWith("/search-typing.test.js")));
@@ -177,6 +177,11 @@ test("ordinary and empty diffs keep the sensitive list, while every changed Node
   ]);
   const fixed = { sensitive: [TESTS[0]], fixed: [TESTS[1]] };
   assert.deepEqual(selectTimeZoneTests([change(TESTS[1])], TESTS, fixed), [TESTS[0]]);
+  const future = "future-tests/calendar.test.js";
+  assert.deepEqual(
+    selectTimeZoneTests([change(future)], [...TESTS, future], MANIFEST),
+    [TESTS[0], future].sort(),
+  );
 });
 
 test("NUL diffs preserve names and classify renamed tests as deletion plus addition", () => {
@@ -216,6 +221,7 @@ function captureInvocation({
     log: (message) => messages.push(message),
     manifest: MANIFEST,
     readText,
+    listTests: () => TESTS,
   });
   return { result, calls, gitCalls, messages };
 }
@@ -232,9 +238,9 @@ test("the protected focused command keeps inherited Node options and reports fai
   assert.equal(calls.length, 1);
   assert.equal(calls[0].command, process.execPath);
   assert.deepEqual(calls[0].arguments_, [
+    "--test-reporter=dot",
     "--import",
     "./tests/no-network.js",
-    "--test-reporter=dot",
     "--test",
     TESTS[0],
   ]);
@@ -292,6 +298,7 @@ test("the CLI includes changed tests and propagates the child test failure", () 
     import fileSystem from 'node:fs';
     import {syncBuiltinESMExports} from 'node:module';
     import {fileURLToPath} from 'node:url';
+    fileSystem.globSync = () => ['tests/days.test.js', 'tests/html.test.js'];
     const read = fileSystem.readFileSync;
     fileSystem.readFileSync = (path, ...options) => {
       if (String(path).endsWith('/tests/time-zone-sensitive.json')) return JSON.stringify({sensitive:['tests/days.test.js'],fixed:[]});

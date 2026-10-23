@@ -96,7 +96,7 @@ const root = new URL("../", import.meta.url);
  * @param {URL} [folder]
  */
 export const readRepoText = (path, folder = root) => {
-  const file = new URL(path, folder);
+  const file = join(fileURLToPath(folder), path);
   return existsSync(file) ? readFileSync(file, "utf8") : null;
 };
 

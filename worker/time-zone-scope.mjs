@@ -2,7 +2,6 @@ import { Linter } from "eslint";
 import { LOCAL_TIME_METHODS } from "../eslint.config.mjs";
 import { listReachedFiles, resolveImport } from "./browser-scope.mjs";
 
-export const NODE_TEST = /^(?:tests|(?:apps|services)\/[^/]+\/tests)\/[^/]+\.test\.js$/;
 export const TIME_ZONE_SOURCE =
   /^(?:shared\/|apps\/[^/]+\/(?:page\/|worker\/)|services\/[^/]+\/worker\/|worker\/|\.claude\/hooks\/).+\.m?js$/;
 const LOCAL_METHODS = new Set([...LOCAL_TIME_METHODS, "toLocaleString"]);
