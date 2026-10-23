@@ -19,6 +19,7 @@ import {
   checkReAddNote,
   checkReAddNoteDismissal,
   checkReAddNoteEases,
+  checkReAddNoteEasesOnReload,
   checkReAddNoteOnReload,
   checkReAddNoteOnReturn,
   checkSystemInstallIcon,
@@ -151,6 +152,14 @@ test.describe("in an iPhone's Home Screen app", () => {
   }) => {
     await checkReAddNoteEases({ page, openApp, openSettings, looks });
   });
+
+  for (const isShowingNote of [true, false]) {
+    test(`a reload on System eases the restored icon note ${isShowingNote ? "out" : "in"} when the phone's look changed`, async ({
+      page,
+    }) => {
+      await checkReAddNoteEasesOnReload({ page, openApp, openSettings, looks, isShowingNote });
+    });
+  }
 
   test("on System, a change of the phone's look as the app comes back takes the icon note to its new state at once, and one later eases it", async ({
     page,

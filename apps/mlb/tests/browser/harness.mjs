@@ -347,6 +347,7 @@ const isWriteRequest = (request) => request.method() !== "GET";
  *   which most tests can do without
  * @param {boolean} [options.isShowingWelcome] whether a phone's browser opens on the welcome,
  *   which starts closed unless a test is about it
+ * @param {string} [options.path] the address of the first open
  */
 export async function openApp(
   page,
@@ -362,6 +363,7 @@ export async function openApp(
     highlights = RECORDED_HIGHLIGHTS,
     isWholeSeason = false,
     isShowingWelcome = false,
+    path = "/",
   } = {},
 ) {
   const snapshotsBySeason = {
@@ -433,7 +435,7 @@ export async function openApp(
       return route.fulfill({ contentType: "text/html", body: "<h1>Sign in to Wi-Fi</h1>" });
     return route.fallback();
   });
-  await loadPageAt(page, now, { isShowingWelcome });
+  await loadPageAt(page, now, { isShowingWelcome, path });
 
   const readDocument = async (path) => (await context.ctx.storage.get(path)) ?? null;
   // The Worker finding the official bracket set, which the Updates box lists.

@@ -36,6 +36,14 @@ function readPhoneLook() {
 }
 
 /**
+ * @param {string} choice
+ * @returns {"light" | "dark"}
+ */
+function resolveTheme(choice) {
+  return isLook(choice) ? choice : readPhoneLook();
+}
+
+/**
  * Checks the Appearance choice that names the look picked, among settings' or the welcome's.
  * @param {Iterable<HTMLInputElement>} choices
  * @param {string} picked
@@ -163,7 +171,8 @@ function keepHomeScreenIcon(carriedIcon) {
     else if (!isReload() && localStorage.getItem(HOME_SCREEN_ICON_KEY) === null)
       localStorage.setItem(HOME_SCREEN_ICON_KEY, readPhoneLook());
   } catch {
-    /* without storage, settings can't tell the icon, and says nothing of it */
+    /* Without storage, settings can't tell the icon, and shows the note only once the viewer
+       switches looks. */
   }
 }
 
@@ -194,7 +203,7 @@ function keepThemeFromAddress() {
 
 /** @param {string} choice */
 function showTheme(choice) {
-  document.documentElement.dataset.theme = isLook(choice) ? choice : readPhoneLook();
+  document.documentElement.dataset.theme = resolveTheme(choice);
 }
 
 /** @param {string} choice */

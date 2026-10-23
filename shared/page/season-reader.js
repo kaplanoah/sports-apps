@@ -1,11 +1,16 @@
 import { isSameJson } from "./compare.js";
+import { isEarlierSeason } from "./title-year.js";
 
 // Reads a league's season from the store, which says which season is current, so a page never goes
 // by its own clock, and pushes each change to the season's record. A page showing the current
 // season moves on to the next one when the store does, and a page that loads again on a past season
-// stays on it. Each season a viewer picks is kept while its record is on its way, and put back on
-// the season shown when it can't be read. A page reads a record in the version it knows, or one
-// saved before records had a version, and reloads once the newer release that saved one is out.
+// stays on it. Each load or pick selects its season before reading; obsolete answers cannot
+// change the selection or report a failure. A failed selection restores the season shown.
+// A page reads a record in the version it knows, or one saved before records had a version, and
+// reloads once the newer release that saved one is out.
+
+/** @typedef {{ year: number | null, kind: "loading" | "shown" | "loaded" | "unread" }} SeasonSelection */
+/** @typedef {"pick" | "current" | "past"} SelectionIntent */
 
 const CURRENT_PATH = "live/current";
 const STATUS_PATH = "live/status";
@@ -24,6 +29,9 @@ export const isReadableSeason = (season, version) =>
 
 /**
  * @typedef {object} SeasonReaderOptions
+ * @property {() => number | null} [readPick] the app's choice captured before pending reads, used
+ *   as a fallback for failed selections and reloads during a viewer's pick when no season is
+ *   known. This can keep a restored past season before the first record loads
  * @property {any} store the page's store, from `createWorkerStore`
  * @property {number} version the version of the season's record the page reads
  * @property {(now: number) => number} guessYear the season the clock suggests, for a store that
@@ -34,8 +42,7 @@ export const isReadableSeason = (season, version) =>
  * @property {(status: any) => void} showStatus takes the store's status of its last update
  * @property {() => void} showUnreadable says a record came in a version the page doesn't read, as
  *   a newer release's Worker saves it, so the page reloads once that release is out
- * @property {() => void} showLoadFailure says the new current season couldn't be read as the
- *   store moved on to it, so the page loads the current season again later
+ * @property {() => void} showLoadFailure reports a failed selection after its choice is restored
  * @property {(year: number) => void} [noteCurrentYear] hears that the store names a new current
  *   season, once a page showing the current one has moved on to it, and whether or not it has
  */
@@ -43,6 +50,7 @@ export const isReadableSeason = (season, version) =>
 /** @param {SeasonReaderOptions} options */
 export function createSeasonReader({
   store,
+  readPick = () => null,
   version,
   guessYear,
   keepSeason,
@@ -71,6 +79,57 @@ export function createSeasonReader({
   let heldRecord = null;
   let unwatchSeason = () => {};
   let isFollowing = false;
+  let selectionRevision = 0;
+  /** @type {SelectionIntent | null} */
+  let pendingIntent = null;
+  /** @type {number | null} */
+  let pickBefore = null;
+  /** @type {Set<(selection: SeasonSelection) => void>} */
+  const selectionWatchers = new Set();
+
+  /** @param {SeasonSelection["kind"]} kind */
+  function publishSelection(kind) {
+    if (kind !== "loading") pendingIntent = null;
+    if (kind === "loading" && askedYear === null) return;
+    const year = kind === "unread" ? (askedYear ?? pickBefore) : askedYear;
+    for (const watcher of selectionWatchers) watcher({ year, kind });
+  }
+
+  /**
+   * @param {number | null} year
+   * @param {SelectionIntent} intent
+   */
+  function startSelection(year, intent) {
+    if (pendingIntent === null) pickBefore = readPick();
+    pendingIntent = intent;
+    const revision = ++selectionRevision;
+    askedYear = year;
+    publishSelection("loading");
+    return revision;
+  }
+
+  function restoreSelection() {
+    stayOnShownYear();
+    publishSelection("unread");
+    showLoadFailure();
+  }
+
+  /**
+   * @template T
+   * @param {number} revision
+   * @param {() => Promise<T>} read
+   * @returns {Promise<{ value: T } | null>}
+   */
+  async function readSelection(revision, read) {
+    try {
+      const value = await read();
+      return revision === selectionRevision ? { value } : null;
+    } catch (error) {
+      if (revision !== selectionRevision) return null;
+      restoreSelection();
+      throw error;
+    }
+  }
 
   /** @param {string} path */
   async function readDoc(path) {
@@ -139,27 +198,29 @@ export function createSeasonReader({
   }
 
   /**
-   * Shows a season's record, resolving once it has loaded, and then follows its changes. A read
-   * that fails, unless a newer one has taken its place, leaves the page on the season it shows.
    * @param {number} year
-   * @param {any} [readRecord] the record, when it has just been read
+   * @param {number} revision
+   * @param {"shown" | "loaded"} kind
+   * @param {any} [readRecord]
    */
-  async function showYear(year, readRecord) {
-    askedYear = year;
-    let season;
-    try {
-      season = readRecord ?? (await readDoc(nameSeasonPath(year)));
-    } catch (error) {
-      if (askedYear === year) stayOnShownYear();
-      throw error;
-    }
-    if (year !== askedYear) return;
+  async function readSelectedYear(year, revision, kind, readRecord) {
+    const answer = await readSelection(
+      revision,
+      async () => readRecord ?? readDoc(nameSeasonPath(year)),
+    );
+    if (!answer) return false;
+    const season = answer.value;
     shownYear = year;
     heldRecord = null;
     lastRecord = season;
     keepSeason(year, isReadable(season) ? season : null);
+    publishSelection(kind);
     watchSeason(year);
+    return true;
   }
+
+  /** @param {number} year */
+  const showYear = (year) => readSelectedYear(year, startSelection(year, "pick"), "shown");
 
   /** @param {number} year */
   async function moveOnToYear(year) {
@@ -167,8 +228,7 @@ export function createSeasonReader({
     currentYear = year;
     try {
       if (!wasShowingCurrent) return;
-      await showYear(year);
-      showChange();
+      if (await readSelectedYear(year, startSelection(year, "current"), "loaded")) showChange();
     } finally {
       noteCurrentYear(year);
     }
@@ -180,7 +240,7 @@ export function createSeasonReader({
     store.doc(CURRENT_PATH).onSnapshot(
       (/** @type {any} */ snapshot) => {
         const year = snapshot.exists ? snapshot.data().season : null;
-        if (year !== null && year !== currentYear) moveOnToYear(year).catch(showLoadFailure);
+        if (year !== null && year !== currentYear) moveOnToYear(year).catch(() => {});
       },
       () => {},
     );
@@ -196,15 +256,39 @@ export function createSeasonReader({
   /** @param {number | null} pastYear */
   async function loadSeason(pastYear) {
     loadedPastYear = pastYear;
-    if (pastYear !== null) askedYear = pastYear;
+    const revision = startSelection(
+      pastYear ?? currentYear,
+      pastYear === null ? "current" : "past",
+    );
     try {
-      const current = await readCurrentSeason();
+      const answer = await readSelection(revision, readCurrentSeason);
+      if (!answer) return;
+      const current = answer.value;
       currentYear = current.year;
       const year = pastYear ?? current.year;
-      await showYear(year, year === current.year ? current.record : undefined);
+      askedYear = year;
+      publishSelection("loading");
+      await readSelectedYear(
+        year,
+        revision,
+        "loaded",
+        year === current.year ? current.record : undefined,
+      );
     } finally {
       followStore();
     }
+  }
+
+  /**
+   * @param {number | null} lastShownYear
+   * @param {number | null} lastCurrentYear
+   */
+  function readReloadYear(lastShownYear, lastCurrentYear) {
+    if (pendingIntent === "current") return null;
+    if (pendingIntent === "past") return loadedPastYear;
+    const previousYear = pendingIntent === "pick" ? pickBefore : lastShownYear;
+    const year = shownYear ?? loadedPastYear ?? previousYear;
+    return isEarlierSeason(year, currentYear ?? lastCurrentYear) ? year : null;
   }
 
   return {
@@ -214,8 +298,23 @@ export function createSeasonReader({
      * @param {number | null} [pastYear]
      */
     loadSeason: (pastYear = null) => loadSeason(pastYear),
+    /**
+     * A current load or advance reloads current, and a pending past load reloads its past year.
+     * During a viewer's pick, the shown year or prior past-load target wins; otherwise it uses the
+     * choice captured before pending reads, which can keep a restored past season. With nothing
+     * pending, the app's last showing supplies the fallback. A pending pick never supplies its year.
+     * @param {number | null} lastShownYear
+     * @param {number | null} lastCurrentYear
+     */
+    reloadSeason: (lastShownYear, lastCurrentYear) =>
+      loadSeason(readReloadYear(lastShownYear, lastCurrentYear)),
     /** @param {number} year */
     showYear: (year) => showYear(year),
+    /** @param {(selection: SeasonSelection) => void} watcher */
+    watchSelection: (watcher) => {
+      selectionWatchers.add(watcher);
+      return () => selectionWatchers.delete(watcher);
+    },
     /** The season the store says is current, or null before it has said. */
     readCurrentYear: () => currentYear,
     /** The season whose record the page shows, or null before one has loaded. */
@@ -224,46 +323,20 @@ export function createSeasonReader({
 }
 
 /**
- * How a pick ended: its season shown, a newer pick taking its place, or its record unread, which
- * leaves another season picked, null before any season has loaded.
- * @typedef {{ kind: "shown" | "replaced" } | { kind: "unread", year: number | null }} PickOutcome
- */
-
-/**
- * Shows each season a viewer picks with `reader`, keeping the pick with `keepPick` while its record
- * is on its way. A pick whose record can't be read, unless a newer one has taken its place, keeps
- * the season the page shows instead, or, before one has loaded, the pick before the picks still on
- * their way, and says the store can't be reached with `noteUnreachable`.
- * @template {number | null} PickedYear
+ * Keeps the app's selection in step with the reader, including a reload taking over a pick.
  * @param {{
- *   reader: Pick<ReturnType<typeof createSeasonReader>, "showYear" | "readShownYear">,
- *   readPick: () => PickedYear,
- *   keepPick: (year: PickedYear | number) => void,
- *   noteUnreachable: () => void,
+ *   reader: ReturnType<typeof createSeasonReader>,
+ *   keepPick: (year: number | null) => void,
  * }} options
- * @returns {(year: number) => Promise<PickOutcome>}
+ * @returns {(year: number) => Promise<void>}
  */
-export function createSeasonPicks({ reader, readPick, keepPick, noteUnreachable }) {
-  /** @type {number | null} */
-  let latestPick = null;
-  let picksOut = 0;
-  let pickBefore = readPick();
+export function createSeasonPicks({ reader, keepPick }) {
+  reader.watchSelection(({ year }) => keepPick(year));
   return async (year) => {
-    if (picksOut === 0) pickBefore = readPick();
-    picksOut++;
-    latestPick = year;
-    keepPick(year);
     try {
       await reader.showYear(year);
     } catch {
-      if (latestPick !== year) return { kind: "replaced" };
-      const kept = reader.readShownYear() ?? pickBefore;
-      keepPick(kept);
-      noteUnreachable();
-      return { kind: "unread", year: kept };
-    } finally {
-      picksOut--;
+      /* the reader has published the failure and restored its selection */
     }
-    return { kind: latestPick === year ? "shown" : "replaced" };
   };
 }
