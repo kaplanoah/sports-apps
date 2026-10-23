@@ -1,9 +1,10 @@
 // Keeps the beta channel to one pull request at a time, while the owner tests it on the phone. A
 // pull request claims beta with the beta label, and of the open ones labeled beta, the one labeled
-// first holds it. A push to beta deploys only the holder's head. The Beta workflow, on each pull
-// request event, takes beta off a pull request that closed, was pushed after its label, or got
-// phone-ok after it, and off every one but the holder, which waits in line with beta-wait. Once
-// beta is free, it comments on the one that has waited longest, which wakes whoever drives it.
+// first holds it. A push to beta deploys only the holder's head. The Beta workflow, on its watched
+// same-repo PR events and each merge to main, takes beta off a pull request that closed, was pushed
+// after its label, or got phone-ok after it, and off every one but the holder, which waits in line
+// with beta-wait. Once beta is free, it comments on the one that has waited longest, which wakes
+// whoever drives it.
 // When another takes beta before the one told claims it, it comments that the one told stays
 // first in line, which spends the telling, so it's told again once beta is free.
 // GitHub keeps one waiting run of the workflow and cancels the one before it, so each run reads

@@ -10,6 +10,7 @@ paths:
 
 - Tooling: the root `worker/` builds, versions, deploys, and rolls back every Worker, each app's and each service's, tells a red change for CI's gate,
   and keeps beta to one pull request at a time, as the `ship` skill's "The beta channel" says.
+  The Beta workflow runs on its watched same-repo PR events and on each merge to `main`.
   `ls worker/` lists its modules, and its tests are in the root `tests/`.
   It opens each app's live page as a phone does, signed in with its code, and says whether it drew what its store sent (`check-page.mjs`).
   It checks the page where a browser lands, which for an app moving to its own address is that address.
