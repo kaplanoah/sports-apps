@@ -96,15 +96,25 @@ Delete it once the app's first PR merges.
    Each channel's token can edit only the Workers it names, so before the first deploy of each channel,
    the owner creates its Worker in Cloudflare's dashboard, as the README's "Deploying on merge" says, and adds it to that environment's token:
    `<app>-app-beta` to the `beta` token before the first push to `beta`, and `<app>-app` to the `production` token before the merge.
-   Once its CI passes, push it to `beta`, whose deploy replaces `<app>-app-beta`,
-   which answers nothing but `robots.txt` and `health` until `npm run set-app-key -- <app> --channel beta` gives it a key and prints its address.
+   Once its CI passes, push it to `beta`, whose deploy replaces `<app>-app-beta`.
+   Its first upload stays live but fails verification until its key, code,
+   and page URL are configured.
+   It answers nothing but `robots.txt` and `health` until `npm run set-app-key -- <app> --channel beta` gives it a key and prints its address.
    Give the owner that address, and ask them for its code, the one every app asks for,
    then run `npm run set-access-code -- <app> <code> --channel beta` yourself, which the owner approves when `.claude/settings.json` asks.
-   Ask the owner to add the address as `<APP>_BETA_PAGE_URL` in the `beta` environment's secrets, beside its `ACCESS_CODE`,
-   add the page to the Home Screen, and label the PR `phone-ok` once they've used it.
+   Ask the owner to add the address as `<APP>_BETA_PAGE_URL` in the `beta` environment's secrets,
+   beside its `ACCESS_CODE`.
+   Rerun that Deploy run after the secrets are saved;
+   it checks the already-live commit without uploading or rolling it back.
+   Wait for this app's `worker check: ok` before asking the owner to add the page to the Home Screen and use it,
+   then ask them to label the PR `phone-ok`.
    The merge's deploy then replaces `<app>-app`, which `npm run set-app-key -- <app>` gives its key in the same way.
+   Its initial production upload also stays live but fails verification until its settings are saved.
    Ask the owner for production's existing code,
    the one every production app already asks for (the `production` environment's `ACCESS_CODE`),
    then run `npm run set-access-code -- <app> <code>` yourself, which the owner approves when `.claude/settings.json` asks.
    The owner adds its address as `<APP>_PAGE_URL`, beside the `production` environment's `ACCESS_CODE`,
    so each deploy and the `Watch apps` workflow open its page.
+   Rerun that Deploy run and wait for this app's `worker check: ok` to verify the already-live commit.
+   The `Watch apps` workflow also checks production's page after setup,
+   but a successful upload alone is not verification.

@@ -82,6 +82,7 @@ function openMovedPage(landedUrl, { thrown } = {}) {
       if (thrown && event === "pageerror") listener(new Error(thrown));
     },
     url: () => address,
+    isClosed: () => false,
     /** @param {string} visited */
     async goto(visited) {
       visits.push(visited);
@@ -118,8 +119,12 @@ test("a failed check never names the host the page's old address sent it on to",
   const { page } = openMovedPage("https://wnba.sports.example/", {
     thrown: "Failed to fetch https://wnba.sports.example/store/live",
   });
-  const context = { newPage: async () => page, close: async () => {} };
-  const browser = { newContext: async () => context, close: async () => {} };
+  const context = { on: () => {}, newPage: async () => page, close: async () => {} };
+  const browser = {
+    isConnected: () => true,
+    newContext: async () => context,
+    close: async () => {},
+  };
 
   const check = await checkAppPage({
     app: "wnba",
@@ -208,8 +213,12 @@ test("thrown check infrastructure failures leave the page unchecked and mask its
     page[step] = async () => {
       throw new Error(`Target closed at ${PAGE_URL}`);
     };
-    const context = { newPage: async () => page, close: async () => {} };
-    const browser = { newContext: async () => context, close: async () => {} };
+    const context = { on: () => {}, newPage: async () => page, close: async () => {} };
+    const browser = {
+      isConnected: () => true,
+      newContext: async () => context,
+      close: async () => {},
+    };
     const check = await checkAppPage({
       app: "wnba",
       channel: "production",
@@ -235,6 +244,133 @@ test("a refused or rate-limited code cannot verify the authenticated page", asyn
     assert.deepEqual(await checkPage(page, { pageUrl: PAGE_URL, accessCode: "LAYUP" }), {
       status: "unchecked",
       reason,
+    });
+  }
+});
+
+test("page navigation failures and renderer crashes remain broken and retry", async () => {
+  for (const [name, message] of [
+    ["TimeoutError", "page.goto: Timeout exceeded"],
+    ["Error", "page.goto: net::ERR_TOO_MANY_REDIRECTS"],
+    ["Error", "page.goto: net::ERR_CONNECTION_REFUSED"],
+    ["TargetClosedError", "page.waitForFunction: Page crashed"],
+    ["Error", "Target crashed"],
+    ["Error", "Execution context was destroyed"],
+  ]) {
+    let opened = 0;
+    const { page } = openMovedPage(PAGE_URL);
+    page.goto = async () => {
+      opened += 1;
+      throw Object.assign(new Error(message), { name });
+    };
+    const context = { on: () => {}, newPage: async () => page, close: async () => {} };
+    const browser = {
+      isConnected: () => true,
+      newContext: async () => context,
+      close: async () => {},
+    };
+    const check = await checkAppPage({
+      app: "wnba",
+      channel: "production",
+      env: { WNBA_PAGE_URL: PAGE_URL, ACCESS_CODE: "LAYUP" },
+      attempts: 2,
+      pauseMs: 0,
+      launchBrowser: async () =>
+        /** @type {import("@playwright/test").Browser} */ (/** @type {unknown} */ (browser)),
+    });
+    assert.deepEqual(check, { status: "broken", reason: `the page didn't load: ${message}` });
+    assert.equal(opened, 2);
+  }
+});
+
+test("a disconnected browser or closed context cannot establish a broken page", async () => {
+  for (const isDisconnected of [true, false]) {
+    const { page } = openMovedPage(PAGE_URL);
+    let closeContext;
+    page.goto = async () => {
+      if (!isDisconnected) closeContext();
+      throw Object.assign(new Error("page.goto: Timeout exceeded"), { name: "TimeoutError" });
+    };
+    const context = {
+      on: (_, listener) => {
+        closeContext = listener;
+      },
+      newPage: async () => page,
+      close: async () => {},
+    };
+    const browser = {
+      isConnected: () => !isDisconnected,
+      newContext: async () => context,
+      close: async () => {},
+    };
+    const check = await checkAppPage({
+      app: "wnba",
+      channel: "production",
+      env: { WNBA_PAGE_URL: PAGE_URL },
+      attempts: 1,
+      launchBrowser: async () =>
+        /** @type {import("@playwright/test").Browser} */ (/** @type {unknown} */ (browser)),
+    });
+    assert.deepEqual(check, {
+      status: "unchecked",
+      reason: "the page check failed: page.goto: Timeout exceeded",
+    });
+  }
+});
+
+test("browser infrastructure failures mask the redirected page host and access code", async () => {
+  const { page } = openMovedPage("https://wnba.sports.example/");
+  const context = {
+    on: () => {},
+    newPage: async () => page,
+    close: async () => {
+      throw new Error("Target closed at https://wnba.sports.example/ for LAYUP");
+    },
+  };
+  const browser = {
+    isConnected: () => true,
+    newContext: async () => context,
+    close: async () => {},
+  };
+  await assert.rejects(
+    checkAppPage({
+      app: "wnba",
+      channel: "production",
+      env: { WNBA_PAGE_URL: PAGE_URL, ACCESS_CODE: "LAYUP" },
+      launchBrowser: async () =>
+        /** @type {import("@playwright/test").Browser} */ (/** @type {unknown} */ (browser)),
+    }),
+    /Target closed at <page host>\/ for <access code>/,
+  );
+});
+
+test("known proxy failures leave navigation unverified while the browser remains available", async () => {
+  for (const code of [
+    "PROXY_CONNECTION_FAILED",
+    "TUNNEL_CONNECTION_FAILED",
+    "NO_SUPPORTED_PROXIES",
+  ]) {
+    const { page } = openMovedPage(PAGE_URL);
+    page.goto = async () => {
+      throw new Error(`net::ERR_${code} at ${PAGE_URL}`);
+    };
+    const context = { on: () => {}, newPage: async () => page, close: async () => {} };
+    const browser = {
+      isConnected: () => true,
+      newContext: async () => context,
+      close: async () => {},
+    };
+    const check = await checkAppPage({
+      app: "wnba",
+      channel: "production",
+      env: { WNBA_PAGE_URL: PAGE_URL },
+      attempts: 1,
+      launchBrowser: async () =>
+        /** @type {import("@playwright/test").Browser} */ (/** @type {unknown} */ (browser)),
+    });
+    assert.deepEqual(check, {
+      status: "unchecked",
+      reason: `the page check failed: net::ERR_${code} at <page>/`,
     });
   }
 });

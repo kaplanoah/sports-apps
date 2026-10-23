@@ -149,8 +149,9 @@ This skill holds what "Shipping a change" in AGENTS.md leaves out, most of it un
 - When the PR's CI passed on exactly the code `main` now has (the root's `worker/find-passed-ci.mjs`),
   which it did if the PR was up to date with `main` as it merged,
   that first Deploy run deploys, and CI on `main` skips the checks it already ran; otherwise the Deploy run that follows CI on `main` does.
-  Either runs the root's `worker/deploy.mjs`, which deploys each Worker, each service's before any app's, and rolls back any new version that doesn't answer,
-  or whose page doesn't draw (the root's `worker/check-page.mjs`).
+  Either runs the root's `worker/deploy.mjs`, which deploys each Worker,
+  each service's before any app's.
+  `.claude/rules/tooling.md` describes its verification and rollback conditions.
   Each line of the deploy log starts with its Worker's name, so read step 10's results for each Worker.
 
 ## Step 10: reading a deploy's log
@@ -159,11 +160,13 @@ Wait for the Deploy runs for the merge commit to finish, then read their logs an
 
 - The first says "No pull request's CI passed on exactly this code": the deploy waits for CI on `main`.
   Read the next Deploy run's log.
-- It says "worker check: ok": the new version is live and verified.
-  For an app, its Worker answers at the expected release and its page draws after signing in with the channel's access code.
-  Tell the user.
+- An app says "worker check: ok": its live Worker answers at the expected release,
+  and its page draws after signing in with the channel's access code.
+  Tell the user it is verified.
+  For a service, read its preceding health-check result below;
+  this line alone does not establish verification.
 - It says "The new version is live but unverified": the upload went live, but the run failed verification without rolling it back.
-  Missing page URL or access-code secrets, refused or rate-limited codes, absent Worker authentication, and unavailable browser checks cannot establish a verified release.
+  The verification limits are listed in `.claude/rules/tooling.md`.
   Tell the user what prevented verification and recommend repairing that check before treating the release as verified.
   An initial new-league upload can reach this state before its key, code, and URL are configured.
 - A service's lines say "health check: ok": every app that reports it says it answers at the uploaded commit,
@@ -172,8 +175,11 @@ Wait for the Deploy runs for the merge commit to finish, then read their logs an
   tell the user, since the `Watch apps` workflow is the first to read it.
 - It says "The service didn't answer as the live version": the run failed without rolling back the unchanged service.
   Inspect the service and the reporting apps' health, and tell the user what didn't answer.
-- It says "Nothing the Worker runs changed": this run left the Worker unchanged because the merge didn't need a deploy, or an earlier run already deployed it.
+- It says "Nothing the Worker runs changed": this run left the Worker unchanged because the merge didn't need a deploy,
+  or an earlier run already deployed it.
   Tell the user which; this line alone establishes no new verification.
+  When the requested commit is already live, read any verification lines after it:
+  the rerun checks that version without uploading or rolling it back.
 - It says "has moved on" and "whose deploy covers": another merge landed first, and CI passed on it, so its Deploy run covers this one.
   This run is superseded; read that run's log for its verified outcome.
   Saying "hasn't passed on it" instead, it deploys this merge while the newer one's CI is still to pass, so read on in this run's log.
@@ -190,9 +196,13 @@ Wait for the Deploy runs for the merge commit to finish, then read their logs an
 - It says "No CLOUDFLARE_API_TOKEN": the channel's environment has no Cloudflare token, so nothing was deployed.
   The run fails: tell the user which channel needs its token restored.
 - The run failed: read the log.
-  If it says "the earlier version is live again", the Worker rolled back after a broken response, wrong release, page exception, or failure to draw.
+  If it says "the earlier version is live again", the Worker rolled back after route setup or a Worker,
+  page, or service check failed.
   The uploaded release is no longer live; tell the user what failed and recommend a fix.
-  If it says "the new version is still live" or "no earlier version exists", restoration failed or was unavailable: report that state explicitly.
+  If it says "the new version is still live" or "no earlier version exists",
+  restoration failed or was unavailable: report that state explicitly.
+  If it says "no version was uploaded or rolled back", a check of the unchanged version failed:
+  report the failed verification and the version still live.
 
 ## Step 12: one thing a PR, and stacked PRs
 

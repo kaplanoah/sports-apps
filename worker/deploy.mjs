@@ -7,7 +7,7 @@ import { nameServiceBinding } from "../shared/worker/services.js";
 import { findWorkerRoot, isService, listApps, listServices, listWorkersOrExit } from "./apps.mjs";
 import { buildWorker } from "./build.mjs";
 import { findChannel, readCommandLine } from "./channels.mjs";
-import { checkAppPage, nameAccessSecrets, readPageAccess } from "./check-page.mjs";
+import { checkAppPage, hideAddress, readPageAccess } from "./check-page.mjs";
 import { checkService } from "./check-service.mjs";
 import { CHECK_INTERVAL_MS, CHECK_TIMEOUT_MS, waitFor } from "./check-timing.mjs";
 import { decideDeploy, listChangedFiles } from "./deploy-scope.mjs";
@@ -425,7 +425,6 @@ export async function deploy({
     await callCloudflare("upload", `${base}/scripts/${name}`, { method: "PUT", body: form });
   }
 
-  // Restore only when a check demonstrates that the uploaded Worker is broken.
   /** @returns {Promise<never>} */
   async function restoreAfter(problem, previousVersions) {
     if (!previousVersions) throw new Error(`${problem}, and no earlier version exists.`);
@@ -435,40 +434,68 @@ export async function deploy({
     throw new Error(`${problem}, so the earlier version is live again.`);
   }
 
+  /** @returns {Promise<never>} */
+  async function rejectFailedCheck(problem, previousVersions, isUploaded) {
+    if (!isUploaded) throw new Error(`${problem}; no version was uploaded or rolled back.`);
+    return restoreAfter(problem, previousVersions);
+  }
+
   // Deploy logs are public, and the address names the account's workers.dev subdomain.
-  async function confirmWorkerAnswers(url, previousVersions) {
+  async function confirmWorkerAnswers(url, previousVersions, isUploaded) {
     if (!previousVersions) log("worker check: waiting for the new workers.dev address to resolve");
     const attempts = previousVersions ? CHECK_ATTEMPTS : FIRST_DEPLOY_CHECK_ATTEMPTS;
     if (await isWorkerAnswering(url, { fetchImpl, pause, commit, attempts })) return;
-    await restoreAfter("The Worker didn't answer as the new version", previousVersions);
+    await rejectFailedCheck(
+      isUploaded
+        ? "The Worker didn't answer as the new version"
+        : "The Worker didn't answer as its recorded live version",
+      previousVersions,
+      isUploaded,
+    );
   }
 
+  /** @returns {never} */
   function rejectUnverifiedPage(reason) {
     throw new Error(`The new version is live but unverified: ${reason}.`);
   }
 
-  // New leagues upload before their key, code, and page address can be configured.
-  function requirePageAccess() {
-    const secrets = nameAccessSecrets(worker, channel);
-    const access = readPageAccess(worker, channel, env);
-    if (!access) rejectUnverifiedPage(`no ${secrets.pageUrl} secret`);
-    if (!access?.accessCode) rejectUnverifiedPage(`no ${secrets.accessCode} secret`);
-  }
-
-  async function confirmPageDraws(previousVersions) {
-    requirePageAccess();
-    const check = await checkPage({ app: worker, channel, commit, env }).catch(() => ({
-      status: /** @type {const} */ ("unchecked"),
-      reason: "the page check failed",
-    }));
+  async function confirmPageDraws(previousVersions, isUploaded) {
+    const check = await checkPage({
+      app: worker,
+      channel,
+      commit,
+      env,
+      isAccessCodeRequired: true,
+    }).catch((error) => {
+      const access = readPageAccess(worker, channel, env);
+      if (!access)
+        return { status: /** @type {const} */ ("unchecked"), reason: "the page check failed" };
+      return hideAddress(
+        {
+          status: /** @type {const} */ ("unchecked"),
+          reason: `the page check failed: ${error instanceof Error ? error.message : error}`,
+        },
+        access.pageUrl,
+        access.pageUrl,
+        access.accessCode,
+      );
+    });
     if (check.status === "unchecked") rejectUnverifiedPage(check.reason);
-    if (check.status === "drawn" && check.note) rejectUnverifiedPage(check.note);
+    if (check.status === "drawn" && check.note)
+      rejectUnverifiedPage("the page opened without asking for its access code");
     if (check.status === "broken")
-      await restoreAfter(
-        `The page didn't draw as the new version: ${check.reason}`,
+      await rejectFailedCheck(
+        `The page didn't draw as ${isUploaded ? "the new version" : "its recorded live version"}: ${check.reason}`,
         previousVersions,
+        isUploaded,
       );
     log("page check: ok");
+  }
+
+  async function confirmAppAnswers(previousVersions, isUploaded) {
+    await confirmWorkerAnswers(formatWorkerUrl(name, subdomain), previousVersions, isUploaded);
+    await confirmPageDraws(previousVersions, isUploaded);
+    logWorkerCheck();
   }
 
   // A service faces only the apps, through their bindings, so it has no address of its own.
@@ -519,6 +546,7 @@ export async function deploy({
     previousVersions && (await deployments.readCommit(previousVersions, "live commit"));
   if (isCheckOnly || !isDeployNeeded(liveCommit)) {
     if (isPageless) await scheduleServiceCheck(previousVersions, liveCommit, false);
+    else if (liveCommit && liveCommit === commit) await confirmAppAnswers(previousVersions, false);
     return null;
   }
   const migrations = listPendingMigrations(await readMigrationTag(), storeClass);
@@ -528,9 +556,7 @@ export async function deploy({
   if (isPageless) {
     await scheduleServiceCheck(previousVersions, commit, true);
   } else {
-    await confirmWorkerAnswers(deployed, previousVersions);
-    await confirmPageDraws(previousVersions);
-    logWorkerCheck();
+    await confirmAppAnswers(previousVersions, true);
   }
   return deployed;
 }
@@ -603,8 +629,9 @@ async function deployGroup(workers, deployWorker, logError) {
 
 /**
  * Deploys every service at once, then every app at once, since an app's binding to a service needs
- * the service to exist. One Worker's failed deploy doesn't hold back the others; each puts its own
- * earlier version back. Services are checked only once all app deploys have settled.
+ * the service to exist. One Worker's failed deploy doesn't hold back the others.
+ * Broken versions and route failures restore earlier versions; unavailable verification leaves
+ * the upload live. Services are checked only once all app deploys have settled.
  * @param {string[]} workers
  * @param {(worker: string, options: ServiceDeploymentOptions) => Promise<unknown>} deployWorker
  * @param {{ logError?: (line: string) => void, isServiceWorker?: (worker: string) => boolean, serviceWorkers?: string[] }} [options]

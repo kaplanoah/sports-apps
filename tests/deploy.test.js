@@ -654,14 +654,16 @@ test("a new version's page that doesn't draw puts the live version back", async 
     }),
     /The page didn't draw as the new version: the page threw: season is undefined, so the earlier version is live again/,
   );
-  assert.deepEqual(checked, [{ app: "mlb", channel: "beta", commit: NEW_COMMIT, env: ENV }]);
+  assert.deepEqual(checked, [
+    { app: "mlb", channel: "beta", commit: NEW_COMMIT, env: ENV, isAccessCodeRequired: true },
+  ]);
   assert.equal(
     describeCalls(cloudflare.calls).at(-1),
     "POST /accounts/acct123/workers/scripts/mlb-app-beta/deployments",
   );
 });
 
-test("a thrown page check leaves the upload live but unverified, without exposing its error", async () => {
+test("a thrown page check leaves the upload live but unverified and masks its access details", async () => {
   const { deploy } = await loadDeployModule();
   const cloudflare = createFakeCloudflare({ liveCommit: LIVE_COMMIT });
   const lines = [];
@@ -679,7 +681,7 @@ test("a thrown page check leaves the upload live but unverified, without exposin
         throw new Error(`Target closed at ${ENV.MLB_PAGE_URL} with ${ENV.ACCESS_CODE}`);
       },
     }),
-    /^Error: The new version is live but unverified: the page check failed\.$/,
+    /^Error: The new version is live but unverified: the page check failed: Target closed at <page>\/ with <access code>\.$/,
   );
   assert.ok(
     !describeCalls(cloudflare.calls).some(
@@ -698,6 +700,7 @@ function createCleanupFailureBrowser(cleanup, result) {
     on: () => {},
     goto: async () => ({ ok: () => result !== "broken response", status: () => 500 }),
     url: () => ENV.MLB_PAGE_URL,
+    isClosed: () => false,
     evaluate: async () => 204,
     locator: () => ({
       evaluateAll: async () => [
@@ -711,8 +714,16 @@ function createCleanupFailureBrowser(cleanup, result) {
     closed.push(name);
     if (name === cleanup) throw new Error("Target closed during cleanup");
   };
-  const context = { newPage: async () => page, close: () => closeResource("context") };
-  const browser = { newContext: async () => context, close: () => closeResource("browser") };
+  const context = {
+    on: () => {},
+    newPage: async () => page,
+    close: () => closeResource("context"),
+  };
+  const browser = {
+    isConnected: () => true,
+    newContext: async () => context,
+    close: () => closeResource("browser"),
+  };
   return {
     browser: /** @type {import("@playwright/test").Browser} */ (/** @type {unknown} */ (browser)),
     closed,
@@ -944,11 +955,15 @@ test("missing page URL or code fails after upload, leaving first and existing re
               script: "",
               log: (line) => lines.push(line),
               pause: skipPause,
-              checkPage: async () => {
-                assert.fail(
-                  "missing verification secrets must be identified before opening a browser",
-                );
-              },
+              checkPage: (options) =>
+                checkAppPage({
+                  ...options,
+                  launchBrowser: async () => {
+                    assert.fail(
+                      "missing verification secrets must be identified before opening a browser",
+                    );
+                  },
+                }),
             }),
             new RegExp(`The new version is live but unverified: no ${secret} secret`),
           );
@@ -973,7 +988,6 @@ test("unchecked or unauthenticated drawing pages fail verification without rollb
     { status: "drawn", note: "the page asks for no code, so its access code secret isn't needed" },
     { status: "unchecked", reason: "the Worker refused the access code" },
     { status: "unchecked", reason: "the Worker had too many tries at the access code" },
-    { status: "unchecked", reason: "no MLB_PAGE_URL secret" },
   ]) {
     const cloudflare = createFakeCloudflare();
     const lines = [];
@@ -987,7 +1001,9 @@ test("unchecked or unauthenticated drawing pages fail verification without rollb
         pause: skipPause,
         checkPage: async () => /** @type {any} */ (check),
       }),
-      /The new version is live but unverified:/,
+      new RegExp(
+        `The new version is live but unverified: ${check.status === "drawn" ? "the page opened without asking for its access code" : check.reason}`,
+      ),
     );
     assert.ok(
       !describeCalls(cloudflare.calls).some(
@@ -1346,3 +1362,104 @@ test(
     assert.deepEqual(errors, ["mlb: upload refused"]);
   },
 );
+
+test("a bootstrap rerun verifies its already-live commit after access settings are saved", async () => {
+  const { deploy } = await loadDeployModule();
+  const first = createFakeCloudflare({ isNew: true });
+  await assert.rejects(
+    deploy({
+      worker: "mlb",
+      channel: "beta",
+      script: "",
+      commit: NEW_COMMIT,
+      fetchImpl: first.fetchImpl,
+      env: { ...ENV, MLB_BETA_PAGE_URL: "" },
+      log: () => {},
+      pause: skipPause,
+      checkPage: (options) => checkAppPage(options),
+    }),
+    /live but unverified: no MLB_BETA_PAGE_URL secret/,
+  );
+  assert.ok(describeCalls(first.calls).some((call) => call.startsWith("PUT ")));
+  const rerun = createFakeCloudflare({ liveCommit: NEW_COMMIT });
+  const checked = [];
+  const lines = [];
+  const result = await deploy({
+    worker: "mlb",
+    channel: "beta",
+    script: "",
+    commit: NEW_COMMIT,
+    fetchImpl: rerun.fetchImpl,
+    env: ENV,
+    findChanges: () => [],
+    log: (line) => lines.push(line),
+    pause: skipPause,
+    checkPage: async (options) => {
+      checked.push(options);
+      return { status: "drawn" };
+    },
+  });
+  assert.equal(result, null);
+  assert.equal(checked[0].commit, NEW_COMMIT);
+  assert.equal(checked[0].isAccessCodeRequired, true);
+  assert.deepEqual(lines.slice(-2), ["page check: ok", "worker check: ok"]);
+  assert.ok(!describeCalls(rerun.calls).some((call) => /^(PUT|POST) /.test(call)));
+});
+
+test("unchanged verification fails visibly for the wrong release or unavailable access without upload or rollback", async () => {
+  const { deploy } = await loadDeployModule();
+  for (const failure of ["worker release", "page release", "access code"]) {
+    const cloudflare = createFakeCloudflare({
+      liveCommit: NEW_COMMIT,
+      answerWorker: failure === "worker release" ? answerRobotsFrom(LIVE_COMMIT) : ANSWER_ROBOTS,
+    });
+    const lines = [];
+    await assert.rejects(
+      deploy({
+        worker: "mlb",
+        script: "",
+        commit: NEW_COMMIT,
+        fetchImpl: cloudflare.fetchImpl,
+        env: failure === "access code" ? { ...ENV, ACCESS_CODE: "" } : ENV,
+        findChanges: () => [],
+        log: (line) => lines.push(line),
+        pause: skipPause,
+        checkPage: (options) =>
+          failure === "access code"
+            ? checkAppPage(options)
+            : Promise.resolve(
+                failure === "page release"
+                  ? { status: "broken", reason: "the page is still the version before" }
+                  : { status: "drawn" },
+              ),
+      }),
+      failure === "access code"
+        ? /live but unverified: no ACCESS_CODE secret/
+        : /no version was uploaded or rolled back/,
+    );
+    assert.ok(!describeCalls(cloudflare.calls).some((call) => /^(PUT|POST) /.test(call)));
+    assert.ok(!lines.includes("worker check: ok"));
+  }
+});
+
+test("an unrelated unchanged app still skips page verification", async () => {
+  const { deploy } = await loadDeployModule();
+  const cloudflare = createFakeCloudflare({ liveCommit: LIVE_COMMIT });
+  assert.equal(
+    await deploy({
+      worker: "mlb",
+      script: "",
+      commit: NEW_COMMIT,
+      fetchImpl: cloudflare.fetchImpl,
+      env: ENV,
+      findChanges: () => [],
+      log: () => {},
+      pause: skipPause,
+      checkPage: async () => {
+        assert.fail("an unrelated app keeps its skip");
+      },
+    }),
+    null,
+  );
+  assert.ok(!describeCalls(cloudflare.calls).some((call) => /^(PUT|POST) /.test(call)));
+});

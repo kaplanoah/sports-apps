@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readRepoFile } from "./repo-files.js";
+import { checkAppPage } from "../worker/check-page.mjs";
 import {
   nameNoCodeIssue,
   nameOutageIssue,
@@ -260,4 +261,51 @@ test("the watch reads each app's address from the workers.dev subdomain the prod
     workflow,
     /CLOUDFLARE_WORKERS_SUBDOMAIN: \$\{\{ secrets\.CLOUDFLARE_WORKERS_SUBDOMAIN \}\}/,
   );
+});
+
+test("page navigation failures retain the recheck and open the watch's outage issue", async () => {
+  for (const [name, message] of [
+    ["TimeoutError", "page.goto: Timeout exceeded"],
+    ["Error", "page.goto: net::ERR_TOO_MANY_REDIRECTS"],
+  ]) {
+    let opened = 0;
+    const pageUrl = "https://mlb-app.example-subdomain.workers.dev/k3y/";
+    const page = {
+      on: () => {},
+      url: () => pageUrl,
+      isClosed: () => false,
+      goto: async () => {
+        opened += 1;
+        throw Object.assign(new Error(message), { name });
+      },
+    };
+    const context = { on: () => {}, newPage: async () => page, close: async () => {} };
+    const browser = {
+      isConnected: () => true,
+      newContext: async () => context,
+      close: async () => {},
+    };
+    const github = createFakeGitHub([]);
+    const lines = await watchApps({
+      repository: REPOSITORY,
+      runUrl: RUN_URL,
+      apps: ["mlb"],
+      services: [],
+      fetchImpl: github.fetchImpl,
+      env: { GH_TOKEN: "token" },
+      checkApp: (app) =>
+        checkAppPage({
+          app,
+          channel: "production",
+          env: { MLB_PAGE_URL: pageUrl },
+          attempts: 2,
+          pauseMs: 0,
+          launchBrowser: async () =>
+            /** @type {import("@playwright/test").Browser} */ (/** @type {unknown} */ (browser)),
+        }),
+    });
+    assert.equal(opened, 2);
+    assert.match(lines[0], /not opening/);
+    assert.equal(github.writes[0].body.title, "The MLB app isn't opening");
+  }
 });

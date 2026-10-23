@@ -357,8 +357,8 @@ add:
   Workers can't read, and which the deploy builds each Worker's address from;
 - for each app, a secret `<APP>_PAGE_URL` with its page's address, key and all,
   like `WNBA_PAGE_URL`;
-- a secret `ACCESS_CODE` with the one code every app asks for, if they ask
-  for one.
+- a required secret `ACCESS_CODE` with the one code every app asks for.
+  Each app's page URL and this code are required to verify a deployment.
 
 The beta channel (see "Trying a change on the phone" below) deploys from an
 environment of its own, named `beta`, limited to the `beta` branch, with the
@@ -368,19 +368,22 @@ page's address with `_BETA` after the app's name, like `WNBA_BETA_PAGE_URL`. Sin
 change only its own channel's Workers, a branch pushed to `beta` can never
 reach the live apps.
 
-Each deploy opens its new version's page as a phone does, signed in with its
-code, and puts the version before back when the page doesn't draw what its store
-sends. Every 15 minutes, the **Watch apps** workflow opens each app's page the
-same way and keeps one open issue for each app that isn't opening, which closes
-itself once the app opens again. An app without its page's secrets isn't
-opened, and the deploy log and the workflow say so. A page that asks for no code
-while its environment holds an `ACCESS_CODE` opens without it, and they say that
-too. The workflow also keeps one open issue for each live app that opens without
-asking for its code, which closes itself once the app asks again or the
-environment holds no `ACCESS_CODE`. A service has no address of its own, so each
-deploy and the workflow ask each app's health of it, and the workflow keeps one
-open issue for each service that isn't answering, which closes itself once it
-answers again.
+Each app deploy checks its Worker's release and opens its page as a phone does,
+signed in with its code. The [tooling rules](.claude/rules/tooling.md) distinguish
+broken releases that roll back from unavailable verification that fails the run
+while leaving the upload live but unverified. After configuring a new app's key,
+code, and page URL, rerun its Deploy run: when that commit is already live,
+the run verifies it without uploading or rolling it back. Other unchanged apps
+keep their normal skip.
+
+Every 15 minutes, the **Watch apps** workflow opens each production app's page
+the same way and keeps one open issue for each app that isn't opening, which
+closes itself once the app opens again. Missing page settings or a refused code
+leave that check unchecked and produce a warning. A page that opens without asking
+for its code gets an issue of its own, which closes once the page asks again or
+the environment holds no `ACCESS_CODE`. A service has no address of its own, so
+each deploy and the workflow ask each app's health of it; the workflow keeps one
+open issue for each service that isn't answering, which closes once it answers.
 
 Each deploy records its commit on the Worker's version. A merge skips a Worker's
 deploy when nothing but docs, tests, tooling, and other Workers' folders changed

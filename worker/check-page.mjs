@@ -12,9 +12,9 @@ const RELEASE_FOLDER = /\/release\/([^/]+)\//;
  *   | { status: "unchecked", reason: string }} PageCheck
  */
 
-/** @param {string} reason @returns {PageCheck} */
+/** @param {string} reason @returns {{ status: "broken", reason: string }} */
 const markBroken = (reason) => ({ status: "broken", reason });
-/** @param {string} reason @returns {PageCheck} */
+/** @param {string} reason @returns {{ status: "unchecked", reason: string }} */
 const markUnchecked = (reason) => ({ status: "unchecked", reason });
 
 /**
@@ -194,13 +194,16 @@ export async function checkPage(
 /**
  * A check's reason without the page's address, since logs and issues are public: not the whole
  * address, its Worker's with or without its scheme, its folder, or its key on its own, in
- * whatever form a browser's error names them, nor the page host the address sent it on to.
- * @param {PageCheck} check
+ * whatever form a browser's error names them, nor the page host the address sent it on to,
+ * or the access code.
+ * @template {PageCheck} Check
+ * @param {Check} check
  * @param {string} pageUrl
  * @param {string} [landedUrl] where the page ended up
- * @returns {PageCheck}
+ * @param {string} [accessCode]
+ * @returns {Check}
  */
-export function hideAddress(check, pageUrl, landedUrl = pageUrl) {
+export function hideAddress(check, pageUrl, landedUrl = pageUrl, accessCode) {
   if (check.status === "drawn") return check;
   const { origin, hostname, pathname } = new URL(pageUrl);
   const key = pathname.split("/").filter(Boolean).at(-1) ?? "";
@@ -217,6 +220,7 @@ export function hideAddress(check, pageUrl, landedUrl = pageUrl) {
       : []),
     [pathname, "/<key>/"],
     ...(key ? [[key, "<key>"]] : []),
+    ...(accessCode ? [[accessCode, "<access code>"]] : []),
   ];
   const reason = masks.reduce(
     (text, [secret, mask]) => text.replaceAll(secret, mask),
@@ -246,23 +250,45 @@ async function closeAfterPageCheck(close, check) {
     await close();
     return true;
   } catch (error) {
-    // Cleanup cannot undo evidence that the uploaded page is broken.
+    // Cleanup cannot undo a confirmed broken-page result.
     if (check.status !== "broken") throw error;
     return false;
   }
 }
 
 /**
- * Opens an app's live page in a browser of its own, trying again after `pauseMs` while it's
- * broken, up to `attempts` times. A page with no address, or whose access code the Worker refuses
- * or rate-limits, goes unchecked. Browser infrastructure failures cannot verify a release;
- * the deploy leaves it live but fails verification, while the watch reports an unchecked page
- * or fails when the browser cannot start.
+ * @param {unknown} error
+ * @param {boolean} isInfrastructureUnavailable
+ * @param {boolean} isPageClosed
+ */
+function judgePageFailure(error, isInfrastructureUnavailable, isPageClosed) {
+  const message = error instanceof Error ? error.message : String(error);
+  const isProxyFailure =
+    /net::ERR_(?:PROXY_CONNECTION_FAILED|TUNNEL_CONNECTION_FAILED|NO_SUPPORTED_PROXIES)/.test(
+      message,
+    );
+  const isPageFailure =
+    isPageClosed ||
+    (error instanceof Error && error.name === "TimeoutError") ||
+    /net::ERR_|Page crashed|Target crashed|Execution context was destroyed|Failed to fetch/.test(
+      message,
+    );
+  return !isInfrastructureUnavailable && !isProxyFailure && isPageFailure
+    ? markBroken(`the page didn't load: ${message}`)
+    : markUnchecked(`the page check failed: ${message}`);
+}
+
+/**
+ * Opens an app's page, retrying page failures up to `attempts` times.
+ * Missing access settings and refused or rate-limited codes return unchecked.
+ * Unavailable page operations return unchecked; browser or context setup and cleanup failures
+ * throw with access details masked.
  * @param {object} options
  * @param {string} options.app
  * @param {string} options.channel
  * @param {string} [options.commit]
  * @param {NodeJS.ProcessEnv} [options.env]
+ * @param {boolean} [options.isAccessCodeRequired]
  * @param {number} [options.attempts]
  * @param {number} [options.pauseMs]
  * @param {typeof launchChromium} [options.launchBrowser]
@@ -273,29 +299,50 @@ export async function checkAppPage({
   channel,
   commit,
   env = process.env,
+  isAccessCodeRequired = false,
   attempts = 3,
   pauseMs = 5000,
   launchBrowser = launchChromium,
 }) {
+  const secrets = nameAccessSecrets(app, channel);
   const access = readPageAccess(app, channel, env);
-  if (!access) return markUnchecked(`no ${nameAccessSecrets(app, channel).pageUrl} secret`);
-  const browser = await launchBrowser(env);
-  let check = markUnchecked("the page wasn't opened");
+  if (!access) return markUnchecked(`no ${secrets.pageUrl} secret`);
+  if (isAccessCodeRequired && !access.accessCode)
+    return markUnchecked(`no ${secrets.accessCode} secret`);
+  let landedUrl = access.pageUrl;
   try {
-    for (let attempt = 0; attempt < attempts; attempt += 1) {
-      if (attempt > 0) await waitFor(pauseMs);
-      // A service worker would answer the next try from what the last one kept.
-      const context = await browser.newContext({ serviceWorkers: "block" });
-      const page = await context.newPage();
-      const opened = await checkPage(page, { ...access, commit }).catch((error) =>
-        markUnchecked(`the page check failed: ${error instanceof Error ? error.message : error}`),
-      );
-      check = hideAddress(opened, access.pageUrl, page.url());
-      if (!(await closeAfterPageCheck(() => context.close(), check))) break;
-      if (check.status !== "broken") break;
+    const browser = await launchBrowser(env);
+    /** @type {PageCheck} */
+    let check = markUnchecked("the page wasn't opened");
+    try {
+      for (let attempt = 0; attempt < attempts; attempt += 1) {
+        if (attempt > 0) await waitFor(pauseMs);
+        const context = await browser.newContext({ serviceWorkers: "block" });
+        let isContextClosed = false;
+        context.on("close", () => {
+          isContextClosed = true;
+        });
+        const page = await context.newPage();
+        const opened = await checkPage(page, { ...access, commit }).catch((error) =>
+          judgePageFailure(error, isContextClosed || !browser.isConnected(), page.isClosed()),
+        );
+        landedUrl = page.url();
+        check = hideAddress(opened, access.pageUrl, landedUrl, access.accessCode);
+        if (!(await closeAfterPageCheck(() => context.close(), check))) break;
+        if (check.status !== "broken") break;
+      }
+      return check;
+    } finally {
+      await closeAfterPageCheck(() => browser.close(), check);
     }
-    return check;
-  } finally {
-    await closeAfterPageCheck(() => browser.close(), check);
+  } catch (error) {
+    const failure = hideAddress(
+      markUnchecked(error instanceof Error ? error.message : String(error)),
+      access.pageUrl,
+      landedUrl,
+      access.accessCode,
+    );
+    // eslint-disable-next-line preserve-caught-error -- Causes may expose page access secrets in public logs.
+    throw new Error(failure.reason);
   }
 }
