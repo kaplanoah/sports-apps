@@ -1,5 +1,5 @@
 import { test, openApp } from "./harness.mjs";
-import { checkUnreadableStoreMessage } from "../../../../tests/browser/diagnostics-switch.mjs";
+import { checkUnreadableStoreMessage } from "../../../../tests/browser/store-messages.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 

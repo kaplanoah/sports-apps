@@ -6,7 +6,8 @@ import {
   turnOnDiagnostics,
 } from "../../../../tests/browser/diagnostics-switch.mjs";
 import { SETTINGS, openSettings } from "../../../../tests/browser/settings.mjs";
-import { RECORD_MS, findRecords, reloadAndRecord } from "./diagnostics-records.mjs";
+import { findRecords } from "../../../../tests/browser/diagnostics-records.mjs";
+import { RECORD_MS, reloadAndRecord } from "./diagnostics-records.mjs";
 
 test.use({
   viewport: { width: 390, height: 844 },

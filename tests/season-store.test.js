@@ -351,6 +351,42 @@ test("a page that says what it watches hears only of changes to those documents"
   assert.deepEqual(unsaid.sent, ["seasons/2026", "readings-2026/2026-09-30-01", "standings/2026"]);
 });
 
+test("a bare collection name cannot replace a page's document watches", async () => {
+  const context = createDurableObjectContext();
+  const SeasonStore = createSeasonStore(QUIET_LEAGUE);
+  const store = new SeasonStore(context.ctx, {});
+  const page = createPageSocket();
+  context.ctx.acceptWebSocket(page);
+  store.webSocketMessage(page, JSON.stringify({ watching: ["seasons/2026"] }));
+
+  store.webSocketMessage(page, JSON.stringify({ watching: ["seasons"] }));
+
+  assert.deepEqual(page.deserializeAttachment(), { watching: ["seasons/2026"] });
+  await store.docs.write("seasons/2026", { year: 2026 });
+  await store.docs.write("seasons/2027", { year: 2027 });
+  assert.deepEqual(page.sent, ["seasons/2026"]);
+});
+
+test("a trailing slash watches a collection but cannot name an empty document id", async () => {
+  const context = createDurableObjectContext();
+  const SeasonStore = createSeasonStore(QUIET_LEAGUE);
+  const store = new SeasonStore(context.ctx, {});
+  const page = createPageSocket();
+  context.ctx.acceptWebSocket(page);
+  store.webSocketMessage(page, JSON.stringify({ watching: ["seasons/"] }));
+  assert.deepEqual(page.deserializeAttachment(), { watching: ["seasons/"] });
+
+  for (const year of [2026, 2027]) await store.docs.write(`seasons/${year}`, { year });
+  await store.docs.write("standings/2026", { year: 2026 });
+  assert.deepEqual(page.sent, ["seasons/2026", "seasons/2027"]);
+  assert.equal((await store.fetch(new Request(`${ORIGIN}/store/seasons`))).status, 200);
+  for (const method of ["GET", "PATCH"])
+    assert.equal(
+      (await store.fetch(new Request(`${ORIGIN}/store/seasons/`, { method }))).status,
+      404,
+    );
+});
+
 test("each update reads the details of the games pages have open, and saves them when they change", async () => {
   const context = createDurableObjectContext();
   const loads = [];
