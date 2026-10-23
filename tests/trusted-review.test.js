@@ -189,6 +189,7 @@ test("Git retains proxy and CA trust while discarding credentials and executable
     HTTPS_PROXY: "https://example.com",
     SSL_CERT_FILE: "/tmp/ca.pem",
     REVIEW_BASE: SHA,
+    REVIEW_TRUSTED: SHA,
     GH_TOKEN: "example-token",
     ANTHROPIC_API_KEY: "example-key",
     NODE_OPTIONS: "--import /tmp/evil.mjs",
@@ -208,7 +209,8 @@ test("Git retains proxy and CA trust while discarding credentials and executable
     assert.equal(env[field], undefined, field);
   assert.equal(env.GIT_CONFIG_GLOBAL, "/dev/null");
   assert.equal(env.GIT_CONFIG_NOSYSTEM, "1");
-  assert.throws(() => createReviewGitEnvironment({ REVIEW_BASE: "main" }), /immutable base/);
+  for (const base of [SHA, "main", ""])
+    assert.throws(() => createReviewGitEnvironment({ REVIEW_BASE: base }), /immutable trusted/);
   assert.equal(
     createReviewGitEnvironment({ REVIEW_BASE: SHA, REVIEW_TRUSTED: ID_ENV.REVIEW_TRUSTED })
       .GIT_ATTR_SOURCE,
@@ -836,6 +838,26 @@ async function verifyHostileReviewIsolation(baseRef) {
   );
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /a.js:1:reviewed tracked text/);
+  const workerSearch = spawnSync(
+    process.execPath,
+    [
+      join(trusted, "worker/review-git.mjs"),
+      "grep",
+      "-n",
+      "-F",
+      "-e",
+      "untrusted code",
+      "--",
+      "worker/stack-change.mjs",
+    ],
+    {
+      cwd: checkout,
+      env: { ...ENV, REVIEW_CHECKOUT: checkout, REVIEW_BASE: base, REVIEW_TRUSTED: source },
+      encoding: "utf8",
+    },
+  );
+  assert.equal(workerSearch.status, 0, workerSearch.stderr);
+  assert.match(workerSearch.stdout, /^worker\/stack-change.mjs:1:.*untrusted code/);
   const history = spawnSync(
     process.execPath,
     [join(trusted, "worker/review-git.mjs"), "show", "HEAD^1:a.js"],
@@ -886,7 +908,7 @@ async function verifyHostileReviewIsolation(baseRef) {
     baseRef === "stack"
       ? !plannedFiles.includes("worker/plan-review.mjs")
       : plannedFiles.includes("worker/plan-review.mjs"),
-    "review reads exactly the PR delta against its own base, ignoring hostile attributes",
+    "review reads exactly the PR delta against its own base",
   );
   for (const reviewedBase of [head, base]) {
     const summary = `<!-- trusted-review-summary -->\n<!-- claude-review-state ${JSON.stringify({ head, base: reviewedBase })} -->`;
