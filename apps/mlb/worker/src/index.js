@@ -25,7 +25,6 @@ export default createAppWorker({
   pageFiles: PAGE_FILES,
   forwardToStore,
   isStoreAnswering,
-  isMovingToPageHost: true,
   reads: {
     "/box-score": (url, env) => boxScores.serveBoxScore(url, (key) => readStoreDoc(env, key)),
     "/highlights": (url, env) => highlights.serveHighlights(url, (key) => readStoreDoc(env, key)),

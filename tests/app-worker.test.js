@@ -121,13 +121,12 @@ const PAGE_FILES = {
 
 const answerOk = () => new Response("data");
 
-function createLockedWorker({ isMovingToPageHost = false } = {}) {
+function createLockedWorker() {
   return createAppWorker({
     pageFiles: PAGE_FILES,
     forwardToStore: answerOk,
     isStoreAnswering: storeAnswers,
     reads: { "/box-score": answerOk },
-    isMovingToPageHost,
   });
 }
 
@@ -135,25 +134,15 @@ const LOCKED_ENV = { APP_KEY: "key", ACCESS_CODE: "fast break", ACCESS_SIGNING_K
 
 /**
  * @param {string} path under the page's key
- * @param {{ method?: string, cookie?: string, body?: unknown, env?: object, origin?: string, isMovingToPageHost?: boolean }} [options]
+ * @param {{ method?: string, cookie?: string, body?: unknown, env?: object, origin?: string }} [options]
  */
 function requestLocked(
   path,
-  {
-    method = "GET",
-    cookie,
-    body,
-    env = LOCKED_ENV,
-    origin = "https://worker.example",
-    isMovingToPageHost = false,
-  } = {},
+  { method = "GET", cookie, body, env = LOCKED_ENV, origin = "https://worker.example" } = {},
 ) {
   const headers = { "cf-connecting-ip": "203.0.113.7", ...(cookie && { cookie }) };
   const init = { method, headers, ...(body !== undefined && { body: JSON.stringify(body) }) };
-  return createLockedWorker({ isMovingToPageHost }).fetch(
-    new Request(`${origin}/key${path}`, init),
-    env,
-  );
+  return createLockedWorker().fetch(new Request(`${origin}/key${path}`, init), env);
 }
 
 const readCookie = (response) => response.headers.get("set-cookie")?.split(";")[0] ?? null;
@@ -416,6 +405,50 @@ test("a handoff opens the page signed in for the ten minutes it says it lasts, a
 const PAGE_HOST = "mlb.sports.example";
 const PAGE_HOST_ENV = { ...LOCKED_ENV, PAGE_HOST };
 
+const MOVING_META = '<meta name="moving-to-page-host" content="true">';
+
+test("the Worker writes the move meta before page scripts only under a key with a host and code", async () => {
+  const source =
+    '<html><meta charset="utf-8"><script src="page-move.js"></script><body>the app</body></html>';
+  const worker = createPageWorker({
+    "index.html": { contentType: "text/html", text: source },
+    "version.json": { contentType: "application/json", text: JSON.stringify(RELEASE) },
+  });
+  const cookie = await signIn(PAGE_HOST_ENV);
+  const request = (host, path, env, headers = {}) =>
+    worker.fetch(new Request(`https://${host}${path}`, { headers: { cookie, ...headers } }), env);
+
+  for (const path of ["/key/", "/key/index.html", "/key/release/abc1234/index.html"]) {
+    const moving = await request("worker.example", path, PAGE_HOST_ENV);
+    const movingBody = await moving.text();
+    assert.equal(moving.status, 200);
+    assert.ok(movingBody.includes(MOVING_META));
+    assert.ok(movingBody.indexOf(MOVING_META) < movingBody.indexOf("<script"));
+    assert.equal(moving.headers.get("cache-control"), "no-cache");
+
+    const headers = { "if-none-match": moving.headers.get("etag") };
+    assert.equal((await request("worker.example", path, PAGE_HOST_ENV, headers)).status, 304);
+    for (const env of [LOCKED_ENV, { APP_KEY: "key", PAGE_HOST }, { APP_KEY: "key" }]) {
+      const staying = await request("worker.example", path, env, headers);
+      assert.equal(staying.status, 200);
+      assert.equal(await staying.text(), source);
+      assert.notEqual(staying.headers.get("etag"), moving.headers.get("etag"));
+    }
+    const atPageHost = await request(PAGE_HOST, path.slice("/key".length), PAGE_HOST_ENV);
+    assert.equal(atPageHost.status, 200);
+    assert.equal(await atPageHost.text(), source);
+  }
+});
+
+test("without a page host a Worker keeps the page under its key and offers no move handoff", async () => {
+  const cookie = await signIn();
+  const page = await requestLocked("/", { cookie });
+  assert.equal(page.status, 200);
+  assert.equal(await page.text(), "the app");
+  assert.equal(page.headers.get("location"), null);
+  await assertNoMoveRoute(await requestLocked("/access/move", { method: "POST", cookie }));
+});
+
 /**
  * @param {string} path at the page's own address, with no key
  * @param {{ method?: string, cookie?: string, body?: unknown, env?: object }} [options]
@@ -465,7 +498,7 @@ test("the page's own address answers nothing while the Worker has no code", asyn
 });
 
 test("with an address of its own, the page still answers under its key, and only there on the Worker's address", async () => {
-  assert.equal(await (await requestLocked("/", { env: PAGE_HOST_ENV })).text(), "the gate");
+  assert.equal((await requestLocked("/", { env: PAGE_HOST_ENV })).status, 301);
   const cookie = await signIn(PAGE_HOST_ENV);
   const page = await requestLocked("/", { cookie, env: PAGE_HOST_ENV });
   assert.equal(await page.text(), "the app");
@@ -484,7 +517,7 @@ test("with an address of its own, the page still answers under its key, and only
  * @param {{ method?: string, cookie?: string, env?: object }} [options]
  */
 const requestMoving = (path, { env = PAGE_HOST_ENV, ...options } = {}) =>
-  requestLocked(path, { ...options, env, isMovingToPageHost: true });
+  requestLocked(path, { ...options, env });
 
 test("a key that's moving gives a phone signed in under it a handoff at the page's own address, which signs it in there", async () => {
   const cookie = await signIn(PAGE_HOST_ENV);
@@ -518,16 +551,13 @@ test("a move's handoff is made only by a POST from a phone signed in, and only w
   assert.equal((await read.json()).error.message, "POST only.");
   assert.equal(read.headers.get("allow"), "POST");
   await assertNoMoveRoute(
-    await requestLocked("/access/move", { method: "POST", cookie, env: PAGE_HOST_ENV }),
-  );
-  await assertNoMoveRoute(
     await requestMoving("/access/move", { method: "POST", cookie, env: LOCKED_ENV }),
   );
   await assertNoMoveRoute(
     await requestMoving("/access/move", { method: "POST", env: { APP_KEY: "key", PAGE_HOST } }),
   );
   await assertNoMoveRoute(
-    await createLockedWorker({ isMovingToPageHost: true }).fetch(
+    await createLockedWorker().fetch(
       new Request(`https://${PAGE_HOST}/access/move`, { method: "POST", headers: { cookie } }),
       PAGE_HOST_ENV,
     ),
@@ -555,10 +585,9 @@ test("a key that's moving keeps the page for a phone signed in, the gate for one
   assert.equal(await (await requestMoving("/styles.css")).text(), "body {}");
 });
 
-test("a page with no address to move to, or a key that isn't moving, shows the gate under the key as before", async () => {
+test("a page with no address to move to shows the gate under the key, as the new address does", async () => {
   assert.equal(await (await requestMoving("/", { env: LOCKED_ENV })).text(), "the gate");
-  assert.equal(await (await requestLocked("/", { env: PAGE_HOST_ENV })).text(), "the gate");
-  const atPageHost = await createLockedWorker({ isMovingToPageHost: true }).fetch(
+  const atPageHost = await createLockedWorker().fetch(
     new Request(`https://${PAGE_HOST}/`),
     PAGE_HOST_ENV,
   );
