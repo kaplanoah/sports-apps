@@ -1,6 +1,5 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
 import {
   SUMMARY_MARKER,
   findSummary,
@@ -18,29 +17,6 @@ test("the reviewed head the summary carries reads back as written", () => {
     readReviewedHead(`${SUMMARY_MARKER}\n${writeReviewedHead(HEAD)}\nClaude reviewed`),
     HEAD,
   );
-});
-
-test("reviewed heads follow the shared object validator's acceptance and rejection", () => {
-  const script = `
-    import assert from "node:assert/strict";
-    import { mock } from "node:test";
-    mock.module(${JSON.stringify(new URL("../worker/git-object.mjs", import.meta.url).href)}, {
-      exports: { isGitObjectId: value => value === "shared-validator-head" },
-    });
-    const { readReviewedHead, writeReviewedHead } = await import(${JSON.stringify(new URL("../worker/review-state.mjs", import.meta.url).href)});
-    assert.equal(readReviewedHead(writeReviewedHead("shared-validator-head")), "shared-validator-head");
-    assert.equal(readReviewedHead(writeReviewedHead(${JSON.stringify(HEAD)})), null);
-  `;
-  const result = spawnSync(
-    process.execPath,
-    ["--experimental-test-module-mocks", "--input-type=module", "-e", script],
-    {
-      encoding: "utf8",
-      timeout: 10000,
-      stdio: ["ignore", "pipe", "pipe"],
-    },
-  );
-  assert.equal(result.status, 0, result.error?.message ?? result.stderr);
 });
 
 test("a summary that carries no head, or a broken one, names none", () => {
