@@ -55,6 +55,7 @@ test("a merge of only docs, tests, and tooling skips the deploy", () => {
     "stryker.config.mjs",
     "worker/browser-scope.mjs",
     "worker/burn-in-specs.mjs",
+    "worker/mutation-tests.mjs",
     "worker/package-imports.mjs",
     "worker/red-change.mjs",
     "worker/red-change-styles.mjs",
