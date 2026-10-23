@@ -30,6 +30,8 @@ paths:
   Manual runs reproduce browser tests without repeating Node tests.
   To reproduce a flaky test, or to show a fix holds, run that workflow by hand with the tests,
   the project, the branch, and how many times to run each: it runs on the machine CI uses, WebKit included, which a cloud session doesn't have.
+  Select the branch in GitHub's "Run workflow" picker, or with `gh workflow run flaky.yml --ref <branch>`.
+  The workflow checks out that run's own ref, so branch code never runs in main's cache context.
 - After a reload whose page code a test holds, the copy the page puts back has already taken the load note away,
   so the test waits for `domcontentloaded` to know the code has run.
 - Route a browser test's requests by a pattern, like the root's `matchPath` in `tests/browser/harness.mjs`,

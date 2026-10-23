@@ -1,5 +1,5 @@
 name: Flaky tests
-run-name: ${{ inputs.tests && format('Repeat {0} on {1}', inputs.tests, inputs.ref) || 'Flaky tests' }}
+run-name: ${{ inputs.tests && format('Repeat {0} on {1}', inputs.tests, github.ref_name) || 'Flaky tests' }}
 
 # Pull requests retry a failed browser test once, so a test that fails only now and then can pass
 # them. Each night, main's browser tests run three times over with no retry, and the report
@@ -12,9 +12,6 @@ on:
     - cron: "17 7 * * *"
   workflow_dispatch:
     inputs:
-      ref:
-        description: Branch or commit to test
-        default: main
       tests:
         description: Tests to run, as paths with an optional :line, split by spaces; every test when empty
         default: ""
@@ -59,7 +56,6 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          ref: ${{ inputs.ref }}
           persist-credentials: false
       - id: node
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7

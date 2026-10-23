@@ -311,6 +311,14 @@ test("only the nightly run repeats the focused Honolulu Node list", () => {
   assert.match(node, /if: steps\.modules\.outputs\.cache-hit != 'true'/);
 });
 
+test("manual runs test the workflow's own ref instead of checking out code into main's context", () => {
+  const workflow = readRepoFile(".github/workflows/flaky.yml");
+  assert.doesNotMatch(workflow, /inputs\.ref|^\s+ref:/m);
+  assert.match(workflow, /format\('Repeat \{0\} on \{1\}', inputs\.tests, github\.ref_name\)/);
+  for (const job of ["node", "browser", "report"])
+    assert.match(readJob(job, "flaky.yml"), /uses: actions\/checkout@/);
+});
+
 test("manual browser runs never restore or save dependency caches", () => {
   const workflow = readRepoFile(".github/workflows/flaky.yml");
   const browser = readJob("browser", "flaky.yml");
