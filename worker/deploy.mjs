@@ -405,11 +405,7 @@ export async function deploy({
   function shouldRecheckLive(liveCommit) {
     if (!liveCommit || !commit || !(Number(env.GITHUB_RUN_ATTEMPT) > 1)) return false;
     if (liveCommit === commit) return true;
-    return (
-      !isForcePushed &&
-      isEarlier(liveCommit, commit) &&
-      !decideDeploy(findChanges(liveCommit), worker).isNeeded
-    );
+    return !isForcePushed && isEarlier(liveCommit, commit);
   }
 
   async function readMigrationTag() {
