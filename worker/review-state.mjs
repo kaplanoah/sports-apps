@@ -51,12 +51,9 @@ export function readReviewedState(body) {
   }
 }
 
-/** @param {string | undefined} body */
-export const readReviewedHead = (body) => readReviewedState(body)?.head ?? null;
-
 // Model quotes remain readable without becoming authoritative review control marks.
 /** @param {string} text */
-export const escapeReviewText = (text) => text.replaceAll("<!--", "&lt;!--");
+export const escapeReviewText = (text) => text.replaceAll("<!--", "<\u2060!--");
 
 /** @param {string | null} head @param {string} [base] */
 export const writeReviewedHead = (head, base) =>

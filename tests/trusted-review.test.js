@@ -14,11 +14,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { readStepScript } from "./workflow-step.js";
 import { REPO_ROOT, readRepoFile } from "./repo-files.js";
+import { GitHubError } from "../worker/github-api.mjs";
 import { createReviewGitEnvironment } from "../worker/review-repository.mjs";
 import {
   exportReviewArtifact,
   importReviewArtifacts,
   prepareReviewCheckout,
+  resolveReviewMerge,
   verifyReviewEvent,
 } from "../worker/trusted-review.mjs";
 import {
@@ -370,7 +372,7 @@ test("sealed stage import rejects PR-seeded or unexpected records and preserves 
   );
 });
 
-test("a hostile merge tree cannot replace trusted entrypoints, imports, Node or package configuration", () => {
+test("a hostile merge tree cannot replace trusted entrypoints, imports, Node or package configuration", async () => {
   const directory = createFolder();
   const trusted = join(directory, "trusted");
   mkdirSync(trusted);
@@ -432,6 +434,184 @@ test("a hostile merge tree cannot replace trusted entrypoints, imports, Node or 
   readGit(directory, ["clone", "--no-local", "--single-branch", "--depth", "1", hostile, checkout]);
   // The moving ref now names another commit; later jobs must fetch the originally planned SHA.
   readGit(hostile, ["update-ref", "refs/pull/1/merge", head]);
+  const event = {
+    ...ENV,
+    GITHUB_EVENT_NAME: "pull_request_target",
+    GITHUB_WORKSPACE: checkout,
+    PR: "1",
+    REVIEW_HEAD: head,
+    REVIEW_BASE: base,
+    GITHUB_REPOSITORY: "example/repository",
+  };
+  const pull = {
+    state: "open",
+    head: { sha: head },
+    base: { ref: "main", sha: base },
+    merge_commit_sha: merge,
+  };
+  for (const initial of [undefined, head]) {
+    let reads = 0;
+    let waits = 0;
+    const selected = await resolveReviewMerge(
+      { ...event, REVIEW_MERGE: initial },
+      {
+        readPull: async (path) => {
+          assert.equal(path, "/pulls/1");
+          reads++;
+          return { ...pull, merge_commit_sha: reads === 1 ? (initial ?? null) : merge };
+        },
+        wait: async (delay) => {
+          assert.ok(delay > 0);
+          waits++;
+        },
+      },
+    );
+    assert.equal(selected, merge);
+    assert.equal(reads, 2);
+    assert.equal(waits, 1);
+    assert.equal(
+      readGit(checkout, ["rev-parse", "HEAD"]),
+      base,
+      "resolving never checks out reviewed code",
+    );
+  }
+  for (const changed of [
+    { ...pull, state: "closed" },
+    { ...pull, head: { sha: base } },
+    { ...pull, base: { ...pull.base, sha: head } },
+    { ...pull, base: { ...pull.base, ref: "stack" } },
+  ]) {
+    let reads = 0;
+    assert.equal(
+      await resolveReviewMerge(event, {
+        readPull: async () => {
+          reads++;
+          return changed;
+        },
+        wait: async () => {
+          assert.fail("moved identity must not retry");
+        },
+      }),
+      null,
+    );
+    assert.equal(reads, 1);
+  }
+  let exhausted = 0;
+  let waited = 0;
+  assert.equal(
+    await resolveReviewMerge(event, {
+      readPull: async () => {
+        exhausted++;
+        return { ...pull, merge_commit_sha: null };
+      },
+      wait: async (delay) => {
+        waited += delay;
+      },
+    }),
+    null,
+  );
+  assert.ok(exhausted > 1 && exhausted < 10, "mergeability recovery is bounded");
+  assert.ok(waited < 10000, "metadata retries wait less than ten seconds in total");
+  assert.equal(
+    await resolveReviewMerge(
+      { ...event, REVIEW_MERGE: merge },
+      {
+        readPull: async () => {
+          assert.fail("a pinned matching merge never follows the live PR");
+        },
+        wait: async () => {},
+      },
+    ),
+    merge,
+  );
+  await assert.rejects(
+    () =>
+      resolveReviewMerge(
+        { ...event, GITHUB_EVENT_NAME: "pull_request" },
+        {
+          readPull: async () => {
+            assert.fail("untrusted events must not read with credentials");
+          },
+        },
+      ),
+    /workflow authority/,
+  );
+  const missing = "f".repeat(40);
+  assert.equal(
+    await resolveReviewMerge(
+      { ...event, REVIEW_MERGE: missing },
+      {
+        readPull: async () => pull,
+        wait: async () => {
+          assert.fail("fresh matching metadata needs no delay");
+        },
+      },
+    ),
+    merge,
+  );
+  assert.equal(
+    await resolveReviewMerge(
+      { ...event, REVIEW_MERGE: missing },
+      { readPull: async () => ({ ...pull, merge_commit_sha: missing }), wait: async () => {} },
+    ),
+    null,
+  );
+  assert.throws(() => prepareReviewCheckout({ ...event, REVIEW_MERGE: missing }), /not our ref/);
+  await assert.rejects(
+    () =>
+      resolveReviewMerge(event, {
+        readPull: async () => {
+          throw new GitHubError(403, "GET pull");
+        },
+        wait: async () => {
+          assert.fail("metadata authentication errors must not retry");
+        },
+      }),
+    /GitHub answered 403/,
+  );
+  readGit(checkout, ["remote", "set-url", "origin", join(directory, "missing-repository")]);
+  try {
+    await assert.rejects(
+      () =>
+        resolveReviewMerge(
+          { ...event, REVIEW_MERGE: missing },
+          {
+            readPull: async () => {
+              assert.fail("non-availability Git failures must propagate");
+            },
+          },
+        ),
+      /does not appear to be a git repository/,
+    );
+  } finally {
+    readGit(checkout, ["remote", "set-url", "origin", hostile]);
+  }
+  const recoveredOutput = join(directory, "recovered-output");
+  const recoveredEnvironment = join(directory, "recovered-env");
+  const recoveryPreload = join(directory, "recovery-fetch.mjs");
+  writeFileSync(
+    recoveryPreload,
+    `globalThis.fetch = async () => ({ ok: true, json: async () => (${JSON.stringify(pull)}) });`,
+  );
+  const recovered = spawnSync(
+    process.execPath,
+    ["--import", recoveryPreload, join(trusted, "worker/trusted-review.mjs"), "prepare-plan"],
+    {
+      cwd: checkout,
+      env: {
+        ...event,
+        RUNNER_TEMP: directory,
+        GITHUB_OUTPUT: recoveredOutput,
+        GITHUB_ENV: recoveredEnvironment,
+        REVIEW_MERGE: "",
+        GH_TOKEN: "example",
+      },
+      encoding: "utf8",
+    },
+  );
+  assert.equal(recovered.status, 0, recovered.stderr);
+  assert.match(readFileSync(recoveredOutput, "utf8"), new RegExp(`available=true\nmerge=${merge}`));
+  assert.equal(readGit(checkout, ["rev-parse", "HEAD"]), merge);
   const envFile = join(directory, "env");
   prepareReviewCheckout({
     ...ENV,
@@ -663,6 +843,14 @@ test("only asked plans prepare PR code and consume their label even without a me
     workflow,
     /name: Leave an unavailable merge's review owed\n {8}if: needs.review-plan.outputs.available == 'false'/,
   );
+  const unavailable = spawnSync(
+    "bash",
+    ["-c", readStepScript(workflow, "Leave an unavailable merge's review owed")],
+    { encoding: "utf8" },
+  );
+  assert.equal(unavailable.status, 1);
+  assert.match(unavailable.stdout, /^::error::.*review-plan notice/);
+  assert.doesNotMatch(unavailable.stdout, /Re-add the review label/);
   const output = join(createFolder(), "sync-output");
   const result = spawnSync("bash", ["-c", readStepScript(workflow, "Decide whether to review")], {
     env: {
@@ -678,4 +866,33 @@ test("only asked plans prepare PR code and consume their label even without a me
   });
   assert.equal(result.status, 0, result.stderr);
   assert.match(readFileSync(output, "utf8"), /owed=true\nreview=false/);
+});
+
+test("Dependabot remains excluded when no checkout or merge was prepared", () => {
+  const workflow = readRepoFile(".github/workflows/review.yml");
+  const output = join(createFolder(), "dependabot-output");
+  const result = spawnSync("bash", ["-c", readStepScript(workflow, "Decide whether to review")], {
+    env: {
+      PATH: process.env.PATH,
+      GITHUB_OUTPUT: output,
+      EVENT: "pull_request_target",
+      ACTION: "opened",
+      AUTHOR: "dependabot[bot]",
+      REVIEW_LABEL: "review",
+    },
+    encoding: "utf8",
+  });
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(readFileSync(output, "utf8"), /owed=false\nreview=false/);
+  assert.match(
+    workflow,
+    /id: result\n {8}if: needs.review-plan.outputs.owed == 'false' && steps.prepare.outputs.available == 'true'/,
+  );
+  const prepare = workflow.split("  review-plan:\n")[1].split(/^ {2}[a-z][\w-]*:/m)[0];
+  assert.match(
+    prepare,
+    /if: steps.decision.outputs.review == 'true'\n {8}env:\n {10}GH_TOKEN: \$\{\{ github.token \}\}\n {8}run: node .* prepare-plan/,
+  );
+  const other = workflow.split("  review-across:\n")[1];
+  assert.doesNotMatch(other, /prepare-plan/);
 });

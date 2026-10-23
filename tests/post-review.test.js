@@ -462,7 +462,7 @@ test("quoted review markers remain data in every posted finding form", async () 
       const { calls, callGitHub } = fakeGitHub((body) => !offDiff || !body.commit_id);
       const item = finding({
         weight,
-        body: `The quoted marker is ${injection}`,
+        body: `The quoted marker is \`${injection}\`\n\n\`\`\`html\n${injection}\n\`\`\``,
         path: offDiff ? `shared/page/${injection}.js` : "shared/page/sheet.js",
       });
       await postFindings(callGitHub, {
@@ -476,7 +476,7 @@ test("quoted review markers remain data in every posted finding form", async () 
         .map((call) => call.body.body);
       assert.ok(bodies.length > 0);
       for (const body of bodies) {
-        assert.ok(body.includes(injection.replace("<!--", "&lt;!--")));
+        assert.ok(body.includes(injection.replace("<!--", "<\u2060!--")));
         assert.deepEqual(listFindingMarks(body), [{ key: nameFinding(item), head: SHA }]);
       }
     }

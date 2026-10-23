@@ -23,7 +23,7 @@ import {
   settleSummary,
 } from "../worker/judge-review.mjs";
 import { chooseStage, writeReview } from "../worker/plan-review.mjs";
-import { SUMMARY_MARKER, readReviewedHead, writeReviewedHead } from "../worker/review-state.mjs";
+import { SUMMARY_MARKER, readReviewedState, writeReviewedHead } from "../worker/review-state.mjs";
 
 /**
  * The SDK's messages for a run that read each file as given, its Read numbered by its place.
@@ -461,7 +461,7 @@ test("a review that read and checked everything passes, and moves the reviewed h
   const { isComplete, body } = judgeReview({ sha: HEAD, plan: PLAN, records });
   assert.ok(isComplete);
   assert.ok(body.startsWith(SUMMARY_MARKER));
-  assert.equal(readReviewedHead(body), HEAD);
+  assert.equal(readReviewedState(body)?.head ?? null, HEAD);
   assert.match(
     body,
     /Claude reviewed c{40}: it read the whole change in 2 areas, and posted 3 findings \(2 Important, 1 Nit\)\./,
@@ -483,7 +483,7 @@ test("a file a reviewer didn't read in full fails the review, keeping the earlie
     records,
   });
   assert.ok(!isComplete);
-  assert.equal(readReviewedHead(body), EARLIER);
+  assert.equal(readReviewedState(body)?.head ?? null, EARLIER);
   assert.match(body, /Read in full: 2 of 3 changed files/);
   assert.match(body, /didn't read every line of them or didn't finish, so the review fails/);
   assert.equal(body.match(/- `b\.js`/g)?.length, 1);
@@ -531,7 +531,7 @@ test("an incomplete first review cannot inject a reviewed head through unjudged 
   const { isComplete, body } = judgeReview({ sha: HEAD, plan: PLAN, records });
   assert.equal(isComplete, false);
   assert.equal(body.split("\n")[1], writeReviewedHead(null));
-  const reviewedHead = readReviewedHead(body);
+  const reviewedHead = readReviewedState(body)?.head ?? null;
   assert.equal(reviewedHead, null);
   assert.equal(
     chooseStage({ reviewedHead, head: HEAD, isOnBranch: false, listChanged: () => [] }).stage,
@@ -552,7 +552,7 @@ test("a reviewer, the check across areas, or the posting step that never finishe
     /- the reviewer of mlb page\n- the check across areas\n- the step that posts the findings/,
   );
   assert.match(body, /- `a.js`/);
-  assert.equal(readReviewedHead(body), null);
+  assert.equal(readReviewedState(body)?.head ?? null, null);
 });
 
 test("a review of a push says what it read since, and findings already on the pull request don't count as posted", () => {
@@ -574,7 +574,7 @@ test("a merge-only push or one restoring files to the base passes with an accura
     records: new Map(),
   });
   assert.ok(isComplete);
-  assert.equal(readReviewedHead(body), HEAD);
+  assert.equal(readReviewedState(body)?.head ?? null, HEAD);
   assert.match(
     body,
     /read nothing new in c{40}: the pushes since eeeeeee leave no new changes to review in files the pull request still changes/,
@@ -648,6 +648,6 @@ test("marker quotes in a completed summary cannot create duplicate authoritative
     records,
   });
   assert.equal(isComplete, true);
-  assert.ok(body.includes(injection.replace("<!--", "&lt;!--")));
-  assert.equal(readReviewedHead(body), HEAD);
+  assert.ok(body.includes(injection.replace("<!--", "<\u2060!--")));
+  assert.equal(readReviewedState(body)?.head ?? null, HEAD);
 });
