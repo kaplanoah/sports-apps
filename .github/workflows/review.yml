@@ -46,6 +46,9 @@ jobs:
           LABEL: ${{ github.event.label.name }}
           IS_DRAFT: ${{ github.event.pull_request.draft }}
           AUTHOR: ${{ github.event.pull_request.user.login }}
+          ASSOCIATION: ${{ github.event.pull_request.author_association }}
+          HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
+          REPOSITORY: ${{ github.repository }}
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
@@ -54,8 +57,15 @@ jobs:
             labeled=true
           fi
           echo "labeled=$labeled" >> "$GITHUB_OUTPUT"
+          case "$ASSOCIATION" in
+            OWNER | MEMBER | COLLABORATOR) trusted=true ;;
+            *) trusted=false ;;
+          esac
+          if [ -n "$HEAD_REPOSITORY" ] && [ "$HEAD_REPOSITORY" = "$REPOSITORY" ]; then
+            trusted=true
+          fi
           case "$ACTION" in
-            opened | ready_for_review) asked=true ;;
+            opened | ready_for_review) asked=$trusted ;;
             *) asked=$labeled ;;
           esac
           reason=""

@@ -401,6 +401,8 @@ test("a hostile merge tree cannot replace trusted entrypoints, imports, Node or 
     "rule-files.mjs",
     "review-state.mjs",
     "review-repository.mjs",
+    "pull-merge.mjs",
+    "check-timing.mjs",
     "deploy-scope.mjs",
     "apps.mjs",
   ])
@@ -480,6 +482,7 @@ test("a hostile merge tree cannot replace trusted entrypoints, imports, Node or 
     { ...pull, head: { sha: base } },
     { ...pull, base: { ...pull.base, sha: head } },
     { ...pull, base: { ...pull.base, ref: "stack" } },
+    { ...pull, mergeable: false },
   ]) {
     let reads = 0;
     assert.equal(
@@ -489,7 +492,7 @@ test("a hostile merge tree cannot replace trusted entrypoints, imports, Node or 
           return changed;
         },
         wait: async () => {
-          assert.fail("moved identity must not retry");
+          assert.fail("moved identity or a known conflict must not retry");
         },
       }),
       null,
@@ -510,8 +513,8 @@ test("a hostile merge tree cannot replace trusted entrypoints, imports, Node or 
     }),
     null,
   );
-  assert.ok(exhausted > 1 && exhausted < 10, "mergeability recovery is bounded");
-  assert.ok(waited < 10000, "metadata retries wait less than ten seconds in total");
+  assert.equal(exhausted, 6, "review uses the shared mergeability retry budget");
+  assert.equal(waited, 25000, "review waits for GitHub's established mergeability budget");
   assert.equal(
     await resolveReviewMerge(
       { ...event, REVIEW_MERGE: merge },
@@ -912,4 +915,75 @@ test("Dependabot remains excluded when no checkout or merge was prepared", () =>
   );
   const other = workflow.split("  review-across:\n")[1];
   assert.doesNotMatch(other, /prepare-plan/);
+});
+
+test("external forks need a fresh review label before spending review credentials", () => {
+  const workflow = readRepoFile(".github/workflows/review.yml");
+  for (const [name, expression] of [
+    ["ASSOCIATION", "github.event.pull_request.author_association"],
+    ["HEAD_REPOSITORY", "github.event.pull_request.head.repo.full_name"],
+    ["REPOSITORY", "github.repository"],
+  ])
+    assert.ok(workflow.includes(`${name}: \${{ ${expression} }}`));
+  for (const action of ["opened", "ready_for_review", "synchronize", "unlabeled", "labeled"]) {
+    for (const association of ["NONE", "CONTRIBUTOR", "FIRST_TIME_CONTRIBUTOR", "FIRST_TIMER"]) {
+      const output = join(createFolder(), "fork-output");
+      const result = spawnSync(
+        "bash",
+        ["-c", readStepScript(workflow, "Decide whether to review")],
+        {
+          env: {
+            PATH: process.env.PATH,
+            GITHUB_OUTPUT: output,
+            EVENT: "pull_request_target",
+            ACTION: action,
+            LABEL: action === "unlabeled" ? "review" : "other",
+            AUTHOR: "example",
+            ASSOCIATION: association,
+            HEAD_REPOSITORY: "example/fork",
+            REPOSITORY: "owner/repository",
+            REVIEW_LABEL: "review",
+            ANTHROPIC_API_KEY: "example",
+          },
+          encoding: "utf8",
+        },
+      );
+      assert.equal(result.status, 0, result.stderr);
+      assert.match(readFileSync(output, "utf8"), /labeled=false\nowed=true\nreview=false/);
+    }
+  }
+  for (const overrides of [
+    { ACTION: "labeled", LABEL: "review" },
+    { ASSOCIATION: "OWNER" },
+    { ASSOCIATION: "MEMBER" },
+    { ASSOCIATION: "COLLABORATOR" },
+    { HEAD_REPOSITORY: "owner/repository" },
+  ]) {
+    for (const action of ["opened", "ready_for_review"]) {
+      const output = join(createFolder(), "permitted-output");
+      const result = spawnSync(
+        "bash",
+        ["-c", readStepScript(workflow, "Decide whether to review")],
+        {
+          env: {
+            PATH: process.env.PATH,
+            GITHUB_OUTPUT: output,
+            EVENT: "pull_request_target",
+            ACTION: action,
+            AUTHOR: "example",
+            ASSOCIATION: "NONE",
+            HEAD_REPOSITORY: "example/fork",
+            REPOSITORY: "owner/repository",
+            REVIEW_LABEL: "review",
+            ANTHROPIC_API_KEY: "example",
+            ...overrides,
+          },
+          encoding: "utf8",
+        },
+      );
+      assert.equal(result.status, 0, result.stderr);
+      assert.match(readFileSync(output, "utf8"), /owed=false\nreview=true/);
+      if (overrides.LABEL === "review") assert.match(readFileSync(output, "utf8"), /^labeled=true/);
+    }
+  }
 });

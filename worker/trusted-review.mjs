@@ -14,7 +14,7 @@ import {
 } from "node:fs";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
-import { setTimeout as waitForMerge } from "node:timers/promises";
+import { readPullMerge } from "./pull-merge.mjs";
 import { WEIGHTS } from "./review-state.mjs";
 import { createGitHub } from "./github-api.mjs";
 import { createReviewGitEnvironment, isReviewRevision } from "./review-repository.mjs";
@@ -61,8 +61,6 @@ const readGit = (args, cwd) =>
     env: createReviewGitEnvironment(),
   }).trim();
 
-const MERGE_READS = 5;
-const MERGE_RETRY_MS = 2000;
 const REVIEW_OWED_NOTICE =
   "::notice::No matching merge is available; review remains owed. Re-add the review label when the PR can merge.";
 
@@ -114,21 +112,31 @@ export async function resolveReviewMerge(
   env,
   {
     readPull = createGitHub({ repository: env.GITHUB_REPOSITORY, env, fetchImpl: fetch }),
-    wait = waitForMerge,
+    wait,
   } = {},
 ) {
   requireReviewAuthority(env);
   if (matchesAvailableReviewMerge(env.REVIEW_MERGE, env)) return env.REVIEW_MERGE;
   const rejected = new Set([env.REVIEW_MERGE]);
-  for (let attempt = 0; attempt < MERGE_READS; attempt += 1) {
-    const pull = await readPull(`/pulls/${env.PR}`);
-    if (!isCurrentReviewPull(pull, env) || pull.base.sha !== env.REVIEW_BASE) return null;
+  let selected = null;
+  /** @param {any} pull */
+  const isReviewMergeReady = (pull) => {
+    if (
+      !isCurrentReviewPull(pull, env) ||
+      pull.base.sha !== env.REVIEW_BASE ||
+      pull.mergeable === false
+    )
+      return true;
     const merge = pull.merge_commit_sha;
-    if (!rejected.has(merge) && matchesAvailableReviewMerge(merge, env)) return merge;
+    if (!rejected.has(merge) && matchesAvailableReviewMerge(merge, env)) {
+      selected = merge;
+      return true;
+    }
     rejected.add(merge);
-    if (attempt < MERGE_READS - 1) await wait(MERGE_RETRY_MS);
-  }
-  return null;
+    return false;
+  };
+  await readPullMerge(readPull, env.PR, { isReady: isReviewMergeReady, wait });
+  return selected;
 }
 
 /** @param {NodeJS.ProcessEnv} env */
