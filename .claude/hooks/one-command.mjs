@@ -87,7 +87,7 @@ const SHELL_BEFORE_SCRIPT = /(?:^|[ \t\n(|/])(?:ba|z|da)?sh[ \t]+(?:-[\w-]+[ \t]
 function scanCommand(command) {
   let quote = "";
   let scriptStart = -1;
-  /** @type {("substitution" | "arithmetic" | "group")[]} */
+  /** @type {("substitution" | "arithmetic" | "arithmetic-command" | "group")[]} */
   const parentheses = [];
   let isInBackticks = false;
   let hasSubstitutionWord = false;
@@ -111,13 +111,9 @@ function scanCommand(command) {
   for (let at = 0; at < text.length; at += 1) {
     const char = text[at];
     const hasCurrentWord = parentheses.length > 0 ? hasSubstitutionWord : hasWord;
-    if (
-      !quote &&
-      !isInBackticks &&
-      char === "#" &&
-      !hasCurrentWord &&
-      parentheses.findLast((kind) => kind !== "group") !== "arithmetic"
-    ) {
+    const isInArithmetic =
+      parentheses.findLast((kind) => kind !== "group")?.startsWith("arithmetic") ?? false;
+    if (!quote && !isInBackticks && char === "#" && !hasCurrentWord && !isInArithmetic) {
       const lineEnd = text.indexOf("\n", at);
       at = lineEnd === -1 ? text.length : lineEnd - 1;
       continue;
@@ -169,14 +165,22 @@ function scanCommand(command) {
       at += 1;
       continue;
     }
+    if (text.startsWith("((", at) && !hasCurrentWord && !isInArithmetic) {
+      parentheses.push("arithmetic-command", "group");
+      hasExpansion = true;
+      hasSubstitutionWord = false;
+      at += 1;
+      continue;
+    }
     if (parentheses.length > 0) {
       if (char === "(") {
         parentheses.push("group");
         hasSubstitutionWord = false;
       } else if (char === ")") {
-        hasSubstitutionWord = parentheses.pop() !== "group";
+        const kind = parentheses.pop();
+        hasSubstitutionWord = kind === "substitution" || kind === "arithmetic";
       } else hasSubstitutionWord = !/[ \t\n;&|<>]/.test(char);
-      if (parentheses.length === 0) hasWord = true;
+      if (parentheses.length === 0) hasWord = hasSubstitutionWord;
       continue;
     }
     const heredoc = text.startsWith("<<", at) ? readHeredoc(text, at) : null;

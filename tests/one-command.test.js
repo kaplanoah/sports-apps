@@ -252,6 +252,33 @@ test("arithmetic hashes do not start shell comments or hide later separators", (
   assert.equal(findSeparator('echo $(( $(echo #"\n) + 1)); git status'), ";");
 });
 
+test("arithmetic commands preserve following separators and shell comment boundaries", () => {
+  for (const arithmetic of ["(( 1 #))", "(( (1 #) + 2 ))"])
+    for (const prefix of [arithmetic, `echo $( ${arithmetic} )`])
+      for (const separator of [";", "&&", "||", "&", "\n"]) {
+        const command = `${prefix}${separator} git status`;
+        assert.equal(findSeparator(command), separator === "\n" ? "a line break" : separator, command);
+        assert.match(findCommandProblem(command) ?? "", /^It joins commands with /, command);
+        assert.equal(parseCommandWords(command), null, command);
+      }
+  for (const command of [
+    "(( 1 #))",
+    "(( 1 ))# actual comment; git status",
+    "(( 1 )) # actual comment; git status",
+    "echo $( (( 1 ))# ) ; ignored\n)",
+    "echo $( (( 1 )) # ) ; ignored\n)",
+    "echo '(( 1 #)); text'",
+  ])
+    assert.equal(findSeparator(command), null, command);
+  for (const command of [
+    "echo $( (( 1 ))# ) ; ignored\n); git status",
+    '(( $(echo #"\n) + 1 )); git status',
+    "echo $( (( 1 #)) )#literal; git status",
+  ])
+    assert.equal(findSeparator(command), ";", command);
+  assert.equal(parseCommandWords("(( 1 ))"), null);
+});
+
 test("a heredoc's end lets the check go on to what follows it", () => {
   assert.equal(findSeparator("cat <<EOF\nbody;\nEOF\ngit push"), "a line break");
 });
