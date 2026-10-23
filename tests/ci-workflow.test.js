@@ -454,6 +454,7 @@ test("only validated trusted review can satisfy the CI review gate", () => {
     plan,
     /owed: \$\{\{ steps.find.outputs.owed \|\| steps.decision.outputs.owed \|\| 'true' \}\}/,
   );
+  assert.match(plan, /ref: \$\{\{ github.event.pull_request.merge_commit_sha \}\}/);
   assert.match(plan, /run: node worker\/find-trusted-review.mjs/);
   assert.match(plan, /run: node worker\/find-trusted-review.mjs verify/);
   assert.match(plan, /run-id: \$\{\{ steps.find.outputs.run \}\}/);

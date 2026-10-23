@@ -48,6 +48,13 @@ test("the join accepts results only from successful trusted workflow runs on the
     { path: ".github/workflows/ci.yml" },
     { head_sha: expected.base },
     { pull_requests: [] },
+    { pull_requests: [{ ...run.pull_requests[0], head: { sha: expected.base } }] },
+    {
+      pull_requests: [
+        { ...run.pull_requests[0], base: { ...run.pull_requests[0].base, sha: expected.head } },
+      ],
+    },
+    { repository: { full_name: expected.repository, id: 1.5 } },
     { pull_requests: [{ ...run.pull_requests[0], number: 2 }] },
     {
       pull_requests: [
@@ -99,6 +106,13 @@ test("the read-only join validates result content and producer identity before c
     () => verifyTrustedReviewResult(folder, { ...env, REVIEW_TREE: "b".repeat(40) }),
     /does not match/,
   );
+  writeJson(folder, "result.json", {
+    identity: { ...IDENTITY, run: "8" },
+    tree: SHA,
+    passed: true,
+  });
+  sealReviewArtifact(folder, "result", IDENTITY, ["result.json"]);
+  assert.throws(() => verifyTrustedReviewResult(folder, env), /does not match/);
   writeJson(folder, "result.json", { identity: IDENTITY, tree: SHA, passed: false });
   sealReviewArtifact(folder, "result", IDENTITY, ["result.json"]);
   assert.throws(() => verifyTrustedReviewResult(folder, env), /does not match/);
@@ -130,7 +144,7 @@ test("the join searches every artifact page and filters run listings to the immu
     calls.push(path);
     if (path.includes("artifacts?"))
       return {
-        artifacts: path.includes("page=1")
+        artifacts: /(?:\?|&)page=1(?:&|$)/.test(path)
           ? Array.from({ length: 100 }, () => ({ expired: true }))
           : [{ workflow_run: { id: 7 } }],
       };
@@ -147,7 +161,7 @@ test("the join searches every artifact page and filters run listings to the immu
     calls.push(path);
     if (path.includes("artifacts?")) return { artifacts: [] };
     return {
-      workflow_runs: path.includes("page=1")
+      workflow_runs: /(?:\?|&)page=1(?:&|$)/.test(path)
         ? Array.from({ length: 100 }, () => ({ ...run, head_sha: expected.base }))
         : [pending],
     };
