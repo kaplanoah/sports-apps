@@ -11,7 +11,7 @@ on:
 
 permissions:
   contents: read
-  # To find a pull request's CI run that passed on main's exact code.
+  # Passed CI and checked production receipts establish safe deployment and inherited coverage.
   actions: read
   # To find the pull request that holds beta: its labels, its timeline, which the issues scope
   # reads, and when its head was pushed, from its check suites.
@@ -81,9 +81,10 @@ jobs:
       # Secrets, so the account ID, its workers.dev subdomain, and each page's address and code are
       # masked in this public log.
       - name: Deploy the Worker
+        id: deploy
         if: github.event_name != 'push' || env.CHANNEL == 'beta' || steps.passed.outputs.run
         env:
-          # To ask whether CI passed on a newer merge whose deploy would cover this one.
+          # Passed CI permits supersession; checked receipts permit inheriting production coverage.
           GH_TOKEN: ${{ github.token }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -99,3 +100,17 @@ jobs:
             exit 1
           fi
           node worker/deploy.mjs --channel "$CHANNEL"
+      # The CLI records coverage only after verification, never on a superseded early exit.
+      - name: Record checked production commit
+        if: steps.deploy.outputs.checked-commit
+        env:
+          TARGET_SHA: ${{ steps.deploy.outputs.checked-commit }}
+        run: printf '%s\n' "$TARGET_SHA" > "$RUNNER_TEMP/production-checked.txt"
+      - name: Keep checked production commit
+        if: steps.deploy.outputs.checked-commit
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: production-checked-${{ steps.deploy.outputs.checked-commit }}
+          path: ${{ runner.temp }}/production-checked.txt
+          overwrite: true
+          retention-days: 90

@@ -1,6 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { nameServiceBinding } from "../shared/worker/services.js";
 import { checkAppPage } from "../worker/check-page.mjs";
 import { listApps, listServices } from "../worker/apps.mjs";
@@ -43,6 +46,57 @@ const answerRobotsFrom = (commit) => () =>
   });
 const ANSWER_ROBOTS = answerRobotsFrom(NEW_COMMIT);
 const skipPause = async () => {};
+
+test("production receipts require successful deployment; superseded, failed and beta runs record nothing", async (context) => {
+  const { deployCheckedRelease } = await loadDeployModule();
+  const folder = mkdtempSync(join(tmpdir(), "deploy-receipt-"));
+  context.after(() => rmSync(folder, { recursive: true, force: true }));
+  const output = join(folder, "output");
+  writeFileSync(output, "");
+  const env = { GITHUB_OUTPUT: output };
+  let deployments = 0;
+  const release = { channel: "production", commit: NEW_COMMIT, newer: "3".repeat(40) };
+  /** @type {typeof import("../worker/deploy.mjs").deployRelease} */
+  const deploy = async (workers, options) => {
+    deployments += 1;
+    workers.forEach((worker) => options?.onCovered?.(worker));
+    return true;
+  };
+  const covered = await deployCheckedRelease(["mlb"], release, {
+    env,
+    readCiState: async () => "passed",
+    deploy,
+  });
+  assert.equal(covered, true);
+  assert.equal(deployments, 0);
+  assert.equal(readFileSync(output, "utf8"), "");
+  const current = { ...release, newer: null };
+  assert.equal(
+    await deployCheckedRelease(["mlb"], current, { env, deploy: async () => false }),
+    false,
+  );
+  assert.equal(readFileSync(output, "utf8"), "");
+  await assert.rejects(
+    deployCheckedRelease(["mlb"], current, {
+      env,
+      deploy: async () => {
+        throw new Error("verification failed");
+      },
+    }),
+    /verification failed/,
+  );
+  assert.equal(readFileSync(output, "utf8"), "");
+  assert.equal(
+    await deployCheckedRelease(["mlb"], { ...current, channel: "beta" }, { env, deploy }),
+    true,
+  );
+  assert.equal(readFileSync(output, "utf8"), "");
+  assert.equal(
+    await deployCheckedRelease(["mlb"], current, { env, deploy, requiredWorkers: ["mlb"] }),
+    true,
+  );
+  assert.equal(readFileSync(output, "utf8"), `checked-commit=${NEW_COMMIT}\n`);
+});
 
 /**
  * @param {{ refuse?: string, isNew?: boolean, answerWorker?: () => Response, refuseRollback?: boolean, migrationTag?: string, liveCommit?: string }} [options]
@@ -1450,26 +1504,30 @@ test("unchanged verification fails visibly for the wrong release or unavailable 
   }
 });
 
-test("an unrelated unchanged app still skips page verification", async () => {
+test("unchanged recovery requires proven production ancestry and cannot cross a beta force push", async () => {
   const { deploy } = await loadDeployModule();
-  const cloudflare = createFakeCloudflare({ liveCommit: LIVE_COMMIT });
-  assert.equal(
-    await deploy({
-      worker: "mlb",
-      script: "",
-      commit: NEW_COMMIT,
-      fetchImpl: cloudflare.fetchImpl,
-      env: { ...ENV, GITHUB_RUN_ATTEMPT: "2" },
-      findChanges: () => [],
-      log: () => {},
-      pause: skipPause,
-      checkPage: async () => {
-        assert.fail("an unrelated app keeps its skip");
-      },
-    }),
-    null,
-  );
-  assert.ok(!describeCalls(cloudflare.calls).some((call) => /^(PUT|POST) /.test(call)));
+  for (const channel of ["production", "beta"]) {
+    const cloudflare = createFakeCloudflare({ liveCommit: LIVE_COMMIT });
+    assert.equal(
+      await deploy({
+        worker: "mlb",
+        channel,
+        script: "",
+        commit: NEW_COMMIT,
+        fetchImpl: cloudflare.fetchImpl,
+        env: { ...ENV, GITHUB_RUN_ATTEMPT: "2" },
+        findChanges: () => [],
+        isEarlier: () => channel === "beta",
+        log: () => {},
+        pause: skipPause,
+        checkPage: async () => {
+          assert.fail("an unrelated or unproven live release keeps its skip");
+        },
+      }),
+      null,
+    );
+    assert.ok(!describeCalls(cloudflare.calls).some((call) => /^(PUT|POST) /.test(call)));
+  }
 });
 
 test("first automatic and hand attempts do not recheck a commit already live", async () => {

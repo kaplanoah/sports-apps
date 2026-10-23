@@ -1,7 +1,7 @@
 // Keeps one summary per legacy or trusted review mode. Its authoritative state carries the last
 // completed head and, for trusted review, its base. Finding marks identify what each review
 // posted so retries do not duplicate it.
-import { isReviewRevision } from "./review-repository.mjs";
+import { isGitObjectId } from "./git-object.mjs";
 import { readAllPages } from "./github-api.mjs";
 
 export const SUMMARY_MARKER = process.env.REVIEW_TRUSTED
@@ -43,8 +43,8 @@ export function readReviewedState(body) {
     const state = JSON.parse(lines[1]?.match(STATE)?.[1] ?? "{}");
     const keys = Object.keys(state).join(",");
     if (keys !== "head" && keys !== "head,base") return null;
-    if (state.head !== null && !isReviewRevision(state.head)) return null;
-    if (keys === "head,base" && !isReviewRevision(state.base)) return null;
+    if (state.head !== null && !isGitObjectId(state.head)) return null;
+    if (keys === "head,base" && !isGitObjectId(state.base)) return null;
     return state;
   } catch {
     return null;

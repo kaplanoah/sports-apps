@@ -15,19 +15,25 @@
 // phone-ok. Anyone who can label a pull request could add the label, so the gate reads who last
 // added it and lets the change through only from the repository's owner, and only when the label
 // came after the pull request's head commit reached GitHub, which the owner hasn't used on the
-// phone otherwise.
+// phone otherwise. It also requires the tested head to contain every red main commit and
+// preceding red changes to have verified production coverage. Red approvals refreshes the phone
+// status as main or its deployment changes; this remains asynchronous.
 // Usage: git diff --text --no-textconv --no-ext-diff --no-renames <base> |
 //   node worker/red-change.mjs '<labels as JSON>'
 // with PR, HEAD_SHA, GH_TOKEN, GITHUB_REPOSITORY, and GITHUB_REPOSITORY_OWNER set, as Actions sets
 // the last two. The diff shows every file's text, whatever .gitattributes says of it, and ends at
 // the files on disk, as CI's `<base> HEAD` in a clean checkout does, since a changed file before
 // the change is rebuilt from the file and the hunks. It writes whether the change is held to
-// $GITHUB_OUTPUT as held=true or held=false.
+// $GITHUB_OUTPUT as held=true or held=false. Approval checks require full history with origin/main
+// and GitHub actions: read in addition to the label/check-suite permissions.
 import { execFileSync } from "node:child_process";
 import { appendFileSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { findChannel } from "./channels.mjs";
 import { PHONE_OK_LABEL, findLabeling, readPushTime, readTimeline } from "./labeling.mjs";
+import { createGitHub } from "./github-api.mjs";
+import { readDeployedMain } from "./production-coverage.mjs";
+import { isGitObjectId } from "./git-object.mjs";
 import {
   LAYER_PROPERTIES,
   createWatchCheck,
@@ -836,19 +842,110 @@ function findLabelProblem({ labeler, isAfterLastPush }, owner) {
   return null;
 }
 
+/** @param {string} cwd */
+function createGateGit(cwd) {
+  /** @param {string[]} arguments_ */
+  return (arguments_) =>
+    execFileSync("git", arguments_, {
+      cwd,
+      encoding: "utf8",
+      maxBuffer: 64 * 1024 * 1024,
+      timeout: 30000,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+}
+
+/**
+ * Red commits on main that the tested head does not contain.
+ * Read every commit's own tree: later styles or scripts must not change its classification.
+ * @param {{ main?: string, head: string, cwd?: string }} options
+ */
+export function findMissingRedCommits({ main = "origin/main", head, cwd = process.cwd() }) {
+  const readGit = createGateGit(cwd);
+  // Resolve caller-supplied revisions before putting them in other git argument positions.
+  const mainSha = readGit(["rev-parse", "--verify", "--end-of-options", `${main}^{commit}`]).trim();
+  const headSha = readGit(["rev-parse", "--verify", "--end-of-options", `${head}^{commit}`]).trim();
+  const commits = readGit(["log", "--first-parent", "--format=%H", mainSha, "--not", headSha, "--"])
+    .trim()
+    .split("\n")
+    .filter(Boolean);
+  return commits.filter((commit) => {
+    const { diff, readPageFile, listStylesheets } = readCommitChange(`${commit}^1`, commit, cwd);
+    return (
+      Boolean(findDiffProblem(diff)) ||
+      findRedReasons(readDiff(diff), readPageFile, listStylesheets).length > 0
+    );
+  });
+}
+
+/** @param {string} base @param {string} head @param {string} [cwd] */
+export function readCommitChange(base, head, cwd = process.cwd()) {
+  const readGit = createGateGit(cwd);
+  const baseSha = readGit(["rev-parse", "--verify", "--end-of-options", `${base}^{commit}`]).trim();
+  const headSha = readGit(["rev-parse", "--verify", "--end-of-options", `${head}^{tree}`]).trim();
+  const diff = readGit([
+    "diff",
+    "--text",
+    "--no-textconv",
+    "--no-ext-diff",
+    "--no-renames",
+    baseSha,
+    headSha,
+    "--",
+  ]);
+  const paths = new Set(
+    readGit(["ls-tree", "-rz", "--name-only", headSha, "--", "shared/page", "apps"])
+      .split("\0")
+      .filter(Boolean),
+  );
+  /** @param {string} path */
+  const readPageFile = (path) => (paths.has(path) ? readGit(["show", `${headSha}:${path}`]) : "");
+  return { diff, readPageFile, listStylesheets: () => [...paths].filter(isPageStylesheet) };
+}
+
+/** @param {string} main @param {string} head @param {string} [cwd] */
+export function readMergedChange(main, head, cwd = process.cwd()) {
+  const readGit = createGateGit(cwd);
+  const mainSha = readGit(["rev-parse", "--verify", "--end-of-options", `${main}^{commit}`]).trim();
+  const headSha = readGit(["rev-parse", "--verify", "--end-of-options", `${head}^{commit}`]).trim();
+  const tree = readGit([
+    "-c",
+    "merge.renormalize=false",
+    "merge-tree",
+    "--write-tree",
+    mainSha,
+    headSha,
+  ]).trim();
+  if (!isGitObjectId(tree)) throw new Error("The current merge tree could not be read.");
+  return readCommitChange(mainSha, tree, cwd);
+}
+
 /**
  * The gate's verdict on a pull request, given its diff, its labels, who last added the phone-ok
  * label and whether that came after its last push, and the repository's owner.
  * @param {string} diff
- * @param {{ labels: string[], labeling?: Labeling, owner?: string }} pullRequest
+ * @param {{ labels: string[], labeling?: Labeling, owner?: string, missingRedCommits?: string[], pendingRedCommits?: string[] }} pullRequest
+ * @param {ReadPageFile} [readPageFile]
+ * @param {() => string[]} [listStylesheets]
  * @returns {{ isHeld: boolean, message: string }}
  */
 export function decideGate(
   diff,
-  { labels, labeling = { labeler: null, addedAt: Number.NaN, isAfterLastPush: false }, owner = "" },
+  {
+    labels,
+    labeling = { labeler: null, addedAt: Number.NaN, isAfterLastPush: false },
+    owner = "",
+    missingRedCommits = [],
+    pendingRedCommits = [],
+  },
+  readPageFile = readChangedFile,
+  listStylesheets = listPageStylesheets,
 ) {
   const diffProblem = findDiffProblem(diff);
-  const reasons = [...(diffProblem ? [diffProblem] : []), ...findRedReasons(readDiff(diff))];
+  const reasons = [
+    ...(diffProblem ? [diffProblem] : []),
+    ...findRedReasons(readDiff(diff), readPageFile, listStylesheets),
+  ];
   if (!reasons.length) return { isHeld: false, message: "Not a red change." };
   const listed = reasons.map((reason) => `- ${reason}`).join("\n");
   if (!labels.includes(PHONE_OK_LABEL))
@@ -861,6 +958,19 @@ export function decideGate(
     };
   const problem = findLabelProblem(labeling, owner);
   if (problem) return { isHeld: true, message: `${problem}\n${listed}` };
+  if (missingRedCommits.length)
+    return {
+      isHeld: true,
+      message:
+        `A red change labeled ${PHONE_OK_LABEL} whose phone-tested head lacks a red change already merged to main: ` +
+        `${missingRedCommits.join(", ")}. Merge main into the branch. ${TO_BETA} ` +
+        `The owner takes the label off and adds it again after using it on the beta app.\n${listed}`,
+    };
+  if (pendingRedCommits.length)
+    return {
+      isHeld: true,
+      message: `A red change waiting for main's red deploy to finish successfully: ${pendingRedCommits.join(", ")}.\n${listed}`,
+    };
   return {
     isHeld: false,
     message: `A red change, labeled ${PHONE_OK_LABEL} by the owner after using it on beta:\n${listed}`,
@@ -868,26 +978,55 @@ export function decideGate(
 }
 
 /**
- * Who last added the phone-ok label and when, read only when the pull request has it.
- * @param {string[]} labels
- * @param {NodeJS.ProcessEnv} env
- * @returns {Promise<Labeling | undefined>}
+ * Read approval evidence only for an owner-approved red change.
+ * @param {object} options
+ * @param {string} options.diff
+ * @param {string[]} options.labels
+ * @param {NodeJS.ProcessEnv} [options.env]
+ * @param {typeof fetch} [options.fetchImpl]
+ * @param {string} [options.cwd]
+ * @param {ReturnType<typeof readCommitChange>} [options.files]
  */
-async function readPhoneOkLabeling(labels, env) {
-  if (!labels.includes(PHONE_OK_LABEL)) return undefined;
+export async function readRedApproval({
+  diff,
+  labels,
+  env = process.env,
+  fetchImpl = fetch,
+  cwd = process.cwd(),
+  files,
+}) {
+  const owner = env.GITHUB_REPOSITORY_OWNER ?? "";
+  /** @param {Parameters<typeof decideGate>[1]} pull */
+  const decide = (pull) => decideGate(diff, pull, files?.readPageFile, files?.listStylesheets);
+  const initial = decide({ labels, owner });
+  if (!initial.isHeld || !labels.includes(PHONE_OK_LABEL)) return initial;
   const repository = env.GITHUB_REPOSITORY ?? "";
-  const [events, headPushedAt] = await Promise.all([
-    readTimeline({ repository, pullNumber: env.PR ?? "", env }),
-    readPushTime({ repository, sha: env.HEAD_SHA ?? "", env }),
-  ]);
-  return findLabeling(events, PHONE_OK_LABEL, headPushedAt);
+  const head = env.HEAD_SHA ?? "";
+  try {
+    const [events, headPushedAt] = await Promise.all([
+      readTimeline({ repository, pullNumber: env.PR ?? "", env, fetchImpl }),
+      readPushTime({ repository, sha: head, env, fetchImpl }),
+    ]);
+    const labeling = findLabeling(events, PHONE_OK_LABEL, headPushedAt);
+    const labeled = decide({ labels, owner, labeling });
+    if (labeled.isHeld) return labeled;
+    const missingRedCommits = findMissingRedCommits({ head, cwd });
+    const fresh = decide({ labels, owner, labeling, missingRedCommits });
+    if (fresh.isHeld) return fresh;
+    const deployed = await readDeployedMain(createGitHub({ repository, fetchImpl, env }));
+    const pendingRedCommits = findMissingRedCommits({ head: deployed, cwd });
+    return decide({ labels, owner, labeling, pendingRedCommits });
+  } catch (error) {
+    return {
+      isHeld: true,
+      message: `A red change whose phone approval cannot be verified: ${error instanceof Error ? error.message : String(error)}`,
+    };
+  }
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const labels = JSON.parse(process.argv[2] || "[]");
-  const labeling = await readPhoneOkLabeling(labels, process.env);
-  const owner = process.env.GITHUB_REPOSITORY_OWNER ?? "";
-  const { isHeld, message } = decideGate(readFileSync(0, "utf8"), { labels, labeling, owner });
+  const { isHeld, message } = await readRedApproval({ diff: readFileSync(0, "utf8"), labels });
   console.log(isHeld ? `::notice::${message.split("\n")[0]}\n${message}` : message);
   if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `held=${isHeld}\n`);
 }

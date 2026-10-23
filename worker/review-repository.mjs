@@ -1,12 +1,10 @@
 // Runs Git against reviewed data without inheriting credentials or executable Git configuration.
-/** @param {unknown} value */
-export const isReviewRevision = (value) =>
-  typeof value === "string" && /^[0-9a-f]{40}$/.test(value);
+import { isGitObjectId } from "./git-object.mjs";
 
 /** @param {NodeJS.ProcessEnv} [env] */
 export function createReviewGitEnvironment(env = process.env) {
   const needsTrustedAttributes = env.REVIEW_BASE !== undefined || env.REVIEW_TRUSTED !== undefined;
-  if (needsTrustedAttributes && !isReviewRevision(env.REVIEW_TRUSTED))
+  if (needsTrustedAttributes && !isGitObjectId(env.REVIEW_TRUSTED))
     throw new Error("Review attributes require an immutable trusted revision.");
   return {
     PATH: env.PATH,

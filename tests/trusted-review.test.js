@@ -538,6 +538,7 @@ async function verifyHostileReviewIsolation(baseRef) {
     "judge-review.mjs",
     "post-review.mjs",
     "github-api.mjs",
+    "git-object.mjs",
     "package-imports.mjs",
     "rule-files.mjs",
     "review-state.mjs",

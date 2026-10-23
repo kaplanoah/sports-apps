@@ -2,6 +2,7 @@
 // and its head's check suites.
 import { createGitHub, readAllPages } from "./github-api.mjs";
 
+export const PHONE_CONTEXT = "phone";
 export const PHONE_OK_LABEL = "phone-ok";
 
 /**

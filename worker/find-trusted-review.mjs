@@ -6,7 +6,8 @@ import { join } from "node:path";
 import { createGitHub, readAllPages } from "./github-api.mjs";
 import { readReviewIdentity, validateReviewArtifact } from "./review-data.mjs";
 import { readJson } from "./judge-review.mjs";
-import { createReviewGitEnvironment, isReviewRevision } from "./review-repository.mjs";
+import { createReviewGitEnvironment } from "./review-repository.mjs";
+import { isGitObjectId } from "./git-object.mjs";
 import { waitFor } from "./check-timing.mjs";
 
 const FINISH_BUDGET_MS = 10 * 60 * 1000;
@@ -55,7 +56,7 @@ function readTrustedReviewSource(run, expected) {
     typeof run.display_title === "string" && run.display_title.startsWith(prefix)
       ? run.display_title.slice(prefix.length)
       : null;
-  return isReviewRevision(source) ? source : null;
+  return isGitObjectId(source) ? source : null;
 }
 
 /**
@@ -85,7 +86,7 @@ export async function findTrustedReviewRun(options) {
         artifact.workflow_run?.id === run.id &&
         typeof artifact.name === "string" &&
         artifact.name.startsWith(RESULT_PREFIX) &&
-        isReviewRevision(artifact.name.slice(RESULT_PREFIX.length)),
+        isGitObjectId(artifact.name.slice(RESULT_PREFIX.length)),
     );
     if (results.length > 1) throw new Error("The trusted run has ambiguous review results.");
     if (results.length === 1)

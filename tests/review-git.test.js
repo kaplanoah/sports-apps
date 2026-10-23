@@ -101,11 +101,8 @@ test("search flags find tracked checkout text, never untracked files or a symlin
   const checkout = join(directory, "repo");
   mkdirSync(join(checkout, "worker"), { recursive: true });
   const script = join(checkout, "worker", "review-git.mjs");
-  writeFileSync(script, readRepoFile("worker/review-git.mjs"));
-  writeFileSync(
-    join(checkout, "worker", "review-repository.mjs"),
-    readRepoFile("worker/review-repository.mjs"),
-  );
+  for (const name of ["review-git.mjs", "review-repository.mjs", "git-object.mjs"])
+    writeFileSync(join(checkout, "worker", name), readRepoFile(`worker/${name}`));
   writeFileSync(join(checkout, "tracked.txt"), "SearchExample first\nSearchExample second\n");
   writeFileSync(join(checkout, "untracked.txt"), "SearchExample hidden\n");
   const outside = join(directory, "outside.txt");
