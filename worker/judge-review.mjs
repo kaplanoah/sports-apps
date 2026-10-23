@@ -17,7 +17,13 @@ import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createGitHub, readAllPages } from "./github-api.mjs";
-import { SUMMARY_MARKER, WEIGHTS, findSummary, writeReviewedHead } from "./review-state.mjs";
+import {
+  SUMMARY_MARKER,
+  WEIGHTS,
+  findSummary,
+  writeReviewedHead,
+  escapeReviewText,
+} from "./review-state.mjs";
 
 // What Claude Code's Read returns when it's given no limit.
 const READ_LINES = 2000;
@@ -423,7 +429,10 @@ export function judgeReview({ sha, base, plan, records }) {
       ? ["Left unread, as nothing to review:", ...plan.unread.map(listUnread)]
       : []),
   ];
-  return { isComplete, body: lines.join("\n").trimEnd() };
+  return {
+    isComplete,
+    body: [...lines.slice(0, 2), ...lines.slice(2).map(escapeReviewText)].join("\n").trimEnd(),
+  };
 }
 
 /**

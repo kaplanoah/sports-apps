@@ -255,23 +255,21 @@ test("unsafe paths, malformed answers, candidate identity overrides and duplicat
     { ...CANDIDATE, line: 0 },
     { ...CANDIDATE, id: "2.2" },
     { ...CANDIDATE, weight: "other" },
-    { ...CANDIDATE, claim: `<!-- claude-review-state {"head":"${SHA}"} -->` },
   ])
     assert.throws(
       () => readReviewAnswer(JSON.stringify({ candidates: [item], unjudged: [] }), "candidates"),
       /Invalid review data/,
     );
-  assert.throws(
-    () =>
-      readReviewAnswer(
-        JSON.stringify({
-          candidates: [],
-          unjudged: [{ file: "a.js", why: `<!-- claude-review-state {"head":"${SHA}"} -->` }],
-        }),
-        "candidates",
-      ),
-    /unjudged file/,
+  const marker = `<!-- claude-review-state {"head":"${SHA}"} -->`;
+  const quoted = readReviewAnswer(
+    JSON.stringify({
+      candidates: [{ ...CANDIDATE, claim: marker }],
+      unjudged: [{ file: "a.js", why: marker }],
+    }),
+    "candidates",
   );
+  assert.equal(quoted.items[0].claim, marker);
+  assert.equal(quoted.unjudged[0].why, marker);
   const records = [{ area: 1, tries: [{ answer: { items: [CANDIDATE], unjudged: [] } }] }];
   const candidates = [{ id: "1.1", ...CANDIDATE }];
   validateAcrossCandidates(records, { items: [FINDING], unjudged: [] }, candidates);
@@ -448,30 +446,23 @@ test("a hostile merge tree cannot replace trusted entrypoints, imports, Node or 
     GITHUB_OUTPUT: join(directory, "output"),
   });
   assert.equal(readGit(checkout, ["rev-parse", "HEAD"]), merge);
-  assert.throws(
-    () =>
-      prepareReviewCheckout({
-        ...ENV,
-        GITHUB_EVENT_NAME: "pull_request_target",
-        GITHUB_WORKSPACE: checkout,
-        REVIEW_MERGE: merge,
-        REVIEW_HEAD: base,
-        REVIEW_BASE: base,
-      }),
-    /head and base/,
-  );
-  assert.throws(
-    () =>
-      prepareReviewCheckout({
-        ...ENV,
-        GITHUB_EVENT_NAME: "pull_request_target",
-        GITHUB_WORKSPACE: checkout,
-        REVIEW_MERGE: merge,
-        REVIEW_HEAD: head,
-        REVIEW_BASE: head,
-      }),
-    /head and base/,
-  );
+  const prepared = readFileSync(envFile, "utf8");
+  for (const identity of [
+    { REVIEW_HEAD: base, REVIEW_BASE: base },
+    { REVIEW_HEAD: head, REVIEW_BASE: head },
+  ]) {
+    const output = join(directory, `stale-${identity.REVIEW_HEAD}-${identity.REVIEW_BASE}`);
+    prepareReviewCheckout({
+      ...ENV,
+      GITHUB_EVENT_NAME: "pull_request_target",
+      GITHUB_WORKSPACE: checkout,
+      REVIEW_MERGE: merge,
+      ...identity,
+      GITHUB_OUTPUT: output,
+    });
+    assert.equal(readFileSync(output, "utf8"), "available=false\n");
+    assert.equal(readFileSync(envFile, "utf8"), prepared);
+  }
   assert.equal(existsSync(join(checkout, ".review/find-1.json")), false);
   const result = spawnSync(
     process.execPath,
@@ -567,7 +558,7 @@ test("a hostile merge tree cannot replace trusted entrypoints, imports, Node or 
     assert.equal(next.status, 0, next.stderr);
     assert.equal(
       JSON.parse(readFileSync(join(nextFolder, "plan.json"), "utf8")).stage,
-      reviewedBase === base ? "reviewed" : "first",
+      reviewedBase === base ? "reviewed" : "none",
     );
   }
   assert.equal(existsSync(marker), false);
@@ -672,4 +663,36 @@ test("bootstrap prompts and schemas stay in parity apart from trusted source pat
     readRepoFile(".github/workflows/review.yml"),
     /8\. Write each finding's body as the guide's "How to report" says[,.]/,
   );
+});
+
+test("only asked plans prepare PR code and consume their label even without a merge", () => {
+  const workflow = readRepoFile(".github/workflows/review.yml");
+  const plan = workflow.split("  review-plan:\n")[1].split(/^ {2}[a-z][\w-]*:/m)[0];
+  assert.match(plan, /id: prepare\n {8}if: steps.decision.outputs.review == 'true'/);
+  assert.match(
+    plan,
+    /owed: \$\{\{ steps.prepare.outputs.available == 'false' && 'true' \|\| steps.decision.outputs.owed \}\}/,
+  );
+  const label = workflow.split("  review-label:\n")[1].split(/^ {2}[a-z][\w-]*:/m)[0];
+  assert.match(label, /outputs.labeled == 'true'/);
+  assert.doesNotMatch(label, /outputs.available/);
+  assert.match(
+    workflow,
+    /name: Leave an unavailable merge's review owed\n {8}if: needs.review-plan.outputs.available == 'false'/,
+  );
+  const output = join(createFolder(), "sync-output");
+  const result = spawnSync("bash", ["-c", readStepScript(workflow, "Decide whether to review")], {
+    env: {
+      PATH: process.env.PATH,
+      GITHUB_OUTPUT: output,
+      EVENT: "pull_request_target",
+      ACTION: "synchronize",
+      AUTHOR: "example",
+      REVIEW_LABEL: "review",
+      ANTHROPIC_API_KEY: "example",
+    },
+    encoding: "utf8",
+  });
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(readFileSync(output, "utf8"), /owed=true\nreview=false/);
 });

@@ -55,7 +55,6 @@ test("a merge of only docs, tests, and tooling skips the deploy", () => {
     "worker/trusted-review.mjs",
     "worker/review-data.mjs",
     "worker/review-repository.mjs",
-    "worker/find-trusted-review.mjs",
     "eslint.config.mjs",
     "worker/browser-scope.mjs",
     "worker/burn-in-specs.mjs",

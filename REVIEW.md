@@ -54,14 +54,25 @@ In order of what has mattered here.
    In a workflow: untrusted text (a title, branch name, or comment) put into `run:` through `${{ }}`,
    wider `permissions` than the job needs, an action not pinned to a commit,
    and a pull request's own code run with a secret.
-   A change that lets the review catch less is Important, naming what it no longer catches.
-   Its controls include jobs in `.github/workflows/ci.yml`, `.github/workflows/review-area.yml`,
-   `.github/workflows/review.yml`, and `.github/workflows/trusted-review-area.yml`,
-   `worker/plan-review.mjs`, `worker/judge-review.mjs`, `worker/post-review.mjs`,
-   `worker/review-context.mjs`, `worker/review-state.mjs`, `worker/rule-files.mjs`,
-   `worker/trusted-review.mjs`, `worker/review-data.mjs`, or `worker/review-repository.mjs`, and the modules they import, like `shared/page/escape-pattern.js`, and guard tests.
-   This applies to trusted controls and checks defined by the pull request itself.
-   So is a change to `worker/review-git.mjs`, the reviewer's only command, that lets it run more,
+   A change that lets the review catch less is Important, naming what it no longer catches,
+   whether the review runs from main's copy or the pull request's own.
+   Its controls include:
+
+   - the jobs in `.github/workflows/ci.yml` and `.github/workflows/review-area.yml`
+   - the jobs in `.github/workflows/review.yml` and `.github/workflows/trusted-review-area.yml`
+   - `worker/plan-review.mjs`
+   - `worker/judge-review.mjs`
+   - `worker/post-review.mjs`
+   - `worker/review-context.mjs`
+   - `worker/review-state.mjs`
+   - `worker/rule-files.mjs`
+   - `worker/trusted-review.mjs`
+   - `worker/review-data.mjs`
+   - `worker/review-repository.mjs`
+   - their imports, like `shared/page/escape-pattern.js`
+   - guard tests
+
+   A change to `worker/review-git.mjs`, the reviewer's only command, that lets it run more is Important,
    naming what the reviewer could newly read or write.
    So is a change to the red-change gate that lets less through,
    its `gate`, `phone`, or `check` job in `.github/workflows/ci.yml`,
@@ -74,6 +85,7 @@ In order of what has mattered here.
    like `worker/deploy-scope.mjs` and `worker/package-imports.mjs`, and `worker/judge-burn-in.mjs`.
    The finding names which browser tests or burn-in specs no longer run or fail,
    since the pull request's own copy of those jobs and modules picks its own tests.
+
 6. **Red changes.**
    A property that gives a part a layer of its own or changes how it takes a touch,
    that `worker/red-change-styles.mjs` doesn't list yet.

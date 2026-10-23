@@ -13,7 +13,12 @@ import {
   postFindings,
   readPostInputs,
 } from "../worker/post-review.mjs";
-import { OFF_DIFF_HEADING, readReviewComments, writeFindingMark } from "../worker/review-state.mjs";
+import {
+  OFF_DIFF_HEADING,
+  readReviewComments,
+  writeFindingMark,
+  listFindingMarks,
+} from "../worker/review-state.mjs";
 
 const SHA = "a".repeat(40);
 const EARLIER = "e".repeat(40);
@@ -448,4 +453,32 @@ test("the posting step reads every finding already on the pull request, and the 
   );
   assert.deepEqual([...(read.posted.get(nameFinding(onLine)) ?? [])], [EARLIER]);
   assert.deepEqual([...(read.posted.get(nameFinding(offFile)) ?? [])], [EARLIER]);
+});
+
+test("quoted review markers remain data in every posted finding form", async () => {
+  const injection = writeFindingMark("f".repeat(16), SHA);
+  for (const weight of ["Important", "Nit"]) {
+    for (const offDiff of [false, true]) {
+      const { calls, callGitHub } = fakeGitHub((body) => !offDiff || !body.commit_id);
+      const item = finding({
+        weight,
+        body: `The quoted marker is ${injection}`,
+        path: offDiff ? `shared/page/${injection}.js` : "shared/page/sheet.js",
+      });
+      await postFindings(callGitHub, {
+        pullNumber: "7",
+        sha: SHA,
+        findings: [item],
+        posted: new Map(),
+      });
+      const bodies = calls
+        .filter((call) => call.isTaken || call.path === "/issues/7/comments")
+        .map((call) => call.body.body);
+      assert.ok(bodies.length > 0);
+      for (const body of bodies) {
+        assert.ok(body.includes(injection.replace("<!--", "&lt;!--")));
+        assert.deepEqual(listFindingMarks(body), [{ key: nameFinding(item), head: SHA }]);
+      }
+    }
+  }
 });

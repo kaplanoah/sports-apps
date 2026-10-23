@@ -1,9 +1,6 @@
-// What CI's review keeps on a pull request: one summary comment for each legacy or trusted mode,
-// which carries the last head and, for trusted review, its base that the
-// review read in full so the next review reads only what changed since, and the findings it
-// posts, each by its weight and marked with what it says and the head it was posted on, so no try
-// posts one twice and the review can tell a finding an earlier head's review posted from a new
-// one.
+// Keeps one summary per legacy or trusted review mode. Its authoritative state carries the last
+// completed head and, for trusted review, its base. Finding marks identify what each review
+// posted so retries do not duplicate it.
 import { isReviewRevision } from "./review-repository.mjs";
 import { readAllPages } from "./github-api.mjs";
 
@@ -35,25 +32,31 @@ export const findSummary = (comments) =>
   ) ?? null;
 
 /**
- * The head the summary says was last reviewed in full, or null when it names none, as a summary
- * from before the review kept one doesn't.
+ * The summary's single authoritative state, or null for old, malformed or duplicate state.
  * @param {string | undefined} body
- * @param {string} [base] require completion against this base for trusted reviews
- * @returns {string | null}
+ * @returns {{ head: string | null, base?: string } | null}
  */
-export function readReviewedHead(body, base) {
+export function readReviewedState(body) {
   try {
     const lines = body?.split("\n") ?? [];
     if (lines[0] !== SUMMARY_MARKER || body.split(STATE_PREFIX).length !== 2) return null;
     const state = JSON.parse(lines[1]?.match(STATE)?.[1] ?? "{}");
-    if (Object.keys(state).join(",") !== (base ? "head,base" : "head")) return null;
-    if (base && state.base !== base) return null;
-    const { head } = state;
-    return isReviewRevision(head) ? head : null;
+    const keys = Object.keys(state).join(",");
+    if (keys !== "head" && keys !== "head,base") return null;
+    if (state.head !== null && !isReviewRevision(state.head)) return null;
+    if (keys === "head,base" && !isReviewRevision(state.base)) return null;
+    return state;
   } catch {
     return null;
   }
 }
+
+/** @param {string | undefined} body */
+export const readReviewedHead = (body) => readReviewedState(body)?.head ?? null;
+
+// Model quotes remain readable without becoming authoritative review control marks.
+/** @param {string} text */
+export const escapeReviewText = (text) => text.replaceAll("<!--", "&lt;!--");
 
 /** @param {string | null} head @param {string} [base] */
 export const writeReviewedHead = (head, base) =>
