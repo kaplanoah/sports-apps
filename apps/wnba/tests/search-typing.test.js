@@ -1,3 +1,4 @@
+import "../../../tests/eastern-time-zone.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -7,7 +8,6 @@ import {
   listSearchGames,
 } from "#shared/game-search.js";
 import { readTypedSearch } from "#shared/search-reading.js";
-import { EASTERN, useTimeZone } from "../../../tests/time-zone.js";
 import {
   listPhrasings,
   sweepMisspellings,
@@ -21,8 +21,6 @@ import { createSearchTerms, readSearchGame } from "../page/js/search-terms.js";
 import { buildSnapshot } from "../page/js/snapshot.js";
 import { indexRosters } from "../worker/src/player-index.js";
 import { describeRoster } from "../worker/src/roster.js";
-
-useTimeZone(EASTERN);
 
 /** @param {string} name */
 const loadFixture = (name) =>

@@ -8,6 +8,15 @@ paths:
 
 # Tooling
 
+- CI runs every Node test once in UTC,
+  then repeats the explicit `tests/time-zone-sensitive.json` sensitive list and changed Node tests in Honolulu (`worker/test-time-zone.mjs`).
+  `worker/time-zone-scope.mjs` verifies native Date/Intl coverage with `listReachedFiles` in `worker/browser-scope.mjs`.
+  Missing coverage or unreadable changes fail instead of silently narrowing the run.
+  The manifest's `browserOnly` adapters run only in browser tests.
+  A native time API source without a Node import path needs a test before CI can pass.
+  Tests in the manifest's `fixed` list import `tests/eastern-time-zone.js` first,
+  so their initialization and assertions use Eastern whatever zone they inherit.
+  They are left out of the Honolulu run.
 - Tooling: the root `worker/` builds, versions, deploys, and rolls back every Worker, each app's and each service's, tells a red change for CI's gate,
   and keeps beta to one pull request at a time, as the `ship` skill's "The beta channel" says.
   `ls worker/` lists its modules, and its tests are in the root `tests/`.
@@ -36,6 +45,10 @@ paths:
 - Hooks in `.claude/settings.json`, each saying why when it blocks a call, and all off in CI's review:
   - `.claude/hooks/one-command.mjs` blocks a call that starts with `cd` or joins commands.
   - `.claude/hooks/context-limit.mjs` hands a session off to a fresh one as its context grows.
+    After its stop, commands run alone with literal arguments: no variables, glob or brace expansions,
+    leading `~`, pipes, redirects, or command substitutions.
+    Quote arguments containing `{`, `(`, or `)`, except the literal `{owner}/{repo}` placeholders.
+    A heredoc with a quoted delimiter on stdin can supply a commit message or PR body.
   - `.claude/hooks/install-packages.mjs` runs `npm ci` as a session starts when `node_modules` is out of date.
   - `.claude/hooks/check-push.mjs` runs lint, format, types, and dead code before each `git push`.
 - A session runs `deploy:api`, `rollback`, and each `set-` script itself, in the cloud environment that holds the Cloudflare token,

@@ -97,11 +97,11 @@ function nameThemeInAddress(choice) {
 
 // Safari takes the Home Screen app's address, and the color of its own bars, from the page as it
 // loaded, so a pick it keeps loads the page again at the address that names it.
-/** @param {string} choice */
-function openThemeAddress(choice) {
+/** @param {string} choice @param {boolean} [reload] */
+function openThemeAddress(choice, reload = false) {
   const address = buildThemeAddress(choice);
   const isKept = readPickedAppearance() === choice;
-  if (isOnHomeScreen() || address.href === location.href) return;
+  if (isOnHomeScreen() || (address.href === location.href && !reload)) return;
   if (isAppleBrowser() && isKept) location.replace(address);
   else nameThemeInAddress(choice);
 }
@@ -206,15 +206,15 @@ function showTheme(choice) {
   document.documentElement.dataset.theme = resolveTheme(choice);
 }
 
-/** @param {string} choice */
-function keepPickedAppearance(choice) {
+/** @param {string} choice @param {boolean} [reload] */
+function keepPickedAppearance(choice, reload = false) {
   try {
     localStorage.setItem("appearance", JSON.stringify(choice));
   } catch {
     /* appearance.js keeps it for as long as the page is open */
   }
   showTheme(choice);
-  openThemeAddress(choice);
+  openThemeAddress(choice, reload);
 }
 
 if (!isOnHomeScreen()) takeThemeFromApp();

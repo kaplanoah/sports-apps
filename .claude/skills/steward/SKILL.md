@@ -1,9 +1,10 @@
 ---
 name: steward
-description: How a session answers CI's review on a pull request in this repo
+description: How a session answers Trusted review on a pull request in this repo
 ---
 
-Answer every review finding, a Nit or Pre-existing one too, as below; the `ship` skill says what to do when the `review` job fails.
+Answer every review finding, a Nit or Pre-existing one too, as below.
+The `ship` skill says what to do when Trusted review's `review` or CI's `review-join` job fails.
 
 - In every round,
   fix each Important finding and each Unsure finding confirmed as a bug,
@@ -15,7 +16,7 @@ Answer every review finding, a Nit or Pre-existing one too, as below; the `ship`
   A finding that demonstrates a broken rule is Important under REVIEW.md; answer it as Important even if it was labeled Nit.
   After a fix, go back to step 2 of "Shipping a change" in AGENTS.md.
 - After any push to a ready PR, add the `review` label.
-  It asks CI to review what the push changed, and takes the label off itself, so the next ask is a fresh label.
+  It asks Trusted review to review what the push changed, and that workflow takes the label off itself, so the next ask is a fresh label.
   Add it once the push's own CI run has started on the PR's head, since that run stops a label's run queued before it.
   A push stops a review still running or waiting, and a label change stops one still waiting.
   Whenever `check` says no review has passed on the code that merges, as after a stopped run or once `main` moved after the last review,

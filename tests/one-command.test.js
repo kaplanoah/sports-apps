@@ -1,9 +1,170 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
-import { findCommandProblem, findSeparator } from "../.claude/hooks/one-command.mjs";
+import {
+  findCommandProblem,
+  findSeparator,
+  parseCommandWords,
+} from "../.claude/hooks/one-command.mjs";
 
 const HOOK = `${import.meta.dirname}/../.claude/hooks/one-command.mjs`;
+
+test("literal arguments preserve quoting, escapes, descriptors, and word comments", () => {
+  assert.deepEqual(parseCommandWords('gh api -H "a\\b" repos/o/r/issues -X DELETE'), [
+    "gh",
+    "api",
+    "-H",
+    "a\\b",
+    "repos/o/r/issues",
+    "-X",
+    "DELETE",
+  ]);
+  assert.deepEqual(parseCommandWords("gh api repos/o/r/issues x#y # ignored -X DELETE"), [
+    "gh",
+    "api",
+    "repos/o/r/issues",
+    "x#y",
+  ]);
+  assert.deepEqual(parseCommandWords("gh api 0<<'EOF' repos/o/r/pulls/1 -X PATCH\nx\nEOF"), [
+    "gh",
+    "api",
+    "repos/o/r/pulls/1",
+    "-X",
+    "PATCH",
+  ]);
+  assert.deepEqual(parseCommandWords("git commit -m ''"), ["git", "commit", "-m", ""]);
+  assert.deepEqual(parseCommandWords('git commit -m "\\$name \\"quoted\\""'), [
+    "git",
+    "commit",
+    "-m",
+    '$name "quoted"',
+  ]);
+});
+
+test("literal arguments fail closed on unfinished input and shell operators", () => {
+  for (const command of [
+    "gh api repos/o/r/issues -X 'DELETE",
+    'gh api repos/o/r/issues -X "GET',
+    "git diff \\",
+    "gh api <<< '-X GET' repos/o/r/issues",
+    "git diff | cat",
+    "git diff &",
+    "git diff; git status",
+    "git diff ${OPTIONS}",
+    'git diff "$OPTIONS"',
+    "git diff {HEAD,main}",
+    "git diff {1..2}",
+    "git diff [ab]",
+    "git diff @(HEAD)",
+    "git commit -F - <<'EOF'",
+    "git commit -F - <<EOF\n${MESSAGE}\nEOF",
+  ])
+    assert.equal(parseCommandWords(command), null, command);
+});
+
+test("only bare digits before a heredoc are file descriptors", () => {
+  for (const argument of ["'1'", '"1"', "\\1", "''1", "1''"])
+    assert.deepEqual(
+      parseCommandWords(`gh api -t ${argument}<<'EOF' repos/o/r/issues -X DELETE\nx\nEOF`),
+      ["gh", "api", "-t", "1", "repos/o/r/issues", "-X", "DELETE"],
+      argument,
+    );
+  assert.deepEqual(parseCommandWords("gh api 1\\\n<<'EOF' repos/o/r/pulls/1 -X PATCH\nx\nEOF"), [
+    "gh",
+    "api",
+    "repos/o/r/pulls/1",
+    "-X",
+    "PATCH",
+  ]);
+  assert.deepEqual(
+    parseCommandWords("gh api -H 'X: a' 1<<'EOF' repos/o/r/pulls/1 -X PATCH\nx\nEOF"),
+    ["gh", "api", "-H", "X: a", "repos/o/r/pulls/1", "-X", "PATCH"],
+  );
+});
+
+test("named heredoc descriptors fail closed while literal placeholders stay arguments", () => {
+  for (const name of ["owner", "repo"])
+    for (const heredoc of ["<<'EOF'", '<<"EOF"', "<<-'EOF'"]) {
+      const descriptor = `{${name}}`;
+      assert.equal(parseCommandWords(`gh api -t ${descriptor}${heredoc}\nx\nEOF`), null);
+      for (const literal of [
+        `'${descriptor}'`,
+        `"${descriptor}"`,
+        `\\${descriptor}`,
+        `''${descriptor}`,
+        `${descriptor}''`,
+      ])
+        assert.deepEqual(
+          parseCommandWords(`gh api -t ${literal}${heredoc}\nx\nEOF`),
+          ["gh", "api", "-t", descriptor],
+          literal,
+        );
+      assert.deepEqual(parseCommandWords(`gh api -t ${descriptor} ${heredoc}\nx\nEOF`), [
+        "gh",
+        "api",
+        "-t",
+        descriptor,
+      ]);
+      assert.deepEqual(
+        parseCommandWords(`gh api repos/${descriptor}/example/pulls/1${heredoc} -X PATCH\nx\nEOF`),
+        ["gh", "api", `repos/${descriptor}/example/pulls/1`, "-X", "PATCH"],
+      );
+    }
+});
+
+test("literal arguments share the scanner's quoted heredoc handling", () => {
+  for (const operator of ["<<'EOF'", '<<"EOF"', "<<-'EOF'"])
+    assert.deepEqual(parseCommandWords(`git commit -F - ${operator}\n$MESSAGE; a && b\nEOF`), [
+      "git",
+      "commit",
+      "-F",
+      "-",
+    ]);
+  assert.deepEqual(parseCommandWords("git commit -F - <<'A' <<'B'\na && b\nA\nc; d\nB"), [
+    "git",
+    "commit",
+    "-F",
+    "-",
+  ]);
+  assert.deepEqual(parseCommandWords("gh api repos/{owner}/{repo}/pulls/1 -X PATCH"), [
+    "gh",
+    "api",
+    "repos/{owner}/{repo}/pulls/1",
+    "-X",
+    "PATCH",
+  ]);
+});
+
+test("shell word boundaries exclude non-ASCII and control whitespace", () => {
+  for (const whitespace of ["\u00a0", "\ufeff", "\u2028", "\u2029", "\v", "\f", "\r"]) {
+    assert.deepEqual(parseCommandWords(`gh api -H X:a${whitespace}-X${whitespace}GET`), [
+      "gh",
+      "api",
+      "-H",
+      `X:a${whitespace}-X${whitespace}GET`,
+    ]);
+    assert.deepEqual(parseCommandWords(`${whitespace}git status${whitespace}`), [
+      `${whitespace}git`,
+      `status${whitespace}`,
+    ]);
+    assert.equal(findCommandProblem(`cd${whitespace}apps`), null);
+    assert.equal(findSeparator(`bash${whitespace}-c "a; b"`), null);
+    assert.equal(parseCommandWords(`gh api <<'EOF'${whitespace} -X GET\nx\nEOF`), null);
+  }
+  assert.deepEqual(parseCommandWords(" \tgh\tapi\t'hello world'\t "), ["gh", "api", "hello world"]);
+});
+
+test("heredoc delimiters keep literal whitespace and strip tabs only when requested", () => {
+  assert.equal(findSeparator("cat <<'EOF'\n\u00a0EOF\nnot a delimiter; text\nEOF"), null);
+  assert.equal(findSeparator("cat <<'EOF'\n\tEOF\nnot a delimiter; text\nEOF"), null);
+  assert.equal(findSeparator("cat <<-'EOF'\nbody\n\tEOF\ngit status"), "a line break");
+  assert.deepEqual(parseCommandWords("git commit -F - <<-'EOF'\nbody\n\tEOF"), [
+    "git",
+    "commit",
+    "-F",
+    "-",
+  ]);
+});
 
 test("a call that starts with cd is blocked, and a word that only starts with cd isn't", () => {
   assert.match(findCommandProblem("cd apps/wnba") ?? "", /^It starts with cd\./);
@@ -76,8 +237,143 @@ test("parentheses inside $(...) nest, so what follows them is still inside it", 
   assert.equal(findSeparator("echo $(f (x)); git status"), ";");
 });
 
+test("comments inside substitutions cannot hide a following separator", () => {
+  for (const substitution of ["$(echo a #b\n)", "`x #y`", "$(f $(g #h\n))", '"`x #y`"'])
+    for (const operator of [";", "&&", "||", "&", "\n"]) {
+      const command = `echo ${substitution}${operator} git status`;
+      assert.equal(findSeparator(command), operator === "\n" ? "a line break" : operator, command);
+      assert.equal(parseCommandWords(command), null, command);
+    }
+  for (const substitution of ["$(echo a)", "`x`"])
+    assert.equal(findSeparator(`echo ${substitution}#literal; git status`), ";");
+  assert.equal(findSeparator("echo `x #y` # actual comment; git status"), null);
+  assert.equal(findSeparator("echo $(echo a) # actual comment; git status"), null);
+  assert.equal(findSeparator("echo '`x #y`; text'"), null);
+  assert.equal(findSeparator("echo `x \\` #y`; git status"), ";");
+  assert.equal(findSeparator("echo `a; b`"), null);
+});
+
+test("command substitution comments ignore backticks, parentheses, and quotes until newline", () => {
+  for (const text of ["`", "(", ")", "'", '"', "$(", "`(')"])
+    for (const prefix of ["echo ", "echo;", "echo|", ""]) {
+      const command = `echo $(${prefix}#${text}\n); git status`;
+      assert.equal(findSeparator(command), ";", command);
+      assert.equal(parseCommandWords(command), null, command);
+    }
+  assert.equal(findSeparator("echo $(echo #` ; git status)"), null);
+  assert.equal(findSeparator("echo $(echo #`\n) && git status"), "&&");
+  assert.equal(findSeparator('echo $(printf x$(#"\n)); git status'), ";");
+  assert.equal(findSeparator("echo $( (echo)#`\n); git status"), ";");
+});
+
+test("hashes inside substitution words and quotes remain literal", () => {
+  for (const body of [
+    "echo x#word",
+    "echo x\\ #word",
+    "echo \\ #word",
+    "echo \\#word",
+    "echo 'x'#word",
+    'echo "x"#word',
+    "echo 'a #b'",
+    'echo "a #b"',
+    "echo $(echo)#word",
+    "echo `x`#word",
+  ]) {
+    const command = `echo $(${body}); git status`;
+    assert.equal(findSeparator(command), ";", command);
+    assert.equal(parseCommandWords(command), null, command);
+  }
+});
+
+test("arithmetic hashes do not start shell comments or hide later separators", () => {
+  for (const expansion of ["$((1 #))", "$(((1 #)))", "$((1 + $((2 #))))", '"$((1 #))"'])
+    for (const separator of [";", "&&", "\n"]) {
+      const command = `echo ${expansion}${separator}git status`;
+      assert.equal(
+        findSeparator(command),
+        separator === "\n" ? "a line break" : separator,
+        command,
+      );
+      assert.equal(parseCommandWords(command), null, command);
+    }
+  assert.equal(findSeparator("echo $((1 #)) # actual comment; git status"), null);
+  assert.equal(findSeparator("echo '$((1 #)); text'"), null);
+  assert.equal(findSeparator("echo $(echo $((1))#literal); git status"), ";");
+  assert.equal(findSeparator('echo $(( $(echo #"\n) + 1)); git status'), ";");
+});
+
+test("arithmetic commands preserve following separators and shell comment boundaries", () => {
+  for (const arithmetic of ["(( 1 #))", "(( (1 #) + 2 ))"])
+    for (const prefix of [arithmetic, `echo $( ${arithmetic} )`])
+      for (const separator of [";", "&&", "||", "&", "\n"]) {
+        const command = `${prefix}${separator} git status`;
+        assert.equal(
+          findSeparator(command),
+          separator === "\n" ? "a line break" : separator,
+          command,
+        );
+        assert.match(findCommandProblem(command) ?? "", /^It joins commands with /, command);
+        assert.equal(parseCommandWords(command), null, command);
+      }
+  for (const command of [
+    "(( 1 #))",
+    "(( 1 ))# actual comment; git status",
+    "(( 1 )) # actual comment; git status",
+    "echo $( (( 1 ))# ) ; ignored\n)",
+    "echo $( (( 1 )) # ) ; ignored\n)",
+    "echo '(( 1 #)); text'",
+  ])
+    assert.equal(findSeparator(command), null, command);
+  for (const command of [
+    "echo $( (( 1 ))# ) ; ignored\n); git status",
+    '(( $(echo #"\n) + 1 )); git status',
+    "echo $( (( 1 #)) )#literal; git status",
+  ])
+    assert.equal(findSeparator(command), ";", command);
+  assert.equal(parseCommandWords("(( 1 ))"), null);
+});
+
+test("an unclosed arithmetic pair falls back to nested subshell separators", () => {
+  for (const [command, separator] of [
+    ["((git status); git push)", ";"],
+    ["((echo a) && git push)", "&&"],
+    ["((echo a) || git push)", "||"],
+    ["((echo a) & git status)", "&"],
+    ["((echo a)\ngit status)", "a line break"],
+    ["((echo a); (git status))", ";"],
+    ["((echo ')'); git status)", ";"],
+    ["((echo a) # ignored ; and ))\n)", "a line break"],
+    ["((git status; git push", ";"],
+    ["((echo a) ) | ((echo b) ); git status", ";"],
+    ["((echo a) ) | (( 1 #)); git status", ";"],
+    ["echo $( ((echo a); git push) ); git status", ";"],
+  ]) {
+    assert.equal(findSeparator(command), separator, command);
+    assert.match(findCommandProblem(command) ?? "", /^It joins commands with /, command);
+    assert.equal(parseCommandWords(command), null, command);
+  }
+  for (const command of [
+    "((echo a) )",
+    "echo $( ((echo a); git push) )",
+    "echo '((git status); git push)'",
+    'echo "((git status); git push)"',
+  ])
+    assert.equal(findSeparator(command), null, command);
+  assert.equal(parseCommandWords("((echo a) )"), null);
+});
+
 test("a heredoc's end lets the check go on to what follows it", () => {
   assert.equal(findSeparator("cat <<EOF\nbody;\nEOF\ngit push"), "a line break");
+});
+
+test("a heredoc's opening line is scanned before its body", () => {
+  for (const operator of ["&&", ";", "||", "&"])
+    assert.equal(
+      findSeparator(`git commit -F - <<'EOF' ${operator} git push -f origin main\nmsg\nEOF`),
+      operator,
+    );
+  assert.equal(findSeparator("cat <<'EOF' | cat\nbody && text\nEOF"), null);
+  assert.equal(findSeparator("cat <<'EOF' # ignored && text\nbody\nEOF"), null);
 });
 
 test("the hook blocks a broken call with exit code 2 and its reason, and passes one command", () => {

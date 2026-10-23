@@ -236,7 +236,7 @@ test("an issue's body without a table reads as an empty table", () => {
 });
 
 /**
- * GitHub's issues, open unless their state says otherwise, filtered by state and page and sorted by the query, keeping reads and writes.
+ * GitHub's issues, open unless their state says otherwise, filtered by state and page, keeping reads and writes.
  * @param {{ number: number, title: string, body?: string, state?: string, pull_request?: object, created_at?: string, updated_at?: string }[]} issues
  */
 function createFakeGitHub(issues) {
@@ -255,13 +255,14 @@ function createFakeGitHub(issues) {
         (issue) => state === "all" || (issue.state ?? "open") === state,
       );
       const sort = searchParams.get("sort");
-      const direction = searchParams.get("direction") === "asc" ? 1 : -1;
-      /** @param {typeof issues[number]} issue */
-      const readSortTime = (issue) =>
-        (sort === "created" ? issue.created_at : issue.updated_at) ?? "";
-      filtered.sort(
-        (first, second) => readSortTime(first).localeCompare(readSortTime(second)) * direction,
-      );
+      if (sort === "created" || sort === "updated") {
+        const key = sort === "created" ? "created_at" : "updated_at";
+        const direction = searchParams.get("direction") === "asc" ? 1 : -1;
+        filtered.sort(
+          (left, right) =>
+            direction * ((Date.parse(left[key] ?? "") || 0) - (Date.parse(right[key] ?? "") || 0)),
+        );
+      }
       const size = Number(searchParams.get("per_page") ?? 100);
       const page = Number(searchParams.get("page") ?? 1);
       return Response.json(filtered.slice((page - 1) * size, page * size));
@@ -1369,6 +1370,36 @@ test("repeated incomplete sweeps preserve last success and a later full sweep ad
   assert.equal(readSweep(body).complete, true);
 });
 
+test("the sweep text shows Eastern times, missing history and bounded artifact lists", () => {
+  const sweep = {
+    complete: false,
+    checkedAt: "2026-10-23T12:00:00.000Z",
+    lastSuccess: "2026-01-23T12:00:00.000Z",
+    unavailable: Array.from({ length: 23 }, (_, index) => index + 1),
+    deferred: Array.from({ length: 21 }, (_, index) => index + 101),
+  };
+  const body = renderTable([], [], sweep);
+  assert.equal(
+    body.split("\n").find((line) => line.startsWith("Collection of completed CI tries:")),
+    "Collection of completed CI tries: **incomplete** (Oct 23, 2026, 8:00:00 AM EDT). Last complete sweep: Jan 23, 2026, 7:00:00 AM EST.",
+  );
+  assert.ok(
+    body.includes(
+      "Unavailable artifacts: 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20 (+3 more).",
+    ),
+  );
+  assert.ok(
+    body.includes(
+      "Deferred artifacts: 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120 (+1 more).",
+    ),
+  );
+  assert.ok(
+    renderTable([], [], { ...sweep, lastSuccess: null }).includes(
+      "Last complete sweep: not recorded.",
+    ),
+  );
+});
+
 test("an empty incomplete report stays visible and a closed report preserves last success", async () => {
   const body = renderTable([], [{ id: 11, at: TONIGHT.toISOString() }], {
     complete: true,
@@ -1513,18 +1544,20 @@ test("a recently updated closed report never replaces the open report's table or
     number: 6,
     title: ISSUE_TITLE,
     state: "closed",
+    updated_at: "2026-10-11T00:00:00Z",
     body: renderTable([], [{ id: 11, at: TONIGHT.toISOString() }]),
   };
   const open = {
     number: 5,
     title: ISSUE_TITLE,
     state: "open",
+    updated_at: "2026-10-09T00:00:00Z",
     body: renderTable(
       [tableRow({ name: AT_REST, lastSeen: "2026-10-09" })],
       [{ id: 21, at: TONIGHT.toISOString() }],
     ),
   };
-  const github = createFakeGitHub([closed, open]);
+  const github = createFakeGitHub([open, closed]);
   await post(github, []);
   assert.equal(github.written.length, 1);
   assert.equal(github.written[0].path, `/repos/${REPOSITORY}/issues/5`);
@@ -1590,7 +1623,7 @@ test("a fully counted last try stays complete when it finishes at or after the d
   }
 });
 
-test("an empty artifact listing completing at the deadline is a complete sweep", async () => {
+test("an empty final listing finishing at the deadline leaves collection complete", async () => {
   let elapsed = 0;
   const result = await collectFailedTests({
     github: async () => {
@@ -1602,49 +1635,54 @@ test("an empty artifact listing completing at the deadline is a complete sweep",
     ledger: UNCOUNTED,
     deadline: 100,
     readTime: () => elapsed,
+    download: () => {
+      throw new Error("An empty listing must download nothing");
+    },
   });
   assert.deepEqual(result.counted, []);
   assert.deepEqual(describeCollection(result), { complete: true, unavailable: [] });
 });
 
-test("the newest created closed report retains its ledger despite comments on an older report", async () => {
-  const lastSuccess = "2026-10-09T07:40:00.000Z";
+test("closed history uses the newest created report despite comments on older reports", async () => {
+  /** @param {number} id @param {string} lastSuccess */
+  const renderClosedBody = (id, lastSuccess) =>
+    renderTable([], [{ id, at: TONIGHT.toISOString() }], {
+      complete: true,
+      unavailable: [],
+      checkedAt: lastSuccess,
+      lastSuccess,
+    });
   const github = createFakeGitHub([
     {
       number: 5,
       title: ISSUE_TITLE,
       state: "closed",
-      created_at: "2026-10-01T07:40:00Z",
-      updated_at: "2026-10-10T07:00:00Z",
-      body: renderTable([]),
+      created_at: "2026-10-08T00:00:00Z",
+      updated_at: "2026-10-11T00:00:00Z",
+      body: renderClosedBody(11, "2026-10-08T00:00:00Z"),
     },
     {
       number: 6,
       title: ISSUE_TITLE,
       state: "closed",
-      created_at: "2026-10-08T07:40:00Z",
-      updated_at: lastSuccess,
-      body: renderTable([], [{ id: 21, at: lastSuccess }], {
-        complete: true,
-        unavailable: [],
-        checkedAt: lastSuccess,
-        lastSuccess,
-      }),
+      created_at: "2026-10-09T00:00:00Z",
+      updated_at: "2026-10-09T00:00:00Z",
+      body: renderClosedBody(21, TONIGHT.toISOString()),
     },
   ]);
   await postReport({
     repository: REPOSITORY,
     failed: [],
+    collection: { complete: false, unavailable: [99] },
     runUrl: RUN_URL,
-    now: TONIGHT,
-    collection: { complete: false, unavailable: [11] },
+    now: NEXT_NIGHT,
     fetchImpl: github.fetchImpl,
     env: { GH_TOKEN: "token" },
   });
-  assert.equal(github.written.length, 1);
-  const [updated] = github.written;
-  assert.equal(updated.path, `/repos/${REPOSITORY}/issues/6`);
-  assert.equal(updated.body.state, "open");
-  assert.deepEqual(readCounted(updated.body.body), [{ id: 21, at: lastSuccess }]);
-  assert.equal(readSweep(updated.body.body).lastSuccess, lastSuccess);
+  assert.equal(github.written[0].path, `/repos/${REPOSITORY}/issues/6`);
+  assert.deepEqual(
+    readCounted(github.written[0].body.body).map(({ id }) => id),
+    [21],
+  );
+  assert.equal(readSweep(github.written[0].body.body).lastSuccess, TONIGHT.toISOString());
 });
