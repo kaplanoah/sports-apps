@@ -60,6 +60,18 @@ test("the nightly run of the browser tests runs every test however many fail", (
   assert.match(readRepoFile(".github/workflows/flaky.yml"), /--max-failures=0\b/);
 });
 
+test("the nightly browser install has a step timeout that leaves time for the tests", () => {
+  const browser = readJob("browser", "flaky.yml");
+  const install = browser
+    .split(/^ {6}- /m)
+    .find((step) => /run: npx playwright install\b/.test(step));
+  assert.ok(install, "the nightly job installs its browsers");
+  const timeout = Number(install.match(/\btimeout-minutes: (\d+)/)?.[1]);
+  const jobTimeout = Number(browser.match(/^ {4}timeout-minutes: (\d+)/m)?.[1]);
+  assert.ok(timeout > 0 && timeout <= 10, "the install stops within ten minutes");
+  assert.ok(timeout < jobTimeout, "the tests keep their own time after installation");
+});
+
 test("the nightly run's report can start the routine that fixes flaky tests", () => {
   const workflow = readRepoFile(".github/workflows/flaky.yml");
   assert.match(workflow, /FLAKY_ROUTINE_URL: \$\{\{ secrets\.FLAKY_ROUTINE_URL \}\}/);

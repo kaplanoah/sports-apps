@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readRepoFile } from "./repo-files.js";
 import {
   nameNoCodeIssue,
   nameOutageIssue,
@@ -255,7 +255,7 @@ test("the watch asks each production app's health of each service", async () => 
 });
 
 test("the watch reads each app's address from the workers.dev subdomain the production environment holds", () => {
-  const workflow = readFileSync(new URL("../.github/workflows/watch.yml", import.meta.url), "utf8");
+  const workflow = readRepoFile(".github/workflows/watch.yml");
   assert.match(
     workflow,
     /CLOUDFLARE_WORKERS_SUBDOMAIN: \$\{\{ secrets\.CLOUDFLARE_WORKERS_SUBDOMAIN \}\}/,
