@@ -20,6 +20,7 @@ export const CONFIG_ONLY_FILES = new Set([
   ".prettierignore",
   "eslint.config.mjs",
   "knip.json",
+  "stryker.config.mjs",
   "tsconfig.json",
 ]);
 const SKIPPED_FILES = new Set([
@@ -29,6 +30,7 @@ const SKIPPED_FILES = new Set([
   ".github/workflows/ci.yml",
   ".github/workflows/conflicts.yml",
   ".github/workflows/flaky.yml",
+  ".github/workflows/mutation.yml",
   ".github/workflows/review.yml",
   ".github/workflows/trusted-review-area.yml",
   ".github/workflows/watch.yml",
@@ -43,6 +45,9 @@ const SKIPPED_FILES = new Set([
   "worker/judge-burn-in.mjs",
   "worker/judge-review.mjs",
   "worker/labeling.mjs",
+  "worker/mutation-tests.mjs",
+  "worker/mutation-targets.mjs",
+  "worker/node-tests.mjs",
   "worker/package-imports.mjs",
   "worker/plan-review.mjs",
   "worker/post-review.mjs",

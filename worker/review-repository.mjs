@@ -5,8 +5,9 @@ export const isReviewRevision = (value) =>
 
 /** @param {NodeJS.ProcessEnv} [env] */
 export function createReviewGitEnvironment(env = process.env) {
-  if (env.REVIEW_BASE && !isReviewRevision(env.REVIEW_BASE))
-    throw new Error("Review attributes require an immutable base revision.");
+  const needsTrustedAttributes = env.REVIEW_BASE !== undefined || env.REVIEW_TRUSTED !== undefined;
+  if (needsTrustedAttributes && !isReviewRevision(env.REVIEW_TRUSTED))
+    throw new Error("Review attributes require an immutable trusted revision.");
   return {
     PATH: env.PATH,
     LANG: "C.UTF-8",
@@ -24,6 +25,6 @@ export function createReviewGitEnvironment(env = process.env) {
     GIT_CONFIG_GLOBAL: "/dev/null",
     GIT_CONFIG_NOSYSTEM: "1",
     GIT_ATTR_NOSYSTEM: "1",
-    ...(env.REVIEW_BASE ? { GIT_ATTR_SOURCE: env.REVIEW_BASE } : {}),
+    ...(env.REVIEW_TRUSTED ? { GIT_ATTR_SOURCE: env.REVIEW_TRUSTED } : {}),
   };
 }

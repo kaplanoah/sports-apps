@@ -100,7 +100,7 @@ function matchesAvailableReviewMerge(merge, env) {
 
 /** @param {any} pull @param {NodeJS.ProcessEnv} env */
 const isCurrentReviewPull = (pull, env) =>
-  pull.state === "open" && pull.head.sha === env.REVIEW_HEAD && pull.base.ref === "main";
+  pull.state === "open" && pull.head.sha === env.REVIEW_HEAD;
 
 /**
  * GitHub computes mergeability after emitting the event. Refresh only the event's immutable
