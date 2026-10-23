@@ -5,7 +5,7 @@ import globals from "globals";
 const HAND_SEPARATOR = String.raw`/\u2022|\u00b7|&bull;|&middot;|&#8226;|&#183;/`;
 
 // The Date methods that read or write a moment on the machine's own calendar and clock.
-const LOCAL_TIME_METHODS = [
+export const LOCAL_TIME_METHODS = [
   "getDate",
   "getDay",
   "getFullYear",
@@ -77,6 +77,7 @@ export default [
   {
     ignores: [
       ".claude/worktrees/",
+      ".stryker-tmp/",
       "apps/*/worker/dist/",
       "services/*/worker/dist/",
       "apps/*/page/js/sortable.min.js",

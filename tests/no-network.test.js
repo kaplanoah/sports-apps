@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { REPO_ROOT, readRepoFile } from "./repo-files.js";
+import { buildNodeTestArgs } from "../worker/node-tests.mjs";
 
 const GUARD = new URL("tests/no-network.js", REPO_ROOT).href;
 const FEED = "https://example.com/feed";
@@ -33,5 +34,11 @@ test("a run that reads only its fakes passes", () => {
 
 test("every Node test run loads the guard first", () => {
   const { scripts } = JSON.parse(readRepoFile("package.json"));
-  assert.match(scripts.test, /^node --import \.\/tests\/no-network\.js --test /);
+  assert.equal(scripts.test, "node worker/node-tests.mjs");
+  assert.deepEqual(buildNodeTestArgs(["tests/example.test.js"]), [
+    "--import",
+    "./tests/no-network.js",
+    "--test",
+    "tests/example.test.js",
+  ]);
 });

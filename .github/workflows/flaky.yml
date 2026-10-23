@@ -5,7 +5,8 @@ run-name: ${{ inputs.tests && format('Repeat {0} on {1}', inputs.tests, inputs.r
 # them. Each night, main's browser tests run three times over with no retry, and one open issue
 # names each test that failed in any run (worker/report-flaky-tests.mjs). Run by hand, it repeats
 # the tests it's given on any branch, on the machine CI uses, WebKit included, to reproduce a flaky
-# test and to show a fix holds.
+# test and to show a fix holds. Only the nightly run also repeats the date/time-sensitive Node
+# tests in Honolulu; a Node failure fails the workflow separately from the browser-flake issue.
 on:
   schedule:
     - cron: "17 7 * * *"
@@ -28,6 +29,28 @@ permissions:
   contents: read
 
 jobs:
+  node:
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - id: node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version-file: .nvmrc
+      - id: modules
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: node_modules
+          key: node-modules-${{ runner.os }}-${{ steps.node.outputs.node-version }}-${{ hashFiles('package-lock.json') }}
+      - if: steps.modules.outputs.cache-hit != 'true'
+        run: npm ci
+      - name: Test date/time-sensitive Node tests in Honolulu
+        run: node worker/test-time-zone.mjs
+
   # The installed Playwright installs the Chromium and WebKit it runs, with the system libraries
   # they need, so one machine runs every project.
   browser:

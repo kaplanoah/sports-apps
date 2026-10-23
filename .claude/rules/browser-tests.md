@@ -25,6 +25,9 @@ paths:
 - CI's `burn-in` runs each spec a pull request adds or changes 10 times, so a spec holds at most 30 tests,
   which the root's `tests/browser-spec-size.test.js` checks (`worker/burn-in-specs.mjs` and `worker/judge-burn-in.mjs`).
 - Each night, main's browser tests run three times over, and each test that failed goes in the issue Flaky browser tests (`.github/workflows/flaky.yml`).
+  The nightly workflow also repeats the date/time-sensitive Node list in Honolulu.
+  Its Node job fails the workflow separately from browser-flake reporting.
+  Manual runs reproduce browser tests without repeating Node tests.
   To reproduce a flaky test, or to show a fix holds, run that workflow by hand with the tests,
   the project, the branch, and how many times to run each: it runs on the machine CI uses, WebKit included, which a cloud session doesn't have.
 - After a reload whose page code a test holds, the copy the page puts back has already taken the load note away,
