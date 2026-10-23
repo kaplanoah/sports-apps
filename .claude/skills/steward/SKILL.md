@@ -1,9 +1,10 @@
 ---
 name: steward
-description: How a session answers CI's review on a pull request in this repo
+description: How a session answers Trusted review on a pull request in this repo
 ---
 
-Answer every review finding, a Nit or Pre-existing one too, as below; the `ship` skill says what to do when the `review` job fails.
+Answer every review finding, a Nit or Pre-existing one too, as below.
+The `ship` skill says what to do when Trusted review's `review` or CI's `review-join` job fails.
 
 - In every round,
   fix each Important finding and each Unsure finding confirmed as a bug,
@@ -15,7 +16,7 @@ Answer every review finding, a Nit or Pre-existing one too, as below; the `ship`
   A finding that demonstrates a broken rule is Important under REVIEW.md; answer it as Important even if it was labeled Nit.
   After a fix, go back to step 2 of "Shipping a change" in AGENTS.md.
 - After any push to a ready PR, add the `review` label.
-  It asks CI to review what the push changed, and takes the label off itself, so the next ask is a fresh label.
+  It asks Trusted review to review what the push changed, and that workflow takes the label off itself, so the next ask is a fresh label.
   Add it once the push's own CI run has started on the PR's head, since that run stops a label's run queued before it.
   A push stops a review still running or waiting, and a label change stops one still waiting.
   Whenever `check` says no review has passed on the code that merges, as after a stopped run or once `main` moved after the last review,
@@ -26,4 +27,9 @@ Answer every review finding, a Nit or Pre-existing one too, as below; the `ship`
 - Resolve a finding answered without a code change once its reply is posted.
 - Resolve each checklist of Nits once every item in it is fixed or answered in a reply on its thread.
 - A finding in the PR's conversation has no thread: answer one you won't fix with a reply in the conversation.
-- After three reviews in a row with an Important finding, or when a finding you declined comes back, stop and ask the user.
+- After three reviews in a row with Important findings,
+  identify what the earlier preparation and review missed.
+  Recommend one concrete, evidence-based improvement in the existing PR description that would have caught those problems sooner.
+  Continue fixing and shipping under the existing checks and approval rules; reaching three rounds alone is not a reason to ask me.
+  If a declined finding returns, reassess it against the code and explain the decision.
+  Ask me when a decision is reserved for me or progress is blocked, rather than because of the round count or a repeated finding.

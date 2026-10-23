@@ -100,7 +100,7 @@ This skill holds what "Shipping a change" in AGENTS.md leaves out, most of it un
 - Take a red change to its branch and PR, put it on beta once its CI passes, as "The beta channel" above says,
   and stop there: tell the user what to use on the phone, and wait, keeping to steps 4 to 6 of AGENTS.md's list meanwhile.
   Its PR stays a draft while the owner tries its design on beta:
-  CI tests a draft, and beta deploys it, as for any PR, but CI reviews it only once it's ready for review.
+  CI tests a draft, and beta deploys it, as for any PR, but Trusted review reviews it only once it's ready for review.
   Once the owner says the design is the one to keep, take `beta` off, since answering the review is going back to work,
   mark the PR ready for review, which starts its first full review,
   go on to step 7 and answer the review, and then put its reviewed head on beta for the owner's `phone-ok`.
@@ -124,12 +124,12 @@ This skill holds what "Shipping a change" in AGENTS.md leaves out, most of it un
 
 - A merge to `main` that leaves an open PR in conflict comments on it (the root's `worker/flag-conflicts.mjs`), which wakes a session watching it.
 
-## Step 7: what CI's review does
+## Step 7: Trusted review and CI's join
 
-- CI reviews a PR once it's ready, when it's opened ready or marked ready, and again only when the `review` label asks, which the steward skill says when to add.
+- The Trusted review workflow reviews a PR once it's ready, when it's opened ready or marked ready, and again only when the `review` label asks, which the steward skill says when to add.
   Each review after the first reads only what changed since the last one that finished (the root's `worker/plan-review.mjs` and `worker/judge-review.mjs`).
   If the summary names something it couldn't judge, tell the user.
-- If `review` fails, read its summary and the log of the failed job, an area's `find` under `review-area`, or `review-across` or `review-post`.
+- If Trusted review's `review` fails, read its summary and the log of the failed job, an area's `find` under `review-area`, or `review-across` or `review-post`.
   An area's `find` and `review-across` show the action's own errors but not each try's turns and tool calls, since they'd be public,
   and `review-post` shows the errors of the root's `worker/post-review.mjs`.
   If an area's `find` or `review-across` stopped before Claude started, like an install that timed out, re-run the failed jobs once yourself.
@@ -137,7 +137,14 @@ This skill holds what "Shipping a change" in AGENTS.md leaves out, most of it un
   If `review-post` failed, re-run the failed jobs once yourself, since it starts no Claude and posts each finding only once.
   Tell the user what the log shows: an invalid or expired Claude credential secret, Claude unreachable,
   an error from `worker/post-review.mjs`, like a GitHub API call that failed, or a re-run that failed too.
-  `check` can't pass until the job does.
+  Once Trusted review's re-run passes, recover CI's join as below before `check` can pass.
+- CI's `review-join` waits for and verifies Trusted review's result; it runs no Claude.
+  If it fails, read its log for an API error, a timeout, missing evidence, or a result for different code or source.
+  After Trusted review recovers by the preceding rule, re-run CI's join with `gh run rerun <CI-run-id> --job <review-join-job-id>`.
+  This re-runs its downstream `check` too, even when the join succeeded with `owed=true` after a failed Trusted review.
+  Re-running only failed jobs would reuse that successful join's owed result.
+  Re-running the join starts no Claude; don't request another review merely to join a recovered result.
+  If the PR's head or base changed, follow the steward skill to request review of the current code instead.
 
 ## Step 8: a red PR
 

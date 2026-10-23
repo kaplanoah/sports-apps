@@ -1,8 +1,7 @@
-// Finds three independent CI records for exactly a git tree. A pull request's CI tests its head
+// Finds independent test and passing-CI records for exactly a git tree. A pull request's CI tests its head
 // merged into its base branch as that branch was then, and records that code's tree:
 // ci-passed means every check and the gate passed, so main can deploy at once on the same tree;
-// ci-tested means every test passed, so a label change skips the tests;
-// ci-reviewed means the review was satisfied, so a label change owes no review on that tree.
+// ci-tested means every test passed, so a label change skips the tests.
 // A squash merge has the tested tree when the base is main and nothing else merged first.
 import { appendFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
@@ -16,9 +15,6 @@ export const namePassedArtifact = (tree) => `ci-passed-${tree}`;
 
 /** @param {string} tree */
 export const nameTestedArtifact = (tree) => `ci-tested-${tree}`;
-
-/** @param {string} tree */
-export const nameReviewedArtifact = (tree) => `ci-reviewed-${tree}`;
 
 // Only a pull request's run of the CI workflow's path, from a branch of this repository. A branch's
 // run uses the branch's own copy of the workflow, which only someone who can push here could
@@ -83,17 +79,6 @@ export const findTestedRun = ({ tree, ...options }) =>
     isRecordingRun: isPullRequestRun,
   });
 
-/**
- * A run that satisfied the review on this code, even if the gate held the change.
- * @param {FindOptions} options
- */
-export const findReviewedRun = ({ tree, ...options }) =>
-  findRecordingRun({
-    ...options,
-    artifact: nameReviewedArtifact(tree),
-    isRecordingRun: isPullRequestRun,
-  });
-
 const SEARCHES = {
   passed: {
     find: findPassedRun,
@@ -107,12 +92,6 @@ const SEARCHES = {
     found: (runId) =>
       `CI run ${runId} passed every test on exactly this code, so the tests are skipped.`,
     waiting: "so every check runs again",
-  },
-  reviewed: {
-    find: findReviewedRun,
-    missing: "No CI run satisfied the review on exactly this code",
-    found: (runId) => `CI run ${runId} satisfied the review on exactly this code.`,
-    waiting: "so the review is still owed",
   },
 };
 
@@ -134,11 +113,7 @@ async function lookForRun(kind, tree) {
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const kind = process.argv.includes("--reviewed")
-    ? "reviewed"
-    : process.argv.includes("--tested")
-      ? "tested"
-      : "passed";
+  const kind = process.argv.includes("--tested") ? "tested" : "passed";
   const tree = execFileSync("git", ["rev-parse", "HEAD^{tree}"], { encoding: "utf8" }).trim();
   const found = await lookForRun(kind, tree);
   if ("runId" in found) {
