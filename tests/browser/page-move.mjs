@@ -78,13 +78,31 @@ const findNewAddress = (pageHost) => `https://${pageHost}/`;
  * @param {string} pageHost
  * @param {() => Promise<unknown>} leave
  */
-async function followHandoff(page, pageHost, leave) {
-  const handoff = page.waitForResponse(`${findNewAddress(pageHost)}access/handoff?**`);
-  await leave();
-  const response = await handoff;
-  const address = new URL(response.headers().location, response.url());
-  await page.goto(address.href);
-  return address;
+export async function followHandoff(page, pageHost, leave) {
+  let noteCommit;
+  const committed = new Promise((resolve) => {
+    /** @param {import("@playwright/test").Frame} frame */
+    noteCommit = (frame) => {
+      if (frame !== page.mainFrame()) return;
+      const address = new URL(frame.url());
+      const isDestination = `${address.origin}${address.pathname}` === findNewAddress(pageHost);
+      if (isDestination || address.href === "chrome-error://chromewebdata/") resolve(null);
+    };
+    page.on("framenavigated", noteCommit);
+  });
+  try {
+    const [response] = await Promise.all([
+      page.waitForResponse(`${findNewAddress(pageHost)}access/handoff?**`),
+      leave(),
+    ]);
+    const address = new URL(response.headers().location, response.url());
+    // Response headers (and even response.finished()) precede the redirected document's commit.
+    await committed;
+    await page.goto(address.href);
+    return address;
+  } finally {
+    page.off("framenavigated", noteCommit);
+  }
 }
 
 /**
