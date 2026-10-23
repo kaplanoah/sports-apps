@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readRepoFile } from "./repo-files.js";
 import { reloadWhenSignedOut } from "#shared/access.js";
 import { STEPS_CACHE } from "#shared/service-worker.js";
 
@@ -43,9 +43,6 @@ test("a browser without the cache API still reloads a page turned away", async (
 // The worker's steps are a plain script it loads, which can't import the page's name for their
 // cache, so the page keeps what the worker kept only while the two names agree.
 test("the page names the worker's steps' cache as the worker does", () => {
-  const worker = readFileSync(
-    new URL("../shared/page/service-worker-steps.js", import.meta.url),
-    "utf8",
-  );
+  const worker = readRepoFile("shared/page/service-worker-steps.js");
   assert.equal(/^const STEPS_CACHE = "([^"]+)";$/m.exec(worker)?.[1], STEPS_CACHE);
 });

@@ -1,3 +1,4 @@
+import { WILD_CARD_SERIES } from "./bracket-rounds.mjs";
 import {
   test,
   expect,
@@ -164,8 +165,6 @@ test("on a wide screen, the whole bracket shows without round dots", async ({ pa
   await expect(page.locator("#bracketWrap .tree-scroll")).not.toHaveClass(/stacked/);
   await expect(page.locator("#bracketWrap .round-dots")).toHaveCount(0);
 });
-
-const WILD_CARD_SERIES = ["AL_WC1", "AL_WC2", "NL_WC1", "NL_WC2"];
 
 for (const width of [360, 390]) {
   test.describe(`on a ${width}px phone`, () => {
