@@ -7,14 +7,11 @@ paths:
 
 # What the shared code holds
 
-Each module's top comment says more.
-Pages import them as `#shared/<module>.js` through their import map, and Node through the root's `package.json`'s imports.
-The root's `tests/shared-modules-list.test.js` keeps this list whole.
+Each module's top comment says more. Pages import them as `#shared/<module>.js` through their import map, and Node through the root's `package.json`'s imports. The root's `tests/shared-modules-list.test.js` keeps this list whole.
 
 ## `shared/page/`
 
-The Worker serves every file here, its `networks/` logos too, under `shared/`,
-but for the tuning panel's, which only a channel off production serves, and only while a round is open (the root's `worker/tuning-files.mjs`).
+The Worker serves every file here, its `networks/` logos too, under `shared/`, but for the tuning panel's, which only a channel off production serves, and only while a round is open (the root's `worker/tuning-files.mjs`).
 
 ### The page and its tabs
 
