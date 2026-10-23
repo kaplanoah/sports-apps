@@ -1,6 +1,5 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { EventEmitter } from "node:events";
 import { setImmediate } from "node:timers/promises";
 import { followHandoff } from "./browser/page-move.mjs";
 
@@ -10,14 +9,17 @@ const ERROR_DOCUMENT = "chrome-error://chromewebdata/";
 
 function createGate() {
   let release;
-  const promise = new Promise((resolve) => {
-    release = () => resolve(null);
+  let reject;
+  const promise = new Promise((resolve, fail) => {
+    release = (value = null) => resolve(value);
+    reject = fail;
   });
-  return { promise, release };
+  return { promise, release, reject };
 }
 
 function createHandoff() {
-  const events = new EventEmitter();
+  let observeCommit;
+  let rejectCommit;
   let frameAddress = "about:blank";
   const frame = { url: () => frameAddress };
   const visits = [];
@@ -28,7 +30,21 @@ function createHandoff() {
     url: () => `https://${PAGE_HOST}/access/handoff?token=fixture`,
     finished: () => finished.promise,
   };
-  const stub = Object.assign(events, {
+  const stub = {
+    waitForEvent: (event, { predicate, signal }) => {
+      assert.equal(event, "framenavigated");
+      const gate = createGate();
+      const cancel = () => gate.reject(signal.reason);
+      observeCommit = (frame) => {
+        if (predicate(frame)) gate.release(frame);
+      };
+      rejectCommit = gate.reject;
+      signal.addEventListener("abort", cancel, { once: true });
+      return gate.promise.finally(() => {
+        observeCommit = null;
+        signal.removeEventListener("abort", cancel);
+      });
+    },
     mainFrame: () => frame,
     waitForResponse: async (pattern) => {
       assert.equal(pattern, `https://${PAGE_HOST}/access/handoff?**`);
@@ -38,56 +54,57 @@ function createHandoff() {
     goto: async (address) => {
       visits.push(address);
     },
-  });
+  };
   const page = /** @type {import("@playwright/test").Page} */ (/** @type {unknown} */ (stub));
   const commit = (address, isMainFrame = true) => {
-    frameAddress = address;
-    events.emit("framenavigated", isMainFrame ? frame : { url: () => address });
+    if (isMainFrame) frameAddress = address;
+    observeCommit?.(isMainFrame ? frame : { url: () => address });
   };
   const leave = async () => {
     headers.release();
     finished.release();
   };
-  return { page, stub, events, visits, response, headers, commit, leave };
+  const countWaiters = () => Number(!!observeCommit);
+  const close = () => rejectCommit(new Error("page closed"));
+  return { page, stub, visits, response, headers, commit, leave, countWaiters, close };
 }
 
-for (const address of [DESTINATION, ERROR_DOCUMENT]) {
-  test(`handoff headers and response completion cannot bypass the gated commit: ${address}`, async () => {
-    const handoff = createHandoff();
-    const gate = createGate();
-    const commit = gate.promise.then(() => handoff.commit(address));
-    const following = followHandoff(handoff.page, PAGE_HOST, handoff.leave);
-    try {
-      await handoff.headers.promise;
-      await handoff.response.finished();
-      await setImmediate();
-      assert.deepEqual(handoff.visits, [], "goto must wait for the original document to commit");
-    } finally {
-      gate.release();
-      await commit;
-      await following;
-    }
-    assert.deepEqual(handoff.visits, [DESTINATION]);
-    assert.equal(handoff.events.listenerCount("framenavigated"), 0);
-  });
+test("handoff headers and response completion cannot bypass the gated commit", async () => {
+  const handoff = createHandoff();
+  const gate = createGate();
+  const commit = gate.promise.then(() => handoff.commit(ERROR_DOCUMENT));
+  const following = followHandoff(handoff.page, PAGE_HOST, handoff.leave);
+  try {
+    await handoff.headers.promise;
+    await handoff.response.finished();
+    await setImmediate();
+    assert.deepEqual(handoff.visits, [], "goto must wait for the original document to commit");
+  } finally {
+    gate.release();
+    await commit;
+    await following;
+  }
+  assert.deepEqual(handoff.visits, [DESTINATION]);
+  assert.equal(handoff.countWaiters(), 0);
+});
 
-  test(`observer captures a commit during departure before headers: ${address}`, async () => {
-    const handoff = createHandoff();
-    const following = followHandoff(handoff.page, PAGE_HOST, async () => {
-      assert.equal(handoff.events.listenerCount("framenavigated"), 1);
-      handoff.commit(address);
-      await handoff.leave();
-    });
-    assert.equal((await following).href, DESTINATION);
-    assert.deepEqual(handoff.visits, [DESTINATION]);
-    assert.equal(handoff.events.listenerCount("framenavigated"), 0);
+test("observer captures a commit during departure before headers", async () => {
+  const handoff = createHandoff();
+  const following = followHandoff(handoff.page, PAGE_HOST, async () => {
+    assert.equal(handoff.countWaiters(), 1);
+    handoff.commit(ERROR_DOCUMENT);
+    await handoff.leave();
   });
-}
+  assert.equal((await following).href, DESTINATION);
+  assert.deepEqual(handoff.visits, [DESTINATION]);
+  assert.equal(handoff.countWaiters(), 0);
+});
 
 for (const [address, isMainFrame] of /** @type {const} */ ([
   ["https://old.sports.example/", true],
   [`https://${PAGE_HOST}/access/handoff?token=fixture`, true],
   ["about:blank", true],
+  [DESTINATION, true],
   [DESTINATION, false],
   [ERROR_DOCUMENT, false],
 ])) {
@@ -107,13 +124,17 @@ for (const [address, isMainFrame] of /** @type {const} */ ([
   });
 }
 
-for (const stage of ["departure", "response", "location", "goto"]) {
-  test(`removes the commit listener when ${stage} fails`, async () => {
+for (const stage of ["departure", "synchronous departure", "response", "location", "goto"]) {
+  test(`cancels the commit wait when ${stage} fails`, async () => {
     const handoff = createHandoff();
     const failure = new Error(`${stage} failed`);
     let leave = handoff.leave;
     if (stage === "departure") {
       leave = async () => {
+        throw failure;
+      };
+    } else if (stage === "synchronous departure") {
+      leave = () => {
         throw failure;
       };
     } else if (stage === "response") {
@@ -134,7 +155,18 @@ for (const stage of ["departure", "response", "location", "goto"]) {
       };
     }
     await assert.rejects(followHandoff(handoff.page, PAGE_HOST, leave), failure);
-    assert.equal(handoff.events.listenerCount("framenavigated"), 0);
+    assert.equal(handoff.countWaiters(), 0);
     assert.deepEqual(handoff.visits, []);
   });
 }
+
+test("a page closing rejects the commit wait and leaves no explicit navigation", async () => {
+  const handoff = createHandoff();
+  const following = followHandoff(handoff.page, PAGE_HOST, async () => {
+    await handoff.leave();
+    handoff.close();
+  });
+  await assert.rejects(following, /page closed/);
+  assert.equal(handoff.countWaiters(), 0);
+  assert.deepEqual(handoff.visits, []);
+});
