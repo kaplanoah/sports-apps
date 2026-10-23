@@ -83,11 +83,35 @@ export function createGraphQL({ fetchImpl, env }) {
  */
 export async function readAllPages(readJson, path, pickItems = (answer) => answer) {
   const items = [];
+  for await (const batch of readPages(readJson, path, pickItems)) items.push(...batch);
+  return items;
+}
+
+/**
+ * The first matching item, without requesting pages after the match.
+ * @param {(path: string) => Promise<any>} readJson
+ * @param {string} path
+ * @param {(item: any) => boolean} isMatch
+ */
+export async function findInPages(readJson, path, isMatch) {
+  for await (const batch of readPages(readJson, path, (answer) => answer)) {
+    const found = batch.find(isMatch);
+    if (found !== undefined) return found;
+  }
+  return undefined;
+}
+
+/**
+ * @param {(path: string) => Promise<any>} readJson
+ * @param {string} path
+ * @param {(answer: any) => any[]} pickItems
+ */
+async function* readPages(readJson, path, pickItems) {
   for (let page = 1; ; page += 1) {
     const batch = pickItems(
       await readJson(`${path}${path.includes("?") ? "&" : "?"}per_page=${PAGE_SIZE}&page=${page}`),
     );
-    items.push(...batch);
-    if (batch.length < PAGE_SIZE) return items;
+    yield batch;
+    if (batch.length < PAGE_SIZE) return;
   }
 }

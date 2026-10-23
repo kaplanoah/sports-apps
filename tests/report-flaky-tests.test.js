@@ -1,14 +1,19 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { execFileSync, spawnSync } from "node:child_process";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   ISSUE_TITLE,
+  COLLECTION_TIMEOUT_MS,
+  PUBLICATION_TIMEOUT_MS,
+  ROUTINE_TIMEOUT_MS,
   addToTable,
   collectFailedTests,
+  describeCollection,
+  downloadRun,
   listFailedTests,
   listUncountedArtifacts,
   mergeFailedTests,
@@ -16,9 +21,12 @@ import {
   readCounted,
   readLedger,
   readRunFailures,
+  readSweep,
   readTable,
   renderTable,
 } from "../worker/report-flaky-tests.mjs";
+import { readRepoFile } from "./repo-files.js";
+import { normalizeSpaces } from "./text.js";
 
 const REPOSITORY = "owner/sports-apps";
 const RUN_URL = "https://github.com/owner/sports-apps/actions/runs/1";
@@ -229,17 +237,37 @@ test("an issue's body without a table reads as an empty table", () => {
 });
 
 /**
- * GitHub's API with these open issues, keeping what's written.
- * @param {{ number: number, title: string, body?: string, pull_request?: object }[]} issues
+ * GitHub's issues, open unless their state says otherwise, filtered by state and page, keeping reads and writes.
+ * @param {{ number: number, title: string, body?: string, state?: string, pull_request?: object, created_at?: string, updated_at?: string }[]} issues
  */
 function createFakeGitHub(issues) {
+  /** @type {string[]} */
+  const reads = [];
   /** @type {{ method: string, path: string, body: any, headers: any }[]} */
   const written = [];
   /** @type {typeof fetch} */
   const fetchImpl = async (url, init) => {
-    const { pathname } = new URL(String(url));
+    const { pathname, searchParams } = new URL(String(url));
     const method = init?.method ?? "GET";
-    if (method === "GET") return Response.json(issues);
+    if (method === "GET") {
+      reads.push(String(url));
+      const state = searchParams.get("state") ?? "open";
+      const filtered = issues.filter(
+        (issue) => state === "all" || (issue.state ?? "open") === state,
+      );
+      const sort = searchParams.get("sort");
+      if (sort === "created" || sort === "updated") {
+        const key = sort === "created" ? "created_at" : "updated_at";
+        const direction = searchParams.get("direction") === "asc" ? 1 : -1;
+        filtered.sort(
+          (left, right) =>
+            direction * ((Date.parse(left[key] ?? "") || 0) - (Date.parse(right[key] ?? "") || 0)),
+        );
+      }
+      const size = Number(searchParams.get("per_page") ?? 100);
+      const page = Number(searchParams.get("page") ?? 1);
+      return Response.json(filtered.slice((page - 1) * size, page * size));
+    }
     written.push({
       method,
       path: pathname,
@@ -248,7 +276,7 @@ function createFakeGitHub(issues) {
     });
     return Response.json({ number: 7 });
   };
-  return { fetchImpl, written };
+  return { fetchImpl, written, reads };
 }
 
 const ROUTINE_URL = "https://api.anthropic.com/v1/claude_code/routines/trig_example/fire";
@@ -676,13 +704,15 @@ const collect = ({ github, download, ledger = UNCOUNTED, now = TONIGHT, nightRep
  * @param {import("../worker/report-flaky-tests.mjs").TestRuns[]} night.failed
  * @param {CountedArtifact[]} night.counted
  * @param {Date} night.now
+ * @param {import("../worker/report-flaky-tests.mjs").CollectionStatus} [night.collection]
  */
-async function postNight({ body, failed, counted, now }) {
+async function postNight({ body, failed, counted, now, collection }) {
   const github = createFakeGitHub([{ number: 5, title: ISSUE_TITLE, body }]);
   await postReport({
     repository: REPOSITORY,
     failed,
     counted,
+    collection,
     runUrl: RUN_URL,
     now,
     fetchImpl: github.fetchImpl,
@@ -835,7 +865,7 @@ let descriptor;
 childProcess.execFileSync = (command, args, options) => {
   if (command !== "gh") throw new Error("unexpected command");
   descriptor = options.stdio[1];
-  throw new Error("artifact download unavailable");
+  throw Object.assign(new Error("download command failed"), { stderr: Buffer.from("artifact download unavailable\\nmore detail") });
 };
 syncBuiltinESMExports();
 process.on("exit", () => {
@@ -876,7 +906,7 @@ globalThis.fetch = async (url, init) => {
     env: { PATH: process.env.PATH, GITHUB_REPOSITORY: REPOSITORY, RUN_URL },
   });
   assert.equal(result.status, 1, result.stderr);
-  assert.match(result.stdout, /Updated #5:/);
+  assert.match(result.stdout, /Updated #5:/, result.stderr);
   assert.match(result.stdout, /artifact descriptor closed/);
   assert.match(result.stderr, /CI run 1's artifacts \(11\).*artifact download unavailable/);
   const { body } = JSON.parse(readFileSync(written, "utf8"));
@@ -885,6 +915,9 @@ globalThis.fetch = async (url, init) => {
     [LAST_DRAWN, AT_REST],
   );
   assert.deepEqual(readCounted(body), []);
+  assert.equal(readSweep(body).complete, false);
+  assert.deepEqual(readSweep(body).unavailable, [11]);
+  assert.equal(readSweep(body).lastSuccess, null);
 });
 
 test("a run tried again before a night judges each try on its own, and counts its first try's report once", async () => {
@@ -1125,4 +1158,534 @@ test("the first night after the issue's body lists what it counted takes each ar
   assert.deepEqual(second, { failed: [], counted: [], skipped: [] });
   assert.deepEqual(readLedger({ body, updated_at: TONIGHT.toISOString() }).countedBefore, 0);
   assert.deepEqual(readLedger(undefined), UNCOUNTED);
+});
+
+const DOWNLOAD_RUN = {
+  id: 1,
+  foundIn: { url: RUN_URL, at: TONIGHT.toISOString() },
+  artifacts: [{ id: 11, name: "browser-report-1", at: TONIGHT.toISOString() }],
+};
+
+/** @param {(command: string, args: readonly string[], options: any) => any} executeFile */
+const downloadWith = (executeFile) =>
+  downloadRun(DOWNLOAD_RUN, { executeFile: /** @type {typeof execFileSync} */ (executeFile) });
+
+test("a stalled artifact download is killed within the collection's remaining budget", () => {
+  let timeout;
+  assert.throws(
+    () =>
+      downloadRun(DOWNLOAD_RUN, {
+        deadline: 100,
+        readTime: () => 0,
+        executeFile: /** @type {typeof execFileSync} */ (
+          (command, args, options) => {
+            assert.equal(command, "gh");
+            timeout = options.timeout;
+            assert.equal(options.killSignal, "SIGKILL");
+            return execFileSync(process.execPath, ["-e", "setTimeout(() => {}, 500)"], options);
+          }
+        ),
+      }),
+    /ETIMEDOUT|collection deadline reached/,
+  );
+  assert.ok(timeout > 0 && timeout <= 100);
+});
+
+test("unzip has its own bound and a stalled unzip leaves the try unavailable", () => {
+  const commands = [];
+  assert.throws(
+    () =>
+      downloadWith((command, args, options) => {
+        commands.push(command);
+        if (command === "gh") {
+          assert.equal(options.timeout, 30000);
+          return Buffer.from("");
+        }
+        assert.equal(command, "unzip");
+        assert.equal(options.timeout, 10000);
+        assert.equal(options.killSignal, "SIGKILL");
+        throw new Error("unzip stalled");
+      }),
+    /unzip stalled/,
+  );
+  assert.deepEqual(commands, ["gh", "unzip"]);
+});
+
+test("a transient download retries once with a truncated file, then unzips", () => {
+  let tries = 0;
+  const commands = [];
+  const directory = downloadWith((command, args, options) => {
+    commands.push(command);
+    if (command === "unzip") return Buffer.from("");
+    tries += 1;
+    if (tries === 1) {
+      writeFileSync(Number(options.stdio[1]), "partial and longer");
+      throw Object.assign(new Error("download failed"), { stderr: Buffer.from("HTTP 503") });
+    }
+    writeFileSync(Number(options.stdio[1]), "whole");
+    return Buffer.from("");
+  });
+  try {
+    assert.equal(readFileSync(join(directory, "11.zip"), "utf8"), "whole");
+    assert.deepEqual(commands, ["gh", "gh", "unzip"]);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("permanent download errors never retry, and transient failures retry at most once", () => {
+  for (const [message, expected] of /** @type {[string, number][]} */ ([
+    ["HTTP 401 authentication failed", 1],
+    ["HTTP 403 forbidden", 1],
+    ["destination policy denied: ECONNRESET", 1],
+    ["configuration error", 1],
+    ["HTTP 404", 1],
+    ["HTTP 503", 2],
+    ["ECONNRESET", 2],
+  ])) {
+    let calls = 0;
+    assert.throws(() =>
+      downloadWith(() => {
+        calls += 1;
+        throw new Error(message);
+      }),
+    );
+    assert.equal(calls, expected, message);
+  }
+});
+
+test("the collection deadline leaves later tries untouched and eligible while partial results publish", async () => {
+  const second = {
+    ciRuns: [
+      ...ONE_REPORT.ciRuns,
+      { id: 2, updated_at: "2026-10-09T14:00:00Z", tries: ["2026-10-09T13:00:00Z"] },
+    ],
+    artifacts: [
+      ...ONE_REPORT.artifacts,
+      { id: 21, name: "browser-report-1", created_at: "2026-10-09T13:30:00Z", run: 2 },
+    ],
+  };
+  const { download, downloaded } = createFakeDownloads({
+    11: RETRY_PASSED_REPORT,
+    21: RETRY_PASSED_REPORT,
+  });
+  let elapsed = 0;
+  const result = await collectFailedTests({
+    github: createFakeRunsApi(second).github,
+    nightReports: [],
+    night: { url: RUN_URL, now: TONIGHT },
+    ledger: UNCOUNTED,
+    deadline: 100,
+    readTime: () => elapsed,
+    download: (run) => {
+      const directory = download(run);
+      elapsed = 100;
+      return directory;
+    },
+  });
+  assert.deepEqual(
+    result.counted.map(({ id }) => id),
+    [11],
+  );
+  assert.deepEqual(
+    result.skipped.map(({ id }) => id),
+    [],
+  );
+  const collection = describeCollection(result);
+  assert.deepEqual(collection, {
+    complete: false,
+    unavailable: [],
+    deferred: [21],
+    problem: "collection deadline reached",
+  });
+  assert.deepEqual(listTries(downloaded), [[1, [11]]]);
+  const body = await postNight({
+    body: OPEN_BODY,
+    ...result,
+    now: TONIGHT,
+    collection,
+  });
+  assert.deepEqual(
+    readCounted(body).map(({ id }) => id),
+    [11],
+  );
+  assert.equal(readSweep(body).complete, false);
+  assert.match(body, /Deferred artifacts: 21/);
+  assert.match(body, /Collection stopped: collection deadline reached/);
+  assert.doesNotMatch(body, /Unavailable artifacts:/);
+  const recovered = await collect({
+    github: createFakeRunsApi(second).github,
+    download,
+    ledger: readLedger({ body, updated_at: TONIGHT.toISOString() }),
+  });
+  assert.deepEqual(
+    recovered.counted.map(({ id }) => id),
+    [21],
+  );
+});
+
+test("a stalled GitHub listing ends collection without consuming publication time", async () => {
+  const result = await collectFailedTests({
+    github: async () => new Promise(() => {}),
+    nightReports: [nightReport],
+    night: { url: RUN_URL, now: TONIGHT },
+    ledger: UNCOUNTED,
+    deadline: Date.now() + 25,
+  });
+  assert.match(result.problem, /collection deadline/);
+  assert.deepEqual(result.counted, []);
+  const body = await postNight({
+    body: OPEN_BODY,
+    ...result,
+    now: TONIGHT,
+    collection: describeCollection(result),
+  });
+  assert.equal(readTable(body).length, 2);
+  assert.match(body, /Collection stopped:.*collection deadline/);
+});
+
+test("repeated incomplete sweeps preserve last success and a later full sweep advances it", async () => {
+  const complete = { complete: true, unavailable: [] };
+  const initial = await postNight({
+    body: OPEN_BODY,
+    failed: [],
+    counted: [],
+    now: TONIGHT,
+    collection: complete,
+  });
+  assert.equal(readSweep(initial).lastSuccess, TONIGHT.toISOString());
+  let body = initial;
+  for (const problem of ["download unavailable", "collection deadline reached"]) {
+    body = await postNight({
+      body,
+      failed: [],
+      counted: [],
+      now: NEXT_NIGHT,
+      collection: { complete: false, unavailable: [11], problem },
+    });
+    assert.equal(readSweep(body).lastSuccess, TONIGHT.toISOString());
+    assert.equal(readSweep(body).complete, false);
+  }
+  body = await postNight({ body, failed: [], counted: [], now: NEXT_NIGHT, collection: complete });
+  assert.equal(readSweep(body).lastSuccess, NEXT_NIGHT.toISOString());
+  assert.equal(readSweep(body).complete, true);
+});
+
+test("the sweep text shows Eastern times, missing history and bounded artifact lists", () => {
+  const sweep = {
+    complete: false,
+    checkedAt: "2026-10-23T12:00:00.000Z",
+    lastSuccess: "2026-01-23T12:00:00.000Z",
+    unavailable: Array.from({ length: 23 }, (_, index) => index + 1),
+    deferred: Array.from({ length: 21 }, (_, index) => index + 101),
+  };
+  const body = renderTable([], [], sweep);
+  assert.equal(
+    normalizeSpaces(
+      body.split("\n").find((line) => line.startsWith("Collection of completed CI tries:")),
+    ),
+    "Collection of completed CI tries: **incomplete** (Oct 23, 2026, 8:00:00 AM EDT). Last complete sweep: Jan 23, 2026, 7:00:00 AM EST.",
+  );
+  assert.ok(
+    body.includes(
+      "Unavailable artifacts: 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20 (+3 more).",
+    ),
+  );
+  assert.ok(
+    body.includes(
+      "Deferred artifacts: 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120 (+1 more).",
+    ),
+  );
+  assert.ok(
+    renderTable([], [], { ...sweep, lastSuccess: null }).includes(
+      "Last complete sweep: not recorded.",
+    ),
+  );
+});
+
+test("an empty incomplete report stays visible and a closed report preserves last success", async () => {
+  const body = renderTable([], [{ id: 11, at: TONIGHT.toISOString() }], {
+    complete: true,
+    unavailable: [],
+    checkedAt: TONIGHT.toISOString(),
+    lastSuccess: TONIGHT.toISOString(),
+  });
+  const github = createFakeGitHub([{ number: 5, title: ISSUE_TITLE, body, state: "closed" }]);
+  await postReport({
+    repository: REPOSITORY,
+    failed: [],
+    collection: { complete: false, unavailable: [11] },
+    runUrl: RUN_URL,
+    now: NEXT_NIGHT,
+    fetchImpl: github.fetchImpl,
+  });
+  assert.equal(github.written[0].body.state, "open");
+  assert.equal(readSweep(github.written[0].body.body).lastSuccess, TONIGHT.toISOString());
+  assert.deepEqual(readCounted(github.written[0].body.body), [
+    { id: 11, at: TONIGHT.toISOString() },
+  ]);
+  assert.deepEqual(readTable(github.written[0].body.body), []);
+  assert.equal(readSweep(OPEN_BODY), null);
+});
+
+test("the report step reserves the publication and fix-routine budgets after collection", () => {
+  const report = readRepoFile(".github/workflows/flaky.yml").split("  report:\n")[1];
+  const jobMinutes = Number(report.match(/^ {4}timeout-minutes: (\d+)/m)?.[1]);
+  const publish = report.split("      - name: Update the flaky-test report\n")[1];
+  const stepMinutes = Number(publish.match(/^ {8}timeout-minutes: (\d+)/m)?.[1]);
+  assert.ok(
+    stepMinutes * 60000 >= COLLECTION_TIMEOUT_MS + PUBLICATION_TIMEOUT_MS + ROUTINE_TIMEOUT_MS,
+  );
+  assert.ok(jobMinutes > stepMinutes, "checkout and artifact setup keep time outside the step");
+});
+
+test("a first incomplete report without failures exposes the gap without starting a fix routine", async () => {
+  const github = createFakeGitHub([]);
+  await postReport({
+    repository: REPOSITORY,
+    failed: [],
+    runUrl: RUN_URL,
+    now: TONIGHT,
+    collection: { complete: false, unavailable: [11] },
+    fetchImpl: github.fetchImpl,
+    env: WITH_ROUTINE,
+  });
+  assert.equal(github.written.length, 1);
+  assert.equal(github.written[0].body.title, ISSUE_TITLE);
+  assert.equal(readSweep(github.written[0].body.body).lastSuccess, null);
+  assert.deepEqual(readTable(github.written[0].body.body), []);
+});
+
+test("report discovery stops on the first matching page instead of reading older history", async () => {
+  for (const count of [99, 199]) {
+    /** @type {Parameters<typeof createFakeGitHub>[0]} */
+    const issues = Array.from({ length: count }, (_, index) => ({
+      number: index + 10,
+      title: "Unrelated",
+    }));
+    issues.push({ number: 5, title: ISSUE_TITLE, body: OPEN_BODY });
+    issues.push({ number: 6, title: "Older history" });
+    const github = createFakeGitHub(issues);
+    await post(github, []);
+    assert.equal(github.reads.length, Math.ceil((count + 1) / 100));
+    assert.ok(github.reads.every((url) => new URL(url).searchParams.get("state") === "open"));
+    assert.equal(github.written[0].path, `/repos/${REPOSITORY}/issues/5`);
+  }
+});
+
+test("a complete clean night refreshes a closed report without claiming to close it again", async () => {
+  const github = createFakeGitHub([
+    { number: 5, title: ISSUE_TITLE, state: "closed", body: renderTable([]) },
+  ]);
+  const logged = await post(github, []);
+  assert.equal(github.written.length, 1);
+  assert.equal(github.written[0].path, `/repos/${REPOSITORY}/issues/5`);
+  assert.equal(github.written[0].body.state, undefined);
+  assert.equal(github.written[0].body.state_reason, undefined);
+  assert.equal(readSweep(github.written[0].body.body).complete, true);
+  assert.match(logged, /Refreshed closed report #5/);
+  assert.doesNotMatch(logged, /Closed #5/);
+});
+
+test(
+  "a stalled publication lookup is bounded independently of collection",
+  { timeout: 2000 },
+  async () => {
+    await assert.rejects(
+      postReport({
+        repository: REPOSITORY,
+        failed: [],
+        runUrl: RUN_URL,
+        fetchImpl: async () => new Promise(() => {}),
+        deadline: Date.now() + 25,
+      }),
+      /publication deadline reached/,
+    );
+  },
+);
+
+test("an unzip failure removes the download's temporary folder", () => {
+  let directory;
+  assert.throws(
+    () =>
+      downloadWith((command, arguments_) => {
+        if (command === "gh") {
+          const match = arguments_[1].match(/\/(\d+)\/zip$/);
+          assert.equal(Number(match[1]), 11);
+          return Buffer.from("");
+        }
+        directory = dirname(arguments_[1]);
+        assert.equal(existsSync(directory), true);
+        throw new Error("unzip failed");
+      }),
+    /unzip failed/,
+  );
+  assert.ok(directory);
+  assert.equal(existsSync(directory), false);
+});
+
+test("a successfully read try removes its temporary folder after counting", async () => {
+  const { download } = createFakeDownloads({ 11: RETRY_PASSED_REPORT });
+  let directory;
+  const result = await collect({
+    github: createFakeRunsApi(ONE_REPORT).github,
+    download: (run) => {
+      directory = download(run);
+      assert.equal(existsSync(directory), true);
+      return directory;
+    },
+  });
+  assert.deepEqual(
+    result.counted.map(({ id }) => id),
+    [11],
+  );
+  assert.equal(existsSync(directory), false);
+});
+
+test("a recently updated closed report never replaces the open report's table or ledger", async () => {
+  const closed = {
+    number: 6,
+    title: ISSUE_TITLE,
+    state: "closed",
+    updated_at: "2026-10-11T00:00:00Z",
+    body: renderTable([], [{ id: 11, at: TONIGHT.toISOString() }]),
+  };
+  const open = {
+    number: 5,
+    title: ISSUE_TITLE,
+    state: "open",
+    updated_at: "2026-10-09T00:00:00Z",
+    body: renderTable(
+      [tableRow({ name: AT_REST, lastSeen: "2026-10-09" })],
+      [{ id: 21, at: TONIGHT.toISOString() }],
+    ),
+  };
+  const github = createFakeGitHub([open, closed]);
+  await post(github, []);
+  assert.equal(github.written.length, 1);
+  assert.equal(github.written[0].path, `/repos/${REPOSITORY}/issues/5`);
+  assert.equal(github.written[0].body.state, undefined);
+  assert.deepEqual(
+    readTable(github.written[0].body.body).map(({ name }) => name),
+    [AT_REST],
+  );
+  assert.deepEqual(
+    readCounted(github.written[0].body.body).map(({ id }) => id),
+    [21],
+  );
+  assert.deepEqual(
+    github.reads.map((url) => new URL(url).searchParams.get("state")),
+    ["open"],
+  );
+});
+
+test("a failed download exhausting the budget records the stop even on the last run", async () => {
+  let elapsed = 0;
+  const result = await collectFailedTests({
+    github: createFakeRunsApi(ONE_REPORT).github,
+    nightReports: [],
+    night: { url: RUN_URL, now: TONIGHT },
+    ledger: UNCOUNTED,
+    deadline: 100,
+    readTime: () => elapsed,
+    download: () => {
+      elapsed = 100;
+      throw new Error("download failed");
+    },
+  });
+  assert.deepEqual(result.counted, []);
+  assert.deepEqual(describeCollection(result), {
+    complete: false,
+    unavailable: [11],
+    problem: "collection deadline reached",
+  });
+});
+
+test("a fully counted last try stays complete when it finishes at or after the deadline", async () => {
+  for (const finishedAt of [100, 101]) {
+    let elapsed = 0;
+    const { download } = createFakeDownloads({ 11: RETRY_PASSED_REPORT });
+    const result = await collectFailedTests({
+      github: createFakeRunsApi(ONE_REPORT).github,
+      nightReports: [],
+      night: { url: RUN_URL, now: TONIGHT },
+      ledger: UNCOUNTED,
+      deadline: 100,
+      readTime: () => elapsed,
+      download: (run) => {
+        const directory = download(run);
+        elapsed = finishedAt;
+        return directory;
+      },
+    });
+    assert.deepEqual(
+      result.counted.map(({ id }) => id),
+      [11],
+    );
+    assert.deepEqual(describeCollection(result), { complete: true, unavailable: [] });
+  }
+});
+
+test("an empty final listing finishing at the deadline leaves collection complete", async () => {
+  let elapsed = 0;
+  const result = await collectFailedTests({
+    github: async () => {
+      elapsed = 100;
+      return { artifacts: [] };
+    },
+    nightReports: [],
+    night: { url: RUN_URL, now: TONIGHT },
+    ledger: UNCOUNTED,
+    deadline: 100,
+    readTime: () => elapsed,
+    download: () => {
+      throw new Error("An empty listing must download nothing");
+    },
+  });
+  assert.deepEqual(result.counted, []);
+  assert.deepEqual(describeCollection(result), { complete: true, unavailable: [] });
+});
+
+test("closed history uses the newest created report despite comments on older reports", async () => {
+  /** @param {number} id @param {string} lastSuccess */
+  const renderClosedBody = (id, lastSuccess) =>
+    renderTable([], [{ id, at: TONIGHT.toISOString() }], {
+      complete: true,
+      unavailable: [],
+      checkedAt: lastSuccess,
+      lastSuccess,
+    });
+  const github = createFakeGitHub([
+    {
+      number: 5,
+      title: ISSUE_TITLE,
+      state: "closed",
+      created_at: "2026-10-08T00:00:00Z",
+      updated_at: "2026-10-11T00:00:00Z",
+      body: renderClosedBody(11, "2026-10-08T00:00:00Z"),
+    },
+    {
+      number: 6,
+      title: ISSUE_TITLE,
+      state: "closed",
+      created_at: "2026-10-09T00:00:00Z",
+      updated_at: "2026-10-09T00:00:00Z",
+      body: renderClosedBody(21, TONIGHT.toISOString()),
+    },
+  ]);
+  await postReport({
+    repository: REPOSITORY,
+    failed: [],
+    collection: { complete: false, unavailable: [99] },
+    runUrl: RUN_URL,
+    now: NEXT_NIGHT,
+    fetchImpl: github.fetchImpl,
+    env: { GH_TOKEN: "token" },
+  });
+  assert.equal(github.written[0].path, `/repos/${REPOSITORY}/issues/6`);
+  assert.deepEqual(
+    readCounted(github.written[0].body.body).map(({ id }) => id),
+    [21],
+  );
+  assert.equal(readSweep(github.written[0].body.body).lastSuccess, TONIGHT.toISOString());
 });
