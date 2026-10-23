@@ -45,7 +45,7 @@ jobs:
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: node_modules
-          key: node-modules-${{ runner.os }}-${{ steps.node.outputs.node-version }}-${{ hashFiles('package-lock.json') }}
+          key: node-modules-v2-${{ runner.os }}-${{ steps.node.outputs.node-version }}-${{ hashFiles('package-lock.json') }}
       - if: steps.modules.outputs.cache-hit != 'true'
         run: npm ci
       - name: Test date/time-sensitive Node tests in Honolulu
@@ -65,12 +65,14 @@ jobs:
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version-file: .nvmrc
+          package-manager-cache: false
       - id: modules
+        if: github.event_name == 'schedule'
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: node_modules
-          key: node-modules-${{ runner.os }}-${{ steps.node.outputs.node-version }}-${{ hashFiles('package-lock.json') }}
-      - if: steps.modules.outputs.cache-hit != 'true'
+          key: node-modules-v2-${{ runner.os }}-${{ steps.node.outputs.node-version }}-${{ hashFiles('package-lock.json') }}
+      - if: github.event_name != 'schedule' || steps.modules.outputs.cache-hit != 'true'
         run: npm ci
       - run: node worker/install-browsers.mjs --with-deps --only-shell chromium webkit
         timeout-minutes: 7

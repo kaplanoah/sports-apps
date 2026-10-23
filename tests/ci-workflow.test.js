@@ -311,6 +311,44 @@ test("only the nightly run repeats the focused Honolulu Node list", () => {
   assert.match(node, /if: steps\.modules\.outputs\.cache-hit != 'true'/);
 });
 
+test("manual browser runs never restore or save dependency caches", () => {
+  const workflow = readRepoFile(".github/workflows/flaky.yml");
+  const browser = readJob("browser", "flaky.yml");
+  const steps = browser.split(/^ {6}- /m).slice(1);
+  const caches = steps.filter((step) => /uses: actions\/cache(?:\/(?:restore|save))?@/.test(step));
+  assert.equal(caches.length, 1);
+  assert.match(caches[0], /^ {8}if: github\.event_name == 'schedule'$/m);
+  const setup = steps.find((step) => /uses: actions\/setup-node@/.test(step));
+  assert.ok(setup);
+  assert.equal(readStepInput(workflow, setup, "package-manager-cache"), "false");
+  assert.equal(readStepInput(workflow, setup, "cache"), "");
+});
+
+test("manual browser runs always install dependencies while nightly cache hits skip installation", () => {
+  const browser = readJob("browser", "flaky.yml");
+  const installs = browser.split(/^ {6}- /m).filter((step) => /run: npm ci\n/.test(step));
+  assert.equal(installs.length, 1);
+  assert.match(
+    installs[0],
+    /^if: github\.event_name != 'schedule' \|\| steps\.modules\.outputs\.cache-hit != 'true'\n/,
+  );
+});
+
+test("dependency caches share a fresh key without falling back to the old cache", () => {
+  const expected =
+    "node-modules-v2-${{ runner.os }}-${{ steps.node.outputs.node-version }}-${{ hashFiles('package-lock.json') }}";
+  const workflows = ["ci.yml", "flaky.yml"].map((name) =>
+    readRepoFile(`.github/workflows/${name}`),
+  );
+  const keys = workflows.flatMap((workflow) =>
+    [...workflow.matchAll(/^ {10}key: (?:&modules-key )?(node-modules-.*)$/gm)].map(
+      ([, key]) => key,
+    ),
+  );
+  assert.deepEqual(keys, [expected, expected, expected]);
+  for (const workflow of workflows) assert.doesNotMatch(workflow, /restore-keys:/);
+});
+
 test("the browser job's traces leave out the page at each step, which burn-in's keep", () => {
   assert.match(readJob("browser"), /TRACE_SNAPSHOTS: "off"/);
   assert.doesNotMatch(readJob("burn-in"), /TRACE_SNAPSHOTS/);
