@@ -250,7 +250,7 @@ async function closeAfterPageCheck(close, check) {
   try {
     await close();
   } catch (error) {
-    // Cleanup cannot undo a confirmed broken-page result.
+    // A broken attempt's result stands whether or not its cleanup succeeds.
     if (check.status !== "broken") throw error;
   }
 }
@@ -258,13 +258,15 @@ async function closeAfterPageCheck(close, check) {
 /**
  * @param {unknown} error
  * @param {boolean} isInfrastructureUnavailable
+ * @param {NodeJS.ProcessEnv} env
  */
-function judgePageFailure(error, isInfrastructureUnavailable) {
+function judgePageFailure(error, isInfrastructureUnavailable, env) {
   const message = error instanceof Error ? error.message : String(error);
   const isVerificationFailure =
-    /net::ERR_(?:PROXY_CONNECTION_FAILED|TUNNEL_CONNECTION_FAILED|NO_SUPPORTED_PROXIES|CERT_AUTHORITY_INVALID|PROXY_CERTIFICATE_INVALID)/.test(
+    /net::ERR_(?:PROXY_CONNECTION_FAILED|TUNNEL_CONNECTION_FAILED|NO_SUPPORTED_PROXIES|PROXY_CERTIFICATE_INVALID)/.test(
       message,
-    );
+    ) ||
+    (!!(env.HTTPS_PROXY || env.HTTP_PROXY) && /net::ERR_CERT_AUTHORITY_INVALID/.test(message));
   const isPageFailure =
     (error instanceof Error && error.name === "TimeoutError") ||
     /net::ERR_|Page crashed|Target crashed|Execution context was destroyed|Failed to fetch/.test(
@@ -279,7 +281,7 @@ function judgePageFailure(error, isInfrastructureUnavailable) {
  * Opens an app's page, retrying page failures up to `attempts` times.
  * Missing access settings and refused or rate-limited codes return unchecked.
  * Unavailable page operations return unchecked; browser or context setup failures throw with
- * access details masked. Cleanup errors preserve a confirmed broken result; otherwise they throw.
+ * access details masked. Cleanup errors preserve a broken attempt's result; otherwise they throw.
  * @param {object} options
  * @param {string} options.app
  * @param {string} options.channel
@@ -322,7 +324,7 @@ export async function checkAppPage({
         });
         const page = await context.newPage();
         const opened = await checkPage(page, { ...access, commit }).catch((error) =>
-          judgePageFailure(error, isContextClosed || !browser.isConnected()),
+          judgePageFailure(error, isContextClosed || !browser.isConnected(), env),
         );
         landedUrl = page.url();
         check = hideAddress(opened, access.pageUrl, landedUrl, access.accessCode);

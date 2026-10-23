@@ -263,10 +263,11 @@ test("the watch reads each app's address from the workers.dev subdomain the prod
   );
 });
 
-test("page navigation failures retain the recheck and open the watch's outage issue", async () => {
+test("page navigation and direct certificate failures retry and open the watch's outage issue", async () => {
   for (const [name, message] of [
     ["TimeoutError", "page.goto: Timeout exceeded"],
     ["Error", "page.goto: net::ERR_TOO_MANY_REDIRECTS"],
+    ["Error", "page.goto: net::ERR_CERT_AUTHORITY_INVALID"],
   ]) {
     let opened = 0;
     const pageUrl = "https://mlb-app.example-subdomain.workers.dev/k3y/";

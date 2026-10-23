@@ -345,12 +345,13 @@ test("browser infrastructure failures mask the redirected page host and access c
 });
 
 test("known proxy and certificate-trust failures leave navigation unverified", async () => {
-  for (const code of [
-    "PROXY_CONNECTION_FAILED",
-    "TUNNEL_CONNECTION_FAILED",
-    "NO_SUPPORTED_PROXIES",
-    "CERT_AUTHORITY_INVALID",
-    "PROXY_CERTIFICATE_INVALID",
+  for (const { code, proxy = {} } of [
+    { code: "PROXY_CONNECTION_FAILED" },
+    { code: "TUNNEL_CONNECTION_FAILED" },
+    { code: "NO_SUPPORTED_PROXIES" },
+    { code: "PROXY_CERTIFICATE_INVALID" },
+    { code: "CERT_AUTHORITY_INVALID", proxy: { HTTPS_PROXY: "http://proxy.example:8080" } },
+    { code: "CERT_AUTHORITY_INVALID", proxy: { HTTP_PROXY: "http://proxy.example:8080" } },
   ]) {
     const { page } = openMovedPage(PAGE_URL);
     page.goto = async () => {
@@ -365,7 +366,7 @@ test("known proxy and certificate-trust failures leave navigation unverified", a
     const check = await checkAppPage({
       app: "wnba",
       channel: "production",
-      env: { WNBA_PAGE_URL: PAGE_URL },
+      env: { WNBA_PAGE_URL: PAGE_URL, ...proxy },
       attempts: 1,
       launchBrowser: async () =>
         /** @type {import("@playwright/test").Browser} */ (/** @type {unknown} */ (browser)),
