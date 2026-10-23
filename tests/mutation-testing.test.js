@@ -161,8 +161,9 @@ function makeRunnerFixture(t) {
     "package.json": '{"type":"module"}',
     "shared/page/search-reading.js": "export const value = 1;",
     "tests/no-network.js": readRepoFile("tests/no-network.js"),
-    "tests/selected.test.js": `import { value } from ${JSON.stringify(FIXTURE_MODULE)}; import assert from "node:assert/strict"; assert.equal(value, 1);`,
-    "tests/unrelated.test.js": 'throw new Error("UNRELATED_TEST_RAN");',
+    "tests/selected.test.js": `import test from "node:test"; import { value } from ${JSON.stringify(FIXTURE_MODULE)}; import assert from "node:assert/strict"; test("selected fixture", () => assert.equal(value, 1));`,
+    "tests/unrelated.test.js":
+      'import test from "node:test"; test("unrelated fixture", () => { throw new Error("UNRELATED_TEST_RAN"); });',
   })) {
     const file = join(folder, path);
     mkdirSync(dirname(file), { recursive: true });
@@ -186,18 +187,21 @@ test("the mutation CLI propagates a selected test's failure and excludes unrelat
   writeFileSync(join(folder, "shared/page/search-reading.js"), "export const value = 2;");
   const failing = invokeRunner(folder);
   assert.equal(failing.status, 1, failing.stderr + failing.stdout);
-  assert.match(failing.stderr + failing.stdout, /AssertionError/);
+  assert.match(failing.stderr + failing.stdout, /ERR_ASSERTION/);
 });
 
 test("the mutation CLI keeps the network guard and refuses invalid or empty selections", (t) => {
   const folder = makeRunnerFixture(t);
   writeFileSync(
     join(folder, "tests/selected.test.js"),
-    `import ${JSON.stringify(FIXTURE_MODULE)}; await fetch("https://example.com/feed").catch(() => {});`,
+    `import test from "node:test"; import ${JSON.stringify(FIXTURE_MODULE)}; test("blocked network fixture", async () => { await fetch("https://example.com/feed"); });`,
   );
   const network = invokeRunner(folder);
   assert.equal(network.status, 1);
-  assert.match(network.stderr + network.stdout, /may not reach the network/);
+  assert.match(
+    network.stderr + network.stdout,
+    /A Node test tried to read https:\/\/example\.com\/feed/,
+  );
   const empty = invokeRunner(folder, ["--target", "series-text"]);
   assert.notEqual(empty.status, 0);
   assert.match(empty.stderr, /No Node tests reach/);
