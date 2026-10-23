@@ -1,10 +1,15 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import {
   listBrowserTestReach,
   listReachedFiles,
   listTestedApps,
   resolveImport,
+  readRepoText,
 } from "../worker/browser-scope.mjs";
 
 const APPS = ["mlb", "wnba"];
@@ -12,6 +17,16 @@ const REACHED = new Set(["worker/check-page.mjs", "tests/durable-object-context.
 
 /** @param {string[]} paths */
 const listApps = (paths) => listTestedApps(paths, { apps: APPS, reached: REACHED });
+
+test("the shared repo reader uses the requested root and leaves missing files out of reach", (t) => {
+  const folder = mkdtempSync(join(tmpdir(), "repo-reader-"));
+  t.after(() => rmSync(folder, { recursive: true, force: true }));
+  writeFileSync(join(folder, "fixture.js"), "export const value = 1;");
+  const root = pathToFileURL(`${folder}/`);
+  assert.equal(readRepoText("fixture.js", root), "export const value = 1;");
+  assert.equal(readRepoText("missing.js", root), null);
+  assert.match(readRepoText("worker/browser-scope.mjs"), /export const readRepoText/);
+});
 
 test("a change to the docs, the other workflows, or the tooling no browser test imports runs none", () => {
   assert.deepEqual(

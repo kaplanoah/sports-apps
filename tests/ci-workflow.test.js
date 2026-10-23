@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -15,6 +15,7 @@ import { findRefusal } from "../worker/review-git.mjs";
 import { escapePattern } from "../shared/page/escape-pattern.js";
 import { REPO_ROOT, readRepoFile } from "./repo-files.js";
 import { readStepScript } from "./workflow-step.js";
+import { MUTATION_TARGETS } from "../worker/mutation-targets.mjs";
 
 const WORKFLOWS = readdirSync(new URL(".github/workflows/", REPO_ROOT)).filter((name) =>
   name.endsWith(".yml"),
@@ -52,9 +53,44 @@ test("mutation testing runs weekly and keeps its uncaught mutations in a report"
   assert.match(cron?.[1] ?? "", /^(?:[01]?\d|2[0-3])$/);
   assert.deepEqual(cron?.slice(2, 4), ["*", "*"]);
   assert.match(cron?.[4] ?? "", /^[0-6]$/);
-  assert.match(workflow, /run: npm run test:mutation/);
+  assert.match(readStepScript(workflow, "Test mutations"), /npm run test:mutation/);
   assert.match(workflow, /path: reports\/mutation\//);
   assert.match(workflow, /if-no-files-found: error/);
+  const targets = workflow.match(/target: \[([^\]]+)\]/)?.[1].split(/,\s*/);
+  assert.deepEqual(targets, MUTATION_TARGETS);
+  assert.match(workflow, /fail-fast: false/);
+  assert.match(workflow, /MUTATION_TARGET: \$\{\{ matrix.target \}\}/);
+  assert.match(workflow, /if: \$\{\{ always\(\) \}\}/);
+  assert.match(workflow, /name: mutation-report-\$\{\{ matrix.target \}\}/);
+});
+
+test("the mutation workflow saves failed command output without hiding its exit status", (t) => {
+  const folder = mkdtempSync(join(tmpdir(), "mutation-step-"));
+  t.after(() => rmSync(folder, { recursive: true, force: true }));
+  writeFileSync(join(folder, "npm"), '#!/bin/sh\necho "FIXTURE_MUTATION_FAILURE" >&2\nexit 7\n', {
+    mode: 0o755,
+  });
+  const workflow = readRepoFile(".github/workflows/mutation.yml");
+  assert.match(workflow, /name: Test mutations\n\s+shell: bash/);
+  const script = readStepScript(workflow, "Test mutations");
+  const result = spawnSync(
+    "bash",
+    ["--noprofile", "--norc", "-e", "-o", "pipefail", "-c", script],
+    {
+      cwd: folder,
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        PATH: `${folder}:${process.env.PATH}`,
+        MUTATION_TARGET: "search-reading",
+      },
+    },
+  );
+  assert.equal(result.status, 7, result.stderr + result.stdout);
+  assert.match(
+    readFileSync(join(folder, "reports/mutation/search-reading/run.log"), "utf8"),
+    /FIXTURE_MUTATION_FAILURE/,
+  );
 });
 
 // An image holds only the browsers its own Playwright version runs, and Dependabot moves the

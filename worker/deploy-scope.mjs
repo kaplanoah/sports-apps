@@ -44,6 +44,8 @@ const SKIPPED_FILES = new Set([
   "worker/judge-review.mjs",
   "worker/labeling.mjs",
   "worker/mutation-tests.mjs",
+  "worker/mutation-targets.mjs",
+  "worker/node-tests.mjs",
   "worker/package-imports.mjs",
   "worker/plan-review.mjs",
   "worker/post-review.mjs",

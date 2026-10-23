@@ -2,6 +2,8 @@
   "$schema": "https://unpkg.com/knip@6/schema.json",
   "stryker": false,
   "entry": [
+    "stryker.config.mjs",
+    "tests/no-network.js",
     "apps/*/page/js/app.js",
     "shared/page/pick-theme.js",
     "shared/page/page-move.js",

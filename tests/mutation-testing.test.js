@@ -4,24 +4,79 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { spawnSync } from "node:child_process";
 import { ESLint } from "eslint";
-import config from "../stryker.config.mjs";
 import { buildMutationTestArgs, listMutationTests } from "../worker/mutation-tests.mjs";
+import { MUTATION_TARGETS, readMutationTarget } from "../worker/mutation-targets.mjs";
+import { buildNodeTestArgs, listNodeTests } from "../worker/node-tests.mjs";
 import { REPO_ROOT, readRepoFile } from "./repo-files.js";
 
-test("mutation testing changes exactly three shared page modules through Node's command runner", () => {
-  assert.deepEqual(config.mutate, [
-    "shared/page/search-reading.js",
-    "shared/page/series-text.js",
-    "shared/page/season-days.js",
-  ]);
-  assert.equal(config.testRunner, "command");
-  assert.equal(config.coverageAnalysis, "off");
-  assert.deepEqual(config.ignorePatterns, ["tsconfig.json"]);
-  assert.equal(config.commandRunner.command, "node worker/mutation-tests.mjs");
-  assert.equal(Object.hasOwn(config, "thresholds"), false);
+const RUNNER = fileURLToPath(new URL("worker/mutation-tests.mjs", REPO_ROOT));
+const FIXTURE_MODULE = `../${readMutationTarget("search-reading")}`;
+const fixtureEnv = { ...process.env };
+// A nested test runner needs its own context to actually execute its fixture files.
+delete fixtureEnv.NODE_TEST_CONTEXT;
+
+test("mutation testing runs exactly one of three shared page modules with one Stryker lane", () => {
+  assert.deepEqual(MUTATION_TARGETS, ["search-reading", "series-text", "season-days"]);
+  for (const target of MUTATION_TARGETS) {
+    const result = spawnSync(
+      process.execPath,
+      [
+        "--input-type=module",
+        "--eval",
+        'import config from "./stryker.config.mjs"; console.log(JSON.stringify(config));',
+      ],
+      {
+        cwd: REPO_ROOT,
+        env: { ...process.env, MUTATION_TARGET: target },
+        encoding: "utf8",
+      },
+    );
+    assert.equal(result.status, 0, result.stderr);
+    const config = JSON.parse(result.stdout);
+    assert.deepEqual(config.mutate, [`shared/page/${target}.js`]);
+    assert.equal(config.concurrency, 1);
+    assert.equal(config.testRunner, "command");
+    assert.equal(config.coverageAnalysis, "off");
+    assert.deepEqual(config.ignorePatterns, ["tsconfig.json"]);
+    assert.equal(config.commandRunner.command, "node worker/mutation-tests.mjs");
+    assert.equal(Object.hasOwn(config, "thresholds"), false);
+    assert.ok(config.reporters.includes("event-recorder"));
+    assert.equal(config.eventReporter.baseDir, `reports/mutation/${target}/events`);
+    assert.equal(config.jsonReporter.fileName, `reports/mutation/${target}/mutation.json`);
+    assert.equal(config.htmlReporter.fileName, `reports/mutation/${target}/mutation.html`);
+    assert.equal(config.tempDirName, `.stryker-tmp/${target}`);
+  }
   const { scripts } = JSON.parse(readRepoFile("package.json"));
   assert.equal(scripts["test:mutation"], "stryker run");
+  for (const target of ["", "all"]) {
+    const result = spawnSync(
+      process.execPath,
+      ["--input-type=module", "--eval", 'await import("./stryker.config.mjs");'],
+      {
+        cwd: REPO_ROOT,
+        env: { ...process.env, MUTATION_TARGET: target },
+        encoding: "utf8",
+      },
+    );
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /Choose MUTATION_TARGET/);
+  }
+});
+
+test("mutation targets reject missing, pooled, unknown, and traversal selectors", () => {
+  for (const target of [
+    undefined,
+    "",
+    "all",
+    "search-reading,series-text",
+    "../search-reading",
+    "shared/page/season-days.js",
+  ])
+    assert.throws(() => readMutationTarget(target), /Choose MUTATION_TARGET/);
+  for (const target of MUTATION_TARGETS)
+    assert.equal(readMutationTarget(target), `shared/page/${target}.js`);
 });
 
 test("mutation discovery follows shared, transitive, cyclic, and dynamic imports for future tests", (t) => {
@@ -43,6 +98,12 @@ test("mutation discovery follows shared, transitive, cyclic, and dynamic imports
     writeFileSync(file, source);
   }
   const root = pathToFileURL(`${folder}/`);
+  assert.deepEqual(listNodeTests(root), [
+    "apps/future/tests/new.test.js",
+    "services/future/tests/new.test.js",
+    "tests/direct.test.js",
+    "tests/unrelated.test.js",
+  ]);
   const modules = ["shared/page/target.js"];
   assert.deepEqual(listMutationTests(modules, root), [
     "apps/future/tests/new.test.js",
@@ -55,7 +116,7 @@ test("mutation discovery follows shared, transitive, cyclic, and dynamic imports
 });
 
 test("mutation discovery includes both typing sweeps and the focused module tests", () => {
-  const tests = listMutationTests(config.mutate);
+  const tests = listMutationTests(MUTATION_TARGETS.map(readMutationTarget));
   for (const file of [
     "apps/mlb/tests/search-typing.test.js",
     "apps/wnba/tests/search-typing.test.js",
@@ -69,17 +130,105 @@ test("mutation discovery includes both typing sweeps and the focused module test
     assert.ok(tests.includes(file), file);
   }
   assert.ok(!tests.includes("tests/mutation-testing.test.js"));
+  assert.deepEqual(listMutationTests([readMutationTarget("search-reading")]), [
+    "apps/mlb/tests/search-typing.test.js",
+    "apps/wnba/tests/search-typing.test.js",
+    "tests/game-search.test.js",
+  ]);
+  assert.ok(
+    !listMutationTests([readMutationTarget("season-days")]).includes("tests/series-text.test.js"),
+  );
 });
 
 test("mutation runner passes discovered paths as arguments and refuses an empty full-suite fallback", () => {
   const tests = ["tests/one.test.js", "apps/future/tests/two words.test.js"];
-  assert.deepEqual(buildMutationTestArgs(tests), [
+  assert.deepEqual(buildMutationTestArgs(tests), buildNodeTestArgs(tests));
+  assert.deepEqual(buildNodeTestArgs(tests), [
     "--import",
     "./tests/no-network.js",
     "--test",
     ...tests,
   ]);
   assert.throws(() => buildMutationTestArgs([]), /No Node tests reach the mutated modules/);
+  assert.throws(() => buildNodeTestArgs([]), /No Node tests were found/);
+});
+
+/** @param {import("node:test").TestContext} t */
+function makeRunnerFixture(t) {
+  const folder = mkdtempSync(join(tmpdir(), "mutation-runner-"));
+  t.after(() => rmSync(folder, { recursive: true, force: true }));
+  for (const [path, source] of Object.entries({
+    "package.json": '{"type":"module"}',
+    "shared/page/search-reading.js": "export const value = 1;",
+    "tests/no-network.js": readRepoFile("tests/no-network.js"),
+    "tests/selected.test.js": `import { value } from ${JSON.stringify(FIXTURE_MODULE)}; import assert from "node:assert/strict"; assert.equal(value, 1);`,
+    "tests/unrelated.test.js": 'throw new Error("UNRELATED_TEST_RAN");',
+  })) {
+    const file = join(folder, path);
+    mkdirSync(dirname(file), { recursive: true });
+    writeFileSync(file, source);
+  }
+  return folder;
+}
+
+/** @param {string} folder @param {string[]} [args] */
+const invokeRunner = (folder, args = ["--target", "search-reading"]) =>
+  spawnSync(process.execPath, [RUNNER, "--root", folder, ...args], {
+    encoding: "utf8",
+    env: fixtureEnv,
+  });
+
+test("the mutation CLI propagates a selected test's failure and excludes unrelated tests", (t) => {
+  const folder = makeRunnerFixture(t);
+  const passing = invokeRunner(folder);
+  assert.equal(passing.status, 0, passing.stderr + passing.stdout);
+  assert.doesNotMatch(passing.stderr + passing.stdout, /UNRELATED_TEST_RAN/);
+  writeFileSync(join(folder, "shared/page/search-reading.js"), "export const value = 2;");
+  const failing = invokeRunner(folder);
+  assert.equal(failing.status, 1, failing.stderr + failing.stdout);
+  assert.match(failing.stderr + failing.stdout, /AssertionError/);
+});
+
+test("the mutation CLI keeps the network guard and refuses invalid or empty selections", (t) => {
+  const folder = makeRunnerFixture(t);
+  writeFileSync(
+    join(folder, "tests/selected.test.js"),
+    `import ${JSON.stringify(FIXTURE_MODULE)}; await fetch("https://example.com/feed").catch(() => {});`,
+  );
+  const network = invokeRunner(folder);
+  assert.equal(network.status, 1);
+  assert.match(network.stderr + network.stdout, /may not reach the network/);
+  const empty = invokeRunner(folder, ["--target", "series-text"]);
+  assert.notEqual(empty.status, 0);
+  assert.match(empty.stderr, /No Node tests reach/);
+  const invalid = invokeRunner(folder, ["--target", "../search-reading"]);
+  assert.notEqual(invalid.status, 0);
+  assert.match(invalid.stderr, /Choose MUTATION_TARGET/);
+});
+
+test("the mutation CLI exposes a child process startup failure", (t) => {
+  const folder = makeRunnerFixture(t);
+  const script = `process.execPath = ${JSON.stringify(join(folder, "missing-node"))};
+    process.argv = ["node", ${JSON.stringify(RUNNER)}, "--target", "search-reading", "--root", ${JSON.stringify(folder)}];
+    await import(${JSON.stringify(pathToFileURL(RUNNER).href)});`;
+  const launcher = join(folder, "launcher.mjs");
+  writeFileSync(launcher, script);
+  const result = spawnSync(process.execPath, [launcher], { encoding: "utf8", env: fixtureEnv });
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /ENOENT/);
+});
+
+test("the ordinary Node runner uses the same discovery and propagates fixture failures", (t) => {
+  const folder = makeRunnerFixture(t);
+  mkdirSync(join(folder, "worker"));
+  const runner = join(folder, "worker/node-tests.mjs");
+  writeFileSync(runner, readRepoFile("worker/node-tests.mjs"));
+  const failed = spawnSync(process.execPath, [runner], { encoding: "utf8", env: fixtureEnv });
+  assert.equal(failed.status, 1);
+  assert.match(failed.stdout + failed.stderr, /UNRELATED_TEST_RAN/);
+  rmSync(join(folder, "tests/unrelated.test.js"));
+  const passed = spawnSync(process.execPath, [runner], { encoding: "utf8", env: fixtureEnv });
+  assert.equal(passed.status, 0, passed.stderr + passed.stdout);
 });
 
 test("ESLint ignores abandoned mutation sandboxes while still linting normal source", async () => {

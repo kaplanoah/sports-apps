@@ -1,8 +1,10 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, globSync, readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
-import config from "../stryker.config.mjs";
-import { listReachedFiles } from "./browser-scope.mjs";
+import { resolve, sep } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { parseArgs } from "node:util";
+import { listReachedFiles, readRepoText } from "./browser-scope.mjs";
+import { buildNodeTestArgs, listNodeTests } from "./node-tests.mjs";
+import { readMutationTarget } from "./mutation-targets.mjs";
 
 const root = new URL("../", import.meta.url);
 
@@ -13,14 +15,8 @@ const root = new URL("../", import.meta.url);
  */
 export function listMutationTests(modules, folder = root) {
   const targets = new Set(modules);
-  const tests = globSync(
-    ["tests/*.test.js", "apps/*/tests/*.test.js", "services/*/tests/*.test.js"],
-    { cwd: folder },
-  );
-  const readText = (path) => {
-    const file = new URL(path, folder);
-    return existsSync(file) ? readFileSync(file, "utf8") : null;
-  };
+  const readText = (path) => readRepoText(path, folder);
+  const tests = listNodeTests(folder);
   return tests
     .filter((path) =>
       [...listReachedFiles([path], readText)].some((reached) => targets.has(reached)),
@@ -31,13 +27,21 @@ export function listMutationTests(modules, folder = root) {
 /** @param {string[]} tests */
 export function buildMutationTestArgs(tests) {
   if (!tests.length) throw new Error("No Node tests reach the mutated modules.");
-  return ["--import", "./tests/no-network.js", "--test", ...tests];
+  return buildNodeTestArgs(tests);
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const tests = listMutationTests(config.mutate);
+  const { values } = parseArgs({
+    options: {
+      target: { type: "string", default: process.env.MUTATION_TARGET },
+      root: { type: "string" },
+    },
+  });
+  const target = readMutationTarget(values.target);
+  const folder = values.root ? pathToFileURL(`${resolve(values.root)}${sep}`) : root;
+  const tests = listMutationTests([target], folder);
   const result = spawnSync(process.execPath, buildMutationTestArgs(tests), {
-    cwd: root,
+    cwd: folder,
     stdio: "inherit",
   });
   if (result.error) throw result.error;

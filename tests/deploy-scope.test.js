@@ -56,6 +56,8 @@ test("a merge of only docs, tests, and tooling skips the deploy", () => {
     "worker/browser-scope.mjs",
     "worker/burn-in-specs.mjs",
     "worker/mutation-tests.mjs",
+    "worker/mutation-targets.mjs",
+    "worker/node-tests.mjs",
     "worker/package-imports.mjs",
     "worker/red-change.mjs",
     "worker/red-change-styles.mjs",

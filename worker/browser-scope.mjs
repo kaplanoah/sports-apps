@@ -88,9 +88,12 @@ export function listTestedApps(paths, { apps, reached }) {
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 
-/** @param {string} path from the repo's root */
-const readRepoText = (path) => {
-  const file = join(root, path);
+/**
+ * @param {string} path from the repo's root
+ * @param {URL} [folder]
+ */
+export const readRepoText = (path, folder = new URL("../", import.meta.url)) => {
+  const file = new URL(path, folder);
   return existsSync(file) ? readFileSync(file, "utf8") : null;
 };
 
