@@ -14,6 +14,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { readStepScript } from "./workflow-step.js";
 import { REPO_ROOT, readRepoFile } from "./repo-files.js";
+import { GitHubError } from "../worker/github-api.mjs";
 import { createReviewGitEnvironment } from "../worker/review-repository.mjs";
 import {
   exportReviewArtifact,
@@ -496,17 +497,21 @@ test("a hostile merge tree cannot replace trusted entrypoints, imports, Node or 
     assert.equal(reads, 1);
   }
   let exhausted = 0;
+  let waited = 0;
   assert.equal(
     await resolveReviewMerge(event, {
       readPull: async () => {
         exhausted++;
         return { ...pull, merge_commit_sha: null };
       },
-      wait: async () => {},
+      wait: async (delay) => {
+        waited += delay;
+      },
     }),
     null,
   );
   assert.ok(exhausted > 1 && exhausted < 10, "mergeability recovery is bounded");
+  assert.ok(waited < 10000, "metadata retries wait less than ten seconds in total");
   assert.equal(
     await resolveReviewMerge(
       { ...event, REVIEW_MERGE: merge },
@@ -531,6 +536,82 @@ test("a hostile merge tree cannot replace trusted entrypoints, imports, Node or 
       ),
     /workflow authority/,
   );
+  const missing = "f".repeat(40);
+  assert.equal(
+    await resolveReviewMerge(
+      { ...event, REVIEW_MERGE: missing },
+      {
+        readPull: async () => pull,
+        wait: async () => {
+          assert.fail("fresh matching metadata needs no delay");
+        },
+      },
+    ),
+    merge,
+  );
+  assert.equal(
+    await resolveReviewMerge(
+      { ...event, REVIEW_MERGE: missing },
+      { readPull: async () => ({ ...pull, merge_commit_sha: missing }), wait: async () => {} },
+    ),
+    null,
+  );
+  assert.throws(() => prepareReviewCheckout({ ...event, REVIEW_MERGE: missing }), /not our ref/);
+  await assert.rejects(
+    () =>
+      resolveReviewMerge(event, {
+        readPull: async () => {
+          throw new GitHubError(403, "GET pull");
+        },
+        wait: async () => {
+          assert.fail("metadata authentication errors must not retry");
+        },
+      }),
+    /GitHub answered 403/,
+  );
+  readGit(checkout, ["remote", "set-url", "origin", join(directory, "missing-repository")]);
+  try {
+    await assert.rejects(
+      () =>
+        resolveReviewMerge(
+          { ...event, REVIEW_MERGE: missing },
+          {
+            readPull: async () => {
+              assert.fail("non-availability Git failures must propagate");
+            },
+          },
+        ),
+      /does not appear to be a git repository/,
+    );
+  } finally {
+    readGit(checkout, ["remote", "set-url", "origin", hostile]);
+  }
+  const recoveredOutput = join(directory, "recovered-output");
+  const recoveredEnvironment = join(directory, "recovered-env");
+  const recoveryPreload = join(directory, "recovery-fetch.mjs");
+  writeFileSync(
+    recoveryPreload,
+    `globalThis.fetch = async () => ({ ok: true, json: async () => (${JSON.stringify(pull)}) });`,
+  );
+  const recovered = spawnSync(
+    process.execPath,
+    ["--import", recoveryPreload, join(trusted, "worker/trusted-review.mjs"), "prepare-plan"],
+    {
+      cwd: checkout,
+      env: {
+        ...event,
+        RUNNER_TEMP: directory,
+        GITHUB_OUTPUT: recoveredOutput,
+        GITHUB_ENV: recoveredEnvironment,
+        REVIEW_MERGE: "",
+        GH_TOKEN: "example",
+      },
+      encoding: "utf8",
+    },
+  );
+  assert.equal(recovered.status, 0, recovered.stderr);
+  assert.match(readFileSync(recoveredOutput, "utf8"), new RegExp(`available=true\nmerge=${merge}`));
+  assert.equal(readGit(checkout, ["rev-parse", "HEAD"]), merge);
   const envFile = join(directory, "env");
   prepareReviewCheckout({
     ...ENV,

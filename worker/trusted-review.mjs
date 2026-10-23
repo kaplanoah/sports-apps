@@ -83,6 +83,23 @@ function matchesReviewMerge(merge, env) {
   );
 }
 
+/** @param {string | undefined | null} merge @param {NodeJS.ProcessEnv} env */
+function matchesAvailableReviewMerge(merge, env) {
+  try {
+    return matchesReviewMerge(merge, env);
+  } catch (error) {
+    const failure = /** @type {{ status?: number, stderr?: string | Buffer }} */ (error);
+    const unavailable =
+      isReviewRevision(merge) &&
+      failure.status === 128 &&
+      new RegExp(
+        `(?:not our ref|couldn't find remote ref|unadvertised object) ${merge}(?:\\s|$)`,
+      ).test(String(failure.stderr ?? ""));
+    if (!unavailable) throw error;
+    return false;
+  }
+}
+
 /** @param {any} pull @param {NodeJS.ProcessEnv} env */
 const isCurrentReviewPull = (pull, env) =>
   pull.state === "open" && pull.head.sha === env.REVIEW_HEAD && pull.base.ref === "main";
@@ -101,13 +118,13 @@ export async function resolveReviewMerge(
   } = {},
 ) {
   requireReviewAuthority(env);
-  if (matchesReviewMerge(env.REVIEW_MERGE, env)) return env.REVIEW_MERGE;
+  if (matchesAvailableReviewMerge(env.REVIEW_MERGE, env)) return env.REVIEW_MERGE;
   const rejected = new Set([env.REVIEW_MERGE]);
   for (let attempt = 0; attempt < MERGE_READS; attempt += 1) {
     const pull = await readPull(`/pulls/${env.PR}`);
     if (!isCurrentReviewPull(pull, env) || pull.base.sha !== env.REVIEW_BASE) return null;
     const merge = pull.merge_commit_sha;
-    if (!rejected.has(merge) && matchesReviewMerge(merge, env)) return merge;
+    if (!rejected.has(merge) && matchesAvailableReviewMerge(merge, env)) return merge;
     rejected.add(merge);
     if (attempt < MERGE_READS - 1) await wait(MERGE_RETRY_MS);
   }
