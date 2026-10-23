@@ -1,11 +1,10 @@
 // When settings shows the note that says how to bring a Home Screen app's icon up to date. An
 // iPhone's Home Screen app keeps the icon the page offered as it was added, which pick-theme.js
 // keeps for each install, so the note shows while the look picked is the other one. An install
-// that doesn't know its icon, as one open when this shipped doesn't until its next open from the
-// Home Screen, shows it from the first time the viewer switches looks. Either way it stays until
-// the viewer dismisses it. Each install keeps both for itself, as a fresh install has a fresh
-// icon, and storage can refuse access, as in a private window, and then they last until the page
-// reloads.
+// that doesn't know its icon, from a first open that was a reload or storage refusing access,
+// shows it from the first time the viewer switches looks. Either way it stays until the viewer
+// dismisses it. Each install keeps both for itself, as a fresh install has a fresh icon. Where
+// storage refuses access, as in a private window, they last until the page reloads.
 
 import { readStoredText, storeText } from "./local-storage.js";
 
@@ -35,15 +34,14 @@ const findOtherLook = (look) => (look === "light" ? "dark" : "light");
  *   isIosApp: boolean,
  *   choice: string,
  *   icon: string | null,
- *   phoneLook: "light" | "dark",
+ *   picked: "light" | "dark",
  *   isSwitched: boolean,
  *   isDismissed: boolean,
  * }} state
  * @returns {{ icon: "light" | "dark", picked: "light" | "dark", choice: string } | null}
  */
-export function chooseReAddNote({ isIosApp, choice, icon, phoneLook, isSwitched, isDismissed }) {
+export function chooseReAddNote({ isIosApp, choice, icon, picked, isSwitched, isDismissed }) {
   if (!isIosApp || isDismissed) return null;
-  const picked = isLook(choice) ? choice : phoneLook;
   if (isLook(icon)) return picked !== icon ? { icon, picked, choice } : null;
   if (!isSwitched) return null;
   return { icon: findOtherLook(picked), picked, choice };
