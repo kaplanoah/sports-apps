@@ -5,15 +5,15 @@ description: How a session answers CI's review on a pull request in this repo
 
 Answer every review finding, a Nit or Pre-existing one too, as below; the `ship` skill says what to do when the `review` job fails.
 
-- Answer every finding from the first review, including Nits and Pre-existing findings.
-  Fix each Important finding and each Unsure finding confirmed as a bug, or reply on its thread explaining why it will not be fixed,
+- In every round,
+  fix each Important finding and each Unsure finding confirmed as a bug,
+  or reply on its thread explaining why it will not be fixed,
   linking the issue that holds it when it is left for later.
-  Fix a genuine nonblocking Nit in a push already needed for the PR, defer substantive unrelated work to a focused issue, or decline it with a reason.
+  Fix a genuine nonblocking Nit or Pre-existing finding only in a push already needed for the PR,
+  or decline it with a reason.
   Replies and deferrals of nonblocking Nits or Pre-existing findings require no push or re-review of their own.
   A finding that demonstrates a broken rule is Important under REVIEW.md; answer it as Important even if it was labeled Nit.
   After a fix, go back to step 2 of "Shipping a change" in AGENTS.md.
-- From the second round on, answer Important and Unsure findings the same way.
-  Answer Nits and Pre-existing findings on their threads; fix them only in a push already needed for the PR.
 - After any push to a ready PR, add the `review` label.
   It asks CI to review what the push changed, and takes the label off itself, so the next ask is a fresh label.
   Add it once the push's own CI run has started on the PR's head, since that run stops a label's run queued before it.
