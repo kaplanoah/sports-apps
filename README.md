@@ -238,8 +238,9 @@ something doesn't match, point them to Cloudflare's
 GitHub lints, checks formatting and types, looks for unused code, and runs the
 Node tests, and the browser tests of the apps a change reaches, on every pull
 request, so merge once those pass and the pull request has no conflicts with
-`main`. The trusted `pull_request_target` workflow reviews pull requests into
-`main`, except Dependabot's, from main's copy of the controls. CI joins its result
+`main`. The trusted `pull_request_target` workflow reviews pull requests against
+their current base, including stacked pull requests, except Dependabot's, from
+main's copy of the controls. CI joins its result
 with read-only credentials and holds the merge until trusted review passes.
 Trusted review requires a `CLAUDE_CODE_OAUTH_TOKEN` or `ANTHROPIC_API_KEY` secret;
 without one, a ready pull request that needs review cannot pass `check`.
@@ -254,7 +255,7 @@ section says how the review checks and posts what it finds. The first review
 reads the whole change, and each review after it reads what changed since the
 last review that finished. A ready pull request's `check` fails until trusted
 review has passed on the code that
-merges, the pull request merged into `main`. A review that can't run, that left
+merges, the pull request merged into its target branch. A review that can't run, that left
 a changed file or a rule file unread, or whose reviewers, check across areas, or
 posting step didn't finish, blocks the merge. Its findings don't fail the check;
 answer and resolve every finding as the [steward skill](.claude/skills/steward/SKILL.md)

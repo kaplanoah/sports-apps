@@ -12,6 +12,7 @@ import { waitFor } from "./check-timing.mjs";
 const FINISH_BUDGET_MS = 10 * 60 * 1000;
 const FIRST_POLL_MS = 60 * 1000;
 const MAX_POLL_MS = 5 * 60 * 1000;
+const RESULT_PREFIX = "trusted-review-passed-";
 
 /** @param {string} folder @param {NodeJS.ProcessEnv} env */
 export function verifyTrustedReviewResult(folder, env) {
@@ -71,7 +72,7 @@ export async function findTrustedReviewRun(options) {
   if (matching.length === 0 || matching.some((run) => run.status !== "completed"))
     return { run: null, tree: null, source: null, pending: true };
   for (const run of matching) {
-    if (run.status !== "completed" || run.conclusion !== "success") continue;
+    if (run.conclusion !== "success") continue;
     const artifacts = await readAllPages(
       readGitHub,
       `/actions/runs/${run.id}/artifacts`,
@@ -81,13 +82,15 @@ export async function findTrustedReviewRun(options) {
       (artifact) =>
         !artifact.expired &&
         artifact.workflow_run?.id === run.id &&
-        /^trusted-review-passed-[0-9a-f]{40}$/.test(artifact.name),
+        typeof artifact.name === "string" &&
+        artifact.name.startsWith(RESULT_PREFIX) &&
+        isReviewRevision(artifact.name.slice(RESULT_PREFIX.length)),
     );
     if (results.length > 1) throw new Error("The trusted run has ambiguous review results.");
     if (results.length === 1)
       return {
         run: run.id,
-        tree: results[0].name.slice("trusted-review-passed-".length),
+        tree: results[0].name.slice(RESULT_PREFIX.length),
         source: readTrustedReviewSource(run, options),
         pending: false,
       };

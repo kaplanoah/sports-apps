@@ -106,16 +106,22 @@ test("only the exact trusted producer's immutable event identity can join, inclu
   });
   assert.equal(pending.pending, true);
   assert.equal(calls.length, 1, "older successful runs trigger no artifact lookups while waiting");
-  assert.deepEqual(
-    await findTrustedReviewRun({
-      ...EXPECTED,
-      readGitHub: async (path) =>
-        path.includes("/artifacts?")
-          ? { artifacts: [{ name: `trusted-review-passed-${TREE}`, workflow_run: { id: 8 } }] }
-          : { workflow_runs: [createRun()] },
-    }),
-    { run: null, tree: null, source: null, pending: false },
-  );
+  for (const artifact of [
+    { name: `trusted-review-passed-${TREE}`, workflow_run: { id: 8 } },
+    { name: `trusted-review-passed-${TREE}`, workflow_run: { id: 7 }, expired: true },
+    { name: "trusted-review-passed-moving-reference", workflow_run: { id: 7 } },
+    { name: "unrelated-artifact", workflow_run: { id: 7 } },
+  ])
+    assert.deepEqual(
+      await findTrustedReviewRun({
+        ...EXPECTED,
+        readGitHub: async (path) =>
+          path.includes("/artifacts?")
+            ? { artifacts: [artifact] }
+            : { workflow_runs: [createRun()] },
+      }),
+      { run: null, tree: null, source: null, pending: false },
+    );
 });
 
 test("producer/run/artifact pagination preserves event binding and rejects ambiguous results", async () => {
