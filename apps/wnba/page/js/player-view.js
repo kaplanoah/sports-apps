@@ -6,7 +6,12 @@
 import { describeDay, formatShortDate, readCalendarDate } from "#shared/days.js";
 import { html, joinNames, joinWithSeparator } from "#shared/html.js";
 import { renderPlaceholder } from "#shared/placeholder.js";
-import { describeFewestFirst, rankAmong, renderRankRow } from "#shared/rank-curve.js";
+import {
+  describeFewestFirst,
+  describeSmallSample,
+  rankAmong,
+  renderRankRow,
+} from "#shared/rank-curve.js";
 import { renderRetryBlock } from "#shared/retry.js";
 import { renderSheetPart } from "#shared/sheet-part.js";
 import { renderTeamDetail } from "#shared/team-sheet.js";
@@ -330,6 +335,18 @@ const listUnrankedShares = (season) =>
       isShare && season.stats.some((stat) => stat.key === key && stat.rank == null),
   );
 
+/**
+ * The least progress among counting stats still without a rank, or none when every one ranks.
+ * @param {RegularSeason} season
+ */
+function measureUnrankedCountProgress(season) {
+  const stats = season.stats.filter(
+    (stat) =>
+      stat.rank == null && RANKED_STATS.some(({ key, isShare }) => key === stat.key && !isShare),
+  );
+  return stats.length ? Math.min(...stats.map((stat) => stat.progress ?? 0)) : null;
+}
+
 // Who the WNBA ranks in a shooting percentage, worded once for every note that names it.
 const SHOTS_NEEDED = "who've made a certain number of shots";
 
@@ -349,8 +366,10 @@ const describeRule = (season) =>
 export function describeRankNote(season, isPastSeason) {
   if (season.stats.every((stat) => stat.rank != null))
     return `The number of ranked players varies by stat because the ${describeRule(season)}`;
-  if (season.games < season.gamesNeeded)
-    return `The ${describeRule(season)}. She's played ${season.games} ${season.games === 1 ? "game" : "games"}.`;
+  if (season.games < season.gamesNeeded) {
+    const sample = describeSmallSample(measureUnrankedCountProgress(season), "ranked players");
+    return `The ${describeRule(season)}. She's played ${season.games} ${season.games === 1 ? "game" : "games"}${sample}.`;
+  }
   const unranked = listUnrankedShares(season);
   const shots = joinNames(
     unranked.map((stat) => stat.shots ?? ""),

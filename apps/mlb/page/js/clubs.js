@@ -1,4 +1,4 @@
-import { TEAMS } from "./teams.js";
+import { nameTeam, TEAMS } from "./teams.js";
 import { buildBracket } from "./bracket.js";
 import { html, joinWithSeparator } from "#shared/html.js";
 import { renderTeamSheetButton } from "#shared/team-sheet.js";
@@ -76,10 +76,6 @@ export function renderTeamDot(id) {
   if (!team) return html`<span class="dot" style="background:#999"></span>`;
   const split = chooseDotSplit(team);
   return html`<span class="dot" style="background:linear-gradient(90deg, ${team.color} ${split}%, ${team.color2} ${split}%)"></span>`;
-}
-
-export function nameTeam(id) {
-  return TEAMS[id] ? TEAMS[id].name : "?";
 }
 
 /**
