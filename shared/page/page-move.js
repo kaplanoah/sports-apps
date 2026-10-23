@@ -1,5 +1,5 @@
 // Moves a fan from the app's old address, a workers.dev one under the key, to its own, which only
-// the Worker names. A page moving to its own address says so in its head. A browser at the old
+// the Worker names. The Worker marks a moving page in its head. A browser at the old
 // address leaves for the new one at once, and a Home Screen app there offers the move in its
 // Updates box (move-cards.js). Either carries the viewer's choices in the new address, packed in
 // one value, since a Home Screen app keeps its storage apart from the browser's and opens at the
