@@ -7,7 +7,7 @@
 // reports as the page comes back, which takes the note to its new state at once.
 
 // Every page that loads this runs pick-theme.js first.
-/* global buildSafariAddress, checkPickedChoice, isAppearanceChoice, isLook, openThemeAddress,
+/* global buildSafariAddress, checkPickedChoice, isAppearanceChoice, openThemeAddress,
    readHomeScreenIcon, resolveTheme -- from pick-theme.js */
 /* global readPageMoveIcon -- from page-move.js */
 
