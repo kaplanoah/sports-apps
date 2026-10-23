@@ -103,6 +103,35 @@ test("imports resolve from the importer, through the import map's names, and lea
   assert.equal(resolveImport("#unmapped/x.js", "tests/browser/harness.mjs"), null);
 });
 
+test("package imports keep literal dollar sequences in filenames as Node does", () => {
+  for (const prefix of ["#shared/", "#page-files/"])
+    for (const name of ["$&", "$$", "$'", "$`"]) {
+      const specifier = `${prefix}${name}.js`;
+      const resolved = resolveImport(specifier, "apps/mlb/tests/browser/a.spec.mjs");
+      assert.ok(resolved);
+      assert.equal(
+        new URL(resolved, new URL("../", import.meta.url)).href,
+        import.meta.resolve(specifier),
+      );
+    }
+});
+
+test("browser scope includes tooling reached through import filenames with literal dollar sequences", () => {
+  for (const name of ["$&", "$$", "$`"]) {
+    const entry = "apps/mlb/tests/browser/a.spec.mjs";
+    const shared = `shared/page/${name}.js`;
+    const tooling = "worker/needed.mjs";
+    const files = {
+      [entry]: `import ${JSON.stringify(`#shared/${name}.js`)};`,
+      [shared]: 'import "../../worker/needed.mjs";',
+      [tooling]: "",
+    };
+    const reached = listReachedFiles([entry], (path) => files[path] ?? null);
+    assert.deepEqual([...reached].toSorted(), [entry, shared, tooling]);
+    assert.deepEqual(listTestedApps([tooling], { apps: APPS, reached }), APPS);
+  }
+});
+
 test("the reached files follow every import from the entries, static and dynamic", () => {
   const files = {
     "apps/mlb/tests/browser/a.spec.mjs":
