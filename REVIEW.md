@@ -117,6 +117,7 @@ and a step posts what it confirmed or left unsure.
   for a security hole, or for a broken rule from AGENTS.md or a rule file;
   **Nit** for something worth fixing that doesn't block;
   **Pre-existing** for a problem in code the change didn't make worse.
+- For a finding that claims a binding rule is broken, quote the applicable rule, name its file, and show how the changed code violates it.
 - Each **Important** or **Unsure** finding gets a thread of its own, and the **Nit** and **Pre-existing** ones a checklist, as the root's `worker/post-review.mjs` posts them.
 - The numbered items above are never matters of taste:
   a rule now in two places, a leftover, or a doc the change makes wrong is a finding whenever the code shows it.
