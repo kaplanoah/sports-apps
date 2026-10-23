@@ -59,6 +59,7 @@ const SKIPPED_FILES = new Set([
   "worker/set-page-host.mjs",
   "worker/set-rp-id.mjs",
   "worker/test-time-zone.mjs",
+  "worker/time-zone-scope.mjs",
   "worker/watch-apps.mjs",
   "worker/worker-secrets.mjs",
 ]);

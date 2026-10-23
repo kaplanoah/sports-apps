@@ -176,15 +176,14 @@ jobs:
       # log's last lines finds it, while TAP's five lines a test put it thousands of lines back.
       - name: Test
         if: ${{ !cancelled() }}
-        env: &test-reporter
+        env:
           NODE_OPTIONS: --test-reporter=dot
+          TZ: UTC
         run: npm test
-      # The runner is ahead of MLB's Eastern day; Honolulu is behind it. Infrastructure and
-      # unclassified new tests repeat the full suite; other changes repeat its sensitive tests.
+      # The runner is ahead of MLB's Eastern day; Honolulu is behind it.
       - name: Test in another time zone
         if: ${{ !cancelled() }}
-        env: *test-reporter
-        run: node worker/test-time-zone.mjs
+        run: node worker/test-time-zone.mjs --changed
       # A pull request's title sets the next version once it's squash merged (worker/release.mjs).
       # The title comes from GitHub rather than the event, so a re-run checks an edited title. The
       # files come from git, which lists a change of any size, where GitHub's diff stops at 20,000

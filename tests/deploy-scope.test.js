@@ -63,6 +63,7 @@ test("a merge of only docs, tests, and tooling skips the deploy", () => {
     "worker/review-state.mjs",
     "worker/rework.mjs",
     "worker/test-time-zone.mjs",
+    "worker/time-zone-scope.mjs",
     "tests/time-zone-sensitive.json",
     "worker/rule-files.mjs",
     "worker/set-app-key.mjs",
