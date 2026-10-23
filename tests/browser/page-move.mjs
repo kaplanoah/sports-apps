@@ -183,7 +183,7 @@ export async function checkSafariMoves({ page, serve, pageHost, oldHost }) {
 /**
  * Opens the Home Screen app at the old address, signed in, with `choices` kept, as it was added,
  * with the theme its address named then, if any.
- * @param {Pick<MovingApp, "page" | "serve" | "pageHost" | "oldHost">} app
+ * @param {Pick<MovingApp, "page" | "serve" | "oldHost"> & { pageHost?: string }} app
  * @param {Record<string, unknown>} [choices]
  * @param {string} [addedOnTheme]
  */
@@ -196,6 +196,16 @@ export async function openOldHomeScreenApp(
   await serve(page, { accessCode: ACCESS_CODE, pageHost });
   await signIn(page, findOldAddress(oldHost), choices);
   await page.goto(`${findOldAddress(oldHost)}${addedOnTheme ? `?theme=${addedOnTheme}` : ""}`);
+}
+
+/** @param {Pick<MovingApp, "page" | "serve" | "oldHost">} app */
+export async function checkHomeScreenWithoutPageHost({ page, serve, oldHost }) {
+  await openOldHomeScreenApp({ page, serve, oldHost });
+  await waitForLoadToSettle(page);
+  await expect(page.locator('meta[name="moving-to-page-host"]')).toHaveCount(0);
+  await expect(page.getByRole("button", { name: MOVE_BUTTON })).toHaveCount(0);
+  await expect(page.locator(".move-card-title")).toHaveCount(0);
+  await expect(page).toHaveURL(findOldAddress(oldHost));
 }
 
 /** @param {import("@playwright/test").Page} page */

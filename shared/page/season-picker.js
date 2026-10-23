@@ -122,31 +122,24 @@ const readMarkedYear = (picker) =>
   [...picker.options].find((option) => option.defaultSelected)?.value ?? picker.value;
 
 /**
- * Shows each season picked, from the picker the row draws now or later, with `pick`, then redraws
- * with `showPicked` once it shows. A pick whose record can't be read redraws with `showUnread` and
- * puts the picker on the season `pick` says it leaves picked, so picking it again retries. Before
- * any season has loaded, that's the one the row marked before the picks still on their way.
+ * Draws the reader's selection as it changes, so reloads and picks share one answer. Before the
+ * reader knows any season, the row keeps the choice in its restored markup.
  * @param {HTMLElement} row
  * @param {{
- *   pick: (year: number) => Promise<import("./season-reader.js").PickOutcome>,
+ *   pick: (year: number) => Promise<void>,
+ *   watchSelection: (watcher: (selection: import("./season-reader.js").SeasonSelection) => void) => unknown,
  *   showPicked: () => void,
- *   showUnread: () => void,
  * }} handlers
  */
-export function watchSeasonPicks(row, { pick, showPicked, showUnread }) {
-  let picksOut = 0;
-  let markedBefore = "";
-  row.addEventListener("change", async (event) => {
+export function watchSeasonPicks(row, { pick, watchSelection, showPicked }) {
+  const picker = row.querySelector("select");
+  const initialYear = picker ? readMarkedYear(picker) : "";
+  watchSelection(({ year, kind }) => {
+    markPicked(row, year === null ? initialYear : String(year));
+    if (kind === "shown") showPicked();
+  });
+  row.addEventListener("change", (event) => {
     const picker = /** @type {HTMLSelectElement} */ (event.target);
-    if (picksOut === 0) markedBefore = readMarkedYear(picker);
-    picksOut++;
-    const year = picker.value;
-    markPicked(row, year);
-    const outcome = await pick(Number(year)).finally(() => picksOut--);
-    if (outcome.kind === "shown") showPicked();
-    if (outcome.kind !== "unread") return;
-    showUnread();
-    if (row.querySelector("select")?.value === year)
-      markPicked(row, outcome.year === null ? markedBefore : String(outcome.year));
+    void pick(Number(picker.value));
   });
 }

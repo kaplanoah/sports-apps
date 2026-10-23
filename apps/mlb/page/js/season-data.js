@@ -4,7 +4,7 @@ import { buildBracket } from "./bracket.js";
 import { namePlayerIndexKey, readPlayerIndex } from "#shared/page-search.js";
 import { createSeasonDocFollower } from "#shared/season-doc-follower.js";
 import { SNAPSHOT_VERSION, nameScheduleCollection } from "./snapshot.js";
-import { composeState, guessSeasonYear, isPastSeason, session } from "./session.js";
+import { composeState, guessSeasonYear, session } from "./session.js";
 import { TEAMS } from "./teams.js";
 
 // The Worker keeps each season's record in the store as it plays out, says which season is
@@ -14,8 +14,8 @@ const UNREACHABLE = "Can't reach the page's server right now";
 
 /** @type {ReturnType<typeof createSeasonReader> | null} */
 let reader = null;
-/** @type {(year: number) => Promise<import("#shared/season-reader.js").PickOutcome>} */
-let pickSeason = async () => ({ kind: "replaced" });
+/** @type {(year: number) => Promise<void>} */
+let pickSeason = async () => {};
 /** @type {{ year: number, record: any } | null} */
 let deferredSeason = null;
 /** @type {number | null} */
@@ -129,6 +129,7 @@ function noteUnreachable() {
 export function startSeasonData({ showChange, showStamp, showCurrentYear, showUnreadable }) {
   reader = createSeasonReader({
     store: session.db,
+    readPick: () => session.activeYear,
     version: SNAPSHOT_VERSION,
     guessYear: guessSeasonYear,
     showUnreadable,
@@ -160,11 +161,9 @@ export function startSeasonData({ showChange, showStamp, showCurrentYear, showUn
   });
   pickSeason = createSeasonPicks({
     reader,
-    readPick: () => session.activeYear,
     keepPick: (year) => {
       session.activeYear = year;
     },
-    noteUnreachable,
   });
 }
 
@@ -172,18 +171,21 @@ export function startSeasonData({ showChange, showStamp, showCurrentYear, showUn
 // showing the current season loads whichever the store now says is current, as it may have moved on.
 export async function loadSeason() {
   try {
-    await reader?.loadSeason(isPastSeason() ? session.activeYear : null);
+    await reader?.reloadSeason(session.activeYear, session.currentSeason);
     session.currentSeason = reader?.readCurrentYear() ?? session.currentSeason;
   } catch {
-    noteUnreachable();
+    /* the reader has reported the failure */
   }
 }
 
 /**
  * Shows the season picked, keeping it in `session.activeYear` while its record is on its way.
- * @type {(year: number) => Promise<import("#shared/season-reader.js").PickOutcome>}
+ * @type {(year: number) => Promise<void>}
  */
 export const showYear = (year) => pickSeason(year);
+
+/** @param {(selection: import("#shared/season-reader.js").SeasonSelection) => void} watcher */
+export const watchSeasonSelection = (watcher) => reader?.watchSelection(watcher);
 
 function collectTrackedTitles(docs) {
   const titles = {};

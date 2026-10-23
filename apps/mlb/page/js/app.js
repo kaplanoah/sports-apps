@@ -47,6 +47,7 @@ import {
   loadSeasonList,
   showYear,
   startSeasonData,
+  watchSeasonSelection,
 } from "./season-data.js";
 import { composeState, session } from "./session.js";
 import { startPlayerSheet } from "./player-sheet.js";
@@ -211,11 +212,6 @@ function wireControls() {
   startAppearance(LOOKS);
   startNewsRedraws(findNewsList(), drawNews, NEWS_LEAGUE);
   startHomeScreen();
-  watchSeasonPicks(findSeasonRow(), {
-    pick: showYear,
-    showPicked: drawPickedSeason,
-    showUnread: () => redrawEased(renderStamp),
-  });
   document
     .getElementById("rankList")
     .addEventListener(REORDER_EVENT, (event) =>
@@ -330,6 +326,11 @@ async function boot() {
     showStamp: () => redrawEased(renderStamp),
     showCurrentYear: showNewCurrentYear,
     showUnreadable: reloadIfReplaced,
+  });
+  watchSeasonPicks(findSeasonRow(), {
+    pick: showYear,
+    watchSelection: watchSeasonSelection,
+    showPicked: drawPickedSeason,
   });
   const [years] = await Promise.all([readSeasonYears(), loadSeason()]);
   fillYearPicker(years);

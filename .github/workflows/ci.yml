@@ -257,7 +257,7 @@ jobs:
       # config leaves out the WebKit projects, which run in the webkit job.
       - &install-browsers
         if: steps.browsers.outputs.cache-hit != 'true'
-        run: npx playwright install --only-shell chromium
+        run: node worker/install-browsers.mjs --only-shell chromium
       # A failed try's trace leaves out the page at each step, a sixth of every test's time, which
       # burn-in and the nightly run keep.
       - shell: bash
@@ -318,7 +318,7 @@ jobs:
           key: *browsers-key
       - *install-browsers
       - if: contains(needs.scope.outputs.specs, 'at-rest.spec.mjs')
-        run: npx playwright install --with-deps webkit
+        run: node worker/install-browsers.mjs --with-deps webkit
       # Every test runs all ten times, however many fail, and the next step decides which
       # failures fail the pull request, so a failed test doesn't fail this one.
       - name: Repeat each browser spec scope lists
@@ -360,7 +360,7 @@ jobs:
       - *setup-node
       - *restore-modules
       - *install-modules
-      - run: npx playwright install --with-deps webkit
+      - run: node worker/install-browsers.mjs --with-deps webkit
       - shell: bash
         env:
           APPS: ${{ needs.scope.outputs.apps }}
@@ -418,9 +418,8 @@ jobs:
           key: *browsers-key
 
   # A pull request is reviewed once it's ready, when it's opened ready or marked ready, and again
-  # only when the review label asks, never on a push alone, so a session answers a review's
-  # findings in one push and then asks. Its change is split into areas, by what its files are
-  # about, each test with its code (worker/plan-review.mjs). In each area one reviewer reads every
+  # only when the review label asks, never on a push alone, so a session asks once its push is up.
+  # Its change is split into areas, by what its files are about, each test with its code (worker/plan-review.mjs). In each area one reviewer reads every
   # line and lists each problem it finds once, with every place it shows; one check across every
   # area confirms each against the code, merges repeats, weighs each, and looks for what spans
   # areas; and one step with no Claude posts what it confirmed or left unsure
@@ -632,8 +631,8 @@ jobs:
             4. Give each a verdict. Confirmed: the code does what it says, and it matters as the guide weighs it. Rejected: the claim is wrong, the path can't happen, a thread already raised it and its answer holds, or it's a matter of taste. The guide's numbered items are never taste: a rule now in two places, a leftover, or a doc the change makes wrong is a finding whenever the code shows it. Unsure: it would matter and you can't settle it; say what would.
             5. Merge candidates that are the same problem into one finding, in one area or across areas, whether they name one place or several, naming every id it merges: one problem is one finding, however many places it shows, in both apps too. Every candidate's id appears in exactly one finding, rejected ones too: a step after you checks.
             6. Look for what no one area could see: a change in one area that another area's files rely on, the same fix due in the other app or another view, one fact or rule now in two places across areas, and docs or comments a change makes wrong. Check each the same way, and add each you confirm or can't settle that no candidate already says as a finding of its own, with no ids.
-            7. Weigh each as the guide says: Important for a bug, meaning a wrong result someone can see, wrong data kept, or a failure, and for a security hole or a broken rule from AGENTS.md or a rule file; Nit for something worth fixing that doesn't block; Pre-existing for a problem in code the change didn't make worse.
-            8. Write each finding's body as the guide's "How to report" says: what is wrong, when it goes wrong, and how to fix it, in a few sentences, without its weight, which a later step adds, naming every place it shows. Put it on the line the diff changes nearest its first place, naming that place if it's another.
+            7. Weigh each as the guide's "How to report" says.
+            8. Write each finding's body as the guide's "How to report" says, without its weight, which a later step adds, naming every place it shows. Put it on the line the diff changes nearest its first place, naming that place if it's another.
             9. Post nothing. End with your answer: every finding, rejected ones too, and anything you couldn't judge from the code, and why.
       - name: Keep the check's answer
         id: keep

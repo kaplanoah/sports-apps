@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { defineConfig, devices, webkit } from "@playwright/test";
 import { listAppsWithBrowserTests } from "./worker/apps.mjs";
+import { ASSERTION_TIMEOUT_MS } from "./tests/browser/limits.mjs";
 
 // Another checkout's browser tests can run alongside on other ports.
 const FIRST_PORT = Number(process.env.BROWSER_TEST_PORT) || 4173;
@@ -15,7 +16,7 @@ const hasWebKit = existsSync(webkit.executablePath());
 
 export default defineConfig({
   timeout: 30_000,
-  expect: { timeout: 5_000 },
+  expect: { timeout: ASSERTION_TIMEOUT_MS },
   // CI retries a failed test once, so a test that fails only now and then doesn't fail a pull
   // request it has nothing to do with. GitHub's reporter marks each one that passed only on its
   // retry as flaky on the pull request's checks, and a nightly run finds them on main

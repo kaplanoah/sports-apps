@@ -1,6 +1,7 @@
 import { test, MOVING_APP } from "./harness.mjs";
 import { ANDROID_PHONE, IPHONE } from "../../../../tests/browser/devices.mjs";
 import {
+  checkHomeScreenWithoutPageHost,
   checkMoveCard,
   checkMoveCardDismissal,
   checkMoveCardStandIns,
@@ -28,6 +29,12 @@ test.describe("on an iPhone", () => {
     browser,
   }) => {
     await checkSafariMoves({ page, browser, ...MOVING_APP });
+  });
+
+  test("a Home Screen app without a page host stays at the old address with no move card", async ({
+    page,
+  }) => {
+    await checkHomeScreenWithoutPageHost({ page, ...MOVING_APP });
   });
 
   test("the Home Screen app at the old address shows the card for the new site", async ({
