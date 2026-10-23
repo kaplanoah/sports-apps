@@ -217,14 +217,23 @@ function expandApiOptions(words) {
   return expanded;
 }
 
+/**
+ * @param {string} word
+ * @param {string} fullOption
+ * @param {number} minimumLength
+ */
+function isOptionPrefix(word, fullOption, minimumLength) {
+  const [option] = word.split("=");
+  return option.length >= minimumLength && fullOption.startsWith(option);
+}
+
 /** @param {string[]} words */
 function isHandoffFetch(words) {
   for (let index = 0; index < words.length; index += 1) {
     const word = words[index];
     if (word === "--") break;
     const [option] = word.split("=");
-    if ((option.length >= 5 && "--upload-pack".startsWith(option)) || word.startsWith("-u"))
-      return false;
+    if (isOptionPrefix(word, "--upload-pack", 5) || word.startsWith("-u")) return false;
     if (/^-[^-]/.test(word) && word.length > 2 && !/^-[oj]/.test(word)) return false;
     if (option === "--recurse-submodules") continue;
     const takesValue =
@@ -252,7 +261,10 @@ function isHandoffGitCommand(words) {
     endOfOptions < 0 ? argumentsAfterCommand : argumentsAfterCommand.slice(0, endOfOptions);
   const readArguments = command === "diff" ? argumentsAfterCommand : options;
   return !(
-    (hasDiffOptions && readArguments.some((word) => /^--(?:output|ext-diff)(?:=|$)/.test(word))) ||
+    (hasDiffOptions &&
+      readArguments.some(
+        (word) => /^--output(?:=|$)/.test(word) || isOptionPrefix(word, "--ext-diff", 5),
+      )) ||
     (command === "diff" && options.some((word) => /^--no-index(?:=|$)/.test(word)))
   );
 }

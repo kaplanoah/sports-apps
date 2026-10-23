@@ -449,6 +449,25 @@ test("at 300,000 tokens diff checks writing and helper flags past every option t
     assert.equal(answerStopCommand(command), null, command);
 });
 
+test("at 300,000 tokens every unique external-diff prefix is denied in every diff argument", () => {
+  for (const option of ["--ext", "--ext-", "--ext-d", "--ext-di", "--ext-dif", "--ext-diff"])
+    for (const suffix of ["", "=true", "=false", "=1", "="])
+      for (const argumentsAfterCommand of [
+        `${option}${suffix} a b`,
+        `-S -- ${option}${suffix} a b`,
+      ]) {
+        const command = `git -C / diff ${argumentsAfterCommand}`;
+        assert.ok(answerStopCommand(command), command);
+      }
+  for (const command of [
+    "git diff --no-ext-diff origin/main",
+    "git diff origin/main -- ./--ext",
+    "git -C /repo diff origin/main -- ./--ext-diff=notes",
+    "git show -- --ext",
+  ])
+    assert.equal(answerStopCommand(command), null, command);
+});
+
 test("the stop reason explains literal arguments and the placeholder and heredoc exceptions", () => {
   const reason =
     answerStopCommand("gh pr view $NUMBER")?.hookSpecificOutput.permissionDecisionReason;

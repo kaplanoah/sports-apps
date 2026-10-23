@@ -235,6 +235,23 @@ test("hashes inside substitution words and quotes remain literal", () => {
   }
 });
 
+test("arithmetic hashes do not start shell comments or hide later separators", () => {
+  for (const expansion of ["$((1 #))", "$(((1 #)))", "$((1 + $((2 #))))", '"$((1 #))"'])
+    for (const separator of [";", "&&", "\n"]) {
+      const command = `echo ${expansion}${separator}git status`;
+      assert.equal(
+        findSeparator(command),
+        separator === "\n" ? "a line break" : separator,
+        command,
+      );
+      assert.equal(parseCommandWords(command), null, command);
+    }
+  assert.equal(findSeparator("echo $((1 #)) # actual comment; git status"), null);
+  assert.equal(findSeparator("echo '$((1 #)); text'"), null);
+  assert.equal(findSeparator("echo $(echo $((1))#literal); git status"), ";");
+  assert.equal(findSeparator('echo $(( $(echo #"\n) + 1)); git status'), ";");
+});
+
 test("a heredoc's end lets the check go on to what follows it", () => {
   assert.equal(findSeparator("cat <<EOF\nbody;\nEOF\ngit push"), "a line break");
 });

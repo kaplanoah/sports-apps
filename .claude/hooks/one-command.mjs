@@ -87,7 +87,7 @@ const SHELL_BEFORE_SCRIPT = /(?:^|[ \t\n(|/])(?:ba|z|da)?sh[ \t]+(?:-[\w-]+[ \t]
 function scanCommand(command) {
   let quote = "";
   let scriptStart = -1;
-  /** @type {("substitution" | "group")[]} */
+  /** @type {("substitution" | "arithmetic" | "group")[]} */
   const parentheses = [];
   let isInBackticks = false;
   let hasSubstitutionWord = false;
@@ -111,7 +111,13 @@ function scanCommand(command) {
   for (let at = 0; at < text.length; at += 1) {
     const char = text[at];
     const hasCurrentWord = parentheses.length > 0 ? hasSubstitutionWord : hasWord;
-    if (!quote && !isInBackticks && char === "#" && !hasCurrentWord) {
+    if (
+      !quote &&
+      !isInBackticks &&
+      char === "#" &&
+      !hasCurrentWord &&
+      parentheses.findLast((kind) => kind !== "group") !== "arithmetic"
+    ) {
       const lineEnd = text.indexOf("\n", at);
       at = lineEnd === -1 ? text.length : lineEnd - 1;
       continue;
@@ -158,7 +164,7 @@ function scanCommand(command) {
     if (char === "$") hasExpansion = true;
     if (char === "$" && text[at + 1] === "(") {
       pipeOrRedirect ??= SUBSTITUTION;
-      parentheses.push("substitution");
+      parentheses.push(text[at + 2] === "(" ? "arithmetic" : "substitution");
       hasSubstitutionWord = false;
       at += 1;
       continue;
@@ -168,7 +174,7 @@ function scanCommand(command) {
         parentheses.push("group");
         hasSubstitutionWord = false;
       } else if (char === ")") {
-        hasSubstitutionWord = parentheses.pop() === "substitution";
+        hasSubstitutionWord = parentheses.pop() !== "group";
       } else hasSubstitutionWord = !/[ \t\n;&|<>]/.test(char);
       if (parentheses.length === 0) hasWord = true;
       continue;
