@@ -9,7 +9,6 @@ test.use({
   viewport: { width: 390, height: 844 },
   hasTouch: true,
   isMobile: true,
-  contextOptions: { reducedMotion: "reduce" },
 });
 
 for (const reducedMotion of /** @type {("reduce" | "no-preference")[]} */ ([

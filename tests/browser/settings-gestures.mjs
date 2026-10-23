@@ -41,9 +41,8 @@ async function trackSettingsFrames(page) {
  * and the picker can still choose another season.
  * @param {import("@playwright/test").Page} page
  * @param {number} distance how far the finger moves down, or up when negative
- * @param {string} [nextYear] another season to choose
  */
-export async function checkSeasonPickerDrag(page, distance, nextYear = "2025") {
+export async function checkSeasonPickerDrag(page, distance) {
   await openSettings(page);
   const settings = page.locator(SETTINGS);
   const picker = settings.getByRole("combobox", { name: "Season" });
@@ -76,9 +75,10 @@ export async function checkSeasonPickerDrag(page, distance, nextYear = "2025") {
   expect(frames[0].isDragged).toBe(false);
   for (const frame of frames) expect(frame).toEqual(frames[0]);
   await expect(settings).toBeVisible();
-  await picker.selectOption(nextYear);
-  await expect(page.locator("#titleYear")).toHaveText(nextYear);
-  await expect(picker).toHaveValue(nextYear);
+  const pastYear = "2025";
+  await picker.selectOption(pastYear);
+  await expect(page.locator("#titleYear")).toHaveText(pastYear);
+  await expect(picker).toHaveValue(pastYear);
 }
 
 /**
@@ -103,7 +103,9 @@ export async function checkSettingsSheetDrag(page) {
   await release();
   await expect(settings).toBeHidden();
   const closing = await readClosingFrames();
-  const tops = [...dragged, ...closing].filter((frame) => frame.isOpen).map((frame) => frame.top);
+  const openFrames = [...dragged, ...closing].filter((frame) => frame.isOpen);
+  for (const frame of openFrames) expect(frame.left).toBe(openFrames[0].left);
+  const tops = openFrames.map((frame) => frame.top);
   expect(tops.some((top) => top > 0 && top < 160)).toBe(true);
   expect(tops.every((top, index) => index === 0 || top >= tops[index - 1])).toBe(true);
 }
