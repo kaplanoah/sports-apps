@@ -50,6 +50,7 @@ jobs:
       - if: steps.modules.outputs.cache-hit != 'true'
         run: npm ci
       - run: npx playwright install --with-deps --only-shell chromium webkit
+        timeout-minutes: 10
       # Every test runs to the end, however many fail, so the issue names each flaky one.
       - name: Run the browser tests over and over
         shell: bash

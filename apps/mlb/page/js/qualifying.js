@@ -1,7 +1,7 @@
 // How near a player is to qualifying for MLB's ranks: a starter with an inning for each of his
 // club's games, and a hitter with 3.1 plate appearances for each.
 
-import { isNearlyRanked } from "#shared/rank-curve.js";
+import { describeSmallSample } from "#shared/rank-curve.js";
 import { session } from "./session.js";
 import { countOuts, formatInnings } from "./stat-table.js";
 
@@ -64,17 +64,6 @@ export const measurePlateAppearancesProgress = (plateAppearances, clubGames) =>
   !clubGames ? null : plateAppearances / (clubGames * PLATE_APPEARANCES_PER_GAME);
 
 /**
- * Why a player too far from qualifying to show where he would rank has no mark on the curves, to
- * end the line on what he needs, or nothing once he's near enough or his share isn't known.
- * @param {number | null} progress his share of what qualifying takes
- * @param {string} players who he'd be compared with, like starters
- */
-const describeSmallSample = (progress, players) =>
-  progress == null || isNearlyRanked(progress)
-    ? ""
-    : `, too small a sample to fairly compare with qualified ${players}`;
-
-/**
  * The innings a starter has pitched against those he needs, and why he has no mark when they're
  * too few, or that he needs more when either isn't known.
  * @param {string} subject his last name, or He
@@ -84,7 +73,10 @@ const describeSmallSample = (progress, players) =>
 export function describeInningsToQualify(subject, innings, clubGames) {
   if (innings == null || clubGames == null)
     return `${subject} hasn't pitched the innings needed to qualify`;
-  const sample = describeSmallSample(measureInningsProgress(innings, clubGames), "starters");
+  const sample = describeSmallSample(
+    measureInningsProgress(innings, clubGames),
+    "qualified starters",
+  );
   return `${subject} has pitched ${formatInnings(innings)} of the ${clubGames} innings needed to qualify${sample}`;
 }
 
@@ -99,7 +91,7 @@ export function describePlateAppearancesToQualify(plateAppearances, clubGames) {
   const needed = countPlateAppearancesNeeded(clubGames);
   const sample = describeSmallSample(
     measurePlateAppearancesProgress(plateAppearances, clubGames),
-    "hitters",
+    "qualified hitters",
   );
   return `He has ${plateAppearances} of the ${needed} plate appearances needed to qualify${sample}`;
 }

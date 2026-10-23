@@ -6,7 +6,7 @@
 // hold its shape. A side that didn't load says so with a Try again button: under the starter's club
 // when the other side did load, or once for the whole section when nothing did.
 
-import { nameTeam, renderClub, renderClubName } from "./clubs.js";
+import { renderClub, renderClubName } from "./clubs.js";
 import { renderArm } from "./games-view.js";
 import { readMlbDay } from "./dates.js";
 import { formatShortDate, readCalendarDate } from "#shared/days.js";
@@ -29,7 +29,7 @@ import {
 } from "./qualifying.js";
 import { describeGamePitching, formatInnings } from "./stat-table.js";
 import { FEWEST_FIRST_LABELS, formatStarterMeasure, STARTER_MEASURES } from "./starter-measures.js";
-import { TEAMS } from "./teams.js";
+import { nameTeam, TEAMS } from "./teams.js";
 import { formatOrdinal } from "#shared/ordinal.js";
 import {
   describeFewestFirst,

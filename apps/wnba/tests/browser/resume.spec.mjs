@@ -1,3 +1,4 @@
+import { writeUnreadableLastSeen } from "../../../../tests/browser/unreadable-last-seen.mjs";
 import { buildReleaseServer, servePageFiles } from "../../../../tests/browser/release-worker.mjs";
 import { NEXT_RELEASE, serveReleases } from "../../../../tests/browser/serve-releases.mjs";
 import { test, expect, openApp, matchPath } from "./harness.mjs";
@@ -121,9 +122,7 @@ test("a reload while a picked season is on its way stays on the season shown", a
 });
 
 test("a last-shown season the page can't draw is skipped", async ({ page }) => {
-  await page.addInitScript(() =>
-    localStorage.setItem("lastSeen", JSON.stringify({ year: 2026, season: { series: 5 } })),
-  );
+  await page.addInitScript(writeUnreadableLastSeen);
 
   await openApp(page);
 
