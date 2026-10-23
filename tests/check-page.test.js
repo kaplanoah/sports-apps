@@ -94,7 +94,7 @@ function openMovedPage(landedUrl, { thrown } = {}) {
       return 204;
     },
     waitForFunction: async () => {
-      if (thrown) throw new Error("Timeout exceeded");
+      if (thrown) throw Object.assign(new Error("Timeout exceeded"), { name: "TimeoutError" });
     },
   };
   return {
@@ -200,4 +200,41 @@ test("a page that never left the blank page hides only its own address", () => {
     status: "broken",
     reason: "the page didn't load: net::ERR_FAILED at <page>/",
   });
+});
+
+test("thrown check infrastructure failures leave the page unchecked and mask its address", async () => {
+  for (const step of ["goto", "evaluate", "waitForFunction"]) {
+    const { page } = openMovedPage(PAGE_URL);
+    page[step] = async () => {
+      throw new Error(`Target closed at ${PAGE_URL}`);
+    };
+    const context = { newPage: async () => page, close: async () => {} };
+    const browser = { newContext: async () => context, close: async () => {} };
+    const check = await checkAppPage({
+      app: "wnba",
+      channel: "production",
+      env: { WNBA_PAGE_URL: PAGE_URL, ACCESS_CODE: "LAYUP" },
+      attempts: 1,
+      launchBrowser: async () =>
+        /** @type {import("@playwright/test").Browser} */ (/** @type {unknown} */ (browser)),
+    });
+    assert.deepEqual(check, {
+      status: "unchecked",
+      reason: "the page check failed: Target closed at <page>/",
+    });
+  }
+});
+
+test("a refused or rate-limited code cannot verify the authenticated page", async () => {
+  for (const [status, reason] of [
+    [401, "the Worker refused the access code"],
+    [429, "the Worker had too many tries at the access code"],
+  ]) {
+    const { page } = openMovedPage(PAGE_URL);
+    page.evaluate = /** @type {typeof page.evaluate} */ (async () => status);
+    assert.deepEqual(await checkPage(page, { pageUrl: PAGE_URL, accessCode: "LAYUP" }), {
+      status: "unchecked",
+      reason,
+    });
+  }
 });

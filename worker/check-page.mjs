@@ -154,7 +154,10 @@ const waitForDrawing = (page, timeoutMs) =>
     )
     .then(
       () => true,
-      () => false,
+      (error) => {
+        if (error.name === "TimeoutError") return false;
+        throw error;
+      },
     );
 
 /**
@@ -237,8 +240,9 @@ async function launchChromium(env) {
 /**
  * Opens an app's live page in a browser of its own, trying again after `pauseMs` while it's
  * broken, up to `attempts` times. A page with no address, or whose access code the Worker refuses
- * or rate-limits, goes unchecked; a browser that doesn't start throws, so the deploy puts the
- * version before back and the watch's run fails.
+ * or rate-limits, goes unchecked. Browser infrastructure failures cannot verify a release;
+ * the deploy leaves it live but fails verification, while the watch reports an unchecked page
+ * or fails when the browser cannot start.
  * @param {object} options
  * @param {string} options.app
  * @param {string} options.channel
@@ -270,7 +274,7 @@ export async function checkAppPage({
       const context = await browser.newContext({ serviceWorkers: "block" });
       const page = await context.newPage();
       const opened = await checkPage(page, { ...access, commit }).catch((error) =>
-        markBroken(`the page didn't load: ${error instanceof Error ? error.message : error}`),
+        markUnchecked(`the page check failed: ${error instanceof Error ? error.message : error}`),
       );
       check = hideAddress(opened, access.pageUrl, page.url());
       await context.close();

@@ -159,25 +159,27 @@ Wait for the Deploy runs for the merge commit to finish, then read their logs an
 
 - The first says "No pull request's CI passed on exactly this code": the deploy waits for CI on `main`.
   Read the next Deploy run's log.
-- It says "worker check: ok": the new version is live.
+- It says "worker check: ok": the new version is live and verified.
+  For an app, its Worker answers at the expected release and its page draws after signing in with the channel's access code.
   Tell the user.
-  A line before it saying "page check: skipped" names a page the deploy couldn't open, like one whose secrets are missing or out of date,
-  and one saying "page check: ok, but" a page that opened without the code its environment holds:
-  tell the user that too.
+- It says "The new version is live but unverified": the upload went live, but the run failed verification without rolling it back.
+  Missing page URL or access-code secrets, refused or rate-limited codes, absent Worker authentication, and unavailable browser checks cannot establish a verified release.
+  Tell the user what prevented verification and recommend repairing that check before treating the release as verified.
+  An initial new-league upload can reach this state before its key, code, and URL are configured.
 - A service's lines say "health check: ok": every app that reports it says it answers at the uploaded commit,
   or at its own live commit when the run didn't change the service.
   Saying "health check: skipped" because "no app reaches" it yet, no app's live version binds it, so the service went unchecked:
   tell the user, since the `Watch apps` workflow is the first to read it.
 - It says "The service didn't answer as the live version": the run failed without rolling back the unchanged service.
   Inspect the service and the reporting apps' health, and tell the user what didn't answer.
-- It says "Nothing the Worker runs changed": the merge didn't need a deploy, or the first Deploy run already deployed it.
-  Tell the user which.
+- It says "Nothing the Worker runs changed": this run left the Worker unchanged because the merge didn't need a deploy, or an earlier run already deployed it.
+  Tell the user which; this line alone establishes no new verification.
 - It says "has moved on" and "whose deploy covers": another merge landed first, and CI passed on it, so its Deploy run covers this one.
-  Read that run's log instead.
+  This run is superseded; read that run's log for its verified outcome.
   Saying "hasn't passed on it" instead, it deploys this merge while the newer one's CI is still to pass, so read on in this run's log.
   Saying "couldn't be asked", it deploys this merge because GitHub couldn't say how CI went on the newer one, so read on in this run's log too.
-- It says "which already has": a newer merge's deploy went live first, and covers this one.
-  Read that run's log instead.
+- It says "which already has": a newer merge's deploy went live first, and supersedes this one.
+  Read that run's log for its verified outcome.
 - The run was skipped:
   CI failed on `main`.
   Read the CI log, fix the failure in a new PR, and start again at step 1.
@@ -188,8 +190,9 @@ Wait for the Deploy runs for the merge commit to finish, then read their logs an
 - It says "No CLOUDFLARE_API_TOKEN": the channel's environment has no Cloudflare token, so nothing was deployed.
   The run fails: tell the user which channel needs its token restored.
 - The run failed: read the log.
-  If it says "the earlier version is live again", the Worker rolled back and is unchanged.
-  Tell the user what failed and recommend a fix.
+  If it says "the earlier version is live again", the Worker rolled back after a broken response, wrong release, page exception, or failure to draw.
+  The uploaded release is no longer live; tell the user what failed and recommend a fix.
+  If it says "the new version is still live" or "no earlier version exists", restoration failed or was unavailable: report that state explicitly.
 
 ## Step 12: one thing a PR, and stacked PRs
 

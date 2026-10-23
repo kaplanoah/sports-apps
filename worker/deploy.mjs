@@ -7,7 +7,7 @@ import { nameServiceBinding } from "../shared/worker/services.js";
 import { findWorkerRoot, isService, listApps, listServices, listWorkersOrExit } from "./apps.mjs";
 import { buildWorker } from "./build.mjs";
 import { findChannel, readCommandLine } from "./channels.mjs";
-import { checkAppPage } from "./check-page.mjs";
+import { checkAppPage, nameAccessSecrets, readPageAccess } from "./check-page.mjs";
 import { checkService } from "./check-service.mjs";
 import { CHECK_INTERVAL_MS, CHECK_TIMEOUT_MS, waitFor } from "./check-timing.mjs";
 import { decideDeploy, listChangedFiles } from "./deploy-scope.mjs";
@@ -425,8 +425,7 @@ export async function deploy({
     await callCloudflare("upload", `${base}/scripts/${name}`, { method: "PUT", body: form });
   }
 
-  // The upload makes the new version live, so anything that goes wrong after it puts the
-  // earlier one back.
+  // Restore only when a check demonstrates that the uploaded Worker is broken.
   /** @returns {Promise<never>} */
   async function restoreAfter(problem, previousVersions) {
     if (!previousVersions) throw new Error(`${problem}, and no earlier version exists.`);
@@ -444,21 +443,32 @@ export async function deploy({
     await restoreAfter("The Worker didn't answer as the new version", previousVersions);
   }
 
-  // A Worker can answer while its page throws or never draws, which a phone would show. A check
-  // that itself fails is no proof the page draws.
+  function rejectUnverifiedPage(reason) {
+    throw new Error(`The new version is live but unverified: ${reason}.`);
+  }
+
+  // New leagues upload before their key, code, and page address can be configured.
+  function requirePageAccess() {
+    const secrets = nameAccessSecrets(worker, channel);
+    const access = readPageAccess(worker, channel, env);
+    if (!access) rejectUnverifiedPage(`no ${secrets.pageUrl} secret`);
+    if (!access?.accessCode) rejectUnverifiedPage(`no ${secrets.accessCode} secret`);
+  }
+
   async function confirmPageDraws(previousVersions) {
-    const check = await checkPage({ app: worker, channel, commit, env }).catch((error) => ({
-      status: /** @type {const} */ ("broken"),
-      reason: `the page check failed: ${error instanceof Error ? error.message : error}`,
+    requirePageAccess();
+    const check = await checkPage({ app: worker, channel, commit, env }).catch(() => ({
+      status: /** @type {const} */ ("unchecked"),
+      reason: "the page check failed",
     }));
-    if (check.status === "drawn")
-      log(check.note ? `::notice::page check: ok, but ${check.note}` : "page check: ok");
-    if (check.status === "unchecked") log(`::notice::page check: skipped, ${check.reason}`);
+    if (check.status === "unchecked") rejectUnverifiedPage(check.reason);
+    if (check.status === "drawn" && check.note) rejectUnverifiedPage(check.note);
     if (check.status === "broken")
       await restoreAfter(
         `The page didn't draw as the new version: ${check.reason}`,
         previousVersions,
       );
+    log("page check: ok");
   }
 
   // A service faces only the apps, through their bindings, so it has no address of its own.

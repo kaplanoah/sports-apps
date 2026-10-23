@@ -6,8 +6,24 @@ import { listApps, listServices } from "../worker/apps.mjs";
 import { readRepoFile } from "./repo-files.js";
 import { readStepScript } from "./workflow-step.js";
 
-const loadDeployModule = () => import("../worker/deploy.mjs");
-const ENV = { CLOUDFLARE_ACCOUNT_ID: "acct123", CLOUDFLARE_WORKERS_SUBDOMAIN: "example-subdomain" };
+async function loadDeployModule() {
+  const module = await import("../worker/deploy.mjs");
+  return {
+    ...module,
+    /** @param {import("../worker/deploy.mjs").WorkerDeploymentOptions} options */
+    deploy: (options) =>
+      module.deploy({ checkPage: async () => ({ status: "drawn" }), ...options }),
+  };
+}
+const ENV = {
+  CLOUDFLARE_ACCOUNT_ID: "acct123",
+  CLOUDFLARE_WORKERS_SUBDOMAIN: "example-subdomain",
+  MLB_PAGE_URL: "https://mlb-app.example-subdomain.workers.dev/k3y/",
+  MLB_BETA_PAGE_URL: "https://mlb-app-beta.example-subdomain.workers.dev/k3y/",
+  WNBA_PAGE_URL: "https://wnba-app.example-subdomain.workers.dev/k3y/",
+  WNBA_BETA_PAGE_URL: "https://wnba-app-beta.example-subdomain.workers.dev/k3y/",
+  ACCESS_CODE: "LAYUP",
+};
 
 const API = "https://api.cloudflare.com/client/v4";
 const WORKER_URL = "https://mlb-app.example-subdomain.workers.dev/";
@@ -644,9 +660,10 @@ test("a new version's page that doesn't draw puts the live version back", async 
   );
 });
 
-test("a page check that fails puts the live version back", async () => {
+test("a thrown page check leaves the upload live but unverified, without exposing its error", async () => {
   const { deploy } = await loadDeployModule();
   const cloudflare = createFakeCloudflare({ liveCommit: LIVE_COMMIT });
+  const lines = [];
   await assert.rejects(
     deploy({
       worker: "mlb",
@@ -655,18 +672,20 @@ test("a page check that fails puts the live version back", async () => {
       script: "",
       commit: NEW_COMMIT,
       findChanges: () => ["apps/mlb/page/js/app.js"],
-      log: () => {},
+      log: (line) => lines.push(line),
       pause: skipPause,
       checkPage: async () => {
-        throw new Error("browserType.newContext: Target closed");
+        throw new Error(`Target closed at ${ENV.MLB_PAGE_URL} with ${ENV.ACCESS_CODE}`);
       },
     }),
-    /The page didn't draw as the new version: the page check failed: browserType\.newContext: Target closed, so the earlier version is live again/,
+    /^Error: The new version is live but unverified: the page check failed\.$/,
   );
-  assert.equal(
-    describeCalls(cloudflare.calls).at(-1),
-    "POST /accounts/acct123/workers/scripts/mlb-app/deployments",
+  assert.ok(
+    !describeCalls(cloudflare.calls).some(
+      (call) => call.startsWith("POST ") && call.endsWith("/deployments"),
+    ),
   );
+  assert.ok(!lines.some((line) => /worker check: ok|page check: ok|LAYUP|k3y/.test(line)));
 });
 
 test("a merge whose live version already has it isn't deployed, but a push to beta is", async () => {
@@ -791,31 +810,99 @@ test("whether CI on main passed on a commit comes from its newest push run, and 
     );
 });
 
-test("a new version passes once its Worker answers and its page draws, or has no page to open", async () => {
+test("an authenticated drawing page verifies each app on each channel", async () => {
   const { deploy } = await loadDeployModule();
-  for (const [check, line] of [
-    [{ status: "drawn" }, "page check: ok"],
-    [
-      { status: "drawn", note: "the page asks for no code" },
-      "::notice::page check: ok, but the page asks for no code",
-    ],
-    [
-      { status: "unchecked", reason: "no MLB_PAGE_URL secret" },
-      "::notice::page check: skipped, no MLB_PAGE_URL secret",
-    ],
+  for (const worker of listApps()) {
+    for (const channel of ["production", "beta"]) {
+      const lines = [];
+      const url = await deploy({
+        worker,
+        channel,
+        fetchImpl: createFakeCloudflare().fetchImpl,
+        env: ENV,
+        script: "",
+        log: (line) => lines.push(line),
+        pause: skipPause,
+      });
+      assert.equal(
+        url,
+        `https://${worker}-app${channel === "beta" ? "-beta" : ""}.example-subdomain.workers.dev/`,
+      );
+      assert.deepEqual(lines.slice(-2), ["page check: ok", "worker check: ok"]);
+    }
+  }
+});
+
+test("missing page URL or code fails after upload, leaving first and existing releases live but unverified", async () => {
+  const { deploy } = await loadDeployModule();
+  const { nameAccessSecrets } = await import("../worker/check-page.mjs");
+  for (const worker of listApps()) {
+    for (const channel of ["production", "beta"]) {
+      for (const secret of Object.values(nameAccessSecrets(worker, channel))) {
+        for (const isNew of [true, false]) {
+          const env = { ...ENV, [secret]: "" };
+          const cloudflare = createFakeCloudflare({ isNew });
+          const lines = [];
+          await assert.rejects(
+            deploy({
+              worker,
+              channel,
+              fetchImpl: cloudflare.fetchImpl,
+              env,
+              script: "",
+              log: (line) => lines.push(line),
+              pause: skipPause,
+              checkPage: async () => {
+                assert.fail(
+                  "missing verification secrets must be identified before opening a browser",
+                );
+              },
+            }),
+            new RegExp(`The new version is live but unverified: no ${secret} secret`),
+          );
+          const calls = describeCalls(cloudflare.calls);
+          assert.ok(
+            calls.some((call) => call.startsWith("PUT ")),
+            "the initial upload must still happen",
+          );
+          assert.ok(
+            !calls.some((call) => call.startsWith("POST ") && call.endsWith("/deployments")),
+          );
+          assert.ok(!lines.some((line) => /worker check: ok|page check: ok/.test(line)));
+        }
+      }
+    }
+  }
+});
+
+test("unchecked or unauthenticated drawing pages fail verification without rollback", async () => {
+  const { deploy } = await loadDeployModule();
+  for (const check of [
+    { status: "drawn", note: "the page asks for no code, so its access code secret isn't needed" },
+    { status: "unchecked", reason: "the Worker refused the access code" },
+    { status: "unchecked", reason: "the Worker had too many tries at the access code" },
+    { status: "unchecked", reason: "no MLB_PAGE_URL secret" },
   ]) {
+    const cloudflare = createFakeCloudflare();
     const lines = [];
-    const url = await deploy({
-      worker: "mlb",
-      fetchImpl: createFakeCloudflare().fetchImpl,
-      env: ENV,
-      script: "",
-      log: (logged) => lines.push(logged),
-      pause: skipPause,
-      checkPage: async () => /** @type {any} */ (check),
-    });
-    assert.equal(url, WORKER_URL);
-    assert.deepEqual(lines.slice(-2), [line, "worker check: ok"]);
+    await assert.rejects(
+      deploy({
+        worker: "mlb",
+        fetchImpl: cloudflare.fetchImpl,
+        env: ENV,
+        script: "",
+        log: (line) => lines.push(line),
+        pause: skipPause,
+        checkPage: async () => /** @type {any} */ (check),
+      }),
+      /The new version is live but unverified:/,
+    );
+    assert.ok(
+      !describeCalls(cloudflare.calls).some(
+        (call) => call.startsWith("POST ") && call.endsWith("/deployments"),
+      ),
+    );
+    assert.ok(!lines.some((line) => /worker check: ok|page check: ok/.test(line)));
   }
 });
 
