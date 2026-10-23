@@ -433,6 +433,22 @@ test("at 300,000 tokens no-index diff mode is outside the handoff grammar", () =
   assert.equal(answerStopCommand("git diff origin/main -- --no-index"), null);
 });
 
+test("at 300,000 tokens diff checks writing and helper flags past every option terminator", () => {
+  for (const folder of ["/", "..", "/repo"])
+    for (const valueOption of ["-S", "-G", "-O", "--anchored"])
+      for (const unsafeOption of ["--output=AGENTS.md", "--output AGENTS.md", "--ext-diff"]) {
+        const command = `git -C ${folder} diff ${valueOption} -- ${unsafeOption} a b`;
+        assert.ok(answerStopCommand(command), command);
+      }
+  for (const command of [
+    "git diff origin/main -- ./--output=notes.md",
+    "git -C /repo diff origin/main -- ./--ext-diff",
+    "git log -- --output=notes.md",
+    "git show -- --ext-diff",
+  ])
+    assert.equal(answerStopCommand(command), null, command);
+});
+
 test("the stop reason explains literal arguments and the placeholder and heredoc exceptions", () => {
   const reason =
     answerStopCommand("gh pr view $NUMBER")?.hookSpecificOutput.permissionDecisionReason;
@@ -538,7 +554,7 @@ test("at 300,000 tokens a handoff's command can't pipe, redirect, or substitute 
 test("at 300,000 tokens quoted git folders and literal file names keep their argument meanings", () => {
   assert.equal(answerStopCommand("git -C '/repo folder' diff origin/main"), null);
   assert.equal(answerStopCommand("git -C /repo\\ folder status"), null);
-  assert.equal(answerStopCommand("git diff origin/main -- '--output=notes.md'"), null);
+  assert.ok(answerStopCommand("git diff origin/main -- '--output=notes.md'"));
   assert.ok(answerStopCommand("git -C '/repo folder' diff '--output=AGENTS.md'"));
   assert.ok(answerStopCommand("git -C '/repo folder' fetch '--upload-pack=x' ."));
   assert.ok(answerStopCommand("git -C '/repo folder' push"));

@@ -250,10 +250,10 @@ function isHandoffGitCommand(words) {
   const endOfOptions = argumentsAfterCommand.indexOf("--");
   const options =
     endOfOptions < 0 ? argumentsAfterCommand : argumentsAfterCommand.slice(0, endOfOptions);
-  return !options.some(
-    (word) =>
-      (hasDiffOptions && /^--(?:output|ext-diff)(?:=|$)/.test(word)) ||
-      (command === "diff" && /^--no-index(?:=|$)/.test(word)),
+  const readArguments = command === "diff" ? argumentsAfterCommand : options;
+  return !(
+    (hasDiffOptions && readArguments.some((word) => /^--(?:output|ext-diff)(?:=|$)/.test(word))) ||
+    (command === "diff" && options.some((word) => /^--no-index(?:=|$)/.test(word)))
   );
 }
 

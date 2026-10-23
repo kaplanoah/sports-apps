@@ -87,8 +87,10 @@ const SHELL_BEFORE_SCRIPT = /(?:^|[ \t\n(|/])(?:ba|z|da)?sh[ \t]+(?:-[\w-]+[ \t]
 function scanCommand(command) {
   let quote = "";
   let scriptStart = -1;
-  let depth = 0;
+  /** @type {("substitution" | "group")[]} */
+  const parentheses = [];
   let isInBackticks = false;
+  let hasSubstitutionWord = false;
   /** @type {string | null} */
   let pipeOrRedirect = null;
   /** @type {string[]} */
@@ -108,6 +110,12 @@ function scanCommand(command) {
   const text = command.replace(/^[ \t\n]+|[ \t\n]+$/g, "");
   for (let at = 0; at < text.length; at += 1) {
     const char = text[at];
+    const hasCurrentWord = parentheses.length > 0 ? hasSubstitutionWord : hasWord;
+    if (!quote && !isInBackticks && char === "#" && !hasCurrentWord) {
+      const lineEnd = text.indexOf("\n", at);
+      at = lineEnd === -1 ? text.length : lineEnd - 1;
+      continue;
+    }
     if (char === "\\" && quote !== "'") {
       const next = text[at + 1];
       if (next === undefined) hasExpansion = true;
@@ -115,6 +123,7 @@ function scanCommand(command) {
         if (next !== "\n") {
           word += next;
           hasWord = true;
+          if (parentheses.length > 0) hasSubstitutionWord = true;
         }
         at += 1;
         continue;
@@ -124,6 +133,7 @@ function scanCommand(command) {
       pipeOrRedirect ??= SUBSTITUTION;
       isInBackticks = !isInBackticks;
       hasWord = true;
+      if (parentheses.length > 0) hasSubstitutionWord = true;
       continue;
     }
     if (isInBackticks) continue;
@@ -141,25 +151,26 @@ function scanCommand(command) {
     if (char === "'" || char === '"') {
       quote = char;
       hasWord = true;
+      if (parentheses.length > 0) hasSubstitutionWord = true;
       scriptStart = SHELL_BEFORE_SCRIPT.test(text.slice(0, at)) ? at + 1 : -1;
       continue;
     }
     if (char === "$") hasExpansion = true;
     if (char === "$" && text[at + 1] === "(") {
       pipeOrRedirect ??= SUBSTITUTION;
-      depth += 1;
+      parentheses.push("substitution");
+      hasSubstitutionWord = false;
       at += 1;
       continue;
     }
-    if (depth > 0) {
-      if (char === "(") depth += 1;
-      if (char === ")") depth -= 1;
-      if (depth === 0) hasWord = true;
-      continue;
-    }
-    if (char === "#" && !hasWord) {
-      const lineEnd = text.indexOf("\n", at);
-      at = lineEnd === -1 ? text.length : lineEnd - 1;
+    if (parentheses.length > 0) {
+      if (char === "(") {
+        parentheses.push("group");
+        hasSubstitutionWord = false;
+      } else if (char === ")") {
+        hasSubstitutionWord = parentheses.pop() === "substitution";
+      } else hasSubstitutionWord = !/[ \t\n;&|<>]/.test(char);
+      if (parentheses.length === 0) hasWord = true;
       continue;
     }
     const heredoc = text.startsWith("<<", at) ? readHeredoc(text, at) : null;

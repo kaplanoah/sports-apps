@@ -188,7 +188,7 @@ test("parentheses inside $(...) nest, so what follows them is still inside it", 
 });
 
 test("comments inside substitutions cannot hide a following separator", () => {
-  for (const substitution of ["$(echo a #b)", "`x #y`", "$(f $(g #h))", '"`x #y`"'])
+  for (const substitution of ["$(echo a #b\n)", "`x #y`", "$(f $(g #h\n))", '"`x #y`"'])
     for (const operator of [";", "&&", "||", "&", "\n"]) {
       const command = `echo ${substitution}${operator} git status`;
       assert.equal(findSeparator(command), operator === "\n" ? "a line break" : operator, command);
@@ -201,6 +201,38 @@ test("comments inside substitutions cannot hide a following separator", () => {
   assert.equal(findSeparator("echo '`x #y`; text'"), null);
   assert.equal(findSeparator("echo `x \\` #y`; git status"), ";");
   assert.equal(findSeparator("echo `a; b`"), null);
+});
+
+test("command substitution comments ignore backticks, parentheses, and quotes until newline", () => {
+  for (const text of ["`", "(", ")", "'", '"', "$(", "`(')"])
+    for (const prefix of ["echo ", "echo;", "echo|", ""]) {
+      const command = `echo $(${prefix}#${text}\n); git status`;
+      assert.equal(findSeparator(command), ";", command);
+      assert.equal(parseCommandWords(command), null, command);
+    }
+  assert.equal(findSeparator("echo $(echo #` ; git status)"), null);
+  assert.equal(findSeparator("echo $(echo #`\n) && git status"), "&&");
+  assert.equal(findSeparator('echo $(printf x$(#"\n)); git status'), ";");
+  assert.equal(findSeparator("echo $( (echo)#`\n); git status"), ";");
+});
+
+test("hashes inside substitution words and quotes remain literal", () => {
+  for (const body of [
+    "echo x#word",
+    "echo x\\ #word",
+    "echo \\ #word",
+    "echo \\#word",
+    "echo 'x'#word",
+    'echo "x"#word',
+    "echo 'a #b'",
+    'echo "a #b"',
+    "echo $(echo)#word",
+    "echo `x`#word",
+  ]) {
+    const command = `echo $(${body}); git status`;
+    assert.equal(findSeparator(command), ";", command);
+    assert.equal(parseCommandWords(command), null, command);
+  }
 });
 
 test("a heredoc's end lets the check go on to what follows it", () => {
