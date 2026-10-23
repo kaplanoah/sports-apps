@@ -1,3 +1,4 @@
+import { holdClock } from "../../../../tests/browser/harness.mjs";
 import { test, expect, expectDayAtTop } from "./harness.mjs";
 import { readStripEdges, scrollStripBy } from "../../../../tests/browser/day-strip-edges.mjs";
 import { openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
@@ -491,7 +492,7 @@ for (const { screen, viewport } of [
         return [before.dataset.day, earlier.dataset.day];
       });
       // Each frame comes only as the test moves the clock, however slow the machine draws.
-      await page.clock.pauseAt((await page.evaluate(() => Date.now())) + 1000);
+      await holdClock(page);
       await page.evaluate(() => {
         const frames =
           /** @type {{ box: number[] | null, left: number, copyOff: number | null }[]} */ ([]);
@@ -586,7 +587,7 @@ for (const { before, isClicked } of [
     );
 
     // Each frame comes only as the test moves the clock, so a slide would still be under way.
-    await page.clock.pauseAt((await page.evaluate(() => Date.now())) + 1000);
+    await holdClock(page);
     // The list chooses its top day from its scroll event, which comes when the browser draws, so
     // the clock moves on only once it has. A click or key moves nothing of its own.
     await findDay(page, dayBefore).evaluate((listed, clicked) => {

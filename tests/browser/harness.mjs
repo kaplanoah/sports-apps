@@ -207,6 +207,17 @@ export async function loadPageAt(page, now, { isShowingWelcome = false } = {}) {
   await page.goto("/");
 }
 
+/**
+ * Holds the page's clock still, so its frames and timers move only as the test moves them,
+ * however slow the machine. The second's lead keeps the clock from passing the pause before it holds.
+ * @param {import("@playwright/test").Page} page
+ */
+export async function holdClock(page) {
+  const now = await page.evaluate(() => Date.now());
+  await page.clock.pauseAt(now + 1000);
+  return now;
+}
+
 const PAGE_KEY = "test-key";
 
 /**
