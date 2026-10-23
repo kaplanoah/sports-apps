@@ -21,6 +21,7 @@ export const CONFIG_ONLY_FILES = new Set([
   "eslint.config.mjs",
   "knip.json",
   "stryker.config.mjs",
+  "tests/time-zone-sensitive.json",
   "tsconfig.json",
 ]);
 const SKIPPED_FILES = new Set([
@@ -68,6 +69,8 @@ const SKIPPED_FILES = new Set([
   "worker/set-email-key.mjs",
   "worker/set-page-host.mjs",
   "worker/set-rp-id.mjs",
+  "worker/test-time-zone.mjs",
+  "worker/time-zone-scope.mjs",
   "worker/trusted-review.mjs",
   "worker/watch-apps.mjs",
   "worker/worker-secrets.mjs",
