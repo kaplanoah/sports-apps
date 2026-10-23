@@ -2,6 +2,7 @@ import { expect } from "@playwright/test";
 import { RECORD_MS } from "../../shared/page/diagnostics.js";
 import { findRecords } from "./diagnostics-records.mjs";
 import { turnOnDiagnostics } from "./diagnostics-switch.mjs";
+import { holdClock } from "./harness.mjs";
 import { openSettings } from "./settings.mjs";
 
 // Store socket messages recorded by Diagnostics without exposing their payloads.
@@ -15,7 +16,7 @@ export async function checkUnreadableStoreMessage(page, openApp) {
   await turnOnDiagnostics(page);
   const heard = app.countWatchersHeard();
   await page.reload();
-  await page.clock.pauseAt((await page.evaluate(() => Date.now())) + 1000);
+  await holdClock(page);
   await expect.poll(() => app.countWatchersHeard()).toBeGreaterThan(heard);
   app.sendSocketMessage({ connected: true, payload: "private frame payload" });
   await page.clock.runFor(RECORD_MS);
