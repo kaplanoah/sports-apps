@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readRepoFile } from "./repo-files.js";
 import { createContext, runInContext } from "node:vm";
 
 const MINUTE_MS = 60 * 1000;
@@ -22,10 +22,7 @@ const context = createContext({
   },
   document: { querySelector: (selector) => (selector === "#channelTag time" ? tagTime : null) },
 });
-runInContext(
-  readFileSync(new URL("../shared/page/draw-channel-tag-age.js", import.meta.url), "utf8"),
-  context,
-);
+runInContext(readRepoFile("shared/page/draw-channel-tag-age.js"), context);
 const describeTimeSince = runInContext("describeTimeSince", context);
 const drawChannelTagAge = runInContext("drawChannelTagAge", context);
 
