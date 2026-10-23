@@ -1,8 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { nameServiceBinding } from "../shared/worker/services.js";
 import { listApps, listServices } from "../worker/apps.mjs";
 import { readRepoFile } from "./repo-files.js";
+import { readStepScript } from "./workflow-step.js";
 
 const loadDeployModule = () => import("../worker/deploy.mjs");
 const ENV = { CLOUDFLARE_ACCOUNT_ID: "acct123", CLOUDFLARE_WORKERS_SUBDOMAIN: "example-subdomain" };
@@ -1044,6 +1046,33 @@ test("deploy:api runs the tests before it deploys, and sends its calls through a
   assert.equal(scripts["deploy:api"], "npm test && NODE_USE_ENV_PROXY=1 node worker/deploy.mjs");
 });
 
+test("a missing channel token fails the deploy step before invoking the deploy", () => {
+  const workflow = readRepoFile(".github/workflows/deploy.yml");
+  const laterStep = "      - name: Unrelated later step\n        run: exit 9\n";
+  const script = readStepScript(`${workflow}${laterStep}`, "Deploy the Worker");
+  for (const channel of ["production", "beta"])
+    for (const token of ["", "test-token"]) {
+      const result = spawnSync(
+        "bash",
+        ["-e", "-c", `node() { printf 'DEPLOY CALLED: %s\\n' "$*"; }\n${script}`],
+        {
+          env: { PATH: process.env.PATH, CHANNEL: channel, CLOUDFLARE_API_TOKEN: token },
+          encoding: "utf8",
+        },
+      );
+      assert.equal(result.status, token ? 0 : 1, result.stderr);
+      if (token) assert.match(result.stdout, new RegExp(`DEPLOY CALLED:.*--channel ${channel}`));
+      else {
+        assert.match(
+          result.stdout,
+          new RegExp(`::error::No CLOUDFLARE_API_TOKEN in the ${channel}`),
+        );
+        assert.doesNotMatch(result.stdout, /DEPLOY CALLED/);
+      }
+      assert.doesNotMatch(result.stdout, /test-token/);
+    }
+});
+
 test("the deploy job runs no package's install scripts or tests while it holds the token", () => {
   const workflow = readRepoFile(".github/workflows/deploy.yml");
   assert.match(workflow, /- run: npm ci --ignore-scripts\n/);
@@ -1079,11 +1108,15 @@ test("project settings ask before each change to a live Worker but beta's, and d
     "Bash(wrangler *)",
     // A branch's name has no spaces, so this keeps the beta push from naming any other branch too.
     "Bash(git push -f origin * *:beta)",
-    // A PR's number has no spaces, so each label edit can't carry another flag, like a phone-ok.
+    // Deny extra arguments and a flag in the PR number's place, including an omitted number.
     "Bash(gh pr edit * * --add-label beta)",
     "Bash(gh pr edit * * --remove-label beta)",
     "Bash(gh pr edit * * --add-label beta-wait)",
     "Bash(gh pr edit * * --remove-label beta-wait)",
+    "Bash(gh pr edit -* --add-label beta)",
+    "Bash(gh pr edit -* --remove-label beta)",
+    "Bash(gh pr edit -* --add-label beta-wait)",
+    "Bash(gh pr edit -* --remove-label beta-wait)",
   ]) {
     assert.ok(permissions.deny.includes(rule), rule);
   }

@@ -10,10 +10,11 @@ import {
   POST_RECORD,
   nameFindRecord,
 } from "../worker/judge-review.mjs";
-import { formatJobOutputs, listJobs as listPlanJobs } from "../worker/plan-review.mjs";
+import { formatJobOutputs, listJobs as listPlanJobs, writeReview } from "../worker/plan-review.mjs";
 import { findRefusal } from "../worker/review-git.mjs";
 import { escapePattern } from "../shared/page/escape-pattern.js";
 import { REPO_ROOT, readRepoFile } from "./repo-files.js";
+import { readStepScript } from "./workflow-step.js";
 
 const WORKFLOWS = readdirSync(new URL(".github/workflows/", REPO_ROOT)).filter((name) =>
   name.endsWith(".yml"),
@@ -465,14 +466,14 @@ test("check fails a ready pull request while a review of its code is owed", () =
  * @param {Record<string, string>} event the step's env, over a ready pull request's
  */
 function decideReview(event) {
-  const step = readJob("review-plan").match(
-    /- name: Decide whether to review\n(?:\s+.*\n)*?\s+run: \|\n((?: {10}.*\n)+)/,
+  const script = readStepScript(
+    readRepoFile(".github/workflows/ci.yml"),
+    "Decide whether to review",
   );
-  assert.ok(step, "review-plan decides whether to review in a script of its own");
   const outputs = mkdtempSync(join(tmpdir(), "ci-decision-"));
   const output = join(outputs, "output");
   writeFileSync(output, "");
-  const { status, stdout, stderr } = spawnSync("bash", ["-e", "-c", step[1]], {
+  const { status, stdout, stderr } = spawnSync("bash", ["-e", "-c", script], {
     encoding: "utf8",
     env: {
       PATH: process.env.PATH,
@@ -831,12 +832,9 @@ const listClaudeSteps = (names) =>
       .map((step) => ({ name, workflow, step }));
   });
 
-// The repo is public, so a Claude step's transcript stays out of its log, and the reviewer, which
-// reads text anyone may have written, can reach nothing but the checkout and its history: Read,
-// Grep, and Glob need no rule within the checkout and are refused outside it, the only command it
-// may run is worker/review-git.mjs, whose allowed options can't read or write outside the
-// checkout, as a shell's quoting could spell an option past a rule refusing it, and the repo's own
-// settings, whose allow list and hooks are for sessions, aren't loaded.
+// The repo is public, so transcripts stay out of logs. Read reaches only the checkout, and
+// search and history use review-git.mjs, whose allowlist checks parsed arguments after the shell
+// removes quotes. Session settings and hooks aren't loaded into CI's reviewer.
 test("every Claude step keeps its transcript out of the log and reads only the checkout and its history", () => {
   const steps = listClaudeSteps(WORKFLOWS);
   assert.ok(steps.length >= 3);
@@ -848,6 +846,10 @@ test("every Claude step keeps its transcript out of the log and reads only the c
     assert.doesNotMatch(args, /--disallowedTools/, name);
     const sources = [...args.matchAll(/--setting-sources (\S+)/g)].map(([, list]) => list);
     assert.deepEqual(sources, ["user"], name);
+    const prompt = readStepInput(workflow, step, "prompt");
+    assert.match(prompt, /\bRead\b/, name);
+    assert.doesNotMatch(prompt, /\b(?:Grep|Glob)\b/, name);
+    assert.match(prompt, /node worker\/review-git\.mjs grep -n -F -e <text> -- <path>/, name);
   }
 });
 
@@ -864,29 +866,116 @@ test("every reviewer reads AGENTS.md whole along with the review guide", () => {
     );
 });
 
-// Each reviewer learns the same forms of review-git.mjs, and the script allows each of them, so
-// no prompt drifts from another or names a form the script refuses.
-test("every reviewer prompt names the same forms of review-git.mjs, each one it allows", () => {
+/** @param {string} text */
+const listReviewForms = (text) =>
+  [...text.matchAll(/`node worker\/review-git\.mjs ([^`]+)`/g)].map(([, form]) =>
+    form
+      .replaceAll("<path>", "README.md")
+      .replaceAll("<start>,<end>", "1,2")
+      .replaceAll("<function>", "main")
+      .replaceAll("<text>", "example")
+      .replaceAll("<pattern>", "example.*")
+      .split(" "),
+  );
+
+/**
+ * @param {string} text
+ * @param {string} name
+ */
+function readReviewOptions(text, name) {
+  const declaration = text.match(
+    new RegExp(`^const ${name} = (?:new Set\\()?\\[([\\s\\S]*?)\\]`, "m"),
+  );
+  assert.ok(declaration, `the reviewer declares ${name} as a literal allowlist`);
+  return [...declaration[1].matchAll(/"([^"]+)"/g)].map(([, option]) => option);
+}
+
+test("the review usage and prompt search options match their allowlists", () => {
+  const source = readRepoFile("worker/review-git.mjs");
+  const search = readReviewOptions(source, "SEARCH_FLAGS");
+  const searchUsage = source.match(/^\/\/ Search options: (.+)\.$/m);
+  assert.ok(searchUsage);
+  assert.deepEqual(searchUsage[1].split(" ").toSorted(), search.toSorted());
+
+  const historyUsage = source.match(/^\/\/ History options:([\s\S]*?)(?=^\/\/ Usage:)/m);
+  assert.ok(historyUsage);
+  const historyOptions = [...historyUsage[1].matchAll(/(?:^|\s)(-{1,2}\S+)/g)].map(([, option]) =>
+    option.replace(/[,.;]$/, ""),
+  );
+  const valued = readReviewOptions(source, "VALUED_FLAGS").map((prefix) => `${prefix}<format>`);
+  const specialForms = [
+    "-n <number>",
+    "-n<number>",
+    "-<number>",
+    "-L<start>,<end>:<path>",
+    "-L:<function>:<path>",
+    "-L <start>,<end>:<path>",
+  ];
+  const permitted = [
+    ...readReviewOptions(source, "FLAGS"),
+    ...valued,
+    ...specialForms.map((form) => form.split(" ")[0]),
+  ];
+  assert.deepEqual([...new Set(historyOptions)].toSorted(), [...new Set(permitted)].toSorted());
+  for (const form of specialForms) {
+    const args = form
+      .replaceAll("<number>", "3")
+      .replaceAll("<start>,<end>", "1,2")
+      .replaceAll("<path>", "README.md")
+      .replaceAll("<function>", "main")
+      .split(" ");
+    assert.equal(findRefusal(["log", ...args], "/repo"), null, form);
+  }
+
+  for (const { name, workflow, step } of listClaudeSteps(["ci.yml", AREA_WORKFLOW])) {
+    const prompt = readStepInput(workflow, step, "prompt");
+    const options = prompt.match(/Search takes (.+?) arguments;/)?.[1];
+    assert.ok(options, name);
+    const named = [...options.matchAll(/`([^`]+)`/g)].map(([, option]) => option.split(" ")[0]);
+    assert.deepEqual(named.toSorted(), [...search, "-e"].toSorted(), name);
+  }
+});
+
+// The prompts and the generated review index must never name a form the script refuses.
+test("every reviewer prompt names the same permitted forms, including the generated index command", () => {
   const steps = listClaudeSteps(["ci.yml", AREA_WORKFLOW]);
   const sentences = steps.map(
     ({ workflow, step }) =>
       readStepInput(workflow, step, "prompt").match(
-        /History comes from [^\n]*?outside this checkout\./,
+        /Search and history come from [^\n]*?outside this checkout\./,
       )?.[0],
   );
   assert.equal(sentences.length, 3);
   assert.ok(sentences[0]);
   for (const sentence of sentences) assert.equal(sentence, sentences[0]);
-  const forms = [...sentences[0].matchAll(/`node worker\/review-git\.mjs ([^`]+)`/g)].map(
-    ([, form]) =>
-      form
-        .replaceAll("<path>", "README.md")
-        .replaceAll("<start>,<end>", "1,2")
-        .replaceAll("<function>", "main")
-        .split(" "),
-  );
-  assert.equal(forms.length, 4);
-  for (const form of forms) assert.equal(findRefusal(form, "/repo"), null, form.join(" "));
+  assert.match(sentences[0], /It refuses options other than those its usage lists/);
+  const forms = listReviewForms(sentences[0]);
+  assert.equal(forms.length, 7);
+  const folder = mkdtempSync(join(tmpdir(), "review-prompt-index-"));
+  writeReview(folder, {
+    choice: { stage: "push", files: ["README.md"] },
+    since: "a".repeat(40),
+    pushed: ["previous", "HEAD"],
+    readDiff: () => ({
+      numstat: "1\t0\tREADME.md\n",
+      diff: "diff --git a/README.md b/README.md\n--- a/README.md\n+++ b/README.md\n@@ -0,0 +1 @@\n+example\n",
+    }),
+    repoFiles: [],
+    listStale: () => [],
+    rules: [],
+  });
+  const indexForms = listReviewForms(readFileSync(join(folder, "push.md"), "utf8"));
+  assert.equal(indexForms.length, 1);
+  assert.deepEqual(indexForms[0], [
+    "show",
+    "--diff-merges=first-parent",
+    "HEAD",
+    "--",
+    "README.md",
+  ]);
+  assert.ok(forms.some((form) => JSON.stringify(form) === JSON.stringify(indexForms[0])));
+  for (const form of [...forms, ...indexForms])
+    assert.equal(findRefusal(form, "/repo"), null, form.join(" "));
 });
 
 // Each review job runs only once the jobs whose records it reads have finished.

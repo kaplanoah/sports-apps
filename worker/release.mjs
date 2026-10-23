@@ -16,7 +16,7 @@ const BASELINES = {
   wnba: { commit: "3cf716ccf7c056c3e598a7e4ce82c0c591ac210c", version: "1.14.1" },
 };
 const FIRST_VERSION = "1.0.0";
-const RECORD_SEPARATOR = "\x1e";
+export const RECORD_SEPARATOR = "\x1e";
 
 /** @typedef {"major" | "minor" | "patch" | null} Bump */
 
@@ -50,7 +50,7 @@ const listTypes = (isReleasing) =>
  * @param {string} title
  * @returns {TitleType | null} null when the title has no known type
  */
-function readTitleType(title) {
+export function readTitleType(title) {
   const [, type, scope, breakingMark] = title.match(TITLE_PATTERN) ?? [];
   if (!type || !Object.hasOwn(BUMPS, type)) return null;
   return { type, scope, isBreaking: breakingMark === "!" };
