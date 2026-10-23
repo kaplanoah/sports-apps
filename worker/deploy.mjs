@@ -314,24 +314,26 @@ export const listAppWorkers = (channel, subdomain, roots) =>
  */
 
 /**
+ * @typedef {object} WorkerDeploymentOptions
+ * @property {string} worker The app or service whose Worker this is.
+ * @property {string} [channel] The channel whose Worker this is.
+ * @property {import("./apps.mjs").WorkerRoots} [roots] Where the apps and services are.
+ * @property {string} script The bundled Worker to upload.
+ * @property {string} [commit] The commit the bundle was built from, recorded on the version.
+ * @property {(since: string) => string[] | null} [findChanges] Files changed since a commit.
+ * @property {typeof fetch} [fetchImpl]
+ * @property {NodeJS.ProcessEnv} [env]
+ * @property {typeof console.log} [log]
+ * @property {(milliseconds: number) => Promise<unknown>} [pause]
+ * @property {typeof checkAppPage} [checkPage] Opens the new version's page.
+ * @property {(commit: string, of: string) => boolean} [isEarlier] Whether a commit comes
+ *   before another in main's history.
+ */
+
+/**
  * Deploys a Worker. An app's answers at its workers.dev address, and its page has to draw. A
  * service has no address, so it answers through the apps' health.
- * @param {object} options
- * @param {string} options.worker The app or service whose Worker this is.
- * @param {string} [options.channel] The channel whose Worker this is.
- * @param {import("./apps.mjs").WorkerRoots} [options.roots] Where the apps and services are.
- * @param {string} options.script The bundled Worker to upload.
- * @param {string} [options.commit] The commit the bundle was built from, recorded on the version.
- * @param {(since: string) => string[] | null} [options.findChanges] Files changed since a commit.
- * @param {typeof fetch} [options.fetchImpl]
- * @param {NodeJS.ProcessEnv} [options.env]
- * @param {typeof console.log} [options.log]
- * @param {(milliseconds: number) => Promise<unknown>} [options.pause]
- * @param {typeof checkAppPage} [options.checkPage] Opens the new version's page.
- * @param {boolean} [options.isCheckOnly] Check a service without uploading it.
- * @param {(confirm: () => Promise<void>) => void} [options.deferServiceCheck] Keep the service's check until apps settle.
- * @param {(commit: string, of: string) => boolean} [options.isEarlier] Whether a commit comes
- *   before another in main's history.
+ * @param {WorkerDeploymentOptions & ServiceDeploymentOptions} options
  * @returns {Promise<string | null>} the app's address or the service's name, or null when nothing
  *   needed deploying
  */
@@ -359,6 +361,10 @@ export async function deploy({
   const base = findWorkersApi(account);
   const callCloudflare = createCloudflareCaller({ fetchImpl, env, log });
   const deployments = createDeploymentsClient({ base, name, callCloudflare });
+
+  function logWorkerCheck() {
+    log("worker check: ok");
+  }
 
   async function findLiveVersions() {
     const [newest] = await deployments.listDeployments();
@@ -482,11 +488,14 @@ export async function deploy({
     if (check.status === "answering") log("health check: ok");
     if (check.status === "unchecked") log(`::notice::health check: skipped, ${check.reason}`);
     if (check.status === "unanswered") {
-      const problem = `The service didn't answer as the ${isUploaded ? "new" : "live"} version: ${check.reason}`;
+      const versionProblem = isUploaded
+        ? "The service didn't answer as the new version"
+        : "The service didn't answer as the live version";
+      const problem = `${versionProblem}: ${check.reason}`;
       if (!isUploaded) throw new Error(problem);
       await restoreAfter(problem, previousVersions);
     }
-    if (isUploaded) log("worker check: ok");
+    if (isUploaded) logWorkerCheck();
   }
 
   async function scheduleServiceCheck(previousVersions, expectedCommit, isUploaded) {
@@ -511,7 +520,7 @@ export async function deploy({
   } else {
     await confirmWorkerAnswers(deployed, previousVersions);
     await confirmPageDraws(previousVersions);
-    log("worker check: ok");
+    logWorkerCheck();
   }
   return deployed;
 }
@@ -567,7 +576,7 @@ const createWorkerLog = (worker) => (message) => {
 };
 
 /**
- * Deploys a group of Workers at once, and says whether every one deployed.
+ * Settles a group of tasks, one per Worker, and says whether each succeeded.
  * @param {string[]} workers
  * @param {(worker: string) => Promise<unknown>} deployWorker
  * @param {(line: string) => void} logError
@@ -589,7 +598,7 @@ async function deployGroup(workers, deployWorker, logError) {
  * @param {string[]} workers
  * @param {(worker: string, options: ServiceDeploymentOptions) => Promise<unknown>} deployWorker
  * @param {{ logError?: (line: string) => void, isServiceWorker?: (worker: string) => boolean, serviceWorkers?: string[] }} [options]
- * @returns {Promise<boolean>} whether every Worker deployed
+ * @returns {Promise<boolean>} whether every Worker deployed and every service passed its check
  */
 export async function deployWorkers(
   workers,
@@ -597,7 +606,7 @@ export async function deployWorkers(
   {
     logError = console.error,
     isServiceWorker = (worker) => isService(worker),
-    serviceWorkers = workers.filter(isServiceWorker),
+    serviceWorkers = [],
   } = {},
 ) {
   const services = [...new Set([...workers.filter(isServiceWorker), ...serviceWorkers])];
@@ -617,6 +626,47 @@ export async function deployWorkers(
     logError,
   );
   return areServicesDeployed && areAppsDeployed && areServicesConfirmed;
+}
+
+/**
+ * Builds the selected Workers and checks every service on their channel after apps settle.
+ * @param {string[]} workers
+ * @param {object} [options]
+ * @param {string} [options.channel]
+ * @param {string} [options.commit]
+ * @param {import("./apps.mjs").WorkerRoots} [options.roots]
+ * @param {typeof buildWorker} [options.buildWorkerImpl]
+ * @param {typeof deploy} [options.deployWorkerImpl]
+ * @param {(line: string) => void} [options.logError]
+ * @returns {Promise<boolean>} whether every Worker deployed and every service passed its check
+ */
+export async function deployRelease(
+  workers,
+  {
+    channel = "production",
+    commit,
+    roots,
+    buildWorkerImpl = buildWorker,
+    deployWorkerImpl = deploy,
+    logError = console.error,
+  } = {},
+) {
+  /** @param {string} worker @param {ServiceDeploymentOptions} options */
+  const deployWorker = async (worker, options) =>
+    deployWorkerImpl({
+      ...options,
+      worker,
+      channel,
+      roots,
+      script: options.isCheckOnly ? "" : await buildWorkerImpl(worker, { channel }),
+      commit,
+      log: createWorkerLog(worker),
+    });
+  return deployWorkers(workers, deployWorker, {
+    serviceWorkers: listServices(roots?.servicesRoot),
+    isServiceWorker: (worker) => isService(worker, roots?.servicesRoot),
+    logError,
+  });
 }
 
 /** @param {string} channel */
@@ -697,16 +747,5 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     if (isCovered) process.exit(0);
   }
   console.log(`Deploying ${branch} at ${commit.slice(0, 7)} to ${channel}`);
-  /** @param {string} worker @param {ServiceDeploymentOptions} options */
-  const deployWorker = async (worker, options) =>
-    deploy({
-      ...options,
-      worker,
-      channel,
-      script: options.isCheckOnly ? "" : await buildWorker(worker, { channel }),
-      commit,
-      log: createWorkerLog(worker),
-    });
-  const serviceWorkers = listServices();
-  if (!(await deployWorkers(workers, deployWorker, { serviceWorkers }))) process.exit(1);
+  if (!(await deployRelease(workers, { channel, commit }))) process.exit(1);
 }

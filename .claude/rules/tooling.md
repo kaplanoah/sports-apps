@@ -26,7 +26,9 @@ paths:
   in a field of its own, `services.<name>`, apart from the app's own status,
   and puts the service's earlier version back unless every app that reports it says it's ok at the new commit (`worker/check-service.mjs`).
   An unchanged service is checked at its own live commit and isn't rolled back.
-  The check is skipped only when no app's live version binds the service.
+  A service with a known release is skipped only when no app's live version binds it.
+  A manual `deploy:api` that names one app fails if a service has no recorded live commit,
+  even when no app binds it yet; deploy all Workers to upload that service first.
   The service reads its release from its `VERSION` binding, which the upload's `workers/tag` sets to the short commit.
   The `Watch apps` workflow checks each service the same way, keeping one open issue for each that isn't answering, which closes once it answers again.
   Each channel's Cloudflare token edits only the Workers it names, so before a service's first deploy on a channel,

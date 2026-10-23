@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { deploy, deployWorkers } from "../worker/deploy.mjs";
+import { deploy, deployRelease, deployWorkers } from "../worker/deploy.mjs";
 import { createServiceRoots } from "./service-roots.js";
 
 const ENV = { CLOUDFLARE_ACCOUNT_ID: "acct123", CLOUDFLARE_WORKERS_SUBDOMAIN: "example-subdomain" };
@@ -263,22 +263,20 @@ async function deployServiceAndApps({
   };
   try {
     const workers = isAppOnly ? ["mlb", "wnba"] : ["accounts", "mlb", "wnba"];
-    const isDeployed = await deployWorkers(
-      workers,
-      (worker, options) =>
+    const isDeployed = await deployRelease(workers, {
+      roots,
+      commit: NEW_COMMIT,
+      buildWorkerImpl: async () => "export default {}",
+      deployWorkerImpl: (options) =>
         deploy({
           ...options,
-          worker,
-          roots,
-          script: "export default {}",
-          commit: NEW_COMMIT,
           findChanges: () =>
             isServiceChanged
               ? ["shared/worker/services.js"]
               : ["apps/mlb/worker/index.js", "apps/wnba/worker/index.js"],
           fetchImpl,
           env: ENV,
-          log: (line) => lines.push(`${worker}: ${line}`),
+          log: (line) => lines.push(`${options.worker}: ${line}`),
           pause: skipPause,
           isEarlier: () => false,
           checkPage: async ({ app }) => {
@@ -290,13 +288,63 @@ async function deployServiceAndApps({
               : { status: "drawn" };
           },
         }),
-      { serviceWorkers: ["accounts"], logError: (line) => errors.push(line) },
-    );
+      logError: (line) => errors.push(line),
+    });
     return { isDeployed, events, errors, lines, calls, previousVersions };
   } finally {
     remove();
   }
 }
+
+test("an app-only release builds only its app and checks every service on its channel", async () => {
+  const { roots, remove } = createServiceRoots();
+  const events = [];
+  const prepared = [];
+  try {
+    const isDeployed = await deployRelease(["mlb"], {
+      channel: "beta",
+      commit: NEW_COMMIT,
+      roots,
+      buildWorkerImpl: async (worker, { channel }) => {
+        assert.equal(worker, "mlb", "a check-only service must not be built");
+        assert.equal(channel, "beta");
+        events.push(`build ${worker}`);
+        return "export default {}";
+      },
+      deployWorkerImpl: async (options) => {
+        prepared.push(options);
+        events.push(`prepare ${options.worker}`);
+        options.deferServiceCheck?.(async () => {
+          events.push(`check ${options.worker}`);
+        });
+        return null;
+      },
+    });
+    assert.equal(isDeployed, true);
+    assert.deepEqual(events, ["prepare accounts", "build mlb", "prepare mlb", "check accounts"]);
+    assert.deepEqual(
+      prepared.map(({ worker, channel, script, isCheckOnly, commit }) => ({
+        worker,
+        channel,
+        script,
+        isCheckOnly,
+        commit,
+      })),
+      [
+        { worker: "accounts", channel: "beta", script: "", isCheckOnly: true, commit: NEW_COMMIT },
+        {
+          worker: "mlb",
+          channel: "beta",
+          script: "export default {}",
+          isCheckOnly: undefined,
+          commit: NEW_COMMIT,
+        },
+      ],
+    );
+  } finally {
+    remove();
+  }
+});
 
 test("a first service deploy is checked through newly bound apps after both pages settle", async () => {
   const { isDeployed, events, lines } = await deployServiceAndApps({ isServiceNew: true });

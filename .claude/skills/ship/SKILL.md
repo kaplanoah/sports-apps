@@ -161,9 +161,12 @@ Wait for the Deploy runs for the merge commit to finish, then read their logs an
   A line before it saying "page check: skipped" names a page the deploy couldn't open, like one whose secrets are missing or out of date,
   and one saying "page check: ok, but" a page that opened without the code its environment holds:
   tell the user that too.
-- A service's lines say "health check: ok": every app that reports it says it answers at the new commit.
+- A service's lines say "health check: ok": every app that reports it says it answers at the uploaded commit,
+  or at its own live commit when the run didn't change the service.
   Saying "health check: skipped" because "no app reaches" it yet, no app's live version binds it, so the service went unchecked:
   tell the user, since the `Watch apps` workflow is the first to read it.
+- It says "The service didn't answer as the live version": the run failed without rolling back the unchanged service.
+  Inspect the service and the reporting apps' health, and tell the user what didn't answer.
 - It says "Nothing the Worker runs changed": the merge didn't need a deploy, or the first Deploy run already deployed it.
   Tell the user which.
 - It says "has moved on" and "whose deploy covers": another merge landed first, and CI passed on it, so its Deploy run covers this one.
