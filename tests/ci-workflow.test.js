@@ -14,7 +14,7 @@ import { formatJobOutputs, listJobs as listPlanJobs, writeReview } from "../work
 import { findRefusal } from "../worker/review-git.mjs";
 import { escapePattern } from "../shared/page/escape-pattern.js";
 import { REPO_ROOT, readRepoFile } from "./repo-files.js";
-import { readStepScript } from "./workflow-step.js";
+import { readStepInput, readStepScript } from "./workflow-step.js";
 import { MUTATION_TARGETS } from "../worker/mutation-targets.mjs";
 
 const WORKFLOWS = readdirSync(new URL(".github/workflows/", REPO_ROOT)).filter((name) =>
@@ -852,23 +852,6 @@ test("only trusted posting jobs can write to the pull request", () => {
   assert.equal(withClaude.length, 3);
   for (const job of withClaude) assert.doesNotMatch(job, /pull-requests: write/);
 });
-
-/**
- * A step's input, through the YAML anchor it names when it names one.
- * @param {string} workflow the workflow's text
- * @param {string} step
- * @param {string} input
- */
-function readStepInput(workflow, step, input) {
-  const value = step.match(new RegExp(`^ {10}${input}: (.*(?:\\n(?: {12}.*)?)*)`, "m"))?.[1] ?? "";
-  const alias = value.trim().match(/^\*([\w-]+)$/)?.[1];
-  if (!alias) return value.trim();
-  return (
-    workflow
-      .match(new RegExp(`^ {10}[\\w-]+: &${alias} (.*(?:\\n(?: {12}.*)?)*)`, "m"))?.[1]
-      ?.trim() ?? ""
-  );
-}
 
 /**
  * Each step that runs Claude in the named workflows, with the workflow's name and text.

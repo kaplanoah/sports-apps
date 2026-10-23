@@ -11,6 +11,7 @@ import {
 } from "../worker/find-trusted-review.mjs";
 import { readReviewIdentity, sealReviewArtifact } from "../worker/review-data.mjs";
 import { readRepoFile, REPO_ROOT } from "./repo-files.js";
+import { readStepInput } from "./workflow-step.js";
 
 const SHA = "a".repeat(40);
 const TREE = "e".repeat(40);
@@ -38,6 +39,58 @@ const createRun = (changes = {}) => ({
   conclusion: "success",
   status: "completed",
   ...changes,
+});
+
+test("actual producer names and CI download inputs agree with the trusted join", async () => {
+  const producer = readRepoFile(".github/workflows/review.yml");
+  const consumer = readRepoFile(".github/workflows/ci.yml");
+  const runName = producer.match(/^run-name: (.+)$/m)?.[1];
+  assert.ok(runName);
+  const steps = producer.split(/^ {6}- /m);
+  const record = steps.findIndex((step) =>
+    step.startsWith("name: Record the trusted review result\n"),
+  );
+  assert.ok(record >= 0);
+  const upload = steps[record + 1];
+  assert.match(upload, /uses: actions\/upload-artifact@/);
+  const download = consumer
+    .split(/^ {6}- /m)
+    .find((step) => step.includes("run-id: ${{ steps.find.outputs.run }}"));
+  assert.ok(download);
+  assert.match(download, /uses: actions\/download-artifact@/);
+  /** @param {string} template @param {Record<string, string>} context */
+  const render = (template, context) =>
+    template.replace(/\$\{\{\s*(.*?)\s*\}\}/g, (_, expression) => {
+      assert.ok(Object.hasOwn(context, expression), `Unknown workflow expression: ${expression}`);
+      return context[expression];
+    });
+  for (const source of [EXPECTED.base, ID_ENV.REVIEW_TRUSTED]) {
+    const context = {
+      "github.event.pull_request.number": EXPECTED.pull,
+      "github.event.pull_request.head.sha": EXPECTED.head,
+      "github.event.pull_request.base.sha": EXPECTED.base,
+      "github.sha": source,
+      "steps.result.outputs.tree": TREE,
+      "steps.find.outputs.tree": TREE,
+      "steps.find.outputs.run": "7",
+    };
+    const run = createRun({ display_title: render(runName, context) });
+    const artifact = {
+      name: render(readStepInput(producer, upload, "name"), context),
+      workflow_run: { id: run.id },
+    };
+    assert.ok(isTrustedReviewRun(run, EXPECTED));
+    assert.deepEqual(
+      await findTrustedReviewRun({
+        ...EXPECTED,
+        readGitHub: async (path) =>
+          path.includes("/artifacts?") ? { artifacts: [artifact] } : { workflow_runs: [run] },
+      }),
+      { run: run.id, tree: TREE, source, pending: false },
+    );
+    assert.equal(render(readStepInput(consumer, download, "name"), context), artifact.name);
+    assert.equal(render(readStepInput(consumer, download, "run-id"), context), String(run.id));
+  }
 });
 
 test("only the exact trusted producer's immutable event identity can join, including forks", async () => {
@@ -235,8 +288,15 @@ function createMergeFixture() {
   const merge = readGit(origin, ["rev-parse", "HEAD"]);
   const tree = readGit(origin, ["rev-parse", "HEAD^{tree}"]);
   const checkout = join(createFolder(), "checkout");
-  readGit(origin, ["clone", origin, checkout]);
-  readGit(checkout, ["checkout", "--detach", base]);
+  readGit(origin, ["init", checkout]);
+  readGit(checkout, ["remote", "add", "origin", origin]);
+  readGit(checkout, ["fetch", "--depth=1", "origin", base]);
+  readGit(checkout, ["checkout", "--detach", "FETCH_HEAD"]);
+  assert.equal(readGit(checkout, ["rev-parse", "--is-shallow-repository"]), "true");
+  assert.throws(
+    () => readGit(checkout, ["cat-file", "-e", merge]),
+    "resolved merge must be fetched",
+  );
   return { base, head, merge, tree, checkout };
 }
 
