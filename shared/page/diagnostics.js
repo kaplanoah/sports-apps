@@ -720,11 +720,13 @@ async function copyReport(text) {
 }
 
 async function sendReport() {
-  const text = writeReport(describePageNow());
+  const text = buildDiagnosticsReport();
   const shared = await shareReport(text);
   if (shared === "shared") showReportStep("shared");
   else if (shared === "failed" && (await copyReport(text))) showReportStep("copied");
 }
+
+export const buildDiagnosticsReport = () => writeReport(describePageNow());
 
 /** @param {Event} event */
 function followSectionClick(event) {

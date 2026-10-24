@@ -108,6 +108,8 @@
   --type-setting-note-size: calc(13.25rem / 16);
   --type-setting-note-weight: 400;
   --type-notice-title-size: calc(14.75rem / 16);
+  --type-confirmation-size: calc(20.5rem / 16);
+  --type-confirmation-weight: 525;
   --type-notice-title-weight: 525;
   --type-notice-text-size: calc(13.75rem / 16);
   --type-notice-text-weight: 400;
@@ -173,6 +175,7 @@
   --focus-ring: var(--now);
   --gate-code-font: var(--numbers);
   --gate-problem: var(--now);
+  --radius-contact: 2px;
   --radius-card: 3px;
   --radius-chip: 3px;
   /* Chivo Mono's capitals land its baseline on a whole pixel only in an even height. */
@@ -1436,13 +1439,13 @@ body.kbd .rank-item .grip:focus {
 /* Settings fill the whole sheet, so the ranking can be one sheet tall, and a scroll settles on the
    settings, the ranking, the copyright at their end, or Diagnostics past it, each of which would
    otherwise be close enough to the one before for the scroll to settle back on that. */
-.settings-panel {
+#settingsDialog {
   container-type: size;
   scroll-snap-type: y proximity;
   scroll-padding-top: var(--section-gap);
   scroll-padding-bottom: var(--bottom-padding);
 }
-.settings-panel .sheet-top {
+#settingsDialog .sheet-top {
   scroll-snap-align: start;
 }
 .settings-footer,
@@ -1486,12 +1489,12 @@ body.kbd .rank-item .grip:focus {
    The ranking's heading gets its own grid row so the list can fill the rest. Only Diagnostics,
    past the sheet's end, need a scroll. */
 @media (min-width: 900px) {
-  .settings-panel {
+  #settingsDialog {
     width: min(920px, calc(100% - 48px));
     max-width: none;
     scroll-snap-type: none;
   }
-  .settings-body {
+  #settingsDialog .settings-body {
     --ranking-heading-top: 20px;
     height: 100%;
     display: grid;
@@ -1499,13 +1502,13 @@ body.kbd .rank-item .grip:focus {
     grid-template-rows: auto auto minmax(0, 1fr);
     gap: 0;
   }
-  .settings-body::before {
+  #settingsDialog .settings-body::before {
     content: "";
     grid-column: 2;
     grid-row: 2 / 4;
     border-left: 1px solid var(--divider);
   }
-  .settings-body .sheet-top {
+  #settingsDialog .settings-body .sheet-top {
     grid-column: 1 / -1;
     grid-row: 1;
     box-shadow: 0 1px 0 var(--divider);

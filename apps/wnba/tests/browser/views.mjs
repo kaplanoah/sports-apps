@@ -1,3 +1,4 @@
+import { CONTACT_VIEWS } from "../../../../tests/browser/contact-views.mjs";
 import { expect, openApp, openGameSheet, keepHighlights } from "./harness.mjs";
 import { openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
 import { SETTINGS } from "../../../../tests/browser/settings.mjs";
@@ -23,6 +24,7 @@ const FINAL_WITH_HIGHLIGHTS = "Game details: Aces at Fever, First Round Game 2";
 
 /** Each view, opened from the last, and what shows once it's drawn. */
 const VIEWS = [
+  ...CONTACT_VIEWS,
   {
     name: "Bracket",
     open: (page) => openSeasonPart(page, "Bracket"),

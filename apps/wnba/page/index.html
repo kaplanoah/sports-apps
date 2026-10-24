@@ -56,6 +56,7 @@
     crossorigin
   />
   <link rel="stylesheet" href="shared/type.css" />
+  <link rel="stylesheet" href="shared/contact.css" />
   <link rel="stylesheet" href="shared/chrome.css" />
   <link rel="stylesheet" href="shared/diagnostics.css" />
   <link rel="stylesheet" href="shared/game-row.css" />
@@ -383,6 +384,15 @@
           ></div>
         </div>
       </div>
+      <button
+        type="button"
+        class="contact-row"
+        id="contactBtn"
+        data-setting="settings:contact"
+        aria-haspopup="dialog"
+      >
+        Contact
+      </button>
       <footer class="settings-footer">
         <p class="settings-version" id="versionNote" hidden data-last-drawn></p>
         <p class="settings-version">Includes data from NBA.com</p>
@@ -407,6 +417,10 @@
         <div class="diagnostics" id="diagnostics" hidden></div>
       </section>
     </div>
+  </dialog>
+
+  <dialog id="contactDialog" class="settings-panel" aria-labelledby="contactTitle">
+    <div class="settings-body" id="contactBody" data-last-drawn></div>
   </dialog>
 
   <dialog id="sheetDialog" class="sheet-panel" aria-labelledby="gameTitle">

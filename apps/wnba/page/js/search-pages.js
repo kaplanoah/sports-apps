@@ -5,6 +5,7 @@
 import {
   ATHLETIC_SETTING,
   DIAGNOSTICS_SETTING,
+  CONTACT_SETTING,
   NEWS_TAB,
   NOTIFICATIONS_SETTING,
   SEASON_SETTING,
@@ -75,6 +76,7 @@ const LEAGUE_PAGES = {
     describeTeamOutletsSetting("Liberty"),
     ATHLETIC_SETTING,
     describeAppearanceSetting(["walnut", "maple"]),
+    CONTACT_SETTING,
     DIAGNOSTICS_SETTING,
   ],
   gameParts: [],

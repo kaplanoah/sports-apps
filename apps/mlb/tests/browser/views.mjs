@@ -1,3 +1,4 @@
+import { CONTACT_VIEWS } from "../../../../tests/browser/contact-views.mjs";
 import {
   expect,
   openApp,
@@ -77,6 +78,7 @@ async function openGame(page, day, game) {
  */
 export const VIEW_GROUPS = {
   "the page's tabs": [
+    ...CONTACT_VIEWS,
     {
       name: "Bracket",
       open: (page) => openSeasonPart(page, "Bracket"),

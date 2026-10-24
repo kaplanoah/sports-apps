@@ -5,10 +5,12 @@
 // .sheet-top, its close button (.sheet-close), and a place for the release (#versionNote).
 
 import { formatDateAndTime } from "./days.js";
-import { joinWithSeparator, setHtml } from "./html.js";
+import { html, joinWithSeparator, setHtml } from "./html.js";
 import { readPageRelease } from "./release.js";
 import { openSheet, wireSheet } from "./sheet.js";
 import { keepDialogFor } from "./sheet-memory.js";
+import { startContact } from "./contact.js";
+import { CONTACT_CARET } from "./contact-view.js";
 
 /* global START_AFTER_AWAY_MS -- from long-away.js */
 
@@ -76,4 +78,6 @@ export function startSettingsSheet({ isOwnGesture } = {}) {
   wireSheet(dialog, { isOwnGesture: (target) => isSettingsControlGesture(target, isOwnGesture) });
   keepDialogFor(dialog, START_AFTER_AWAY_MS);
   showRelease();
+  setHtml(findElement("contactBtn"), html`Contact${CONTACT_CARET}`);
+  startContact(/** @type {HTMLDialogElement} */ (findElement("contactDialog")));
 }
