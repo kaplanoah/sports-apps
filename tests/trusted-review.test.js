@@ -12,7 +12,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { readStepScript } from "./workflow-step.js";
+import { createReviewDecisionEnvironment, readStepScript } from "./workflow-step.js";
 import { REPO_ROOT, readRepoFile } from "./repo-files.js";
 import { GitHubError } from "../worker/github-api.mjs";
 import { createReviewGitEnvironment } from "../worker/review-repository.mjs";
@@ -113,10 +113,9 @@ test("trusted review pins workflow authority, source, Node and isolated artifact
   const main = readRepoFile(".github/workflows/review.yml");
   const area = readRepoFile(".github/workflows/trusted-review-area.yml");
   assert.match(main, / {2}pull_request_target:/);
-  assert.doesNotMatch(main, /base\.ref/);
   assert.match(
     main,
-    /^run-name: Review \$\{\{ github.event.pull_request.number \}\} head \$\{\{ github.event.pull_request.head.sha \}\} base \$\{\{ github.event.pull_request.base.sha \}\} source \$\{\{ github.sha \}\}$/m,
+    /^run-name: &review-name Review \$\{\{ github.event.pull_request.number \}\} head \$\{\{ github.event.pull_request.head.sha \}\} base \$\{\{ github.event.pull_request.base.sha \}\} source \$\{\{ github.sha \}\} target .* intent /m,
   );
   let claude = 0;
   for (const workflow of [main, area]) {
@@ -171,14 +170,14 @@ test("missing required credentials fail visibly rather than declaring review unn
   );
   const output = join(createFolder(), "outputs");
   const result = spawnSync("bash", ["-c", script], {
-    env: {
+    env: createReviewDecisionEnvironment({
       PATH: process.env.PATH,
       GITHUB_OUTPUT: output,
       EVENT: "pull_request_target",
       ACTION: "opened",
       AUTHOR: "example",
       REVIEW_LABEL: "review",
-    },
+    }),
     encoding: "utf8",
   });
   assert.equal(result.status, 1);
@@ -1031,8 +1030,9 @@ test("stacked target runs plan and summarize with the same owed and result gates
   const workflow = readRepoFile(".github/workflows/review.yml");
   for (const name of ["review-plan", "review"]) {
     const job = workflow.split(`  ${name}:\n`)[1].split(/^ {2}[a-z][\w-]*:/m)[0];
-    assert.match(job, /if: \$\{\{ !cancelled\(\) \}\}/);
-    assert.doesNotMatch(job, /base\.ref/);
+    assert.match(job, /if: \$\{\{ !cancelled\(\)/);
+    if (name === "review") assert.doesNotMatch(job, /base\.ref/);
+    else assert.match(job, /github.event.pull_request.base.ref != 'main'/);
   }
   assert.match(workflow, /id: result\n {8}if: .*steps.prepare.outputs.available == 'true'/);
   assert.doesNotMatch(workflow, /pattern: trusted-review-\*\n/);
@@ -1070,7 +1070,7 @@ test("only asked plans prepare PR code and consume their label even without a me
   assert.doesNotMatch(unavailable.stdout, /Re-add the review label/);
   const output = join(createFolder(), "sync-output");
   const result = spawnSync("bash", ["-c", readStepScript(workflow, "Decide whether to review")], {
-    env: {
+    env: createReviewDecisionEnvironment({
       PATH: process.env.PATH,
       GITHUB_OUTPUT: output,
       EVENT: "pull_request_target",
@@ -1078,7 +1078,7 @@ test("only asked plans prepare PR code and consume their label even without a me
       AUTHOR: "example",
       REVIEW_LABEL: "review",
       ANTHROPIC_API_KEY: "example",
-    },
+    }),
     encoding: "utf8",
   });
   assert.equal(result.status, 0, result.stderr);
@@ -1090,7 +1090,7 @@ test("Dependabot remains excluded when no checkout or merge was prepared", () =>
   for (const action of ["opened", "labeled"]) {
     const output = join(createFolder(), "dependabot-output");
     const result = spawnSync("bash", ["-c", readStepScript(workflow, "Decide whether to review")], {
-      env: {
+      env: createReviewDecisionEnvironment({
         PATH: process.env.PATH,
         GITHUB_OUTPUT: output,
         EVENT: "pull_request_target",
@@ -1101,7 +1101,7 @@ test("Dependabot remains excluded when no checkout or merge was prepared", () =>
         HEAD_REPOSITORY: "owner/repository",
         REPOSITORY: "owner/repository",
         REVIEW_LABEL: "review",
-      },
+      }),
       encoding: "utf8",
     });
     assert.equal(result.status, 0, result.stderr);
@@ -1122,12 +1122,14 @@ test("Dependabot remains excluded when no checkout or merge was prepared", () =>
 
 test("external forks need a fresh review label before spending review credentials", () => {
   const workflow = readRepoFile(".github/workflows/review.yml");
-  for (const [name, expression] of [
-    ["ASSOCIATION", "github.event.pull_request.author_association"],
-    ["HEAD_REPOSITORY", "github.event.pull_request.head.repo.full_name"],
-    ["REPOSITORY", "github.repository"],
+  const title = workflow.split("\n")[1];
+  for (const expression of [
+    "github.event.pull_request.author_association",
+    "github.event.pull_request.head.repo.full_name",
+    "github.repository",
   ])
-    assert.ok(workflow.includes(`${name}: \${{ ${expression} }}`));
+    assert.ok(title.includes(expression));
+  assert.match(workflow, /REVIEW_RUN_NAME: \*review-name/);
   for (const action of ["opened", "ready_for_review", "synchronize", "unlabeled", "labeled"]) {
     for (const association of ["NONE", "CONTRIBUTOR", "FIRST_TIME_CONTRIBUTOR", "FIRST_TIMER"]) {
       const output = join(createFolder(), "fork-output");
@@ -1135,7 +1137,7 @@ test("external forks need a fresh review label before spending review credential
         "bash",
         ["-c", readStepScript(workflow, "Decide whether to review")],
         {
-          env: {
+          env: createReviewDecisionEnvironment({
             PATH: process.env.PATH,
             GITHUB_OUTPUT: output,
             EVENT: "pull_request_target",
@@ -1147,7 +1149,7 @@ test("external forks need a fresh review label before spending review credential
             REPOSITORY: "owner/repository",
             REVIEW_LABEL: "review",
             ANTHROPIC_API_KEY: "example",
-          },
+          }),
           encoding: "utf8",
         },
       );
@@ -1172,7 +1174,7 @@ test("external forks need a fresh review label before spending review credential
         "bash",
         ["-c", readStepScript(workflow, "Decide whether to review")],
         {
-          env: {
+          env: createReviewDecisionEnvironment({
             PATH: process.env.PATH,
             GITHUB_OUTPUT: output,
             EVENT: "pull_request_target",
@@ -1184,7 +1186,7 @@ test("external forks need a fresh review label before spending review credential
             REVIEW_LABEL: "review",
             ANTHROPIC_API_KEY: "example",
             ...overrides,
-          },
+          }),
           encoding: "utf8",
         },
       );

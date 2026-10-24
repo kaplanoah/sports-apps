@@ -1,0 +1,63 @@
+name: Publish trusted review
+
+on:
+  workflow_call:
+    inputs:
+      head:
+        type: string
+        required: true
+      phase:
+        type: string
+        required: true
+      producers:
+        type: string
+        default: "{}"
+
+permissions:
+  contents: read
+  actions: read
+  pull-requests: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: trusted-review-publisher
+    concurrency:
+      group: trusted-review-publication-${{ github.repository }}-${{ inputs.head }}
+      cancel-in-progress: false
+      queue: max
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version-file: .nvmrc
+          package-manager-cache: false
+      - name: Mint a repository-only check publisher token
+        id: app
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3
+        with:
+          app-id: ${{ vars.TRUSTED_REVIEW_APP_ID }}
+          private-key: ${{ secrets.TRUSTED_REVIEW_APP_PRIVATE_KEY }}
+          repositories: ${{ github.event.repository.name }}
+          permission-checks: write
+      - name: Reconcile the authoritative review check
+        env:
+          GH_TOKEN: ${{ github.token }}
+          APP_TOKEN: ${{ steps.app.outputs.token }}
+          TRUSTED_REVIEW_APP_ID: ${{ vars.TRUSTED_REVIEW_APP_ID }}
+          PUBLISH_HEAD: ${{ inputs.head }}
+          PUBLISH_PHASE: ${{ inputs.phase }}
+          PUBLISH_NEEDS: ${{ inputs.producers }}
+        run: node worker/publish-trusted-review.mjs
+      - name: Preserve the terminal publication decision
+        if: inputs.phase == 'finish'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: trusted-review-publication-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/review-publication-evidence/decision.json
+          if-no-files-found: ignore
+          retention-days: 14

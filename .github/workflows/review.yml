@@ -1,5 +1,5 @@
 name: Trusted review
-run-name: Review ${{ github.event.pull_request.number }} head ${{ github.event.pull_request.head.sha }} base ${{ github.event.pull_request.base.sha }} source ${{ github.sha }}
+run-name: &review-name Review ${{ github.event.pull_request.number }} head ${{ github.event.pull_request.head.sha }} base ${{ github.event.pull_request.base.sha }} source ${{ github.sha }} target ${{ github.event.pull_request.base.ref == 'main' && 'main' || 'other' }} intent ${{ github.event.pull_request.user.login == 'dependabot[bot]' && 'exempt' || (!github.event.pull_request.draft && ((github.event.action == 'labeled' && github.event.label.name == 'review') || ((github.event.action == 'opened' || github.event.action == 'ready_for_review') && (contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.pull_request.author_association) || github.event.pull_request.head.repo.full_name == github.repository)))) && 'review' || 'observe' }}
 
 on:
   pull_request_target:
@@ -21,8 +21,20 @@ concurrency:
   cancel-in-progress: ${{ github.event.action != 'labeled' && github.event.action != 'unlabeled' }}
 
 jobs:
+  review-begin:
+    if: vars.TRUSTED_REVIEW_PUBLISHER_ENABLED == 'true' && github.event.pull_request.base.ref == 'main'
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
+    uses: ./.github/workflows/publish-trusted-review.yml
+    with:
+      head: ${{ github.event.pull_request.head.sha }}
+      phase: begin
+
   review-plan:
-    if: ${{ !cancelled() }}
+    needs: review-begin
+    if: ${{ !cancelled() && (vars.TRUSTED_REVIEW_PUBLISHER_ENABLED != 'true' || github.event.pull_request.base.ref != 'main' || needs.review-begin.result == 'success') }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -45,10 +57,7 @@ jobs:
           ACTION: ${{ github.event.action }}
           LABEL: ${{ github.event.label.name }}
           IS_DRAFT: ${{ github.event.pull_request.draft }}
-          AUTHOR: ${{ github.event.pull_request.user.login }}
-          ASSOCIATION: ${{ github.event.pull_request.author_association }}
-          HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
-          REPOSITORY: ${{ github.repository }}
+          REVIEW_RUN_NAME: *review-name
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
@@ -57,31 +66,25 @@ jobs:
             labeled=true
           fi
           echo "labeled=$labeled" >> "$GITHUB_OUTPUT"
-          case "$ASSOCIATION" in
-            OWNER | MEMBER | COLLABORATOR) trusted=true ;;
-            *) trusted=false ;;
-          esac
-          if [ -n "$HEAD_REPOSITORY" ] && [ "$HEAD_REPOSITORY" = "$REPOSITORY" ]; then
-            trusted=true
-          fi
-          case "$ACTION" in
-            opened | ready_for_review) asked=$trusted ;;
-            *) asked=$labeled ;;
+          intent="${REVIEW_RUN_NAME##* intent }"
+          case "$intent" in
+            review | observe | exempt) ;;
+            *) echo "::error::Invalid native review intent."; exit 1 ;;
           esac
           reason=""
           owed=false
           if [ "$EVENT" != "pull_request_target" ]; then
             reason="only pull requests are reviewed"
-          elif [ "$AUTHOR" = "dependabot[bot]" ]; then
+          elif [ "$intent" = "exempt" ]; then
             reason="Dependabot's pull requests aren't reviewed"
           elif [ -z "$CLAUDE_CODE_OAUTH_TOKEN" ] && [ -z "$ANTHROPIC_API_KEY" ]; then
             echo "::error::Required review credentials are missing."
             exit 1
-          elif [ "$asked" != "true" ]; then
-            reason="there is no authorized review request; a maintainer can add the $REVIEW_LABEL label"
-            owed=true
           elif [ "$IS_DRAFT" = "true" ]; then
             reason="a draft is reviewed once it's ready for review"
+            owed=true
+          elif [ "$intent" != "review" ]; then
+            reason="there is no authorized review request; a maintainer can add the $REVIEW_LABEL label"
             owed=true
           fi
           echo "owed=$owed" >> "$GITHUB_OUTPUT"
@@ -318,6 +321,10 @@ jobs:
     permissions:
       contents: read
       pull-requests: write
+    outputs:
+      artifact: ${{ steps.upload-result.outputs.artifact-id }}
+      digest: ${{ steps.upload-result.outputs.artifact-digest }}
+      tree: ${{ steps.result.outputs.tree }}
     steps:
       - name: Fail when the review couldn't be planned
         if: needs.review-plan.result != 'success'
@@ -353,9 +360,24 @@ jobs:
           REVIEW_OWED: ${{ needs.review-plan.outputs.owed }}
         run: node "$RUNNER_TEMP/trusted/worker/trusted-review.mjs" result
       - if: steps.result.outputs.tree != ''
+        id: upload-result
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: trusted-review-passed-${{ steps.result.outputs.tree }}
           path: ${{ env.REVIEW_UPLOAD }}/trusted-review-result/
           retention-days: 14
           overwrite: true
+
+  review-publish:
+    needs:
+      [review-begin, review-plan, review-label, review-area, review-across, review-post, review]
+    if: ${{ always() && vars.TRUSTED_REVIEW_PUBLISHER_ENABLED == 'true' && github.event.pull_request.base.ref == 'main' }}
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
+    uses: ./.github/workflows/publish-trusted-review.yml
+    with:
+      head: ${{ github.event.pull_request.head.sha }}
+      phase: finish
+      producers: ${{ toJSON(needs) }}
