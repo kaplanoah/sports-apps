@@ -1,4 +1,4 @@
-import { readReviewRun } from "./review-run.mjs";
+import { readReviewRun, REVIEW_CHECK_NAME } from "./review-run.mjs";
 import { createHash } from "node:crypto";
 
 /** @param {any} evidence */
@@ -12,7 +12,7 @@ export const createPublicationStamp = (evidence) =>
 export function validatePublicationAttestation(check, evidence, appId) {
   if (
     check?.app?.id !== appId ||
-    check.name !== "trusted-review" ||
+    check.name !== REVIEW_CHECK_NAME ||
     check.head_sha !== evidence.head ||
     check.id !== evidence.check ||
     check.output?.text !== createPublicationStamp(evidence)
@@ -20,7 +20,7 @@ export function validatePublicationAttestation(check, evidence, appId) {
     throw new Error("Terminal evidence has no matching App-owned attestation.");
 }
 
-const STAGES = [
+export const REVIEW_PUBLICATION_STAGES = [
   "review-begin",
   "review-plan",
   "review-label",
@@ -100,7 +100,7 @@ export function validatePublicationJobs(jobs, attempt, needs) {
   if (!Number.isSafeInteger(count) || count < 0) throw new Error("Missing trusted area count.");
   const labeled = needs["review-plan"]?.outputs?.labeled === "true";
   const selected = [];
-  for (const name of STAGES) {
+  for (const name of REVIEW_PUBLICATION_STAGES) {
     const optional =
       name === "review-label"
         ? !labeled

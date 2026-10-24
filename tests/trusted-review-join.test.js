@@ -44,7 +44,7 @@ const createRun = (changes = {}) => ({
 test("actual producer names and CI download inputs agree with the trusted join", async () => {
   const producer = readRepoFile(".github/workflows/review.yml");
   const consumer = readRepoFile(".github/workflows/ci.yml");
-  const runName = producer.match(/^run-name: (.+)$/m)?.[1];
+  const runName = producer.match(/^run-name: &review-name (.+)$/m)?.[1];
   assert.ok(runName);
   const steps = producer.split(/^ {6}- /m);
   const record = steps.findIndex((step) =>
@@ -62,6 +62,7 @@ test("actual producer names and CI download inputs agree with the trusted join",
   const render = (template, context) =>
     template.replace(/\$\{\{\s*(.*?)\s*\}\}/g, (_, expression) => {
       if (expression.startsWith("github.event.pull_request.user.login ==")) return "review";
+      if (expression.startsWith("github.event.pull_request.base.ref ==")) return "main";
       assert.ok(Object.hasOwn(context, expression), `Unknown workflow expression: ${expression}`);
       return context[expression];
     });

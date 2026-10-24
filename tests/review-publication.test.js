@@ -2,16 +2,19 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { readReviewRun } from "../worker/review-run.mjs";
 import { readReviewIdentity } from "../worker/review-data.mjs";
 import { readReviewArtifact } from "../worker/review-artifact.mjs";
 import {
+  createPublicationStamp,
+  REVIEW_PUBLICATION_STAGES,
   selectPublicationPull,
   selectPublicationRun,
   validatePublicationJobs,
+  validatePublicationEvidence,
 } from "../worker/review-publication.mjs";
 import {
   discoverPublicationHeads,
@@ -157,6 +160,9 @@ function createHarness() {
     archives: new Map([[5, archive]]),
     artifacts: [artifact],
     failWrites: false,
+    commit: { sha: MERGE, tree: { sha: TREE }, parents: [{ sha: BASE }, { sha: HEAD }] },
+    suites: null,
+    changeWriteAnswer: (answer) => answer,
     async readGitHub(path) {
       if (path === "") return { full_name: REPOSITORY, id: 1 };
       if (path.startsWith("/pulls?")) return state.pulls;
@@ -167,15 +173,16 @@ function createHarness() {
       if (path.startsWith("/actions/runs/7/artifacts?")) return { artifacts: state.artifacts };
       if (path.startsWith("/actions/artifacts/"))
         return state.artifacts.find((item) => item.id === Number(path.split("/").at(-1)));
-      if (path === `/git/commits/${MERGE}`)
-        return { sha: MERGE, tree: { sha: TREE }, parents: [{ sha: BASE }, { sha: HEAD }] };
+      if (path === `/git/commits/${MERGE}`) return state.commit;
       throw new Error(`Unexpected read: ${path}`);
     },
     async writeGitHub(path, request) {
       if (!request) {
         if (path.startsWith(`/commits/${HEAD}/check-suites?`))
           return {
-            check_suites: state.checks.length ? [{ id: 10, head_sha: HEAD, app: { id: 9 } }] : [],
+            check_suites:
+              state.suites ??
+              (state.checks.length ? [{ id: 10, head_sha: HEAD, app: { id: 9 } }] : []),
           };
         if (path.startsWith("/check-suites/10/check-runs?")) return { check_runs: state.checks };
         throw new Error(`Unexpected check read: ${path}`);
@@ -188,7 +195,7 @@ function createHarness() {
         state.checks.push(check);
       }
       Object.assign(check, request.body);
-      return structuredClone(check);
+      return state.changeWriteAnswer(structuredClone(check));
     },
     async fetchImpl(url) {
       const id = Number(String(url).match(/artifacts\/(\d+)\/zip$/)?.[1]);
@@ -196,6 +203,8 @@ function createHarness() {
       return new Response(state.archives.get(id));
     },
   };
+  const readGitHub = state.readGitHub;
+  state.readGitHub = async (path) => structuredClone(await readGitHub(path));
   return state;
 }
 
@@ -550,12 +559,263 @@ test("publisher workflows keep credentials isolated, token scope explicit, and m
   );
   assert.match(observer, /types: \[requested, in_progress, completed\]/);
   assert.match(observer, /converted_to_draft/);
-  assert.match(
-    reviewer,
-    /needs:\s+\[review-begin, review-plan, review-label, review-area, review-across, review-post, review\]/,
-  );
+  const finalNeeds = reviewer.split("  review-publish:")[1].match(/needs:\s+\[([^\]]+)\]/)[1];
+  assert.deepEqual(finalNeeds.split(", "), REVIEW_PUBLICATION_STAGES);
   assert.match(reviewer, /TRUSTED_REVIEW_PUBLISHER_ENABLED != 'true'/);
   assert.equal([...reviewer.matchAll(/uses: anthropics\//g)].length, 1);
   assert.match(publisher, /group: trusted-review-publication-/);
-  assert.match(publisher, /cancel-in-progress: false/);
+  assert.match(publisher, /cancel-in-progress: false\n\s+queue: max/);
+});
+
+test("authenticated upload outputs, artifact names and merge metadata are mandatory", async () => {
+  for (const [change, message] of /** @type {[(state:any)=>void, RegExp][]} */ ([
+    [(state) => delete state.needs.review.outputs.artifact, /authenticated review upload/],
+    [(state) => delete state.needs.review.outputs.digest, /authenticated review upload/],
+    [
+      (state) => {
+        state.artifacts[0].name = "renamed";
+      },
+      /Unexpected review result artifact/,
+    ],
+    [
+      (state) => {
+        state.commit.sha = SOURCE;
+      },
+      /merge parents or tree/,
+    ],
+    [
+      (state) => {
+        state.commit.tree.sha = SOURCE;
+      },
+      /merge parents or tree/,
+    ],
+    [
+      (state) => {
+        state.commit.parents.reverse();
+      },
+      /merge parents or tree/,
+    ],
+    [
+      (state) => {
+        state.commit.parents.pop();
+      },
+      /merge parents or tree/,
+    ],
+  ])) {
+    const state = createHarness();
+    change(state);
+    state.env.PUBLISH_NEEDS = JSON.stringify(state.needs);
+    await assert.rejects(reconcileReviewPublication(state), message);
+    assert.ok(state.writes.every((write) => write.body.conclusion === "failure"));
+  }
+});
+
+test("foreign check suites and checks cannot supply publisher identity", async () => {
+  for (const [level, field, value, message] of /** @type {[string,string,any,RegExp][]} */ ([
+    ["suite", "app", { id: 8 }, /Foreign publisher check suite/],
+    ["suite", "head_sha", BASE, /Foreign publisher check suite/],
+    ["suite", "id", null, /Foreign publisher check suite/],
+    ["check", "app", { id: 8 }, /Foreign publisher check\./],
+    ["check", "head_sha", BASE, /Foreign publisher check\./],
+    ["check", "id", null, /Invalid publisher check ID/],
+  ])) {
+    const state = createHarness();
+    state.suites = [{ id: 10, head_sha: HEAD, app: { id: 9 } }];
+    state.checks = [{ id: 60, head_sha: HEAD, app: { id: 9 }, name: "trusted-review" }];
+    (level === "suite" ? state.suites[0] : state.checks[0])[field] = value;
+    await assert.rejects(reconcileReviewPublication(state), message);
+    assert.equal(state.writes.length, 0);
+  }
+});
+
+test("publication must confirm App, head, name, conclusion and stable check ID", async () => {
+  for (const existing of [false, true]) {
+    for (const [field, value] of /** @type {[string,any][]} */ ([
+      ["app", { id: 8 }],
+      ["head_sha", BASE],
+      ["name", "other"],
+      ["conclusion", "success"],
+      ["id", null],
+      ...(existing ? [["id", 61]] : []),
+    ])) {
+      const state = createHarness();
+      state.env.PUBLISH_PHASE = "begin";
+      if (existing)
+        state.checks = [{ id: 60, head_sha: HEAD, app: { id: 9 }, name: "trusted-review" }];
+      state.changeWriteAnswer = (answer) => ({ ...answer, [field]: value });
+      await assert.rejects(reconcileReviewPublication(state), /did not confirm/);
+      assert.equal(
+        existsSync(join(state.env.RUNNER_TEMP, "review-publication-evidence/decision.json")),
+        false,
+      );
+    }
+  }
+});
+
+test("freshness binds the latest attempt and authenticated exemption without shared API references", async () => {
+  for (const change of [
+    (state) => {
+      state.run.run_attempt = 3;
+    },
+    (state) => {
+      state.pull.user = { login: "dependabot[bot]", type: "Bot" };
+    },
+  ]) {
+    const state = createHarness();
+    const original = state.readGitHub;
+    state.readGitHub = async (path) => {
+      const answer = await original(path);
+      if (path.startsWith("/git/commits/")) change(state);
+      return answer;
+    };
+    await assert.rejects(reconcileReviewPublication(state), /context changed/);
+    assert.ok(state.writes.every((write) => write.body.conclusion === "failure"));
+  }
+});
+
+test("even App-attested terminal result fields must match the authenticated upload", async () => {
+  for (const key of ["artifact", "digest", "merge", "tree"]) {
+    const state = createHarness();
+    await reconcileReviewPublication(state);
+    completePublication(state, (decision) => {
+      decision[key] = key === "artifact" ? 99 : "f".repeat(40);
+      state.checks[0].output.text = createPublicationStamp(decision);
+    });
+    await assert.rejects(reconcileReviewPublication(state), /Terminal result evidence changed/);
+    assert.equal(state.checks[0].conclusion, "failure");
+  }
+});
+
+test("same-head retargeting reconciles under default-branch authority", async () => {
+  const state = createHarness();
+  await reconcileReviewPublication(state);
+  state.pull.base.ref = "other";
+  state.env.GITHUB_WORKFLOW_REF = `${REPOSITORY}/.github/workflows/trusted-review-publisher.yml@refs/heads/main`;
+  state.env.PUBLISH_PHASE = "observe";
+  assert.deepEqual(
+    await discoverPublicationHeads(
+      { action: "edited", pull_request: state.pull },
+      state.env,
+      state.readGitHub,
+    ),
+    [HEAD],
+  );
+  await reconcileReviewPublication(state);
+  assert.equal(state.checks[0].conclusion, "failure");
+  assert.equal(state.env.GITHUB_REF, "refs/heads/main");
+});
+
+test("run title bounds base names without changing main eligibility", () => {
+  const workflow = readRepoFile(".github/workflows/review.yml");
+  assert.match(workflow, /github.event.pull_request.base.ref == 'main' && 'main' \|\| 'other'/);
+  assert.doesNotMatch(workflow.split("\n")[1], /\$\{\{ github.event.pull_request.base.ref \}\}/);
+  const state = createHarness();
+  state.run.display_title = state.run.display_title.replace("target main", "target other");
+  assert.equal(readReviewRun(state.run).target, "other");
+  assert.equal(selectPublicationRun([state.run], state.pull, { name: REPOSITORY, id: 1 }), null);
+});
+
+/** @param {"symlink"|"encrypted"} kind */
+function createUnsafeArchive(kind) {
+  const archive = execFileSync(
+    "python3",
+    [
+      "-I",
+      "-c",
+      `
+import io,stat,sys,zipfile
+buffer=io.BytesIO()
+with zipfile.ZipFile(buffer, 'w') as archive:
+    entry=zipfile.ZipInfo('result.json')
+    entry.create_system=3
+    entry.external_attr=(stat.S_IFLNK|0o777)<<16 if sys.argv[1]=='symlink' else (stat.S_IFREG|0o644)<<16
+    archive.writestr(entry,'{}')
+sys.stdout.buffer.write(buffer.getvalue())
+`,
+      kind,
+    ],
+    { env: { PATH: process.env.PATH } },
+  );
+  if (kind === "encrypted") {
+    archive.writeUInt16LE(archive.readUInt16LE(6) | 1, 6);
+    const central = archive.indexOf(Buffer.from([0x50, 0x4b, 0x01, 0x02]));
+    archive.writeUInt16LE(archive.readUInt16LE(central + 8) | 1, central + 8);
+  }
+  return archive;
+}
+
+test("unsafe ZIP members are rejected and rejected extraction leaves no temporary folder", async () => {
+  const root = mkdtempSync(join(tmpdir(), "rejected-archive-test-"));
+  try {
+    for (const kind of /** @type {const} */ (["symlink", "encrypted"])) {
+      const archive = createUnsafeArchive(kind);
+      const artifact = {
+        id: 5,
+        workflow_run: { id: 7, repository_id: 1 },
+        size_in_bytes: archive.length,
+        digest: `sha256:${sha256(archive)}`,
+      };
+      const script = `
+        import { readReviewArtifact } from ${JSON.stringify(new URL("../worker/review-artifact.mjs", import.meta.url).href)};
+        const archive = Buffer.from(${JSON.stringify(archive.toString("base64"))}, "base64");
+        try {
+          await readReviewArtifact(${JSON.stringify(artifact)}, {
+            repository: "example/repository", repositoryId: 1, run: 7, token: "read-token", names: ["result.json"],
+            fetchImpl: async () => new Response(archive),
+          });
+          throw new Error("Unsafe ZIP was accepted");
+        } catch (error) {
+          if (!String(error.stderr).includes("Unsafe or oversized artifact member")) throw error;
+        }
+      `;
+      execFileSync(process.execPath, ["--input-type=module", "-e", script], {
+        env: { PATH: process.env.PATH, TMPDIR: root },
+        stdio: "pipe",
+      });
+      assert.deepEqual(readdirSync(root), [], kind);
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("App-attested identity and exact producer attempts still bind terminal evidence", async () => {
+  for (const [key, value] of /** @type {[string,any][]} */ ([
+    ["version", 2],
+    ["repository", "other/repository"],
+    ["repositoryId", 2],
+    ["pull", 2],
+    ["head", BASE],
+    ["base", HEAD],
+    ["target", "other"],
+    ["source", BASE],
+    ["run", 8],
+    ["attempt", 1],
+    ["producers", []],
+  ])) {
+    const state = createHarness();
+    await reconcileReviewPublication(state);
+    completePublication(state, (decision) => {
+      decision[key] = value;
+      assert.throws(
+        () => validatePublicationEvidence(state.pull, state.run, decision, state.jobs),
+        /Stale or foreign publication evidence|Publication producer attempts changed/,
+      );
+      state.checks[0].output.text = createPublicationStamp(decision);
+    });
+    await assert.rejects(
+      reconcileReviewPublication(state),
+      /Stale or foreign publication evidence|Publication producer attempts changed|App-owned attestation/,
+    );
+    assert.equal(state.checks[0].conclusion, "failure");
+  }
+});
+
+test("observer producer-read failure invalidates previously successful publication", async () => {
+  const state = createHarness();
+  await reconcileReviewPublication(state);
+  completePublication(state);
+  state.jobs[0].run_id = 8;
+  await assert.rejects(reconcileReviewPublication(state), /Foreign producer job/);
+  assert.equal(state.checks[0].conclusion, "failure");
 });

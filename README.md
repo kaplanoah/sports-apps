@@ -113,7 +113,7 @@ Every deploy checks that the Worker answers afterward. If it doesn't, the deploy
 
 ### Independent review enforcement
 
-The optional [App-pinned review publisher](TRUSTED_REVIEW_SETUP.md) makes validated review an independent required check. Its protected credentials, installation, live proofs, and expected-App rule must be configured before claiming enforcement. It remains disabled until setup is explicitly enabled.
+The optional [trusted-review publisher](TRUSTED_REVIEW_SETUP.md) uses a separate GitHub App to publish validated review. Enforcement requires protected credentials, installation, live proofs, and a required-check rule that accepts only that App. The publisher remains disabled until setup is explicitly enabled.
 
 ### Deploying on merge
 

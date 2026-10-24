@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createGitHub, readAllPages } from "./github-api.mjs";
 import { isGitObjectId } from "./git-object.mjs";
-import { readReviewRun } from "./review-run.mjs";
+import { readReviewRun, REVIEW_CHECK_NAME, REVIEW_RESULT_PREFIX } from "./review-run.mjs";
 import { readReviewArtifact } from "./review-artifact.mjs";
 import { verifyTrustedReviewResult } from "./find-trusted-review.mjs";
 import {
@@ -15,8 +15,6 @@ import {
   createPublicationStamp,
   validatePublicationAttestation,
 } from "./review-publication.mjs";
-
-const CHECK_NAME = "trusted-review";
 
 /** @param {NodeJS.ProcessEnv} env */
 export function requirePublisherAuthority(env) {
@@ -61,7 +59,7 @@ async function readProducerJobs(readGitHub, run) {
 }
 
 /** @param {any} options @param {any} artifact @param {number} run @param {string[]} names @param {string} [digest] */
-async function withArtifact(options, artifact, run, names, digest) {
+async function downloadRunArtifact(options, artifact, run, names, digest) {
   return readReviewArtifact(artifact, {
     repository: options.env.GITHUB_REPOSITORY,
     token: options.env.GH_TOKEN,
@@ -80,9 +78,9 @@ async function validateResultArtifact(options, run, needs, identity) {
   if (!Number.isSafeInteger(artifactId) || !/^[a-f0-9]{64}$/.test(outputs?.digest ?? ""))
     throw new Error("Missing authenticated review upload outputs.");
   const artifact = await options.readGitHub(`/actions/artifacts/${artifactId}`);
-  if (artifact.name !== `trusted-review-passed-${outputs.tree}`)
+  if (artifact.name !== `${REVIEW_RESULT_PREFIX}${outputs.tree}`)
     throw new Error("Unexpected review result artifact.");
-  const folder = await withArtifact(
+  const folder = await downloadRunArtifact(
     options,
     artifact,
     run.id,
@@ -134,7 +132,7 @@ async function readTerminalEvidence(options, run, pull, jobs) {
     (artifact) => artifact.name === `trusted-review-publication-${run.run_attempt}`,
   );
   if (matching.length !== 1) throw new Error("Missing or ambiguous terminal publication evidence.");
-  const folder = await withArtifact(options, matching[0], run.id, ["decision.json"]);
+  const folder = await downloadRunArtifact(options, matching[0], run.id, ["decision.json"]);
   try {
     const evidence = JSON.parse(readFileSync(join(folder, "decision.json"), "utf8"));
     const checks = await readOwnedChecks(options, pull.head.sha);
@@ -189,7 +187,7 @@ async function readOwnedChecks(options, head) {
       if (check.app?.id !== appId || check.head_sha !== head)
         throw new Error("Foreign publisher check.");
       if (!Number.isSafeInteger(check.id)) throw new Error("Invalid publisher check ID.");
-      if (check.name === CHECK_NAME) checks.push(check);
+      if (check.name === REVIEW_CHECK_NAME) checks.push(check);
     }
   }
   return checks;
@@ -214,7 +212,7 @@ async function publishDecision(options, head, decision, repository) {
     throw new Error("Multiple App-owned trusted-review checks; success withheld.");
   }
   const body = {
-    name: CHECK_NAME,
+    name: REVIEW_CHECK_NAME,
     head_sha: head,
     external_id: `trusted-review:${repository.id}:${head}`,
     status: "completed",
@@ -234,9 +232,11 @@ async function publishDecision(options, head, decision, repository) {
     },
   );
   if (
+    !Number.isSafeInteger(answer.id) ||
+    (checks.length === 1 && answer.id !== checks[0].id) ||
     answer.app?.id !== Number(options.env.TRUSTED_REVIEW_APP_ID) ||
     answer.head_sha !== head ||
-    answer.name !== CHECK_NAME ||
+    answer.name !== REVIEW_CHECK_NAME ||
     answer.conclusion !== body.conclusion
   )
     throw new Error("GitHub did not confirm the expected publisher identity/result.");
@@ -259,6 +259,156 @@ async function requireFreshContext(options, repository, previous) {
     throw new Error("PR authorization context changed before publication.");
 }
 
+/** @param {any} request @param {string} title @param {string} summary */
+function holdReviewPublication(request, title, summary) {
+  return publishDecision(
+    request.options,
+    request.head,
+    { success: false, title, summary },
+    request.repository,
+  );
+}
+
+/** @param {any} request */
+async function publishExemption(request) {
+  await requireFreshContext(request.options, request.repository, request.context);
+  await publishDecision(
+    request.options,
+    request.head,
+    {
+      success: true,
+      title: "Review not required for Dependabot",
+      summary:
+        "The trusted publisher verified the existing Dependabot exemption. This is not reviewed evidence.",
+    },
+    request.repository,
+  );
+  return { success: true, exempt: true };
+}
+
+/** @param {any} request */
+async function holdForBegin(request) {
+  await holdReviewPublication(
+    request,
+    "Trusted review is in progress",
+    "A new authorized review attempt owns this check; earlier success has been invalidated.",
+  );
+  return { success: false };
+}
+
+/** @param {any} request @param {number} check */
+async function buildPublicationEvidence(request, check) {
+  const {
+    options,
+    context: { run, pull },
+  } = request;
+  const needs = JSON.parse(options.env.PUBLISH_NEEDS);
+  const jobs = await readProducerJobs(options.readGitHub, run);
+  const producers = validatePublicationJobs(jobs, run.run_attempt, needs);
+  const identity = readReviewRun(run);
+  const result = await validateResultArtifact(options, run, needs, identity);
+  return {
+    version: 1,
+    repository: request.repository.full_name,
+    repositoryId: request.repository.id,
+    pull: pull.number,
+    head: request.head,
+    base: pull.base.sha,
+    target: pull.base.ref,
+    source: identity.source,
+    run: run.id,
+    attempt: run.run_attempt,
+    needs,
+    producers,
+    ...result,
+    check,
+  };
+}
+
+/** @param {NodeJS.ProcessEnv} env @param {any} evidence */
+function writePublicationDecision(env, evidence) {
+  const folder = join(env.RUNNER_TEMP, "review-publication-evidence");
+  mkdirSync(folder, { recursive: true });
+  writeFileSync(join(folder, "decision.json"), JSON.stringify(evidence));
+}
+
+/** @param {any} request */
+async function publishFinish(request) {
+  const check = await holdReviewPublication(
+    request,
+    "Validating trusted review",
+    "Earlier success is invalid until this attempt's result is verified.",
+  );
+  const evidence = await buildPublicationEvidence(request, check);
+  await requireFreshContext(request.options, request.repository, request.context);
+  await publishDecision(
+    request.options,
+    request.head,
+    {
+      success: true,
+      title: "Validated trusted review passed",
+      summary: `Trusted run ${evidence.run}, attempt ${evidence.attempt}, PR #${evidence.pull}. Reviewed head ${evidence.head}, base ${evidence.base}, tree ${evidence.tree}.`,
+      stamp: createPublicationStamp(evidence),
+    },
+    request.repository,
+  );
+  writePublicationDecision(request.options.env, evidence);
+  return { success: true };
+}
+
+/** @param {any} request */
+async function revalidatePublication(request) {
+  const {
+    options,
+    context: { run, pull },
+  } = request;
+  if (run.status !== "completed" || run.conclusion !== "success") {
+    await holdReviewPublication(
+      request,
+      "Trusted review has not passed",
+      "The latest authorized request is pending, failed, or cancelled; earlier success cannot authorize this attempt.",
+    );
+    return { success: false };
+  }
+  try {
+    const jobs = await readProducerJobs(options.readGitHub, run);
+    await readTerminalEvidence(options, run, pull, jobs);
+    await requireFreshContext(options, request.repository, request.context);
+  } catch (error) {
+    await holdReviewPublication(
+      request,
+      "Trusted publication evidence is unavailable",
+      "The current attempt has no valid terminal decision. Inspect the publisher workflow before retrying.",
+    );
+    throw error;
+  }
+  await publishDecision(
+    options,
+    request.head,
+    {
+      success: true,
+      title: "Validated trusted review passed",
+      summary: `Revalidated trusted run ${run.id}, attempt ${run.run_attempt}, PR #${pull.number}.`,
+    },
+    request.repository,
+  );
+  return { success: true };
+}
+
+/** @param {NodeJS.ProcessEnv} env @param {any} run */
+const isOwnedPublicationRequest = (env, run) =>
+  run.id === Number(env.GITHUB_RUN_ID) && run.run_attempt === Number(env.GITHUB_RUN_ATTEMPT);
+
+/** @param {NodeJS.ProcessEnv} env @param {any} run */
+function requireDirectPublisherSource(env, run) {
+  if (
+    env.GITHUB_WORKFLOW_REF !==
+      `${env.GITHUB_REPOSITORY}/.github/workflows/review.yml@refs/heads/main` ||
+    readReviewRun(run).source !== env.GITHUB_SHA
+  )
+    throw new Error("Publisher source does not match native trusted workflow authority.");
+}
+
 /** @param {any} options */
 export async function reconcileReviewPublication(options) {
   const { env } = options;
@@ -271,97 +421,28 @@ export async function reconcileReviewPublication(options) {
   if (repository.full_name !== env.GITHUB_REPOSITORY || !Number.isSafeInteger(repository.id))
     throw new Error("Unexpected publisher repository.");
   const context = await readPublicationContext(options, head, repository);
+  const request = { options, head, repository, context };
   const { pull, run } = context;
-  const hold = (title, summary) =>
-    publishDecision(options, head, { success: false, title, summary }, repository);
   if (!pull) {
-    await hold(
+    await holdReviewPublication(
+      request,
       "Review context is unavailable or conflicting",
       "Exactly one open, ready PR targeting main must own this commit.",
     );
     return { success: false };
   }
-  if (isPublicationExempt(pull)) {
-    await requireFreshContext(options, repository, context);
-    await publishDecision(
-      options,
-      head,
-      {
-        success: true,
-        title: "Review not required for Dependabot",
-        summary:
-          "The trusted publisher verified the existing Dependabot exemption. This is not reviewed evidence.",
-      },
-      repository,
-    );
-    return { success: true, exempt: true };
-  }
+  if (isPublicationExempt(pull)) return publishExemption(request);
   if (!run) {
-    await hold(
+    await holdReviewPublication(
+      request,
       "Trusted review is owed",
       "No authorized trusted review covers this PR head and base.",
     );
     return { success: false };
   }
-  const ownsRequest =
-    run.id === Number(env.GITHUB_RUN_ID) && run.run_attempt === Number(env.GITHUB_RUN_ATTEMPT);
-  if (
-    ownsRequest &&
-    phase !== "observe" &&
-    (env.GITHUB_WORKFLOW_REF !==
-      `${env.GITHUB_REPOSITORY}/.github/workflows/review.yml@refs/heads/main` ||
-      readReviewRun(run).source !== env.GITHUB_SHA)
-  )
-    throw new Error("Publisher source does not match native trusted workflow authority.");
-  if (phase === "begin" && ownsRequest) {
-    await hold(
-      "Trusted review is in progress",
-      "A new authorized review attempt owns this check; earlier success has been invalidated.",
-    );
-    return { success: false };
-  }
-  if (phase === "finish" && ownsRequest) {
-    const check = await hold(
-      "Validating trusted review",
-      "Earlier success is invalid until this attempt's result is verified.",
-    );
-    const needs = JSON.parse(env.PUBLISH_NEEDS);
-    const jobs = await readProducerJobs(options.readGitHub, run);
-    const producers = validatePublicationJobs(jobs, run.run_attempt, needs);
-    const identity = readReviewRun(run);
-    const result = await validateResultArtifact(options, run, needs, identity);
-    const evidence = {
-      version: 1,
-      repository: repository.full_name,
-      repositoryId: repository.id,
-      pull: pull.number,
-      head,
-      base: pull.base.sha,
-      target: pull.base.ref,
-      source: identity.source,
-      run: run.id,
-      attempt: run.run_attempt,
-      needs,
-      producers,
-      ...result,
-      check,
-    };
-    await requireFreshContext(options, repository, context);
-    await publishDecision(
-      options,
-      head,
-      {
-        success: true,
-        title: "Validated trusted review passed",
-        summary: `Trusted run ${run.id}, attempt ${run.run_attempt}, PR #${pull.number}. Reviewed head ${head}, base ${pull.base.sha}, tree ${result.tree}.`,
-        stamp: createPublicationStamp(evidence),
-      },
-      repository,
-    );
-    const folder = join(env.RUNNER_TEMP, "review-publication-evidence");
-    mkdirSync(folder, { recursive: true });
-    writeFileSync(join(folder, "decision.json"), JSON.stringify(evidence));
-    return { success: true };
+  if (isOwnedPublicationRequest(env, run) && phase !== "observe") {
+    requireDirectPublisherSource(env, run);
+    return phase === "begin" ? holdForBegin(request) : publishFinish(request);
   }
   if (
     phase === "begin" &&
@@ -369,35 +450,7 @@ export async function reconcileReviewPublication(options) {
       "review"
   )
     throw new Error("Superseded review request cannot reclaim publication.");
-  if (run.status !== "completed" || run.conclusion !== "success") {
-    await hold(
-      "Trusted review has not passed",
-      "The latest authorized request is pending, failed, or cancelled; earlier success cannot authorize this attempt.",
-    );
-    return { success: false };
-  }
-  const jobs = await readProducerJobs(options.readGitHub, run);
-  try {
-    await readTerminalEvidence(options, run, pull, jobs);
-    await requireFreshContext(options, repository, context);
-  } catch (error) {
-    await hold(
-      "Trusted publication evidence is unavailable",
-      "The current attempt has no valid terminal decision. Inspect the publisher workflow before retrying.",
-    );
-    throw error;
-  }
-  await publishDecision(
-    options,
-    head,
-    {
-      success: true,
-      title: "Validated trusted review passed",
-      summary: `Revalidated trusted run ${run.id}, attempt ${run.run_attempt}, PR #${pull.number}.`,
-    },
-    repository,
-  );
-  return { success: true };
+  return revalidatePublication(request);
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

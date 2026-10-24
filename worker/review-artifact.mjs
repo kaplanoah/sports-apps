@@ -72,24 +72,29 @@ export async function readReviewArtifact(artifact, options) {
   if (`sha256:${createHash("sha256").update(archive).digest("hex")}` !== artifact.digest)
     throw new Error("Review artifact archive digest mismatch.");
   const folder = mkdtempSync(join(tmpdir(), "review-publication-"));
-  const archivePath = join(folder, "artifact.zip");
-  writeFileSync(archivePath, archive);
-  const files = JSON.parse(
-    execFileSync(
-      "python3",
-      ["-I", "-c", READ_ARCHIVE, archivePath, JSON.stringify(options.names)],
-      {
-        encoding: "utf8",
-        env: { PATH: process.env.PATH },
-        maxBuffer: 256 * 1024,
-        timeout: 5000,
-      },
-    ),
-  );
-  rmSync(archivePath);
-  for (const name of options.names) {
-    if (!/^[a-z-]+\.json$/.test(name)) throw new Error("Invalid artifact data filename.");
-    writeFileSync(join(folder, name), files[name]);
+  try {
+    const archivePath = join(folder, "artifact.zip");
+    writeFileSync(archivePath, archive);
+    const files = JSON.parse(
+      execFileSync(
+        "python3",
+        ["-I", "-c", READ_ARCHIVE, archivePath, JSON.stringify(options.names)],
+        {
+          encoding: "utf8",
+          env: { PATH: process.env.PATH },
+          maxBuffer: 256 * 1024,
+          timeout: 5000,
+        },
+      ),
+    );
+    rmSync(archivePath);
+    for (const name of options.names) {
+      if (!/^[a-z-]+\.json$/.test(name)) throw new Error("Invalid artifact data filename.");
+      writeFileSync(join(folder, name), files[name]);
+    }
+  } catch (error) {
+    rmSync(folder, { recursive: true, force: true });
+    throw error;
   }
   return folder;
 }

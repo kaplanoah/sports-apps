@@ -15,13 +15,17 @@ The SHA-pinned token action requests one repository explicitly and revokes its t
 
 The initial job replaces prior success with a documented completed/failure conclusion while review is pending. This deliberate non-success avoids assuming that setting an old completed check to in-progress clears its successful conclusion. Titles explain whether review is pending, invalid, or conflicting. Final success requires exact authenticated evidence; review stages and test suites are unchanged.
 
-The App requirement applies to main. A successful non-success publication does not prevent the existing trusted reviewer from reviewing a stacked PR against another base; that PR gets no authoritative passing App check until its context qualifies for main. Publication API failures still stop newly requested model work.
+The App requirement applies to main. A PR targeting another branch keeps its normal trusted review and gets no passing App check until its context qualifies for main. Publication API failures still stop newly requested model work.
 
 The final job directly depends on all review producers, including label consumption. It validates their outcomes, actual job IDs/attempts, the authenticated result upload ID/digest, sealed data, and GitHub's merge parents/tree. Successful stages reused by rerun-failed are allowed; newer failed producers and stale terminal decisions are rejected. It never waits for its own workflow's final conclusion.
 
 The publisher binds its native main source to the review run, then places a digest of the terminal decision in the App-owned check output. The saved terminal artifact contains the exact decision, including check ID, repository/PR, head/base/source, run/attempt, producer records, and result identity. Observer restoration requires that App-owned attestation; matching job names and self-sealed artifacts alone cannot prove publisher execution.
 
-The lifecycle workflow handles requested, in-progress, and completed review events plus PR lifecycle events without invoking Claude. Requested events do not occur on reruns; the in-progress observer handles reused successful start jobs. Observation-only label events do not supersede authorized requests. Requests order by original creation, with attempts ordered within their run; rerunning an older request cannot reclaim a newer check.
+The lifecycle workflow handles requested, in-progress, and completed review events plus PR lifecycle events without invoking Claude. GitHub.com runs `pull_request_target` from the default branch, including for stacked PRs and retargeting away from main. The publisher still rejects non-main native authority. Verify these native refs during live setup; older GitHub Enterprise Server versions have different semantics. Requested events do not occur on reruns; the in-progress observer handles reused successful start jobs. Observation-only label events do not supersede authorized requests. Requests order by original creation, with attempts ordered within their run; rerunning an older request cannot reclaim a newer check.
+
+Every publisher phase shares one concurrency group per repository/head with `queue: max` and cancellation disabled. GitHub queues up to 100 waiting jobs instead of replacing the pending begin or finish with an observer. Queue overflow cancels additional jobs; a failed or missed publication remains visible and requires recovery. Live setup must verify queue support and a burst covering all phases.
+
+The review run title uses a bounded main/other target and one native intent expression shared with the planner. Long branch names cannot enlarge the title, and the planner does not independently decide which requests are authorized.
 
 ## Commit scope and asynchronous limits
 
@@ -43,8 +47,9 @@ Use an owner-approved isolated target/ruleset, not a weakened Main rule. Synthet
 | Foreign workflow fabricates matching jobs, seals, and terminal artifact | No success without the App-owned terminal attestation. |
 | Failed review, missing evidence, permission denial, or cancelled first attempt | No successful authoritative result created. |
 | Failed rerun reuses a successful start or earlier stages | Previous success invalidates after observation; old artifacts cannot rescue the failed current attempt. Record invalidation delay and failed-write behavior. |
-| Shared head, retarget, or draft conversion | Commit-wide check held after reconciliation, without extra Claude work. |
+| Shared head, retarget, or draft conversion | Commit-wide check held after reconciliation, without extra Claude work. For a stacked or retargeted PR, record native `github.ref`, `github.sha`, and `github.workflow_ref`; the publisher must execute from main, including when the target is an older branch. |
 | Conflicting PR moves to another head | Both SHAs reconciled; surviving old-head context restored only from valid attested evidence. |
+| Burst of begin, finish, and observe jobs for one head | Shared queue retains every job within its 100-job bound, with no concurrent writes or pending-job replacement. |
 | Duplicate App checks or reordered events | No convenient old success selected; all conflicting owned checks become non-success, and superseded runs do not reclaim ownership. |
 
 The local controller tests do not establish these platform behaviors. Record the live evidence and residual windows before approving the final rule.
@@ -53,6 +58,6 @@ The local controller tests do not establish these platform behaviors. Record the
 
 After live proof and explicit owner approval, add one required check: context `trusted-review`, expected integration equal to the actual App ID. Preserve `check`, `phone`, CodeQL, thread resolution, strict-off, and every other rule. Read back the effective rule and verify a legitimate PR. Never infer issuer enforcement from the displayed check name alone.
 
-Current agent credentials cannot administer Actions protections. App creation, secure key entry, environment setup, and the final approved rule need the owner's authenticated browser or an appropriately authorized administration integration.
+App creation, secure key entry, environment setup, and the final approved rule require the owner's authenticated browser or an appropriately authorized administration integration.
 
 If publication fails, repair credentials or publishing and rerun the appropriate failed publisher jobs. Duplicate owned checks deliberately hold and need reviewed repair; do not remove the required rule, invent an alias, or mark a failure successful. Removing a required rule or broadening environment access requires a separate owner decision. Rotation replaces the environment key and verifies publication before revoking the prior key.

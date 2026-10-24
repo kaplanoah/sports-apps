@@ -14,7 +14,7 @@ import { formatJobOutputs, listJobs as listPlanJobs, writeReview } from "../work
 import { findRefusal } from "../worker/review-git.mjs";
 import { escapePattern } from "../shared/page/escape-pattern.js";
 import { REPO_ROOT, readRepoFile } from "./repo-files.js";
-import { readStepInput, readStepScript } from "./workflow-step.js";
+import { readNativeReviewName, readStepInput, readStepScript } from "./workflow-step.js";
 import { PHONE_CONTEXT as EXPECTED_PHONE_CONTEXT } from "../worker/labeling.mjs";
 import { MUTATION_TARGETS } from "../worker/mutation-targets.mjs";
 
@@ -726,22 +726,24 @@ function decideReview(event) {
   const outputs = mkdtempSync(join(tmpdir(), "ci-decision-"));
   const output = join(outputs, "output");
   writeFileSync(output, "");
+  const env = {
+    PATH: process.env.PATH,
+    GITHUB_OUTPUT: output,
+    REVIEW_LABEL: readRepoFile(".github/workflows/review.yml").match(/REVIEW_LABEL: (\S+)/)?.[1],
+    EVENT: "pull_request_target",
+    ACTION: "opened",
+    LABEL: "",
+    IS_DRAFT: "false",
+    AUTHOR: "someone",
+    ASSOCIATION: "OWNER",
+    HEAD_REPOSITORY: "",
+    CLAUDE_CODE_OAUTH_TOKEN: "token",
+    ANTHROPIC_API_KEY: "",
+    ...event,
+  };
   const { status, stdout, stderr } = spawnSync("bash", ["-e", "-c", script], {
     encoding: "utf8",
-    env: {
-      PATH: process.env.PATH,
-      GITHUB_OUTPUT: output,
-      REVIEW_LABEL: readRepoFile(".github/workflows/review.yml").match(/REVIEW_LABEL: (\S+)/)?.[1],
-      EVENT: "pull_request_target",
-      ACTION: "opened",
-      LABEL: "",
-      IS_DRAFT: "false",
-      AUTHOR: "someone",
-      ASSOCIATION: "OWNER",
-      CLAUDE_CODE_OAUTH_TOKEN: "token",
-      ANTHROPIC_API_KEY: "",
-      ...event,
-    },
+    env: { ...env, REVIEW_RUN_NAME: readNativeReviewName(env) },
   });
   assert.equal(status, 0, stderr);
   const written = Object.fromEntries(
@@ -788,8 +790,36 @@ test("a pull request is reviewed when it's opened ready, marked ready, or labele
   assert.equal(decideReview({ EVENT: "push", ACTION: "" }).review, "false");
 });
 
-// Asking adds a label no run reads as a new ask once it's there, so each ask is a fresh label.
-// Only a draft still owes the review it skips; Dependabot never runs one.
+test("native run metadata supplies the planner's only request decision", () => {
+  const workflow = readRepoFile(".github/workflows/review.yml");
+  assert.match(workflow, /^run-name: &review-name /m);
+  assert.match(readJob("review-plan", REVIEW_WORKFLOW), /REVIEW_RUN_NAME: \*review-name/);
+  assert.doesNotMatch(
+    readStepScript(workflow, "Decide whether to review"),
+    /ASSOCIATION|HEAD_REPOSITORY|asked=/,
+  );
+  const label = workflow.match(/REVIEW_LABEL: (\S+)/)?.[1];
+  assert.ok(workflow.includes(`github.event.label.name == '${label}'`));
+  assert.equal(
+    decideReview({ ASSOCIATION: "NONE", HEAD_REPOSITORY: "example/repository" }).review,
+    "true",
+  );
+  assert.equal(
+    decideReview({ ASSOCIATION: "NONE", HEAD_REPOSITORY: "example/fork" }).review,
+    "false",
+  );
+});
+
+test("long base refs keep native review metadata bounded", () => {
+  const state = { ACTION: "opened", ASSOCIATION: "OWNER", AUTHOR: "example" };
+  const main = readNativeReviewName({ ...state, BASE_REF: "main" });
+  const other = readNativeReviewName({ ...state, BASE_REF: "x".repeat(255) });
+  assert.match(main, /target main intent review$/);
+  assert.match(other, /target other intent review$/);
+  assert.equal(other.length, main.length + 1);
+  assert.ok(other.length < 200);
+});
+
 test("every reason not to review holds when the review is asked for", () => {
   for (const [event, reason, owed] of /** @type {[Record<string, string>, RegExp, string][]} */ ([
     [{ IS_DRAFT: "true" }, /a draft is reviewed once it's ready/, "true"],
@@ -921,10 +951,8 @@ test("only trusted posting jobs can write to the pull request", () => {
   const withClaude = [
     ...listJobs(REVIEW_WORKFLOW).map((job) => readJob(job, REVIEW_WORKFLOW)),
     readJob("find", AREA_WORKFLOW),
-  ].filter((job) =>
-    /anthropics\/|uses: \.\/\.github\/workflows\/trusted-review-area\.yml/.test(job),
-  );
-  assert.equal(withClaude.length, 3);
+  ].filter((job) => /anthropics\/|uses: \.\/\.github/.test(job));
+  assert.equal(withClaude.length, 5);
   for (const job of withClaude) assert.doesNotMatch(job, /pull-requests: write/);
 });
 

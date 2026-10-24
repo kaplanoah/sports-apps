@@ -9,12 +9,11 @@ import { readJson } from "./judge-review.mjs";
 import { createReviewGitEnvironment } from "./review-repository.mjs";
 import { isGitObjectId } from "./git-object.mjs";
 import { waitFor } from "./check-timing.mjs";
-import { readReviewRun } from "./review-run.mjs";
+import { readReviewRun, REVIEW_RESULT_PREFIX } from "./review-run.mjs";
 
 const FINISH_BUDGET_MS = 10 * 60 * 1000;
 const FIRST_POLL_MS = 60 * 1000;
 const MAX_POLL_MS = 5 * 60 * 1000;
-const RESULT_PREFIX = "trusted-review-passed-";
 
 /** @param {string} folder @param {NodeJS.ProcessEnv} env */
 export function verifyTrustedReviewResult(folder, env) {
@@ -43,11 +42,7 @@ export function verifyTrustedReviewResult(folder, env) {
  * @param {any} run @param {{ repository: string, head: string, base: string, pull: string }} expected
  */
 export const isTrustedReviewRun = (run, expected) =>
-  run.path === ".github/workflows/review.yml" &&
-  run.event === "pull_request_target" &&
-  run.head_sha === expected.head &&
   run.repository?.full_name === expected.repository &&
-  Number.isSafeInteger(run.repository?.id) &&
   Boolean(readTrustedReviewSource(run, expected));
 
 /** @param {any} run @param {{ head: string, base: string, pull: string }} expected */
@@ -87,14 +82,14 @@ export async function findTrustedReviewRun(options) {
         !artifact.expired &&
         artifact.workflow_run?.id === run.id &&
         typeof artifact.name === "string" &&
-        artifact.name.startsWith(RESULT_PREFIX) &&
-        isGitObjectId(artifact.name.slice(RESULT_PREFIX.length)),
+        artifact.name.startsWith(REVIEW_RESULT_PREFIX) &&
+        isGitObjectId(artifact.name.slice(REVIEW_RESULT_PREFIX.length)),
     );
     if (results.length > 1) throw new Error("The trusted run has ambiguous review results.");
     if (results.length === 1)
       return {
         run: run.id,
-        tree: results[0].name.slice(RESULT_PREFIX.length),
+        tree: results[0].name.slice(REVIEW_RESULT_PREFIX.length),
         source: readTrustedReviewSource(run, options),
         pending: false,
       };

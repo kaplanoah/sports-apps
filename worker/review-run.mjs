@@ -1,5 +1,8 @@
 import { isGitObjectId } from "./git-object.mjs";
 
+export const REVIEW_CHECK_NAME = "trusted-review";
+export const REVIEW_RESULT_PREFIX = "trusted-review-passed-";
+
 /** @param {any} run */
 export function readReviewRun(run) {
   const match =

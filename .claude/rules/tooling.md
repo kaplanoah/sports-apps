@@ -8,6 +8,8 @@ paths:
 
 # Tooling
 
+- The protected App publisher validates trusted-review evidence on main before writing the independent head check. `TRUSTED_REVIEW_PUBLISHER_ENABLED` stays unset until protected setup and live proofs pass. GitHub.com runs the PR lifecycle reconciler from the default branch, including after retargeting away from main. See `TRUSTED_REVIEW_SETUP.md` for setup and recovery.
+
 - CI runs every Node test once in UTC, then repeats the explicit `tests/time-zone-sensitive.json` sensitive list and changed Node tests in Honolulu (`worker/test-time-zone.mjs`). `worker/time-zone-scope.mjs` verifies native Date/Intl coverage with `listReachedFiles` in `worker/browser-scope.mjs`. Missing coverage or unreadable changes fail instead of silently narrowing the run. The manifest's `browserOnly` adapters run only in browser tests. A native time API source without a Node import path needs a test before CI can pass. Tests in the manifest's `fixed` list import `tests/eastern-time-zone.js` first, so their initialization and assertions use Eastern whatever zone they inherit. They are left out of the Honolulu run.
 - Tooling: the root `worker/` builds, versions, deploys, and rolls back every Worker, each app's and each service's, tells a red change for CI's gate, and keeps beta to one pull request at a time, as the `ship` skill's "The beta channel" says. `ls worker/` lists its modules, and its tests are in the root `tests/`. It opens each app's live page as a phone does, signed in with its code, and says whether it drew what its store sent (`check-page.mjs`). It checks the page where a browser lands, which for an app moving to its own address is that address.
 
