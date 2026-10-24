@@ -6,6 +6,7 @@
 import { SERVICES, nameServiceBinding } from "./services.js";
 import { abortAfter } from "./timeout.js";
 import { createReusedLoader } from "./upstream.js";
+import { isContactConfigured } from "./contact-request.js";
 
 export const HEALTH_REUSE_MS = 60 * 1000;
 export const ANSWER_TIMEOUT_MS = 5000;
@@ -70,6 +71,21 @@ const askService = (binding) =>
 export function createHealthServer({ isStoreAnswering, release, now = Date.now }) {
   const askStore = (env) => askInTime(() => isStoreAnswering(env)).catch(() => false);
   const checkStore = createReusedLoader(askStore, HEALTH_REUSE_MS, now);
+  const checkContact = createReusedLoader(
+    async (env) => {
+      if (!isContactConfigured(env)) return { ok: false, problem: "not configured" };
+      try {
+        const stub = env.CONTACT.get(env.CONTACT.idFromName("outbox"));
+        const response = await askInTime(() => stub.fetch(new Request("https://contact/status")));
+        const status = await response.json();
+        return { ok: status.ok === true };
+      } catch {
+        return { ok: false, problem: "no answer" };
+      }
+    },
+    HEALTH_REUSE_MS,
+    now,
+  );
   const serviceChecks = SERVICES.map((service) => ({
     service,
     binding: nameServiceBinding(service),
@@ -86,15 +102,21 @@ export function createHealthServer({ isStoreAnswering, release, now = Date.now }
 
   /** @param {any} env the Worker's bindings */
   return async function serveHealth(env) {
-    const [isAnswering, serviceHealths] = await Promise.all([checkStore(env), checkServices(env)]);
+    const [isAnswering, serviceHealths, contact] = await Promise.all([
+      checkStore(env),
+      checkServices(env),
+      env.CONTACT ? checkContact(env) : null,
+    ]);
+    const ok = isAnswering && (contact === null || contact.ok);
     const health = {
-      ok: isAnswering,
+      ok,
       release,
       store: isAnswering ? "ok" : "no answer",
+      ...(contact && { contact }),
       ...(Object.keys(serviceHealths).length && { services: serviceHealths }),
     };
     return new Response(JSON.stringify(health), {
-      status: isAnswering ? 200 : 503,
+      status: ok ? 200 : 503,
       headers: HEALTH_HEADERS,
     });
   };

@@ -17,6 +17,7 @@ import {
   serveMoveHandoff,
 } from "./access-gate.js";
 import { createHealthServer } from "./health.js";
+import { serveContact } from "./contact-request.js";
 
 const PAGE_HEADERS = {
   "cache-control": "no-cache",
@@ -248,7 +249,8 @@ export function createAppWorker({ pageFiles, forwardToStore, isStoreAnswering, r
   // Decided by the file a path names, since the release's folder names the page too.
   const isIndexPath = (appPath) => findPageFile(appPath, releaseFolder).path === "index.html";
   const serveHealth = createHealthServer({ isStoreAnswering, release: releaseCommit });
-  const isDataPath = (appPath) => isStorePath(appPath) || Object.hasOwn(reads, appPath);
+  const isDataPath = (appPath) =>
+    appPath === "/contact" || isStorePath(appPath) || Object.hasOwn(reads, appPath);
 
   // Until the phone sends the access code, the page's address shows the gate instead, or, for a
   // phone that never sent one under a key that's moving, the same page at PAGE_HOST, whose gate
@@ -287,6 +289,7 @@ export function createAppWorker({ pageFiles, forwardToStore, isStoreAnswering, r
         return serveMoveHandoff(request, env);
       const access = await readAccess(request, env);
       if (access !== "open") return serveLocked(request, env, { url, appPath, prefix, access });
+      if (appPath === "/contact") return serveContact(request, env);
       if (isStorePath(appPath)) return forwardToStore(request, env, appPath);
       if (request.method === "GET" && Object.hasOwn(reads, appPath))
         return reads[appPath](url, env);

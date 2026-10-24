@@ -207,14 +207,14 @@ test("a beta deploy uploads to the beta Worker, with the same bindings", async (
   const metadata = JSON.parse(await upload.init.body.get("metadata").text());
   assert.deepEqual(
     metadata.bindings.map((binding) => binding.name),
-    ["STORE", "ACCESS_LIMIT", "ACCOUNTS"],
+    ["STORE", "ACCESS_LIMIT", "ACCOUNTS", "CONTACT"],
   );
   assert.deepEqual(metadata.bindings[2], {
     type: "service",
     name: "ACCOUNTS",
     service: "accounts-beta",
   });
-  assert.deepEqual(metadata.migrations.new_tag, "v1");
+  assert.deepEqual(metadata.migrations.new_tag, "v2");
 });
 
 test("upload, route, and the Worker URL", async () => {
@@ -257,10 +257,14 @@ test("upload, route, and the Worker URL", async () => {
         simple: { limit: 10, period: 60 },
       },
       { type: "service", name: "ACCOUNTS", service: "accounts" },
+      { type: "durable_object_namespace", name: "CONTACT", class_name: "ContactOutbox" },
     ],
     keep_bindings: ["secret_text"],
     annotations: { "workers/message": NEW_COMMIT, "workers/tag": NEW_COMMIT.slice(0, 7) },
-    migrations: { new_tag: "v1", steps: [{ new_sqlite_classes: ["SeasonStore"] }] },
+    migrations: {
+      new_tag: "v2",
+      steps: [{ new_sqlite_classes: ["SeasonStore"] }, { new_sqlite_classes: ["ContactOutbox"] }],
+    },
   });
   const file = form.get("worker.mjs");
   assert.equal(file.type, "application/javascript+module");
@@ -334,14 +338,19 @@ test("a live version with no recorded commit, or changes that can't be listed, d
 
 test("a migration already applied isn't sent again", async () => {
   const { deploy, listPendingMigrations } = await loadDeployModule();
-  assert.equal(listPendingMigrations("v1", "SeasonStore"), null);
+  assert.equal(listPendingMigrations("v2", "SeasonStore"), null);
+  assert.deepEqual(listPendingMigrations("v1", "SeasonStore"), {
+    old_tag: "v1",
+    new_tag: "v2",
+    steps: [{ new_sqlite_classes: ["ContactOutbox"] }],
+  });
   assert.deepEqual(listPendingMigrations(undefined, "SeasonStore"), {
     old_tag: undefined,
-    new_tag: "v1",
-    steps: [{ new_sqlite_classes: ["SeasonStore"] }],
+    new_tag: "v2",
+    steps: [{ new_sqlite_classes: ["SeasonStore"] }, { new_sqlite_classes: ["ContactOutbox"] }],
   });
 
-  const cloudflare = createFakeCloudflare({ migrationTag: "v1" });
+  const cloudflare = createFakeCloudflare({ migrationTag: "v2" });
   await deploy({
     worker: "mlb",
     fetchImpl: cloudflare.fetchImpl,

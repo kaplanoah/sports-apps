@@ -105,6 +105,28 @@ Each app's Worker carries its page. Every deploy bundles both from the source it
 
 A service is a Worker with no page, in `services/<name>/`, which the apps reach by a binding and the public never does. It's built, versioned, deployed, and rolled back as an app is. The `accounts` service keeps each account's passkeys and the choices it saves in each app, and knows an email only by a keyed hash.
 
+### Contact email setup
+
+Contact uses a separate `ContactOutbox` Durable Object in each app, behind the existing access gate. A successful submission means the server durably saved the report and scheduled delivery. The outbox sends through Resend, using the visitor's optional address as Reply-To. The owner replies from their own mailbox in a normal email app. Mailbox hosting is separate from transactional sending; the sending provider can also serve future magic links.
+
+Before deploying Contact on either channel, choose a receiving mailbox that can send replies, verify a sending domain with Resend, and configure these Worker secrets on both apps for that channel. Keep addresses and credentials out of the repository, issues, and workflow logs:
+
+| Secret             | Value                                                           |
+| ------------------ | --------------------------------------------------------------- |
+| `CONTACT_FROM`     | An authenticated address on the verified sending domain         |
+| `CONTACT_TO`       | The owner's receiving domain mailbox                            |
+| `CONTACT_MAIL_KEY` | A Resend API key allowed to send and retrieve sent email status |
+
+Use the provider's domain verification records without replacing the mailbox provider's MX records. Do not reuse the accounts service's `EMAIL_KEY`: it hashes account emails and cannot send mail. Worker uploads preserve these secrets. The session needs Cloudflare credential access to inspect or change them; a GitHub connection alone does not provide it.
+
+The outbox keeps a durable receipt for each submission ID, so a response lost after acceptance can be retried without creating another report. It rejects a changed report under an existing ID. Messages, optional diagnostics, and validated PNG/JPEG/WebP attachments stay private in chunked storage until delivery is confirmed. A screenshot is limited to 2 MB. Five new reports per sender per hour and 100 pending reports per app bound abuse and backlog; saved IDs remain retryable at those limits.
+
+Resend's acceptance is tracked separately from delivery. An alarm checks the sent email's status until the receiving mail server accepts it; this does not establish inbox placement. On confirmed delivery the private payload is removed, leaving the receipt. Retries use the same provider idempotency key and frozen email content. Because [Resend retains those keys for 24 hours](https://resend.com/docs/dashboard/emails/idempotency-keys), uncertain sends pause before 23 hours rather than risk duplicate email. Bounces and delivery checks unresolved for seven days also retain the report for investigation.
+
+An unavailable configuration, a report older than an hour, or a paused report makes the app's Contact health fail. The existing Watch apps workflow raises its app outage issue. Investigate the provider's logs and the private Durable Object storage; do not clear the outbox or resend an uncertain report without checking whether it was delivered. The endpoint never exposes stored reports. Restoring configuration alone does not automatically resend reports paused for uncertainty.
+
+Before production, verify one real beta report in the chosen mailbox, its screenshot, and Reply-To with a reply to the supplied visitor address. Also verify that a report without a visitor address has no Reply-To. No deployment or mocked test proves that mailbox check.
+
 Code every app uses lives in `shared/`: the type roles every page's text takes, each app sizing and weighing them for its own fonts (`type.css`), the page's tab bar and settings sheet and the bar that asks a phone to add the page to the Home Screen (their styles in `chrome.css`), the sheet a tap on a game opens (`sheet.css`), catching up on return, showing what the page last showed while it loads, and store client in `shared/page/`, and the Worker's routing and push notifications in `shared/worker/`. A change there reaches every app. The root `worker/` holds the tooling every app shares: building, versioning, deploying, and setting the page's key. Tests for shared code and tooling are in the root `tests/`; each app's own tests are in its `tests/`.
 
 Versions follow [semantic versioning](https://semver.org). Each pull request's title starts with a type: `feat:` for a new feature, `fix:`, `refactor:`, or `build:` for a patch, and `docs:`, `test:`, `ci:`, or `chore:` for changes that don't deploy. A `!` after a type that deploys, as in `feat!:`, marks a major change for each Worker it deploys; `feat(mlb)!:` makes it major for that Worker alone, and the others take the type's own bump. The build works out each Worker's version from these titles on `main`, so there are no tags to keep. A merge that changes nothing a Worker's deploy counts, like only its tests, docs, or other Workers' folders, leaves that Worker's version alone. Each Worker counts on from a baseline version in `worker/release.mjs`; a new one starts at 1.0.0 with the merge that adds its folder.

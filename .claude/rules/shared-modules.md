@@ -62,6 +62,7 @@ The Worker serves every file here, its `networks/` logos too, under `shared/`, b
 ### Settings and Diagnostics
 
 - `settings-sheet.js`: the settings sheet
+- `contact-rules.js`: Contact categories and shared input limits
 - `season-picker.js`: settings' Season picker
 - `notifications.js`: settings' notifications switch
 - `notification-status.js`: what that switch says under it
@@ -219,6 +220,9 @@ Pages link these before their own stylesheet, and theme them with the tokens the
 ## `shared/worker/`
 
 - `app-worker.js`: the Worker's routing, under the key or at its own address, and moving the page there
+- `contact-request.js`: bounded Contact requests behind the app's access gate
+- `contact-outbox.js`: durable acceptance and alarm-driven email delivery
+- `contact-mail.js`: transactional email and provider delivery checks
 - `access-gate.js`: asking for the access code before the page opens
 - `health.js`: the Worker's health, for an uptime monitor, and what each service it binds answers
 - `services.js`: the services an app may bind, and each one's binding name
