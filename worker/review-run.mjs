@@ -6,7 +6,7 @@ export const REVIEW_RESULT_PREFIX = "trusted-review-passed-";
 /** @param {any} run */
 export function readReviewRun(run) {
   const match =
-    /^Review ([1-9]\d*) head ([a-f0-9]{40}) base ([a-f0-9]{40}) source ([a-f0-9]{40})(?: target (\S+) intent (review|observe|exempt))?$/.exec(
+    /^Review ([1-9]\d*) head ([a-f0-9]{40}) base ([a-f0-9]{40}) source ([a-f0-9]{40})(?: target (main|other) intent (review|observe|exempt))?$/.exec(
       run?.display_title ?? "",
     );
   if (!match) return null;

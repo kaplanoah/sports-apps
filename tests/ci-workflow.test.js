@@ -14,7 +14,12 @@ import { formatJobOutputs, listJobs as listPlanJobs, writeReview } from "../work
 import { findRefusal } from "../worker/review-git.mjs";
 import { escapePattern } from "../shared/page/escape-pattern.js";
 import { REPO_ROOT, readRepoFile } from "./repo-files.js";
-import { readNativeReviewName, readStepInput, readStepScript } from "./workflow-step.js";
+import {
+  createReviewDecisionEnvironment,
+  readNativeReviewName,
+  readStepInput,
+  readStepScript,
+} from "./workflow-step.js";
 import { PHONE_CONTEXT as EXPECTED_PHONE_CONTEXT } from "../worker/labeling.mjs";
 import { MUTATION_TARGETS } from "../worker/mutation-targets.mjs";
 
@@ -743,7 +748,7 @@ function decideReview(event) {
   };
   const { status, stdout, stderr } = spawnSync("bash", ["-e", "-c", script], {
     encoding: "utf8",
-    env: { ...env, REVIEW_RUN_NAME: readNativeReviewName(env) },
+    env: createReviewDecisionEnvironment(env),
   });
   assert.equal(status, 0, stderr);
   const written = Object.fromEntries(

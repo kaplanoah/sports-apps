@@ -37,17 +37,17 @@ export function readStepInput(workflow, step, input) {
 export function readNativeReviewName(env) {
   const github = {
     repository: env.REPOSITORY ?? "example/repository",
-    sha: "d".repeat(40),
+    sha: env.REVIEW_TRUSTED ?? "d".repeat(40),
     event: {
       action: env.ACTION,
       label: { name: env.LABEL },
       pull_request: {
-        number: 1,
+        number: Number(env.PR ?? "1"),
         draft: env.IS_DRAFT === "true",
         user: { login: env.AUTHOR },
         author_association: env.ASSOCIATION,
-        head: { sha: "a".repeat(40), repo: { full_name: env.HEAD_REPOSITORY } },
-        base: { sha: "b".repeat(40), ref: env.BASE_REF ?? "main" },
+        head: { sha: env.REVIEW_HEAD ?? "a".repeat(40), repo: { full_name: env.HEAD_REPOSITORY } },
+        base: { sha: env.REVIEW_BASE ?? "b".repeat(40), ref: env.BASE_REF ?? "main" },
       },
     },
   };

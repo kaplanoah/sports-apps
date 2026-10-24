@@ -712,6 +712,13 @@ test("run title bounds base names without changing main eligibility", () => {
   const state = createHarness();
   state.run.display_title = state.run.display_title.replace("target main", "target other");
   assert.equal(readReviewRun(state.run).target, "other");
+  assert.equal(
+    readReviewRun({
+      ...state.run,
+      display_title: state.run.display_title.replace("target other", "target arbitrary"),
+    }),
+    null,
+  );
   assert.equal(selectPublicationRun([state.run], state.pull, { name: REPOSITORY, id: 1 }), null);
 });
 

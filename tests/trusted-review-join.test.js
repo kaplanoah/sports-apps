@@ -11,7 +11,7 @@ import {
 } from "../worker/find-trusted-review.mjs";
 import { readReviewIdentity, sealReviewArtifact } from "../worker/review-data.mjs";
 import { readRepoFile, REPO_ROOT } from "./repo-files.js";
-import { readStepInput } from "./workflow-step.js";
+import { readNativeReviewName, readStepInput } from "./workflow-step.js";
 
 const SHA = "a".repeat(40);
 const TREE = "e".repeat(40);
@@ -44,8 +44,6 @@ const createRun = (changes = {}) => ({
 test("actual producer names and CI download inputs agree with the trusted join", async () => {
   const producer = readRepoFile(".github/workflows/review.yml");
   const consumer = readRepoFile(".github/workflows/ci.yml");
-  const runName = producer.match(/^run-name: &review-name (.+)$/m)?.[1];
-  assert.ok(runName);
   const steps = producer.split(/^ {6}- /m);
   const record = steps.findIndex((step) =>
     step.startsWith("name: Record the trusted review result\n"),
@@ -61,23 +59,27 @@ test("actual producer names and CI download inputs agree with the trusted join",
   /** @param {string} template @param {Record<string, string>} context */
   const render = (template, context) =>
     template.replace(/\$\{\{\s*(.*?)\s*\}\}/g, (_, expression) => {
-      if (expression.startsWith("github.event.pull_request.user.login ==")) return "review";
-      if (expression.startsWith("github.event.pull_request.base.ref ==")) return "main";
       assert.ok(Object.hasOwn(context, expression), `Unknown workflow expression: ${expression}`);
       return context[expression];
     });
   for (const source of [EXPECTED.base, ID_ENV.REVIEW_TRUSTED]) {
     const context = {
-      "github.event.pull_request.number": EXPECTED.pull,
-      "github.event.pull_request.head.sha": EXPECTED.head,
-      "github.event.pull_request.base.sha": EXPECTED.base,
-      "github.event.pull_request.base.ref": "main",
-      "github.sha": source,
       "steps.result.outputs.tree": TREE,
       "steps.find.outputs.tree": TREE,
       "steps.find.outputs.run": "7",
     };
-    const run = createRun({ display_title: render(runName, context) });
+    const run = createRun({
+      display_title: readNativeReviewName({
+        ACTION: "opened",
+        ASSOCIATION: "OWNER",
+        AUTHOR: "example",
+        REPOSITORY: EXPECTED.repository,
+        PR: EXPECTED.pull,
+        REVIEW_HEAD: EXPECTED.head,
+        REVIEW_BASE: EXPECTED.base,
+        REVIEW_TRUSTED: source,
+      }),
+    });
     const artifact = {
       name: render(readStepInput(producer, upload, "name"), context),
       workflow_run: { id: run.id },
@@ -473,4 +475,23 @@ test("real verify CLI accepts the sealed resolved merge and rejects mismatched p
     assert.match(rejected.stderr, /reviewed merge does not match/);
     assert.equal(rejected.output, "");
   }
+});
+
+test("native title rendering preserves supplied PR and commit identities", () => {
+  const expected = { ...EXPECTED, head: "f".repeat(40), base: "e".repeat(40), pull: "23" };
+  const source = "c".repeat(40);
+  const title = readNativeReviewName({
+    ACTION: "opened",
+    ASSOCIATION: "OWNER",
+    AUTHOR: "example",
+    REPOSITORY: expected.repository,
+    PR: expected.pull,
+    REVIEW_HEAD: expected.head,
+    REVIEW_BASE: expected.base,
+    REVIEW_TRUSTED: source,
+  });
+  assert.ok(
+    isTrustedReviewRun(createRun({ head_sha: expected.head, display_title: title }), expected),
+  );
+  assert.ok(title.includes(`source ${source} target main intent review`));
 });
