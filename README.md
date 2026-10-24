@@ -107,17 +107,17 @@ A service is a Worker with no page, in `services/<name>/`, which the apps reach 
 
 ### Contact email setup
 
-Contact uses a separate `ContactOutbox` Durable Object in each app, behind the existing access gate. A successful submission means the server durably saved the report and scheduled delivery. The outbox sends through Resend, using the visitor's optional address as Reply-To. The owner replies from their own mailbox in a normal email app. Mailbox hosting is separate from transactional sending; the sending provider can also serve future magic links.
+Contact uses a separate `ContactOutbox` Durable Object in each app, behind the existing access gate. A successful submission means the server durably saved the report and scheduled delivery. The outbox sends through Resend, using the visitor's optional address as Reply-To. The receiving domain address can be a mailbox or an alias forwarded to an existing personal mailbox, such as with Cloudflare Email Routing. The owner replies in their normal email app, whose sending address determines the identity the visitor sees. Transactional sending can also serve future magic links.
 
-Before deploying Contact on either channel, choose a receiving mailbox that can send replies, verify a sending domain with Resend, and configure these Worker secrets on both apps for that channel. Keep addresses and credentials out of the repository, issues, and workflow logs:
+Before deploying Contact on either channel, choose the receiving domain address and how the owner will reply, verify a sending domain with Resend, and configure these Worker secrets on both apps for that channel. Keep addresses and credentials out of the repository, issues, and workflow logs:
 
 | Secret             | Value                                                           |
 | ------------------ | --------------------------------------------------------------- |
 | `CONTACT_FROM`     | An authenticated address on the verified sending domain         |
-| `CONTACT_TO`       | The owner's receiving domain mailbox                            |
+| `CONTACT_TO`       | The owner's receiving domain address or forwarding alias        |
 | `CONTACT_MAIL_KEY` | A Resend API key allowed to send and retrieve sent email status |
 
-Use the provider's domain verification records without replacing the mailbox provider's MX records. Do not reuse the accounts service's `EMAIL_KEY`: it hashes account emails and cannot send mail. Worker uploads preserve these secrets. The session needs Cloudflare credential access to inspect or change them; a GitHub connection alone does not provide it.
+Use the provider's domain verification records without replacing the receiving domain's MX records. Do not reuse the accounts service's `EMAIL_KEY`: it hashes account emails and cannot send mail. Worker uploads preserve these secrets. The session needs Cloudflare credential access to inspect or change them; a GitHub connection alone does not provide it.
 
 The outbox keeps a durable receipt for each submission ID, so a response lost after acceptance can be retried without creating another report. It rejects a changed report under an existing ID. Messages, optional diagnostics, and validated PNG/JPEG/WebP attachments stay private in chunked storage until delivery is confirmed. A screenshot is limited to 2 MB. Five new reports per sender per hour and 100 pending reports per app bound abuse and backlog; saved IDs remain retryable at those limits.
 

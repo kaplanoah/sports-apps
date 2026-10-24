@@ -207,9 +207,9 @@ test("a beta deploy uploads to the beta Worker, with the same bindings", async (
   const metadata = JSON.parse(await upload.init.body.get("metadata").text());
   assert.deepEqual(
     metadata.bindings.map((binding) => binding.name),
-    ["STORE", "ACCESS_LIMIT", "ACCOUNTS", "CONTACT"],
+    ["STORE", "ACCESS_LIMIT", "CONTACT", "ACCOUNTS"],
   );
-  assert.deepEqual(metadata.bindings[2], {
+  assert.deepEqual(metadata.bindings[3], {
     type: "service",
     name: "ACCOUNTS",
     service: "accounts-beta",
@@ -256,8 +256,8 @@ test("upload, route, and the Worker URL", async () => {
         namespace_id: "2701",
         simple: { limit: 10, period: 60 },
       },
-      { type: "service", name: "ACCOUNTS", service: "accounts" },
       { type: "durable_object_namespace", name: "CONTACT", class_name: "ContactOutbox" },
+      { type: "service", name: "ACCOUNTS", service: "accounts" },
     ],
     keep_bindings: ["secret_text"],
     annotations: { "workers/message": NEW_COMMIT, "workers/tag": NEW_COMMIT.slice(0, 7) },

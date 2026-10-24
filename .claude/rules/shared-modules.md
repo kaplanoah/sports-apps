@@ -72,6 +72,7 @@ The Worker serves every file here, its `networks/` logos too, under `shared/`, b
 - `diagnostics.js`: the Diagnostics and their shared report
 - `sent-label.js`: how long a button that copies or shares says it did
 - `step-log.js`: a Diagnostics log of what one part of the page does
+- `report-addresses.js`: hiding private addresses in Diagnostics and submitted reports
 - `viewport-log.js`: each change to the screen's viewports
 - `sheet-log.js`: what each dialog's sheets do
 - `day-strip-log.js`: what a season's list of days does
