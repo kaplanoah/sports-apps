@@ -61,6 +61,7 @@ test("actual producer names and CI download inputs agree with the trusted join",
   /** @param {string} template @param {Record<string, string>} context */
   const render = (template, context) =>
     template.replace(/\$\{\{\s*(.*?)\s*\}\}/g, (_, expression) => {
+      if (expression.startsWith("github.event.pull_request.user.login ==")) return "review";
       assert.ok(Object.hasOwn(context, expression), `Unknown workflow expression: ${expression}`);
       return context[expression];
     });
@@ -69,6 +70,7 @@ test("actual producer names and CI download inputs agree with the trusted join",
       "github.event.pull_request.number": EXPECTED.pull,
       "github.event.pull_request.head.sha": EXPECTED.head,
       "github.event.pull_request.base.sha": EXPECTED.base,
+      "github.event.pull_request.base.ref": "main",
       "github.sha": source,
       "steps.result.outputs.tree": TREE,
       "steps.find.outputs.tree": TREE,

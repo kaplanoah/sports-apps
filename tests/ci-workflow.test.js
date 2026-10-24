@@ -921,7 +921,9 @@ test("only trusted posting jobs can write to the pull request", () => {
   const withClaude = [
     ...listJobs(REVIEW_WORKFLOW).map((job) => readJob(job, REVIEW_WORKFLOW)),
     readJob("find", AREA_WORKFLOW),
-  ].filter((job) => /anthropics\/|uses: \.\/\.github/.test(job));
+  ].filter((job) =>
+    /anthropics\/|uses: \.\/\.github\/workflows\/trusted-review-area\.yml/.test(job),
+  );
   assert.equal(withClaude.length, 3);
   for (const job of withClaude) assert.doesNotMatch(job, /pull-requests: write/);
 });

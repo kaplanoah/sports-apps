@@ -9,6 +9,7 @@ import { readJson } from "./judge-review.mjs";
 import { createReviewGitEnvironment } from "./review-repository.mjs";
 import { isGitObjectId } from "./git-object.mjs";
 import { waitFor } from "./check-timing.mjs";
+import { readReviewRun } from "./review-run.mjs";
 
 const FINISH_BUDGET_MS = 10 * 60 * 1000;
 const FIRST_POLL_MS = 60 * 1000;
@@ -51,12 +52,13 @@ export const isTrustedReviewRun = (run, expected) =>
 
 /** @param {any} run @param {{ head: string, base: string, pull: string }} expected */
 function readTrustedReviewSource(run, expected) {
-  const prefix = `Review ${expected.pull} head ${expected.head} base ${expected.base} source `;
-  const source =
-    typeof run.display_title === "string" && run.display_title.startsWith(prefix)
-      ? run.display_title.slice(prefix.length)
-      : null;
-  return isGitObjectId(source) ? source : null;
+  const identity = readReviewRun(run);
+  return identity &&
+    String(identity.pull) === expected.pull &&
+    identity.head === expected.head &&
+    identity.base === expected.base
+    ? identity.source
+    : null;
 }
 
 /**

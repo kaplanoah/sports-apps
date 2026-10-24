@@ -1,5 +1,5 @@
 name: Trusted review
-run-name: Review ${{ github.event.pull_request.number }} head ${{ github.event.pull_request.head.sha }} base ${{ github.event.pull_request.base.sha }} source ${{ github.sha }}
+run-name: Review ${{ github.event.pull_request.number }} head ${{ github.event.pull_request.head.sha }} base ${{ github.event.pull_request.base.sha }} source ${{ github.sha }} target ${{ github.event.pull_request.base.ref }} intent ${{ github.event.pull_request.user.login == 'dependabot[bot]' && 'exempt' || (!github.event.pull_request.draft && ((github.event.action == 'labeled' && github.event.label.name == 'review') || ((github.event.action == 'opened' || github.event.action == 'ready_for_review') && (contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.pull_request.author_association) || github.event.pull_request.head.repo.full_name == github.repository)))) && 'review' || 'observe' }}
 
 on:
   pull_request_target:
@@ -21,8 +21,20 @@ concurrency:
   cancel-in-progress: ${{ github.event.action != 'labeled' && github.event.action != 'unlabeled' }}
 
 jobs:
+  review-begin:
+    if: vars.TRUSTED_REVIEW_PUBLISHER_ENABLED == 'true' && github.event.pull_request.base.ref == 'main'
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
+    uses: ./.github/workflows/publish-trusted-review.yml
+    with:
+      head: ${{ github.event.pull_request.head.sha }}
+      phase: begin
+
   review-plan:
-    if: ${{ !cancelled() }}
+    needs: review-begin
+    if: ${{ !cancelled() && (vars.TRUSTED_REVIEW_PUBLISHER_ENABLED != 'true' || github.event.pull_request.base.ref != 'main' || needs.review-begin.result == 'success') }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -318,6 +330,10 @@ jobs:
     permissions:
       contents: read
       pull-requests: write
+    outputs:
+      artifact: ${{ steps.upload-result.outputs.artifact-id }}
+      digest: ${{ steps.upload-result.outputs.artifact-digest }}
+      tree: ${{ steps.result.outputs.tree }}
     steps:
       - name: Fail when the review couldn't be planned
         if: needs.review-plan.result != 'success'
@@ -353,9 +369,24 @@ jobs:
           REVIEW_OWED: ${{ needs.review-plan.outputs.owed }}
         run: node "$RUNNER_TEMP/trusted/worker/trusted-review.mjs" result
       - if: steps.result.outputs.tree != ''
+        id: upload-result
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: trusted-review-passed-${{ steps.result.outputs.tree }}
           path: ${{ env.REVIEW_UPLOAD }}/trusted-review-result/
           retention-days: 14
           overwrite: true
+
+  review-publish:
+    needs:
+      [review-begin, review-plan, review-label, review-area, review-across, review-post, review]
+    if: ${{ always() && vars.TRUSTED_REVIEW_PUBLISHER_ENABLED == 'true' && github.event.pull_request.base.ref == 'main' }}
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
+    uses: ./.github/workflows/publish-trusted-review.yml
+    with:
+      head: ${{ github.event.pull_request.head.sha }}
+      phase: finish
+      producers: ${{ toJSON(needs) }}

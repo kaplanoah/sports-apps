@@ -113,10 +113,9 @@ test("trusted review pins workflow authority, source, Node and isolated artifact
   const main = readRepoFile(".github/workflows/review.yml");
   const area = readRepoFile(".github/workflows/trusted-review-area.yml");
   assert.match(main, / {2}pull_request_target:/);
-  assert.doesNotMatch(main, /base\.ref/);
   assert.match(
     main,
-    /^run-name: Review \$\{\{ github.event.pull_request.number \}\} head \$\{\{ github.event.pull_request.head.sha \}\} base \$\{\{ github.event.pull_request.base.sha \}\} source \$\{\{ github.sha \}\}$/m,
+    /^run-name: Review \$\{\{ github.event.pull_request.number \}\} head \$\{\{ github.event.pull_request.head.sha \}\} base \$\{\{ github.event.pull_request.base.sha \}\} source \$\{\{ github.sha \}\} target .* intent /m,
   );
   let claude = 0;
   for (const workflow of [main, area]) {
@@ -1031,8 +1030,9 @@ test("stacked target runs plan and summarize with the same owed and result gates
   const workflow = readRepoFile(".github/workflows/review.yml");
   for (const name of ["review-plan", "review"]) {
     const job = workflow.split(`  ${name}:\n`)[1].split(/^ {2}[a-z][\w-]*:/m)[0];
-    assert.match(job, /if: \$\{\{ !cancelled\(\) \}\}/);
-    assert.doesNotMatch(job, /base\.ref/);
+    assert.match(job, /if: \$\{\{ !cancelled\(\)/);
+    if (name === "review") assert.doesNotMatch(job, /base\.ref/);
+    else assert.match(job, /github.event.pull_request.base.ref != 'main'/);
   }
   assert.match(workflow, /id: result\n {8}if: .*steps.prepare.outputs.available == 'true'/);
   assert.doesNotMatch(workflow, /pattern: trusted-review-\*\n/);

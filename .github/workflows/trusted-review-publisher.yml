@@ -1,0 +1,57 @@
+name: Reconcile trusted review
+
+on:
+  workflow_run:
+    workflows: [Trusted review]
+    types: [requested, in_progress, completed]
+  pull_request_target:
+    types:
+      [
+        opened,
+        reopened,
+        synchronize,
+        edited,
+        converted_to_draft,
+        ready_for_review,
+        closed,
+        labeled,
+        unlabeled,
+      ]
+
+permissions:
+  contents: read
+  actions: read
+  pull-requests: read
+
+jobs:
+  discover:
+    if: vars.TRUSTED_REVIEW_PUBLISHER_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      heads: ${{ steps.heads.outputs.heads }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version-file: .nvmrc
+          package-manager-cache: false
+      - name: Discover affected commit checks
+        id: heads
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node worker/publish-trusted-review.mjs discover
+
+  reconcile:
+    needs: discover
+    strategy:
+      fail-fast: false
+      matrix:
+        head: ${{ fromJSON(needs.discover.outputs.heads) }}
+    uses: ./.github/workflows/publish-trusted-review.yml
+    with:
+      head: ${{ matrix.head }}
+      phase: observe
