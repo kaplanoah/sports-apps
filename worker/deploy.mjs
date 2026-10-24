@@ -149,7 +149,7 @@ function listBindings({ storeClass, isPageless, channel, roots }) {
     name: "CONTACT",
     class_name: "ContactOutbox",
   };
-  return [store, ACCESS_LIMIT_BINDING, ...listServiceBindings(channel, roots), contact];
+  return [store, ACCESS_LIMIT_BINDING, contact, ...listServiceBindings(channel, roots)];
 }
 
 // Cloudflare records the last tag applied and rejects an upload that repeats one.

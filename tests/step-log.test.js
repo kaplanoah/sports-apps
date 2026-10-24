@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { createStepLog, nameFile, writeStepsAsText } from "../shared/page/step-log.js";
+import { createStepLog, writeStepsAsText } from "../shared/page/step-log.js";
+import { nameFile } from "../shared/page/report-addresses.js";
 import { normalizeSpaces } from "./text.js";
 import { checkInTimeZone, EASTERN } from "./time-zone.js";
 
