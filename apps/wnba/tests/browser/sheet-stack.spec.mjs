@@ -2,6 +2,7 @@ import { test, expect, openApp } from "./harness.mjs";
 import { waitForTimedAnimations } from "../../../../tests/browser/animations.mjs";
 import { recordSheetMotions } from "../../../../tests/browser/sheet-motions.mjs";
 import { expectShown, readLeft } from "../../../../tests/browser/sheet-row.mjs";
+import { SETTINGS } from "../../../../tests/browser/settings.mjs";
 import { drag } from "../../../../tests/browser/touch.mjs";
 
 const PHONE = { width: 390, height: 844 };
@@ -235,9 +236,12 @@ test.describe("with reduced motion", () => {
 
       await page.keyboard.press("Escape");
       await page.getByRole("button", { name: "Settings", exact: true }).click();
-      await expect(page.locator(".settings-panel")).toHaveCSS("background-color", floor);
-      await expect(page.locator(".settings-panel .sheet-top")).toHaveCSS("background-color", floor);
-      await expect(page.locator(".settings-panel .sheet-top")).toHaveCSS("box-shadow", "none");
+      await expect(page.locator(SETTINGS)).toHaveCSS("background-color", floor);
+      await expect(page.locator(SETTINGS).locator(".sheet-top")).toHaveCSS(
+        "background-color",
+        floor,
+      );
+      await expect(page.locator(SETTINGS).locator(".sheet-top")).toHaveCSS("box-shadow", "none");
     });
 
   test("on a wide screen, a sheet and settings lift off the page by a shadow", async ({ page }) => {
@@ -248,7 +252,7 @@ test.describe("with reduced motion", () => {
 
     await page.keyboard.press("Escape");
     await page.getByRole("button", { name: "Settings", exact: true }).click();
-    await expect(page.locator(".settings-panel")).not.toHaveCSS("box-shadow", "none");
+    await expect(page.locator(SETTINGS)).not.toHaveCSS("box-shadow", "none");
   });
 
   test("on a phone, every sheet fills the screen, whatever it holds", async ({ page }) => {
