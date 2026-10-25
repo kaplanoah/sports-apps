@@ -32,7 +32,9 @@ export function testGameReminderSettings(test, expect, app) {
     await expect(reminders).toHaveAttribute("aria-checked", "false");
     await expect(updates).toHaveAttribute("aria-checked", "true");
     await expect(timing).toBeDisabled();
+    const synced = page.waitForResponse(matchPath("/push/preferences"));
     await page.reload({ waitUntil: "domcontentloaded" });
+    await (await synced).finished();
     await expect(updates).toHaveAttribute("aria-checked", "true");
     await expect(reminders).toHaveAttribute("aria-checked", "false");
     await expect(timing).toHaveValue("60");
@@ -178,6 +180,17 @@ export function testGameReminderSettings(test, expect, app) {
     await expect(page.locator("#notifyNote")).toBeEmpty();
     expect(subscriptionWrites).toBe(0);
     expect(await page.evaluate((key) => sessionStorage.getItem(key), PUSH_STUB.keptKey)).toBeNull();
+    await page.unroute("**/push/preferences");
+    await page.unroute("**/push/subscription");
+    const updates = page.getByRole("switch", { name: app.updates, exact: true });
+    await updates.click();
+    await expect(updates).toHaveAttribute("aria-checked", "true");
+    await expect(reminders).toHaveAttribute("aria-checked", "false");
+    const stored = await page.evaluate(() =>
+      JSON.parse(localStorage.getItem("device-notifications")),
+    );
+    expect(stored.updates).toBe(true);
+    expect(stored.reminders).toBe(false);
   });
 
   test("a missing timing record rejected by a full store leaves this device off with guidance", async ({
@@ -207,10 +220,63 @@ export function testGameReminderSettings(test, expect, app) {
     await timing.selectOption("60");
     await expect(reminders).toHaveAttribute("aria-checked", "false");
     await expect(timing).toBeDisabled();
-    await expect(timing).toHaveValue("15");
+    await expect(timing).toHaveValue("60");
     await expect(page.locator("#notifyNote")).toContainText("Too many devices");
     expect(await page.evaluate((key) => sessionStorage.getItem(key), PUSH_STUB.keptKey)).toBeNull();
+    await page.unroute("**/push/preferences");
+    await page.unroute("**/push/subscription");
+    const updates = page.getByRole("switch", { name: app.updates, exact: true });
+    await updates.click();
+    await expect(updates).toHaveAttribute("aria-checked", "true");
+    await expect(reminders).toHaveAttribute("aria-checked", "false");
+    const stored = await page.evaluate(() =>
+      JSON.parse(localStorage.getItem("device-notifications")),
+    );
+    expect(stored.updates).toBe(true);
+    expect(stored.reminders).toBe(false);
   });
+
+  for (const source of ["a category edit", "a return visit"])
+    test(`a capacity rejection during ${source} clears prior categories before another opt-in`, async ({
+      page,
+    }) => {
+      await page.addInitScript(stubPushManager, PUSH_STUB);
+      await app.openApp(page);
+      await app.openSettings(page);
+      const reminders = page.getByRole("switch", { name: "Game reminders", exact: true });
+      const updates = page.getByRole("switch", { name: app.updates, exact: true });
+      await reminders.click();
+      await expect(reminders).toHaveAttribute("aria-checked", "true");
+      await page.route("**/push/subscription", (route) =>
+        route.fulfill({
+          status: 429,
+          json: { error: { code: "too_many_devices", message: "Full" } },
+        }),
+      );
+      if (source === "a category edit") {
+        await page.route("**/push/preferences", (route) =>
+          route.request().method() === "PUT"
+            ? route.fulfill({
+                status: 404,
+                json: { error: { code: "not_found", message: "Gone" } },
+              })
+            : route.fallback(),
+        );
+        await updates.click();
+      } else {
+        const rejected = page.waitForResponse(matchPath("/push/subscription"));
+        await page.reload({ waitUntil: "domcontentloaded" });
+        await (await rejected).finished();
+      }
+      await expect(page.locator("#notifyNote")).toContainText("Too many devices");
+      await expect(reminders).toHaveAttribute("aria-checked", "false");
+      await expect(updates).toHaveAttribute("aria-checked", "false");
+      await page.unroute("**/push/preferences");
+      await page.unroute("**/push/subscription");
+      await updates.click();
+      await expect(updates).toHaveAttribute("aria-checked", "true");
+      await expect(reminders).toHaveAttribute("aria-checked", "false");
+    });
 
   test("Notifications matches News and timing occupies its own row", async ({ page }) => {
     await page.addInitScript(stubPushManager, PUSH_STUB);

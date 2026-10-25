@@ -8,7 +8,7 @@ import { respondError, respondJson } from "./responses.js";
 // Push subscriptions and the key that signs messages for them. Both are kept under keys the
 // store's own paths can't name, so the page's store never hands them out. The store keeps a hundred
 // active devices at most, since anyone with the page's address can subscribe one. Once full, it
-// makes room for a new one only by forgetting the one saved longest ago that hasn't been saved for
+// makes room for a new one only by retiring the one saved longest ago that hasn't been saved for
 // a month, since each visit saves its device again, and turns the new one away otherwise, so a flood of
 // subscriptions never pushes out a phone opened that month. It also removes active devices their push
 // service says are gone, or that have failed every message for a week, long enough for a fault of the
@@ -88,7 +88,7 @@ async function readBody(request) {
 }
 
 /**
- * The device a full store forgets to make room for another, the one saved longest ago once that's
+ * The device a full store retires to make room for another, the one saved longest ago once that's
  * a month ago, or undefined when every device was saved since. A device kept without the time it
  * was saved counts as saved longest ago.
  * @param {Map<string, { savedAt?: number }>} stored
@@ -171,10 +171,10 @@ export function createPushService({ storage, now, fetchImpl }) {
   }
 
   /**
-   * Keeps when the device's messages started failing, and forgets it once they have failed long
+   * Keeps when the device's messages started failing, and retires it once they have failed long
    * enough. A message that goes through clears it. A device removed or subscribed again while the
    * message was out keeps what that did. Answers the device as it's now kept, or null once it's
-   * forgotten.
+   * retired.
    * @param {string} key
    * @param {any} sent the device as the message went out to it
    * @param {boolean} wentThrough
@@ -201,7 +201,7 @@ export function createPushService({ storage, now, fetchImpl }) {
 
   /**
    * Sends the device a message, and answers the push service's status with the device as it's
-   * now kept, or null once it's forgotten.
+   * now kept, or null once it's retired.
    * @param {string} key
    * @param {any} subscription
    * @param {object} message
@@ -277,7 +277,7 @@ export function createPushService({ storage, now, fetchImpl }) {
   }
 
   /**
-   * Makes room for the device when the store is full and holds one it can forget, and answers
+   * Makes room for the device when the store is full and holds one it can retire, and answers
    * whether the device has room.
    * @param {string} key
    */
@@ -311,8 +311,10 @@ export function createPushService({ storage, now, fetchImpl }) {
   }
 
   async function archiveDevice(key, device) {
+    // A returning device gets a fresh failure window.
+    const { failingSince, ...history } = device;
     await storage.put(key.replace(SUBSCRIPTION_PREFIX, RETIRED_PREFIX), {
-      ...device,
+      ...history,
       deviceId: device.deviceId ?? key,
       retiredAt: now(),
     });

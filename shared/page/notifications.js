@@ -161,6 +161,7 @@ async function saveOrForget(
     if (isTurnedAway(error)) {
       await current.unsubscribe().catch(() => {});
       subscription = null;
+      forgetCategories(initialPreferences ?? preferences);
     }
     throw error;
   }
@@ -237,9 +238,8 @@ async function readPreferences() {
     ...sendEndpoint("POST", subscription.endpoint),
     body: JSON.stringify(subscription.toJSON()),
   });
-  preferences = result.preferences;
+  rememberPreferences(result.preferences);
   revision = result.revision;
-  storeJson(PREFERENCES_KEY, preferences);
   forgetStored(PENDING_KEY);
   renderNotifications();
 }
@@ -250,9 +250,18 @@ async function savePreferences(next) {
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ ...subscription.toJSON(), preferences: next, revision }),
   });
-  preferences = result.preferences;
+  rememberPreferences(result.preferences);
   revision = result.revision;
+}
+
+function rememberPreferences(next) {
+  preferences = next;
   storeJson(PREFERENCES_KEY, preferences);
+}
+
+function forgetCategories(next) {
+  rememberPreferences({ ...next, updates: false, reminders: false });
+  forgetStored(PENDING_KEY);
 }
 
 async function saveOrRestorePreferences(next) {
@@ -283,6 +292,7 @@ async function removeSubscription(next) {
   storeJson(PREVIOUS_KEY, subscription.toJSON());
   await subscription.unsubscribe();
   subscription = null;
+  forgetCategories(next);
 }
 
 async function changeCategory(category, isEnabled, permissionPromise) {
@@ -308,9 +318,9 @@ async function changeCategory(category, isEnabled, permissionPromise) {
       setStatus("off");
     }
   } catch (error) {
-    preferences = before;
     if (isTurnedAway(error)) setStatus("off", TOO_MANY_DEVICES);
     else {
+      preferences = before;
       if (subscription) await readPreferences().catch(() => {});
       setStatus(subscription ? "on" : "failed", CHANGE_FAILED);
     }

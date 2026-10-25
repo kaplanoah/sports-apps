@@ -567,7 +567,6 @@ for (const { removal, status, inactiveDays } of [
       harness.clock.now += 7 * 24 * 60 * 60_000;
       await harness.push.sendToAll([{ title: "Final" }]);
     }
-    const beforeRenewal = harness.sent.length;
     assert.equal((await harness.push.listSubscriptions()).size, 0);
     const renewed = {
       ...subscription,
@@ -585,13 +584,20 @@ for (const { removal, status, inactiveDays } of [
     const [device] = (await harness.push.listSubscriptions()).values();
     assert.deepEqual(device.preferences, { ...PREFERENCES, updates: true });
     assert.equal(device.reminderReceipts[GAME.id].state, "sent");
+    if (status === 503) {
+      await harness.push.sendToAll([{ title: "Next update" }]);
+      assert.equal((await harness.push.listSubscriptions()).size, 1);
+      const [active] = (await harness.push.listSubscriptions()).values();
+      assert.equal(active.failingSince, harness.clock.now);
+    }
+    const beforeReschedule = harness.sent.length;
     const moved = { ...GAME, start: harness.clock.now + 2 * 60 * 60_000 };
     harness.upstream.games = [moved];
     await harness.reminders.saveGames([moved]);
     harness.clock.now = moved.start - 60 * 60_000;
     harness.upstream.status = 201;
     await harness.reminders.checkDue();
-    assert.equal(harness.sent.length, beforeRenewal);
+    assert.equal(harness.sent.length, beforeReschedule);
   });
 }
 
@@ -685,8 +691,8 @@ test("retired renewal history expires a month after removal even before another 
 for (const change of ["endpoint", "keys"]) {
   test(`a gone response for the old ${change} retries a renewed reminder within its original deadline`, async () => {
     const harness = createHarness();
-    const { subscription } = await harness.subscribe();
-    const keys = await createBrowserKeys();
+    const { subscription, keys: originalKeys } = await harness.subscribe();
+    const keys = change === "endpoint" ? originalKeys : await createBrowserKeys();
     const renewed = {
       ...subscription,
       endpoint:
