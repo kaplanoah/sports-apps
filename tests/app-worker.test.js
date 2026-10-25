@@ -181,7 +181,47 @@ test("an app's own read gets the Worker's bindings, so it can read the store", a
   assert.deepEqual(handed, [["NYL", "the store"]]);
 });
 
-const DATA_PATHS = ["/box-score", "/store/seasons/2026", "/watch", "/push/key"];
+const DATA_PATHS = ["/box-score", "/store/seasons/2026", "/watch", "/push/key", "/visits"];
+
+test("visit writes require page access and a same-origin POST; reading totals never writes a visit", async () => {
+  const forwarded = [];
+  const worker = createAppWorker({
+    pageFiles: PAGE_FILES,
+    forwardToStore: (request, _env, path) => {
+      forwarded.push({ method: request.method, path });
+      return new Response(null, { status: 204 });
+    },
+    isStoreAnswering: storeAnswers,
+  });
+  const url = "https://worker.example/key/visits";
+  assert.equal((await worker.fetch(new Request(url, { method: "POST" }), LOCKED_ENV)).status, 401);
+  const cookie = await signIn();
+  for (const origin of [null, "https://other.example"]) {
+    const headers = { cookie, ...(origin && { origin }) };
+    assert.equal(
+      (await worker.fetch(new Request(url, { method: "POST", headers }), LOCKED_ENV)).status,
+      403,
+    );
+  }
+  const response = await worker.fetch(
+    new Request(url, {
+      method: "POST",
+      headers: { cookie, origin: "https://worker.example" },
+    }),
+    LOCKED_ENV,
+  );
+  assert.equal(response.status, 204);
+  assert.equal(response.headers.get("set-cookie"), null);
+  await worker.fetch(new Request(url, { headers: { cookie } }), LOCKED_ENV);
+  assert.deepEqual(forwarded, [
+    { method: "POST", path: "/visits" },
+    { method: "GET", path: "/visits" },
+  ]);
+  assert.equal(
+    (await worker.fetch(new Request("https://worker.example/visits"), LOCKED_ENV)).status,
+    404,
+  );
+});
 
 test("without an access code, the page and its data open as they always have", async () => {
   const env = { APP_KEY: "key" };

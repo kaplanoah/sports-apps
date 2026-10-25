@@ -9,6 +9,7 @@ import { startHomeScreen } from "#shared/home-screen.js";
 import { showJobStatuses, startDiagnostics } from "#shared/diagnostics.js";
 import { redrawEased } from "#shared/eased-redraw.js";
 import { trackKeyboardFocus } from "#shared/keyboard-focus.js";
+import { startVisits } from "#shared/visits.js";
 import { showStartDay, startDayStrip, startOverDayStrip } from "#shared/day-strip.js";
 import { startGameSearch } from "#shared/game-search-view.js";
 import { keepLastRead } from "#shared/kept-read.js";
@@ -305,6 +306,7 @@ function drawLoadedSeason() {
 async function boot() {
   startDiagnostics();
   watchReturns({ isBusy: () => session.isReordering, catchUp, pause: () => session.db.pause() });
+  startVisits();
   trackKeyboardFocus();
   watchPresses();
   wireControls();

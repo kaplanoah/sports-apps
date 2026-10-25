@@ -227,7 +227,10 @@ function redirectToPageHost(url, appPath, env) {
 }
 
 const isStorePath = (appPath) =>
-  appPath === "/watch" || appPath.startsWith("/store/") || appPath.startsWith("/push/");
+  appPath === "/watch" ||
+  appPath === "/visits" ||
+  appPath.startsWith("/store/") ||
+  appPath.startsWith("/push/");
 
 const GATE_PATH = "/gate.html";
 
@@ -287,6 +290,12 @@ export function createAppWorker({ pageFiles, forwardToStore, isStoreAnswering, r
         return serveMoveHandoff(request, env);
       const access = await readAccess(request, env);
       if (access !== "open") return serveLocked(request, env, { url, appPath, prefix, access });
+      if (
+        appPath === "/visits" &&
+        request.method === "POST" &&
+        request.headers.get("origin") !== url.origin
+      )
+        return respondText("Same origin only.\n", 403, PAGE_HEADERS);
       if (isStorePath(appPath)) return forwardToStore(request, env, appPath);
       if (request.method === "GET" && Object.hasOwn(reads, appPath))
         return reads[appPath](url, env);

@@ -18,6 +18,7 @@ import { fillDayStrip, showStartDay, startDayStrip, startOverDayStrip } from "#s
 import { refreshGameSearch, startGameSearch } from "#shared/game-search-view.js";
 import { listSearchGames } from "#shared/game-search.js";
 import { trackKeyboardFocus } from "#shared/keyboard-focus.js";
+import { startVisits } from "#shared/visits.js";
 import { keepLastRead } from "#shared/kept-read.js";
 import {
   keepLastSeen,
@@ -289,6 +290,7 @@ async function boot() {
   startDiagnostics();
   startAppearance(LOOKS);
   watchReturns({ catchUp, pause: () => session.db.pause() });
+  startVisits();
   trackKeyboardFocus();
   watchPresses([".team-line .team-open"]);
   startPageTabs();

@@ -23,6 +23,18 @@ const QUIET_LEAGUE = {
 
 const NOW = Date.parse("2026-09-30T20:00:00Z");
 
+test("the visit route counts independently of season updates and normal store reads", async () => {
+  const context = createDurableObjectContext();
+  const SeasonStore = createSeasonStore(QUIET_LEAGUE);
+  const store = new SeasonStore(context.ctx, {}, { now: () => NOW });
+  const response = await store.fetch(new Request(`${ORIGIN}/visits`, { method: "POST" }));
+  assert.equal(response.status, 204);
+  assert.equal(await context.ctx.storage.getAlarm(), null);
+  await store.fetch(new Request(`${ORIGIN}/store/live/current`));
+  const counts = await (await store.fetch(new Request(`${ORIGIN}/visits`))).json();
+  assert.deepEqual(counts.days, { "2026-09-30": { "app.example": 1 } });
+});
+
 const patchSeason = (store, body) =>
   store.fetch(
     new Request(`${ORIGIN}/store/seasons/2026`, {

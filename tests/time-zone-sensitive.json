@@ -147,6 +147,8 @@
     "tests/trusted-review.test.js",
     "tests/updates.test.js",
     "tests/viewport-log.test.js",
+    "tests/visit-counter.test.js",
+    "tests/visits.test.js",
     "tests/watch-apps.test.js",
     "tests/web-push.test.js",
     "tests/worker-fetch.test.js",

@@ -48,6 +48,7 @@ The Worker serves every file here, its `networks/` logos too, under `shared/`, b
 - `caught-up-sweep.js`: the sweep through the header once caught up
 - `pull-to-refresh.js`: pulling down on the Home Screen to catch up
 - `resume.js`: the release check and catching up on return
+- `visits.js`: anonymous foreground visits, excluding automated browser checks
 - `last-seen.js`: what the page last showed, drawn first on its next load
 - `element-path.js`: where a part sits, so a later load finds it
 - `stamp.js`: the header's lines on the latest score and the next game
@@ -248,3 +249,4 @@ Pages link these before their own stylesheet, and theme them with the tokens the
 - `push.js`: push subscriptions and their signing key
 - `web-push.js`: sending Web Push messages
 - `responses.js`: what the JSON endpoints answer with
+- `visits.js`: daily visit totals by hostname, retained for 35 Eastern calendar days

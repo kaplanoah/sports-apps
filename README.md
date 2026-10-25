@@ -27,6 +27,14 @@ A Cloudflare Worker serves the page and reads the WNBA's own feeds on its own, e
 
 Pages deployed with this repo's tooling require an access code, which the deploy's check also uses. Each phone types it once and remembers it, whether the page is private or shared.
 
+### Anonymous traffic counts
+
+Each app counts a foreground opening and a return after at least 30 minutes away. Score updates, background requests, and known automated browser checks do not add visits. Do Not Track and Global Privacy Control disable counting. These are visit counts, not distinct people or browsers; reloads count again, and offline or blocked requests can be missed.
+
+The app sends an empty same-origin POST to `visits`, using its existing access authentication. The counter creates no cookie or browser identifier and keeps no individual events, IP addresses, access codes, URL paths, or query strings. Its existing Durable Object stores only daily totals by hostname for the last 35 Eastern calendar days. Production and beta use separate stores. Existing platform logs are unchanged.
+
+An authenticated GET to `visits`, relative to the app's page address, returns the totals as JSON without adding a visit. It uses the same page key or custom hostname and access code as the app. There is no public reporting endpoint or additional credential to configure. Counts begin with the release containing the counter; it cannot reconstruct earlier visits.
+
 ## Setup (for humans)
 
 Open [Claude Code on the web](https://claude.ai/code), paste this prompt, and follow Claude's instructions.

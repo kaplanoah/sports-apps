@@ -1,6 +1,7 @@
 import { isSameJson } from "../page/compare.js";
 import { isStoreDocumentPath, isStoreName } from "../page/store-path.js";
 import { createPushService } from "./push.js";
+import { createVisitCounter } from "./visits.js";
 import { describeError, respondError, respondJson, respondMethodNotAllowed } from "./responses.js";
 
 // An app's saved data, kept in one Durable Object so every device reads the latest write.
@@ -205,6 +206,7 @@ export function createSeasonStore(league) {
       this.hasAlarm = false;
       this.failures = 0;
       this.push = createPushService({ storage: ctx.storage, now, fetchImpl });
+      this.visits = createVisitCounter({ storage: ctx.storage, now });
       /** @type {Map<string, Promise<void>>} */
       this.docUpdates = new Map();
       this.docs = {
@@ -219,6 +221,7 @@ export function createSeasonStore(league) {
     }
 
     async fetch(request) {
+      if (new URL(request.url).pathname === "/visits") return this.visits.serve(request);
       await this.startUpdating();
       const { pathname, searchParams } = new URL(request.url);
       if (pathname === "/watch") return this.acceptWatcher(request);
@@ -344,6 +347,7 @@ export function createSeasonStore(league) {
       const now = this.now();
       let nextAt = now + RETRY_MS[0];
       try {
+        await this.visits.prune().catch(() => {});
         const seasonDueAt = await this.updateSeasonWhenDue(now);
         const jobDueTimes = await this.startDueJobs(now);
         nextAt = Math.min(seasonDueAt, ...jobDueTimes);
