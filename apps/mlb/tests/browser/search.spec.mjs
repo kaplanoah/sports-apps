@@ -569,13 +569,6 @@ test("a setting's words find it, and its row opens settings with the setting in 
 
   await expect(page.locator(SETTINGS)).toBeVisible();
   await expect(page.locator("#rankingTitle")).toBeInViewport();
-
-  await page.locator("#settingsDialog .sheet-close").click();
-  await sendSearch(page, "before game");
-  await expect(findRows(page)).toContainText(["Game reminders"]);
-  await findRows(page).filter({ hasText: "Game reminders" }).tap();
-  await expect(page.locator(SETTINGS)).toBeVisible();
-  await expect(page.locator("#reminderTiming")).toBeInViewport();
 });
 
 test("while typing, a place's half-typed word lists it first, beside a player it starts, a setting's word beside the club it's a letter off, and a city two clubs share both clubs' games, its half-typed words starting no player", async ({

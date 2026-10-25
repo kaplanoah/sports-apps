@@ -78,6 +78,7 @@ function showView(tab) {
 // or hides while a tab beside the bar shows.
 function placeTabPill() {
   const bar = /** @type {HTMLElement} */ (document.getElementById("tabBar"));
+  if (!bar) return;
   const buttons = [...bar.querySelectorAll("[role=tab]")];
   const selected = buttons.findIndex((button) => button.classList.contains("active"));
   bar.style.setProperty("--tab-count", String(buttons.length));
@@ -88,9 +89,21 @@ function placeTabPill() {
 // A tab saved before the page dropped it is left alone, so the page opens on its first tab.
 function openLastTab() {
   const tab = readNotificationIntent(location.href).isRequested ? "games" : readLastTab();
-  if (tab && document.getElementById(`view-${tab}`)) {
+  if (tab && document.getElementById(`tab-${tab}`)) {
     markTabSelected(tab);
     showView(tab);
   }
   placeTabPill();
 }
+
+// A streamed page can paint before the inline call, so choose Games as its markup arrives.
+function openNotificationTabBeforePaint() {
+  if (!readNotificationIntent(location.href).isRequested) return;
+  const observer = new MutationObserver(() => {
+    openLastTab();
+    if (document.getElementById("view-games")) observer.disconnect();
+  });
+  observer.observe(document, { childList: true, subtree: true });
+}
+
+openNotificationTabBeforePaint();

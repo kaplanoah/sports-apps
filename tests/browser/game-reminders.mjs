@@ -129,6 +129,27 @@ export function testGameReminderSettings(test, expect, app) {
     await expect(group.getByLabel("Before the game", { exact: true })).toHaveCount(0);
   });
 
+  test("reminder search words open their timing control on a device that supports push", async ({
+    page,
+  }) => {
+    await page.addInitScript(stubPushManager, PUSH_STUB);
+    await app.openApp(page);
+    await page.getByRole("tab", { name: "Search", exact: true }).click();
+    const input = page.locator("#gameSearch .search-input");
+    const row = page
+      .locator("#gameSearch .search-suggestion")
+      .filter({ hasText: "Game reminders" });
+    for (const words of ["remind", "before game", "game notifications"]) {
+      await input.fill(words);
+      await input.press("Enter");
+      await expect(row).toBeVisible();
+      await row.click();
+      await expect(page.locator("#settingsDialog")).toBeVisible();
+      await expect(page.locator("#reminderTiming")).toBeInViewport();
+      await page.locator("#settingsDialog .sheet-close").click();
+    }
+  });
+
   test("Notifications matches News and timing occupies its own row", async ({ page }) => {
     await page.addInitScript(stubPushManager, PUSH_STUB);
     await app.openApp(page);
@@ -205,6 +226,41 @@ export function testGameReminderSettings(test, expect, app) {
       "true",
     );
     await expect(page.locator("#sheetDialog")).toBeHidden();
+  });
+
+  test("a notification selects Games while a streamed page is still being parsed", async ({
+    page,
+  }) => {
+    await app.openApp(page);
+    const url = new URL(page.url());
+    const markup = await (await page.request.get(url.href)).text();
+    url.searchParams.set("game", app.game);
+    url.searchParams.set("season", "2026");
+    await page.route("**/?game=**", (route) =>
+      route.fulfill({
+        contentType: "text/html",
+        body: markup.replace("</nav>", '</nav><script src="test-parser-pause.js"></script>'),
+      }),
+    );
+    let release = () => {};
+    const held = new Promise((resolve) => {
+      release = () => resolve(undefined);
+    });
+    await page.route(matchPath("/test-parser-pause.js"), async (route) => {
+      await held;
+      await route.fulfill({ contentType: "text/javascript", body: "" });
+    });
+    const paused = page.waitForRequest(matchPath("/test-parser-pause.js"));
+    const loading = page.goto(url.href, { waitUntil: "domcontentloaded" });
+    try {
+      await paused;
+      await expect(page.locator("#tab-games")).toBeVisible();
+      await expect(page.locator("#tab-games")).toHaveAttribute("aria-selected", "true");
+    } finally {
+      release();
+      await loading;
+    }
+    await expect(page.locator("#gameSheet")).toBeVisible();
   });
 
   test("a notification's slow season load leaves the rest of page startup working", async ({
