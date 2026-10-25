@@ -36,6 +36,7 @@ export const SeasonStore = createSeasonStore({
     const context = { teams: snapshot.teams, standings: snapshot.standings };
     return updates.length ? listNotifications(updates, context) : [];
   },
+  listReminderGames: (snapshot) => snapshot.reminderGames ?? null,
   detailsCollection: GAME_DETAILS_COLLECTION,
   createLoadDetails: () => createWatchedGameLoader(),
   backgroundJobs: {

@@ -399,6 +399,9 @@ function openGameSheet(id, section) {
  */
 export const openGameSection = (id, section) => openGameSheet(id, section);
 
+/** @param {string} id */
+export const openNotifiedGame = (id) => openGameSheet(id);
+
 /**
  * Redraws the open sheet from the season as the store has it now. A game that started since the
  * sheet opened switches from its preview to its box score.

@@ -77,3 +77,15 @@ export function chooseFailedSyncStatus(error, isSubscribed) {
   if (isTurnedAway(error)) return { status: "off", note: TOO_MANY_DEVICES };
   return isSubscribed ? null : { status: "off", note: "" };
 }
+
+/** @param {{ status: string, isBusy: boolean, preferences: { updates: boolean, reminders: boolean } }} state */
+export function chooseNotificationControls({ status, isBusy, preferences }) {
+  const isOn = status === "on";
+  return {
+    areSwitchesHidden: !["off", "on", "failed", "blocked"].includes(status),
+    areSwitchesDisabled: isBusy || status === "blocked",
+    areUpdatesOn: isOn && preferences.updates,
+    areRemindersOn: isOn && preferences.reminders,
+    isTimingDisabled: !isOn || !preferences.reminders || isBusy,
+  };
+}

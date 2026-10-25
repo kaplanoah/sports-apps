@@ -141,9 +141,9 @@ export function createSnapshotLoader({
   }
 
   /** @param {string} month */
-  async function readNetworkMonth(month) {
+  async function readNetworkMonth(month, verify = false) {
     const kept = networkMonths.get(month);
-    if (!isDueForNetworksRead(month)) return kept.data;
+    if (!verify && !isDueForNetworksRead(month)) return kept.data;
     try {
       const data = await fetchEspnJson(WNBASnapshot.NETWORKS_REQUEST(month));
       networkMonths.set(month, { readAt: now(), answeredAt: now(), data });
@@ -164,13 +164,13 @@ export function createSnapshotLoader({
     return [...new Set(times.map(formatEspnMonth))].sort();
   }
 
-  async function readNetworks(schedule, season) {
+  async function readNetworks(schedule, season, verify = false) {
     const months = listNetworkMonths(schedule, season);
-    const answers = await Promise.all(months.map(readNetworkMonth));
+    const answers = await Promise.all(months.map((month) => readNetworkMonth(month, verify)));
     return answers.filter(Boolean);
   }
 
-  async function fetchResponses(season) {
+  async function fetchResponses(season, verify = false) {
     await slowFeeds.forgetFeed("players", nameAveragesRequest(season));
     const scoreboard = await fetchFeed("scoreboard", WNBASnapshot.REQUESTS.scoreboard).catch(
       () => null,
@@ -179,8 +179,24 @@ export function createSnapshotLoader({
     const hasGamesLeftLive = (schedule) =>
       WNBASnapshot.listGamesLeftLive(schedule, scoreboard, season).size > 0;
     const [schedule, bracket, standings] = await Promise.all([
-      readSlowFeed("schedule", WNBASnapshot.REQUESTS.schedule, hasGamesLeftLive).catch(() => null),
-      readSlowFeed("bracket", WNBASnapshot.REQUESTS.bracket(season)).catch(() => null),
+      (verify
+        ? slowFeeds.readFeed(
+            "schedule",
+            WNBASnapshot.REQUESTS.schedule,
+            () => fetchFeed("schedule", WNBASnapshot.REQUESTS.schedule),
+            { requireFresh: true },
+          )
+        : readSlowFeed("schedule", WNBASnapshot.REQUESTS.schedule, hasGamesLeftLive)
+      ).catch(() => null),
+      (verify
+        ? slowFeeds.readFeed(
+            "bracket",
+            WNBASnapshot.REQUESTS.bracket(season),
+            () => fetchFeed("bracket", WNBASnapshot.REQUESTS.bracket(season)),
+            { requireFresh: true },
+          )
+        : readSlowFeed("bracket", WNBASnapshot.REQUESTS.bracket(season))
+      ).catch(() => null),
       readSlowFeed("standings", WNBASnapshot.REQUESTS.standings(season)).catch(() => null),
     ]);
     if (!scoreboard && !schedule && !bracket)
@@ -188,7 +204,7 @@ export function createSnapshotLoader({
     const needsBackup = !scoreboard || hasGamesLeftLive(schedule);
     const [backup, networks] = await Promise.all([
       needsBackup ? fetchBackup().catch(() => null) : null,
-      readNetworks(schedule, season),
+      readNetworks(schedule, season, verify),
     ]);
     return { scoreboard, schedule, bracket, standings, backup, networks };
   }
@@ -197,8 +213,8 @@ export function createSnapshotLoader({
    * @param {number} season
    * @param {number} requestedAt
    */
-  async function fetchSnapshot(season, requestedAt) {
-    const responses = await fetchResponses(season);
+  async function fetchSnapshot(season, requestedAt, verify = false) {
+    const responses = await fetchResponses(season, verify);
     const snapshot = WNBASnapshot.buildSnapshot(responses, { season, now: requestedAt });
     const ended = await addGameEnds(snapshot);
     return {
@@ -224,7 +240,9 @@ export function createSnapshotLoader({
     };
   }
 
-  const loadSnapshot = createReusedLoader(fetchSnapshot, SNAPSHOT_REUSE_MS, now);
+  const loadReusedSnapshot = createReusedLoader(fetchSnapshot, SNAPSHOT_REUSE_MS, now);
+  const loadSnapshot = (season, { verify = false } = {}) =>
+    verify ? fetchSnapshot(season, now(), true) : loadReusedSnapshot(season);
 
   return { loadSnapshot };
 }

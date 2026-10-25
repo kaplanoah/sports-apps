@@ -6,6 +6,7 @@
 // ESPN's scoreboard does, and it says when a game starts while the league's schedule still has its
 // time to be decided.
 
+import { isNecessaryPlayoffGame } from "#shared/series-text.js";
 import { readEasternDay } from "#shared/days.js";
 import * as PollSchedule from "#shared/poll-schedule.js";
 import { findTeamCode, findTeamCodeByEspnId, TEAMS } from "./teams.js";
@@ -650,4 +651,38 @@ export function choosePollDelay(snapshot, now = Date.now()) {
     liveMs: games.some(isClosingStretch) ? POLL_CLOSING_MS : POLL_LIVE_MS,
     now,
   });
+}
+
+/** @param {any} snapshot */
+export function listReminderGames(snapshot) {
+  if (snapshot.missing.some((name) => ["schedule", "scoreboard", "bracket"].includes(name)))
+    return null;
+  const series = new Map(snapshot.series.map((record) => [record.id, record]));
+  return snapshot.games
+    .filter((game) => isConfirmedReminderGame(game, series.get(game.series)))
+    .map((game) => ({
+      id: game.id,
+      season: snapshot.season,
+      start: Date.parse(game.start),
+      away: TEAMS[game.away.team]?.name,
+      home: TEAMS[game.home.team]?.name,
+      networks: game.networks ?? [],
+    }))
+    .filter((game) => game.away && game.home && Number.isFinite(game.start));
+}
+
+function isConfirmedReminderGame(game, series) {
+  return (
+    game.round !== null &&
+    game.state === "pre" &&
+    game.isTimeSet &&
+    !isPutOff(game) &&
+    !series?.winner &&
+    isNecessaryPlayoffGame({
+      ifNecessary: game.isIfNeeded,
+      number: game.number,
+      winsNeeded: countWinsNeeded(game.round),
+      wins: [series?.top?.wins ?? 0, series?.bottom?.wins ?? 0],
+    })
+  );
 }

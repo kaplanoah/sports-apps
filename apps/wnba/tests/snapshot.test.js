@@ -535,3 +535,36 @@ test("a game the league plays at a neutral site says so", () => {
   const neutral = schedule.find((each) => each.id === "1042600102");
   assert.deepEqual([neutral.isNeutral, neutral.arena.city], [true, "Vancouver"]);
 });
+
+test("reminders require confirmed necessary playoff games and successful source reads", () => {
+  const snapshot = buildAfternoon();
+  const candidate = snapshot.games.find((game) =>
+    WNBASnapshot.listReminderGames(snapshot).some((reminder) => reminder.id === game.id),
+  );
+  assert.ok(candidate);
+  const listChanged = (change) =>
+    WNBASnapshot.listReminderGames({ ...snapshot, games: [{ ...candidate, ...change }] });
+  const [reminder] = listChanged({ networks: ["ESPN", "ABC"] });
+  assert.deepEqual(reminder.networks, ["ESPN", "ABC"]);
+  for (const change of [
+    { state: "live" },
+    { state: "final" },
+    { status: "Postponed" },
+    { status: "Canceled" },
+    { isTimeSet: false },
+    { away: { team: null } },
+    { start: null },
+    { round: null },
+    { isIfNeeded: true, number: 99 },
+  ])
+    assert.deepEqual(listChanged(change), []);
+  assert.deepEqual(
+    WNBASnapshot.listReminderGames({
+      ...snapshot,
+      series: snapshot.series.map((series) => ({ ...series, winner: "NYL" })),
+    }),
+    [],
+  );
+  for (const missing of ["schedule", "scoreboard", "bracket"])
+    assert.equal(WNBASnapshot.listReminderGames({ ...snapshot, missing: [missing] }), null);
+});

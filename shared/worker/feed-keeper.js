@@ -170,15 +170,16 @@ export function createFeedKeeper({ feeds, leagueName, now, storage = createMemor
      * @param {string} key the request, so that each season's answers are kept apart
      * @param {() => Promise<any>} load
      * @param {object} [options]
+     * @param {boolean} [options.requireFresh] read again and reject failed verification
      * @param {(data: any) => boolean} [options.isBehind] whether a kept answer is behind what
      *   another feed already says
      */
-    async readFeed(name, key, load, { isBehind = () => false } = {}) {
+    async readFeed(name, key, load, { isBehind = () => false, requireFresh = false } = {}) {
       const storageKey = await nameFeedKey(name, key);
       const what = `${name} ${key}`;
       const record = await readRecord(storageKey);
       const answer = record?.answer;
-      if (!(await isDue(name, record, isBehind))) {
+      if (!requireFresh && !(await isDue(name, record, isBehind))) {
         if (answer) return answer.data;
         throw new Error(`${leagueName} didn't answer ${name} a moment ago`);
       }
@@ -188,7 +189,7 @@ export function createFeedKeeper({ feeds, leagueName, now, storage = createMemor
         return data;
       } catch (error) {
         await saveRecord(storageKey, { answer, failedAt: now() }, what);
-        if (answer) return answer.data;
+        if (answer && !requireFresh) return answer.data;
         throw error;
       }
     },

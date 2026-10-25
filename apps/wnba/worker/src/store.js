@@ -1,4 +1,4 @@
-import { choosePollDelay } from "../../page/js/snapshot.js";
+import { choosePollDelay, listReminderGames } from "../../page/js/snapshot.js";
 import PAGE_FILES from "#page-files/wnba";
 import { readReleaseCommit } from "../../../../shared/worker/app-worker.js";
 import { createSeasonStore } from "../../../../shared/worker/season-store.js";
@@ -29,6 +29,7 @@ export const SeasonStore = createSeasonStore({
   statusFields: SeasonUpdater.STATUS_FIELDS,
   choosePollDelay,
   listNotifications: SeasonUpdater.listNotifications,
+  listReminderGames,
   detailsCollection: GAME_DETAILS_COLLECTION,
   createLoadDetails: () => createWatchedGameLoader(),
   backgroundJobs: {

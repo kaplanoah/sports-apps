@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  chooseNotificationControls,
   CHANGE_FAILED,
   chooseFailedSyncStatus,
   chooseNotifyNote,
@@ -86,4 +87,29 @@ test("the note splits before its last word, which the ? keeps to", () => {
     "screen.",
   ]);
   assert.deepEqual(splitAtLastWord("screen."), ["", "screen."]);
+});
+
+test("category controls stay independent and timing is enabled only for active reminders", () => {
+  const preferences = { updates: false, reminders: true };
+  const active = chooseNotificationControls({ status: "on", isBusy: false, preferences });
+  assert.equal(active.areUpdatesOn, false);
+  assert.equal(active.areRemindersOn, true);
+  assert.equal(active.isTimingDisabled, false);
+  for (const status of ["off", "blocked", "unsupported", "homeScreen", "loading"])
+    assert.equal(
+      chooseNotificationControls({ status, isBusy: false, preferences }).isTimingDisabled,
+      true,
+    );
+  assert.equal(
+    chooseNotificationControls({ status: "on", isBusy: true, preferences }).isTimingDisabled,
+    true,
+  );
+  assert.equal(
+    chooseNotificationControls({
+      status: "on",
+      isBusy: false,
+      preferences: { updates: true, reminders: false },
+    }).isTimingDisabled,
+    true,
+  );
 });

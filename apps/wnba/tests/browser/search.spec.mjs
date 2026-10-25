@@ -455,6 +455,13 @@ test("a setting's words find it, and its row opens settings with the setting in 
 
   await expect(page.locator(SETTINGS)).toBeVisible();
   await expect(page.locator("#appearanceTitle")).toBeInViewport();
+
+  await page.locator("#settingsDialog .sheet-close").click();
+  await sendSearch(page, "before game");
+  await expect(findRows(page)).toContainText(["Game reminders"]);
+  await findRows(page).filter({ hasText: "Game reminders" }).tap();
+  await expect(page.locator(SETTINGS)).toBeVisible();
+  await expect(page.locator("#reminderTiming")).toBeInViewport();
 });
 
 test("a found game's row opens its sheet wherever a finger lands on it", async ({ page }) => {

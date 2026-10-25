@@ -77,8 +77,16 @@ function startServiceWorker({ publicKey = "AQID_w", app = "mlb", answer = null }
   };
   const caches = createCacheStorage(fetch);
   const shown = [];
+  const windows = [];
+  const opened = [];
   const self = {
-    clients: { claim: async () => {} },
+    clients: {
+      claim: async () => {},
+      matchAll: async () => windows,
+      openWindow: async (url) => {
+        opened.push(url);
+      },
+    },
     skipWaiting: async () => {},
     addEventListener: (type, listener) => (listeners[type] ??= []).push(listener),
     registration: {
@@ -150,6 +158,8 @@ function startServiceWorker({ publicKey = "AQID_w", app = "mlb", answer = null }
     requests,
     subscribed,
     shown,
+    windows,
+    opened,
     createSubscription,
   };
 }
@@ -628,4 +638,53 @@ test("a service worker that failed to register is registered again the next time
 
   assert.equal(await registerServiceWorker(), "registered");
   assert.equal(await registerServiceWorker(), "registered");
+});
+
+test("a reminder retains its game intent, opens a safe launch URL and navigates an existing client", async () => {
+  for (const app of ["mlb", "wnba"]) {
+    const worker = startServiceWorker({ app });
+    const message = {
+      title: "Away @ Home starting now on FOX",
+      game: "123",
+      season: 2026,
+      tag: "game-reminder:123",
+    };
+    await worker.dispatch("push", { data: { json: () => message } });
+    assert.deepEqual(JSON.parse(JSON.stringify(worker.shown[0].data)), {
+      game: "123",
+      season: 2026,
+    });
+    const notification = { data: worker.shown[0].data, close() {} };
+    await worker.dispatch("notificationclick", { notification });
+    assert.deepEqual(worker.opened, [`${SCOPE}?game=123&season=2026`]);
+    const steps = [];
+    worker.windows.push({
+      url: `${SCOPE}?theme=dark`,
+      navigate: async (url) => steps.push(url),
+      focus: async () => steps.push("focus"),
+    });
+    await worker.dispatch("notificationclick", { notification });
+    assert.deepEqual(steps, [`${SCOPE}?game=123&season=2026`, "focus"]);
+    assert.equal(worker.opened.length, 1);
+  }
+});
+
+test("notification navigation rejects foreign URLs and malformed game intents", async () => {
+  for (const game of ["https://elsewhere.example/", "../other", "123?next=elsewhere", "", null]) {
+    const worker = startServiceWorker();
+    await worker.dispatch("notificationclick", {
+      notification: { data: { game, season: 2026 }, close() {} },
+    });
+    assert.deepEqual(worker.opened, [SCOPE]);
+  }
+});
+
+test("endpoint renewal sends the old subscription proof so the server can preserve preferences and receipts", async () => {
+  const worker = startServiceWorker();
+  const previous = worker.createSubscription(OLD_ENDPOINT);
+  await worker.dispatch("pushsubscriptionchange", {
+    oldSubscription: previous,
+    newSubscription: worker.createSubscription(NEW_ENDPOINT),
+  });
+  assert.deepEqual(JSON.parse(worker.requests[0].body).previousSubscription, previous.toJSON());
 });

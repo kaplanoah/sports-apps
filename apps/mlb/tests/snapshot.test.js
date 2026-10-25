@@ -1782,3 +1782,55 @@ test("a decided series's games it didn't need are called off, and every other pl
   );
   assert.deepEqual([...calledOffIds], ["3"]);
 });
+
+test("reminders join current playoff state and channels, excluding unconfirmed and ineligible games", () => {
+  const original = buildSnapshot(DIVISION_SERIES);
+  const candidate = original.reminderGames.find((game) =>
+    DIVISION_SERIES.responses.schedule.dates.some((day) =>
+      day.games.some((listing) => String(listing.gamePk) === game.id),
+    ),
+  );
+  assert.ok(candidate);
+  const buildChanged = (change) => {
+    const fixture = structuredClone(DIVISION_SERIES);
+    for (const feed of ["postseason", "schedule", "seasonGames"])
+      for (const day of fixture.responses[feed]?.dates ?? [])
+        for (const game of day.games ?? []) if (String(game.gamePk) === candidate.id) change(game);
+    if (fixture.responses.liveGames) delete fixture.responses.liveGames[candidate.id];
+    return buildSnapshot(fixture);
+  };
+  const listed = buildChanged((game) => {
+    game.broadcasts = [{ name: "FOX", type: "TV", language: "en", isNational: true }];
+  });
+  assert.deepEqual(listed.reminderGames.find((game) => game.id === candidate.id).networks, ["FOX"]);
+  assert.deepEqual(
+    listed.slate.today.games.find((game) => game.id === candidate.id)?.networks ??
+      listed.slate.nextDay.games.find((game) => game.id === candidate.id).networks,
+    ["FOX"],
+  );
+  for (const change of [
+    (game) => {
+      game.status = { abstractGameState: "Live", codedGameState: "I" };
+    },
+    (game) => {
+      game.status = { abstractGameState: "Final", codedGameState: "F" };
+    },
+    (game) => {
+      game.status = { abstractGameState: "Final", codedGameState: "D", detailedState: "Postponed" };
+    },
+    (game) => {
+      game.status.startTimeTBD = true;
+    },
+    (game) => {
+      game.teams.away.team = { id: 0, name: "TBD" };
+    },
+    (game) => {
+      game.ifNecessary = "Y";
+      game.seriesGameNumber = 99;
+    },
+    (game) => {
+      game.gameType = "A";
+    },
+  ])
+    assert.ok(!buildChanged(change).reminderGames.some((game) => game.id === candidate.id));
+});

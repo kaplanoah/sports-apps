@@ -617,3 +617,14 @@ test("each theme's icon draws its ball and its panels in that theme's colors", (
     assert.ok(svg.includes(`fill="${panels}" fill-rule="evenodd"`), file);
   }
 });
+
+test("reminder verification refreshes schedule, scoreboard and bracket without rereading standings", async () => {
+  const league = createLeague();
+  const loader = createSnapshotLoader({ fetchImpl: league.fetchImpl, now: () => NOW });
+  await loader.loadSnapshot(2026);
+  await loader.loadSnapshot(2026, { verify: true });
+  assert.equal(league.countReads("schedule"), 2);
+  assert.equal(league.countReads("scoreboard"), 2);
+  assert.equal(league.countReads("bracket"), 2);
+  assert.equal(league.countReads("standings"), 1);
+});

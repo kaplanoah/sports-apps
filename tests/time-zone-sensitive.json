@@ -92,6 +92,7 @@
     "tests/feed-keeper.test.js",
     "tests/floor-colors.test.js",
     "tests/game-cards.test.js",
+    "tests/game-reminders.test.js",
     "tests/game-search-two-leagues.test.js",
     "tests/game-search.test.js",
     "tests/highlights-job.test.js",

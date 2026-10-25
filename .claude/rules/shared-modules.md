@@ -64,6 +64,8 @@ The Worker serves every file here, its `networks/` logos too, under `shared/`, b
 - `settings-sheet.js`: the settings sheet
 - `season-picker.js`: settings' Season picker
 - `notifications.js`: settings' notifications switch
+- `notification-preferences.js`: device push categories, timing presets, and validation
+- `notification-navigation.js`: opening a game from a notification through reloads and the access gate
 - `notification-status.js`: what that switch says under it
 - `diagnostics.js`: the Diagnostics and their shared report
 - `sent-label.js`: how long a button that copies or shares says it did
@@ -245,6 +247,7 @@ Pages link these before their own stylesheet, and theme them with the tokens the
 - `hash-text.js`: a short fixed-length name for any text
 - `seasons.js`: the season a request names
 - `notifications.js`: capping a night's notifications
+- `game-reminders.js`: persisted game reminder deadlines, verification, delivery, and retries
 - `push.js`: push subscriptions and their signing key
 - `web-push.js`: sending Web Push messages
 - `responses.js`: what the JSON endpoints answer with

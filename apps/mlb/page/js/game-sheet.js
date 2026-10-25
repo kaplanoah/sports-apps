@@ -353,6 +353,13 @@ export function openGameSection(key, section) {
   if (game) openGameSheet(game, section);
 }
 
+/** @param {string} id */
+export function openNotifiedGame(id) {
+  const games = listSeasonGames(session.state?.slate, session.schedule);
+  const game = games.filter((each) => each.id === id && each.state !== "off").pop();
+  if (game) openGameSheet(game);
+}
+
 const readShownGame = () =>
   shown && {
     ...shown,

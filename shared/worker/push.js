@@ -1,3 +1,7 @@
+import {
+  isNotificationPreferences,
+  readNotificationPreferences,
+} from "../page/notification-preferences.js";
 import * as WebPush from "./web-push.js";
 import { respondError, respondJson } from "./responses.js";
 
@@ -12,6 +16,7 @@ import { respondError, respondJson } from "./responses.js";
 
 const SIGNING_KEY = "push:signing-key";
 const SUBSCRIPTION_PREFIX = "push:subscription:";
+const RETIRED_PREFIX = "push:retired:";
 const MAX_BODY_BYTES = 4 * 1024;
 const GONE_STATUSES = new Set([404, 410]);
 const MAX_SUBSCRIPTIONS = 100;
@@ -102,6 +107,28 @@ async function findSubscriptionKey(endpoint) {
  */
 export function createPushService({ storage, now, fetchImpl }) {
   let signingKey = null;
+  let changing = Promise.resolve();
+
+  /** @template Result @param {() => Promise<Result>} task */
+  function changeDevices(task) {
+    const result = changing.then(task);
+    changing = result.then(
+      () => {},
+      () => {},
+    );
+    return result;
+  }
+
+  /** @param {string} key @param {(device: any) => any} change */
+  function updateDevice(key, change) {
+    return changeDevices(async () => {
+      const stored = await storage.get(key);
+      if (!stored) return null;
+      const next = change(stored);
+      if (next) await storage.put(key, next);
+      return next ?? stored;
+    });
+  }
 
   async function loadSigningKey() {
     const stored = await storage.get(SIGNING_KEY);
@@ -130,21 +157,23 @@ export function createPushService({ storage, now, fetchImpl }) {
    * @param {boolean} wentThrough
    */
   async function noteDelivery(key, sent, wentThrough) {
-    const subscription = await storage.get(key);
-    if (!subscription || !isSameSubscription(subscription, sent)) return subscription ?? null;
-    const { failingSince, ...kept } = subscription;
-    if (wentThrough) {
-      if (failingSince !== undefined) await storage.put(key, kept);
-      return kept;
-    }
-    if (failingSince === undefined) {
-      const failing = { ...kept, failingSince: now() };
-      await storage.put(key, failing);
-      return failing;
-    }
-    if (now() - failingSince < FAILING_FOR_MS) return subscription;
-    await storage.delete(key);
-    return null;
+    return changeDevices(async () => {
+      const subscription = await storage.get(key);
+      if (!subscription || !isSameSubscription(subscription, sent)) return subscription ?? null;
+      const { failingSince, ...kept } = subscription;
+      if (wentThrough) {
+        if (failingSince !== undefined) await storage.put(key, kept);
+        return kept;
+      }
+      if (failingSince === undefined) {
+        const failing = { ...kept, failingSince: now() };
+        await storage.put(key, failing);
+        return failing;
+      }
+      if (now() - failingSince < FAILING_FOR_MS) return subscription;
+      await storage.delete(key);
+      return null;
+    });
   }
 
   /**
@@ -154,7 +183,7 @@ export function createPushService({ storage, now, fetchImpl }) {
    * @param {any} subscription
    * @param {object} message
    */
-  async function deliver(key, subscription, message) {
+  async function deliver(key, subscription, message, ttlSeconds = undefined) {
     let status;
     try {
       status = await WebPush.sendPush({
@@ -164,6 +193,7 @@ export function createPushService({ storage, now, fetchImpl }) {
         subject: subscription.subject,
         now: now(),
         fetchImpl,
+        ttlSeconds,
       });
     } catch (error) {
       await noteDelivery(key, subscription, false);
@@ -171,7 +201,10 @@ export function createPushService({ storage, now, fetchImpl }) {
     }
     if (!GONE_STATUSES.has(status))
       return { status, kept: await noteDelivery(key, subscription, isDelivered(status)) };
-    await storage.delete(key);
+    await changeDevices(async () => {
+      const current = await storage.get(key);
+      if (current && isSameSubscription(current, subscription)) await storage.delete(key);
+    });
     return { status, kept: null };
   }
 
@@ -185,13 +218,41 @@ export function createPushService({ storage, now, fetchImpl }) {
     const body = await readBody(request);
     if (!isSubscription(body))
       return respondError(400, "invalid_argument", "That isn't a push subscription.");
-    const { endpoint, keys } = body;
-    const key = await findSubscriptionKey(endpoint);
-    if (!(await makeRoomFor(key)))
-      return respondError(429, "too_many_devices", "Too many devices get notifications already.");
-    const subject = new URL(request.url).origin;
-    await storage.put(key, { endpoint, keys, subject, savedAt: now() });
-    return new Response(null, { status: 204 });
+    if (body.preferences !== undefined && !isNotificationPreferences(body.preferences))
+      return respondError(400, "invalid_argument", "Invalid notification preferences.");
+    return changeDevices(async () => {
+      const { endpoint, keys, previousSubscription } = body;
+      const key = await findSubscriptionKey(endpoint);
+      const previousKey = isSubscription(previousSubscription)
+        ? await findSubscriptionKey(previousSubscription.endpoint)
+        : null;
+      const activePrevious = previousKey ? await storage.get(previousKey) : null;
+      const previous =
+        activePrevious ??
+        (previousKey
+          ? await storage.get(previousKey.replace(SUBSCRIPTION_PREFIX, RETIRED_PREFIX))
+          : null);
+      if (previous && !isSameSubscription(previous, previousSubscription))
+        return respondError(409, "conflict", "The previous subscription changed.");
+      const stored = await storage.get(key);
+      if (!activePrevious && !(await makeRoomFor(key)))
+        return respondError(429, "too_many_devices", "Too many devices get notifications already.");
+      const kept = stored ?? previous ?? {};
+      const preferences = readNotificationPreferences(kept);
+      await storage.put(key, {
+        ...kept,
+        endpoint,
+        keys,
+        subject: new URL(request.url).origin,
+        savedAt: now(),
+        preferences: !stored && !previous && body.preferences ? body.preferences : preferences,
+        revision: kept.revision ?? 0,
+      });
+      if (previousKey && previousKey !== key) await storage.delete(previousKey);
+      if (previousKey)
+        await storage.delete(previousKey.replace(SUBSCRIPTION_PREFIX, RETIRED_PREFIX));
+      return new Response(null, { status: 204 });
+    });
   }
 
   /**
@@ -213,14 +274,58 @@ export function createPushService({ storage, now, fetchImpl }) {
     const body = await readBody(request);
     if (!body || typeof body.endpoint !== "string") return {};
     const key = await findSubscriptionKey(body.endpoint);
-    return { key, subscription: await storage.get(key) };
+    const subscription = await storage.get(key);
+    if (body.keys && subscription && !isSameSubscription(subscription, body)) return {};
+    return { key, subscription };
   }
 
   async function removeSubscription(request) {
     const { key } = await readSubscriptionFor(request);
     if (!key) return respondError(400, "invalid_argument", "Say which subscription to remove.");
-    await storage.delete(key);
+    await changeDevices(async () => {
+      const device = await storage.get(key);
+      if (device) {
+        await storage.put(key.replace(SUBSCRIPTION_PREFIX, RETIRED_PREFIX), device);
+        await trimRetiredDevices();
+      }
+      await storage.delete(key);
+    });
     return new Response(null, { status: 204 });
+  }
+
+  async function trimRetiredDevices() {
+    const retired = [...(await storage.list({ prefix: RETIRED_PREFIX }))].sort(
+      ([, first], [, second]) => second.savedAt - first.savedAt,
+    );
+    for (const [index, [key, device]] of retired.entries()) {
+      if (index >= MAX_SUBSCRIPTIONS || now() - device.savedAt > UNSAVED_FOR_MS)
+        await storage.delete(key);
+    }
+  }
+
+  async function servePreferences(request) {
+    const body = await readBody(request);
+    if (!isSubscription(body))
+      return respondError(400, "invalid_argument", "Say which device to change.");
+    return changeDevices(async () => {
+      const key = await findSubscriptionKey(body.endpoint);
+      const stored = await storage.get(key);
+      if (!stored || !isSameSubscription(stored, body))
+        return respondError(404, "not_found", "This device isn't subscribed.");
+      if (request.method === "PUT") {
+        if (!isNotificationPreferences(body.preferences) || !Number.isSafeInteger(body.revision))
+          return respondError(400, "invalid_argument", "Invalid notification preferences.");
+        if (body.revision !== (stored.revision ?? 0))
+          return respondError(409, "conflict", "Notifications changed. Try again.");
+        stored.preferences = body.preferences;
+        stored.revision = body.revision + 1;
+        await storage.put(key, stored);
+      }
+      return respondJson({
+        preferences: readNotificationPreferences(stored),
+        revision: stored.revision ?? 0,
+      });
+    });
   }
 
   async function sendTest(request) {
@@ -242,6 +347,8 @@ export function createPushService({ storage, now, fetchImpl }) {
     if (route === "GET /push/key") return serveKey();
     if (route === "PUT /push/subscription") return saveSubscription(request);
     if (route === "DELETE /push/subscription") return removeSubscription(request);
+    if (route === "POST /push/preferences" || route === "PUT /push/preferences")
+      return servePreferences(request);
     if (route === "POST /push/test") return sendTest(request);
     return respondError(404, "not_found", "No such path.");
   }
@@ -260,9 +367,11 @@ export function createPushService({ storage, now, fetchImpl }) {
   async function sendToAll(messages) {
     const stored = await listSubscriptions();
     return Promise.allSettled(
-      [...stored].map(([key, subscription]) => sendInOrder(key, subscription, messages)),
+      [...stored]
+        .filter(([, subscription]) => readNotificationPreferences(subscription).updates)
+        .map(([key, subscription]) => sendInOrder(key, subscription, messages)),
     );
   }
 
-  return { serveRequest, sendToAll };
+  return { serveRequest, sendToAll, listSubscriptions, updateDevice, deliver };
 }

@@ -19,21 +19,41 @@ self.addEventListener("push", (event) => {
     self.registration.showNotification(message.title || self.pageName, {
       body: message.body || "",
       tag: message.tag,
+      data: readGameIntent(message),
       icon: "icon-180.png",
     }),
   );
 });
 
-async function openPage() {
+function readGameIntent(message) {
+  if (
+    !/^\d{1,12}$/.test(String(message?.game ?? "")) ||
+    !Number.isInteger(message?.season) ||
+    message.season < 1900 ||
+    message.season > 2200
+  )
+    return null;
+  return { game: String(message.game), season: message.season };
+}
+
+async function openPageFromNotification(data) {
   const scope = self.registration.scope;
+  const url = new URL(scope);
+  const intent = readGameIntent(data);
+  if (intent) {
+    url.searchParams.set("game", intent.game);
+    url.searchParams.set("season", String(intent.season));
+  }
   const windows = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
   const open = windows.find((client) => client.url.startsWith(scope));
-  return open ? open.focus() : self.clients.openWindow(scope);
+  if (!open) return self.clients.openWindow(url.href);
+  if (intent) await open.navigate(url.href);
+  return open.focus();
 }
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  event.waitUntil(openPage());
+  event.waitUntil(openPageFromNotification(event.notification.data));
 });
 
 async function requestPush(path, method, body) {
@@ -64,7 +84,10 @@ async function subscribeAgain(oldSubscription) {
 
 async function replaceSubscription(oldSubscription, newSubscription) {
   const replacement = newSubscription ?? (await subscribeAgain(oldSubscription));
-  await requestPush("push/subscription", "PUT", replacement.toJSON());
+  await requestPush("push/subscription", "PUT", {
+    ...replacement.toJSON(),
+    previousSubscription: oldSubscription?.toJSON(),
+  });
   if (oldSubscription && oldSubscription.endpoint !== replacement.endpoint)
     await requestPush("push/subscription", "DELETE", { endpoint: oldSubscription.endpoint });
 }

@@ -183,12 +183,14 @@ test("settings list Notifications, the News switches, and Appearance, with lines
   await page.getByRole("button", { name: "Settings", exact: true }).click();
   const rows = page.locator(`${SETTINGS} .settings-controls .control-row`);
   await expect(rows.locator(".control-label > span:first-child")).toHaveText([
-    "Notifications",
+    "Final scores",
+    "Game reminders",
+    "Before the game",
     "Include dedicated Liberty sources",
     "Include content from The Athletic",
     "Appearance",
   ]);
-  await expect(page.locator("#notifyNote")).toHaveText("Final scores");
+  await expect(page.locator("#notifyNote")).toBeHidden();
   const groups = page.locator(`${SETTINGS} .settings-controls > *`);
   const readBorders = () =>
     Promise.all([
@@ -201,7 +203,7 @@ test("settings list Notifications, the News switches, and Appearance, with lines
   // The Season row stays hidden while the store keeps only the current season.
   expect(await readBorders()).toEqual([
     ["none", "none", "solid", "solid"],
-    ["none", "none", "none", "none", "solid"],
+    ["none", "none", "none", "none", "none", "none", "solid"],
     "none",
   ]);
 

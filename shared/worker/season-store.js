@@ -1,3 +1,4 @@
+import { createGameReminders } from "./game-reminders.js";
 import { isSameJson } from "../page/compare.js";
 import { isStoreDocumentPath, isStoreName } from "../page/store-path.js";
 import { createPushService } from "./push.js";
@@ -23,7 +24,7 @@ import { describeError, respondError, respondJson, respondMethodNotAllowed } fro
  * store's paths can't name, the store's reading of the league, the Worker's secrets, and the clock.
  * @typedef {object} JobContext
  * @property {any} docs
- * @property {(fetchImpl: typeof fetch) => (season: number) => Promise<any>} createLoadSnapshot
+ * @property {(fetchImpl: typeof fetch) => (season: number, options?: { verify?: boolean }) => Promise<any>} createLoadSnapshot
  *   the store's reading of the league, made on the fetch it's handed, so a run that counts its
  *   requests counts these too
  * @property {{ get: (key: string) => Promise<any>, put: (key: string, value: any) => Promise<void>, delete: (key: string) => Promise<boolean>, list: (prefix: string) => Promise<Map<string, any>> }} storage
@@ -44,9 +45,9 @@ import { describeError, respondError, respondJson, respondMethodNotAllowed } fro
 /**
  * What a league hands the store.
  * @typedef {object} League
- * @property {(storage: import("./feed-keeper.js").FeedStorage, fetchImpl: typeof fetch) => (season: number) => Promise<any>} createLoadSnapshot
+ * @property {(storage: import("./feed-keeper.js").FeedStorage, fetchImpl: typeof fetch) => (season: number, options?: { verify?: boolean }) => Promise<any>} createLoadSnapshot
  *   reads the league through `fetchImpl`, keeping what it may read again in `storage`
- * @property {(loadSnapshot: (season: number) => Promise<any>, now: number) => Promise<any>} loadCurrentSnapshot
+ * @property {(loadSnapshot: (season: number, options?: { verify?: boolean }) => Promise<any>, now: number) => Promise<any>} loadCurrentSnapshot
  * @property {(docs: any, season: number) => Promise<any>} readUpdates
  * @property {(docs: any, snapshot: any) => Promise<void>} saveSnapshot
  * @property {(snapshot: any) => Record<string, string>} describeSnapshotStatus
@@ -55,6 +56,7 @@ import { describeError, respondError, respondJson, respondMethodNotAllowed } fro
  * @property {(snapshot: any, now: number) => number} choosePollDelay the wait until the next
  *   update
  * @property {(change: { before: any, after: any, snapshot: any, now: number }) => object[]} listNotifications
+ * @property {(snapshot: any) => any[] | null} [listReminderGames]
  * @property {string} [detailsCollection] where the details of the games pages have open are kept
  * @property {() => (id: string, snapshot: any, stored: any) => Promise<any>} [createLoadDetails]
  *   reads a game's details, or answers null while it needs none
@@ -205,6 +207,12 @@ export function createSeasonStore(league) {
       this.hasAlarm = false;
       this.failures = 0;
       this.push = createPushService({ storage: ctx.storage, now, fetchImpl });
+      this.reminders = createGameReminders({
+        storage: ctx.storage,
+        push: this.push,
+        now,
+        verify: () => this.verifyReminderGames(),
+      });
       /** @type {Map<string, Promise<void>>} */
       this.docUpdates = new Map();
       this.docs = {
@@ -222,7 +230,14 @@ export function createSeasonStore(league) {
       await this.startUpdating();
       const { pathname, searchParams } = new URL(request.url);
       if (pathname === "/watch") return this.acceptWatcher(request);
-      if (pathname.startsWith("/push/")) return this.push.serveRequest(request, pathname);
+      if (pathname.startsWith("/push/")) {
+        const response = await this.push.serveRequest(request, pathname);
+        if (response.ok && request.method !== "GET") {
+          await this.reminders.refreshDevices();
+          await this.armReminderAlarm();
+        }
+        return response;
+      }
       if (pathname.startsWith("/count/")) return this.addToCount(request, pathname);
       const path = readPath(pathname);
       if (!path) return respondError(404, "not_found", "No such path.");
@@ -346,12 +361,38 @@ export function createSeasonStore(league) {
       try {
         const seasonDueAt = await this.updateSeasonWhenDue(now);
         const jobDueTimes = await this.startDueJobs(now);
-        nextAt = Math.min(seasonDueAt, ...jobDueTimes);
+        await this.reminders.checkDue();
+        const reminderAt = await this.reminders.findNextDeadline();
+        nextAt = Math.min(
+          seasonDueAt,
+          ...jobDueTimes,
+          reminderAt <= this.now() ? this.now() + RETRY_MS[0] : reminderAt,
+        );
       } catch (error) {
         console.error(`The store's alarm failed: ${describeError(error)}`);
       } finally {
         await this.ctx.storage.setAlarm(nextAt);
       }
+    }
+
+    async armReminderAlarm() {
+      const dueAt = await this.reminders.findNextDeadline();
+      const alarmAt = await this.ctx.storage.getAlarm();
+      if (Number.isFinite(dueAt) && (alarmAt === null || dueAt < alarmAt))
+        await this.ctx.storage.setAlarm(Math.max(this.now(), dueAt));
+    }
+
+    async verifyReminderGames() {
+      if (!league.listReminderGames) return;
+      const snapshot = await league.loadCurrentSnapshot(
+        (season) => this.loadSnapshot(season, { verify: true }),
+        this.now(),
+      );
+      const before = await league.readUpdates(this.docs, snapshot.season);
+      await league.saveSnapshot(this.docs, snapshot);
+      await this.saveCurrentSeason(snapshot.season);
+      await this.notifyUpdates(before, snapshot);
+      await this.reminders.saveGames(league.listReminderGames(snapshot), true);
     }
 
     // A schedule saved before it had a due time reads as due, as does one an earlier release saved,
@@ -465,6 +506,7 @@ export function createSeasonStore(league) {
       try {
         snapshot = await league.loadCurrentSnapshot(this.loadSnapshot, this.now());
       } catch (error) {
+        await this.reminders.saveGames(null);
         return this.recordFailure({ error: "upstream_error", detail: describeError(error) });
       }
       let before;
@@ -473,11 +515,14 @@ export function createSeasonStore(league) {
         await league.saveSnapshot(this.docs, snapshot);
         await this.saveCurrentSeason(snapshot.season);
       } catch (error) {
+        await this.reminders.saveGames(null);
         return this.recordFailure({ write: describeError(error) });
       }
       this.failures = 0;
       // The next update's `before` holds what this one saved, so notifying can't wait on the status.
       await this.notifyUpdates(before, snapshot);
+      if (league.listReminderGames)
+        await this.reminders.saveGames(league.listReminderGames(snapshot));
       await this.saveStatus(league.describeSnapshotStatus(snapshot));
       await this.refreshWatchedDetails(snapshot);
       return league.choosePollDelay(snapshot, this.now());

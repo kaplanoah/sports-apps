@@ -290,3 +290,27 @@ export function nameDay(
  */
 export const describeDay = (day, now) =>
   nameDay(day, new Date(now), { nameOtherDay: formatWeekdayAndDate, isCapitalized: true });
+
+/** @param {number} start @param {string} timeZone */
+export const formatReminderTime = (start, timeZone) =>
+  new Intl.DateTimeFormat("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    timeZoneName: "short",
+    timeZone,
+  }).format(new Date(start));
+
+/** The device's zone, saved only with its push choices. */
+export const readDeviceTimeZone = () => Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+/** @param {unknown} value */
+export function isTimeZone(value) {
+  if (typeof value !== "string" || value.length > 100 || !/^[A-Za-z][A-Za-z0-9_/+-]*$/.test(value))
+    return false;
+  try {
+    new Intl.DateTimeFormat("en", { timeZone: value });
+    return true;
+  } catch {
+    return false;
+  }
+}

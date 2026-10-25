@@ -4,6 +4,8 @@
 // Worker read the league's data from here.
 // Runs in both the browser page and the Worker, so it uses no DOM and no globals.
 
+import { isNecessaryPlayoffGame } from "#shared/series-text.js";
+import { TEAMS } from "./teams.js";
 import { readEasternDay } from "#shared/days.js";
 import * as PollSchedule from "#shared/poll-schedule.js";
 import {
@@ -16,6 +18,8 @@ import {
   listScheduledGames,
 } from "./feed-games.js";
 import {
+  countWinsNeeded,
+  listSeriesIds,
   buildSeries,
   groupPostseason,
   listPostseasonGames,
@@ -163,6 +167,39 @@ const listPutOffStarts = (games) =>
     .filter((game) => game.state === "off" && hasBothClubs(game) && game.start)
     .map((game) => game.start);
 
+function listReminderGames(games, gamesBySeries, series, season) {
+  const seriesIds = listSeriesIds(gamesBySeries);
+  return games
+    .filter((game) => isConfirmedReminderGame(game, seriesIds, series))
+    .map((game) => ({
+      id: game.id,
+      season,
+      start: Date.parse(game.start),
+      away: TEAMS[game.away.id]?.name,
+      home: TEAMS[game.home.id]?.name,
+      networks: game.networks,
+    }))
+    .filter((game) => game.away && game.home && Number.isFinite(game.start));
+}
+
+function isConfirmedReminderGame(game, seriesIds, series) {
+  const id = seriesIds.get(game.id);
+  const round = id === "WS" ? "WS" : id?.split("_")[1]?.replace(/\d$/, "");
+  const record = id ? series[id] : null;
+  return (
+    game.state === "pre" &&
+    !game.tbd &&
+    hasBothClubs(game) &&
+    !!record &&
+    isNecessaryPlayoffGame({
+      ifNecessary: game.ifNecessary,
+      number: game.number,
+      winsNeeded: countWinsNeeded(round),
+      wins: [record.winsA, record.winsB],
+    })
+  );
+}
+
 export function buildSnapshot(rawResponses, { season, now = Date.now() }) {
   const responses = {
     ...rawResponses,
@@ -202,6 +239,7 @@ export function buildSnapshot(rawResponses, { season, now = Date.now() }) {
     putOffStarts: listPutOffStarts(games),
     schedule: schedule && !isSeriesKnown ? leaveOutPlayoffGames(schedule) : schedule,
     isSeriesKnown,
+    reminderGames: isSeriesKnown ? listReminderGames(needed, gamesBySeries, series, season) : null,
     missing: findMissingFields(responses),
   };
 }

@@ -255,3 +255,14 @@ test("a loader that starts over on the same storage keeps what the last one read
   await createLoaderOnStorage().loadSnapshot(2026);
   assert.deepEqual(["schedule", ...SLOW_REQUESTS].map(mlb.countCalls), [2, 1, 1, 1, 1]);
 });
+
+test("reminder verification refreshes game facts without rereading every league feed", async () => {
+  const mlb = createFakeMlb();
+  const loader = createSnapshotLoader({ fetchImpl: mlb.fetchImpl, now: () => NOW });
+  await loader.loadSnapshot(2026);
+  await loader.loadSnapshot(2026, { verify: true });
+  assert.equal(mlb.countCalls("schedule"), 2);
+  assert.equal(mlb.countCalls("postseason"), 2);
+  assert.equal(mlb.countCalls("standings"), 1);
+  assert.equal(mlb.countCalls("seasonGames"), 1);
+});

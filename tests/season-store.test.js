@@ -826,3 +826,160 @@ test("the Worker adds to a count a job keeps, which the job reads and the page c
   assert.equal(read.headers.get("allow"), "POST");
   assert.equal(await store.createJobStorage("players").get("count:leagueReads"), 2);
 });
+
+test("a saved reminder wakes a sleeping store before the three-hour season poll, surviving a restart", async () => {
+  const context = createDurableObjectContext();
+  const clock = { now: NOW };
+  const reads = [];
+  const sends = [];
+  const game = {
+    id: "123",
+    season: 2026,
+    away: "Away",
+    home: "Home",
+    start: NOW + 2 * 60 * 60_000,
+    networks: ["FOX"],
+  };
+  let jobs = 0;
+  const league = {
+    ...QUIET_LEAGUE,
+    loadCurrentSnapshot: (load) => load(2026),
+    listReminderGames: (snapshot) => snapshot.games,
+    choosePollDelay: () => 3 * 60 * 60_000,
+    backgroundJobs: {
+      news: {
+        chooseDelay: () => 24 * 60 * 60_000,
+        updateStore: async () => {
+          jobs++;
+        },
+      },
+    },
+  };
+  const SeasonStore = createSeasonStore(league);
+  const options = {
+    now: () => clock.now,
+    createLoadSnapshot: () => async (season, settings) => {
+      reads.push(settings?.verify ?? false);
+      return { season, games: [game] };
+    },
+    fetchImpl: async (url, init) => {
+      sends.push(init);
+      return new Response(null, { status: 201 });
+    },
+  };
+  let store = new SeasonStore(context.ctx, {}, options);
+  const { createBrowserKeys } = await import("./push-reader.js");
+  const keys = await createBrowserKeys();
+  const response = await store.fetch(
+    new Request(`${ORIGIN}/push/subscription`, {
+      method: "PUT",
+      body: JSON.stringify({
+        endpoint: "https://web.push.apple.com/reminder",
+        keys,
+        preferences: { updates: false, reminders: true, minutes: 60, timeZone: "America/New_York" },
+      }),
+    }),
+  );
+  assert.equal(response.status, 204);
+  await store.alarm();
+  assert.deepEqual(reads, [false]);
+  assert.equal(await context.ctx.storage.getAlarm(), game.start - 60 * 60_000 - 30_000);
+  store = new SeasonStore(context.ctx, {}, options);
+  await fireNextAlarm(store, context, clock);
+  assert.deepEqual(reads, [false, true]);
+  assert.equal(sends.length, 0);
+  assert.equal(jobs, 1);
+  assert.equal(await context.ctx.storage.getAlarm(), game.start - 60 * 60_000);
+  await fireNextAlarm(store, context, clock);
+  assert.equal(sends.length, 1);
+  assert.equal(jobs, 1);
+  assert.deepEqual(reads, [false, true]);
+  assert.equal(await context.ctx.storage.getAlarm(), NOW + 3 * 60 * 60_000);
+});
+
+test("a reminder verification that discovers an update still delivers existing alerts", async () => {
+  const context = createDurableObjectContext();
+  let newest = 0;
+  const sent = [];
+  const SeasonStore = createSeasonStore({
+    ...QUIET_LEAGUE,
+    loadCurrentSnapshot: async () => ({ season: 2026, newest: ++newest }),
+    readUpdates: async (docs) => (await docs.read("updates/latest"))?.newest ?? 0,
+    saveSnapshot: async (docs, snapshot) =>
+      docs.write("updates/latest", { newest: snapshot.newest }),
+    listNotifications: ({ before, after }) =>
+      after > before ? [{ title: "Final", tag: `final:${after}` }] : [],
+    listReminderGames: () => [],
+  });
+  const store = new SeasonStore(
+    context.ctx,
+    {},
+    {
+      now: () => NOW,
+      fetchImpl: async (url, init) => {
+        sent.push(init);
+        return new Response(null, { status: 201 });
+      },
+    },
+  );
+  const { createBrowserKeys } = await import("./push-reader.js");
+  const keys = await createBrowserKeys();
+  await store.fetch(
+    new Request(`${ORIGIN}/push/subscription`, {
+      method: "PUT",
+      body: JSON.stringify({ endpoint: "https://web.push.apple.com/alerts", keys }),
+    }),
+  );
+  await store.verifyReminderGames();
+  assert.equal(sent.length, 1);
+});
+
+test("a failed season read invalidates recently verified reminder facts instead of delivering them", async () => {
+  const context = createDurableObjectContext();
+  const clock = { now: NOW };
+  const sent = [];
+  const game = {
+    id: "123",
+    season: 2026,
+    away: "Away",
+    home: "Home",
+    start: NOW + 2 * 60 * 60_000,
+    networks: ["FOX"],
+  };
+  const SeasonStore = createSeasonStore({
+    ...QUIET_LEAGUE,
+    loadCurrentSnapshot: async () => {
+      throw new Error("Source down");
+    },
+    listReminderGames: () => [game],
+  });
+  const store = new SeasonStore(
+    context.ctx,
+    {},
+    {
+      now: () => clock.now,
+      fetchImpl: async (url, init) => {
+        sent.push(init);
+        return new Response(null, { status: 201 });
+      },
+    },
+  );
+  const { createBrowserKeys } = await import("./push-reader.js");
+  const keys = await createBrowserKeys();
+  await store.fetch(
+    new Request(`${ORIGIN}/push/subscription`, {
+      method: "PUT",
+      body: JSON.stringify({
+        endpoint: "https://web.push.apple.com/freshness",
+        keys,
+        preferences: { updates: false, reminders: true, minutes: 60, timeZone: "America/New_York" },
+      }),
+    }),
+  );
+  await store.reminders.saveGames([game]);
+  clock.now = game.start - 60 * 60_000 - 30_000;
+  await store.reminders.saveGames([game], true);
+  clock.now += 30_000;
+  await store.alarm();
+  assert.equal(sent.length, 0);
+});

@@ -58,7 +58,13 @@ export const SEASON_SETTING = {
 export const NOTIFICATIONS_SETTING = {
   key: "settings:notifications",
   name: ["Notifications"],
-  words: ["notifications", "notify", "alerts", "push"],
+  words: ["notifications", "notify", "alerts", "push", "game notifications"],
+};
+/** @type {SettingRow} */
+export const REMINDERS_SETTING = {
+  key: "settings:reminders",
+  name: ["Game reminders", "Before the game"],
+  words: ["remind", "reminders", "before game", "before the game", "game notifications", "timing"],
 };
 /** @type {SettingRow} */
 export const ATHLETIC_SETTING = {
