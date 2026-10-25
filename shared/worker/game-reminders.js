@@ -34,6 +34,14 @@ function describeDeadline(game, preferences) {
   return { dueAt, expiresAt };
 }
 
+function isDeliveryFinished(receipt) {
+  return (
+    receipt?.state === "sent" ||
+    receipt?.attempts >= MAX_ATTEMPTS ||
+    (receipt?.state !== "pending" && receipt?.uncertain)
+  );
+}
+
 /** @param {any} device @param {any[]} games @param {number} now */
 function planDevice(device, games, now) {
   const preferences = readNotificationPreferences(device);
@@ -52,18 +60,18 @@ function planDevice(device, games, now) {
   if (!preferences.reminders) return { ...device, reminderReceipts: receipts };
   for (const game of games) {
     const previous = receipts[game.id];
-    if (previous && previous.state !== "pending") continue;
+    if (isDeliveryFinished(previous)) continue;
     const deadline = describeDeadline(game, preferences);
     const changed = !previous || previous.dueAt !== deadline.dueAt;
     if (changed) {
-      if (previous?.attempts > 0) {
+      if (previous?.uncertain) {
         receipts[game.id] = { ...previous, state: "expired" };
         continue;
       }
       receipts[game.id] = {
         ...deadline,
         state: deadline.dueAt <= now ? "skipped" : "pending",
-        attempts: 0,
+        attempts: previous?.attempts ?? 0,
         nextAt: deadline.dueAt,
       };
     }
@@ -136,6 +144,7 @@ export function createGameReminders({ storage, push, now, verify }) {
           await deliverGame(key, id, games);
       }),
     );
+    await refreshDevices();
   }
 
   async function deliverGame(key, id, games) {
@@ -155,6 +164,7 @@ export function createGameReminders({ storage, push, now, verify }) {
       const attempt = {
         ...receipt,
         attempts: receipt.attempts + 1,
+        uncertain: true,
         nextAt: now() + RETRY_MS * (receipt.attempts + 1),
       };
       claimed = { device, receipt: attempt, preferences, game };
@@ -164,6 +174,7 @@ export function createGameReminders({ storage, push, now, verify }) {
     if (!claimed) return;
     const { device, receipt, preferences, game } = claimed;
     let status = 503;
+    let uncertain = true;
     try {
       ({ status } = await push.deliver(
         key,
@@ -171,6 +182,7 @@ export function createGameReminders({ storage, push, now, verify }) {
         describeGameReminder(game, preferences),
         Math.max(0, Math.floor((receipt.expiresAt - now()) / 1000)),
       ));
+      uncertain = false;
     } catch {
       /* The persisted attempt bounds a retry after an uncertain response. */
     }
@@ -181,10 +193,15 @@ export function createGameReminders({ storage, push, now, verify }) {
           ? "pending"
           : "expired";
     await push.updateDevice(key, (current) => {
-      if (current.reminderReceipts?.[id]?.attempts !== receipt.attempts) return null;
+      const latest = current.reminderReceipts?.[id];
+      if (latest?.attempts !== receipt.attempts) return null;
+      const nextState = latest.state !== "pending" && state !== "sent" ? latest.state : state;
       return {
         ...current,
-        reminderReceipts: { ...current.reminderReceipts, [id]: { ...receipt, state } },
+        reminderReceipts: {
+          ...current.reminderReceipts,
+          [id]: { ...latest, uncertain, state: nextState },
+        },
       };
     });
   }

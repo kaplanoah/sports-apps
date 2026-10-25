@@ -357,6 +357,7 @@ export function createPushService({ storage, now, fetchImpl }) {
   async function sendInOrder(key, subscription, messages) {
     let kept = subscription;
     for (const message of messages) {
+      if (!readNotificationPreferences(kept).updates) return;
       ({ kept } = await deliver(key, kept, message));
       if (!kept) return;
     }

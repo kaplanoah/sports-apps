@@ -24,12 +24,19 @@ function createHarness() {
   const { ctx, stored } = createDurableObjectContext();
   const clock = { now: NOW };
   const sent = [];
-  const upstream = { games: [GAME], status: 201, throws: false, reads: 0 };
+  const upstream = {
+    games: [GAME],
+    status: 201,
+    throws: false,
+    reads: 0,
+    onSend: /** @type {null | (() => Promise<void>)} */ (null),
+  };
   const push = createPushService({
     storage: ctx.storage,
     now: () => clock.now,
     fetchImpl: async (url, init) => {
       sent.push({ url, init });
+      if (upstream.onSend) await upstream.onSend();
       if (upstream.throws) throw new Error("Response lost");
       return new Response(null, { status: upstream.status });
     },
@@ -411,4 +418,75 @@ test("rescheduling an uncertain delivery cannot reset its attempts or issue a ne
   harness.upstream.throws = false;
   await harness.reminders.checkDue();
   assert.equal(harness.sent.length, 1);
+});
+
+test("turning updates off while reminders stay on stops the remaining update batch", async () => {
+  const harness = createHarness();
+  const { subscription } = await harness.subscribe({ ...PREFERENCES, updates: true });
+  harness.upstream.onSend = async () => {
+    harness.upstream.onSend = null;
+    await harness.request("PUT", "preferences", {
+      ...subscription,
+      preferences: PREFERENCES,
+      revision: 0,
+    });
+  };
+  await harness.push.sendToAll([{ title: "First update" }, { title: "Second update" }]);
+  assert.equal(harness.sent.length, 1);
+  const [device] = (await harness.push.listSubscriptions()).values();
+  assert.equal(device.preferences.reminders, true);
+});
+
+test("an unsent reminder skipped after its deadline can follow a later start or future lead deadline", async () => {
+  for (const change of ["start", "lead"]) {
+    const harness = createHarness();
+    const { subscription } = await harness.subscribe();
+    harness.clock.now = GAME.start - 60 * 60_000 + 30_000;
+    await harness.reminders.saveGames([GAME]);
+    assert.equal(await harness.reminders.findNextDeadline(), Infinity);
+    const game = change === "start" ? { ...GAME, start: GAME.start + 60 * 60_000 } : GAME;
+    const minutes = change === "lead" ? 15 : 60;
+    if (change === "lead")
+      await harness.request("PUT", "preferences", {
+        ...subscription,
+        preferences: { ...PREFERENCES, minutes },
+        revision: 0,
+      });
+    harness.upstream.games = [game];
+    await harness.reminders.saveGames([game]);
+    const dueAt = game.start - minutes * 60_000;
+    assert.equal(await harness.reminders.findNextDeadline(), dueAt - 30_000);
+    harness.clock.now = dueAt;
+    await harness.reminders.checkDue();
+    assert.equal(harness.sent.length, 1);
+  }
+});
+
+test("a confirmed push rejection can follow a rescheduled game without resetting its attempt count", async () => {
+  for (const changesDuringSend of [false, true]) {
+    const harness = createHarness();
+    await harness.subscribe();
+    await harness.reminders.saveGames([GAME]);
+    harness.clock.now = GAME.start - 60 * 60_000;
+    harness.upstream.status = 503;
+    const moved = { ...GAME, start: GAME.start + 60 * 60_000 };
+    const reschedule = async () => {
+      harness.upstream.games = [moved];
+      await harness.reminders.saveGames([moved]);
+    };
+    if (changesDuringSend)
+      harness.upstream.onSend = async () => {
+        harness.upstream.onSend = null;
+        await reschedule();
+      };
+    await harness.reminders.checkDue();
+    if (!changesDuringSend) await reschedule();
+    assert.equal(await harness.reminders.findNextDeadline(), moved.start - 60 * 60_000 - 30_000);
+    const [device] = (await harness.push.listSubscriptions()).values();
+    assert.equal(device.reminderReceipts[GAME.id].attempts, 1);
+    harness.clock.now += 60 * 60_000;
+    harness.upstream.status = 201;
+    await harness.reminders.checkDue();
+    assert.equal(harness.sent.length, 2);
+  }
 });
