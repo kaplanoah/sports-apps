@@ -1,5 +1,4 @@
-// What the settings panel's notifications switch says under it, for its status and the device,
-// and what it shows once saving this device's subscription to the Worker fails.
+// Permission guidance and category controls for this device's notification settings.
 
 export const TOO_MANY_DEVICES = "Too many devices get notifications already";
 export const CHANGE_FAILED = "Couldn't change notifications. Try again in a moment.";
@@ -36,14 +35,13 @@ function describeStatus(status, device) {
 }
 
 /**
- * The note under the switch: a message the switch was given, else what its status says, else what
- * the app's notifications tell. Where they come only from the Home Screen, it ends with a ? that
- * opens the welcome's steps, wherever the welcome can open.
- * @param {{ status: string, message: string, about: string, device: NoteDevice }} state
+ * The note below the updates label: a message it was given, else what its status says. Where
+ * notifications come only from the Home Screen, its ? opens the welcome's steps.
+ * @param {{ status: string, message: string, device: NoteDevice }} state
  * @returns {{ text: string, hasHelp: boolean }}
  */
-export const chooseNotifyNote = ({ status, message, about, device }) => ({
-  text: message || describeStatus(status, device) || about,
+export const chooseNotifyNote = ({ status, message, device }) => ({
+  text: message || describeStatus(status, device) || "",
   hasHelp: status === "homeScreen" && device.canOpenWelcome,
 });
 

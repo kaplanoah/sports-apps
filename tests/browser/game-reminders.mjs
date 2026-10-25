@@ -1,3 +1,5 @@
+import { matchPath } from "./harness.mjs";
+import { holdRequests } from "./hold-requests.mjs";
 import { showTheme, listThemeLayoutChanges } from "./theme-layout.mjs";
 import { listLowContrastText } from "./contrast.mjs";
 import { listTextOffRoles } from "./type-roles.mjs";
@@ -70,6 +72,63 @@ export function testGameReminderSettings(test, expect, app) {
     }
   });
 
+  test("a failed first subscription save can be retried without reloading", async ({ page }) => {
+    await page.addInitScript(stubPushManager, PUSH_STUB);
+    await app.openApp(page);
+    await app.openSettings(page);
+    let rejectSave = true;
+    await page.route("**/push/subscription", async (route) => {
+      if (route.request().method() === "PUT" && rejectSave) {
+        rejectSave = false;
+        await route.fulfill({
+          status: 503,
+          json: { error: { code: "unavailable", message: "Try again" } },
+        });
+      } else await route.fallback();
+    });
+    const reminders = page.getByRole("switch", { name: "Game reminders", exact: true });
+    await reminders.click();
+    await expect(page.locator("#notifyNote")).toContainText("Couldn't change notifications");
+    await expect(reminders).toHaveAttribute("aria-checked", "false");
+    await reminders.click();
+    await expect(reminders).toHaveAttribute("aria-checked", "true");
+    await expect(page.getByLabel("Before the game", { exact: true })).toBeEnabled();
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await expect(reminders).toHaveAttribute("aria-checked", "true");
+  });
+
+  test("a permission reset turns the displayed category on with a fresh user gesture", async ({
+    page,
+  }) => {
+    await page.addInitScript(stubPushManager, PUSH_STUB);
+    await app.openApp(page);
+    await app.openSettings(page);
+    const reminders = page.getByRole("switch", { name: "Game reminders", exact: true });
+    await reminders.click();
+    await expect(reminders).toHaveAttribute("aria-checked", "true");
+    await page.evaluate(() => sessionStorage.setItem("test-notification-permission", "default"));
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await expect(reminders).toHaveAttribute("aria-checked", "false");
+    await reminders.click();
+    await expect(reminders).toHaveAttribute("aria-checked", "true");
+    expect(await page.evaluate(() => Notification.permission)).toBe("granted");
+  });
+
+  test("unsupported push keeps its guidance and hides unusable reminder controls", async ({
+    page,
+  }) => {
+    await page.addInitScript(() => {
+      delete window.PushManager;
+    });
+    await app.openApp(page);
+    await app.openSettings(page);
+    const group = page.getByRole("group", { name: "Notifications", exact: true });
+    await expect(group).toContainText("This browser can't show notifications");
+    await expect(group.getByRole("switch")).toHaveCount(0);
+    await expect(group.getByText("Game reminders", { exact: true })).toHaveCount(0);
+    await expect(group.getByLabel("Before the game", { exact: true })).toHaveCount(0);
+  });
+
   test("Notifications matches News and timing occupies its own row", async ({ page }) => {
     await page.addInitScript(stubPushManager, PUSH_STUB);
     await app.openApp(page);
@@ -107,8 +166,35 @@ export function testGameReminderSettings(test, expect, app) {
     const url = new URL(page.url());
     url.searchParams.set("game", key.split(" ")[0]);
     url.searchParams.set("season", "2026");
+    await page.locator("nav.tabs [data-tab]").first().click();
+    await app.openSettings(page);
+    await page.addInitScript(() => {
+      const opened = [];
+      Reflect.set(window, "testLaunchDialogs", opened);
+      const show = HTMLDialogElement.prototype.showModal;
+      HTMLDialogElement.prototype.showModal = function () {
+        opened.push(this.id);
+        return show.call(this);
+      };
+      const observer = new MutationObserver(() => {
+        if (!document.getElementById("tabBar")) return;
+        observer.disconnect();
+        requestAnimationFrame(() => {
+          Reflect.set(
+            window,
+            "testFirstPaintTab",
+            document.querySelector("nav.tabs [aria-selected=true]")?.getAttribute("data-tab"),
+          );
+        });
+      });
+      observer.observe(document, { childList: true, subtree: true });
+    });
     await page.goto(url.href);
     await expect(page.locator("#gameSheet")).toBeVisible();
+    expect(await page.evaluate(() => Reflect.get(window, "testFirstPaintTab"))).toBe("games");
+    expect(await page.evaluate(() => Reflect.get(window, "testLaunchDialogs"))).not.toContain(
+      "settingsDialog",
+    );
     await expect(page).not.toHaveURL(/game=/);
     await page.reload({ waitUntil: "domcontentloaded" });
     await expect(page.locator("#gameSheet")).toBeVisible();
@@ -119,6 +205,27 @@ export function testGameReminderSettings(test, expect, app) {
       "true",
     );
     await expect(page.locator("#sheetDialog")).toBeHidden();
+  });
+
+  test("a notification's slow season load leaves the rest of page startup working", async ({
+    page,
+  }) => {
+    await page.addInitScript(stubPushManager, PUSH_STUB);
+    await app.openApp(page);
+    const url = new URL(page.url());
+    url.searchParams.set("game", "123");
+    url.searchParams.set("season", "2025");
+    const release = await holdRequests(page, matchPath("/store/seasons/2025"));
+    const requested = page.waitForRequest(matchPath("/store/seasons/2025"));
+    try {
+      await page.goto(url.href, { waitUntil: "domcontentloaded" });
+      await requested;
+      await expect(page.locator("#notifyRow")).not.toHaveAttribute("hidden");
+      await expect(page.locator("#notifySwitch")).toBeEnabled();
+    } finally {
+      release();
+    }
+    await expect(page).not.toHaveURL(/game=/);
   });
 
   test("a game's notification intent survives signing in through the access gate", async ({

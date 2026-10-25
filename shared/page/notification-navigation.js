@@ -1,3 +1,4 @@
+/* global readNotificationIntent -- from notification-intent.js */
 // Notification intent stays in the URL through the access gate and an interrupted load.
 import { listOpenDialogs } from "./sheet.js";
 import { openPageTab } from "./page-tabs.js";
@@ -5,15 +6,14 @@ import { openPageTab } from "./page-tabs.js";
 /** @param {{ showYear: (year: number) => any, openGame: (id: string) => void }} options */
 export async function openNotificationGame({ showYear, openGame }) {
   const url = new URL(location.href);
-  const game = url.searchParams.get("game");
-  if (game === null) return;
+  const { isRequested, target } = readNotificationIntent(url.href);
+  if (!isRequested) return;
   await closeNotificationDialogs();
   openPageTab("games");
-  const season = Number(url.searchParams.get("season"));
-  if (/^\d{1,12}$/.test(game) && Number.isInteger(season) && season >= 1900 && season <= 2200) {
+  if (target) {
     try {
-      await showYear(season);
-      openGame(game);
+      await showYear(target.season);
+      openGame(target.game);
     } catch {
       /* Games remains available when the requested season cannot be read. */
     }

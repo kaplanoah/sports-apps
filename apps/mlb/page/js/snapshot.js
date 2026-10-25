@@ -4,6 +4,7 @@
 // Worker read the league's data from here.
 // Runs in both the browser page and the Worker, so it uses no DOM and no globals.
 
+import { listTimedReminderGames } from "#shared/reminder-games.js";
 import { isNecessaryPlayoffGame } from "#shared/series-text.js";
 import { TEAMS } from "./teams.js";
 import { readEasternDay } from "#shared/days.js";
@@ -18,7 +19,7 @@ import {
   listScheduledGames,
 } from "./feed-games.js";
 import {
-  countWinsNeeded,
+  countSeriesWinsNeeded,
   listSeriesIds,
   buildSeries,
   groupPostseason,
@@ -167,24 +168,20 @@ const listPutOffStarts = (games) =>
     .filter((game) => game.state === "off" && hasBothClubs(game) && game.start)
     .map((game) => game.start);
 
-function listReminderGames(games, gamesBySeries, series, season) {
+function listConfirmedReminderGames(games, gamesBySeries, series) {
   const seriesIds = listSeriesIds(gamesBySeries);
-  return games
-    .filter((game) => isConfirmedReminderGame(game, seriesIds, series))
-    .map((game) => ({
-      id: game.id,
-      season,
-      start: Date.parse(game.start),
-      away: TEAMS[game.away.id]?.name,
-      home: TEAMS[game.home.id]?.name,
-      networks: game.networks,
-    }))
-    .filter((game) => game.away && game.home && Number.isFinite(game.start));
+  return games.filter((game) => isConfirmedReminderGame(game, seriesIds, series));
 }
+
+/** @param {any} snapshot */
+export const listReminderGames = (snapshot) =>
+  listTimedReminderGames(snapshot.reminderCandidates, snapshot.season, (game) => ({
+    away: TEAMS[game.away.id]?.name,
+    home: TEAMS[game.home.id]?.name,
+  }));
 
 function isConfirmedReminderGame(game, seriesIds, series) {
   const id = seriesIds.get(game.id);
-  const round = id === "WS" ? "WS" : id?.split("_")[1]?.replace(/\d$/, "");
   const record = id ? series[id] : null;
   return (
     game.state === "pre" &&
@@ -194,7 +191,7 @@ function isConfirmedReminderGame(game, seriesIds, series) {
     isNecessaryPlayoffGame({
       ifNecessary: game.ifNecessary,
       number: game.number,
-      winsNeeded: countWinsNeeded(round),
+      winsNeeded: countSeriesWinsNeeded(id),
       wins: [record.winsA, record.winsB],
     })
   );
@@ -239,7 +236,10 @@ export function buildSnapshot(rawResponses, { season, now = Date.now() }) {
     putOffStarts: listPutOffStarts(games),
     schedule: schedule && !isSeriesKnown ? leaveOutPlayoffGames(schedule) : schedule,
     isSeriesKnown,
-    reminderGames: isSeriesKnown ? listReminderGames(needed, gamesBySeries, series, season) : null,
+    reminderCandidates:
+      isSeriesKnown && !!responses.postseason && !!responses.schedule
+        ? listConfirmedReminderGames(needed, gamesBySeries, series)
+        : null,
     missing: findMissingFields(responses),
   };
 }

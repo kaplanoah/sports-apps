@@ -395,12 +395,9 @@ function openGameSheet(id, section) {
 /**
  * Opens a game's sheet on one of its sections, as a search does.
  * @param {string} id
- * @param {string} section
+ * @param {string} [section]
  */
 export const openGameSection = (id, section) => openGameSheet(id, section);
-
-/** @param {string} id */
-export const openNotifiedGame = (id) => openGameSheet(id);
 
 /**
  * Redraws the open sheet from the season as the store has it now. A game that started since the

@@ -1,3 +1,4 @@
+/* global readGameIntent -- from notification-intent.js */
 // The service worker every app's sw.js loads: it shows the Worker's push messages, and opens the
 // page when one is tapped. Every push shows a notification, because iOS stops delivering to a page
 // whose pushes show nothing, so a message that can't be read shows the app's sw.js `pageName`.
@@ -25,17 +26,6 @@ self.addEventListener("push", (event) => {
   );
 });
 
-function readGameIntent(message) {
-  if (
-    !/^\d{1,12}$/.test(String(message?.game ?? "")) ||
-    !Number.isInteger(message?.season) ||
-    message.season < 1900 ||
-    message.season > 2200
-  )
-    return null;
-  return { game: String(message.game), season: message.season };
-}
-
 async function openPageFromNotification(data) {
   const scope = self.registration.scope;
   const url = new URL(scope);
@@ -47,8 +37,15 @@ async function openPageFromNotification(data) {
   const windows = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
   const open = windows.find((client) => client.url.startsWith(scope));
   if (!open) return self.clients.openWindow(url.href);
-  if (intent) await open.navigate(url.href);
-  return open.focus();
+  try {
+    const focused = await open.focus();
+    if (!intent) return focused;
+    const navigated = await focused.navigate(url.href);
+    if (navigated) return navigated;
+  } catch {
+    /* A closing or uncontrolled window may no longer be navigable. */
+  }
+  return self.clients.openWindow(url.href);
 }
 
 self.addEventListener("notificationclick", (event) => {
@@ -88,8 +85,6 @@ async function replaceSubscription(oldSubscription, newSubscription) {
     ...replacement.toJSON(),
     previousSubscription: oldSubscription?.toJSON(),
   });
-  if (oldSubscription && oldSubscription.endpoint !== replacement.endpoint)
-    await requestPush("push/subscription", "DELETE", { endpoint: oldSubscription.endpoint });
 }
 
 // A browser can replace a subscription on its own, and the Worker would otherwise keep sending

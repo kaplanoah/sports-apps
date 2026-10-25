@@ -75,3 +75,10 @@ declare class WebSocketPair {
 interface ResponseInit {
   webSocket?: WebSocket;
 }
+
+// Shared notification launch intent, loaded before page and service worker scripts.
+declare function readGameIntent(message: unknown): { game: string; season: number } | null;
+declare function readNotificationIntent(href: string): {
+  isRequested: boolean;
+  target: { game: string; season: number } | null;
+};

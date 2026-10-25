@@ -930,56 +930,143 @@ test("a reminder verification that discovers an update still delivers existing a
       body: JSON.stringify({ endpoint: "https://web.push.apple.com/alerts", keys }),
     }),
   );
+  await store.recordFailure({ error: "upstream_error", detail: "Earlier failure" });
+  await store.recordFailure({ write: "Earlier write failure" });
   await store.verifyReminderGames();
   assert.equal(sent.length, 1);
+  assert.equal(store.failures, 0);
+  assert.deepEqual(await store.docs.read("live/status"), {
+    at: new Date(NOW).toISOString(),
+    error: "",
+    detail: "",
+    write: "",
+  });
 });
 
-test("a failed season read invalidates recently verified reminder facts instead of delivering them", async () => {
+for (const failure of ["read", "write"]) {
+  test(`a failed season ${failure} invalidates recently verified reminder facts instead of delivering them`, async () => {
+    const context = createDurableObjectContext();
+    const clock = { now: NOW };
+    const sent = [];
+    const game = {
+      id: "123",
+      season: 2026,
+      away: "Away",
+      home: "Home",
+      start: NOW + 2 * 60 * 60_000,
+      networks: ["FOX"],
+    };
+    const SeasonStore = createSeasonStore({
+      ...QUIET_LEAGUE,
+      loadCurrentSnapshot: async () => {
+        if (failure === "read") throw new Error("Source down");
+        return { season: 2026 };
+      },
+      saveSnapshot: async () => {
+        if (failure === "write") throw new Error("Write failed");
+      },
+      listReminderGames: () => [game],
+    });
+    const store = new SeasonStore(
+      context.ctx,
+      {},
+      {
+        now: () => clock.now,
+        fetchImpl: async (url, init) => {
+          sent.push(init);
+          return new Response(null, { status: 201 });
+        },
+      },
+    );
+    const { createBrowserKeys } = await import("./push-reader.js");
+    const keys = await createBrowserKeys();
+    await store.fetch(
+      new Request(`${ORIGIN}/push/subscription`, {
+        method: "PUT",
+        body: JSON.stringify({
+          endpoint: "https://web.push.apple.com/freshness",
+          keys,
+          preferences: {
+            updates: false,
+            reminders: true,
+            minutes: 60,
+            timeZone: "America/New_York",
+          },
+        }),
+      }),
+    );
+    await store.reminders.saveGames([game]);
+    clock.now = game.start - 60 * 60_000 - 30_000;
+    await store.reminders.saveGames([game], true);
+    clock.now += 30_000;
+    await store.alarm();
+    assert.equal(sent.length, 0);
+  });
+}
+
+test("enabling reminders and changing their lead brings an existing three-hour alarm forward", async () => {
   const context = createDurableObjectContext();
-  const clock = { now: NOW };
-  const sent = [];
   const game = {
     id: "123",
     season: 2026,
     away: "Away",
     home: "Home",
     start: NOW + 2 * 60 * 60_000,
-    networks: ["FOX"],
+    networks: [],
   };
   const SeasonStore = createSeasonStore({
     ...QUIET_LEAGUE,
-    loadCurrentSnapshot: async () => {
-      throw new Error("Source down");
-    },
-    listReminderGames: () => [game],
+    loadCurrentSnapshot: async () => ({ season: 2026, games: [game] }),
+    listReminderGames: (snapshot) => snapshot.games,
+    choosePollDelay: () => 3 * 60 * 60_000,
   });
+  const store = new SeasonStore(context.ctx, {}, { now: () => NOW });
+  const { createBrowserKeys } = await import("./push-reader.js");
+  const device = { endpoint: "https://web.push.apple.com/enable", keys: await createBrowserKeys() };
+  const request = (path, method, body) =>
+    store.fetch(new Request(`${ORIGIN}/push/${path}`, { method, body: JSON.stringify(body) }));
+  await request("subscription", "PUT", device);
+  await store.alarm();
+  assert.equal(await context.ctx.storage.getAlarm(), NOW + 3 * 60 * 60_000);
+  const initial = await (await request("preferences", "POST", device)).json();
+  const enabled = await (
+    await request("preferences", "PUT", {
+      ...device,
+      revision: initial.revision,
+      preferences: { ...initial.preferences, reminders: true, minutes: 15 },
+    })
+  ).json();
+  assert.equal(await context.ctx.storage.getAlarm(), game.start - 15 * 60_000 - 30_000);
+  await request("preferences", "PUT", {
+    ...device,
+    revision: enabled.revision,
+    preferences: { ...enabled.preferences, minutes: 60 },
+  });
+  assert.equal(await context.ctx.storage.getAlarm(), game.start - 60 * 60_000 - 30_000);
+});
+
+test("reading preferences and sending a test push do not replan device reminders", async () => {
+  const context = createDurableObjectContext();
+  const SeasonStore = createSeasonStore(QUIET_LEAGUE);
   const store = new SeasonStore(
     context.ctx,
     {},
-    {
-      now: () => clock.now,
-      fetchImpl: async (url, init) => {
-        sent.push(init);
-        return new Response(null, { status: 201 });
-      },
-    },
+    { now: () => NOW, fetchImpl: async () => new Response(null, { status: 201 }) },
   );
   const { createBrowserKeys } = await import("./push-reader.js");
-  const keys = await createBrowserKeys();
+  const device = { endpoint: "https://web.push.apple.com/read", keys: await createBrowserKeys() };
   await store.fetch(
-    new Request(`${ORIGIN}/push/subscription`, {
-      method: "PUT",
-      body: JSON.stringify({
-        endpoint: "https://web.push.apple.com/freshness",
-        keys,
-        preferences: { updates: false, reminders: true, minutes: 60, timeZone: "America/New_York" },
-      }),
-    }),
+    new Request(`${ORIGIN}/push/subscription`, { method: "PUT", body: JSON.stringify(device) }),
   );
-  await store.reminders.saveGames([game]);
-  clock.now = game.start - 60 * 60_000 - 30_000;
-  await store.reminders.saveGames([game], true);
-  clock.now += 30_000;
-  await store.alarm();
-  assert.equal(sent.length, 0);
+  let plans = 0;
+  store.reminders.refreshDevices = async () => {
+    plans++;
+  };
+  for (const path of ["preferences", "test"]) {
+    const response = await store.fetch(
+      new Request(`${ORIGIN}/push/${path}`, { method: "POST", body: JSON.stringify(device) }),
+    );
+    assert.equal(response.ok, true);
+  }
+  assert.equal(plans, 0);
 });

@@ -74,7 +74,7 @@ export function createSnapshotLoader({
     return snapshot;
   }
 
-  /** @param {number} season */
+  /** @param {number} season @param {{ verify?: boolean }} [options] */
   const loadSnapshot = (season, { verify = false } = {}) => {
     if (verify)
       return MLBSnapshot.fetchSnapshot(

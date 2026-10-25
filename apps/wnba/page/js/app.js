@@ -49,12 +49,7 @@ import { BACKGROUND_JOBS } from "./background-jobs.js";
 import { LOOKS } from "./looks.js";
 import { placeBracket, startBracket, takeBracketScroll } from "./bracket-tree.js";
 import { renderBracket } from "./bracket-view.js";
-import {
-  openNotifiedGame,
-  openGameSection,
-  refreshGameSheet,
-  startGameSheet,
-} from "./game-sheet.js";
+import { openGameSection, refreshGameSheet, startGameSheet } from "./game-sheet.js";
 import { renderDot } from "./clubs.js";
 import { LEAGUE_WORDS } from "./league-words.js";
 import { listFoundGameDays, listListedGames, listSeasonDays } from "./games-view.js";
@@ -344,7 +339,6 @@ async function boot() {
   });
   const [years] = await Promise.all([readSeasonYears(), loadSeason()]);
   fillSeasonList(years);
-  await openNotificationGame({ showYear, openGame: openNotifiedGame });
   session.db.afterHandOver(() => redrawEased(drawLoadedSeason));
   watchNews(session.db, (news) => {
     session.news = news;
@@ -354,7 +348,8 @@ async function boot() {
   watchUpdatesSeen(() => redrawEased(drawUpdates));
   refreshClockEveryMinute();
   startServiceWorker();
-  startNotifications({ about: "Final scores" });
+  startNotifications({ updatesLabel: "Final scores" });
+  openNotificationGame({ showYear, openGame: openGameSection });
 }
 
 boot();

@@ -26,7 +26,7 @@ let registration = null;
 let subscription = null;
 let status = "loading";
 let note = "";
-let about = "Game updates";
+let updatesLabel = "Game updates";
 let preferences = { ...DEFAULT_NOTIFICATION_PREFERENCES };
 let revision = 0;
 const PREFERENCES_KEY = "device-notifications";
@@ -46,7 +46,7 @@ function renderNote() {
     isOnHomeScreen: isOnHomeScreen(),
     canOpenWelcome: isAskingToAdd(),
   };
-  const { text, hasHelp } = chooseNotifyNote({ status, message: note, about: "", device });
+  const { text, hasHelp } = chooseNotifyNote({ status, message: note, device });
   if (!hasHelp) return text;
   const [lead, lastWord] = splitAtLastWord(text);
   return html`${lead}<span class="notify-help-end">${lastWord}${HELP_BUTTON}</span>`;
@@ -66,17 +66,21 @@ function renderNotifications() {
     html`<h3 class="settings-group-label" id="notificationsSettingsTitle">Notifications</h3>
     ${renderToggle(
       "notify",
-      about,
+      updatesLabel,
       controls.areUpdatesOn,
       html`<span class="control-note" id="notifyNote" role="status">${renderNote()}</span>`,
     )}
-    ${renderToggle("reminders", "Game reminders", controls.areRemindersOn)}
+    ${
+      controls.areSwitchesHidden
+        ? html``
+        : html`${renderToggle("reminders", "Game reminders", controls.areRemindersOn)}
     <label class="control-row" data-setting="settings:reminders">
       <span class="control-label"><span id="reminderTimingTitle">Before the game</span></span>
       <select class="select-field" id="reminderTiming" aria-labelledby="reminderTimingTitle" ${controls.isTimingDisabled ? "disabled" : ""}>
         ${REMINDER_PRESETS.map(({ minutes, label }) => html`<option value="${minutes}" ${preferences.minutes === minutes ? "selected" : ""}>${label}</option>`)}
       </select>
-    </label>`,
+    </label>`
+    }`,
   );
   row.hidden = status === "loading";
 }
@@ -251,9 +255,23 @@ async function savePreferences(next) {
   storeJson(PREFERENCES_KEY, preferences);
 }
 
-async function changeCategory(category, permissionPromise) {
+async function saveOrRestorePreferences(next) {
+  try {
+    await savePreferences(next);
+  } catch (error) {
+    if (/** @type {{ code?: string }} */ (error)?.code !== "not_found") throw error;
+    storeJson(PENDING_KEY, next);
+    await saveOrForget(subscription, next, readStoredJson(PREVIOUS_KEY) ?? undefined);
+    forgetStored(PREVIOUS_KEY);
+    await readPreferences();
+    if (Object.keys(next).some((key) => next[key] !== preferences[key]))
+      throw Object.assign(new Error("Notifications changed. Try again."), { code: "conflict" });
+  }
+}
+
+async function changeCategory(category, isEnabled, permissionPromise) {
   const before = preferences;
-  const next = { ...before, [category]: !before[category], timeZone: readDeviceTimeZone() };
+  const next = { ...before, [category]: isEnabled, timeZone: readDeviceTimeZone() };
   try {
     if (permissionPromise && (await permissionPromise) !== "granted") {
       setStatus(Notification.permission === "denied" ? "blocked" : "off");
@@ -267,10 +285,10 @@ async function changeCategory(category, permissionPromise) {
         await subscribe(await fetchPublicKey(), next, readStoredJson(PREVIOUS_KEY) ?? undefined);
         forgetStored(PREVIOUS_KEY);
       }
-      await savePreferences(next);
+      await saveOrRestorePreferences(next);
       setStatus("on");
     } else {
-      await savePreferences(next);
+      await saveOrRestorePreferences(next);
       await requestPush("push/subscription", sendEndpoint("DELETE", subscription.endpoint));
       storeJson(PREVIOUS_KEY, subscription.toJSON());
       await subscription.unsubscribe();
@@ -287,18 +305,20 @@ async function changeCategory(category, permissionPromise) {
   }
 }
 
-function turnOnCategory(category) {
+function toggleCategory(category) {
+  const controls = chooseNotificationControls({ status, isBusy, preferences });
+  const isEnabled = !(category === "updates" ? controls.areUpdatesOn : controls.areRemindersOn);
   // Permission is requested in the click stack, before registration or network reads.
-  const permission = !preferences[category] ? Notification.requestPermission() : null;
-  showBusyDuring(() => changeCategory(category, permission));
+  const permission = isEnabled ? Notification.requestPermission() : null;
+  showBusyDuring(() => changeCategory(category, isEnabled, permission));
 }
 
 /** @param {Event} event */
 function toggleNotifications(event) {
   if (isBusy) return;
   const target = /** @type {Element} */ (event.target);
-  if (target.closest("#notifySwitch")) turnOnCategory("updates");
-  if (target.closest("#remindersSwitch")) turnOnCategory("reminders");
+  if (target.closest("#notifySwitch")) toggleCategory("updates");
+  if (target.closest("#remindersSwitch")) toggleCategory("reminders");
 }
 
 async function changeTiming() {
@@ -306,7 +326,7 @@ async function changeTiming() {
   const next = { ...preferences, minutes: Number(timing.value) };
   await showBusyDuring(async () => {
     try {
-      await savePreferences(next);
+      await saveOrRestorePreferences(next);
       note = "";
     } catch {
       await readPreferences().catch(() => {});
@@ -340,7 +360,8 @@ const readSubscriptionOnce = () => (reading ??= readSubscription());
 
 /** Turns notifications on from a tap elsewhere on the page, as the switch does. */
 export function turnOnNotifications() {
-  if (!isBusy && !preferences.updates) turnOnCategory("updates");
+  const controls = chooseNotificationControls({ status, isBusy, preferences });
+  if (!isBusy && !controls.areUpdatesOn) toggleCategory("updates");
 }
 
 /** Whether this device is subscribed to the Worker's pushes, once that's known. */
@@ -351,10 +372,10 @@ export async function hasNotificationsSubscription() {
 }
 
 /**
- * @param {{ about?: string }} [options] the app's existing alerts label
+ * @param {{ updatesLabel?: string }} [options] the app's existing alerts label
  */
 export async function startNotifications(options = {}) {
-  about = options.about ?? "Game updates";
+  updatesLabel = options.updatesLabel ?? "Game updates";
   preferences = {
     ...DEFAULT_NOTIFICATION_PREFERENCES,
     ...readStoredJson(PREFERENCES_KEY),
@@ -386,5 +407,5 @@ export async function startNotifications(options = {}) {
       if (note) return;
     }
   }
-  if (status !== "off" || !note) setStatus(describeStartStatus());
+  setStatus(describeStartStatus());
 }

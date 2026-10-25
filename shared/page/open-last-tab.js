@@ -12,7 +12,7 @@ function readStored(key) {
   }
 }
 
-/* global isLongAwayFrom -- from long-away.js */
+/* global isLongAwayFrom, readNotificationIntent -- from the prepaint scripts */
 
 // After two minutes away, a part that starts hidden, like a search, is hidden again
 // (show-last-drawn.js), and a tab that shows nothing else goes back to the tab before it.
@@ -87,7 +87,7 @@ function placeTabPill() {
 
 // A tab saved before the page dropped it is left alone, so the page opens on its first tab.
 function openLastTab() {
-  const tab = readLastTab();
+  const tab = readNotificationIntent(location.href).isRequested ? "games" : readLastTab();
   if (tab && document.getElementById(`view-${tab}`)) {
     markTabSelected(tab);
     showView(tab);

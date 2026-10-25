@@ -17,7 +17,7 @@ import {
   renderArm,
   renderGameFaceOff,
 } from "./games-view.js";
-import { listSeasonGames, nameGameKey } from "./season-games.js";
+import { findGameToOpen, listSeasonGames, nameGameKey } from "./season-games.js";
 import { describeDay, readCalendarDate } from "#shared/days.js";
 import { watchGameOpens } from "#shared/game-row.js";
 import { createHighlightsSection } from "#shared/highlights-section.js";
@@ -72,10 +72,11 @@ const findElement = (id) => /** @type {HTMLElement} */ (document.getElementById(
  * @returns {MatchupGame | null}
  */
 function findGame(key) {
-  const slate = session.state?.slate;
-  const games = listSeasonGames(slate, session.schedule);
-  const game = games.find((each) => !each.allStar && nameGameKey(each) === key);
-  return game ? { ...game, today: game.date === slate?.today.date } : null;
+  return findGameToOpen(
+    session.state?.slate,
+    session.schedule,
+    (game) => nameGameKey(game) === key,
+  );
 }
 
 // Once the slate has moved past a game's day, the sheet shows it as it was when it opened.
@@ -346,7 +347,7 @@ function openGameSheet(game, section) {
 /**
  * Opens a game's sheet on one of its sections, as a search does.
  * @param {string} key the game's, from nameGameKey
- * @param {string} section
+ * @param {string} [section]
  */
 export function openGameSection(key, section) {
   const game = findGame(key);
@@ -355,8 +356,11 @@ export function openGameSection(key, section) {
 
 /** @param {string} id */
 export function openNotifiedGame(id) {
-  const games = listSeasonGames(session.state?.slate, session.schedule);
-  const game = games.filter((each) => each.id === id && each.state !== "off").pop();
+  const game = findGameToOpen(
+    session.state?.slate,
+    session.schedule,
+    (each) => each.id === id && each.state !== "off",
+  );
   if (game) openGameSheet(game);
 }
 

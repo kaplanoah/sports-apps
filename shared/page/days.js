@@ -300,7 +300,6 @@ export const formatReminderTime = (start, timeZone) =>
     timeZone,
   }).format(new Date(start));
 
-/** The device's zone, saved only with its push choices. */
 export const readDeviceTimeZone = () => Intl.DateTimeFormat().resolvedOptions().timeZone;
 
 /** @param {unknown} value */

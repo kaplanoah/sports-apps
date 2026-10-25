@@ -554,17 +554,48 @@ test("reminders require confirmed necessary playoff games and successful source 
     { isTimeSet: false },
     { away: { team: null } },
     { start: null },
-    { round: null },
     { isIfNeeded: true, number: 99 },
   ])
     assert.deepEqual(listChanged(change), []);
   assert.deepEqual(
     WNBASnapshot.listReminderGames({
       ...snapshot,
+      games: snapshot.games.map((game) => ({ ...game, isIfNeeded: true })),
       series: snapshot.series.map((series) => ({ ...series, winner: "NYL" })),
     }),
     [],
   );
   for (const missing of ["schedule", "scoreboard", "bracket"])
     assert.equal(WNBASnapshot.listReminderGames({ ...snapshot, missing: [missing] }), null);
+});
+
+test("an if-needed first-round Game 3 is confirmed when its series reaches 1-1", () => {
+  const snapshot = buildAfternoon();
+  const candidate = snapshot.games.find((game) => game.round === 1);
+  assert.ok(candidate);
+  const game = {
+    ...candidate,
+    state: "pre",
+    status: "Scheduled",
+    isTimeSet: true,
+    isIfNeeded: true,
+    number: 3,
+  };
+  const listWithWins = (top, bottom) =>
+    WNBASnapshot.listReminderGames({
+      ...snapshot,
+      games: [game],
+      series: snapshot.series.map((series) =>
+        series.id === game.series
+          ? {
+              ...series,
+              winner: null,
+              top: { ...series.top, wins: top },
+              bottom: { ...series.bottom, wins: bottom },
+            }
+          : series,
+      ),
+    });
+  assert.equal(listWithWins(1, 0).length, 0);
+  assert.equal(listWithWins(1, 1).length, 1);
 });

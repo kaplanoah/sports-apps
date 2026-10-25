@@ -330,7 +330,6 @@ async function boot() {
   });
   const [years] = await Promise.all([readSeasonYears(), loadSeason()]);
   fillYearPicker(years);
-  await openNotificationGame({ showYear, openGame: openNotifiedGame });
   session.db.afterHandOver(() => redrawEased(drawLoadedSeason));
   watchNews(session.db, (news) => {
     session.news = news;
@@ -341,6 +340,7 @@ async function boot() {
   refreshClockEveryMinute();
   startServiceWorker();
   startNotifications();
+  openNotificationGame({ showYear, openGame: openNotifiedGame });
 }
 
 boot();

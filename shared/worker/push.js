@@ -7,12 +7,14 @@ import { respondError, respondJson } from "./responses.js";
 
 // Push subscriptions and the key that signs messages for them. Both are kept under keys the
 // store's own paths can't name, so the page's store never hands them out. The store keeps a hundred
-// devices at most, since anyone with the page's address can subscribe one. Once full, it makes room
-// for a new one only by forgetting the one saved longest ago that hasn't been saved for a month,
+// active devices at most, since anyone with the page's address can subscribe one. Once full, it
+// makes room for a new one only by forgetting the one saved longest ago that hasn't been saved for
+// a month,
 // since each visit saves its device again, and turns the new one away otherwise, so a flood of
 // subscriptions never pushes out a phone opened that month. It also forgets a device its push
 // service says is gone, or that has failed every message for a week, long enough for a fault of the
-// store's own to be fixed first.
+// store's own to be fixed first. Up to a hundred retired devices retain preferences and reminder
+// receipts for a month, so returning devices and renewed endpoints keep their delivery history.
 
 const SIGNING_KEY = "push:signing-key";
 const SUBSCRIPTION_PREFIX = "push:subscription:";
@@ -38,7 +40,10 @@ const TEST_MESSAGE = {
 };
 
 /** @param {number} status */
-const isDelivered = (status) => status >= 200 && status < 300;
+export const isDelivered = (status) => status >= 200 && status < 300;
+
+/** @param {number} status */
+export const isRetryablePushStatus = (status) => status === 429 || status >= 500;
 
 const isPushServiceHost = (host) =>
   PUSH_SERVICE_HOSTS.some((allowed) => host === allowed || host.endsWith(`.${allowed}`));

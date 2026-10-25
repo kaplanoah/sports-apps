@@ -490,3 +490,52 @@ test("a confirmed push rejection can follow a rescheduled game without resetting
     assert.equal(harness.sent.length, 2);
   }
 });
+
+test("a gone response for old keys cannot remove a subscription renewed during delivery", async () => {
+  const harness = createHarness();
+  const { subscription } = await harness.subscribe({ ...PREFERENCES, updates: true });
+  const { p256dh, auth } = await createBrowserKeys();
+  const renewed = { ...subscription, keys: { p256dh, auth } };
+  harness.upstream.status = 410;
+  harness.upstream.onSend = async () => {
+    assert.equal((await harness.request("PUT", "subscription", renewed)).status, 204);
+  };
+  assert.equal((await harness.request("POST", "test", subscription)).status, 502);
+  const [kept] = (await harness.push.listSubscriptions()).values();
+  assert.deepEqual(kept.keys, renewed.keys);
+  assert.equal((await harness.request("POST", "preferences", renewed)).status, 200);
+});
+
+test("DELETE and test requests with wrong keys cannot act on another device", async () => {
+  const harness = createHarness();
+  const { subscription } = await harness.subscribe();
+  const impostor = { ...subscription, keys: await createBrowserKeys() };
+  assert.equal((await harness.request("POST", "test", impostor)).status, 404);
+  assert.equal((await harness.request("DELETE", "subscription", impostor)).status, 400);
+  assert.equal(harness.sent.length, 0);
+  assert.equal((await harness.push.listSubscriptions()).size, 1);
+  assert.equal((await harness.request("POST", "preferences", subscription)).status, 200);
+});
+
+test("retired device history prunes records older than a month and keeps at most a hundred", async () => {
+  const harness = createHarness();
+  const { subscription } = await harness.subscribe();
+  const [device] = (await harness.push.listSubscriptions()).values();
+  harness.stored.set("push:retired:stale", { ...device, savedAt: NOW - 30 * 24 * 60 * 60_000 - 1 });
+  assert.equal((await harness.request("DELETE", "subscription", subscription)).status, 204);
+  const firstRetired = await harness.ctx.storage.list({
+    prefix: "push:retired:",
+    limit: undefined,
+  });
+  assert.equal(firstRetired.size, 1);
+  assert.equal(firstRetired.has("push:retired:stale"), false);
+  const second = await harness.subscribe(PREFERENCES, "second");
+  for (let index = 0; index < 100; index++)
+    harness.stored.set(`push:retired:${index}`, { ...device, savedAt: NOW - index });
+  assert.equal((await harness.request("DELETE", "subscription", second.subscription)).status, 204);
+  const retired = await harness.ctx.storage.list({ prefix: "push:retired:", limit: undefined });
+  assert.equal(retired.size, 100);
+  assert.equal(retired.has("push:retired:stale"), false);
+  assert.equal(retired.has("push:retired:99"), false);
+  assert.equal(retired.has("push:retired:0"), true);
+});

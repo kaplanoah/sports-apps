@@ -1,4 +1,5 @@
 // Pregame deadlines and receipts share the season store's alarm and private device records.
+import { isDelivered, isRetryablePushStatus } from "./push.js";
 import { isSameJson } from "../page/compare.js";
 import { readNotificationPreferences } from "../page/notification-preferences.js";
 import { formatReminderTime } from "../page/days.js";
@@ -180,18 +181,17 @@ export function createGameReminders({ storage, push, now, verify }) {
         key,
         device,
         describeGameReminder(game, preferences),
-        Math.max(0, Math.floor((receipt.expiresAt - now()) / 1000)),
+        (receipt.expiresAt - now()) / 1000,
       ));
       uncertain = false;
     } catch {
       /* The persisted attempt bounds a retry after an uncertain response. */
     }
-    const state =
-      status >= 200 && status < 300
-        ? "sent"
-        : (status === 429 || status >= 500) && receipt.attempts < MAX_ATTEMPTS
-          ? "pending"
-          : "expired";
+    const state = isDelivered(status)
+      ? "sent"
+      : isRetryablePushStatus(status) && receipt.attempts < MAX_ATTEMPTS
+        ? "pending"
+        : "expired";
     await push.updateDevice(key, (current) => {
       const latest = current.reminderReceipts?.[id];
       if (latest?.attempts !== receipt.attempts) return null;

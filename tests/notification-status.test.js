@@ -36,15 +36,13 @@ const IPHONE_SAFARI = { isIos: true, isOnHomeScreen: false, canOpenWelcome: true
 const IPHONE_APP = { isIos: true, isOnHomeScreen: true, canOpenWelcome: false };
 const IPAD_WITH_TRACKPAD = { isIos: true, isOnHomeScreen: false, canOpenWelcome: false };
 const COMPUTER = { isIos: false, isOnHomeScreen: false, canOpenWelcome: false };
-const ABOUT = "Final scores";
 
 /**
  * @param {string} status
  * @param {import("../shared/page/notification-status.js").NoteDevice} device
  * @param {string} [message]
  */
-const readNote = (status, device, message = "") =>
-  chooseNotifyNote({ status, message, about: ABOUT, device });
+const readNote = (status, device, message = "") => chooseNotifyNote({ status, message, device });
 
 test("Safari outside the Home Screen says why notifications need it, ending with a ? wherever the welcome can open", () => {
   const text =
@@ -73,12 +71,12 @@ test("a switch that couldn't turn on says to try again", () => {
   assert.deepEqual(readNote("failed", COMPUTER), { text: CHANGE_FAILED, hasHelp: false });
 });
 
-test("a message the switch was given wins, and a switch that works says what the notifications tell", () => {
+test("a message the switch was given wins, and working notifications need no guidance", () => {
   assert.deepEqual(readNote("off", COMPUTER, TOO_MANY_DEVICES), {
     text: TOO_MANY_DEVICES,
     hasHelp: false,
   });
-  for (const status of ["off", "on"]) assert.equal(readNote(status, IPHONE_APP).text, ABOUT);
+  for (const status of ["off", "on"]) assert.equal(readNote(status, IPHONE_APP).text, "");
 });
 
 test("the note splits before its last word, which the ? keeps to", () => {

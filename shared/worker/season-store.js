@@ -9,7 +9,8 @@ import { describeError, respondError, respondJson, respondMethodNotAllowed } fro
 // document but writes none, since what a viewer chooses stays on their own device.
 //
 // An alarm keeps the current season up to date from the league while no page is open, and tells
-// subscribed devices about new updates. With no page open, only notifications need the updates,
+// subscribed devices about new updates. It also wakes for reminder verification, delivery and
+// retries. With no page open, only notifications need the updates,
 // and those can wait a little, so updates come less often until a page opens, which hears whether
 // the update it brings forward is coming and when each update is done. Each page says
 // which documents it watches, and hears only of changes to those. A league can keep
@@ -232,7 +233,7 @@ export function createSeasonStore(league) {
       if (pathname === "/watch") return this.acceptWatcher(request);
       if (pathname.startsWith("/push/")) {
         const response = await this.push.serveRequest(request, pathname);
-        if (response.ok && request.method !== "GET") {
+        if (response.ok && ["PUT", "DELETE"].includes(request.method)) {
           await this.reminders.refreshDevices();
           await this.armReminderAlarm();
         }
@@ -384,15 +385,7 @@ export function createSeasonStore(league) {
 
     async verifyReminderGames() {
       if (!league.listReminderGames) return;
-      const snapshot = await league.loadCurrentSnapshot(
-        (season) => this.loadSnapshot(season, { verify: true }),
-        this.now(),
-      );
-      const before = await league.readUpdates(this.docs, snapshot.season);
-      await league.saveSnapshot(this.docs, snapshot);
-      await this.saveCurrentSeason(snapshot.season);
-      await this.notifyUpdates(before, snapshot);
-      await this.reminders.saveGames(league.listReminderGames(snapshot), true);
+      await this.loadAndSaveSeason({ verify: true });
     }
 
     // A schedule saved before it had a due time reads as due, as does one an earlier release saved,
@@ -500,14 +493,20 @@ export function createSeasonStore(league) {
       return isWatched ? delay : Math.max(delay, UNWATCHED_DELAY_MS);
     }
 
-    // Returns how long to wait before the next update.
-    async updateSeason() {
+    async loadAndSaveSeason({ verify = false } = {}) {
       let snapshot;
       try {
-        snapshot = await league.loadCurrentSnapshot(this.loadSnapshot, this.now());
+        snapshot = await league.loadCurrentSnapshot(
+          (season) => this.loadSnapshot(season, { verify }),
+          this.now(),
+        );
       } catch (error) {
         await this.reminders.saveGames(null);
-        return this.recordFailure({ error: "upstream_error", detail: describeError(error) });
+        const delay = await this.recordFailure({
+          error: "upstream_error",
+          detail: describeError(error),
+        });
+        return { snapshot: null, delay };
       }
       let before;
       try {
@@ -516,16 +515,23 @@ export function createSeasonStore(league) {
         await this.saveCurrentSeason(snapshot.season);
       } catch (error) {
         await this.reminders.saveGames(null);
-        return this.recordFailure({ write: describeError(error) });
+        const delay = await this.recordFailure({ write: describeError(error) });
+        return { snapshot: null, delay };
       }
       this.failures = 0;
       // The next update's `before` holds what this one saved, so notifying can't wait on the status.
       await this.notifyUpdates(before, snapshot);
       if (league.listReminderGames)
-        await this.reminders.saveGames(league.listReminderGames(snapshot));
+        await this.reminders.saveGames(league.listReminderGames(snapshot), verify);
       await this.saveStatus(league.describeSnapshotStatus(snapshot));
-      await this.refreshWatchedDetails(snapshot);
-      return league.choosePollDelay(snapshot, this.now());
+      return { snapshot, delay: league.choosePollDelay(snapshot, this.now()) };
+    }
+
+    // Returns how long to wait before the next update.
+    async updateSeason() {
+      const { snapshot, delay } = await this.loadAndSaveSeason();
+      if (snapshot) await this.refreshWatchedDetails(snapshot);
+      return delay;
     }
 
     async refreshWatchedDetails(snapshot) {

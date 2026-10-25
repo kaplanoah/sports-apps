@@ -47,6 +47,7 @@
   <link rel="stylesheet" href="styles.css" />
   <script src="shared/page-move.js"></script>
   <script src="shared/pick-theme.js"></script>
+  <script src="shared/notification-intent.js"></script>
   <script src="shared/long-away.js"></script>
   <script src="shared/open-last-tab.js"></script>
   <script src="shared/draw-home-screen-asks.js"></script>
@@ -625,7 +626,7 @@
 
   <script>
     openLastTab();
-    showLastDrawn();
+    if (!readNotificationIntent(location.href).isRequested) showLastDrawn();
     followSeasonPart();
     watchSlowLoad();
     drawHomeScreenAsks();

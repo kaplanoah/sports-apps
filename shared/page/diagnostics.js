@@ -17,6 +17,7 @@ import {
   formatClockTimeWithSeconds,
   formatWeekdayAndDate,
   nameDay,
+  readDeviceTimeZone,
 } from "./days.js";
 import { isOnHomeScreen, isTouchDevice } from "./device.js";
 import { capitalize, html, joinWithSeparator, setHtml } from "./html.js";
@@ -436,7 +437,7 @@ const readPageFacts = () => ({
   pixelRatio: devicePixelRatio,
   prefersReducedMotion: prefersReducedMotion(),
   theme: document.documentElement.dataset.theme,
-  timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+  timeZone: readDeviceTimeZone(),
   openedAt,
   returns,
   jobs: jobStatuses,

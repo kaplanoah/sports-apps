@@ -63,10 +63,12 @@ The Worker serves every file here, its `networks/` logos too, under `shared/`, b
 
 - `settings-sheet.js`: the settings sheet
 - `season-picker.js`: settings' Season picker
-- `notifications.js`: settings' notifications switch
+- `notifications.js`: device notification categories, permission guidance and reminder timing
 - `notification-preferences.js`: device push categories, timing presets, and validation
+- `notification-intent.js`: shared launch validation for prepaint scripts, page modules and the service worker
+- `reminder-games.js`: normalized timed reminder facts from league adapters
 - `notification-navigation.js`: opening a game from a notification through reloads and the access gate
-- `notification-status.js`: what that switch says under it
+- `notification-status.js`: notification guidance and category control states
 - `diagnostics.js`: the Diagnostics and their shared report
 - `sent-label.js`: how long a button that copies or shares says it did
 - `step-log.js`: a Diagnostics log of what one part of the page does
@@ -248,6 +250,6 @@ Pages link these before their own stylesheet, and theme them with the tokens the
 - `seasons.js`: the season a request names
 - `notifications.js`: capping a night's notifications
 - `game-reminders.js`: persisted game reminder deadlines, verification, delivery, and retries
-- `push.js`: push subscriptions and their signing key
+- `push.js`: active and retired push devices, private preferences and receipts, signing and delivery
 - `web-push.js`: sending Web Push messages
 - `responses.js`: what the JSON endpoints answer with
