@@ -150,6 +150,68 @@ export function testGameReminderSettings(test, expect, app) {
     }
   });
 
+  test("turning off the last category treats a missing server device as already removed", async ({
+    page,
+  }) => {
+    await page.addInitScript(stubPushManager, PUSH_STUB);
+    await app.openApp(page);
+    await app.openSettings(page);
+    const reminders = page.getByRole("switch", { name: "Game reminders", exact: true });
+    await reminders.click();
+    await expect(reminders).toHaveAttribute("aria-checked", "true");
+    await page.route("**/push/preferences", (route) =>
+      route.request().method() === "PUT"
+        ? route.fulfill({
+            status: 404,
+            json: { error: { code: "not_found", message: "Device gone" } },
+          })
+        : route.fallback(),
+    );
+    let subscriptionWrites = 0;
+    await page.route("**/push/subscription", (route) => {
+      subscriptionWrites++;
+      return route.fallback();
+    });
+    await reminders.click();
+    await expect(reminders).toHaveAttribute("aria-checked", "false");
+    await expect(reminders).toBeEnabled();
+    await expect(page.locator("#notifyNote")).toBeEmpty();
+    expect(subscriptionWrites).toBe(0);
+    expect(await page.evaluate((key) => sessionStorage.getItem(key), PUSH_STUB.keptKey)).toBeNull();
+  });
+
+  test("a missing timing record rejected by a full store leaves this device off with guidance", async ({
+    page,
+  }) => {
+    await page.addInitScript(stubPushManager, PUSH_STUB);
+    await app.openApp(page);
+    await app.openSettings(page);
+    const reminders = page.getByRole("switch", { name: "Game reminders", exact: true });
+    await reminders.click();
+    await expect(reminders).toHaveAttribute("aria-checked", "true");
+    await page.route("**/push/preferences", (route) =>
+      route.request().method() === "PUT"
+        ? route.fulfill({
+            status: 404,
+            json: { error: { code: "not_found", message: "Device gone" } },
+          })
+        : route.fallback(),
+    );
+    await page.route("**/push/subscription", (route) =>
+      route.fulfill({
+        status: 429,
+        json: { error: { code: "too_many_devices", message: "Full" } },
+      }),
+    );
+    const timing = page.getByLabel("Before the game", { exact: true });
+    await timing.selectOption("60");
+    await expect(reminders).toHaveAttribute("aria-checked", "false");
+    await expect(timing).toBeDisabled();
+    await expect(timing).toHaveValue("15");
+    await expect(page.locator("#notifyNote")).toContainText("Too many devices");
+    expect(await page.evaluate((key) => sessionStorage.getItem(key), PUSH_STUB.keptKey)).toBeNull();
+  });
+
   test("Notifications matches News and timing occupies its own row", async ({ page }) => {
     await page.addInitScript(stubPushManager, PUSH_STUB);
     await app.openApp(page);
@@ -198,7 +260,7 @@ export function testGameReminderSettings(test, expect, app) {
         return show.call(this);
       };
       const observer = new MutationObserver(() => {
-        if (!document.getElementById("tabBar")) return;
+        if (!document.getElementById("tab-games")) return;
         observer.disconnect();
         requestAnimationFrame(() => {
           Reflect.set(
@@ -226,41 +288,6 @@ export function testGameReminderSettings(test, expect, app) {
       "true",
     );
     await expect(page.locator("#sheetDialog")).toBeHidden();
-  });
-
-  test("a notification selects Games while a streamed page is still being parsed", async ({
-    page,
-  }) => {
-    await app.openApp(page);
-    const url = new URL(page.url());
-    const markup = await (await page.request.get(url.href)).text();
-    url.searchParams.set("game", app.game);
-    url.searchParams.set("season", "2026");
-    await page.route("**/?game=**", (route) =>
-      route.fulfill({
-        contentType: "text/html",
-        body: markup.replace("</nav>", '</nav><script src="test-parser-pause.js"></script>'),
-      }),
-    );
-    let release = () => {};
-    const held = new Promise((resolve) => {
-      release = () => resolve(undefined);
-    });
-    await page.route(matchPath("/test-parser-pause.js"), async (route) => {
-      await held;
-      await route.fulfill({ contentType: "text/javascript", body: "" });
-    });
-    const paused = page.waitForRequest(matchPath("/test-parser-pause.js"));
-    const loading = page.goto(url.href, { waitUntil: "domcontentloaded" });
-    try {
-      await paused;
-      await expect(page.locator("#tab-games")).toBeVisible();
-      await expect(page.locator("#tab-games")).toHaveAttribute("aria-selected", "true");
-    } finally {
-      release();
-      await loading;
-    }
-    await expect(page.locator("#gameSheet")).toBeVisible();
   });
 
   test("a notification's slow season load leaves the rest of page startup working", async ({

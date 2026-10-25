@@ -531,7 +531,7 @@ const COVERAGE = {
   "section:roster": { search: "Mets roster", opens: "roster" },
   "sheet:playerSheet": { search: "Lindor", opens: "player" },
   "settings:season": { search: "season", opens: "settings:season" },
-  "settings:notifications": { search: "notifications", opens: "settings:notifications" },
+  "settings:notifications": { search: "game updates", opens: "settings:notifications" },
   "settings:reminders": { search: "before game", opens: "settings:reminders" },
   "settings:appearance": { search: "night game", opens: "settings:appearance" },
   "settings:team-outlets": { search: "dedicated sources", opens: "settings:team-outlets" },

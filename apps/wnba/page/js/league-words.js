@@ -1,5 +1,6 @@
 /** @type {import("#shared/league-words.js").LeagueWords} */
 export const LEAGUE_WORDS = {
+  notificationUpdates: "Final scores",
   seasonOpener: "season opener",
   allStar: "All-Star Game",
   cup: "Commissioner's Cup",

@@ -1,5 +1,10 @@
 // Pregame deadlines and receipts share the season store's alarm and private device records.
-import { isDelivered, isRetryablePushStatus } from "./push.js";
+import {
+  isDelivered,
+  isRetryablePushStatus,
+  isGonePushStatus,
+  isSameSubscription,
+} from "./push.js";
 import { isSameJson } from "../page/compare.js";
 import { readNotificationPreferences } from "../page/notification-preferences.js";
 import { formatReminderTime } from "../page/days.js";
@@ -187,23 +192,30 @@ export function createGameReminders({ storage, push, now, verify }) {
     } catch {
       /* The persisted attempt bounds a retry after an uncertain response. */
     }
-    const state = isDelivered(status)
-      ? "sent"
-      : isRetryablePushStatus(status) && receipt.attempts < MAX_ATTEMPTS
-        ? "pending"
-        : "expired";
-    await push.updateDevice(key, (current) => {
-      const latest = current.reminderReceipts?.[id];
-      if (latest?.attempts !== receipt.attempts) return null;
-      const nextState = latest.state !== "pending" && state !== "sent" ? latest.state : state;
-      return {
-        ...current,
-        reminderReceipts: {
-          ...current.reminderReceipts,
-          [id]: { ...latest, uncertain, state: nextState },
-        },
-      };
-    });
+    await push.updateDevice(
+      key,
+      (current) => {
+        const latest = current.reminderReceipts?.[id];
+        if (latest?.attempts !== receipt.attempts) return null;
+        const canRetry =
+          isRetryablePushStatus(status) ||
+          (isGonePushStatus(status) && !isSameSubscription(current, device));
+        const state = isDelivered(status)
+          ? "sent"
+          : canRetry && receipt.attempts < MAX_ATTEMPTS
+            ? "pending"
+            : "expired";
+        const nextState = latest.state !== "pending" && state !== "sent" ? latest.state : state;
+        return {
+          ...current,
+          reminderReceipts: {
+            ...current.reminderReceipts,
+            [id]: { ...latest, uncertain, state: nextState },
+          },
+        };
+      },
+      device.deviceId ?? key,
+    );
   }
 
   function checkDue() {

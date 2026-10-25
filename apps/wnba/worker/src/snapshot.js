@@ -36,7 +36,7 @@ const hasFeedData = (name, answer) => Array.isArray(FEED_DATA[name](answer));
 const nameAveragesRequest = (season) =>
   `https://stats.wnba.com/stats/leaguedashplayerstats?College=&Conference=&Country=&DateFrom=&DateTo=&Division=&DraftPick=&DraftYear=&GameScope=&GameSegment=&Height=&LastNGames=0&LeagueID=10&Location=&MeasureType=Base&Month=0&OpponentTeamID=0&Outcome=&PORound=0&PaceAdjust=N&PerMode=PerGame&Period=0&PlayerExperience=&PlayerPosition=&PlusMinus=N&Rank=N&Season=${season}&SeasonSegment=&SeasonType=Regular+Season&ShotClockRange=&StarterBench=&TeamID=0&VsConference=&VsDivision=&Weight=`;
 
-// Network listings are reused between normal polls; deadline verification refreshes open months.
+// Broadcast listings rarely change between ordinary season polls.
 const NETWORKS_MS = 6 * 60 * 60 * 1000;
 
 const formatEspnDay = (ms) => readEasternDay(ms).date.replaceAll("-", "");
@@ -143,6 +143,7 @@ export function createSnapshotLoader({
   /** @param {string} month @param {boolean} [verify] */
   async function readNetworkMonth(month, verify = false) {
     const kept = networkMonths.get(month);
+    // A reminder needs current listings, but a finalized month cannot change.
     if (!isDueForNetworksRead(month) && (!verify || isFinalAnswer(kept, month))) return kept.data;
     try {
       const data = await fetchEspnJson(WNBASnapshot.NETWORKS_REQUEST(month));

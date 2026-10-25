@@ -348,7 +348,7 @@ async function boot() {
   watchUpdatesSeen(() => redrawEased(drawUpdates));
   refreshClockEveryMinute();
   startServiceWorker();
-  startNotifications({ updatesLabel: "Final scores" });
+  startNotifications(LEAGUE_WORDS);
   openNotificationGame({ showYear, openGame: openGameSection });
 }
 

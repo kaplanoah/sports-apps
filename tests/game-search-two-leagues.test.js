@@ -82,6 +82,7 @@ const TERMS = {
     },
     crossConference: { name: "Interleague", words: ["interleague"] },
     neverShown: ["postseason"],
+    notificationUpdates: "Game updates",
     seasonSpansYears: false,
     searchFiller: ["pitching", "starter"],
   },

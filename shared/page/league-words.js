@@ -6,6 +6,7 @@ import { escapePattern } from "./escape-pattern.js";
 /**
  * @typedef {object} LeagueWords
  * @property {string} seasonOpener its season's first game, as a fan says it mid-sentence
+ * @property {string} notificationUpdates the existing game-alert category in Settings
  * @property {string} allStar its All-Star Game
  * @property {string | null} cup its in-season cup, or null for a league without one
  * @property {boolean} hasDoubleheaders whether two teams can play each other twice in a day

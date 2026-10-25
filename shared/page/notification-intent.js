@@ -1,4 +1,4 @@
-// Shared by prepaint scripts, page modules and the classic service worker.
+// Which game a notification asks the page to open, from its message or the page's address.
 function readGameIntent(message) {
   if (
     !/^\d{1,12}$/.test(String(message?.game ?? "")) ||

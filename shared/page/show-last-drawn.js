@@ -8,6 +8,7 @@
 
 /* global findPlaceToShow -- from long-away.js */
 /* global LAST_DRAWN_KEY -- from open-last-tab.js */
+/* global readNotificationIntent -- from notification-intent.js */
 /* global checkPickedChoice, readPickedAppearance -- from pick-theme.js */
 
 // What last-seen.js saves the page's open sheets and settings' switches under.
@@ -251,6 +252,7 @@ function showPickedAppearance() {
 // What the page last showed is a drawing of its own, so the note that its views are still empty
 // goes with it.
 function showLastDrawn() {
+  if (readNotificationIntent(location.href).isRequested) return;
   const parts = Object.entries(readLastDrawn()).filter(([id, part]) => isDrawnPart(id, part));
   const now = Date.now();
   const pageTops = parts.map(([id, part]) => showPart(id, part, now));

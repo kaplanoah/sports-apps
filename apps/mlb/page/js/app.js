@@ -339,7 +339,7 @@ async function boot() {
   watchBracketSpace();
   refreshClockEveryMinute();
   startServiceWorker();
-  startNotifications();
+  startNotifications(LEAGUE_WORDS);
   openNotificationGame({ showYear, openGame: openNotifiedGame });
 }
 

@@ -2,11 +2,12 @@
 // teams, its Bracket and the standings' lists, and the settings its page shows. Runs in the page
 // and in Node, so it uses no DOM.
 
+import { LEAGUE_WORDS } from "./league-words.js";
 import {
   ATHLETIC_SETTING,
   DIAGNOSTICS_SETTING,
   NEWS_TAB,
-  NOTIFICATIONS_SETTING,
+  describeNotificationsSetting,
   REMINDERS_SETTING,
   SEASON_SETTING,
   SETTINGS_ROW,
@@ -72,7 +73,7 @@ const LEAGUE_PAGES = {
   settings: [
     SETTINGS_ROW,
     SEASON_SETTING,
-    NOTIFICATIONS_SETTING,
+    describeNotificationsSetting(LEAGUE_WORDS),
     REMINDERS_SETTING,
     describeTeamOutletsSetting("Liberty"),
     ATHLETIC_SETTING,

@@ -521,7 +521,10 @@ test("retired device history prunes records older than a month and keeps at most
   const harness = createHarness();
   const { subscription } = await harness.subscribe();
   const [device] = (await harness.push.listSubscriptions()).values();
-  harness.stored.set("push:retired:stale", { ...device, savedAt: NOW - 30 * 24 * 60 * 60_000 - 1 });
+  harness.stored.set("push:retired:stale", {
+    ...device,
+    retiredAt: NOW - 30 * 24 * 60 * 60_000 - 1,
+  });
   assert.equal((await harness.request("DELETE", "subscription", subscription)).status, 204);
   const firstRetired = await harness.ctx.storage.list({
     prefix: "push:retired:",
@@ -531,7 +534,7 @@ test("retired device history prunes records older than a month and keeps at most
   assert.equal(firstRetired.has("push:retired:stale"), false);
   const second = await harness.subscribe(PREFERENCES, "second");
   for (let index = 0; index < 100; index++)
-    harness.stored.set(`push:retired:${index}`, { ...device, savedAt: NOW - index });
+    harness.stored.set(`push:retired:${index}`, { ...device, retiredAt: NOW - index });
   assert.equal((await harness.request("DELETE", "subscription", second.subscription)).status, 204);
   const retired = await harness.ctx.storage.list({ prefix: "push:retired:", limit: undefined });
   assert.equal(retired.size, 100);
@@ -539,3 +542,187 @@ test("retired device history prunes records older than a month and keeps at most
   assert.equal(retired.has("push:retired:99"), false);
   assert.equal(retired.has("push:retired:0"), true);
 });
+
+for (const { removal, status, inactiveDays } of [
+  { removal: "permanent removal", status: 410, inactiveDays: 0 },
+  { removal: "permanent removal after a month away", status: 410, inactiveDays: 40 },
+  { removal: "a week of failures", status: 503, inactiveDays: 0 },
+]) {
+  test(`renewal after ${removal} retains opted-in categories and sent receipts`, async () => {
+    const harness = createHarness();
+    const { subscription } = await harness.subscribe({ ...PREFERENCES, updates: true });
+    if (inactiveDays) {
+      const [key, device] = [...(await harness.push.listSubscriptions())][0];
+      await harness.ctx.storage.put(key, {
+        ...device,
+        savedAt: NOW - inactiveDays * 24 * 60 * 60_000,
+      });
+    }
+    await harness.reminders.saveGames([GAME]);
+    harness.clock.now = GAME.start - 60 * 60_000;
+    await harness.reminders.checkDue();
+    harness.upstream.status = status;
+    await harness.push.sendToAll([{ title: "Final" }]);
+    if (status === 503) {
+      harness.clock.now += 7 * 24 * 60 * 60_000;
+      await harness.push.sendToAll([{ title: "Final" }]);
+    }
+    const beforeRenewal = harness.sent.length;
+    assert.equal((await harness.push.listSubscriptions()).size, 0);
+    const renewed = {
+      ...subscription,
+      endpoint: "https://web.push.apple.com/renewed-after-removal",
+    };
+    assert.equal(
+      (
+        await harness.request("PUT", "subscription", {
+          ...renewed,
+          previousSubscription: subscription,
+        })
+      ).status,
+      204,
+    );
+    const [device] = (await harness.push.listSubscriptions()).values();
+    assert.deepEqual(device.preferences, { ...PREFERENCES, updates: true });
+    assert.equal(device.reminderReceipts[GAME.id].state, "sent");
+    const moved = { ...GAME, start: harness.clock.now + 2 * 60 * 60_000 };
+    harness.upstream.games = [moved];
+    await harness.reminders.saveGames([moved]);
+    harness.clock.now = moved.start - 60 * 60_000;
+    harness.upstream.status = 201;
+    await harness.reminders.checkDue();
+    assert.equal(harness.sent.length, beforeRenewal);
+  });
+}
+
+for (const transfer of ["renewal", "opt-out"]) {
+  test(`a known successful reminder keeps its sent receipt across in-flight ${transfer}`, async () => {
+    const harness = createHarness();
+    const { subscription } = await harness.subscribe();
+    const renewed = { ...subscription, endpoint: "https://web.push.apple.com/renewed-during-send" };
+    const saveRenewal = () =>
+      harness.request("PUT", "subscription", { ...renewed, previousSubscription: subscription });
+    harness.upstream.onSend = async () => {
+      harness.upstream.onSend = null;
+      if (transfer === "opt-out") await harness.request("DELETE", "subscription", subscription);
+      else await saveRenewal();
+    };
+    await harness.reminders.saveGames([GAME]);
+    harness.clock.now = GAME.start - 60 * 60_000;
+    await harness.reminders.checkDue();
+    if (transfer === "opt-out") await saveRenewal();
+    const [device] = (await harness.push.listSubscriptions()).values();
+    assert.equal(device.reminderReceipts[GAME.id].state, "sent");
+    harness.clock.now += 15_000;
+    await harness.reminders.checkDue();
+    assert.equal(harness.sent.length, 1);
+  });
+}
+
+test("a legacy same-endpoint return restores retired history only with its subscription proof", async () => {
+  const harness = createHarness();
+  const { subscription } = await harness.subscribe();
+  await harness.reminders.saveGames([GAME]);
+  harness.clock.now = GAME.start - 60 * 60_000;
+  await harness.reminders.checkDue();
+  await harness.request("DELETE", "subscription", subscription);
+  const { p256dh, auth } = await createBrowserKeys();
+  const impostor = { ...subscription, keys: { p256dh, auth } };
+  assert.equal((await harness.request("PUT", "subscription", impostor)).status, 409);
+  assert.equal((await harness.request("PUT", "subscription", subscription)).status, 204);
+  const [device] = (await harness.push.listSubscriptions()).values();
+  assert.deepEqual(device.preferences, PREFERENCES);
+  assert.equal(device.reminderReceipts[GAME.id].state, "sent");
+});
+
+test("a stale device displaced by capacity can return without losing its reminder choices", async () => {
+  const harness = createHarness();
+  const { subscription } = await harness.subscribe();
+  const [key, device] = [...(await harness.push.listSubscriptions())][0];
+  await harness.ctx.storage.put(key, { ...device, savedAt: NOW - 40 * 24 * 60 * 60_000 });
+  for (let index = 0; index < 100; index++)
+    assert.equal(
+      (
+        await harness.request("PUT", "subscription", {
+          ...subscription,
+          endpoint: `https://web.push.apple.com/capacity-${index}`,
+        })
+      ).status,
+      204,
+    );
+  assert.equal((await harness.push.listSubscriptions()).has(key), false);
+  await harness.request("DELETE", "subscription", {
+    ...subscription,
+    endpoint: "https://web.push.apple.com/capacity-0",
+  });
+  assert.equal((await harness.request("PUT", "subscription", subscription)).status, 204);
+  assert.deepEqual((await harness.ctx.storage.get(key)).preferences, PREFERENCES);
+});
+
+test("retired renewal history expires a month after removal even before another retirement", async () => {
+  const harness = createHarness();
+  const { subscription } = await harness.subscribe();
+  await harness.request("DELETE", "subscription", subscription);
+  harness.clock.now += 30 * 24 * 60 * 60_000 + 1;
+  assert.equal(
+    (
+      await harness.request("PUT", "subscription", {
+        ...subscription,
+        endpoint: "https://web.push.apple.com/after-history-expiry",
+        previousSubscription: subscription,
+      })
+    ).status,
+    204,
+  );
+  const [device] = (await harness.push.listSubscriptions()).values();
+  assert.equal(device.preferences.reminders, false);
+  assert.equal(
+    (await harness.ctx.storage.list({ prefix: "push:retired:", limit: undefined })).size,
+    0,
+  );
+});
+
+for (const change of ["endpoint", "keys"]) {
+  test(`a gone response for the old ${change} retries a renewed reminder within its original deadline`, async () => {
+    const harness = createHarness();
+    const { subscription } = await harness.subscribe();
+    const keys = await createBrowserKeys();
+    const renewed = {
+      ...subscription,
+      endpoint:
+        change === "endpoint" ? "https://web.push.apple.com/changed" : subscription.endpoint,
+      keys: { p256dh: keys.p256dh, auth: keys.auth },
+    };
+    harness.upstream.status = 410;
+    harness.upstream.onSend = async () => {
+      harness.upstream.onSend = null;
+      assert.equal(
+        (
+          await harness.request("PUT", "subscription", {
+            ...renewed,
+            previousSubscription: subscription,
+          })
+        ).status,
+        204,
+      );
+    };
+    await harness.reminders.saveGames([GAME]);
+    harness.clock.now = GAME.start - 60 * 60_000;
+    await harness.reminders.checkDue();
+    const [device] = (await harness.push.listSubscriptions()).values();
+    assert.equal(device.reminderReceipts[GAME.id].state, "pending");
+    harness.clock.now += 15_000;
+    harness.upstream.status = 201;
+    await harness.reminders.checkDue();
+    assert.equal(harness.sent.length, 2);
+    assert.equal(harness.sent[1].url, renewed.endpoint);
+    assert.equal(harness.sent[1].init.headers.ttl, "105");
+    assert.equal(
+      (await readPushMessage(harness.sent[1].init.body, keys)).tag,
+      `game-reminder:${GAME.id}`,
+    );
+    harness.clock.now += 15_000;
+    await harness.reminders.checkDue();
+    assert.equal(harness.sent.length, 2);
+  });
+}

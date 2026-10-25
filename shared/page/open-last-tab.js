@@ -1,6 +1,5 @@
-// Modules run only once all of them have loaded, so a page left to them would first paint the tab
-// its markup selects and then jump. This plain script loads in the head, and the page calls
-// openLastTab() right after its tabs and views, before anything is painted.
+// The saved tab or a notification's Games tab is chosen as markup arrives, before modules load.
+// The inline call applies it again once the page's views and dialogs are complete.
 
 // Storage can be empty or refuse access, as in a private window, so the page never depends on it.
 /** @param {string} key */
@@ -12,7 +11,7 @@ function readStored(key) {
   }
 }
 
-/* global isLongAwayFrom, readNotificationIntent -- from the prepaint scripts */
+/* global isLongAwayFrom, readNotificationIntent -- from long-away.js and notification-intent.js */
 
 // After two minutes away, a part that starts hidden, like a search, is hidden again
 // (show-last-drawn.js), and a tab that shows nothing else goes back to the tab before it.
@@ -86,24 +85,29 @@ function placeTabPill() {
   bar.classList.toggle("is-unselected", selected < 0);
 }
 
-// A tab saved before the page dropped it is left alone, so the page opens on its first tab.
-function openLastTab() {
-  const tab = readNotificationIntent(location.href).isRequested ? "games" : readLastTab();
-  if (tab && document.getElementById(`tab-${tab}`)) {
+/** @type {MutationObserver | null} */
+let tabObserver = null;
+
+function readOpeningTab(isParsing) {
+  const intent = readNotificationIntent(location.href);
+  const requested = intent.isRequested ? "games" : readLastTab();
+  if (requested && (isParsing || document.getElementById(`tab-${requested}`))) return requested;
+  return document.querySelector("nav.tabs [data-tab]")?.getAttribute("data-tab");
+}
+
+function openLastTab({ isParsing = false } = {}) {
+  if (!isParsing) tabObserver?.disconnect();
+  const tab = readOpeningTab(isParsing);
+  if (tab) {
     markTabSelected(tab);
     showView(tab);
   }
   placeTabPill();
 }
 
-// A streamed page can paint before the inline call, so choose Games as its markup arrives.
-function openNotificationTabBeforePaint() {
-  if (!readNotificationIntent(location.href).isRequested) return;
-  const observer = new MutationObserver(() => {
-    openLastTab();
-    if (document.getElementById("view-games")) observer.disconnect();
-  });
-  observer.observe(document, { childList: true, subtree: true });
+function openLastTabBeforePaint() {
+  tabObserver = new MutationObserver(() => openLastTab({ isParsing: true }));
+  tabObserver.observe(document, { childList: true, subtree: true });
 }
 
-openNotificationTabBeforePaint();
+openLastTabBeforePaint();

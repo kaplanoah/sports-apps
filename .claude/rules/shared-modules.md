@@ -63,10 +63,9 @@ The Worker serves every file here, its `networks/` logos too, under `shared/`, b
 
 - `settings-sheet.js`: the settings sheet
 - `season-picker.js`: settings' Season picker
-- `notifications.js`: device notification categories, permission guidance and reminder timing
+- `notifications.js`: drawing the Notifications group, its switches, permission notes and timing
 - `notification-preferences.js`: device push categories, timing presets, and validation
-- `notification-intent.js`: shared launch validation for prepaint scripts, page modules and the service worker
-- `reminder-games.js`: normalized timed reminder facts from league adapters
+- `notification-intent.js`: the game a notification asks to open, from its message or the page's address
 - `notification-navigation.js`: opening a game from a notification through reloads and the access gate
 - `notification-status.js`: notification guidance and category control states
 - `diagnostics.js`: the Diagnostics and their shared report
@@ -168,6 +167,7 @@ The Worker serves every file here, its `networks/` logos too, under `shared/`, b
 
 ### The store and reading
 
+- `reminder-games.js`: the playoff games a league's snapshot hands the store for reminders
 - `worker-fetch.js`: reading from the app's own Worker, sharing a recent read
 - `worker-error.js`: reading the Worker's error answers
 - `worker-store.js`: the store client

@@ -55,11 +55,17 @@ export const SEASON_SETTING = {
   words: ["season", "year", "past seasons"],
 };
 /** @type {SettingRow} */
-export const NOTIFICATIONS_SETTING = {
+const NOTIFICATIONS_SETTING = {
   key: "settings:notifications",
   name: ["Notifications"],
   words: ["notifications", "notify", "alerts", "push", "game notifications"],
 };
+/** @param {Pick<import("./league-words.js").LeagueWords, "notificationUpdates">} words */
+export const describeNotificationsSetting = (words) => ({
+  ...NOTIFICATIONS_SETTING,
+  words: [...NOTIFICATIONS_SETTING.words, words.notificationUpdates],
+});
+
 /** @type {SettingRow} */
 export const REMINDERS_SETTING = {
   key: "settings:reminders",

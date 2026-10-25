@@ -9,10 +9,9 @@ import { respondError, respondJson } from "./responses.js";
 // store's own paths can't name, so the page's store never hands them out. The store keeps a hundred
 // active devices at most, since anyone with the page's address can subscribe one. Once full, it
 // makes room for a new one only by forgetting the one saved longest ago that hasn't been saved for
-// a month,
-// since each visit saves its device again, and turns the new one away otherwise, so a flood of
-// subscriptions never pushes out a phone opened that month. It also forgets a device its push
-// service says is gone, or that has failed every message for a week, long enough for a fault of the
+// a month, since each visit saves its device again, and turns the new one away otherwise, so a flood of
+// subscriptions never pushes out a phone opened that month. It also removes active devices their push
+// service says are gone, or that have failed every message for a week, long enough for a fault of the
 // store's own to be fixed first. Up to a hundred retired devices retain preferences and reminder
 // receipts for a month, so returning devices and renewed endpoints keep their delivery history.
 
@@ -20,7 +19,6 @@ const SIGNING_KEY = "push:signing-key";
 const SUBSCRIPTION_PREFIX = "push:subscription:";
 const RETIRED_PREFIX = "push:retired:";
 const MAX_BODY_BYTES = 4 * 1024;
-const GONE_STATUSES = new Set([404, 410]);
 const MAX_SUBSCRIPTIONS = 100;
 const FAILING_FOR_MS = 7 * 24 * 60 * 60 * 1000;
 const UNSAVED_FOR_MS = 30 * 24 * 60 * 60 * 1000;
@@ -45,6 +43,9 @@ export const isDelivered = (status) => status >= 200 && status < 300;
 /** @param {number} status */
 export const isRetryablePushStatus = (status) => status === 429 || status >= 500;
 
+/** @param {number} status */
+export const isGonePushStatus = (status) => status === 404 || status === 410;
+
 const isPushServiceHost = (host) =>
   PUSH_SERVICE_HOSTS.some((allowed) => host === allowed || host.endsWith(`.${allowed}`));
 
@@ -65,8 +66,10 @@ function hasKeyLength(text, length) {
   }
 }
 
-const isSameSubscription = (stored, sent) =>
-  stored.keys.p256dh === sent.keys.p256dh && stored.keys.auth === sent.keys.auth;
+export const isSameSubscription = (stored, sent) =>
+  stored.endpoint === sent.endpoint &&
+  stored.keys.p256dh === sent.keys.p256dh &&
+  stored.keys.auth === sent.keys.auth;
 
 const isSubscription = (value) =>
   !!value &&
@@ -124,13 +127,28 @@ export function createPushService({ storage, now, fetchImpl }) {
     return result;
   }
 
-  /** @param {string} key @param {(device: any) => any} change */
-  function updateDevice(key, change) {
+  async function findDeviceForUpdate(key, deviceId) {
+    const stored = await storage.get(key);
+    if (stored && (deviceId === undefined || (stored.deviceId ?? key) === deviceId))
+      return [key, stored];
+    if (deviceId === undefined) return null;
+    // A completed receipt follows its device through renewal or retirement during the send.
+    for (const prefix of [SUBSCRIPTION_PREFIX, RETIRED_PREFIX]) {
+      const devices = await storage.list({ prefix });
+      for (const [candidate, device] of devices)
+        if ((device.deviceId ?? candidate) === deviceId) return [candidate, device];
+    }
+    return null;
+  }
+
+  /** @param {string} key @param {(device: any) => any} change @param {string} [deviceId] */
+  function updateDevice(key, change, deviceId = undefined) {
     return changeDevices(async () => {
-      const stored = await storage.get(key);
-      if (!stored) return null;
+      const found = await findDeviceForUpdate(key, deviceId);
+      if (!found) return null;
+      const [currentKey, stored] = found;
       const next = change(stored);
-      if (next) await storage.put(key, next);
+      if (next) await storage.put(currentKey, next);
       return next ?? stored;
     });
   }
@@ -176,7 +194,7 @@ export function createPushService({ storage, now, fetchImpl }) {
         return failing;
       }
       if (now() - failingSince < FAILING_FOR_MS) return subscription;
-      await storage.delete(key);
+      await archiveDevice(key, subscription);
       return null;
     });
   }
@@ -204,11 +222,11 @@ export function createPushService({ storage, now, fetchImpl }) {
       await noteDelivery(key, subscription, false);
       throw error;
     }
-    if (!GONE_STATUSES.has(status))
+    if (!isGonePushStatus(status))
       return { status, kept: await noteDelivery(key, subscription, isDelivered(status)) };
     await changeDevices(async () => {
       const current = await storage.get(key);
-      if (current && isSameSubscription(current, subscription)) await storage.delete(key);
+      if (current && isSameSubscription(current, subscription)) await archiveDevice(key, current);
     });
     return { status, kept: null };
   }
@@ -228,24 +246,22 @@ export function createPushService({ storage, now, fetchImpl }) {
     return changeDevices(async () => {
       const { endpoint, keys, previousSubscription } = body;
       const key = await findSubscriptionKey(endpoint);
-      const previousKey = isSubscription(previousSubscription)
-        ? await findSubscriptionKey(previousSubscription.endpoint)
-        : null;
-      const activePrevious = previousKey ? await storage.get(previousKey) : null;
-      const previous =
-        activePrevious ??
-        (previousKey
-          ? await storage.get(previousKey.replace(SUBSCRIPTION_PREFIX, RETIRED_PREFIX))
-          : null);
-      if (previous && !isSameSubscription(previous, previousSubscription))
-        return respondError(409, "conflict", "The previous subscription changed.");
       const stored = await storage.get(key);
+      const isRenewal = isSubscription(previousSubscription);
+      const proof = isRenewal ? previousSubscription : body;
+      const previousKey = await findSubscriptionKey(proof.endpoint);
+      const activePrevious = isRenewal ? await storage.get(previousKey) : null;
+      const previous =
+        activePrevious ?? (isRenewal || !stored ? await readRetiredDevice(previousKey) : null);
+      if (previous && !isSameSubscription(previous, proof))
+        return respondError(409, "conflict", "The previous subscription changed.");
       if (!activePrevious && !(await makeRoomFor(key)))
         return respondError(429, "too_many_devices", "Too many devices get notifications already.");
-      const kept = stored ?? previous ?? {};
+      const { retiredAt, ...kept } = stored ?? previous ?? {};
       const preferences = readNotificationPreferences(kept);
       await storage.put(key, {
         ...kept,
+        deviceId: kept.deviceId ?? (previous && !stored ? previousKey : key),
         endpoint,
         keys,
         subject: new URL(request.url).origin,
@@ -253,8 +269,8 @@ export function createPushService({ storage, now, fetchImpl }) {
         preferences: !stored && !previous && body.preferences ? body.preferences : preferences,
         revision: kept.revision ?? 0,
       });
-      if (previousKey && previousKey !== key) await storage.delete(previousKey);
-      if (previousKey)
+      if (previousKey !== key) await storage.delete(previousKey);
+      if (previous && !activePrevious)
         await storage.delete(previousKey.replace(SUBSCRIPTION_PREFIX, RETIRED_PREFIX));
       return new Response(null, { status: 204 });
     });
@@ -271,7 +287,7 @@ export function createPushService({ storage, now, fetchImpl }) {
     if (stored.size < MAX_SUBSCRIPTIONS) return true;
     const forgettable = findForgettable(stored, now());
     if (forgettable === undefined) return false;
-    await storage.delete(forgettable);
+    await archiveDevice(forgettable, stored.get(forgettable));
     return true;
   }
 
@@ -289,22 +305,39 @@ export function createPushService({ storage, now, fetchImpl }) {
     if (!key) return respondError(400, "invalid_argument", "Say which subscription to remove.");
     await changeDevices(async () => {
       const device = await storage.get(key);
-      if (device) {
-        await storage.put(key.replace(SUBSCRIPTION_PREFIX, RETIRED_PREFIX), device);
-        await trimRetiredDevices();
-      }
-      await storage.delete(key);
+      if (device) await archiveDevice(key, device);
     });
     return new Response(null, { status: 204 });
   }
 
+  async function archiveDevice(key, device) {
+    await storage.put(key.replace(SUBSCRIPTION_PREFIX, RETIRED_PREFIX), {
+      ...device,
+      deviceId: device.deviceId ?? key,
+      retiredAt: now(),
+    });
+    await trimRetiredDevices();
+    await storage.delete(key);
+  }
+
+  function isRetiredExpired(device) {
+    return now() - device.retiredAt > UNSAVED_FOR_MS;
+  }
+
+  async function readRetiredDevice(subscriptionKey) {
+    const key = subscriptionKey.replace(SUBSCRIPTION_PREFIX, RETIRED_PREFIX);
+    const device = await storage.get(key);
+    if (!device || !isRetiredExpired(device)) return device;
+    await storage.delete(key);
+    return null;
+  }
+
   async function trimRetiredDevices() {
     const retired = [...(await storage.list({ prefix: RETIRED_PREFIX }))].sort(
-      ([, first], [, second]) => second.savedAt - first.savedAt,
+      ([, first], [, second]) => second.retiredAt - first.retiredAt,
     );
     for (const [index, [key, device]] of retired.entries()) {
-      if (index >= MAX_SUBSCRIPTIONS || now() - device.savedAt > UNSAVED_FOR_MS)
-        await storage.delete(key);
+      if (index >= MAX_SUBSCRIPTIONS || isRetiredExpired(device)) await storage.delete(key);
     }
   }
 

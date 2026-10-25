@@ -26,7 +26,7 @@ let registration = null;
 let subscription = null;
 let status = "loading";
 let note = "";
-let updatesLabel = "Game updates";
+let updatesLabel = "";
 let preferences = { ...DEFAULT_NOTIFICATION_PREFERENCES };
 let revision = 0;
 const PREFERENCES_KEY = "device-notifications";
@@ -259,7 +259,7 @@ async function saveOrRestorePreferences(next) {
   try {
     await savePreferences(next);
   } catch (error) {
-    if (/** @type {{ code?: string }} */ (error)?.code !== "not_found") throw error;
+    if (!isSubscriptionMissing(error)) throw error;
     storeJson(PENDING_KEY, next);
     await saveOrForget(subscription, next, readStoredJson(PREVIOUS_KEY) ?? undefined);
     forgetStored(PREVIOUS_KEY);
@@ -267,6 +267,22 @@ async function saveOrRestorePreferences(next) {
     if (Object.keys(next).some((key) => next[key] !== preferences[key]))
       throw Object.assign(new Error("Notifications changed. Try again."), { code: "conflict" });
   }
+}
+
+/** @param {unknown} error */
+const isSubscriptionMissing = (error) =>
+  /** @type {{ code?: string }} */ (error)?.code === "not_found";
+
+async function removeSubscription(next) {
+  try {
+    await savePreferences(next);
+    await requestPush("push/subscription", sendEndpoint("DELETE", subscription.endpoint));
+  } catch (error) {
+    if (!isSubscriptionMissing(error)) throw error;
+  }
+  storeJson(PREVIOUS_KEY, subscription.toJSON());
+  await subscription.unsubscribe();
+  subscription = null;
 }
 
 async function changeCategory(category, isEnabled, permissionPromise) {
@@ -288,11 +304,7 @@ async function changeCategory(category, isEnabled, permissionPromise) {
       await saveOrRestorePreferences(next);
       setStatus("on");
     } else {
-      await saveOrRestorePreferences(next);
-      await requestPush("push/subscription", sendEndpoint("DELETE", subscription.endpoint));
-      storeJson(PREVIOUS_KEY, subscription.toJSON());
-      await subscription.unsubscribe();
-      subscription = null;
+      await removeSubscription(next);
       setStatus("off");
     }
   } catch (error) {
@@ -328,9 +340,12 @@ async function changeTiming() {
     try {
       await saveOrRestorePreferences(next);
       note = "";
-    } catch {
-      await readPreferences().catch(() => {});
-      note = CHANGE_FAILED;
+    } catch (error) {
+      if (isTurnedAway(error)) setStatus("off", TOO_MANY_DEVICES);
+      else {
+        await readPreferences().catch(() => {});
+        note = CHANGE_FAILED;
+      }
     }
   });
 }
@@ -372,10 +387,10 @@ export async function hasNotificationsSubscription() {
 }
 
 /**
- * @param {{ updatesLabel?: string }} [options] the app's existing alerts label
+ * @param {Pick<import("./league-words.js").LeagueWords, "notificationUpdates">} words
  */
-export async function startNotifications(options = {}) {
-  updatesLabel = options.updatesLabel ?? "Game updates";
+export async function startNotifications(words) {
+  updatesLabel = words.notificationUpdates;
   preferences = {
     ...DEFAULT_NOTIFICATION_PREFERENCES,
     ...readStoredJson(PREFERENCES_KEY),

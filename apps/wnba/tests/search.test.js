@@ -353,7 +353,7 @@ const COVERAGE = {
   "section:roster": { search: "Liberty roster", opens: "roster" },
   "sheet:playerSheet": { search: "Stewart", opens: "player" },
   "settings:season": { search: "season", opens: "settings:season" },
-  "settings:notifications": { search: "notifications", opens: "settings:notifications" },
+  "settings:notifications": { search: "final scores", opens: "settings:notifications" },
   "settings:reminders": { search: "before game", opens: "settings:reminders" },
   "settings:team-outlets": { search: "dedicated sources", opens: "settings:team-outlets" },
   "settings:paywalled": { search: "the athletic", opens: "settings:paywalled" },
