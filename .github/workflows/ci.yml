@@ -475,6 +475,8 @@ jobs:
         id: verify
         if: steps.find.outputs.run != ''
         env:
+          GH_TOKEN: ${{ github.token }}
+          REVIEW_DEFAULT_PROVIDER: ${{ vars.TRUSTED_REVIEW_DEFAULT_PROVIDER || 'claude' }}
           REVIEW_RUN: ${{ steps.find.outputs.run }}
           REVIEW_TREE: ${{ steps.find.outputs.tree }}
           REVIEW_TRUSTED: ${{ steps.find.outputs.source }}

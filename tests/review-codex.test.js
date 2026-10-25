@@ -1,0 +1,222 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import {
+  arrangeCodexPortions,
+  buildCodexRequest,
+  acceptCodexAnswer,
+} from "../worker/review-codex.mjs";
+import { recomputeReviewCoverage, readReviewIdentity } from "../worker/review-data.mjs";
+import { exportReviewArtifact, importReviewArtifacts } from "../worker/trusted-review.mjs";
+import { readRepoFile } from "./repo-files.js";
+
+const ENV = {
+  GITHUB_REPOSITORY: "example/repository",
+  GITHUB_RUN_ID: "7",
+  REVIEW_HEAD: "a".repeat(40),
+  REVIEW_BASE: "b".repeat(40),
+  REVIEW_MERGE: "c".repeat(40),
+  REVIEW_TRUSTED: "d".repeat(40),
+  GITHUB_WORKFLOW_REF: "example/repository/.github/workflows/review.yml@refs/heads/main",
+  REVIEW_PROVIDER: "codex",
+  REVIEW_SELECTION: "initial",
+};
+const IDENTITY = readReviewIdentity(ENV);
+const CANDIDATE = {
+  path: "shared/page/value.js",
+  line: 1,
+  weight: "Important",
+  confidence: "high",
+  claim: "Late result replaces a newer value.",
+  when: "Two callers complete out of order.",
+  fix: "Discard the stale result.",
+};
+const FINDING = {
+  ids: ["1.1"],
+  path: CANDIDATE.path,
+  line: 1,
+  weight: "Important",
+  verdict: "confirmed",
+  body: CANDIDATE.claim,
+  why: "Both callers share state.",
+};
+
+/** @param {boolean} [large] */
+function createFixture(large = false) {
+  const folder = mkdtempSync(join(tmpdir(), "codex-review-"));
+  const files = ["shared/page/value.js", ...(large ? ["apps/mlb/worker/src/read.js"] : [])];
+  const plan = {
+    provider: "codex",
+    selection: "initial",
+    stage: "first",
+    since: null,
+    unread: [],
+    areas: files.map((file, index) => ({
+      area: index + 1,
+      name: `portion ${index + 1}`,
+      files: [file],
+      rules: ["rules/tooling.md"],
+      partsByFile: { [file]: [`first/${index + 1}.diff`] },
+    })),
+  };
+  mkdirSync(join(folder, "first"));
+  mkdirSync(join(folder, "rules"));
+  for (const path of [
+    "REVIEW.md",
+    "AGENTS.md",
+    "pull-request.md",
+    "test-context.md",
+    "stale-names.md",
+    "first.md",
+    "rules/tooling.md",
+    ...files.map((_, index) => `first/${index + 1}.diff`),
+  ])
+    writeFileSync(join(folder, path), `${path}\n` + "complete required content\n".repeat(2200));
+  writeFileSync(join(folder, "plan.json"), JSON.stringify(plan));
+  return { folder, plan };
+}
+
+/** @param {string} folder @param {number | "integration"} portion @param {any} [changes] */
+function createAnswer(folder, portion, changes = {}) {
+  const request = buildCodexRequest(folder, portion, IDENTITY);
+  const answer = {
+    binding: request.binding,
+    complete: true,
+    unfinished: [],
+    unjudged: [],
+    ...(portion !== "integration" ? { candidates: [] } : {}),
+    ...(portion === "integration" ||
+    JSON.parse(readFileSync(join(folder, "plan.json"), "utf8")).areas.length === 1
+      ? { findings: [] }
+      : {}),
+    ...changes,
+  };
+  return JSON.stringify(answer);
+}
+
+test("native portions follow semantic code and tests rather than Claude area counts or line limits", () => {
+  const { plan } = createFixture(true);
+  const one = { ...plan.areas[0], name: "shared page part 1" };
+  const two = {
+    ...one,
+    area: 2,
+    files: ["shared/page/other.js"],
+    partsByFile: { "shared/page/other.js": ["first/other.diff"] },
+  };
+  const arranged = arrangeCodexPortions({ ...plan, areas: [one, two, plan.areas[1]] }, []);
+  assert.equal(arranged.areas.length, 2);
+  assert.deepEqual(arranged.areas[0].files, [CANDIDATE.path, "shared/page/other.js"]);
+});
+
+test("a contained session receives all content and verifies every candidate without fake Read events", () => {
+  const { folder, plan } = createFixture();
+  const request = buildCodexRequest(folder, 1, IDENTITY);
+  assert.ok(request.prompt.includes(readFileSync(join(folder, "first/1.diff"), "utf8")));
+  assert.match(request.prompt, /Follow callers, shared state, related code, failure paths/);
+  acceptCodexAnswer(
+    folder,
+    1,
+    IDENTITY,
+    createAnswer(folder, 1, { candidates: [CANDIDATE], findings: [FINDING] }),
+  );
+  const record = JSON.parse(readFileSync(join(folder, "find-1.json"), "utf8"));
+  assert.equal(record.tries[0].reads, undefined);
+  assert.equal(record.tries[0].evidence.kind, "supplied-content");
+  assert.deepEqual(recomputeReviewCoverage(record, plan.areas[0], folder).unread, []);
+  assert.equal(
+    JSON.parse(readFileSync(join(folder, "across.json"), "utf8")).items[0].verdict,
+    "confirmed",
+  );
+});
+
+test("malformed, unfinished, interrupted, unbound and undisposed answers cannot approve", () => {
+  for (const changes of [
+    { complete: false },
+    { unfinished: ["inspect callers"] },
+    { unjudged: [{ file: CANDIDATE.path, why: "unknown" }] },
+    { binding: "foreign" },
+    { candidates: [CANDIDATE], findings: [] },
+    { findings: [FINDING] },
+    { extra: true },
+    { candidates: [{ ...CANDIDATE, line: 0 }] },
+  ]) {
+    const { folder } = createFixture();
+    assert.throws(() => acceptCodexAnswer(folder, 1, IDENTITY, createAnswer(folder, 1, changes)));
+  }
+  const { folder } = createFixture();
+  for (const output of ["", "null", "{}", "{partial", "[]"])
+    assert.throws(() => acceptCodexAnswer(folder, 1, IDENTITY, output));
+});
+
+test("a large review requires an integration pass even when all portions found nothing", () => {
+  const { folder, plan } = createFixture(true);
+  for (const area of plan.areas)
+    acceptCodexAnswer(folder, area.area, IDENTITY, createAnswer(folder, area.area));
+  writeFileSync(join(folder, "candidates.json"), "[]");
+  const request = buildCodexRequest(folder, "integration", IDENTITY);
+  for (const area of plan.areas)
+    assert.ok(
+      request.prompt.includes(readFileSync(join(folder, `first/${area.area}.diff`), "utf8")),
+    );
+  assert.match(
+    request.prompt,
+    /mandatory independent integration pass, even when candidates are empty/,
+  );
+  acceptCodexAnswer(folder, "integration", IDENTITY, createAnswer(folder, "integration"));
+  const across = JSON.parse(readFileSync(join(folder, "across.json"), "utf8"));
+  assert.equal(across.evidence.portion, "integration");
+});
+
+test("sealed native artifacts revalidate supplied content, exact code, provider and integration", () => {
+  const { folder } = createFixture();
+  const upload = mkdtempSync(join(tmpdir(), "codex-uploads-"));
+  const env = { ...ENV, REVIEW_UPLOAD: upload };
+  exportReviewArtifact(folder, "plan", env);
+  acceptCodexAnswer(folder, 1, IDENTITY, createAnswer(folder, 1));
+  exportReviewArtifact(folder, "find-1", env);
+  exportReviewArtifact(folder, "across", env);
+  const destination = () => mkdtempSync(join(tmpdir(), "codex-import-"));
+  assert.equal(importReviewArtifacts(upload, destination(), env).provider, "codex");
+  for (const change of [
+    { REVIEW_HEAD: "e".repeat(40) },
+    { REVIEW_BASE: "e".repeat(40) },
+    { REVIEW_SELECTION: "3" },
+    { REVIEW_PROVIDER: "claude" },
+  ])
+    assert.throws(() => importReviewArtifacts(upload, destination(), { ...env, ...change }));
+  const record = JSON.parse(readFileSync(join(folder, "find-1.json"), "utf8"));
+  for (const mutation of [
+    (copy) => copy.tries[0].evidence.files.pop(),
+    (copy) => (copy.tries[0].evidence.files[0].sha256 = "0".repeat(64)),
+    (copy) => (copy.tries[0].reads = []),
+  ]) {
+    const copy = structuredClone(record);
+    mutation(copy);
+    assert.throws(() =>
+      recomputeReviewCoverage(
+        copy,
+        JSON.parse(readFileSync(join(folder, "plan.json"), "utf8")).areas[0],
+        folder,
+      ),
+    );
+  }
+});
+
+test("native execution has pinned official tooling, isolated credentials and no privileged publishing", () => {
+  const workflow = readRepoFile(".github/workflows/trusted-codex-review.yml");
+  assert.match(workflow, /openai\/codex-action@c05cfd74ad95c626cdf05c6685e62becc3bf7813/);
+  assert.match(workflow, /codex-version: 0.164.0/);
+  assert.match(workflow, /permission-profile: ":read-only"/);
+  assert.match(workflow, /safety-strategy: drop-sudo/);
+  assert.match(workflow, /output-schema-file:/);
+  const model = workflow.split("  model:\n")[1].split("  validate:\n")[0];
+  assert.match(model, /- \*plan\n/);
+  assert.match(model, /- \*import\n/);
+  assert.match(workflow, /validate:\n {4}needs: model\n {4}runs-on: ubuntu-latest/);
+  assert.doesNotMatch(
+    workflow,
+    /self-hosted|claude|ANTHROPIC|pull-requests: write|checks: write|max-turns|continue-on-error/,
+  );
+});

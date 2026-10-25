@@ -34,7 +34,7 @@ export const findSummary = (comments) =>
 /**
  * The summary's single authoritative state, or null for old, malformed or duplicate state.
  * @param {string | undefined} body
- * @returns {{ head: string | null, base?: string } | null}
+ * @returns {{ head: string | null, base?: string, provider?: string, selection?: string } | null}
  */
 export function readReviewedState(body) {
   try {
@@ -42,9 +42,14 @@ export function readReviewedState(body) {
     if (lines[0] !== SUMMARY_MARKER || body.split(STATE_PREFIX).length !== 2) return null;
     const state = JSON.parse(lines[1]?.match(STATE)?.[1] ?? "{}");
     const keys = Object.keys(state).join(",");
-    if (keys !== "head" && keys !== "head,base") return null;
+    if (!["head", "head,base", "head,base,provider,selection"].includes(keys)) return null;
+    if (
+      keys === "head,base,provider,selection" &&
+      (!["claude", "codex"].includes(state.provider) || !/^(initial|\d+)$/.test(state.selection))
+    )
+      return null;
     if (state.head !== null && !isGitObjectId(state.head)) return null;
-    if (keys === "head,base" && !isGitObjectId(state.base)) return null;
+    if (state.base !== undefined && !isGitObjectId(state.base)) return null;
     return state;
   } catch {
     return null;
@@ -55,9 +60,9 @@ export function readReviewedState(body) {
 /** @param {string} text */
 export const escapeReviewText = (text) => text.replaceAll("<!--", "<\u2060!--");
 
-/** @param {string | null} head @param {string} [base] */
-export const writeReviewedHead = (head, base) =>
-  `<!-- claude-review-state ${JSON.stringify({ head, ...(base ? { base } : {}) })} -->`;
+/** @param {string | null} head @param {string} [base] @param {string} [provider] @param {string} [selection] */
+export const writeReviewedHead = (head, base, provider, selection) =>
+  `<!-- claude-review-state ${JSON.stringify({ head, ...(base ? { base } : {}), ...(provider ? { provider, selection } : {}) })} -->`;
 
 /**
  * The mark a finding's comment carries, the same in every form it's posted in.

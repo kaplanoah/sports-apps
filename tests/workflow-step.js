@@ -37,9 +37,11 @@ export function readStepInput(workflow, step, input) {
 export function readNativeReviewName(env) {
   const github = {
     repository: env.REPOSITORY ?? "example/repository",
+    repository_owner: (env.REPOSITORY ?? "example/repository").split("/")[0],
     sha: env.REVIEW_TRUSTED ?? "d".repeat(40),
     event: {
       action: env.ACTION,
+      sender: { login: env.SENDER ?? "example" },
       label: { name: env.LABEL },
       pull_request: {
         number: Number(env.PR ?? "1"),

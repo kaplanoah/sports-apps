@@ -21,11 +21,14 @@ export function validatePublicationAttestation(check, evidence, appId) {
 }
 
 export const REVIEW_PUBLICATION_STAGES = [
+  "review-select",
   "review-begin",
   "review-plan",
   "review-label",
   "review-area",
   "review-across",
+  "review-codex",
+  "review-codex-across",
   "review-post",
   "review",
 ];
@@ -77,7 +80,7 @@ function selectProducerJob(jobs, name, attempt) {
     (job) =>
       (job.name === name ||
         job.name.startsWith(`${name} / `) ||
-        (name === "review-area" && job.name.startsWith("review-area ("))) &&
+        (["review-area", "review-codex"].includes(name) && job.name.startsWith(`${name} (`))) &&
       Number.isSafeInteger(job.id) &&
       Number.isSafeInteger(job.run_attempt) &&
       job.run_attempt <= attempt,
@@ -99,19 +102,57 @@ export function validatePublicationJobs(jobs, attempt, needs) {
   const count = Number(needs["review-plan"]?.outputs?.count);
   if (!Number.isSafeInteger(count) || count < 0) throw new Error("Missing trusted area count.");
   const labeled = needs["review-plan"]?.outputs?.labeled === "true";
+  const provider = needs["review-plan"]?.outputs?.provider;
+  const codex = provider === "codex";
+  if (provider !== undefined && !["claude", "codex"].includes(provider))
+    throw new Error("Invalid producer provider.");
+  if (
+    provider !== undefined &&
+    (needs["review-select"]?.outputs?.provider !== provider ||
+      needs["review-select"]?.outputs?.selection !== needs["review-plan"]?.outputs?.selection)
+  )
+    throw new Error("Producer provider selection changed.");
+  const required = {
+    "review-select": provider !== undefined,
+    "review-label": labeled,
+    "review-area": count > 0 && !codex,
+    "review-across": count > 0 && !codex,
+    "review-codex": count > 0 && codex,
+    "review-codex-across": count > 1 && codex,
+    "review-post": count > 0,
+  };
   const selected = [];
   for (const name of REVIEW_PUBLICATION_STAGES) {
-    const optional =
-      name === "review-label"
-        ? !labeled
-        : ["review-area", "review-across", "review-post"].includes(name) && count === 0;
+    const optional = required[name] === false;
+    if (
+      optional &&
+      needs[name] === undefined &&
+      ["review-select", "review-codex", "review-codex-across"].includes(name)
+    )
+      continue;
     const expected = optional ? "skipped" : "success";
     if (needs[name]?.result !== expected)
       throw new Error(`Required producer did not pass: ${name}.`);
     const producers = selectProducerJob(jobs, name, attempt);
     if (!producers.length && !optional) throw new Error(`Missing producer job: ${name}.`);
-    if (name === "review-area" && count > 0 && producers.length !== count)
+    if (name === "review-area" && !optional && count > 0 && producers.length !== count)
       throw new Error("Review area jobs do not match the trusted plan.");
+    if (["review-codex", "review-codex-across"].includes(name) && !optional) {
+      const prefixes = new Map();
+      for (const job of producers) {
+        const match = /^(.*) \/ (request|model|validate)$/.exec(job.name);
+        if (!match) throw new Error("Invalid Codex producer stage.");
+        if (!prefixes.has(match[1])) prefixes.set(match[1], []);
+        prefixes.get(match[1]).push(match[2]);
+      }
+      if (
+        prefixes.size !== (name === "review-codex" ? count : 1) ||
+        [...prefixes.values()].some(
+          (stages) => stages.sort().join(",") !== "model,request,validate",
+        )
+      )
+        throw new Error("Missing Codex producer stage.");
+    }
     for (const job of producers) {
       if (job.status !== "completed" || job.conclusion !== expected)
         throw new Error(`Producer attempt did not pass: ${name}.`);

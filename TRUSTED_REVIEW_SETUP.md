@@ -9,11 +9,11 @@ The separate GitHub App publishes `trusted-review` on the PR head. Main's expect
 3. Add environment variable `TRUSTED_REVIEW_APP_ID` with the App ID, not its installation ID. Add `TRUSTED_REVIEW_APP_PRIVATE_KEY` as an environment secret. Enter the key directly in GitHub; never put it in repository secrets, a checkout, an issue, or chat. Required owner review can additionally make each publication manual.
 4. Once trusted code is on main and the environment is verified, set repository variable `TRUSTED_REVIEW_PUBLISHER_ENABLED` to `true`. Missing credentials or publication permissions then stop new authorized model work instead of silently skipping the publisher. This flag alone does not enforce a required check.
 
-The SHA-pinned token action requests one repository explicitly and revokes its token after the job. The protected publisher runs on fresh GitHub-hosted runners with trusted main source, no PR checkout, dependency installation, restored cache, PR actions, or Claude credentials. Main-authorized workflows are part of this trust boundary; an environment does not pin access to a particular workflow file.
+The SHA-pinned token action requests one repository explicitly and revokes its token after the job. The protected publisher runs on fresh GitHub-hosted runners with trusted main source, no PR checkout, dependency installation, restored cache, PR actions, or model credentials. Main-authorized workflows are part of this trust boundary; an environment does not pin access to a particular workflow file.
 
 ## Publication and evidence
 
-The initial job replaces prior success with a documented completed/failure conclusion while review is pending. This deliberate non-success avoids assuming that setting an old completed check to in-progress clears its successful conclusion. Titles explain whether review is pending, invalid, or conflicting. Final success requires exact authenticated evidence; review stages and test suites are unchanged.
+The initial job replaces prior success with a documented completed/failure conclusion while review is pending. This deliberate non-success avoids assuming that setting an old completed check to in-progress clears its successful conclusion. Titles explain whether review is pending, invalid, or conflicting. Final success requires exact authenticated evidence; the selected provider must finish every required stage.
 
 The App requirement applies to main. A PR targeting another branch keeps its normal trusted review and gets no passing App check until its context qualifies for main. Publication API failures still stop newly requested model work.
 
@@ -21,7 +21,7 @@ The final job directly depends on all review producers, including label consumpt
 
 The publisher binds its native main source to the review run, then places a digest of the terminal decision in the App-owned check output. The saved terminal artifact contains the exact decision, including check ID, repository/PR, head/base/source, run/attempt, producer records, and result identity. Observer restoration requires that App-owned attestation; matching job names and self-sealed artifacts alone cannot prove publisher execution.
 
-The lifecycle workflow handles requested, in-progress, and completed review events plus PR lifecycle events without invoking Claude. GitHub.com runs `pull_request_target` from the default branch, including for stacked PRs and retargeting away from main. The publisher still rejects non-main native authority. Verify these native refs during live setup; older GitHub Enterprise Server versions have different semantics. Requested events do not occur on reruns; the in-progress observer handles reused successful start jobs. Observation-only label events do not supersede authorized requests. Requests order by original creation, with attempts ordered within their run; rerunning an older request cannot reclaim a newer check.
+The lifecycle workflow handles requested, in-progress, and completed review events plus PR lifecycle events without invoking a model. GitHub.com runs `pull_request_target` from the default branch, including for stacked PRs and retargeting away from main. The publisher still rejects non-main native authority. Verify these native refs during live setup; older GitHub Enterprise Server versions have different semantics. Requested events do not occur on reruns; the in-progress observer handles reused successful start jobs. Observation-only label events do not supersede authorized requests. Requests order by original creation, with attempts ordered within their run; rerunning an older request cannot reclaim a newer check.
 
 Every publisher phase shares one concurrency group per repository/head with `queue: max` and cancellation disabled. GitHub queues up to 100 waiting jobs instead of replacing the pending begin or finish with an observer. Queue overflow cancels additional jobs; a failed or missed publication remains visible and requires recovery. GitHub's [job-concurrency schema](https://github.com/actions/languageservices/blob/4043eda158e16579cc5fb1b0b07a4bce2a76f0b5/workflow-parser/src/workflow-v1.0.json#L2044-L2083) and [positive parser fixture](https://github.com/actions/languageservices/blob/4043eda158e16579cc5fb1b0b07a4bce2a76f0b5/workflow-parser/testdata/reader/concurrency.yml#L28-L32) accept this syntax. Live setup must verify a burst covering all phases.
 
@@ -61,3 +61,40 @@ After live proof and explicit owner approval, add one required check: context `t
 App creation, secure key entry, environment setup, and the final approved rule require the owner's authenticated browser or an appropriately authorized administration integration.
 
 If publication fails, repair credentials or publishing and rerun the appropriate failed publisher jobs. Duplicate owned checks deliberately hold and need reviewed repair; do not remove the required rule, invent an alias, or mark a failure successful. Removing a required rule or broadening environment access requires a separate owner decision. Rotation replaces the environment key and verifies publication before revoking the prior key.
+
+# Selecting Claude or Codex
+
+Claude is the initial repository default. `TRUSTED_REVIEW_DEFAULT_PROVIDER` may name `claude` or `codex`; the first trusted selection pins that default per PR. Changing the repository default does not change existing PR choices.
+
+The owner selects a provider by adding `review-provider:claude` or `review-provider:codex`. Only the repository owner's label events count. Removing a label does not change the choice. Remove and re-add an existing provider label to select it again. The latest owner selection wins, even when both labels remain. Each selection event starts a complete review with a new selection identity. The ordinary `review` label requests another round with the current provider.
+
+The trusted bot comment stores the initial choice. Timeline events retain explicit choices through failed or interrupted runs. Artifacts bind the provider and selection alongside the repository, run, head, base, merge and trusted source. Publishing and CI's join recheck the live choice. A switch away and back cannot reuse an older result. Unfinished work is never shared between providers.
+
+## Codex activation gate
+
+Codex stays disabled until both of these exist:
+
+- A repository Actions secret named `TRUSTED_REVIEW_OPENAI_API_KEY`, containing an OpenAI API project credential with its own spending limit.
+- Repository variable `TRUSTED_CODEX_REVIEW_ENABLED=true`, set only after the historical evaluation and disposable-runner proofs below have been recorded.
+
+The API credential is separate from Claude credentials and subscription usage. Never paste its value into a chat, issue, PR, command argument or log. The owner can enter it directly in GitHub's Actions secrets settings or use the secure prompt from `gh secret set TRUSTED_REVIEW_OPENAI_API_KEY` in a local clone. Do not enable the variable merely because the secret exists. A gated Codex selection fails visibly without starting Claude or silently switching providers.
+
+Before activation, record the separate provider measurements described in `TRUSTED_REVIEW_EVALUATION.md`. Include large historical changes, cross-app interactions, an empty-candidate integration pass, and interruption recovery. Demonstrate that malformed answers, missing coverage, stale head/base/provider identities and missing integration evidence cannot publish success. Keep the protected publisher and unresolved-thread and phone requirements.
+
+## Verified official Codex configuration
+
+The implementation was checked against the official [action README](https://github.com/openai/codex-action/blob/c05cfd74ad95c626cdf05c6685e62becc3bf7813/README.md), [action inputs](https://github.com/openai/codex-action/blob/c05cfd74ad95c626cdf05c6685e62becc3bf7813/action.yml), and [security guidance](https://github.com/openai/codex-action/blob/c05cfd74ad95c626cdf05c6685e62becc3bf7813/docs/security.md) on October 25, 2026. The action is pinned to that commit and the CLI and API proxy to `0.164.0`. Permission profiles require CLI `0.138.0` or later. The pinned CLI's official model catalog includes `gpt-6.1-sol`; this path uses that model with high reasoning effort. No quality comparison is implied.
+
+`trusted-codex-review.yml` uses disposable GitHub-hosted Linux runners, `openai-api-key`, `prompt-file`, `output-schema-file`, `output-file`, `permission-profile: ":read-only"` and `safety-strategy: drop-sudo`. The official action invokes native `codex exec`. Native search, shell and history remain available within its sandbox. No Claude tools, Read events, agent counts, chunk limits or turn limits are imitated.
+
+Trusted Codex configuration lives outside the reviewed checkout. Project instructions are disabled and that checkout is explicitly untrusted, preventing its Codex configuration from becoming trusted settings. Shell commands inherit no credentials. The action protects its API credential through its own proxy and privilege removal. Model jobs receive no Claude or publisher credentials. The only step after model execution transports the answer as an artifact. Validation and privileged publishing run on fresh hosts from trusted source.
+
+## Coverage and review portions
+
+Preparation supplies the same exact-code plan, complete required diffs, trusted rules and previous findings independently of the provider. Both providers receive observed CI check context and a test-source inventory, and investigate the relevant tests themselves. Existing diff parts are transport files; every assigned part is included whole in the native prompt, without using their sizes to limit Codex investigation.
+
+Codex groups code and tests by semantic repository area. One contained area uses one native session to investigate and verify findings. Multiple areas use coherent portions and a separate integration session supplied the whole change and every candidate. Integration runs even when every portion found nothing. There is no line-count or agent-count routing threshold. Cross-app changes get an integration pass regardless of size.
+
+Coverage records hash the actual complete content supplied by trusted preparation, not a model assertion that it read everything. The summary says "Supplied in full" for Codex and retains Claude's Read-based accounting. Native tools inspect callers, shared state, related code, both apps, failure paths and tests beyond the diff. Supplied coverage establishes delivery, not the depth of reasoning. Incomplete investigation, unjudged work, context exhaustion, malformed output or interruption fails closed. No automatic retry starts another provider.
+
+Claude's runner, retry policy, coverage checks and integration responsibilities remain intact. Both providers produce the common candidate, disposition and posting contract, with different coverage evidence. Structured answers and sealed artifacts are revalidated before privileged posting or approval.

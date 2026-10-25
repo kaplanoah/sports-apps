@@ -369,10 +369,10 @@ function describeReview(judged, { plan, sha }) {
     : "";
   const lead = LEADS[/** @type {"first" | "push"} */ (plan.stage)];
   const lines = [
-    `Claude reviewed ${sha}: it ${lead(plan.areas.length, plan.since ?? "")}, and posted ${describeFound(judged.weights)}${repeated}.`,
+    `${plan.provider === "codex" ? "Codex" : "Claude"} reviewed ${sha}: it ${lead(plan.areas.length, plan.since ?? "")}, and posted ${describeFound(judged.weights)}${repeated}.`,
     "",
     `Checked: the check across areas turned down ${judged.rejected} of ${pluralize(judged.checked, "candidate")} the reviewers listed, after merging repeats.`,
-    `Read in full: ${judged.fileCount - judged.unreadFiles.length} of ${pluralize(judged.fileCount, "changed file")} to read.`,
+    `${plan.provider === "codex" ? "Supplied in full" : "Read in full"}: ${judged.fileCount - judged.unreadFiles.length} of ${pluralize(judged.fileCount, "changed file")} to read.`,
   ];
   if (judged.unreadFiles.length)
     lines.push(
@@ -402,8 +402,8 @@ function describeReview(judged, { plan, sha }) {
  */
 const describeNothingDue = (plan, sha) =>
   plan.stage === "none"
-    ? `Claude read nothing new in ${sha}: the pushes since ${(plan.since ?? "").slice(0, 7)} leave no new changes to review in files the pull request still changes.`
-    : `Claude had nothing to read in ${sha}.`;
+    ? `${plan.provider === "codex" ? "Codex" : "Claude"} read nothing new in ${sha}: the pushes since ${(plan.since ?? "").slice(0, 7)} leave no new changes to review in files the pull request still changes.`
+    : `${plan.provider === "codex" ? "Codex" : "Claude"} had nothing to read in ${sha}.`;
 
 /**
  * What the review read, found, and checked, whether it did everything it was due, and the head
@@ -423,7 +423,7 @@ export function judgeReview({ sha, base, plan, records }) {
   const reviewedHead = isComplete ? sha : plan.since;
   const lines = [
     SUMMARY_MARKER,
-    writeReviewedHead(reviewedHead, base),
+    writeReviewedHead(reviewedHead, base, plan.provider, plan.selection),
     ...(judged ? describeReview(judged, { plan, sha }) : [describeNothingDue(plan, sha), ""]),
     ...(plan.unread.length
       ? ["Left unread, as nothing to review:", ...plan.unread.map(listUnread)]

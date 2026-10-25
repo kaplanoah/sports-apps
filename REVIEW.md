@@ -39,6 +39,8 @@ In order of what has mattered here.
    - `worker/rule-files.mjs`
    - `worker/trusted-review.mjs`
    - `worker/review-data.mjs`
+   - `worker/review-provider.mjs`, `worker/review-codex.mjs`, and `worker/review-supplied.mjs`
+   - `.github/workflows/trusted-codex-review.yml`
    - `worker/review-repository.mjs`
    - `worker/find-trusted-review.mjs`
    - `worker/publish-trusted-review.mjs`, `worker/review-publication.mjs`, and `worker/review-artifact.mjs`
@@ -59,7 +61,9 @@ Skip what lint, Prettier, TypeScript, knip, and the repo's guard tests already c
 
 ## How to report
 
-In CI, one reviewer an area looks for every item above and lists every problem it finds. One check across every area, one area too, confirms each against the code before anything is posted, merges repeats, weighs each, and adds what spans areas, and a step posts what it confirmed or left unsure.
+In CI, the selected provider performs the whole review. Claude keeps one reviewer per area and a check across every area. Codex uses one native session for a contained semantic area, investigating and verifying its findings. Multiple Codex portions require a separate integration pass, even without candidates. Every path verifies claims, merges repeats, weighs findings, and checks what spans areas before publishing.
+
+The owner can select `review-provider:claude` or `review-provider:codex` on a PR. The choice stays through rounds; changing it requires a complete review by the newly selected provider. Claude remains the initial default. Codex records supplied content and native results, rather than Claude Read events. Missing coverage, unfinished investigation, or a stale provider selection cannot approve.
 
 - Report every problem you find, not a sample, each as one finding that names every place it shows, in both apps too, rather than one finding for each place. Include one you're unsure of, with your confidence, rather than leaving it out.
 - Before a finding is posted, check it by reading more of the code: trace the path from a real caller or input to what goes wrong, and see what the base did. If it would matter and still can't be settled, post it as **Unsure** with what would settle it.

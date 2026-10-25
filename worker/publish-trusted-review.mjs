@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createGitHub, readAllPages } from "./github-api.mjs";
 import { isGitObjectId } from "./git-object.mjs";
+import { readReviewProvider } from "./review-provider.mjs";
 import { readReviewRun, REVIEW_CHECK_NAME, REVIEW_RESULT_PREFIX } from "./review-run.mjs";
 import { readReviewArtifact } from "./review-artifact.mjs";
 import { verifyTrustedReviewResult } from "./find-trusted-review.mjs";
@@ -88,6 +89,10 @@ async function validateResultArtifact(options, run, needs, identity) {
     outputs.digest,
   );
   try {
+    const { choice } = await readReviewProvider(
+      { ...options.env, PR: String(identity.pull) },
+      options.readGitHub,
+    );
     const result = verifyTrustedReviewResult(folder, {
       GITHUB_REPOSITORY: options.env.GITHUB_REPOSITORY,
       REVIEW_RUN: String(run.id),
@@ -95,7 +100,15 @@ async function validateResultArtifact(options, run, needs, identity) {
       REVIEW_BASE: identity.base,
       REVIEW_TRUSTED: identity.source,
       REVIEW_TREE: outputs.tree,
+      ...(needs["review-plan"]?.outputs?.provider
+        ? { REVIEW_PROVIDER: choice.provider, REVIEW_SELECTION: choice.selection }
+        : {}),
     });
+    if (
+      !needs["review-plan"]?.outputs?.provider &&
+      (choice.selection !== "initial" || choice.provider !== "claude")
+    )
+      throw new Error("Legacy result predates the owner provider selection.");
     const commit = await options.readGitHub(`/git/commits/${result.merge}`);
     if (
       commit.sha !== result.merge ||

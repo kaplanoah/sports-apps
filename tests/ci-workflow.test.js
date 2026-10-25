@@ -907,6 +907,8 @@ test("trusted review preserves complete area reading, retries, and the across-ar
     "review-plan",
     "review-area",
     "review-across",
+    "review-codex",
+    "review-codex-across",
     "review-post",
   ]);
   assert.match(review, /trusted-review.mjs" summary/);
@@ -948,16 +950,16 @@ test("only trusted posting jobs can write to the pull request", () => {
   const writers = listJobs(REVIEW_WORKFLOW).filter((job) =>
     /pull-requests: write/.test(readJob(job, REVIEW_WORKFLOW)),
   );
-  assert.deepEqual(writers.toSorted(), ["review", "review-label", "review-post"]);
+  assert.deepEqual(writers.toSorted(), ["review", "review-label", "review-post", "review-select"]);
   for (const job of writers)
-    assert.doesNotMatch(readJob(job, REVIEW_WORKFLOW), /claude-code-action/);
+    assert.doesNotMatch(readJob(job, REVIEW_WORKFLOW), /claude-code-action|codex-action/);
   for (const job of listJobs())
     assert.doesNotMatch(readJob(job), /pull-requests: write|claude-code-action/);
   const withClaude = [
     ...listJobs(REVIEW_WORKFLOW).map((job) => readJob(job, REVIEW_WORKFLOW)),
     readJob("find", AREA_WORKFLOW),
   ].filter((job) => /anthropics\/|uses: \.\/\.github/.test(job));
-  assert.equal(withClaude.length, 5);
+  assert.equal(withClaude.length, 7);
   for (const job of withClaude) assert.doesNotMatch(job, /pull-requests: write/);
 });
 
@@ -1132,7 +1134,7 @@ test("each review job waits for the jobs whose records it reads", () => {
   const order = [
     ["review-area", ["review-plan"]],
     ["review-across", ["review-plan", "review-area"]],
-    ["review-post", ["review-plan", "review-across"]],
+    ["review-post", ["review-plan", "review-across", "review-codex", "review-codex-across"]],
   ];
   for (const [job, before] of order) assert.deepEqual(readNeeds(job, REVIEW_WORKFLOW), before, job);
 });

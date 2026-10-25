@@ -134,7 +134,7 @@ test("trusted review pins workflow authority, source, Node and isolated artifact
         assert.match(step, /path: \$\{\{ runner.temp \}\}\/review-input\//);
         assert.doesNotMatch(step, /merge-multiple|run-id:/);
       }
-      if (/run:.*node /.test(step)) {
+      if (/run:.*node /.test(step) && !step.startsWith("name: Pin the provider choice")) {
         assert.match(
           step,
           /node "\$RUNNER_TEMP\/trusted\/worker\/(?:trusted-review|review-diagnostics)\.mjs"/,
@@ -656,6 +656,7 @@ async function verifyHostileReviewIsolation(baseRef) {
   }
   for (const changed of [
     { ...pull, state: "closed" },
+    { ...pull, base: { sha: "f".repeat(40) } },
     { ...pull, head: { sha: base } },
     { ...pull, base: { ...pull.base, sha: head } },
     { ...pull, mergeable: false },
@@ -984,8 +985,12 @@ test("missing merge metadata leaves review owed without following a moving ref",
   assert.equal(readFileSync(output, "utf8"), "available=false\n");
 });
 
-test("posting rechecks the open pull and head but retains its immutable reviewed base", async () => {
-  const pull = { state: "open", head: { sha: SHA }, base: { sha: "f".repeat(40), ref: "main" } };
+test("posting rechecks the open pull, head and immutable reviewed base", async () => {
+  const pull = {
+    state: "open",
+    head: { sha: SHA },
+    base: { sha: ID_ENV.REVIEW_BASE, ref: "main" },
+  };
   const env = { ...ID_ENV, PR: "1" };
   for (const ref of ["main", "stack"])
     await verifyReviewEvent(env, async (path) => {
@@ -994,6 +999,7 @@ test("posting rechecks the open pull and head but retains its immutable reviewed
     });
   for (const changed of [
     { ...pull, state: "closed" },
+    { ...pull, base: { sha: "f".repeat(40) } },
     { ...pull, head: { sha: "e".repeat(40) } },
   ])
     await assert.rejects(() => verifyReviewEvent(env, async () => changed), /moved/);
