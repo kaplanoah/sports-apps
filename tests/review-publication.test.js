@@ -157,6 +157,8 @@ function createHarness() {
     runs: [run],
     checks: [],
     writes: [],
+    providerEvents: [],
+    providerComments: [],
     archives: new Map([[5, archive]]),
     artifacts: [artifact],
     failWrites: false,
@@ -164,6 +166,8 @@ function createHarness() {
     suites: null,
     changeWriteAnswer: (answer) => answer,
     async readGitHub(path) {
+      if (path.startsWith("/issues/1/timeline?")) return state.providerEvents;
+      if (path.startsWith("/issues/1/comments?")) return state.providerComments;
       if (path === "") return { full_name: REPOSITORY, id: 1 };
       if (path.startsWith("/pulls?")) return state.pulls;
       if (path === "/pulls/1") return state.pull;
@@ -254,6 +258,87 @@ test("matrix review producers and label consumption must match the actual truste
   state.needs["review-plan"].outputs.count = "1";
   state.needs["review-label"].result = "failure";
   assert.throws(() => validatePublicationJobs(state.jobs, 2, state.needs), /review-label/);
+});
+
+test("Codex publication requires every fresh request, model and validation stage plus large-change integration", () => {
+  const state = createHarness();
+  state.needs["review-select"] = {
+    result: "success",
+    outputs: { provider: "codex", selection: "initial" },
+  };
+  state.needs["review-plan"].outputs = {
+    count: "2",
+    labeled: "false",
+    provider: "codex",
+    selection: "initial",
+  };
+  for (const name of ["review-codex", "review-codex-across", "review-post"])
+    state.needs[name] = { result: "success", outputs: {} };
+  state.jobs.find((job) => job.name === "review-post").conclusion = "success";
+  state.jobs.push({
+    id: 100,
+    run_id: 7,
+    name: "review-select",
+    run_attempt: 2,
+    status: "completed",
+    conclusion: "success",
+  });
+  let next = 101;
+  for (const prefix of [
+    "review-codex (shared page)",
+    "review-codex (mlb Worker)",
+    "review-codex-across",
+  ])
+    for (const stage of ["request", "model", "validate"])
+      state.jobs.push({
+        id: next++,
+        run_id: 7,
+        name: `${prefix} / ${stage}`,
+        run_attempt: 2,
+        status: "completed",
+        conclusion: "success",
+      });
+  assert.ok(validatePublicationJobs(state.jobs, 2, state.needs).length > 0);
+  for (const name of ["review-codex (shared page) / model", "review-codex-across / validate"])
+    assert.throws(
+      () =>
+        validatePublicationJobs(
+          state.jobs.filter((job) => job.name !== name),
+          2,
+          state.needs,
+        ),
+      /Codex producer/,
+    );
+  state.needs["review-codex-across"].result = "skipped";
+  assert.throws(() => validatePublicationJobs(state.jobs, 2, state.needs), /review-codex-across/);
+  state.needs["review-codex-across"].result = "success";
+  state.needs["review-area"].result = "success";
+  assert.throws(() => validatePublicationJobs(state.jobs, 2, state.needs), /review-area/);
+});
+
+test("a live owner provider switch invalidates a sealed legacy success on unchanged code", async () => {
+  const state = createHarness();
+  state.providerEvents = [
+    {
+      id: 88,
+      event: "labeled",
+      actor: { login: "example" },
+      label: { name: "review-provider:codex" },
+    },
+  ];
+  await assert.rejects(reconcileReviewPublication(state), /Legacy result predates/);
+  assert.ok(state.writes.every((write) => write.body.conclusion !== "success"));
+});
+
+test("a pinned initial Codex choice cannot inherit a legacy Claude approval", async () => {
+  const state = createHarness();
+  state.providerComments = [
+    {
+      user: { login: "github-actions[bot]" },
+      body: '<!-- trusted-review-provider {"provider":"codex","selection":"initial"} -->\nChoice.',
+    },
+  ];
+  await assert.rejects(reconcileReviewPublication(state), /Legacy result predates/);
 });
 
 test("holding a non-main check preserves the existing stacked-review pipeline", async () => {
@@ -560,7 +645,13 @@ test("publisher workflows keep credentials isolated, token scope explicit, and m
   assert.match(observer, /types: \[requested, in_progress, completed\]/);
   assert.match(observer, /converted_to_draft/);
   const finalNeeds = reviewer.split("  review-publish:")[1].match(/needs:\s+\[([^\]]+)\]/)[1];
-  assert.deepEqual(finalNeeds.split(", "), REVIEW_PUBLICATION_STAGES);
+  assert.deepEqual(
+    finalNeeds
+      .split(",")
+      .map((name) => name.trim())
+      .filter(Boolean),
+    REVIEW_PUBLICATION_STAGES,
+  );
   assert.match(reviewer, /TRUSTED_REVIEW_PUBLISHER_ENABLED != 'true'/);
   assert.equal([...reviewer.matchAll(/uses: anthropics\//g)].length, 1);
   assert.match(publisher, /group: trusted-review-publication-/);

@@ -9,6 +9,8 @@ import { readJson } from "./judge-review.mjs";
 import { createReviewGitEnvironment } from "./review-repository.mjs";
 import { isGitObjectId } from "./git-object.mjs";
 import { waitFor } from "./check-timing.mjs";
+import { readReviewProvider } from "./review-provider.mjs";
+import { matchesReviewProvider } from "./review-state.mjs";
 import { readReviewRun, REVIEW_RESULT_PREFIX } from "./review-run.mjs";
 
 const FINISH_BUDGET_MS = 10 * 60 * 1000;
@@ -21,6 +23,10 @@ export function verifyTrustedReviewResult(folder, env) {
   // The authenticated producer's run title supplies the immutable default-branch source.
   const identity = readReviewIdentity({
     ...env,
+    ...(!result?.identity?.provider &&
+    matchesReviewProvider(undefined, env.REVIEW_PROVIDER, env.REVIEW_SELECTION)
+      ? { REVIEW_PROVIDER: undefined, REVIEW_SELECTION: undefined }
+      : {}),
     GITHUB_RUN_ID: env.REVIEW_RUN,
     REVIEW_MERGE: result?.identity?.merge,
     GITHUB_WORKFLOW_REF: `${env.GITHUB_REPOSITORY}/.github/workflows/review.yml@refs/heads/main`,
@@ -147,7 +153,13 @@ function verifyReviewedMerge(folder, env) {
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const { env } = process;
   if (process.argv[2] === "verify") {
-    const tree = verifyReviewedMerge(process.argv[3], env);
+    const readGitHub = createGitHub({ repository: env.GITHUB_REPOSITORY, fetchImpl: fetch, env });
+    const { choice } = await readReviewProvider(env, readGitHub);
+    const tree = verifyReviewedMerge(process.argv[3], {
+      ...env,
+      REVIEW_PROVIDER: choice.provider,
+      REVIEW_SELECTION: choice.selection,
+    });
     appendFileSync(env.GITHUB_OUTPUT, `tree=${tree}\n`);
   } else {
     const result = await waitForTrustedReview(env);

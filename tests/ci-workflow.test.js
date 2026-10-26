@@ -22,6 +22,7 @@ import {
 } from "./workflow-step.js";
 import { PHONE_CONTEXT as EXPECTED_PHONE_CONTEXT } from "../worker/labeling.mjs";
 import { MUTATION_TARGETS } from "../worker/mutation-targets.mjs";
+import { WEBKIT_TEST_MATCH } from "./browser/projects.mjs";
 
 const WORKFLOWS = readdirSync(new URL(".github/workflows/", REPO_ROOT)).filter((name) =>
   name.endsWith(".yml"),
@@ -201,7 +202,10 @@ test("only the nightly run writes the issue Flaky browser tests, from main's cod
   const workflow = readRepoFile(".github/workflows/flaky.yml");
   assert.doesNotMatch(workflow.split(/^jobs:$/m)[0], /issues: write/);
   const report = readJob("report", "flaky.yml");
-  assert.match(report, /if: \$\{\{ !cancelled\(\) && github\.event_name == 'schedule' \}\}/);
+  assert.match(
+    report,
+    /if: \$\{\{ !cancelled\(\) && github\.event_name == 'schedule' && needs\.browser\.outputs\.report-artifact != '' \}\}/,
+  );
   assert.match(report, /permissions:\n\s+contents: read\n\s+actions: read\n\s+issues: write/);
   assert.match(report, /run: node worker\/report-flaky-tests\.mjs nightly-report\/report\.json/);
   assert.match(report, /GH_REPO: \$\{\{ github\.repository \}\}/);
@@ -252,22 +256,46 @@ test("each job that runs the at-rest specs in WebKit installs WebKit with its sy
   for (const [job, workflow] of [
     ["burn-in", "ci.yml"],
     ["webkit", "ci.yml"],
-    ["browser", "flaky.yml"],
   ])
     assert.match(
       readJob(job, workflow),
       /run: node worker\/install-browsers\.mjs --with-deps .*\bwebkit\b/,
       `${workflow}: ${job}`,
     );
-  const webkitSpec = readRepoFile("playwright.config.mjs").match(/testMatch: "([^"]+)"/)?.[1];
-  assert.ok(webkitSpec, "the Playwright config names the spec its WebKit projects run");
   assert.match(
     readJob("burn-in"),
     new RegExp(
-      `- if: contains\\(needs\\.scope\\.outputs\\.specs, '${escapePattern(webkitSpec)}'\\)\\n\\s+run: node worker/install-browsers.mjs --with-deps webkit\\n`,
+      `- if: contains\\(needs\\.scope\\.outputs\\.specs, '${escapePattern(WEBKIT_TEST_MATCH)}'\\)\\n\\s+run: node worker/install-browsers.mjs --with-deps webkit\\n`,
     ),
     "burn-in installs WebKit whenever a spec the config's WebKit projects run is among the ones it repeats",
   );
+});
+
+test("repeat setup selects browsers from the same unexpanded inputs as the tests", () => {
+  const browser = readJob("browser", "flaky.yml");
+  const install = browser
+    .split(/^ {6}- /m)
+    .find((step) => /run: node worker\/install-browsers\.mjs\b/.test(step));
+  assert.ok(install);
+  assert.match(install, /--with-deps --only-shell \$\{\{ steps\.browsers\.outputs\.browsers \}\}/);
+  const selection = browser.split(/^ {6}- /m).find((step) => /^id: browsers\n/.test(step));
+  assert.ok(selection);
+  assert.match(selection, /TESTS: \$\{\{ inputs\.tests \}\}/);
+  assert.match(selection, /PROJECT: \$\{\{ inputs\.project \}\}/);
+  assert.match(selection, /run: node tests\/browser\/projects\.mjs/);
+});
+
+test("nightly setup failures retain their failure without a missing-report download", () => {
+  const browser = readJob("browser", "flaky.yml");
+  const upload = browser.split(/^ {6}- /m).find((step) => /id: nightly-report/.test(step));
+  assert.ok(upload);
+  assert.match(
+    upload,
+    /if: \$\{\{ !cancelled\(\) && github\.event_name == 'schedule' && hashFiles\('test-results\/report\.json'\) != '' \}\}/,
+  );
+  assert.match(browser, /report-artifact: \$\{\{ steps\.nightly-report\.outputs\.artifact-id \}\}/);
+  const report = readJob("report", "flaky.yml");
+  assert.match(report, /needs\.browser\.outputs\.report-artifact != ''/);
 });
 
 // A cache saved with WebKit in it would have the browser job, whose machines lack WebKit's system
@@ -615,6 +643,7 @@ test("a label change skips tests once a run passed every test on the same code",
 
 test("only validated trusted review can satisfy the CI review gate", () => {
   const plan = readJob("review-join");
+  assert.match(plan, /pull-requests: read/);
   assert.match(
     plan,
     /owed: \$\{\{ steps.find.outputs.owed \|\| steps.decision.outputs.owed \|\| 'true' \}\}/,
@@ -907,6 +936,8 @@ test("trusted review preserves complete area reading, retries, and the across-ar
     "review-plan",
     "review-area",
     "review-across",
+    "review-codex",
+    "review-codex-across",
     "review-post",
   ]);
   assert.match(review, /trusted-review.mjs" summary/);
@@ -948,16 +979,16 @@ test("only trusted posting jobs can write to the pull request", () => {
   const writers = listJobs(REVIEW_WORKFLOW).filter((job) =>
     /pull-requests: write/.test(readJob(job, REVIEW_WORKFLOW)),
   );
-  assert.deepEqual(writers.toSorted(), ["review", "review-label", "review-post"]);
+  assert.deepEqual(writers.toSorted(), ["review", "review-label", "review-post", "review-select"]);
   for (const job of writers)
-    assert.doesNotMatch(readJob(job, REVIEW_WORKFLOW), /claude-code-action/);
+    assert.doesNotMatch(readJob(job, REVIEW_WORKFLOW), /claude-code-action|codex-action/);
   for (const job of listJobs())
     assert.doesNotMatch(readJob(job), /pull-requests: write|claude-code-action/);
   const withClaude = [
     ...listJobs(REVIEW_WORKFLOW).map((job) => readJob(job, REVIEW_WORKFLOW)),
     readJob("find", AREA_WORKFLOW),
   ].filter((job) => /anthropics\/|uses: \.\/\.github/.test(job));
-  assert.equal(withClaude.length, 5);
+  assert.equal(withClaude.length, 7);
   for (const job of withClaude) assert.doesNotMatch(job, /pull-requests: write/);
 });
 
@@ -1132,7 +1163,7 @@ test("each review job waits for the jobs whose records it reads", () => {
   const order = [
     ["review-area", ["review-plan"]],
     ["review-across", ["review-plan", "review-area"]],
-    ["review-post", ["review-plan", "review-across"]],
+    ["review-post", ["review-plan", "review-across", "review-codex", "review-codex-across"]],
   ];
   for (const [job, before] of order) assert.deepEqual(readNeeds(job, REVIEW_WORKFLOW), before, job);
 });

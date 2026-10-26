@@ -1,10 +1,6 @@
 name: Reconcile trusted review
 
 on:
-  workflow_dispatch:
-  pull_request:
-    branches: [issue-809-proof-base]
-    types: [opened]
   workflow_run:
     workflows: [Trusted review]
     types: [requested, in_progress, completed]
@@ -28,32 +24,8 @@ permissions:
   pull-requests: read
 
 jobs:
-  access-canary:
-    if: github.event_name == 'workflow_dispatch' || github.event_name == 'pull_request'
-    permissions: {}
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    environment: trusted-review-publisher
-    steps:
-      - name: Check environment access
-        shell: bash
-        env:
-          CANARY_PRESENT: ${{ secrets.TRUSTED_REVIEW_SETUP_CANARY != '' }}
-        run: |
-          set -euo pipefail
-          printf 'event=%s ref=%s sha=%s workflow=%s run=%s attempt=%s\n' "$GITHUB_EVENT_NAME" "$GITHUB_REF" "$GITHUB_SHA" "$GITHUB_WORKFLOW_REF" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT"
-          if [ "$GITHUB_REF" != 'refs/heads/main' ] || [ "$GITHUB_WORKFLOW_REF" != 'kaplanoah/sports-apps/.github/workflows/trusted-review-publisher.yml@refs/heads/main' ]; then
-            echo '::error::A disallowed ref reached a runner; environment isolation failed.'
-            exit 1
-          fi
-          if [ "$CANARY_PRESENT" != 'true' ]; then
-            echo '::error::The environment-only canary is unavailable.'
-            exit 1
-          fi
-          echo 'Main received the harmless environment canary; no secret value was logged.'
-
   discover:
-    if: vars.TRUSTED_REVIEW_PUBLISHER_ENABLED == 'true' && (github.event_name == 'pull_request_target' || github.event_name == 'workflow_run')
+    if: vars.TRUSTED_REVIEW_PUBLISHER_ENABLED == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
