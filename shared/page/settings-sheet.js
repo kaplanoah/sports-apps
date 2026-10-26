@@ -10,7 +10,7 @@ import { readPageRelease } from "./release.js";
 import { openSheet, wireSheet } from "./sheet.js";
 import { keepDialogFor } from "./sheet-memory.js";
 import { startContact } from "./contact.js";
-import { SETTINGS_CARET } from "./settings-page.js";
+import { SETTINGS_CARET } from "./settings-icons.js";
 
 /* global START_AFTER_AWAY_MS -- from long-away.js */
 
