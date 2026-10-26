@@ -1,10 +1,15 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { CONTACT_LIMITS } from "../shared/page/contact-rules.js";
-import { buildContactMail, sendContactMail } from "../shared/worker/contact-mail.js";
-import { readContactRequest, serveContact } from "../shared/worker/contact-request.js";
+import { buildContactMail, sendContactMail } from "../services/email/worker/src/mail.js";
+import {
+  readContactRequest,
+  serveContact as serveAppContact,
+} from "../shared/worker/contact-request.js";
 import { createAppWorker } from "../shared/worker/app-worker.js";
 import { createHealthServer } from "../shared/worker/health.js";
+
+const serveContact = (request, env) => serveAppContact(request, env, "mlb");
 
 const ID = "23428fa1-9250-4f13-b567-c094f8bdc448";
 const SUBMISSION = {
@@ -18,7 +23,7 @@ const ENV = {
   CONTACT_FROM: "reports@example.com",
   CONTACT_TO: "owner@example.com",
   CONTACT_MAIL_KEY: "test-mail-key",
-  CONTACT: {},
+  EMAIL: {},
 };
 /** @param {any} [body] @param {Record<string, string>} [headers] */
 const createRequest = (body = SUBMISSION, headers = {}) =>
@@ -83,7 +88,7 @@ test("screenshots require matching image signatures and receive safe filenames",
 test("delivery uses an authenticated sender, visitor Reply-To, plain text and a provider idempotency key", async () => {
   const submission = {
     ...SUBMISSION,
-    app: "WNBA",
+    app: "wnba",
     diagnostics: "Actual diagnostics",
     screenshot: { filename: "screenshot.png", type: "image/png", content: "iVBORw0KGgo=" },
   };
@@ -97,7 +102,7 @@ test("delivery uses an authenticated sender, visitor Reply-To, plain text and a 
   assert.ok(!Object.hasOwn(buildContactMail({ ...submission, email: "" }, ENV), "reply_to"));
   const id = await sendContactMail(submission, ENV, async (url, options) => {
     assert.equal(url, "https://api.resend.com/emails");
-    assert.equal(options.headers["idempotency-key"], `contact/${ID}`);
+    assert.equal(options.headers["idempotency-key"], `contact/wnba/${ID}`);
     assert.equal(options.headers.authorization, "Bearer test-mail-key");
     assert.deepEqual(JSON.parse(options.body), mail);
     return Response.json({ id: "provider-id" });
@@ -115,25 +120,21 @@ test("endpoint requires same-origin access, configured delivery and durable serv
   let received;
   const env = {
     ...ENV,
-    CONTACT: {
-      idFromName: (name) => name,
-      get: () => ({
-        fetch: async (request) => {
-          received = await request.json();
-          return Response.json({ accepted: true, id: ID }, { status: 202 });
-        },
-      }),
+    EMAIL: {
+      submitContact: async (request) => {
+        received = request;
+        return Response.json({ accepted: true, id: ID }, { status: 202 });
+      },
     },
   };
   const response = await serveContact(createRequest(), env);
   assert.equal(response.status, 202);
   assert.equal(received.submission.message, SUBMISSION.message);
   assert.match(received.sender, /^[a-f0-9]{64}$/);
-  env.CONTACT.get = () => ({
-    fetch: async () => {
-      throw new Error("outage");
-    },
-  });
+  assert.equal(received.app, "mlb");
+  env.EMAIL.submitContact = async () => {
+    throw new Error("outage");
+  };
   assert.equal((await serveContact(createRequest(), env)).status, 503);
   assert.equal(
     (await serveContact(new Request("https://example.com/contact"), {})).headers.get(
@@ -157,22 +158,18 @@ test("Contact routes stay behind the existing app path and access gate", async (
   );
 });
 
-test("health surfaces unavailable delivery or an outbox that needs attention without revealing report content", async () => {
-  const createServer = () =>
-    createHealthServer({ isStoreAnswering: async () => true, release: "abc" });
-  assert.equal((await createServer()(ENV)).status, 503);
-  const env = {
-    ...ENV,
-    CONTACT: {
-      idFromName: () => "outbox",
-      get: () => ({
-        fetch: async () => Response.json({ ok: false, pending: 2, private: "message" }),
-      }),
+test("email service health is reported without exposing report content or affecting sports health", async () => {
+  const serveHealth = createHealthServer({ isStoreAnswering: async () => true, release: "abc" });
+  const response = await serveHealth({
+    EMAIL: {
+      readHealth: async () => ({ ok: false, release: "def", private: "message", pending: 2 }),
     },
-  };
-  const response = await createServer()(env);
-  assert.equal(response.status, 503);
-  assert.doesNotMatch(await response.text(), /message|pending/);
-  env.CONTACT.get = () => ({ fetch: async () => Response.json({ ok: true }) });
-  assert.equal((await createServer()(env)).status, 200);
+  });
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), {
+    ok: true,
+    release: "abc",
+    store: "ok",
+    services: { email: { ok: false, release: "def" } },
+  });
 });

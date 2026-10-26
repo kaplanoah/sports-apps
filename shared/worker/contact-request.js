@@ -1,20 +1,12 @@
 import {
   CONTACT_CATEGORIES,
   CONTACT_LIMITS,
-  isContactEmail,
   validateContactFields,
   validateContactScreenshot,
 } from "../page/contact-rules.js";
 import { hideAddresses } from "../page/report-addresses.js";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-
-/** @param {any} env */
-export const isContactConfigured = (env) =>
-  !!env.CONTACT_MAIL_KEY &&
-  isContactEmail(env.CONTACT_FROM) &&
-  isContactEmail(env.CONTACT_TO) &&
-  !!env.CONTACT;
 
 /** @param {unknown} value */
 export async function hashContactValue(value) {
@@ -86,7 +78,11 @@ async function readBoundedBody(request) {
 
 /** @param {Request} request */
 export async function readContactRequest(request) {
-  const body = await readBoundedBody(request);
+  return parseContactSubmission(await readBoundedBody(request));
+}
+
+/** @param {any} body */
+export function parseContactSubmission(body) {
   if (!UUID.test(body?.id) || !CONTACT_CATEGORIES.some(({ key }) => key === body.category))
     throw new Error("request");
   if (
@@ -119,15 +115,21 @@ export const respondContact = (body, status = 200) =>
     headers: { "cache-control": "no-store", "x-content-type-options": "nosniff" },
   });
 
-/** @param {Request} request @param {any} env */
-export async function serveContact(request, env) {
-  if (request.method === "GET")
-    return respondContact({ email: isContactConfigured(env) ? env.CONTACT_TO : null });
+/** @param {Request} request @param {any} env @param {string} app */
+export async function serveContact(request, env, app) {
+  if (request.method === "GET") {
+    try {
+      const config = await env.EMAIL.readContactConfig();
+      return respondContact({ email: config.email });
+    } catch {
+      return respondContact({ email: null });
+    }
+  }
   if (request.method !== "POST")
     return new Response(null, { status: 405, headers: { allow: "GET, POST" } });
   if (request.headers.get("origin") !== new URL(request.url).origin)
     return respondContact({ problem: "origin" }, 403);
-  if (!isContactConfigured(env)) return respondContact({ problem: "unavailable" }, 503);
+  if (!env.EMAIL) return respondContact({ problem: "unavailable" }, 503);
   let submission;
   try {
     submission = await readContactRequest(request);
@@ -136,13 +138,7 @@ export async function serveContact(request, env) {
   }
   try {
     const sender = await hashContactValue(request.headers.get("cf-connecting-ip") ?? "unknown");
-    const stub = env.CONTACT.get(env.CONTACT.idFromName("outbox"));
-    return await stub.fetch(
-      new Request("https://contact/submit", {
-        method: "POST",
-        body: JSON.stringify({ submission, sender }),
-      }),
-    );
+    return await env.EMAIL.submitContact({ app, submission, sender });
   } catch {
     return respondContact({ problem: "unavailable" }, 503);
   }

@@ -1,4 +1,3 @@
-import { createContactOutbox } from "../../../../shared/worker/contact-outbox.js";
 import PAGE_FILES from "#page-files/mlb";
 import { createAppWorker } from "../../../../shared/worker/app-worker.js";
 import { createBoxScoreServer } from "./box-score.js";
@@ -23,6 +22,7 @@ const rotations = createRotationServer();
 const createLeagueReadCounter = (env) => () => addToJobCount(env, PITCHER_JOB, LEAGUE_READS_COUNT);
 
 export default createAppWorker({
+  name: "mlb",
   pageFiles: PAGE_FILES,
   forwardToStore,
   isStoreAnswering,
@@ -37,5 +37,3 @@ export default createAppWorker({
 });
 
 export { SeasonStore };
-
-export const ContactOutbox = createContactOutbox("MLB");

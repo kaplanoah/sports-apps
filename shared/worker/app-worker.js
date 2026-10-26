@@ -236,13 +236,20 @@ const GATE_PATH = "/gate.html";
  * An app's Worker: its page, its store, and any reads of its own, all under the APP_KEY secret or
  * at the PAGE_HOST address, and behind the ACCESS_CODE secret when the Worker has one.
  * @param {object} app
+ * @param {string} [app.name] the league identifier supplied by the app, never by a visitor
  * @param {Parameters<typeof decodePageFiles>[0]} app.pageFiles
  * @param {(request: Request, env: any, storePath: string) => Response | Promise<Response>} app.forwardToStore
  * @param {(env: any) => Promise<boolean>} app.isStoreAnswering
  * @param {Record<string, (url: URL, env: any) => Response | Promise<Response>>} [app.reads] more GET
  *   paths, each handed the Worker's bindings, so it can read the store
  */
-export function createAppWorker({ pageFiles, forwardToStore, isStoreAnswering, reads = {} }) {
+export function createAppWorker({
+  name = "",
+  pageFiles,
+  forwardToStore,
+  isStoreAnswering,
+  reads = {},
+}) {
   const releaseCommit = readReleaseCommit(pageFiles);
   const releaseFolder = releaseCommit && nameReleaseFolder(releaseCommit);
   const servePageFile = createPageServer(pageFiles, releaseFolder);
@@ -289,7 +296,7 @@ export function createAppWorker({ pageFiles, forwardToStore, isStoreAnswering, r
         return serveMoveHandoff(request, env);
       const access = await readAccess(request, env);
       if (access !== "open") return serveLocked(request, env, { url, appPath, prefix, access });
-      if (appPath === "/contact") return serveContact(request, env);
+      if (appPath === "/contact") return serveContact(request, env, name);
       if (isStorePath(appPath)) return forwardToStore(request, env, appPath);
       if (request.method === "GET" && Object.hasOwn(reads, appPath))
         return reads[appPath](url, env);

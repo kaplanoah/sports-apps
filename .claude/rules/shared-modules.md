@@ -226,8 +226,6 @@ Pages link these before their own stylesheet, and theme them with the tokens the
 
 - `app-worker.js`: the Worker's routing, under the key or at its own address, and moving the page there
 - `contact-request.js`: bounded Contact requests behind the app's access gate
-- `contact-outbox.js`: durable acceptance and alarm-driven email delivery
-- `contact-mail.js`: transactional email and provider delivery checks
 - `access-gate.js`: asking for the access code before the page opens
 - `health.js`: the Worker's health, for an uptime monitor, and what each service it binds answers
 - `services.js`: the services an app may bind, and each one's binding name

@@ -144,20 +144,12 @@ const listServiceBindings = (channel, roots) =>
 function listBindings({ storeClass, isPageless, channel, roots }) {
   const store = { type: "durable_object_namespace", name: "STORE", class_name: storeClass };
   if (isPageless) return [store, VERSION_BINDING];
-  const contact = {
-    type: "durable_object_namespace",
-    name: "CONTACT",
-    class_name: "ContactOutbox",
-  };
-  return [store, ACCESS_LIMIT_BINDING, contact, ...listServiceBindings(channel, roots)];
+  return [store, ACCESS_LIMIT_BINDING, ...listServiceBindings(channel, roots)];
 }
 
 // Cloudflare records the last tag applied and rejects an upload that repeats one.
 /** @param {string} storeClass the Worker's Durable Object */
-export const listMigrations = (storeClass) => [
-  { tag: "v1", new_sqlite_classes: [storeClass] },
-  ...(storeClass === "SeasonStore" ? [{ tag: "v2", new_sqlite_classes: ["ContactOutbox"] }] : []),
-];
+export const listMigrations = (storeClass) => [{ tag: "v1", new_sqlite_classes: [storeClass] }];
 
 /**
  * @param {string | undefined} appliedTag
