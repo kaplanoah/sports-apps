@@ -96,14 +96,10 @@ export function reproduceReviewCases(destination) {
 
 /** @param {string} text */
 export function readCodexEvents(text) {
-  try {
-    return text
-      .split("\n")
-      .filter((line) => line.trim().startsWith("{"))
-      .map((line) => JSON.parse(line));
-  } catch {
-    throw new Error("Invalid evaluation telemetry.");
-  }
+  return text
+    .split("\n")
+    .filter((line) => line.trim().startsWith("{"))
+    .map((line) => JSON.parse(line));
 }
 
 /** @param {string} text @param {string} provider */

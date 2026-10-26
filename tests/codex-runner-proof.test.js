@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -95,8 +95,6 @@ test("the model host receives only the disposable fixture before execution and n
     before,
     /actions\/checkout|CLAUDE_CODE_OAUTH_TOKEN|ANTHROPIC_API_KEY|TRUSTED_REVIEW_APP_PRIVATE_KEY/,
   );
-  assert.match(before, /openai\/codex-action@c05cfd74ad95c626cdf05c6685e62becc3bf7813/);
-  assert.match(before, /codex-version: 0.164.0/);
   assert.match(before, /permission-profile: ":read-only"/);
   assert.match(before, /safety-strategy: drop-sudo/);
   assert.match(before, /BASH_ENV: \$\{\{ runner.temp \}\}\/codex-log-capture.sh/);
@@ -211,4 +209,54 @@ test("fixed proof errors are reported while unexpected diagnostic contents stay 
   });
   assert.notEqual(missing.status, 0);
   assert.doesNotMatch(missing.stderr, /private-unavailable-proof|ENOENT|node:fs/);
+});
+
+test("the collector records configured pins and observed CLI, rejecting an installed-version mismatch", () => {
+  const configured = readCodexProofConfiguration(
+    readRepoFile(".github/workflows/codex-runner-proof.yml"),
+  );
+  for (const installed of [configured.cli, "0.0.0"]) {
+    const folder = mkdtempSync(join(tmpdir(), "codex-proof-collect-"));
+    mkdirSync(join(folder, "codex-answer"));
+    mkdirSync(join(folder, "bin"));
+    const events = structuredClone(EVENTS);
+    events[0].item.command = `/bin/bash -lc 'node ${join(folder, "codex-proof/probe.mjs")}'`;
+    writeFileSync(join(folder, "codex-events.jsonl"), renderEvents(events));
+    writeFileSync(join(folder, "codex-answer/answer.json"), ANSWER);
+    writeFileSync(
+      join(folder, "bin/codex"),
+      '#!/usr/bin/env node\nconsole.log("codex-cli " + process.env.PROOF_TEST_CLI);\n',
+      { mode: 0o755 },
+    );
+    const result = spawnSync(
+      process.execPath,
+      [fileURLToPath(new URL("worker/prove-codex-runner.mjs", REPO_ROOT)), "collect"],
+      {
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          ...OWNER,
+          RUNNER_TEMP: folder,
+          PATH: `${join(folder, "bin")}:${process.env.PATH}`,
+          GITHUB_SHA: "a".repeat(40),
+          GITHUB_RUN_ID: "7",
+          PROOF_TEST_CLI: installed,
+        },
+      },
+    );
+    if (installed !== configured.cli) {
+      assert.notEqual(result.status, 0);
+      assert.match(result.stderr, /Unexpected installed Codex CLI/);
+      continue;
+    }
+    assert.equal(result.status, 0, result.stderr);
+    const proof = JSON.parse(readFileSync(join(folder, "codex-proof-result/proof.json"), "utf8"));
+    assert.equal(proof.action, configured.action);
+    assert.equal(proof.cli, configured.cli);
+    assert.equal(proof.configuredModel, configured.configuredModel);
+    assert.equal(proof.observedCli, `codex-cli ${installed}`);
+    assert.equal(proof.source, "a".repeat(40));
+    assert.equal(proof.run, "7");
+    assert.equal(proof.nativeToolProof, true);
+  }
 });
