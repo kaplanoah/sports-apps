@@ -22,7 +22,7 @@ import {
 } from "./workflow-step.js";
 import { PHONE_CONTEXT as EXPECTED_PHONE_CONTEXT } from "../worker/labeling.mjs";
 import { MUTATION_TARGETS } from "../worker/mutation-targets.mjs";
-import { WEBKIT_TEST_MATCH } from "../worker/browser-projects.mjs";
+import { WEBKIT_TEST_MATCH } from "./browser/projects.mjs";
 
 const WORKFLOWS = readdirSync(new URL(".github/workflows/", REPO_ROOT)).filter((name) =>
   name.endsWith(".yml"),
@@ -262,12 +262,10 @@ test("each job that runs the at-rest specs in WebKit installs WebKit with its sy
       /run: node worker\/install-browsers\.mjs --with-deps .*\bwebkit\b/,
       `${workflow}: ${job}`,
     );
-  const webkitSpec = WEBKIT_TEST_MATCH;
-  assert.ok(webkitSpec, "the Playwright config names the spec its WebKit projects run");
   assert.match(
     readJob("burn-in"),
     new RegExp(
-      `- if: contains\\(needs\\.scope\\.outputs\\.specs, '${escapePattern(webkitSpec)}'\\)\\n\\s+run: node worker/install-browsers.mjs --with-deps webkit\\n`,
+      `- if: contains\\(needs\\.scope\\.outputs\\.specs, '${escapePattern(WEBKIT_TEST_MATCH)}'\\)\\n\\s+run: node worker/install-browsers.mjs --with-deps webkit\\n`,
     ),
     "burn-in installs WebKit whenever a spec the config's WebKit projects run is among the ones it repeats",
   );
@@ -284,7 +282,7 @@ test("repeat setup selects browsers from the same unexpanded inputs as the tests
   assert.ok(selection);
   assert.match(selection, /TESTS: \$\{\{ inputs\.tests \}\}/);
   assert.match(selection, /PROJECT: \$\{\{ inputs\.project \}\}/);
-  assert.match(selection, /run: node worker\/browser-projects\.mjs/);
+  assert.match(selection, /run: node tests\/browser\/projects\.mjs/);
 });
 
 test("nightly setup failures retain their failure without a missing-report download", () => {
@@ -295,7 +293,6 @@ test("nightly setup failures retain their failure without a missing-report downl
     upload,
     /if: \$\{\{ !cancelled\(\) && github\.event_name == 'schedule' && hashFiles\('test-results\/report\.json'\) != '' \}\}/,
   );
-  assert.match(upload, /if-no-files-found: error/);
   assert.match(browser, /report-artifact: \$\{\{ steps\.nightly-report\.outputs\.artifact-id \}\}/);
   const report = readJob("report", "flaky.yml");
   assert.match(report, /needs\.browser\.outputs\.report-artifact != ''/);

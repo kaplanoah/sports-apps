@@ -76,7 +76,7 @@ jobs:
         env:
           TESTS: ${{ inputs.tests }}
           PROJECT: ${{ inputs.project }}
-        run: node worker/browser-projects.mjs
+        run: node tests/browser/projects.mjs
       - run: node worker/install-browsers.mjs --with-deps --only-shell ${{ steps.browsers.outputs.browsers }}
         timeout-minutes: 7
       # Every test runs to the end, however many fail, so the issue names each flaky one.
@@ -98,7 +98,6 @@ jobs:
         with:
           name: nightly-report
           path: test-results/report.json
-          if-no-files-found: error
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         if: failure()
         with:

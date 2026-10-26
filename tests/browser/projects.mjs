@@ -1,15 +1,21 @@
 import { appendFileSync, existsSync } from "node:fs";
 import { basename } from "node:path";
 import { fileURLToPath } from "node:url";
-import { listAppsWithBrowserTests } from "./apps.mjs";
+import { listAppsWithBrowserTests } from "../../worker/apps.mjs";
 
 export const WEBKIT_TEST_MATCH = "at-rest.spec.mjs";
+
+/** @param {string} app */
+export const nameWebKitProject = (app) => `${app}-webkit`;
+
+/** @param {string} path */
+export const isBrowserSpec = (path) => /^apps\/[^/]+\/tests\/browser\/.+\.spec\.mjs$/.test(path);
 
 /** @param {{ project?: string, tests?: string }} selection */
 export function listRequiredBrowsers({ project = "", tests = "" } = {}) {
   const apps = listAppsWithBrowserTests();
   if (apps.includes(project)) return ["chromium"];
-  if (apps.some((app) => `${app}-webkit` === project)) return ["webkit"];
+  if (apps.some((app) => nameWebKitProject(app) === project)) return ["webkit"];
   if (project || !tests.trim()) return ["chromium", "webkit"];
   const paths = tests
     .trim()
@@ -17,8 +23,9 @@ export function listRequiredBrowsers({ project = "", tests = "" } = {}) {
     .map((path) => path.replace(/:\d+(?::\d+)?$/, ""));
   const onlyChromium = paths.every(
     (path) =>
-      /^apps\/[a-z-]+\/tests\/browser\/[\w/.-]+\.spec\.mjs$/.test(path) &&
-      existsSync(new URL(`../${path}`, import.meta.url)) &&
+      isBrowserSpec(path) &&
+      !/[*+?^${}()|[\]\\]/.test(path) &&
+      existsSync(new URL(`../../${path}`, import.meta.url)) &&
       basename(path) !== WEBKIT_TEST_MATCH,
   );
   return onlyChromium ? ["chromium"] : ["chromium", "webkit"];
