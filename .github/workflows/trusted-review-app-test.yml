@@ -1,0 +1,63 @@
+name: Test trusted review App identity
+
+on:
+  workflow_dispatch:
+    inputs:
+      proof-head:
+        description: Approved disposable proof commit SHA (40 characters)
+        required: true
+        type: string
+      approval:
+        description: Type APPROVE_ONE_APP_IDENTITY_TEST after approving the recorded protocol
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  pull-requests: read
+  checks: read
+
+jobs:
+  identity:
+    if: github.ref == 'refs/heads/main' && github.actor == github.repository_owner && github.triggering_actor == github.repository_owner && github.run_attempt == 1 && vars.TRUSTED_REVIEW_PUBLISHER_ENABLED != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: trusted-review-publisher
+    concurrency:
+      group: issue-809-app-identity
+      cancel-in-progress: false
+      queue: max
+    env:
+      APP_PROOF_HEAD: ${{ inputs.proof-head }}
+      APP_PROOF_APPROVAL: ${{ inputs.approval }}
+      APP_PROOF_EXPECTED_ID: "5481243"
+      TRUSTED_REVIEW_APP_ID: ${{ vars.TRUSTED_REVIEW_APP_ID }}
+      TRUSTED_REVIEW_PUBLISHER_ENABLED: ${{ vars.TRUSTED_REVIEW_PUBLISHER_ENABLED }}
+      TRUSTED_CODEX_REVIEW_ENABLED: ${{ vars.TRUSTED_CODEX_REVIEW_ENABLED }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version-file: .nvmrc
+          package-manager-cache: false
+      - name: Validate owner authority and disposable target before using the key
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node worker/test-review-app.mjs validate
+      - name: Mint one repository-only Checks token
+        id: app
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3
+        with:
+          app-id: ${{ vars.TRUSTED_REVIEW_APP_ID }}
+          private-key: ${{ secrets.TRUSTED_REVIEW_APP_PRIVATE_KEY }}
+          repositories: ${{ github.event.repository.name }}
+          permission-checks: write
+      - name: Create and read back one deliberately failing proof check
+        env:
+          GH_TOKEN: ${{ github.token }}
+          APP_TOKEN: ${{ steps.app.outputs.token }}
+          APP_PROOF_INSTALLATION: ${{ steps.app.outputs.installation-id }}
+        run: node worker/test-review-app.mjs publish
