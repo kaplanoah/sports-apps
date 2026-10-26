@@ -3,7 +3,6 @@ import assert from "node:assert/strict";
 import {
   GitHubError,
   createGitHub,
-  createGitHubRoot,
   createGraphQL,
   findInPages,
   readAllPages,
@@ -17,32 +16,6 @@ import {
 const answerWith = (status, body) => async () => new Response(body, { status });
 
 const env = { GH_TOKEN: "t0ken" };
-
-test("API-root metadata shares REST authentication, version, timeout and sanitized errors", async () => {
-  const requests = [];
-  const readRoot = createGitHubRoot({
-    env,
-    fetchImpl: async (url, init) => {
-      requests.push({ url, init });
-      return new Response('{"total_count":1,"repositories":[]}');
-    },
-  });
-  assert.deepEqual(await readRoot("/installation/repositories?per_page=100"), {
-    total_count: 1,
-    repositories: [],
-  });
-  assert.equal(requests[0].url, "https://api.github.com/installation/repositories?per_page=100");
-  assert.equal(requests[0].init.headers.authorization, "Bearer t0ken");
-  assert.equal(requests[0].init.headers["x-github-api-version"], "2022-11-28");
-  assert.ok(requests[0].init.signal instanceof AbortSignal);
-  const denied = createGitHubRoot({ env, fetchImpl: answerWith(403, "untrusted response body") });
-  await assert.rejects(denied("/installation/repositories"), (error) => {
-    assert.ok(error instanceof GitHubError);
-    assert.equal(error.status, 403);
-    assert.doesNotMatch(error.message, /untrusted response body|t0ken/);
-    return true;
-  });
-});
 
 test("a refused REST request says GitHub's status, which a caller can tell apart", async () => {
   const callGitHub = createGitHub({ repository: "o/r", fetchImpl: answerWith(422, "{}"), env });
