@@ -196,48 +196,69 @@ test("owner REST snapshot may omit caller bypass state without inventing it", as
 });
 
 test("unsafe owner snapshots stop before metadata or key use", async () => {
-  for (const change of [
-    (f) => {
-      f.env.ISSUER_RULESET_SNAPSHOT = "not json";
-    },
-    (f) => {
-      f.env.ISSUER_RULESET_SNAPSHOT = "null";
-    },
-    (f) => {
-      f.env.ISSUER_RULESET_SNAPSHOT = "{}";
-    },
-    (f) => {
-      const s = JSON.parse(f.env.ISSUER_RULESET_SNAPSHOT);
-      delete s.bypass_actors;
-      f.env.ISSUER_RULESET_SNAPSHOT = JSON.stringify(s);
-    },
-    (f) => {
-      const s = JSON.parse(f.env.ISSUER_RULESET_SNAPSHOT);
-      s.bypass_actors = [{ actor_id: 1 }];
-      f.env.ISSUER_RULESET_SNAPSHOT = JSON.stringify(s);
-    },
-    (f) => {
-      const s = JSON.parse(f.env.ISSUER_RULESET_SNAPSHOT);
-      s.updated_at = "missing";
-      f.env.ISSUER_RULESET_SNAPSHOT = JSON.stringify(s);
-    },
-    (f) => {
-      const s = JSON.parse(f.env.ISSUER_RULESET_SNAPSHOT);
-      s.current_user_can_bypass = "always";
-      f.env.ISSUER_RULESET_SNAPSHOT = JSON.stringify(s);
-    },
-    (f) => {
-      const s = JSON.parse(f.env.ISSUER_RULESET_SNAPSHOT);
-      delete s.updated_at;
-      f.env.ISSUER_RULESET_SNAPSHOT = JSON.stringify(s);
-    },
-  ]) {
+  for (const [change, diagnostic] of /** @type {Array<[(fixture:any)=>void, RegExp]>} */ ([
+    [
+      (f) => {
+        f.env.ISSUER_RULESET_SNAPSHOT = "not json";
+      },
+      /Missing approved owner ruleset snapshot/,
+    ],
+    [
+      (f) => {
+        f.env.ISSUER_RULESET_SNAPSHOT = "null";
+      },
+      /Approved owner snapshot must pin/,
+    ],
+    [
+      (f) => {
+        f.env.ISSUER_RULESET_SNAPSHOT = "{}";
+      },
+      /Approved owner snapshot must pin/,
+    ],
+    [
+      (f) => {
+        const s = JSON.parse(f.env.ISSUER_RULESET_SNAPSHOT);
+        delete s.bypass_actors;
+        f.env.ISSUER_RULESET_SNAPSHOT = JSON.stringify(s);
+      },
+      /Approved owner snapshot must pin/,
+    ],
+    [
+      (f) => {
+        const s = JSON.parse(f.env.ISSUER_RULESET_SNAPSHOT);
+        s.bypass_actors = [{ actor_id: 1 }];
+        f.env.ISSUER_RULESET_SNAPSHOT = JSON.stringify(s);
+      },
+      /Approved owner snapshot must pin/,
+    ],
+    [
+      (f) => {
+        const s = JSON.parse(f.env.ISSUER_RULESET_SNAPSHOT);
+        s.updated_at = "missing";
+        f.env.ISSUER_RULESET_SNAPSHOT = JSON.stringify(s);
+      },
+      /Approved owner snapshot must pin/,
+    ],
+    [
+      (f) => {
+        const s = JSON.parse(f.env.ISSUER_RULESET_SNAPSHOT);
+        s.current_user_can_bypass = "always";
+        f.env.ISSUER_RULESET_SNAPSHOT = JSON.stringify(s);
+      },
+      /Approved owner snapshot must pin/,
+    ],
+    [
+      (f) => {
+        const s = JSON.parse(f.env.ISSUER_RULESET_SNAPSHOT);
+        delete s.updated_at;
+        f.env.ISSUER_RULESET_SNAPSHOT = JSON.stringify(s);
+      },
+      /Approved owner snapshot must pin/,
+    ],
+  ])) {
     const fixture = createFixture();
     change(fixture);
-    await assert.rejects(
-      validateIssuerProof(fixture.env, fixture.readMetadata),
-      /owner snapshot|owner ruleset snapshot/,
-    );
+    await assert.rejects(validateIssuerProof(fixture.env, fixture.readMetadata), diagnostic);
     assert.deepEqual(fixture.requests, []);
     assert.deepEqual(fixture.writes, []);
   }
@@ -939,16 +960,16 @@ test("repository-only scope, current metadata and readback are required without 
     /transport failed/,
   );
   assert.equal(writes, 1);
-  for (const field of [
-    "app",
-    "head_sha",
-    "conclusion",
-    "output",
-    "id",
-    "status",
-    "name",
-    "external_id",
-  ]) {
+  for (const [field, diagnostic] of /** @type {Array<[string, RegExp]>} */ ([
+    ["app", /check identity/],
+    ["head_sha", /check identity/],
+    ["conclusion", /GitHub did not confirm/],
+    ["output", /GitHub did not confirm/],
+    ["id", /check identity/],
+    ["status", /check identity/],
+    ["name", /check identity/],
+    ["external_id", /check identity/],
+  ])) {
     const bad = createFixture();
     let calls = 0;
     await assert.rejects(
@@ -962,7 +983,7 @@ test("repository-only scope, current metadata and readback are required without 
         },
         async () => bad.state.scope,
       ),
-      /Unexpected issuer proof check identity|GitHub did not confirm/,
+      diagnostic,
     );
     assert.equal(bad.writes.length, 1);
   }
