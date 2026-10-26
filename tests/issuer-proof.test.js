@@ -175,9 +175,23 @@ function createFixture(phase = "fail") {
   };
 }
 
-test("read-only ruleset metadata can omit bypass actors without inventing an empty list", async () => {
+test("visible empty bypass actors are accepted against the owner snapshot", async () => {
   const fixture = createFixture();
-  delete fixture.data["/rulesets/8"].bypass_actors;
+  fixture.data["/rulesets/8"].bypass_actors = [];
+  assert.equal((await fixture.publish()).conclusion, "failure");
+});
+
+test("read-only ruleset metadata may omit caller bypass state", async () => {
+  const fixture = createFixture();
+  delete fixture.data["/rulesets/8"].current_user_can_bypass;
+  assert.equal((await fixture.publish()).conclusion, "failure");
+});
+
+test("owner REST snapshot may omit caller bypass state without inventing it", async () => {
+  const fixture = createFixture();
+  const snapshot = JSON.parse(fixture.env.ISSUER_RULESET_SNAPSHOT);
+  delete snapshot.current_user_can_bypass;
+  fixture.env.ISSUER_RULESET_SNAPSHOT = JSON.stringify(snapshot);
   assert.equal((await fixture.publish()).conclusion, "failure");
 });
 
@@ -238,7 +252,7 @@ test("native version and caller bypass state stay bound to the owner snapshot", 
       f.data["/rulesets/8"].current_user_can_bypass = "always";
     },
     (f) => {
-      delete f.data["/rulesets/8"].current_user_can_bypass;
+      f.data["/rulesets/8"].current_user_can_bypass = null;
     },
     (f) => {
       f.data["/rulesets/8"].bypass_actors = null;
@@ -246,10 +260,7 @@ test("native version and caller bypass state stay bound to the owner snapshot", 
   ]) {
     const fixture = createFixture();
     change(fixture);
-    await assert.rejects(
-      fixture.publish(),
-      /owner snapshot|owner ruleset snapshot|exact disposable base/,
-    );
+    await assert.rejects(fixture.publish(), /exact disposable base/);
     assert.equal(fixture.writes.length, 0);
   }
 });
@@ -324,170 +335,196 @@ for (const [name, value] of Object.entries(authorityChanges)) {
   });
 }
 
-/** @type {Array<[string, (fixture:any)=>void]>} */
+/** @type {Array<[string, (fixture:any)=>void, RegExp]>} */
 const targetChanges = [
   [
     "wrong comparison status",
     (f) => {
       f.data[`/compare/${SOURCE}...${HEAD}`].status = "diverged";
     },
+    /one marker-only child/,
   ],
   [
     "wrong ahead count",
     (f) => {
       f.data[`/compare/${SOURCE}...${HEAD}`].ahead_by = 2;
     },
+    /one marker-only child/,
   ],
   [
     "wrong behind count",
     (f) => {
       f.data[`/compare/${SOURCE}...${HEAD}`].behind_by = 1;
     },
+    /one marker-only child/,
   ],
   [
     "extra comparison commit",
     (f) => {
       f.data[`/compare/${SOURCE}...${HEAD}`].commits.push({ sha: SOURCE });
     },
+    /one marker-only child/,
   ],
   [
     "wrong comparison commit",
     (f) => {
       f.data[`/compare/${SOURCE}...${HEAD}`].commits[0].sha = SOURCE;
     },
+    /one marker-only child/,
   ],
   [
     "marker directory",
     (f) => {
       f.data[`/contents/${MARKER}?ref=${HEAD}`].type = "dir";
     },
+    /one marker-only child/,
   ],
   [
     "wrong marker path",
     (f) => {
       f.data[`/contents/${MARKER}?ref=${HEAD}`].path = "other.md";
     },
+    /one marker-only child/,
   ],
   [
     "wrong marker encoding",
     (f) => {
       f.data[`/contents/${MARKER}?ref=${HEAD}`].encoding = "none";
     },
+    /one marker-only child/,
   ],
   [
     "wrong PR base SHA",
     (f) => {
       f.data["/pulls/7"].base.sha = HEAD;
     },
+    /exact isolated marker-only PR/,
   ],
   [
     "wrong PR base repository",
     (f) => {
       f.data["/pulls/7"].base.repo.full_name = "foreign/repository";
     },
+    /exact isolated marker-only PR/,
   ],
   [
     "foreign repository",
     (f) => {
       f.data[""].full_name = "other/repository";
     },
+    /one marker-only child/,
   ],
   [
     "non-main default",
     (f) => {
       f.data[""].default_branch = "other";
     },
+    /one marker-only child/,
   ],
   [
     "fork",
     (f) => {
       f.data[""].fork = true;
     },
+    /one marker-only child/,
   ],
   [
     "moved main",
     (f) => {
       f.data["/git/ref/heads/main"].object.sha = HEAD;
     },
+    /exact isolated marker-only PR/,
   ],
   [
     "wrong base ref",
     (f) => {
       f.data[`/git/ref/heads/${BASE_REF}`].ref = "refs/heads/main";
     },
+    /exact isolated marker-only PR/,
   ],
   [
     "moved proof base",
     (f) => {
       f.data[`/git/ref/heads/${BASE_REF}`].object.sha = HEAD;
     },
+    /exact isolated marker-only PR/,
   ],
   [
     "moved proof head",
     (f) => {
       f.data[`/git/ref/heads/${HEAD_REF}`].object.sha = SOURCE;
     },
+    /exact isolated marker-only PR/,
   ],
   [
     "extra parent",
     (f) => {
       f.data[`/git/commits/${HEAD}`].parents.push({ sha: HEAD });
     },
+    /one marker-only child/,
   ],
   [
     "wrong parent",
     (f) => {
       f.data[`/git/commits/${HEAD}`].parents[0].sha = HEAD;
     },
+    /one marker-only child/,
   ],
   [
     "extra diff",
     (f) => {
       f.data[`/compare/${SOURCE}...${HEAD}`].files.push({ filename: "ci.yml", status: "modified" });
     },
+    /one marker-only child/,
   ],
   [
     "wrong merge base",
     (f) => {
       f.data[`/compare/${SOURCE}...${HEAD}`].merge_base_commit.sha = HEAD;
     },
+    /one marker-only child/,
   ],
   [
     "wrong marker",
     (f) => {
       f.data[`/contents/${MARKER}?ref=${HEAD}`].content = Buffer.from("other\n").toString("base64");
     },
+    /one marker-only child/,
   ],
   [
     "Main PR",
     (f) => {
       f.data["/pulls/7"].base.ref = "main";
     },
+    /exact isolated marker-only PR/,
   ],
   [
     "foreign PR head",
     (f) => {
       f.data["/pulls/7"].head.repo.full_name = "outsider/repository";
     },
+    /exact isolated marker-only PR/,
   ],
   [
     "wrong PR head",
     (f) => {
       f.data["/pulls/7"].head.sha = SOURCE;
     },
+    /exact isolated marker-only PR/,
   ],
   [
     "closed initial PR",
     (f) => {
       f.data["/pulls/7"].state = "closed";
     },
+    /exact isolated marker-only PR/,
   ],
 ];
-for (const [name, change] of targetChanges) {
+for (const [name, change, diagnostic] of targetChanges) {
   test(`target rejects ${name} with no write`, async () => {
     const fixture = createFixture();
     change(fixture);
-    await assert.rejects(fixture.publish(), /exact isolated marker-only PR|one marker-only child/);
+    await assert.rejects(fixture.publish(), diagnostic);
     assert.equal(fixture.writes.length, 0);
   });
 }
@@ -741,23 +778,38 @@ test("listing identity uses fields supplied by GitHub's PR collection", async ()
 });
 
 test("latest source, refs and PR identity are checked after complete listings", async () => {
-  for (const change of [
-    (f) => {
-      f.data["/git/ref/heads/main"].object.sha = HEAD;
-    },
-    (f) => {
-      f.data[`/git/ref/heads/${BASE_REF}`].object.sha = HEAD;
-    },
-    (f) => {
-      f.data[`/git/ref/heads/${HEAD_REF}`].object.sha = SOURCE;
-    },
-    (f) => {
-      f.data["/pulls/7"].base.ref = "main";
-    },
-    (f) => {
-      f.data["/pulls/7"].draft = true;
-    },
-  ]) {
+  for (const [change, diagnostic] of /** @type {Array<[(fixture:any)=>void, RegExp]>} */ ([
+    [
+      (f) => {
+        f.data["/git/ref/heads/main"].object.sha = HEAD;
+      },
+      /exact isolated marker-only PR/,
+    ],
+    [
+      (f) => {
+        f.data[`/git/ref/heads/${BASE_REF}`].object.sha = HEAD;
+      },
+      /exact isolated marker-only PR/,
+    ],
+    [
+      (f) => {
+        f.data[`/git/ref/heads/${HEAD_REF}`].object.sha = SOURCE;
+      },
+      /exact isolated marker-only PR/,
+    ],
+    [
+      (f) => {
+        f.data["/pulls/7"].base.ref = "main";
+      },
+      /exact isolated marker-only PR/,
+    ],
+    [
+      (f) => {
+        f.data["/pulls/7"].draft = true;
+      },
+      /blocked PR/,
+    ],
+  ])) {
     const fixture = createFixture("pass");
     const read = async (path) => {
       const value = await fixture.readMetadata(path);
@@ -766,7 +818,7 @@ test("latest source, refs and PR identity are checked after complete listings", 
     };
     await assert.rejects(
       publishIssuerProof(fixture.env, read, fixture.writeChecks, async () => fixture.state.scope),
-      /exact isolated marker-only PR|blocked PR/,
+      diagnostic,
     );
     assert.equal(fixture.writes.length, 0);
   }

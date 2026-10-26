@@ -127,7 +127,7 @@ function readApprovedRuleset(env, proof) {
     !isIsolatedConfiguration(snapshot, proof) ||
     !Array.isArray(snapshot.bypass_actors) ||
     snapshot.bypass_actors.length !== 0 ||
-    snapshot.current_user_can_bypass !== "never" ||
+    hasVisibleCallerBypass(snapshot) ||
     !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(
       snapshot.updated_at,
     )
@@ -146,12 +146,19 @@ function hasVisibleBypass(ruleset) {
   );
 }
 
+/** @param {any} ruleset */
+function hasVisibleCallerBypass(ruleset) {
+  return (
+    Object.hasOwn(ruleset, "current_user_can_bypass") && ruleset.current_user_can_bypass !== "never"
+  );
+}
+
 /** @param {any} ruleset @param {any[]} effective @param {any} proof */
 function requireIsolatedRule(ruleset, effective, proof) {
   if (
     !isIsolatedConfiguration(ruleset, proof) ||
     ruleset.updated_at !== proof.rulesetSnapshot.updated_at ||
-    ruleset.current_user_can_bypass !== "never" ||
+    hasVisibleCallerBypass(ruleset) ||
     hasVisibleBypass(ruleset) ||
     effective.length !== 1 ||
     !isPinnedRule(effective[0], proof.app)
