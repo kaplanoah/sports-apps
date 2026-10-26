@@ -37,6 +37,8 @@ Strict up-to-date checks stay off. Main advancing after publication remains outs
 
 ## Live acceptance before enforcement
 
+The dormant [isolated issuer protocol](TRUSTED_REVIEW_ISSUER_TEST.md) prepares the expected-source association and same-name Actions rejection test. Shipping its fixture does not approve live execution or publisher activation.
+
 Use an owner-approved isolated target/ruleset, not a weakened Main rule. Synthetic fixtures can test publication mechanics; a real positive uses existing authenticated review evidence without an extra Claude probe. A throwaway repository cannot prove this repository's environment protection: inspect the actual configuration and use an approved harmless canary for access denial.
 
 | Proof | Required observation |

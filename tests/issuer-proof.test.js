@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { publishIssuerProof, validateIssuerProof } from "../worker/test-review-issuer.mjs";
 
 const SOURCE = "a".repeat(40);
@@ -31,6 +32,7 @@ function createFixture(phase = "fail") {
     ISSUER_HEAD: HEAD,
     ISSUER_PULL: "7",
     ISSUER_RULESET: "8",
+    ISSUER_RULESET_SNAPSHOT: "",
     ISSUER_PHASE: phase,
     ISSUER_CHECK: phase === "fail" ? "0" : "91",
     ISSUER_ACTIONS_CHECK: phase === "fail" ? "0" : "92",
@@ -64,6 +66,7 @@ function createFixture(phase = "fail") {
     head: HEAD,
     pull: 7,
     ruleset: 8,
+    rulesetDigest: "",
     run: "99",
   };
   const owned = {
@@ -118,12 +121,18 @@ function createFixture(phase = "fail") {
       enforcement: "active",
       source_type: "Repository",
       source: REPOSITORY,
+      current_user_can_bypass: "never",
+      updated_at: "2026-01-01T10:00:00Z",
       bypass_actors: [],
       conditions: { ref_name: { include: [`refs/heads/${BASE_REF}`], exclude: [] } },
       rules: [structuredClone(rule)],
     },
     [`/rules/branches/${BASE_REF}`]: [structuredClone(rule)],
   };
+  env.ISSUER_RULESET_SNAPSHOT = JSON.stringify(data["/rulesets/8"]);
+  record.rulesetDigest = createHash("sha256").update(env.ISSUER_RULESET_SNAPSHOT).digest("hex");
+  owned.output.text = JSON.stringify(record);
+  delete data["/rulesets/8"].bypass_actors;
   const state = /** @type {any} */ ({
     env,
     data,
@@ -165,6 +174,101 @@ function createFixture(phase = "fail") {
     publish: () => publishIssuerProof(env, readMetadata, writeChecks, async () => state.scope),
   };
 }
+
+test("read-only ruleset metadata can omit bypass actors without inventing an empty list", async () => {
+  const fixture = createFixture();
+  delete fixture.data["/rulesets/8"].bypass_actors;
+  assert.equal((await fixture.publish()).conclusion, "failure");
+});
+
+test("unsafe owner snapshots stop before metadata or key use", async () => {
+  for (const change of [
+    (f) => {
+      f.env.ISSUER_RULESET_SNAPSHOT = "not json";
+    },
+    (f) => {
+      f.env.ISSUER_RULESET_SNAPSHOT = "null";
+    },
+    (f) => {
+      f.env.ISSUER_RULESET_SNAPSHOT = "{}";
+    },
+    (f) => {
+      const s = JSON.parse(f.env.ISSUER_RULESET_SNAPSHOT);
+      delete s.bypass_actors;
+      f.env.ISSUER_RULESET_SNAPSHOT = JSON.stringify(s);
+    },
+    (f) => {
+      const s = JSON.parse(f.env.ISSUER_RULESET_SNAPSHOT);
+      s.bypass_actors = [{ actor_id: 1 }];
+      f.env.ISSUER_RULESET_SNAPSHOT = JSON.stringify(s);
+    },
+    (f) => {
+      const s = JSON.parse(f.env.ISSUER_RULESET_SNAPSHOT);
+      s.updated_at = "missing";
+      f.env.ISSUER_RULESET_SNAPSHOT = JSON.stringify(s);
+    },
+    (f) => {
+      const s = JSON.parse(f.env.ISSUER_RULESET_SNAPSHOT);
+      s.current_user_can_bypass = "always";
+      f.env.ISSUER_RULESET_SNAPSHOT = JSON.stringify(s);
+    },
+    (f) => {
+      const s = JSON.parse(f.env.ISSUER_RULESET_SNAPSHOT);
+      delete s.updated_at;
+      f.env.ISSUER_RULESET_SNAPSHOT = JSON.stringify(s);
+    },
+  ]) {
+    const fixture = createFixture();
+    change(fixture);
+    await assert.rejects(
+      validateIssuerProof(fixture.env, fixture.readMetadata),
+      /owner snapshot|owner ruleset snapshot/,
+    );
+    assert.deepEqual(fixture.requests, []);
+    assert.deepEqual(fixture.writes, []);
+  }
+});
+
+test("native version and caller bypass state stay bound to the owner snapshot", async () => {
+  for (const change of [
+    (f) => {
+      f.data["/rulesets/8"].updated_at = "2026-01-02T10:00:00Z";
+    },
+    (f) => {
+      f.data["/rulesets/8"].current_user_can_bypass = "always";
+    },
+    (f) => {
+      delete f.data["/rulesets/8"].current_user_can_bypass;
+    },
+    (f) => {
+      f.data["/rulesets/8"].bypass_actors = null;
+    },
+  ]) {
+    const fixture = createFixture();
+    change(fixture);
+    await assert.rejects(
+      fixture.publish(),
+      /owner snapshot|owner ruleset snapshot|exact disposable base/,
+    );
+    assert.equal(fixture.writes.length, 0);
+  }
+});
+
+test("uncomputed mergeability is distinct from a conflict and cannot spend an App write", async () => {
+  const fixture = createFixture("pass");
+  fixture.data["/pulls/7"].mergeable = null;
+  await assert.rejects(fixture.publish(), /not computed yet/);
+  assert.equal(fixture.writes.length, 0);
+});
+
+test("malformed phase record values are rejected with the phase diagnostic", async () => {
+  for (const text of ["null", "[]", "0", '"other"']) {
+    const fixture = createFixture("pass");
+    fixture.owned.output.text = text;
+    await assert.rejects(fixture.publish(), /Missing issuer proof phase record/);
+    assert.equal(fixture.writes.length, 0);
+  }
+});
 
 test("isolated phases create one failure, then update the same check to success and back", async () => {
   for (const phase of /** @type {const} */ (["fail", "pass", "reset"])) {
@@ -222,6 +326,66 @@ for (const [name, value] of Object.entries(authorityChanges)) {
 
 /** @type {Array<[string, (fixture:any)=>void]>} */
 const targetChanges = [
+  [
+    "wrong comparison status",
+    (f) => {
+      f.data[`/compare/${SOURCE}...${HEAD}`].status = "diverged";
+    },
+  ],
+  [
+    "wrong ahead count",
+    (f) => {
+      f.data[`/compare/${SOURCE}...${HEAD}`].ahead_by = 2;
+    },
+  ],
+  [
+    "wrong behind count",
+    (f) => {
+      f.data[`/compare/${SOURCE}...${HEAD}`].behind_by = 1;
+    },
+  ],
+  [
+    "extra comparison commit",
+    (f) => {
+      f.data[`/compare/${SOURCE}...${HEAD}`].commits.push({ sha: SOURCE });
+    },
+  ],
+  [
+    "wrong comparison commit",
+    (f) => {
+      f.data[`/compare/${SOURCE}...${HEAD}`].commits[0].sha = SOURCE;
+    },
+  ],
+  [
+    "marker directory",
+    (f) => {
+      f.data[`/contents/${MARKER}?ref=${HEAD}`].type = "dir";
+    },
+  ],
+  [
+    "wrong marker path",
+    (f) => {
+      f.data[`/contents/${MARKER}?ref=${HEAD}`].path = "other.md";
+    },
+  ],
+  [
+    "wrong marker encoding",
+    (f) => {
+      f.data[`/contents/${MARKER}?ref=${HEAD}`].encoding = "none";
+    },
+  ],
+  [
+    "wrong PR base SHA",
+    (f) => {
+      f.data["/pulls/7"].base.sha = HEAD;
+    },
+  ],
+  [
+    "wrong PR base repository",
+    (f) => {
+      f.data["/pulls/7"].base.repo.full_name = "foreign/repository";
+    },
+  ],
   [
     "foreign repository",
     (f) => {
@@ -323,13 +487,37 @@ for (const [name, change] of targetChanges) {
   test(`target rejects ${name} with no write`, async () => {
     const fixture = createFixture();
     change(fixture);
-    await assert.rejects(fixture.publish(), /exact isolated marker-only PR/);
+    await assert.rejects(fixture.publish(), /exact isolated marker-only PR|one marker-only child/);
     assert.equal(fixture.writes.length, 0);
   });
 }
 
 /** @type {Array<[string, (rule:any)=>void]>} */
 const ruleChanges = [
+  [
+    "wrong ruleset id",
+    (r) => {
+      r.id = 9;
+    },
+  ],
+  [
+    "wrong ruleset name",
+    (r) => {
+      r.name = "Main";
+    },
+  ],
+  [
+    "wrong source type",
+    (r) => {
+      r.source_type = "Organization";
+    },
+  ],
+  [
+    "extra ruleset rule",
+    (r) => {
+      r.rules.push({ type: "pull_request" });
+    },
+  ],
   [
     "Main include",
     (r) => {
@@ -369,7 +557,7 @@ const ruleChanges = [
   [
     "bypass",
     (r) => {
-      r.bypass_actors.push({ actor_id: 1 });
+      r.bypass_actors = [{ actor_id: 1 }];
     },
   ],
   [
@@ -424,17 +612,13 @@ test("additional inherited rules and effective issuer mismatches stop the proof"
 });
 
 test("every open-PR and check page is inspected for collisions", async () => {
-  for (const collision of ["head", "merge", "check"]) {
+  for (const collision of ["head", "check"]) {
     const fixture = createFixture();
     fixture.state.pulls = Array.from({ length: 100 }, (_, index) => ({ number: index + 1000 }));
     if (collision === "check") {
       fixture.state.checks = Array.from({ length: 100 }, () => ({ name: "unrelated" }));
       fixture.state.checks.push({ name: "trusted-review", app: { id: 23 } });
-    } else
-      fixture.state.pulls.push({
-        number: 900,
-        ...(collision === "head" ? { head: { sha: HEAD } } : { merge_commit_sha: HEAD }),
-      });
+    } else fixture.state.pulls.push({ number: 900, head: { sha: HEAD } });
     await assert.rejects(fixture.publish(), collision === "check" ? /already has/ : /collides/);
     assert.equal(fixture.writes.length, 0);
     assert.ok(fixture.requests.some((path) => path.includes("page=2")));
@@ -490,6 +674,9 @@ test("duplicate owned checks, wrong IDs, stale and forged phase records cannot a
       f.owned.conclusion = "success";
     },
     (f) => {
+      f.owned.status = "in_progress";
+    },
+    (f) => {
       f.owned.output.text = "not json";
     },
     (f) => {
@@ -506,6 +693,9 @@ test("duplicate owned checks, wrong IDs, stale and forged phase records cannot a
     },
     (f) => {
       f.record.ruleset = 9;
+    },
+    (f) => {
+      f.record.rulesetDigest = "foreign";
     },
     (f) => {
       f.record.phase = "reset";
@@ -576,13 +766,40 @@ test("latest source, refs and PR identity are checked after complete listings", 
     };
     await assert.rejects(
       publishIssuerProof(fixture.env, read, fixture.writeChecks, async () => fixture.state.scope),
-      /exact isolated marker-only PR/,
+      /exact isolated marker-only PR|blocked PR/,
+    );
+    assert.equal(fixture.writes.length, 0);
+  }
+});
+
+test("native ruleset version and effective rules are re-read after check pagination", async () => {
+  for (const change of [
+    (f) => {
+      f.data["/rulesets/8"].updated_at = "2026-01-02T10:00:00Z";
+    },
+    (f) => {
+      f.data[`/rules/branches/${BASE_REF}`].push({ type: "pull_request" });
+    },
+  ]) {
+    const fixture = createFixture("pass");
+    const read = async (path) => {
+      const answer = await fixture.readMetadata(path);
+      if (path.includes("/check-runs?")) change(fixture);
+      return answer;
+    };
+    await assert.rejects(
+      publishIssuerProof(fixture.env, read, fixture.writeChecks, async () => fixture.state.scope),
+      /exact disposable base/,
     );
     assert.equal(fixture.writes.length, 0);
   }
 });
 
 test("repository-only scope, current metadata and readback are required without automatic retries", async () => {
+  const count = createFixture();
+  count.state.scope.total_count = 2;
+  await assert.rejects(count.publish(), /exactly this repository/);
+  assert.equal(count.requests.length, 0);
   const scope = createFixture();
   scope.state.scope.repositories.push({ full_name: "example/other" });
   await assert.rejects(scope.publish(), /exactly this repository/);
@@ -607,7 +824,16 @@ test("repository-only scope, current metadata and readback are required without 
     /transport failed/,
   );
   assert.equal(writes, 1);
-  for (const field of ["app", "head_sha", "conclusion", "output", "id"]) {
+  for (const field of [
+    "app",
+    "head_sha",
+    "conclusion",
+    "output",
+    "id",
+    "status",
+    "name",
+    "external_id",
+  ]) {
     const bad = createFixture();
     let calls = 0;
     await assert.rejects(
@@ -621,6 +847,7 @@ test("repository-only scope, current metadata and readback are required without 
         },
         async () => bad.state.scope,
       ),
+      /Unexpected issuer proof check identity|GitHub did not confirm/,
     );
     assert.equal(bad.writes.length, 1);
   }
@@ -638,6 +865,9 @@ test("main-only key use and permission-free lookalike stay distinct from product
   assert.match(workflow, /workflow_dispatch:/);
   assert.doesNotMatch(workflow, /^ {2}(?:push|pull_request|workflow_run):/m);
   assert.match(workflow, /github\.run_attempt == 1/);
+  assert.match(workflow, /inputs.approval == 'APPROVE_ISOLATED_ISSUER_PROTOCOL'/);
+  assert.match(workflow, /vars.TRUSTED_CODEX_REVIEW_ENABLED != 'true'/);
+  assert.match(workflow, /ISSUER_RULESET_SNAPSHOT: \$\{\{ inputs.ruleset-snapshot \}\}/);
   assert.match(workflow, /environment: trusted-review-publisher/);
   assert.match(workflow, /ref: \$\{\{ github.sha \}\}/);
   assert.match(workflow, /persist-credentials: false/);

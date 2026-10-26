@@ -19,6 +19,10 @@ on:
         description: Approved isolated issuer ruleset ID
         required: true
         type: string
+      ruleset-snapshot:
+        description: Exact approved owner-verified ruleset JSON, including bypass actors and updated_at
+        required: true
+        type: string
       phase:
         description: Approved phase, once each in order
         required: true
@@ -46,7 +50,7 @@ permissions:
 
 jobs:
   issuer:
-    if: github.ref == 'refs/heads/main' && github.actor == github.repository_owner && github.triggering_actor == github.repository_owner && github.run_attempt == 1 && vars.TRUSTED_REVIEW_PUBLISHER_ENABLED != 'true'
+    if: github.ref == 'refs/heads/main' && github.actor == github.repository_owner && github.triggering_actor == github.repository_owner && github.run_attempt == 1 && inputs.approval == 'APPROVE_ISOLATED_ISSUER_PROTOCOL' && vars.TRUSTED_REVIEW_PUBLISHER_ENABLED != 'true' && vars.TRUSTED_CODEX_REVIEW_ENABLED != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     environment: trusted-review-publisher
@@ -59,6 +63,7 @@ jobs:
       ISSUER_HEAD: ${{ inputs.proof-head }}
       ISSUER_PULL: ${{ inputs.proof-pr }}
       ISSUER_RULESET: ${{ inputs.proof-ruleset }}
+      ISSUER_RULESET_SNAPSHOT: ${{ inputs.ruleset-snapshot }}
       ISSUER_PHASE: ${{ inputs.phase }}
       ISSUER_CHECK: ${{ inputs.proof-check }}
       ISSUER_ACTIONS_CHECK: ${{ inputs.actions-check }}

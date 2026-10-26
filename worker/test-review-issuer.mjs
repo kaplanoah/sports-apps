@@ -1,4 +1,5 @@
 import { appendFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { createGitHub, createGitHubRoot, GitHubError, readAllPages } from "./github-api.mjs";
 import { isGitObjectId } from "./git-object.mjs";
@@ -58,7 +59,7 @@ function requireIssuerAuthority(env) {
     throw new IssuerProofError(
       "Issuer proof requires approved owner/main authority, exact source, first attempt and unset activation flags.",
     );
-  return {
+  const proof = {
     repository,
     source: env.ISSUER_SOURCE,
     head: env.ISSUER_HEAD,
@@ -69,6 +70,12 @@ function requireIssuerAuthority(env) {
     check: Number(env.ISSUER_CHECK),
     actionsCheck: Number(env.ISSUER_ACTIONS_CHECK),
     run: env.GITHUB_RUN_ID,
+  };
+  const rulesetSnapshot = readApprovedRuleset(env, proof);
+  return {
+    ...proof,
+    rulesetSnapshot,
+    rulesetDigest: createHash("sha256").update(JSON.stringify(rulesetSnapshot)).digest("hex"),
   };
 }
 
@@ -91,21 +98,61 @@ function isPinnedRule(rule, app) {
   );
 }
 
+/** @param {any} ruleset @param {any} proof */
+function isIsolatedConfiguration(ruleset, proof) {
+  return (
+    ruleset?.id === proof.ruleset &&
+    ruleset.name === "Issue 809 issuer proof" &&
+    ruleset.target === "branch" &&
+    ruleset.enforcement === "active" &&
+    ruleset.source_type === "Repository" &&
+    ruleset.source === proof.repository &&
+    ruleset.conditions?.ref_name?.include?.length === 1 &&
+    ruleset.conditions.ref_name.include[0] === `refs/heads/${BASE}` &&
+    ruleset.conditions.ref_name.exclude?.length === 0 &&
+    ruleset.rules?.length === 1 &&
+    isPinnedRule(ruleset.rules[0], proof.app)
+  );
+}
+
+/** @param {NodeJS.ProcessEnv} env @param {any} proof */
+function readApprovedRuleset(env, proof) {
+  let snapshot;
+  try {
+    snapshot = JSON.parse(env.ISSUER_RULESET_SNAPSHOT ?? "");
+  } catch {
+    throw new IssuerProofError("Missing approved owner ruleset snapshot.");
+  }
+  if (
+    !isIsolatedConfiguration(snapshot, proof) ||
+    !Array.isArray(snapshot.bypass_actors) ||
+    snapshot.bypass_actors.length !== 0 ||
+    snapshot.current_user_can_bypass !== "never" ||
+    !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(
+      snapshot.updated_at,
+    )
+  )
+    throw new IssuerProofError(
+      "Approved owner snapshot must pin the isolated rule, its version and no bypass actors.",
+    );
+  return snapshot;
+}
+
+/** @param {any} ruleset */
+function hasVisibleBypass(ruleset) {
+  return (
+    Object.hasOwn(ruleset, "bypass_actors") &&
+    (!Array.isArray(ruleset.bypass_actors) || ruleset.bypass_actors.length !== 0)
+  );
+}
+
 /** @param {any} ruleset @param {any[]} effective @param {any} proof */
 function requireIsolatedRule(ruleset, effective, proof) {
   if (
-    ruleset.id !== proof.ruleset ||
-    ruleset.name !== "Issue 809 issuer proof" ||
-    ruleset.target !== "branch" ||
-    ruleset.enforcement !== "active" ||
-    ruleset.source_type !== "Repository" ||
-    ruleset.source !== proof.repository ||
-    ruleset.bypass_actors?.length !== 0 ||
-    ruleset.conditions?.ref_name?.include?.length !== 1 ||
-    ruleset.conditions.ref_name.include[0] !== `refs/heads/${BASE}` ||
-    ruleset.conditions.ref_name.exclude?.length !== 0 ||
-    ruleset.rules?.length !== 1 ||
-    !isPinnedRule(ruleset.rules[0], proof.app) ||
+    !isIsolatedConfiguration(ruleset, proof) ||
+    ruleset.updated_at !== proof.rulesetSnapshot.updated_at ||
+    ruleset.current_user_can_bypass !== "never" ||
+    hasVisibleBypass(ruleset) ||
     effective.length !== 1 ||
     !isPinnedRule(effective[0], proof.app)
   )
@@ -147,6 +194,8 @@ function requireProofTransition(checks, proof) {
   } catch {
     throw new IssuerProofError("Missing issuer proof phase record.");
   }
+  if (!record || typeof record !== "object" || Array.isArray(record))
+    throw new IssuerProofError("Missing issuer proof phase record.");
   const previous = PHASES[proof.phase].previous;
   if (
     !previous ||
@@ -156,6 +205,7 @@ function requireProofTransition(checks, proof) {
     record.head !== proof.head ||
     record.pull !== proof.pull ||
     record.ruleset !== proof.ruleset ||
+    record.rulesetDigest !== proof.rulesetDigest ||
     !isPositiveId(record.run) ||
     record.run === proof.run ||
     owned[0].conclusion !== PHASES[previous].conclusion
@@ -199,27 +249,27 @@ function requireCurrentIssuerTarget(proof, { main, base, head, pull }) {
     head.ref !== `refs/heads/${HEAD}` ||
     head.object?.type !== "commit" ||
     head.object.sha !== proof.head ||
-    !isIssuerPull(pull, proof) ||
-    (proof.phase === "pass" &&
-      (pull.draft !== false || pull.mergeable !== true || pull.mergeable_state !== "blocked"))
+    !isIssuerPull(pull, proof)
   )
     throw new IssuerProofError(
-      "Issuer proof requires the exact isolated marker-only PR above current main; passing requires a ready conflict-free blocked PR.",
+      "Issuer proof requires the exact isolated marker-only PR above current main.",
     );
+  requireReadyIssuerHold(pull, proof);
 }
 
-/** @param {NodeJS.ProcessEnv} env @param {(path:string)=>Promise<any>} readMetadata */
-export async function validateIssuerProof(env, readMetadata) {
-  const proof = requireIssuerAuthority(env);
-  const repository = await readMetadata("");
-  const main = await readMetadata("/git/ref/heads/main");
-  const base = await readMetadata(`/git/ref/heads/${BASE}`);
-  const head = await readMetadata(`/git/ref/heads/${HEAD}`);
-  const commit = await readMetadata(`/git/commits/${proof.head}`);
-  const comparison = await readMetadata(`/compare/${proof.source}...${proof.head}`);
-  const marker = await readMetadata(`/contents/${MARKER}?ref=${proof.head}`);
-  const pull = await readMetadata(`/pulls/${proof.pull}`);
-  requireCurrentIssuerTarget(proof, { main, base, head, pull });
+/** @param {any} pull @param {any} proof */
+function requireReadyIssuerHold(pull, proof) {
+  if (proof.phase !== "pass") return;
+  if (pull.mergeable === null)
+    throw new IssuerProofError(
+      "PR mergeability is not computed yet; confirm settled native state before the approved pass dispatch.",
+    );
+  if (pull.draft !== false || pull.mergeable !== true || pull.mergeable_state !== "blocked")
+    throw new IssuerProofError("Issuer success requires a ready conflict-free blocked PR.");
+}
+
+/** @param {any} repository @param {any} commit @param {any} comparison @param {any} marker @param {any} proof */
+function requireMarkerOnlyChild(repository, commit, comparison, marker, proof) {
   if (
     repository.full_name !== proof.repository ||
     repository.default_branch !== "main" ||
@@ -242,15 +292,26 @@ export async function validateIssuerProof(env, readMetadata) {
     Buffer.from(marker.content ?? "", "base64").toString("utf8") !== TEXT
   )
     throw new IssuerProofError(
-      "Issuer proof requires the exact isolated marker-only PR above current main; passing requires a ready conflict-free blocked PR.",
+      "Issuer target must be one marker-only child of the approved source in the expected repository.",
     );
+}
+
+/** @param {NodeJS.ProcessEnv} env @param {(path:string)=>Promise<any>} readMetadata */
+export async function validateIssuerProof(env, readMetadata) {
+  const proof = requireIssuerAuthority(env);
+  const repository = await readMetadata("");
+  const main = await readMetadata("/git/ref/heads/main");
+  const base = await readMetadata(`/git/ref/heads/${BASE}`);
+  const head = await readMetadata(`/git/ref/heads/${HEAD}`);
+  const commit = await readMetadata(`/git/commits/${proof.head}`);
+  const comparison = await readMetadata(`/compare/${proof.source}...${proof.head}`);
+  const marker = await readMetadata(`/contents/${MARKER}?ref=${proof.head}`);
+  const pull = await readMetadata(`/pulls/${proof.pull}`);
+  requireCurrentIssuerTarget(proof, { main, base, head, pull });
+  requireMarkerOnlyChild(repository, commit, comparison, marker, proof);
   const pulls = await readAllPages(readMetadata, "/pulls?state=open", requireProofList);
   if (
-    pulls.some(
-      (candidate) =>
-        (candidate.head?.sha === proof.head || candidate.merge_commit_sha === proof.head) &&
-        !isIssuerPull(candidate, proof),
-    )
+    pulls.some((candidate) => candidate.head?.sha === proof.head && !isIssuerPull(candidate, proof))
   )
     throw new IssuerProofError("Issuer target collides with another open PR.");
   const ruleset = await readMetadata(`/rulesets/${proof.ruleset}`);
@@ -262,12 +323,16 @@ export async function validateIssuerProof(env, readMetadata) {
     (answer) => requireProofList(answer.check_runs),
   );
   requireProofTransition(checks, proof);
-  const [latestMain, latestBase, latestHead, latestPull] = await Promise.all([
-    readMetadata("/git/ref/heads/main"),
-    readMetadata(`/git/ref/heads/${BASE}`),
-    readMetadata(`/git/ref/heads/${HEAD}`),
-    readMetadata(`/pulls/${proof.pull}`),
-  ]);
+  const [latestMain, latestBase, latestHead, latestPull, latestRuleset, latestEffective] =
+    await Promise.all([
+      readMetadata("/git/ref/heads/main"),
+      readMetadata(`/git/ref/heads/${BASE}`),
+      readMetadata(`/git/ref/heads/${HEAD}`),
+      readMetadata(`/pulls/${proof.pull}`),
+      readMetadata(`/rulesets/${proof.ruleset}`),
+      readMetadata(`/rules/branches/${BASE}`),
+    ]);
+  requireIsolatedRule(latestRuleset, requireProofList(latestEffective), proof);
   requireCurrentIssuerTarget(proof, {
     main: latestMain,
     base: latestBase,
@@ -300,6 +365,7 @@ export async function publishIssuerProof(env, readMetadata, writeChecks, readIns
     head: proof.head,
     pull: proof.pull,
     ruleset: proof.ruleset,
+    rulesetDigest: proof.rulesetDigest,
     run: proof.run,
   };
   const conclusion = PHASES[proof.phase].conclusion;
