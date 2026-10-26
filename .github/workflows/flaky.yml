@@ -48,11 +48,13 @@ jobs:
       - name: Test date/time-sensitive Node tests in Honolulu
         run: node worker/test-time-zone.mjs
 
-  # The installed Playwright installs the Chromium and WebKit it runs, with the system libraries
-  # they need, so one machine runs every project.
+  # Explicit manual selections install only their browsers; nightly and ambiguous selections
+  # retain both engines and their system libraries.
   browser:
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    outputs:
+      report-artifact: ${{ steps.nightly-report.outputs.artifact-id }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -70,7 +72,12 @@ jobs:
           key: node-modules-v2-${{ runner.os }}-${{ steps.node.outputs.node-version }}-${{ hashFiles('package-lock.json') }}
       - if: steps.modules.outputs.cache-hit != 'true'
         run: npm ci
-      - run: node worker/install-browsers.mjs --with-deps --only-shell chromium webkit
+      - id: browsers
+        env:
+          TESTS: ${{ inputs.tests }}
+          PROJECT: ${{ inputs.project }}
+        run: node worker/browser-projects.mjs
+      - run: node worker/install-browsers.mjs --with-deps --only-shell ${{ steps.browsers.outputs.browsers }}
         timeout-minutes: 7
       # Every test runs to the end, however many fail, so the issue names each flaky one.
       - name: Run the browser tests over and over
@@ -86,10 +93,12 @@ jobs:
           npm run test:browser -- "${options[@]}" "${tests[@]}"
       # Only the nightly run of main reports, since a run by hand may test a branch.
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
-        if: ${{ !cancelled() && github.event_name == 'schedule' }}
+        id: nightly-report
+        if: ${{ !cancelled() && github.event_name == 'schedule' && hashFiles('test-results/report.json') != '' }}
         with:
           name: nightly-report
           path: test-results/report.json
+          if-no-files-found: error
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         if: failure()
         with:
@@ -104,7 +113,7 @@ jobs:
   # its API trigger.
   report:
     needs: browser
-    if: ${{ !cancelled() && github.event_name == 'schedule' }}
+    if: ${{ !cancelled() && github.event_name == 'schedule' && needs.browser.outputs.report-artifact != '' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
