@@ -4,7 +4,7 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { listRequiredBrowsers, WEBKIT_TEST_MATCH } from "../worker/browser-projects.mjs";
+import { listRequiredBrowsers, WEBKIT_TEST_MATCH } from "./browser/projects.mjs";
 import { readRepoFile } from "./repo-files.js";
 
 test("explicit Chromium and WebKit projects install their own engine", () => {
@@ -49,6 +49,7 @@ test("nightly, all-test, WebKit and ambiguous selections keep both engines", () 
 
 test("Playwright and browser installation share WebKit's test match", () => {
   assert.match(readRepoFile("playwright.config.mjs"), /testMatch: WEBKIT_TEST_MATCH/);
+  assert.match(readRepoFile("playwright.config.mjs"), /name: nameWebKitProject\(app\)/);
   assert.equal(WEBKIT_TEST_MATCH, "at-rest.spec.mjs");
 });
 
@@ -69,7 +70,7 @@ test("the selection command publishes only browser names as workflow arguments",
       },
       { selection: {}, browsers: "chromium webkit" },
     ]) {
-      const result = spawnSync(process.execPath, ["worker/browser-projects.mjs"], {
+      const result = spawnSync(process.execPath, ["tests/browser/projects.mjs"], {
         env: { ...process.env, TESTS: "", PROJECT: "", ...selection, GITHUB_OUTPUT: output },
         encoding: "utf8",
         timeout: 2000,

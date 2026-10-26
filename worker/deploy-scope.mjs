@@ -42,7 +42,6 @@ const SKIPPED_FILES = new Set([
   "types/globals.d.ts",
   "worker/beta-claim.mjs",
   "worker/browser-scope.mjs",
-  "worker/browser-projects.mjs",
   "worker/burn-in-specs.mjs",
   "worker/check-pr-title.mjs",
   "worker/find-trusted-review.mjs",
