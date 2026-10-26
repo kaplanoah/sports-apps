@@ -44,13 +44,11 @@ test("on a phone, Diagnostics sit past the copyright, a scroll beyond where sett
   await expect(page.locator(".diagnostics-area .control-label")).toHaveText("Diagnostics");
 });
 
-test("on a wide screen, Diagnostics sit under the settings and ranking, a scroll away", async ({
-  page,
-}) => {
+test("on a wide screen, Diagnostics sit under the settings, a scroll away", async ({ page }) => {
   await page.setViewportSize(LAPTOP);
   await openApp(page);
   await openSettings(page);
-  await expect(page.locator(".rank-frame")).toBeInViewport();
+  await expect(page.locator("#rankingBtn")).toBeInViewport();
   await expect(findDiagnosticsSwitch(page)).not.toBeInViewport();
   await page.mouse.move(LAPTOP.width / 2, LAPTOP.height / 2);
 

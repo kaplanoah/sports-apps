@@ -390,6 +390,51 @@ section.view.active:not([data-follows]):has(> :is(.day-view, .season-parts)) {
     box-shadow: var(--sheet-shadow);
   }
 }
+.settings-page-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  min-height: 56px;
+  padding: 12px 0;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font-family: inherit;
+  font-size: var(--type-setting-size);
+  font-weight: var(--type-setting-weight);
+  text-align: left;
+  cursor: pointer;
+}
+.settings-page-row svg {
+  width: 18px;
+  height: 18px;
+  flex: none;
+  color: var(--ink-dim);
+}
+.settings-back {
+  position: absolute;
+  left: -10px;
+  top: 0;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 9px;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  cursor: pointer;
+}
+.settings-back svg {
+  width: 26px;
+  height: 26px;
+}
+@media (hover: hover) {
+  :is(.settings-page-row, .settings-back):hover {
+    color: var(--ink-hover);
+  }
+}
 /* Sheets and settings leave the page behind them as it is. */
 :is(.settings-panel, .sheet-panel)::backdrop {
   background: none;

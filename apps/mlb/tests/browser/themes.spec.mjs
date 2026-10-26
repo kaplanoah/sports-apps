@@ -40,6 +40,7 @@ for (const [screen, viewport] of Object.entries(SCREENS)) {
 }
 
 const CHIP_LOOKS = {
+  "the settings pages": ["filled", "outlined"],
   "the page's tabs": ["filled", "outlined"],
   "a game's sheets": [],
   "a club's and a player's sheets": ["filled", "outlined"],

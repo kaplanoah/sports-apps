@@ -60,7 +60,7 @@ export function registerContactTests({ test, expect, openApp, app }) {
     await openContact(page);
     const dialog = page.locator("#contactDialog");
     await expect(dialog.getByRole("link")).toHaveAttribute("href", "mailto:owner@example.com");
-    await expect(dialog.locator(".contact-row")).toHaveText([
+    await expect(dialog.locator(".settings-page-row")).toHaveText([
       "Bug report",
       "Feature request",
       "Something else",

@@ -70,7 +70,7 @@ export function startContact(dialog) {
         else field.removeAttribute("aria-describedby");
       }
     }
-    const back = /** @type {HTMLButtonElement | null} */ (dialog.querySelector(".contact-back"));
+    const back = /** @type {HTMLButtonElement | null} */ (dialog.querySelector(".settings-back"));
     if (back) back.disabled = view.sending;
   }
 

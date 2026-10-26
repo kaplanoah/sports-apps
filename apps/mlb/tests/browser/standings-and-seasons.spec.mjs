@@ -1,3 +1,4 @@
+import { openRanking } from "./settings-sheet.mjs";
 import {
   test,
   expect,
@@ -243,6 +244,7 @@ test("with no field yet, the bracket says it fills in once MLB projects one", as
   await expect(note.locator("p")).toHaveCSS("text-wrap-style", "balance");
   await expect(page.getByRole("button", { name: "Set the field" })).toHaveCount(0);
   await openSettings(page);
+  await openRanking(page);
   await expect(page.locator("#rankList")).toHaveText(
     "The ranking fills in once there's a playoff field",
   );
@@ -265,6 +267,7 @@ test("the ranking can be reordered from the keyboard, and this device keeps it",
   const app = await openApp(page);
   await expect.poll(() => app.countSeasonReads()).toBe(2);
   await openSettings(page);
+  await openRanking(page);
   await expect(page.locator("#rankList .rank-item")).toHaveCount(12);
 
   const firstItem = page.locator("#rankList .rank-item").first();
@@ -284,6 +287,7 @@ test("a ranking reordered in another tab shows in this one", async ({ page }) =>
   const app = await openApp(page);
   await expect.poll(() => app.countSeasonReads()).toBe(2);
   await openSettings(page);
+  await openRanking(page);
   const items = page.locator("#rankList .rank-item");
   await expect(items).toHaveCount(12);
   const order = await items.evaluateAll((shown) => shown.map((item) => item.dataset.id));
@@ -307,6 +311,7 @@ test("a stored field short a league says there's no field instead of breaking th
 
   await expect(page.getByRole("heading", { name: "No playoff field yet" })).toBeVisible();
   await openSettings(page);
+  await openRanking(page);
   await expect(page.locator("#rankList .rank-item")).toHaveCount(12);
 });
 

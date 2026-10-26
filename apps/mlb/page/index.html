@@ -385,28 +385,25 @@
         </div>
         <button
           type="button"
-          class="contact-row"
+          class="settings-page-row"
+          id="rankingBtn"
+          data-last-drawn
+          data-setting="settings:ranking"
+          aria-haspopup="dialog"
+        >
+          Ranking
+        </button>
+        <button
+          type="button"
+          class="settings-page-row"
           id="contactBtn"
+          data-last-drawn
           data-setting="settings:contact"
           aria-haspopup="dialog"
         >
           Contact
         </button>
       </div>
-      <section
-        class="settings-ranking"
-        aria-labelledby="rankingTitle"
-        data-setting="settings:ranking"
-      >
-        <div class="ranking-heading">
-          <h3 id="rankingTitle">Ranking</h3>
-          <p class="ranking-note">Who you want to win the World Series</p>
-        </div>
-        <div class="rank-frame">
-          <ol class="rank-numbers" id="rankNumbers" aria-hidden="true" data-last-drawn></ol>
-          <ul class="rank-list" id="rankList" data-last-drawn></ul>
-        </div>
-      </section>
       <footer class="settings-footer">
         <p class="settings-version" id="versionNote" hidden data-last-drawn></p>
         <p class="settings-version">&copy; 2026 Noah Kaplan</p>
@@ -429,6 +426,22 @@
         </div>
         <div class="diagnostics" id="diagnostics" hidden></div>
       </section>
+    </div>
+  </dialog>
+
+  <dialog id="rankingDialog" class="settings-panel" aria-labelledby="rankingTitle">
+    <div class="settings-body ranking-body" id="rankingBody" data-last-drawn>
+      <div class="sheet-top">
+        <div class="sheet-head">
+          <button type="button" class="settings-back" aria-label="Back to Settings"></button>
+          <div class="sheet-title"><h2 id="rankingTitle">Ranking</h2></div>
+        </div>
+        <p class="ranking-note">Who you want to win the World Series</p>
+      </div>
+      <div class="rank-frame">
+        <ol class="rank-numbers" id="rankNumbers" aria-hidden="true" data-last-drawn></ol>
+        <ul class="rank-list" id="rankList" data-last-drawn></ul>
+      </div>
     </div>
   </dialog>
 

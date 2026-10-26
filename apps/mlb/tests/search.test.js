@@ -517,6 +517,7 @@ const COVERAGE = {
   "tab:news": { search: "news", opens: "tab:news" },
   "tab:search": { leftOut: "It's the search itself" },
   "dialog:contactDialog": { search: "contact", opens: "settings:contact" },
+  "dialog:rankingDialog": { search: "ranking", opens: "settings:ranking" },
   "dialog:settingsDialog": { search: "settings", opens: "settings" },
   "dialog:sheetDialog": { leftOut: "It holds the sheets, each listed on its own" },
   "dialog:homeScreenWelcome": {

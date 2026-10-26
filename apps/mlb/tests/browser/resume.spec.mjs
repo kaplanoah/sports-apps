@@ -1,3 +1,4 @@
+import { openRanking } from "./settings-sheet.mjs";
 import { NEXT_RELEASE, serveReleases } from "../../../../tests/browser/serve-releases.mjs";
 import { wakeAsStoreUpdates } from "../../../../tests/browser/wake-as-store-updates.mjs";
 import { waitForCatchUp } from "../../../../tests/browser/at-rest.mjs";
@@ -217,6 +218,7 @@ test("live scores the page can't read reload it once a newer release is out", as
  */
 async function startDrag(page) {
   await openSettings(page);
+  await openRanking(page);
   const box = await page.locator("#rankList .grip").first().boundingBox();
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
   await page.mouse.down();

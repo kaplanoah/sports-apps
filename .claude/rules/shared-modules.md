@@ -62,6 +62,7 @@ The Worker serves every file here, its `networks/` logos too, under `shared/`, b
 ### Settings and Diagnostics
 
 - `settings-sheet.js`: the settings sheet
+- `settings-page.js`: shared Settings page navigation, caret and Back button
 - `contact.js`: Contact navigation, validation, screenshots, and sending
 - `contact-view.js`: the selected Contact menu, forms, and confirmations
 - `contact-drafts.js`: separate category drafts and stable submission identifiers

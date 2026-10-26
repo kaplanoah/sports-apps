@@ -1,32 +1,10 @@
-.contact-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  width: 100%;
-  min-height: 56px;
-  padding: 12px 0;
-  border: 0;
-  background: none;
-  color: var(--ink);
-  font-family: inherit;
-  font-size: var(--type-setting-size);
-  font-weight: var(--type-setting-weight);
-  text-align: left;
-  cursor: pointer;
-}
-.contact-row svg {
-  width: 18px;
-  height: 18px;
-  flex: none;
-  color: var(--ink-dim);
-}
 .contact-menu {
   background: var(--raised);
   border: 1px solid var(--edge);
   border-radius: var(--radius-contact);
   padding: 0 14px;
 }
-.contact-menu .contact-row + .contact-row {
+.contact-menu .settings-page-row + .settings-page-row {
   border-top: 1px solid var(--divider);
 }
 .contact-domain {
@@ -39,24 +17,6 @@
   font-size: var(--type-setting-note-size);
   font-weight: var(--type-setting-note-weight);
   text-decoration: none;
-}
-.contact-back {
-  position: absolute;
-  left: -10px;
-  top: 0;
-  display: grid;
-  place-items: center;
-  width: 44px;
-  height: 44px;
-  padding: 9px;
-  border: 0;
-  background: none;
-  color: var(--accent);
-  cursor: pointer;
-}
-.contact-back svg {
-  width: 26px;
-  height: 26px;
 }
 #contactForm fieldset {
   min-width: 0;
@@ -256,7 +216,7 @@
   margin-top: 26px;
 }
 @media (hover: hover) {
-  :is(.contact-row, .contact-domain a, .contact-quiet, .contact-back, .contact-secondary):hover {
+  :is(.contact-domain a, .contact-quiet, .contact-secondary):hover {
     color: var(--ink-hover);
   }
 }

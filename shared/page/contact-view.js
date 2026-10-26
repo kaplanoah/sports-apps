@@ -1,14 +1,14 @@
 import { html } from "./html.js";
 import { CONTACT_CATEGORIES, CONTACT_LIMITS } from "./contact-rules.js";
 
-// Phosphor's arrow-left, caret-right, and paperclip, at their Light weight.
-const ARROW = html`<svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M222,128a6,6,0,0,1-6,6H54.49l61.75,61.76a6,6,0,1,1-8.48,8.48l-72-72a6,6,0,0,1,0-8.48l72-72a6,6,0,0,1,8.48,8.48L54.49,122H216A6,6,0,0,1,222,128Z"/></svg>`;
-export const CONTACT_CARET = html`<svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M180.24,132.24l-80,80a6,6,0,0,1-8.48-8.48L167.51,128,91.76,52.24a6,6,0,0,1,8.48-8.48l80,80A6,6,0,0,1,180.24,132.24Z"/></svg>`;
+import { SETTINGS_BACK, SETTINGS_CARET } from "./settings-page.js";
+
+// Phosphor's paperclip, at its Light weight.
 const PAPERCLIP = html`<svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M208.25,123.76a6,6,0,0,1,0,8.49l-82.06,82a54,54,0,0,1-76.36-76.39L149.1,37.14a38,38,0,1,1,53.77,53.72L103.59,191.54a22,22,0,1,1-31.15-31.09l83.28-84.67a6,6,0,0,1,8.56,8.42L81,168.91a10,10,0,1,0,14.11,14.18L194.35,82.4a26,26,0,1,0-36.74-36.8L58.33,146.28a42,42,0,1,0,59.37,59.44l82.06-82A6,6,0,0,1,208.25,123.76Z"/></svg>`;
 
 /** @param {string} title @param {string | null} back */
 const renderHeader = (title, back) => html`<div class="sheet-top"><div class="sheet-head">
-  ${back && html`<button type="button" class="contact-back" data-contact="back" aria-label="Back to ${back}">${ARROW}</button>`}
+  ${back && html`<button type="button" class="settings-back" data-contact="back" aria-label="Back to ${back}">${SETTINGS_BACK}</button>`}
   <div class="sheet-title"><h2 id="contactTitle">${title}</h2></div>
 </div></div>`;
 
@@ -35,7 +35,7 @@ export function renderContact(view) {
   if (view.screen === "received")
     return html`${renderHeader("Contact", null)}<div class="contact-success" role="status"><h3>Message received</h3><p data-quoted>${view.receiptEmail ? `Replies will go to ${view.receiptEmail}.` : "No email address was provided, so a reply isn\u2019t possible."}</p><button type="button" class="contact-primary" data-contact="done">Done</button></div>`;
   if (view.screen === "menu")
-    return html`${renderHeader("Contact", "Settings")}<div class="contact-menu">${CONTACT_CATEGORIES.map(({ key, name }) => html`<button type="button" class="contact-row" data-contact="category" data-category="${key}">${name}${CONTACT_CARET}</button>`)}</div>
+    return html`${renderHeader("Contact", "Settings")}<div class="contact-menu">${CONTACT_CATEGORIES.map(({ key, name }) => html`<button type="button" class="settings-page-row" data-contact="category" data-category="${key}">${name}${SETTINGS_CARET}</button>`)}</div>
       ${view.email && html`<p class="contact-domain"><a href="mailto:${view.email}">${view.email}</a></p>`}`;
   const category = CONTACT_CATEGORIES.find(({ key }) => key === view.category);
   const draft = view.draft;

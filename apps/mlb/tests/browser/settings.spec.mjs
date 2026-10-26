@@ -11,7 +11,12 @@ import {
   buildFixtureSnapshot,
   FINAL_2025_FIXTURE,
 } from "./harness.mjs";
-import { scrollSettingsToEnd, waitForSheetToRise, WITH_A_PAST_SEASON } from "./settings-sheet.mjs";
+import {
+  openRanking,
+  scrollSettingsToEnd,
+  waitForSheetToRise,
+  WITH_A_PAST_SEASON,
+} from "./settings-sheet.mjs";
 import { LAPTOP, PHONE } from "./screen-sizes.mjs";
 import { holdRequests } from "../../../../tests/browser/hold-requests.mjs";
 import { comeBackTo, setHidden } from "../../../../tests/browser/visibility.mjs";
@@ -71,13 +76,13 @@ test("the sliders button opens settings, and its close button, Escape, or the ba
   await expect(settings).toBeHidden();
 });
 
-test("settings open on a reload show again, with the season, notifications, and ranking, before the page's code arrives", async ({
+test("settings open on a reload show again, with the season, notifications, and Ranking caret, before the page's code arrives", async ({
   page,
 }) => {
   await openApp(page, WITH_A_PAST_SEASON);
   const settings = page.getByRole("dialog", { name: "Settings" });
   await openSettings(page);
-  await expect(settings.locator("#rankList .rank-item")).toHaveCount(12);
+  await expect(settings.locator("#rankingBtn")).toBeVisible();
   const notifications = settings.locator("#notifyRow");
   await expect(notifications).toBeVisible();
   const note = await notifications.locator("#notifyNote").textContent();
@@ -87,7 +92,7 @@ test("settings open on a reload show again, with the season, notifications, and 
 
   await expect(settings).toBeVisible();
   await expect(notifications.locator("#notifyNote")).toHaveText(note);
-  await expect(settings.locator("#rankList .rank-item")).toHaveCount(12);
+  await expect(settings.locator("#rankingBtn")).toBeVisible();
   await expect(settings.getByRole("combobox", { name: "Season" })).toHaveValue("2026");
   release();
   await page.waitForLoadState("domcontentloaded");
@@ -102,7 +107,7 @@ test("settings left off the screen two minutes are closed as the page comes back
   await openApp(page);
   const settings = page.getByRole("dialog", { name: "Settings" });
   await openSettings(page);
-  await expect(settings.locator("#rankList .rank-item")).toHaveCount(12);
+  await expect(settings.locator("#rankingBtn")).toBeVisible();
 
   await setHidden(page, true);
   await page.clock.runFor(2 * 60_000 - 1000);
@@ -262,41 +267,20 @@ test("at their foot, settings name the release the page came from and when it ca
   await expect(page.locator(`${SETTINGS} .sheet-top`)).not.toContainText("Released");
 });
 
-test("on a wide screen, settings end at the bottom left, level with the ranking's end", async ({
-  page,
-}) => {
-  await page.setViewportSize({ width: 1280, height: 900 });
-  await serveReleases(page);
-  await openApp(page);
-  await openSettings(page);
-
-  const footer = page.locator(`${SETTINGS} .settings-footer`);
-  await expect(footer).toHaveCSS("text-align", "left");
-  const [box, controls, ranking] = await Promise.all(
-    [footer, page.locator(".settings-main > .settings-controls"), page.locator(".rank-frame")].map(
-      (each) => each.boundingBox(),
-    ),
-  );
-  expect(Math.abs(box.x - controls.x)).toBeLessThan(1);
-  expect(box.x + box.width).toBeLessThanOrEqual(ranking.x);
-  expect(Math.abs(box.y + box.height - (ranking.y + ranking.height))).toBeLessThan(1);
-});
-
-test("on a phone, settings end with the copyright, centered under the ranking", async ({
-  page,
-}) => {
-  await page.setViewportSize(PHONE);
-  await openApp(page);
-  await openSettings(page);
-
-  const footer = page.locator(`${SETTINGS} .settings-footer > :last-child`);
-  await expect(footer).toHaveText("\u00a9 2026 Noah Kaplan");
-  await expect(footer).toHaveCSS("text-align", "center");
-  const [ranking, copyright] = await Promise.all(
-    [page.locator(".rank-frame"), footer].map((each) => each.boundingBox()),
-  );
-  expect(copyright.y).toBeGreaterThan(ranking.y + ranking.height);
-});
+for (const viewport of [PHONE, { width: 1280, height: 900 }])
+  test(`at ${viewport.width}px, settings end with the copyright below the page links`, async ({
+    page,
+  }) => {
+    await page.setViewportSize(viewport);
+    await openApp(page);
+    await openSettings(page);
+    const footer = page.locator(`${SETTINGS} .settings-footer > :last-child`);
+    await expect(footer).toHaveText("\u00a9 2026 Noah Kaplan");
+    await expect(footer).toHaveCSS("text-align", "center");
+    const link = await page.locator("#contactBtn").boundingBox();
+    const copyright = await footer.boundingBox();
+    expect(copyright.y).toBeGreaterThan(link.y + link.height);
+  });
 
 test("on a phone, a scroll just past the end of settings rests at their end, with the copyright in full view", async ({
   page,
@@ -423,24 +407,17 @@ test("on a phone, a quick flick down closes settings, and a cancelled swipe spri
   await expect(settings).toBeHidden();
 });
 
-test("on a phone, a swipe down scrolled into the ranking or on a grip leaves settings open", async ({
-  page,
-}) => {
+test("a drag on a ranking grip never moves the Ranking page", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "no-preference" });
   await page.setViewportSize(PHONE);
   await openApp(page);
   await openSettings(page);
-  await waitForSheetToRise(page);
-  const settings = page.getByRole("dialog", { name: "Settings" });
-
+  await openRanking(page);
+  const ranking = page.locator("#rankingDialog");
+  await expect.poll(async () => Math.round((await ranking.boundingBox()).y)).toBe(0);
   await swipeSheetDown(page, { target: "#rankList .grip", distance: 200, steps: 10, stepMs: 30 });
-  await expect(settings).toBeVisible();
-  expect(await readSheetTop(page)).toBe(0);
-
-  await scrollSettingsToEnd(page);
-  await swipeSheetDown(page, { target: "#rankList", distance: 200, steps: 10, stepMs: 30 });
-  await expect(settings).toBeVisible();
-  expect(await readSheetTop(page)).toBe(0);
+  await expect(ranking).toBeVisible();
+  expect(Math.round((await ranking.boundingBox()).y)).toBe(0);
 });
 
 test("on a wide screen, settings open as a modal with a close button", async ({ page }) => {
@@ -457,7 +434,7 @@ test("on a wide screen, settings open as a modal with a close button", async ({ 
   expect(Math.abs(box.x + box.width / 2 - width / 2)).toBeLessThan(2);
 });
 
-test("settings open at the top again after scrolling down to the ranking", async ({ page }) => {
+test("settings open at the top again after scrolling to their end", async ({ page }) => {
   await page.setViewportSize(PHONE);
   await openApp(page);
   await openSettings(page);

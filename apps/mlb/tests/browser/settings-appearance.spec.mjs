@@ -283,7 +283,7 @@ test.describe("on an iPhone's Home Screen app, which has no Home Screen box", ()
     const lineToRanking = await news.evaluate((group) => {
       const rows = group.querySelector(".settings-group-rows").getBoundingClientRect();
       const lastRow = [...group.querySelectorAll(".control-row")].at(-1).getBoundingClientRect();
-      const ranking = document.getElementById("rankingTitle").getBoundingClientRect();
+      const ranking = document.getElementById("rankingBtn").getBoundingClientRect();
       return { underLastRow: rows.bottom - lastRow.bottom, overRanking: ranking.top - rows.bottom };
     });
     expect(lineToRanking.underLastRow).toBe(1);

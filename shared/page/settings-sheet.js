@@ -10,7 +10,7 @@ import { readPageRelease } from "./release.js";
 import { openSheet, wireSheet } from "./sheet.js";
 import { keepDialogFor } from "./sheet-memory.js";
 import { startContact } from "./contact.js";
-import { CONTACT_CARET } from "./contact-view.js";
+import { SETTINGS_CARET } from "./settings-page.js";
 
 /* global START_AFTER_AWAY_MS -- from long-away.js */
 
@@ -64,7 +64,10 @@ export function isSettingShown(key) {
  */
 export function openSettings(key = null) {
   openSheet(findDialog());
-  if (key) findSettingRow(key)?.scrollIntoView({ block: "center" });
+  if (!key) return;
+  const row = findSettingRow(key);
+  if (row?.matches('button[aria-haspopup="dialog"]')) row.click();
+  else row?.scrollIntoView({ block: "center" });
 }
 
 /**
@@ -78,6 +81,6 @@ export function startSettingsSheet({ isOwnGesture } = {}) {
   wireSheet(dialog, { isOwnGesture: (target) => isSettingsControlGesture(target, isOwnGesture) });
   keepDialogFor(dialog, START_AFTER_AWAY_MS);
   showRelease();
-  setHtml(findElement("contactBtn"), html`Contact${CONTACT_CARET}`);
+  setHtml(findElement("contactBtn"), html`Contact${SETTINGS_CARET}`);
   startContact(/** @type {HTMLDialogElement} */ (findElement("contactDialog")));
 }

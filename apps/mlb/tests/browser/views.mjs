@@ -77,8 +77,28 @@ async function openGame(page, day, game) {
  * @type {Record<string, View[]>}
  */
 export const VIEW_GROUPS = {
-  "the page's tabs": [
+  "the settings pages": [
     ...CONTACT_VIEWS,
+    {
+      name: "Ranking",
+      open: async (page) => {
+        await openSettings(page);
+        await page.locator("#rankingBtn").click();
+      },
+      shown: (page) => page.locator("#rankingDialog #rankList"),
+      close: async (page) => {
+        await page.keyboard.press("Escape");
+        await page.keyboard.press("Escape");
+      },
+    },
+    {
+      name: "settings",
+      open: (page) => openSettings(page),
+      shown: (page) => page.locator(`${SETTINGS} .appearance-row`),
+      close: (page) => page.keyboard.press("Escape"),
+    },
+  ],
+  "the page's tabs": [
     {
       name: "Bracket",
       open: (page) => openSeasonPart(page, "Bracket"),
@@ -114,12 +134,6 @@ export const VIEW_GROUPS = {
       name: "News",
       open: (page) => page.getByRole("tab", { name: "News" }).click(),
       shown: (page) => page.locator(".news-more-title").first(),
-    },
-    {
-      name: "settings",
-      open: (page) => openSettings(page),
-      shown: (page) => page.locator(`${SETTINGS} .appearance-row`),
-      close: (page) => page.keyboard.press("Escape"),
     },
   ],
   "a game's sheets": [
