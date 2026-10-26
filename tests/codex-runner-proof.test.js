@@ -5,8 +5,12 @@ import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { runInNewContext } from "node:vm";
-import { requireCodexProofAuthority, verifyCodexProof } from "../worker/prove-codex-runner.mjs";
+import {
+  requireCodexProofAuthority,
+  verifyCodexProof,
+  readCodexProofConfiguration,
+} from "../worker/prove-codex-runner.mjs";
+import { assertCodexSandbox } from "../worker/codex-runner-probe.mjs";
 import { readRepoFile, REPO_ROOT } from "./repo-files.js";
 
 const OWNER = {
@@ -136,26 +140,75 @@ test("preparation archives only the synthetic project and production configurati
   );
   assert.equal(gitObjects.status, 0);
   assert.equal(gitObjects.stdout, "");
-  const probe = readFileSync(join(folder, "codex-proof/probe.mjs"), "utf8").replace(
-    /^import .*;\n/gm,
-    "",
+  assert.equal(
+    readFileSync(join(folder, "codex-proof/probe.mjs"), "utf8"),
+    readRepoFile("worker/codex-runner-probe.mjs"),
   );
+});
+
+test("the trusted probe rejects root, credentials, sudo and writable checkout independently", () => {
   const blocked = () => {
     throw new Error("Blocked by the sandbox.");
   };
-  const sandbox = {
-    assert,
-    process: { getuid: () => 1001, env: {} },
-    spawnSync: () => ({ status: 1 }),
-    writeFileSync: blocked,
-    console: { log: () => {}, error: () => {} },
-  };
-  assert.doesNotThrow(() => runInNewContext(probe, sandbox));
+  const checks = { uid: 1001, environment: {}, sudoStatus: () => 1, writeCheckout: blocked };
+  assert.doesNotThrow(() => assertCodexSandbox(checks));
   for (const change of [
-    { process: { getuid: () => 0, env: {} } },
-    { process: { getuid: () => 1001, env: { TRIAL_SECRET_CANARY: "present" } } },
-    { spawnSync: () => ({ status: 0 }) },
-    { writeFileSync: () => {} },
+    { uid: 0 },
+    { environment: { TRIAL_SECRET_CANARY: "present" } },
+    { sudoStatus: () => 0 },
+    { writeCheckout: () => {} },
   ])
-    assert.throws(() => runInNewContext(probe, { ...sandbox, ...change }));
+    assert.throws(() => assertCodexSandbox({ ...checks, ...change }));
+  for (const name of [
+    "OPENAI_API_KEY",
+    "ANTHROPIC_API_KEY",
+    "CLAUDE_CODE_OAUTH_TOKEN",
+    "GH_TOKEN",
+    "GITHUB_TOKEN",
+  ])
+    assert.throws(() => assertCodexSandbox({ ...checks, environment: { [name]: "present" } }));
+});
+
+test("paid execution independently checks authority when preparation is reused", () => {
+  const workflow = readRepoFile(".github/workflows/codex-runner-proof.yml");
+  assert.match(
+    workflow,
+    /prepare:\n {4}if: &proof-authority .*github.actor == github.repository_owner.*github.triggering_actor == github.repository_owner.*github.run_attempt == 1.*TRUSTED_CODEX_REVIEW_ENABLED != 'true'/,
+  );
+  assert.match(workflow, /model:\n {4}needs: prepare\n {4}if: \*proof-authority/);
+  assert.match(workflow, /node-version: \$\{\{ needs.prepare.outputs.node-version \}\}/);
+  assert.match(workflow, /node-version: \$\{\{ steps.node.outputs.node-version \}\}/);
+});
+
+test("recorded configured pins come from the workflow and agree with production", () => {
+  const configured = readCodexProofConfiguration(
+    readRepoFile(".github/workflows/codex-runner-proof.yml"),
+  );
+  assert.deepEqual(
+    configured,
+    readCodexProofConfiguration(readRepoFile(".github/workflows/trusted-codex-review.yml")),
+  );
+  assert.throws(() => readCodexProofConfiguration("model: example"), /configuration missing/);
+  assert.deepEqual(
+    readCodexProofConfiguration(
+      `uses: openai/codex-action@${"a".repeat(40)}\ncodex-version: 1.2.3\nmodel: example-model`,
+    ),
+    { action: "a".repeat(40), cli: "1.2.3", configuredModel: "example-model" },
+  );
+});
+
+test("fixed proof errors are reported while unexpected diagnostic contents stay private", () => {
+  const command = fileURLToPath(new URL("worker/prove-codex-runner.mjs", REPO_ROOT));
+  const denied = spawnSync(process.execPath, [command, "prepare"], {
+    encoding: "utf8",
+    env: { ...process.env, ...OWNER, GITHUB_RUN_ATTEMPT: "2" },
+  });
+  assert.notEqual(denied.status, 0);
+  assert.match(denied.stderr, /one owner dispatch on main/);
+  const missing = spawnSync(process.execPath, [command, "collect"], {
+    encoding: "utf8",
+    env: { ...process.env, ...OWNER, RUNNER_TEMP: "/tmp/private-unavailable-proof" },
+  });
+  assert.notEqual(missing.status, 0);
+  assert.doesNotMatch(missing.stderr, /private-unavailable-proof|ENOENT|node:fs/);
 });

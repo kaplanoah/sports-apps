@@ -1,14 +1,12 @@
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { measureReviewTokens, retainCodexUsage } from "./review-evaluation.mjs";
+import { measureReviewTokens, retainCodexUsage, readCodexEvents } from "./review-evaluation.mjs";
+import { TOOL_PROOF, CAPTURE_PROOF } from "./codex-runner-probe.mjs";
 
-const TOOL_PROOF = "TRUSTED_CODEX_TOOL_PROOF_OK";
-const CAPTURE_PROOF = "TRUSTED_CODEX_CAPTURE_PROOF";
-const ACTION = "c05cfd74ad95c626cdf05c6685e62becc3bf7813";
-const CLI = "0.164.0";
+class CodexProofError extends Error {}
 
 /** @param {NodeJS.ProcessEnv} env */
 export function requireCodexProofAuthority(env) {
@@ -21,7 +19,9 @@ export function requireCodexProofAuthority(env) {
     env.GITHUB_RUN_ATTEMPT !== "1" ||
     env.TRUSTED_CODEX_REVIEW_ENABLED === "true"
   )
-    throw new Error("Codex proof requires one owner dispatch on main with live Codex disabled.");
+    throw new CodexProofError(
+      "Codex proof requires one owner dispatch on main with live Codex disabled.",
+    );
 }
 
 /** @param {string} folder */
@@ -36,20 +36,7 @@ function writeCodexProofFixture(folder) {
   writeFileSync(join(checkout, ".codex/config.toml"), 'model = "untrusted-project-model"\n');
   writeFileSync(join(checkout, "sample.txt"), "Disposable hosted-runner proof.\n");
   execFileSync("git", ["init", "--quiet", checkout]);
-  const probe = [
-    'import assert from "node:assert/strict";',
-    'import { spawnSync } from "node:child_process";',
-    'import { writeFileSync } from "node:fs";',
-    "assert.notEqual(process.getuid(), 0);",
-    'for (const name of ["OPENAI_API_KEY", "ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN", "GH_TOKEN", "GITHUB_TOKEN", "TRIAL_SECRET_CANARY"])',
-    "  assert.equal(process.env[name], undefined);",
-    'assert.notEqual(spawnSync("sudo", ["-n", "true"]).status, 0);',
-    `assert.throws(() => writeFileSync(${JSON.stringify(join(checkout, "forbidden-write.txt"))}, "blocked"));`,
-    `console.log(${JSON.stringify(TOOL_PROOF)});`,
-    `console.error(${JSON.stringify(CAPTURE_PROOF)});`,
-    "",
-  ].join("\n");
-  writeFileSync(join(folder, "probe.mjs"), probe);
+  copyFileSync(new URL("./codex-runner-probe.mjs", import.meta.url), join(folder, "probe.mjs"));
 }
 
 /** @param {string} folder */
@@ -107,15 +94,17 @@ export function verifyCodexProof(transcript, output, probePath) {
   let events;
   try {
     answer = JSON.parse(output);
-    events = transcript
-      .split("\n")
-      .filter((line) => line.trim().startsWith("{"))
-      .map((line) => JSON.parse(line));
+    events = readCodexEvents(transcript);
   } catch {
-    throw new Error("Malformed Codex proof evidence.");
+    throw new CodexProofError("Malformed Codex proof evidence.");
   }
-  if (Object.keys(answer).join() !== "complete" || answer.complete !== true)
-    throw new Error("Codex proof has no complete structured answer.");
+  if (
+    !answer ||
+    typeof answer !== "object" ||
+    Object.keys(answer).join() !== "complete" ||
+    answer.complete !== true
+  )
+    throw new CodexProofError("Codex proof has no complete structured answer.");
   const commands = events
     .filter((event) => event.type === "item.completed" && event.item?.type === "command_execution")
     .map((event) => event.item);
@@ -136,17 +125,24 @@ export function verifyCodexProof(transcript, output, probePath) {
           [TOOL_PROOF, CAPTURE_PROOF].sort().join("\n"),
     )
   )
-    throw new Error("Native tool results do not establish the runner proof.");
+    throw new CodexProofError("Native tool results do not establish the runner proof.");
   const usage = retainCodexUsage(transcript);
   return {
-    action: ACTION,
-    cli: CLI,
-    configuredModel: "gpt-6.1-sol",
     nativeToolProof: true,
     structuredAnswer: true,
     tokens: measureReviewTokens(usage, "codex"),
     transcriptSha256: createHash("sha256").update(transcript).digest("hex"),
   };
+}
+
+/** @param {string} workflow */
+export function readCodexProofConfiguration(workflow) {
+  const action = workflow.match(/uses: openai\/codex-action@([a-f0-9]{40})/)?.[1];
+  const cli = workflow.match(/codex-version: ([\d.]+)/)?.[1];
+  const configuredModel = workflow.match(/^\s*model: ([\w.-]+)$/m)?.[1];
+  if (!action || !cli || !configuredModel)
+    throw new CodexProofError("Proof workflow configuration missing.");
+  return { action, cli, configuredModel };
 }
 
 /** @param {NodeJS.ProcessEnv} env */
@@ -157,14 +153,18 @@ function collectCodexProof(env) {
     readFileSync(join(env.RUNNER_TEMP, "codex-answer/answer.json"), "utf8"),
     join(env.RUNNER_TEMP, "codex-proof/probe.mjs"),
   );
+  const configuration = readCodexProofConfiguration(
+    readFileSync(new URL("../.github/workflows/codex-runner-proof.yml", import.meta.url), "utf8"),
+  );
   const observedCli = execFileSync("codex", ["--version"], { encoding: "utf8" }).trim();
-  if (observedCli !== `codex-cli ${CLI}`) throw new Error("Unexpected installed Codex CLI.");
+  if (observedCli !== `codex-cli ${configuration.cli}`)
+    throw new CodexProofError("Unexpected installed Codex CLI.");
   const folder = join(env.RUNNER_TEMP, "codex-proof-result");
   mkdirSync(folder);
   writeFileSync(
     join(folder, "proof.json"),
     JSON.stringify(
-      { ...proof, observedCli, source: env.GITHUB_SHA, run: env.GITHUB_RUN_ID },
+      { ...proof, ...configuration, observedCli, source: env.GITHUB_SHA, run: env.GITHUB_RUN_ID },
       null,
       2,
     ),
@@ -178,8 +178,9 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   try {
     if (process.argv[2] === "prepare") prepareCodexProof(process.env);
     else if (process.argv[2] === "collect") collectCodexProof(process.env);
-    else throw new Error("Unknown proof command.");
-  } catch {
+    else throw new CodexProofError("Unknown proof command.");
+  } catch (error) {
+    if (error instanceof CodexProofError) console.error(error.message);
     console.error(
       "Codex runner proof failed. Keep Codex disabled; inspect the failed step without retrying model work.",
     );

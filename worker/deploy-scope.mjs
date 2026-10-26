@@ -46,6 +46,7 @@ const SKIPPED_FILES = new Set([
   "worker/browser-scope.mjs",
   "worker/burn-in-specs.mjs",
   "worker/check-pr-title.mjs",
+  "worker/codex-runner-probe.mjs",
   "worker/find-trusted-review.mjs",
   "worker/flag-conflicts.mjs",
   "worker/judge-burn-in.mjs",

@@ -94,17 +94,23 @@ export function reproduceReviewCases(destination) {
   });
 }
 
+/** @param {string} text */
+export function readCodexEvents(text) {
+  try {
+    return text
+      .split("\n")
+      .filter((line) => line.trim().startsWith("{"))
+      .map((line) => JSON.parse(line));
+  } catch {
+    throw new Error("Invalid evaluation telemetry.");
+  }
+}
+
 /** @param {string} text @param {string} provider */
 function readReviewUsage(text, provider) {
   let events;
   try {
-    events =
-      provider === "claude"
-        ? JSON.parse(text)
-        : text
-            .split("\n")
-            .filter((line) => line.trim().startsWith("{"))
-            .map((line) => JSON.parse(line));
+    events = provider === "claude" ? JSON.parse(text) : readCodexEvents(text);
   } catch {
     throw new Error("Invalid evaluation telemetry.");
   }

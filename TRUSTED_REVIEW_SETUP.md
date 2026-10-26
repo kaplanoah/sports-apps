@@ -87,7 +87,7 @@ After the owner saves the API secret, run `gh workflow run codex-runner-proof.ym
 
 The native tool must execute the trusted probe successfully. It checks non-root execution, unavailable sudo, absent credential and canary variables in its shell, and refused checkout writes. A model's completion claim or a command that merely prints the markers cannot pass. The workflow retains only fixed proof facts, a transcript hash and numeric usage. Raw turns and tool output stay on the runner.
 
-Read the completed job log separately: neither `TRUSTED_CODEX_TOOL_PROOF_OK` nor `TRUSTED_CODEX_CAPTURE_PROOF` may appear there. Record the source SHA, run, proof artifact, actual action/CLI/model, observed usage and log inspection. This establishes only the tested runner behavior; historical quality, large-review integration, interruption and publishing proofs remain required. Never enable the gate based on this proof alone. A model-started failure needs fresh owner authorization before another attempt.
+Read the completed job log separately: neither `TRUSTED_CODEX_TOOL_PROOF_OK` nor `TRUSTED_CODEX_CAPTURE_PROOF` may appear there. Record the source SHA, run, proof artifact, observed CLI, configured action and model, observed usage and log inspection. Apply the activation gate above; this proof establishes only the tested runner behavior. A model-started failure needs fresh owner authorization before another attempt.
 
 ## Verified official Codex configuration
 
