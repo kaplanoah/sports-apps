@@ -6,13 +6,12 @@ import {
   mkdirSync,
   mkdtempSync,
   readdirSync,
-  realpathSync,
   rmSync,
   symlinkSync,
   writeFileSync,
   appendFileSync,
 } from "node:fs";
-import { join, relative } from "node:path";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { readPullMerge } from "./pull-merge.mjs";
 import { verifyReviewProvider } from "./review-provider.mjs";
@@ -42,6 +41,7 @@ import {
   readReviewIdentity,
   readReviewAnswer,
   recomputeReviewCoverage,
+  normalizeClaudeReadEvidence,
   sealReviewArtifact,
   validateAcrossCandidates,
   validateReviewArtifact,
@@ -198,15 +198,7 @@ export function exportReviewArtifact(folder, stage, env) {
     const area = readJson(join(folder, "plan.json")).areas.find(
       (area) => nameFindRecord(area.area) === `${stage}.json`,
     );
-    const parts = new Set([...Object.values(area.partsByFile).flat(), ...area.rules]);
-    for (const attempt of record.tries)
-      attempt.reads = attempt.reads.flatMap(([path, ranges]) => {
-        const relativeView = relative(folder, path);
-        const part = parts.has(relativeView) ? relativeView : relative(realpathSync(folder), path);
-        return parts.has(part) ? [[part, ranges]] : [];
-      });
-    recomputeReviewCoverage(record, area, folder);
-    writeFileSync(recordPath, JSON.stringify(record));
+    writeFileSync(recordPath, JSON.stringify(normalizeClaudeReadEvidence(record, area, folder)));
   }
   sealReviewArtifact(destination, stage, identity, names);
 }

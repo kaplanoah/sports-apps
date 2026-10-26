@@ -10,6 +10,10 @@ The offline replay script imports each fix's regression test into its historical
 | --- | --- | --- | --- | --- |
 | case-1: unknown store socket frame throws | `950a11002a35bab3d2671c2d858615ff86587fd7` | `1b90fd34f64459f960ff0e735c1eb1f1266fcc11` | exit 1 | exit 0 |
 | case-2: a removed playoff month remains stored | `8e61ec83806cf5cd0f21a2791b456039aec5e7be` | `f2f919e6ae856d9e7b2a953ffceb9e55ffe66714` | exit 1 | exit 0 |
+| range-694: complete historical PR #694, both apps and shared code | `54e0ca728ecd43d12a670b8a35aebb97b63335c2` | `1b90fd34f64459f960ff0e735c1eb1f1266fcc11` | exit 1 | exit 0 |
+| range-734: complete historical PR #734 | `a6105d72d8706dc280d162b890a6cd82b21888dc` | `1b90fd34f64459f960ff0e735c1eb1f1266fcc11` | exit 1 | exit 0 |
+
+The two complete ranges reproduce case-1's socket defect; they are not two additional independent bugs. Their reviewed ranges are each frozen head's first parent through that head. PR #694 changes 51 files across both apps, shared page and Worker code, tests and rules. Component audits supply their target files completely; full-range trials supply the complete production review plan, including its disclosed generated/binary exclusions.
 
 Reproduce with `node worker/review-evaluation.mjs reproduce /tmp/review-cases`. The destination must not exist. The script writes the snapshots, reproduction logs, review context and a hidden adjudication rubric outside git. It runs no provider and posts nothing to GitHub.
 
@@ -20,6 +24,20 @@ Copy only a case's `buggy` checkout and `review-context.json` to a disposable ru
 Run Claude and Codex as independent trials, never together on a live PR. Use the pinned production provider configuration. Capture final structured answers, all portion and integration outcomes, native usage telemetry, elapsed wall time including setup and integration, model and tool versions, and the exact snapshot identity. Record failures and interruptions as trials too.
 
 These first two cases audit historical components; they do not establish full PR quality or large-change completion. Before enabling Codex, also replay the original complete historical PR ranges and large changes with multiple areas. Include both apps, interactions, empty candidates, malformed results and a deliberate interruption. Do not omit difficult cases or failed runs.
+
+## Hosted blind trials
+
+`provider-review-trial.yml` accepts one explicit provider and one frozen case per owner dispatch on main, while Codex remains gated. Each paid model job independently refuses reruns. The preparation job supplies identical trusted rules, observed-test context and complete required content independently of the provider. Common-content hashes distinguish actual supplied input from a model's claim of reading it.
+
+Only the historical head and its ancestors reach the model host, in a Git bundle. Current source, fixes and the hidden rubric arrive only after execution. Claude retains its pinned production action, model, native Read/history tools and per-session turn settings; one measured attempt is made per stage, with no automatic retry of model failures. Codex uses its production action/CLI/model, native tools, structured schema and semantic portions. Its offline configuration additionally [disables web search](https://developers.openai.com/codex/config-reference/#web_search), preventing cached or live lookup of later answers. Integration is unconditional after complete portions when the production provider policy requires it, including empty candidate lists.
+
+The native validator checks exact case/head/base/source/run/provider, immutable input/plan/bundle hashes, actual coverage and candidate dispositions. Claude coverage is normalized from real SDK Read records through the same helper as live artifact export. No synthetic Claude events stand in for Codex's supplied-content evidence. These trials have no publishing permission and cannot satisfy a live PR's checks.
+
+GitHub artifacts are public. A session creates an RSA evidence key outside git and keeps its private key in private session storage. Only its public X.509 certificate enters the dispatch's `evidence-certificate` input. Preparation checks its strength and tests OpenSSL CMS encryption before any model runs. After execution, complete supplied context, answers and raw command/tool transcripts are encrypted with AES-256-GCM and RSA-OAEP/SHA-256 before upload. The private key never enters GitHub or a model host.
+
+The one-day public session artifact contains validated answer/coverage records and numeric usage; a separate 14-day artifact contains only encrypted raw evidence. A session downloads and decrypts that evidence privately for command inspection and adjudication. Never print or publish its plaintext. Preserve the private key until every trial is adjudicated; losing it makes those raw records unavailable, not public. Encryption adds no permission to publish sensitive material.
+
+Record each configured action/model and observed CLI/SDK version separately. An unavailable observed version remains null until verified from actual run evidence. `sessionElapsedSeconds` measures from that model job's input download through the start of collection. Measure complete trial wall time from Actions job timestamps, including preparation, setup, queues, validation, evidence capture and integration. Sum usage from every portion and integration session. Keep failed, interrupted and unmeasured trials in the report; absent usage is never zero. All outputs remain evidence to adjudicate, not automatic quality scores.
 
 Judge each reported finding against the code and reproducer, separately for each provider. Record its id, verdict and evidence as `confirmed-target`, `confirmed-other`, `false` or `unsure`. A real additional defect is not a false finding. Report unresolved adjudications separately. Do not use a model's own accuracy or completion assertion as the score.
 

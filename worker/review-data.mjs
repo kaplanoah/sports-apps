@@ -6,6 +6,7 @@ import {
   mkdirSync,
   readFileSync,
   readdirSync,
+  realpathSync,
   writeFileSync,
 } from "node:fs";
 import { dirname, isAbsolute, join, relative } from "node:path";
@@ -331,6 +332,19 @@ export function recomputeReviewCoverage(record, area, folder) {
     ),
     isAnswered: record.tries.at(-1).answer !== null,
   };
+}
+
+/** @param {any} record @param {any} area @param {string} folder */
+export function normalizeClaudeReadEvidence(record, area, folder) {
+  const parts = new Set([...Object.values(area.partsByFile).flat(), ...area.rules]);
+  for (const attempt of record.tries)
+    attempt.reads = attempt.reads.flatMap(([path, ranges]) => {
+      const relativeView = relative(folder, path);
+      const part = parts.has(relativeView) ? relativeView : relative(realpathSync(folder), path);
+      return parts.has(part) ? [[part, ranges]] : [];
+    });
+  recomputeReviewCoverage(record, area, folder);
+  return record;
 }
 
 /** @param {any[]} records @param {any} across @param {any[]} candidates */

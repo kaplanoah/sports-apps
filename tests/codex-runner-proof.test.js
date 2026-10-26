@@ -1,4 +1,5 @@
 import test from "node:test";
+import { createEvidenceCertificate } from "./evaluation-certificate.js";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -110,7 +111,12 @@ test("preparation archives only the synthetic project and production configurati
     [fileURLToPath(new URL("worker/prove-codex-runner.mjs", REPO_ROOT)), "prepare"],
     {
       encoding: "utf8",
-      env: { ...process.env, ...OWNER, RUNNER_TEMP: folder },
+      env: {
+        ...process.env,
+        ...OWNER,
+        RUNNER_TEMP: folder,
+        CODEX_EVIDENCE_CERTIFICATE: createEvidenceCertificate(folder),
+      },
     },
   );
   assert.equal(result.status, 0, result.stderr);
@@ -150,6 +156,15 @@ test("the trusted probe rejects root, credentials, sudo and writable checkout in
   };
   const checks = { uid: 1001, environment: {}, sudoStatus: () => 1, writeCheckout: blocked };
   assert.doesNotThrow(() => assertCodexSandbox(checks));
+  let credentialRead = false;
+  const environment = Object.defineProperty({}, "OPENAI_API_KEY", {
+    get() {
+      credentialRead = true;
+      return "private-fixture-value";
+    },
+  });
+  assert.throws(() => assertCodexSandbox({ ...checks, environment }));
+  assert.equal(credentialRead, false);
   for (const change of [
     { uid: 0 },
     { environment: { TRIAL_SECRET_CANARY: "present" } },
@@ -217,6 +232,21 @@ test("the collector records configured pins and observed CLI, rejecting an insta
   );
   for (const installed of [configured.cli, "0.0.0"]) {
     const folder = mkdtempSync(join(tmpdir(), "codex-proof-collect-"));
+    const certificate = createEvidenceCertificate(folder);
+    const prepared = spawnSync(
+      process.execPath,
+      [fileURLToPath(new URL("worker/prove-codex-runner.mjs", REPO_ROOT)), "prepare"],
+      {
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          ...OWNER,
+          RUNNER_TEMP: folder,
+          CODEX_EVIDENCE_CERTIFICATE: certificate,
+        },
+      },
+    );
+    assert.equal(prepared.status, 0, prepared.stderr);
     mkdirSync(join(folder, "codex-answer"));
     mkdirSync(join(folder, "bin"));
     const events = structuredClone(EVENTS);
@@ -241,6 +271,7 @@ test("the collector records configured pins and observed CLI, rejecting an insta
           GITHUB_SHA: "a".repeat(40),
           GITHUB_RUN_ID: "7",
           PROOF_TEST_CLI: installed,
+          MODEL_OUTCOME: "success",
         },
       },
     );
@@ -258,5 +289,61 @@ test("the collector records configured pins and observed CLI, rejecting an insta
     assert.equal(proof.source, "a".repeat(40));
     assert.equal(proof.run, "7");
     assert.equal(proof.nativeToolProof, true);
+  }
+});
+
+test("failed and interrupted native proofs retain encrypted diagnostics and never claim success", () => {
+  for (const outcome of ["failure", "cancelled"]) {
+    const root = mkdtempSync(join(tmpdir(), "codex-proof-failure-"));
+    const command = fileURLToPath(new URL("worker/prove-codex-runner.mjs", REPO_ROOT));
+    const env = {
+      ...process.env,
+      ...OWNER,
+      RUNNER_TEMP: root,
+      GITHUB_SHA: "a".repeat(40),
+      GITHUB_RUN_ID: "7",
+      CODEX_EVIDENCE_CERTIFICATE: createEvidenceCertificate(root),
+      MODEL_OUTCOME: outcome,
+    };
+    const prepared = spawnSync(process.execPath, [command, "prepare"], { env, encoding: "utf8" });
+    assert.equal(prepared.status, 0, prepared.stderr);
+    const diagnostic = '{"type":"error","message":"private execution diagnostic"}';
+    writeFileSync(join(root, "codex-events.jsonl"), diagnostic);
+    const failed = spawnSync(process.execPath, [command, "collect"], { env, encoding: "utf8" });
+    assert.notEqual(failed.status, 0);
+    assert.doesNotMatch(failed.stdout + failed.stderr, /private execution diagnostic/);
+    const proof = JSON.parse(readFileSync(join(root, "codex-proof-result/proof.json"), "utf8"));
+    assert.equal(proof.nativeToolProof, false);
+    assert.equal(proof.failureStage, "provider-action");
+    assert.equal(proof.source, env.GITHUB_SHA);
+    assert.equal(proof.run, "7");
+    assert.equal("tokens" in proof, false);
+    const decoded = join(root, "decoded.tgz");
+    assert.equal(
+      spawnSync(
+        "openssl",
+        [
+          "cms",
+          "-decrypt",
+          "-binary",
+          "-inform",
+          "DER",
+          "-in",
+          join(root, "trial-private/evidence.cms"),
+          "-out",
+          decoded,
+          "-recip",
+          join(root, "certificate.pem"),
+          "-inkey",
+          join(root, "key.pem"),
+        ],
+        { stdio: "pipe" },
+      ).status,
+      0,
+    );
+    assert.equal(
+      spawnSync("tar", ["-xOf", decoded, "./transcript.json"], { encoding: "utf8" }).stdout,
+      diagnostic,
+    );
   }
 });

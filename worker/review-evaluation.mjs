@@ -5,13 +5,17 @@ import { fileURLToPath } from "node:url";
 import { hashReviewContent } from "./review-supplied.mjs";
 import { createReviewGitEnvironment } from "./review-repository.mjs";
 
+const SOCKET_CASE = {
+  fix: "1b90fd34f64459f960ff0e735c1eb1f1266fcc11",
+  test: "tests/worker-store.test.js",
+  pattern: "an unknown socket message leaves watched documents",
+};
+
 const CASES = [
   {
     id: "case-1",
     head: "950a11002a35bab3d2671c2d858615ff86587fd7",
-    fix: "1b90fd34f64459f960ff0e735c1eb1f1266fcc11",
-    test: "tests/worker-store.test.js",
-    pattern: "an unknown socket message leaves watched documents",
+    ...SOCKET_CASE,
     targets: ["shared/page/worker-store.js", "shared/worker/season-store.js"],
     bug: "An unknown socket frame reaches receivePush without a document path and throws instead of preserving watches.",
   },
@@ -28,7 +32,28 @@ const CASES = [
     ],
     bug: "A stored playoff month remains after the current schedule drops every game it contained.",
   },
+  {
+    id: "range-694",
+    head: "54e0ca728ecd43d12a670b8a35aebb97b63335c2",
+    ...SOCKET_CASE,
+    targets: [],
+    bug: "The unknown socket frame failure is also reproduced in the complete historical PR #694 snapshot.",
+  },
+  {
+    id: "range-734",
+    head: "a6105d72d8706dc280d162b890a6cd82b21888dc",
+    ...SOCKET_CASE,
+    targets: [],
+    bug: "The unknown socket frame failure is also reproduced in the complete historical PR #734 snapshot.",
+  },
 ];
+
+/** @param {string} id */
+export function readReviewEvaluationCase(id) {
+  const entry = CASES.find((entry) => entry.id === id);
+  if (!entry) throw new Error("Unknown frozen review case.");
+  return entry;
+}
 
 /** @param {string[]} args */
 const readEvaluationGit = (args) =>
@@ -41,9 +66,7 @@ const readEvaluationGit = (args) =>
 export function reproduceReviewCases(destination) {
   mkdirSync(destination);
   return CASES.map((entry) => {
-    const head = readEvaluationGit(["rev-parse", `${entry.fix}^`])
-      .toString()
-      .trim();
+    const head = readEvaluationGit(["rev-parse", entry.head]).toString().trim();
     if (head !== entry.head) throw new Error("Historical snapshot changed.");
     const folder = join(destination, entry.id);
     mkdirSync(folder);

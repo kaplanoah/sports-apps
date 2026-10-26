@@ -2,6 +2,11 @@ name: Prove Codex hosted runner
 
 on:
   workflow_dispatch:
+    inputs:
+      evidence-certificate:
+        description: Public evidence encryption certificate, never a private key or API credential
+        type: string
+        required: true
 
 permissions:
   contents: read
@@ -27,6 +32,8 @@ jobs:
           node-version-file: .nvmrc
           package-manager-cache: false
       - name: Prepare trusted controls and a disposable hostile project
+        env:
+          CODEX_EVIDENCE_CERTIFICATE: ${{ inputs.evidence-certificate }}
         run: node worker/prove-codex-runner.mjs prepare
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
@@ -53,6 +60,8 @@ jobs:
       - name: Prepare the answer destination
         run: mkdir "$RUNNER_TEMP/codex-answer"
       - name: Run one native Codex proof
+        id: model
+        continue-on-error: true
         uses: openai/codex-action@c05cfd74ad95c626cdf05c6685e62becc3bf7813
         env:
           BASH_ENV: ${{ runner.temp }}/codex-log-capture.sh
@@ -72,14 +81,26 @@ jobs:
           codex-args: '["--ephemeral", "--json"]'
       # The model cannot see current source, historical fixes or evaluation rubrics.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        if: always()
         with:
           ref: ${{ github.sha }}
           path: controls
           persist-credentials: false
       - name: Verify actual tool evidence and retain only proof facts and numeric usage
+        if: always()
+        env:
+          MODEL_OUTCOME: ${{ steps.model.outcome }}
         run: node controls/worker/prove-codex-runner.mjs collect
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        if: always()
         with:
           name: codex-runner-proof
           path: ${{ runner.temp }}/codex-proof-result/proof.json
           retention-days: 14
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        if: always()
+        with:
+          name: codex-proof-private
+          path: ${{ runner.temp }}/trial-private/evidence.cms
+          retention-days: 14
+          if-no-files-found: error

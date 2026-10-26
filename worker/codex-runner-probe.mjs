@@ -17,7 +17,7 @@ export function assertCodexSandbox({ uid, environment, sudoStatus, writeCheckout
     "GITHUB_TOKEN",
     "TRIAL_SECRET_CANARY",
   ])
-    assert.equal(environment[name], undefined);
+    assert.equal(Object.hasOwn(environment, name), false);
   assert.notEqual(sudoStatus(), 0);
   assert.throws(writeCheckout);
 }

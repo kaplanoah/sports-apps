@@ -83,9 +83,11 @@ Before activation, record the separate provider measurements described in `TRUST
 
 ### Hosted runner proof
 
-After the owner saves the API secret, run `gh workflow run codex-runner-proof.yml --ref main` once. Only the owner can dispatch this proof, on main, with live Codex still disabled. The disposable model host receives a hostile fixture and trusted configuration; current source, historical fixes and evaluation rubrics arrive only after the model exits.
+After the owner saves the API secret, dispatch `codex-runner-proof.yml` once on main with the public `evidence-certificate` prepared by `TRUSTED_REVIEW_EVALUATION.md`. Only the owner can dispatch it, with live Codex still disabled. The disposable model host receives a hostile fixture and trusted configuration; current source, historical fixes and evaluation rubrics arrive only after the model exits.
 
-The native tool must execute the trusted probe successfully. It checks non-root execution, unavailable sudo, absent credential and canary variables in its shell, and refused checkout writes. A model's completion claim or a command that merely prints the markers cannot pass. The workflow retains only fixed proof facts, a transcript hash and numeric usage. Raw turns and tool output stay on the runner.
+The native tool must execute the trusted probe successfully. It checks non-root execution, unavailable sudo, absent credential and canary variables in its shell, and refused checkout writes. It checks variable presence without reading or printing their values. A model's completion claim or a command that merely prints the markers cannot pass. The public proof artifact retains only fixed facts, a transcript hash and observed numeric usage.
+
+Collection also runs when the action fails and keeps that failure red. Complete raw input, answer and execution evidence is encrypted to the session-held evidence key before upload, as for historical trials. Inspect it privately instead of guessing a failure's cause. Missing usage is unavailable, never zero. A failed proof cannot become activation evidence merely because its diagnostic artifact exists.
 
 Read the completed job log separately: neither `TRUSTED_CODEX_TOOL_PROOF_OK` nor `TRUSTED_CODEX_CAPTURE_PROOF` may appear there. Record the source SHA, run, proof artifact, observed CLI, configured action and model, observed usage and log inspection. Apply the activation gate above; this proof establishes only the tested runner behavior. A model-started failure needs fresh owner authorization before another attempt.
 

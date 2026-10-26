@@ -1,10 +1,14 @@
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { copyFileSync, cpSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { measureReviewTokens, retainCodexUsage, readCodexEvents } from "./review-evaluation.mjs";
 import { TOOL_PROOF, CAPTURE_PROOF } from "./codex-runner-probe.mjs";
+import {
+  prepareTrialEvidenceCertificate,
+  retainPrivateTrialEvidence,
+} from "./review-trial-evidence.mjs";
 
 class CodexProofError extends Error {}
 
@@ -70,6 +74,7 @@ function prepareCodexProof(env) {
   const folder = join(env.RUNNER_TEMP, "codex-proof");
   writeCodexProofFixture(folder);
   writeCodexProofRequest(folder);
+  prepareTrialEvidenceCertificate(folder, env.CODEX_EVIDENCE_CERTIFICATE);
   execFileSync(
     process.execPath,
     [fileURLToPath(new URL("./review-codex.mjs", import.meta.url)), "config"],
@@ -148,19 +153,54 @@ export function readCodexProofConfiguration(workflow) {
 /** @param {NodeJS.ProcessEnv} env */
 function collectCodexProof(env) {
   requireCodexProofAuthority(env);
-  const proof = verifyCodexProof(
-    readFileSync(join(env.RUNNER_TEMP, "codex-events.jsonl"), "utf8"),
-    readFileSync(join(env.RUNNER_TEMP, "codex-answer/answer.json"), "utf8"),
-    join(env.RUNNER_TEMP, "codex-proof/probe.mjs"),
-  );
   const configuration = readCodexProofConfiguration(
     readFileSync(new URL("../.github/workflows/codex-runner-proof.yml", import.meta.url), "utf8"),
   );
-  const observedCli = execFileSync("codex", ["--version"], { encoding: "utf8" }).trim();
-  if (observedCli !== `codex-cli ${configuration.cli}`)
-    throw new CodexProofError("Unexpected installed Codex CLI.");
+  const root = join(env.RUNNER_TEMP, "codex-proof");
+  writeFileSync(
+    join(root, "identity.json"),
+    JSON.stringify({ source: env.GITHUB_SHA, run: env.GITHUB_RUN_ID, kind: "hosted-proof" }),
+  );
+  writeFileSync(join(root, "configuration.json"), JSON.stringify(configuration));
+  cpSync(join(root, "checkout"), join(root, "data/checkout"), { recursive: true });
+  copyFileSync(join(root, "probe.mjs"), join(root, "data/probe.mjs"));
+  retainPrivateTrialEvidence(
+    {
+      ...env,
+      TRIAL_PROVIDER: "codex",
+      TRIAL_ANSWER_FILE: join(env.RUNNER_TEMP, "codex-answer/answer.json"),
+    },
+    root,
+  );
   const folder = join(env.RUNNER_TEMP, "codex-proof-result");
   mkdirSync(folder);
+  let proof;
+  let observedCli;
+  try {
+    if (env.MODEL_OUTCOME !== "success")
+      throw new CodexProofError(
+        "Native Codex execution failed; inspect encrypted evidence without rerunning the model.",
+      );
+    proof = verifyCodexProof(
+      readFileSync(join(env.RUNNER_TEMP, "codex-events.jsonl"), "utf8"),
+      readFileSync(join(env.RUNNER_TEMP, "codex-answer/answer.json"), "utf8"),
+      join(root, "probe.mjs"),
+    );
+    observedCli = execFileSync("codex", ["--version"], { encoding: "utf8" }).trim();
+    if (observedCli !== `codex-cli ${configuration.cli}`)
+      throw new CodexProofError("Unexpected installed Codex CLI.");
+  } catch (error) {
+    writeFileSync(
+      join(folder, "proof.json"),
+      JSON.stringify({
+        source: env.GITHUB_SHA,
+        run: env.GITHUB_RUN_ID,
+        nativeToolProof: false,
+        failureStage: env.MODEL_OUTCOME === "success" ? "validation" : "provider-action",
+      }),
+    );
+    throw error;
+  }
   writeFileSync(
     join(folder, "proof.json"),
     JSON.stringify(

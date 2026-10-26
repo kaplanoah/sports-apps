@@ -1,0 +1,625 @@
+import test from "node:test";
+import { createEvidenceCertificate } from "./evaluation-certificate.js";
+import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import {
+  mkdtempSync,
+  mkdirSync,
+  readFileSync,
+  writeFileSync,
+  existsSync,
+  cpSync,
+  symlinkSync,
+  rmSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+import {
+  prepareTrialEvidenceCertificate,
+  encryptReviewTrialEvidence,
+} from "../worker/review-trial-evidence.mjs";
+import {
+  requireReviewTrialAuthority,
+  readTrialProviderConfiguration,
+  importTrialPortions,
+  retainClaudeTrialUsage,
+  renderTrialComponent,
+} from "../worker/review-trial.mjs";
+import { buildCodexRequest, acceptCodexAnswer } from "../worker/review-codex.mjs";
+import { readCodexProofConfiguration } from "../worker/prove-codex-runner.mjs";
+import { readRepoFile, REPO_ROOT } from "./repo-files.js";
+
+const OWNER = {
+  GITHUB_REPOSITORY: "kaplanoah/sports-apps",
+  GITHUB_EVENT_NAME: "workflow_dispatch",
+  GITHUB_REF: "refs/heads/main",
+  GITHUB_ACTOR: "kaplanoah",
+  GITHUB_TRIGGERING_ACTOR: "kaplanoah",
+  GITHUB_RUN_ATTEMPT: "1",
+  TRIAL_PROVIDER: "codex",
+  TRIAL_CASE: "case-1",
+};
+
+test("component delivery preserves trailing spaces, blank lines and the final newline", () => {
+  for (const text of ["a  \n\n", "a  ", "a\n"]) {
+    const part = renderTrialComponent("shared/page/example.js", text);
+    const supplied =
+      part.diff
+        .split("\n")
+        .slice(4)
+        .filter((line) => line.startsWith("+"))
+        .map((line) => line.slice(1))
+        .join("\n") + (text.endsWith("\n") ? "\n" : "");
+    assert.equal(supplied, text);
+  }
+});
+
+test("offline trials require a first owner dispatch, a frozen snapshot and one explicit provider", () => {
+  assert.equal(requireReviewTrialAuthority(OWNER).id, "case-1");
+  for (const [name, value] of [
+    ["GITHUB_REPOSITORY", "example/fork"],
+    ["GITHUB_EVENT_NAME", "pull_request"],
+    ["GITHUB_REF", "refs/heads/feature"],
+    ["GITHUB_ACTOR", "outsider"],
+    ["GITHUB_TRIGGERING_ACTOR", "outsider"],
+    ["GITHUB_RUN_ATTEMPT", "2"],
+    ["TRUSTED_CODEX_REVIEW_ENABLED", "true"],
+    ["TRIAL_PROVIDER", "both"],
+    ["TRIAL_CASE", "unfrozen"],
+  ])
+    assert.throws(() => requireReviewTrialAuthority({ ...OWNER, [name]: value }));
+});
+
+test("a blind large-range bundle contains only historical ancestors and complete trusted coverage", (context) => {
+  const root = mkdtempSync(join(tmpdir(), "review-trial-"));
+  context.after(() => rmSync(root, { recursive: true, force: true }));
+  const env = {
+    ...process.env,
+    ...OWNER,
+    RUNNER_TEMP: root,
+    GITHUB_OUTPUT: join(root, "outputs"),
+    GITHUB_SHA: "a".repeat(40),
+    GITHUB_RUN_ID: "7",
+    TRIAL_CASE: "range-694",
+    TRIAL_EVIDENCE_CERTIFICATE: createEvidenceCertificate(root),
+  };
+  const command = fileURLToPath(new URL("worker/review-trial.mjs", REPO_ROOT));
+  const prepared = spawnSync(process.execPath, [command, "prepare"], { env, encoding: "utf8" });
+  assert.equal(prepared.status, 0, prepared.stderr);
+  const metadata = JSON.parse(readFileSync(join(root, "trial/identity.json"), "utf8"));
+  assert.equal(metadata.head, "54e0ca728ecd43d12a670b8a35aebb97b63335c2");
+  assert.equal(metadata.base, "2f94ca2b07ac1683356b6cff542b0ca68869faad");
+  const plan = JSON.parse(readFileSync(join(root, "trial/data/plan.json"), "utf8"));
+  assert.ok(plan.areas.length > 1);
+  const files = plan.areas.flatMap((area) => area.files);
+  assert.ok(files.includes("apps/mlb/page/js/app.js"));
+  assert.ok(files.includes("apps/wnba/page/js/app.js"));
+  assert.ok(files.includes("shared/page/worker-store.js"));
+  assert.match(readFileSync(env.GITHUB_OUTPUT, "utf8"), /integration=true/);
+  const claudeRoot = join(root, "claude");
+  mkdirSync(claudeRoot);
+  const claudeEnv = {
+    ...env,
+    RUNNER_TEMP: claudeRoot,
+    TRIAL_PROVIDER: "claude",
+    GITHUB_OUTPUT: join(claudeRoot, "outputs"),
+  };
+  const claudePrepared = spawnSync(process.execPath, [command, "prepare"], {
+    env: claudeEnv,
+    encoding: "utf8",
+  });
+  assert.equal(claudePrepared.status, 0, claudePrepared.stderr);
+  const claudeIdentity = JSON.parse(readFileSync(join(claudeRoot, "trial/identity.json"), "utf8"));
+  assert.equal(claudeIdentity.inputSha256, metadata.inputSha256);
+  const clone = join(root, "model-checkout");
+  assert.equal(
+    spawnSync("git", ["clone", "--quiet", join(root, "trial/snapshot.bundle"), clone]).status,
+    0,
+  );
+  assert.equal(
+    spawnSync("git", ["-C", clone, "rev-parse", "HEAD"], { encoding: "utf8" }).stdout.trim(),
+    metadata.head,
+  );
+  assert.notEqual(
+    spawnSync(
+      "git",
+      ["-C", clone, "cat-file", "-e", "1b90fd34f64459f960ff0e735c1eb1f1266fcc11^{commit}"],
+      { stdio: "pipe" },
+    ).status,
+    0,
+  );
+  assert.equal(existsSync(join(root, "trial/rubric.json")), false);
+  assert.equal(existsSync(join(root, "trial/fixed")), false);
+  const requested = spawnSync(process.execPath, [command, "request", "1"], {
+    env: { ...env, GITHUB_WORKSPACE: clone },
+    encoding: "utf8",
+  });
+  assert.equal(requested.status, 0, requested.stderr);
+  const request = buildCodexRequest(join(root, "trial/data"), 1, metadata);
+  assert.equal(readFileSync(join(root, "trial/prompt.txt"), "utf8"), request.prompt);
+  assert.match(request.prompt, /blind offline historical trial/);
+  assert.match(
+    readFileSync(join(root, "codex-home/config.toml"), "utf8"),
+    /web_search = "disabled"/,
+  );
+  assert.doesNotMatch(request.prompt, /1b90fd34|unknown socket frame|rubric.json/);
+  for (const change of [
+    { head: "b".repeat(40) },
+    { base: "b".repeat(40) },
+    { source: "b".repeat(40) },
+    { run: "8" },
+    { inputSha256: "b".repeat(64) },
+    { bundleSha256: "b".repeat(64) },
+    { planSha256: "b".repeat(64) },
+  ]) {
+    const staleRoot = mkdtempSync(join(root, "stale-"));
+    cpSync(join(root, "trial"), join(staleRoot, "trial"), { recursive: true });
+    writeFileSync(
+      join(staleRoot, "trial/identity.json"),
+      JSON.stringify({ ...metadata, ...change }),
+    );
+    const invalid = spawnSync(process.execPath, [command, "request", "1"], {
+      env: { ...env, RUNNER_TEMP: staleRoot, GITHUB_WORKSPACE: clone },
+      encoding: "utf8",
+    });
+    assert.notEqual(invalid.status, 0);
+  }
+  writeFileSync(join(root, "trial/identity.json"), JSON.stringify(metadata));
+  const configuration = JSON.parse(readFileSync(join(root, "trial/configuration.json"), "utf8"));
+  mkdirSync(join(root, "bin"));
+  writeFileSync(
+    join(root, "bin/codex"),
+    '#!/usr/bin/env node\nconsole.log("codex-cli " + process.env.PROOF_TEST_CLI);\n',
+    { mode: 0o755 },
+  );
+  writeFileSync(join(root, "trial-start.txt"), process.hrtime.bigint().toString());
+  writeFileSync(
+    join(root, "codex-events.jsonl"),
+    '{"type":"item.completed","private":"private caller trace"}\n{"type":"turn.completed","usage":{"input_tokens":12,"cached_input_tokens":2,"output_tokens":3}}\n',
+  );
+  writeFileSync(
+    join(root, "trial-answer.json"),
+    JSON.stringify({
+      binding: request.binding,
+      complete: true,
+      unfinished: [],
+      unjudged: [],
+      candidates: [],
+    }),
+  );
+  const collected = spawnSync(process.execPath, [command, "collect", "1"], {
+    env: {
+      ...env,
+      GITHUB_WORKSPACE: clone,
+      MODEL_OUTCOME: "success",
+      PATH: `${join(root, "bin")}:${process.env.PATH}`,
+      PROOF_TEST_CLI: configuration.cli,
+    },
+    encoding: "utf8",
+  });
+  assert.equal(collected.status, 0, collected.stderr);
+  const result = JSON.parse(readFileSync(join(root, "trial-result/session.json"), "utf8"));
+  assert.equal(result.status, "completed");
+  assert.equal(result.toolVersion, `codex-cli ${configuration.cli}`);
+  assert.equal(result.configuration.configuredModel, configuration.configuredModel);
+  assert.equal(JSON.stringify(result).includes("private caller trace"), false);
+  assert.deepEqual(result.tokens, { input: 10, output: 3, cached: 2, cacheWrite: 0 });
+  assert.ok(result.sessionElapsedSeconds > 0);
+  assert.ok(existsSync(join(root, "trial-private/evidence.cms")));
+  for (const [name, outcome, changedAnswer, events, expectedStage] of [
+    ["failed-action", "failure", null, null, "provider-action"],
+    ["interrupted-action", "cancelled", null, null, "provider-action"],
+    ["malformed", "success", "private malformed answer", null, "answer-validation"],
+    [
+      "incomplete",
+      "success",
+      JSON.stringify({
+        binding: request.binding,
+        complete: false,
+        unfinished: ["remaining callers"],
+        unjudged: [],
+        candidates: [],
+      }),
+      null,
+      "answer-validation",
+    ],
+    [
+      "stale",
+      "success",
+      JSON.stringify({
+        binding: "stale-binding",
+        complete: true,
+        unfinished: [],
+        unjudged: [],
+        candidates: [],
+      }),
+      null,
+      "answer-validation",
+    ],
+    ["missing-usage", "success", null, "", "telemetry"],
+  ]) {
+    const attempt = join(root, name);
+    mkdirSync(attempt);
+    cpSync(join(root, "trial"), join(attempt, "trial"), { recursive: true });
+    writeFileSync(join(attempt, "trial-start.txt"), process.hrtime.bigint().toString());
+    writeFileSync(
+      join(attempt, "codex-events.jsonl"),
+      events ?? readFileSync(join(root, "codex-events.jsonl")),
+    );
+    writeFileSync(
+      join(attempt, "trial-answer.json"),
+      changedAnswer ?? readFileSync(join(root, "trial-answer.json")),
+    );
+    const failed = spawnSync(process.execPath, [command, "collect", "1"], {
+      env: {
+        ...env,
+        RUNNER_TEMP: attempt,
+        GITHUB_WORKSPACE: clone,
+        MODEL_OUTCOME: outcome,
+        PATH: `${join(root, "bin")}:${process.env.PATH}`,
+        PROOF_TEST_CLI: configuration.cli,
+      },
+      encoding: "utf8",
+    });
+    assert.notEqual(failed.status, 0, name);
+    assert.doesNotMatch(
+      failed.stdout + failed.stderr,
+      /private malformed answer|private caller trace/,
+    );
+    const failedSession = JSON.parse(
+      readFileSync(join(attempt, "trial-result/session.json"), "utf8"),
+    );
+    assert.equal(failedSession.status, outcome === "cancelled" ? "interrupted" : "failed", name);
+    assert.equal(failedSession.failureStage, expectedStage, name);
+    assert.equal(existsSync(join(attempt, "trial-private/evidence.cms")), true, name);
+    assert.equal("record" in failedSession, false, name);
+    if (name !== "missing-usage") assert.deepEqual(failedSession.tokens, result.tokens);
+    else assert.equal("tokens" in failedSession, false);
+  }
+  const decoded = join(root, "private-evidence.tgz");
+  assert.equal(
+    spawnSync(
+      "openssl",
+      [
+        "cms",
+        "-decrypt",
+        "-binary",
+        "-inform",
+        "DER",
+        "-in",
+        join(root, "failed-action/trial-private/evidence.cms"),
+        "-out",
+        decoded,
+        "-recip",
+        join(root, "certificate.pem"),
+        "-inkey",
+        join(root, "key.pem"),
+      ],
+      { stdio: "pipe" },
+    ).status,
+    0,
+  );
+  assert.match(
+    spawnSync("tar", ["-xOf", decoded, "./transcript.json"], { encoding: "utf8" }).stdout,
+    /private caller trace/,
+  );
+});
+
+test("raw trial evidence is authenticated ciphertext, decryptable only with the held private key", (context) => {
+  const root = mkdtempSync(join(tmpdir(), "trial-evidence-"));
+  context.after(() => rmSync(root, { recursive: true, force: true }));
+  const certificate = createEvidenceCertificate(root);
+  assert.match(prepareTrialEvidenceCertificate(root, certificate), /^[A-F0-9:]+$/);
+  assert.throws(() => prepareTrialEvidenceCertificate(root, "-----BEGIN PRIVATE KEY-----"));
+  const input = join(root, "input.txt");
+  const encrypted = join(root, "evidence.cms");
+  const decoded = join(root, "decoded.txt");
+  writeFileSync(input, "private raw command and output");
+  encryptReviewTrialEvidence(input, encrypted, join(root, "evidence-certificate.pem"));
+  assert.equal(readFileSync(encrypted).includes(Buffer.from("private raw command")), false);
+  const envelope = spawnSync(
+    "openssl",
+    ["cms", "-cmsout", "-print", "-inform", "DER", "-in", encrypted],
+    { encoding: "utf8" },
+  );
+  assert.equal(envelope.status, 0);
+  assert.match(envelope.stdout, /aes-256-gcm/);
+  assert.match(envelope.stdout, /rsaesOaep/);
+  assert.match(envelope.stdout, /sha256/);
+  const args = [
+    "cms",
+    "-decrypt",
+    "-binary",
+    "-inform",
+    "DER",
+    "-in",
+    encrypted,
+    "-out",
+    decoded,
+    "-recip",
+    join(root, "certificate.pem"),
+    "-inkey",
+    join(root, "key.pem"),
+  ];
+  assert.equal(spawnSync("openssl", args, { stdio: "pipe" }).status, 0);
+  assert.equal(readFileSync(decoded, "utf8"), "private raw command and output");
+  const changed = readFileSync(encrypted);
+  changed[changed.length - 1] ^= 1;
+  writeFileSync(encrypted, changed);
+  assert.notEqual(spawnSync("openssl", args, { stdio: "pipe" }).status, 0);
+});
+
+test("integration imports every complete exact-provider portion even when all candidates are empty", (context) => {
+  const root = mkdtempSync(join(tmpdir(), "review-trial-portions-"));
+  context.after(() => rmSync(root, { recursive: true, force: true }));
+  const folder = join(root, "data");
+  mkdirSync(folder);
+  const identity = {
+    kind: "offline-trial",
+    case: "case-1",
+    provider: "codex",
+    head: "a".repeat(40),
+    base: "b".repeat(40),
+    source: "c".repeat(40),
+    run: "7",
+  };
+  const plan = {
+    provider: "codex",
+    stage: "first",
+    since: null,
+    unread: [],
+    areas: [1, 2].map((area) => ({
+      area,
+      name: `portion ${area}`,
+      files: [`shared/page/value-${area}.js`],
+      rules: [],
+      partsByFile: { [`shared/page/value-${area}.js`]: [`part-${area}.diff`] },
+    })),
+  };
+  writeFileSync(join(folder, "plan.json"), JSON.stringify(plan));
+  for (const path of [
+    "REVIEW.md",
+    "AGENTS.md",
+    "pull-request.md",
+    "test-context.md",
+    "stale-names.md",
+    "part-1.diff",
+    "part-2.diff",
+  ])
+    writeFileSync(join(folder, path), `Complete supplied ${path}.\n`);
+  const artifacts = [];
+  for (const area of [1, 2]) {
+    const request = buildCodexRequest(folder, area, identity);
+    acceptCodexAnswer(
+      folder,
+      area,
+      identity,
+      JSON.stringify({
+        binding: request.binding,
+        complete: true,
+        unfinished: [],
+        unjudged: [],
+        candidates: [],
+      }),
+    );
+    const artifact = {
+      identity,
+      portion: area,
+      status: "completed",
+      record: JSON.parse(readFileSync(join(folder, `find-${area}.json`), "utf8")),
+    };
+    const destination = join(root, `review-trial-session-${area}`);
+    mkdirSync(destination);
+    writeFileSync(join(destination, "session.json"), JSON.stringify(artifact));
+    artifacts.push({ artifact, destination });
+  }
+  importTrialPortions(folder, root, identity);
+  const request = buildCodexRequest(folder, "integration", identity);
+  assert.match(
+    request.prompt,
+    /mandatory independent integration pass, even when candidates are empty/,
+  );
+  assert.ok(request.prompt.includes("Complete supplied part-1.diff."));
+  assert.ok(request.prompt.includes("Complete supplied part-2.diff."));
+  for (const change of [
+    { identity: { ...identity, provider: "claude" } },
+    { identity: { ...identity, head: "d".repeat(40) } },
+    { identity: { ...identity, base: "d".repeat(40) } },
+    { identity: { ...identity, source: "d".repeat(40) } },
+    { status: "failed" },
+    { record: { ...artifacts[0].artifact.record, tries: [] } },
+    {
+      record: {
+        ...artifacts[0].artifact.record,
+        tries: artifacts[0].artifact.record.tries.map((attempt) => ({ ...attempt, answer: null })),
+      },
+    },
+    { record: { ...artifacts[0].artifact.record, provider: "claude" } },
+    {
+      record: {
+        provider: "claude",
+        area: 1,
+        tries: [{ reads: [["part-1.diff", [[1, 1]]]], answer: { items: [], unjudged: [] } }],
+      },
+    },
+  ]) {
+    writeFileSync(
+      join(artifacts[0].destination, "session.json"),
+      JSON.stringify({ ...artifacts[0].artifact, ...change }),
+    );
+    assert.throws(() => importTrialPortions(folder, root, identity));
+  }
+});
+
+test("Claude telemetry retains only numeric final usage and rejects missing counters", () => {
+  const events = [
+    { type: "assistant", message: { content: "private raw turn" } },
+    {
+      type: "result",
+      private: "private metadata",
+      usage: {
+        input_tokens: 10,
+        output_tokens: 2,
+        cache_read_input_tokens: 3,
+        cache_creation_input_tokens: 4,
+        other: "private",
+      },
+    },
+  ];
+  const retained = retainClaudeTrialUsage(JSON.stringify(events));
+  assert.doesNotMatch(retained, /private|assistant|message|other/);
+  assert.equal(JSON.parse(retained).length, 1);
+  assert.throws(() => retainClaudeTrialUsage("[]"));
+});
+
+test("trial workflows isolate provider credentials and guard paid reruns with no publishing rights", () => {
+  const workflow = readRepoFile(".github/workflows/provider-review-trial.yml");
+  const session = readRepoFile(".github/workflows/provider-review-session.yml");
+  assert.match(workflow, /options: \[claude, codex\]/);
+  assert.match(workflow, /inputs.provider == 'codex' && secrets.TRUSTED_REVIEW_OPENAI_API_KEY/);
+  assert.match(workflow, /inputs.provider == 'claude' && secrets.CLAUDE_CODE_OAUTH_TOKEN/);
+  assert.doesNotMatch(
+    workflow + session,
+    /secrets: inherit|pull-requests: write|checks: write|contents: write/,
+  );
+  assert.match(session, /model:\n {4}needs: request\n {4}if: \*trial-authority/);
+  const model = session.split("\n  model:\n")[1];
+  assert.doesNotMatch(model.split("      # Current source")[0], /actions\/checkout/);
+  assert.match(model, /Native Codex investigation[\s\S]*if: inputs.provider == 'codex'/);
+  assert.match(model, /Claude investigation[\s\S]*if: inputs.provider == 'claude'/);
+  assert.match(model, /path: \$\{\{ runner.temp \}\}\/trial-result\//);
+  assert.doesNotMatch(model.split("name: review-trial-session-")[1], /events|execution|transcript/);
+});
+
+test("Claude trials use real Read evidence and verify empty integration coverage independently", (context) => {
+  const root = mkdtempSync(join(tmpdir(), "claude-trial-"));
+  context.after(() => rmSync(root, { recursive: true, force: true }));
+  const command = fileURLToPath(new URL("worker/review-trial.mjs", REPO_ROOT));
+  const env = {
+    ...process.env,
+    ...OWNER,
+    TRIAL_PROVIDER: "claude",
+    RUNNER_TEMP: root,
+    GITHUB_OUTPUT: join(root, "outputs"),
+    GITHUB_SHA: "a".repeat(40),
+    GITHUB_RUN_ID: "7",
+    TRIAL_EVIDENCE_CERTIFICATE: createEvidenceCertificate(root),
+  };
+  const prepared = spawnSync(process.execPath, [command, "prepare"], { env, encoding: "utf8" });
+  assert.equal(prepared.status, 0, prepared.stderr);
+  const plan = JSON.parse(readFileSync(join(root, "trial/data/plan.json"), "utf8"));
+  const portions = join(root, "portions");
+  mkdirSync(portions);
+  function collectClaudeFixture(portion, omitted) {
+    const attempt = join(root, `${portion}-${omitted ? "missing" : "full"}`);
+    mkdirSync(attempt);
+    cpSync(join(root, "trial"), join(attempt, "trial"), { recursive: true });
+    if (portion === "integration")
+      cpSync(portions, join(attempt, "trial-portions"), { recursive: true });
+    const workspace = join(attempt, "workspace");
+    mkdirSync(workspace);
+    symlinkSync(join(attempt, "trial/data"), join(workspace, ".review"));
+    const fixtureEnv = {
+      ...env,
+      RUNNER_TEMP: attempt,
+      GITHUB_WORKSPACE: workspace,
+      GITHUB_OUTPUT: join(attempt, "outputs"),
+      MODEL_OUTCOME: "success",
+      EXECUTION_FILE: join(attempt, "execution.json"),
+      STRUCTURED_OUTPUT: JSON.stringify(
+        portion === "integration"
+          ? { findings: [], unjudged: [] }
+          : { candidates: [], unjudged: [] },
+      ),
+    };
+    const requested = spawnSync(process.execPath, [command, "request", `${portion}`], {
+      env: fixtureEnv,
+      encoding: "utf8",
+    });
+    assert.equal(requested.status, 0, requested.stderr);
+    const areas =
+      portion === "integration" ? plan.areas : plan.areas.filter((area) => area.area === portion);
+    const paths = [
+      ...new Set(
+        areas.flatMap((area) => [...Object.values(area.partsByFile).flat(), ...area.rules]),
+      ),
+    ];
+    if (portion === "integration") paths.push("candidates.json");
+    /** @type {any[]} */
+    const messages = (omitted ? paths.slice(1) : paths).flatMap((path, index) => [
+      {
+        type: "assistant",
+        message: {
+          content: [
+            {
+              type: "tool_use",
+              id: `${index}`,
+              name: "Read",
+              input: {
+                file_path: join(workspace, ".review", path),
+                offset: 1,
+                limit: readFileSync(join(workspace, ".review", path), "utf8").split("\n").length,
+              },
+            },
+          ],
+        },
+      },
+      {
+        type: "user",
+        message: { content: [{ type: "tool_result", tool_use_id: `${index}`, is_error: false }] },
+      },
+    ]);
+    messages.push({
+      type: "result",
+      usage: {
+        input_tokens: 10,
+        output_tokens: 2,
+        cache_read_input_tokens: 3,
+        cache_creation_input_tokens: 4,
+      },
+    });
+    writeFileSync(fixtureEnv.EXECUTION_FILE, JSON.stringify(messages));
+    writeFileSync(join(attempt, "trial-start.txt"), process.hrtime.bigint().toString());
+    const collected = spawnSync(process.execPath, [command, "collect", `${portion}`], {
+      env: fixtureEnv,
+      encoding: "utf8",
+    });
+    assert.equal(collected.status, omitted ? 1 : 0, collected.stderr);
+    const session = JSON.parse(readFileSync(join(attempt, "trial-result/session.json"), "utf8"));
+    assert.equal(session.status, omitted ? "failed" : "completed");
+    if (!omitted && portion !== "integration") {
+      assert.ok(session.record.tries[0].reads.length > 0);
+      assert.ok(session.record.tries[0].reads.every(([path]) => !path.startsWith("/")));
+      assert.equal(session.record.provider, undefined);
+      cpSync(join(attempt, "trial-result"), join(portions, `review-trial-session-${portion}`), {
+        recursive: true,
+      });
+    }
+    if (!omitted && portion === "integration")
+      assert.ok(session.integrationCoverage.tries[0].reads.length > 0);
+  }
+  for (const area of plan.areas) collectClaudeFixture(area.area, false);
+  collectClaudeFixture(plan.areas[0].area, true);
+  collectClaudeFixture("integration", true);
+  collectClaudeFixture("integration", false);
+});
+
+test("trial actions and provider configurations agree with the trusted production pins", () => {
+  const session = readRepoFile(".github/workflows/provider-review-session.yml");
+  assert.deepEqual(
+    readTrialProviderConfiguration("codex", 1),
+    readCodexProofConfiguration(readRepoFile(".github/workflows/trusted-codex-review.yml")),
+  );
+  for (const portion of /** @type {const} */ ([1, "integration"])) {
+    const workflow = portion === "integration" ? "review.yml" : "trusted-review-area.yml";
+    const production = readRepoFile(`.github/workflows/${workflow}`);
+    const configured = readTrialProviderConfiguration("claude", portion);
+    assert.equal(
+      configured.action,
+      session.match(/uses: anthropics\/claude-code-action@([a-f0-9]{40})/)[1],
+    );
+    assert.equal(configured.configuredModel, production.match(/--model ([\w.-]+)/)[1]);
+    assert.equal(configured.maxTurns, Number(production.match(/--max-turns (\d+)/)[1]));
+  }
+});
