@@ -51,6 +51,7 @@ jobs:
           TRUSTED_REVIEW_APP_ID: ${{ vars.TRUSTED_REVIEW_APP_ID }}
           PUBLISH_HEAD: ${{ inputs.head }}
           PUBLISH_PHASE: ${{ inputs.phase }}
+          REVIEW_DEFAULT_PROVIDER: ${{ vars.TRUSTED_REVIEW_DEFAULT_PROVIDER }}
           PUBLISH_NEEDS: ${{ inputs.producers }}
         run: node worker/publish-trusted-review.mjs
       - name: Preserve the terminal publication decision

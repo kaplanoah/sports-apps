@@ -424,6 +424,27 @@ function finishReview(areas, changes = {}) {
   return new Map(Object.entries(merged).filter(([, record]) => record !== undefined));
 }
 
+test("Codex summaries name their actual contained or integration verification and supplied coverage", () => {
+  for (const { areas, verification } of [
+    { areas: AREAS, verification: "the integration pass" },
+    { areas: [AREAS[0]], verification: "the contained session" },
+  ]) {
+    const { body, isComplete } = judgeReview({
+      sha: HEAD,
+      plan: { ...PLAN, provider: "codex", selection: "initial", areas },
+      records: finishReview(areas),
+    });
+    assert.equal(isComplete, true);
+    assert.ok(
+      body.includes(
+        `Checked: ${verification} turned down 0 of 0 candidates listed during investigation`,
+      ),
+    );
+    assert.match(body, /Supplied in full:/);
+    assert.doesNotMatch(body, /the reviewers listed|Checked: the check across areas/);
+  }
+});
+
 test("a reviewer that left its area's rule file unread hasn't finished", () => {
   const records = finishReview(AREAS, {
     [nameFindRecord(2)]: finishReviewer(2, { unread: ["rules/page-look.md"] }),

@@ -15,8 +15,12 @@ import {
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { readPullMerge } from "./pull-merge.mjs";
+import { verifyReviewProvider } from "./review-provider.mjs";
+import { arrangeCodexPortions, buildCodexRequest } from "./review-codex.mjs";
+import { formatJobOutputs, listJobs } from "./plan-review.mjs";
+import { isContainedCodexReview, needsCodexIntegration } from "./review-supplied.mjs";
 import { WEIGHTS } from "./review-state.mjs";
-import { createGitHub } from "./github-api.mjs";
+import { createGitHub, readAllPages } from "./github-api.mjs";
 import { createReviewGitEnvironment } from "./review-repository.mjs";
 import { isGitObjectId } from "./git-object.mjs";
 import {
@@ -170,12 +174,12 @@ export function prepareReviewCheckout(env) {
   appendFileSync(env.GITHUB_OUTPUT, `available=true\nmerge=${merge}\n`);
 }
 
-/** @param {string} script @param {string[]} args @param {NodeJS.ProcessEnv} env */
-const invokeReviewScript = (script, args, env) =>
+/** @param {string} script @param {string[]} args @param {NodeJS.ProcessEnv} env @param {boolean} [captureOutput] */
+const invokeReviewScript = (script, args, env, captureOutput = false) =>
   execFileSync(process.execPath, [join(SOURCE, "worker", script), ...args], {
     cwd: env.REVIEW_CHECKOUT,
     env,
-    stdio: "inherit",
+    stdio: captureOutput ? ["ignore", "pipe", "inherit"] : "inherit",
   });
 
 /** @param {string} folder @param {string} stage @param {NodeJS.ProcessEnv} env */
@@ -188,7 +192,7 @@ export function exportReviewArtifact(folder, stage, env) {
   const destination = join(env.REVIEW_UPLOAD, `trusted-review-${stage}`);
   mkdirSync(destination);
   copyReviewFiles(folder, destination, names);
-  if (/^find-\d+$/.test(stage)) {
+  if (/^find-\d+$/.test(stage) && identity.provider !== "codex") {
     const recordPath = join(destination, `${stage}.json`);
     const record = readJson(recordPath);
     const area = readJson(join(folder, "plan.json")).areas.find(
@@ -231,6 +235,11 @@ export function importReviewArtifacts(input, folder, env) {
   const planFolder = artifacts.get("plan");
   if (!planFolder) throw new Error("Missing review plan artifact.");
   const plan = validateReviewPlan(readJson(join(planFolder, "plan.json")));
+  if (
+    identity.provider &&
+    (plan.provider !== identity.provider || plan.selection !== identity.selection)
+  )
+    throw new Error("Stale or mixed review provider plan.");
   const planFiles = listPlanFiles(plan);
   validateReviewArtifact(planFolder, "plan", identity, planFiles);
   copyReviewFiles(planFolder, folder, planFiles);
@@ -247,9 +256,13 @@ export function importReviewArtifacts(input, folder, env) {
     const name = nameFindRecord(area.area);
     if (!existsSync(join(folder, name))) continue;
     const record = recomputeReviewCoverage(readJson(join(folder, name)), area, folder);
-    // The existing judge's coverage reader uses the local absolute paths.
-    for (const attempt of record.tries)
-      attempt.reads = attempt.reads.map(([path, ranges]) => [join(folder, path), ranges]);
+    if (identity.provider === "codex" && record.provider !== "codex")
+      throw new Error("Mixed review providers.");
+    if (identity.provider !== "codex" && record.provider === "codex")
+      throw new Error("Mixed review providers.");
+    if (record.provider !== "codex")
+      for (const attempt of record.tries)
+        attempt.reads = attempt.reads.map(([path, ranges]) => [join(folder, path), ranges]);
     writeFileSync(join(folder, name), JSON.stringify(record));
     records.push(record);
   }
@@ -261,6 +274,22 @@ export function importReviewArtifacts(input, folder, env) {
       readJson(join(folder, "across.json")),
       readJson(join(folder, "candidates.json")),
     );
+    const across = readJson(join(folder, "across.json"));
+    if (identity.provider === "codex") {
+      const portion = isContainedCodexReview(plan.areas.length) ? 1 : "integration";
+      const request = buildCodexRequest(folder, portion, identity);
+      const expected = {
+        kind: "supplied-content",
+        portion,
+        promptSha256: request.promptSha256,
+        files: request.supplied,
+      };
+      if (
+        across.provider !== "codex" ||
+        JSON.stringify(across.evidence) !== JSON.stringify(expected)
+      )
+        throw new Error("Missing or changed Codex integration evidence.");
+    }
   }
   if (existsSync(join(folder, "post.json"))) {
     const post = readJson(join(folder, "post.json"));
@@ -283,15 +312,53 @@ export async function verifyReviewEvent(
   const pull = await callGitHub(`/pulls/${env.PR}`);
   if (!isCurrentReviewPull(pull, env))
     throw new Error("The pull request moved after this review started.");
+  await verifyReviewProvider(env, callGitHub);
 }
 
-/** @param {NodeJS.ProcessEnv} env */
-function writeTrustedReviewPlan(env) {
+/**
+ * @param {NodeJS.ProcessEnv} env
+ * @param {{ invokeScript?: typeof invokeReviewScript, readRepository?: typeof readGit, readGitHub?: ReturnType<typeof createGitHub> }} [options]
+ */
+export async function writeTrustedReviewPlan(env, options = {}) {
+  const invokeScript = options.invokeScript ?? invokeReviewScript;
+  const readRepository = options.readRepository ?? readGit;
   const folder = env.REVIEW_FOLDER;
-  invokeReviewScript("plan-review.mjs", [folder], env);
-  invokeReviewScript("review-context.mjs", [folder], env);
+  invokeScript("plan-review.mjs", [folder], env, true);
+  invokeScript("review-context.mjs", [folder], env);
   for (const name of ["REVIEW.md", "AGENTS.md"])
     copyFileSync(join(SOURCE, name), join(folder, name));
+  let plan = readJson(join(folder, "plan.json"));
+  if (env.REVIEW_PROVIDER)
+    plan = { ...plan, provider: env.REVIEW_PROVIDER, selection: env.REVIEW_SELECTION };
+  if (env.REVIEW_PROVIDER) {
+    const repoFiles = readRepository(["ls-files"], env.REVIEW_CHECKOUT).split("\n");
+    if (env.REVIEW_PROVIDER === "codex") plan = arrangeCodexPortions(plan, repoFiles);
+    const readGitHub =
+      options.readGitHub ??
+      createGitHub({ repository: env.GITHUB_REPOSITORY, env, fetchImpl: fetch });
+    const checks = await readAllPages(
+      readGitHub,
+      `/commits/${env.REVIEW_HEAD}/check-runs`,
+      (answer) => answer.check_runs,
+    );
+    writeFileSync(
+      join(folder, "test-context.md"),
+      JSON.stringify(
+        {
+          head: env.REVIEW_HEAD,
+          checks: checks.map(({ name, status, conclusion }) => ({ name, status, conclusion })),
+          testSources: repoFiles.filter((path) => /\.(test|spec)\.m?js$/.test(path)),
+          note: "Observed CI checks only. Locate and inspect relevant test sources in the checkout; do not execute PR code.",
+        },
+        null,
+        2,
+      ),
+    );
+  }
+  writeFileSync(join(folder, "plan.json"), JSON.stringify(plan));
+  console.log(`stage=${plan.stage}`);
+  console.log(formatJobOutputs(listJobs(plan.areas)));
+  console.log(`integration=${needsCodexIntegration(plan.provider, plan.areas.length)}`);
   exportReviewArtifact(folder, "plan", env);
 }
 

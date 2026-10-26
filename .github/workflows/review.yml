@@ -1,5 +1,5 @@
 name: Trusted review
-run-name: &review-name Review ${{ github.event.pull_request.number }} head ${{ github.event.pull_request.head.sha }} base ${{ github.event.pull_request.base.sha }} source ${{ github.sha }} target ${{ github.event.pull_request.base.ref == 'main' && 'main' || 'other' }} intent ${{ github.event.pull_request.user.login == 'dependabot[bot]' && 'exempt' || (!github.event.pull_request.draft && ((github.event.action == 'labeled' && github.event.label.name == 'review') || ((github.event.action == 'opened' || github.event.action == 'ready_for_review') && (contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.pull_request.author_association) || github.event.pull_request.head.repo.full_name == github.repository)))) && 'review' || 'observe' }}
+run-name: &review-name Review ${{ github.event.pull_request.number }} head ${{ github.event.pull_request.head.sha }} base ${{ github.event.pull_request.base.sha }} source ${{ github.sha }} target ${{ github.event.pull_request.base.ref == 'main' && 'main' || 'other' }} intent ${{ github.event.pull_request.user.login == 'dependabot[bot]' && 'exempt' || (!github.event.pull_request.draft && ((github.event.action == 'labeled' && (github.event.label.name == 'review' || (github.event.sender.login == github.repository_owner && contains(fromJSON('["review-provider:claude","review-provider:codex"]'), github.event.label.name)))) || ((github.event.action == 'opened' || github.event.action == 'ready_for_review') && (contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.pull_request.author_association) || github.event.pull_request.head.repo.full_name == github.repository)))) && 'review' || 'observe' }}
 
 on:
   pull_request_target:
@@ -18,9 +18,39 @@ env:
 
 concurrency:
   group: trusted-review-${{ github.event.pull_request.number }}
-  cancel-in-progress: ${{ github.event.action != 'labeled' && github.event.action != 'unlabeled' }}
+  cancel-in-progress: ${{ (github.event.action != 'labeled' && github.event.action != 'unlabeled') || (github.event.action == 'labeled' && github.event.sender.login == github.repository_owner && startsWith(github.event.label.name, 'review-provider:')) }}
 
 jobs:
+  review-select:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: write
+    outputs:
+      provider: ${{ steps.select.outputs.provider }}
+      selection: ${{ steps.select.outputs.selection }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version-file: .nvmrc
+          package-manager-cache: false
+      - &trusted-source
+        name: Preserve the trusted source before checking out reviewed data
+        run: |
+          mkdir "$RUNNER_TEMP/trusted"
+          git archive "$REVIEW_TRUSTED" | tar -x -C "$RUNNER_TEMP/trusted"
+      - name: Pin the provider choice from trusted source
+        id: select
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REVIEW_DEFAULT_PROVIDER: ${{ vars.TRUSTED_REVIEW_DEFAULT_PROVIDER }}
+        run: node "$RUNNER_TEMP/trusted/worker/review-provider.mjs"
+
   review-begin:
     if: vars.TRUSTED_REVIEW_PUBLISHER_ENABLED == 'true' && github.event.pull_request.base.ref == 'main'
     permissions:
@@ -33,20 +63,27 @@ jobs:
       phase: begin
 
   review-plan:
-    needs: review-begin
-    if: ${{ !cancelled() && (vars.TRUSTED_REVIEW_PUBLISHER_ENABLED != 'true' || github.event.pull_request.base.ref != 'main' || needs.review-begin.result == 'success') }}
+    needs: [review-select, review-begin]
+    env:
+      REVIEW_PROVIDER: ${{ needs.review-select.outputs.provider }}
+      REVIEW_SELECTION: ${{ needs.review-select.outputs.selection }}
+    if: ${{ !cancelled() && needs.review-select.result == 'success' && (vars.TRUSTED_REVIEW_PUBLISHER_ENABLED != 'true' || github.event.pull_request.base.ref != 'main' || needs.review-begin.result == 'success') }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
       contents: read
       pull-requests: read
+      checks: read
     outputs:
+      provider: ${{ needs.review-select.outputs.provider }}
+      selection: ${{ needs.review-select.outputs.selection }}
       labeled: ${{ steps.decision.outputs.labeled }}
       owed: ${{ steps.prepare.outputs.available == 'false' && 'true' || steps.decision.outputs.owed }}
       stage: ${{ steps.plan.outputs.stage }}
       areas: ${{ steps.plan.outputs.areas }}
       area-numbers: ${{ steps.plan.outputs.area-numbers }}
       count: ${{ steps.plan.outputs.count }}
+      integration: ${{ steps.plan.outputs.integration }}
       merge: ${{ steps.prepare.outputs.merge }}
       available: ${{ steps.prepare.outputs.available }}
     steps:
@@ -60,6 +97,8 @@ jobs:
           REVIEW_RUN_NAME: *review-name
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          CODEX_API_KEY: ${{ secrets.TRUSTED_REVIEW_OPENAI_API_KEY }}
+          CODEX_ENABLED: ${{ vars.TRUSTED_CODEX_REVIEW_ENABLED }}
         run: |
           labeled=false
           if [ "$ACTION:$LABEL" = "labeled:$REVIEW_LABEL" ]; then
@@ -71,13 +110,20 @@ jobs:
             review | observe | exempt) ;;
             *) echo "::error::Invalid native review intent."; exit 1 ;;
           esac
+          case "$REVIEW_PROVIDER" in
+            claude | codex) ;;
+            *) echo "::error::Missing or invalid selected provider."; exit 1 ;;
+          esac
           reason=""
           owed=false
           if [ "$EVENT" != "pull_request_target" ]; then
             reason="only pull requests are reviewed"
           elif [ "$intent" = "exempt" ]; then
             reason="Dependabot's pull requests aren't reviewed"
-          elif [ -z "$CLAUDE_CODE_OAUTH_TOKEN" ] && [ -z "$ANTHROPIC_API_KEY" ]; then
+          elif [ "$REVIEW_PROVIDER" = "codex" ] && { [ "$CODEX_ENABLED" != "true" ] || [ -z "$CODEX_API_KEY" ]; }; then
+            echo "::error::Codex review is gated pending its API credential and historical evaluation. No provider fallback is allowed."
+            exit 1
+          elif [ "$REVIEW_PROVIDER" = "claude" ] && [ -z "$CLAUDE_CODE_OAUTH_TOKEN" ] && [ -z "$ANTHROPIC_API_KEY" ]; then
             echo "::error::Required review credentials are missing."
             exit 1
           elif [ "$IS_DRAFT" = "true" ]; then
@@ -105,11 +151,7 @@ jobs:
         with:
           node-version-file: .nvmrc
           package-manager-cache: false
-      - &trusted-source
-        name: Preserve the trusted source before checking out reviewed data
-        run: |
-          mkdir "$RUNNER_TEMP/trusted"
-          git archive "$REVIEW_TRUSTED" | tar -x -C "$RUNNER_TEMP/trusted"
+      - *trusted-source
       - name: Prepare a fresh reviewed checkout
         id: prepare
         if: steps.decision.outputs.review == 'true'
@@ -160,7 +202,7 @@ jobs:
   # Areas can finish independently before the check across them.
   review-area:
     needs: review-plan
-    if: ${{ !cancelled() && needs.review-plan.outputs.count > 0 }}
+    if: ${{ !cancelled() && needs.review-plan.outputs.provider == 'claude' && needs.review-plan.outputs.count > 0 }}
     permissions:
       contents: read
       pull-requests: read
@@ -170,6 +212,8 @@ jobs:
         include: ${{ fromJSON(needs.review-plan.outputs.areas || '[]') }}
     uses: ./.github/workflows/trusted-review-area.yml
     with:
+      provider: ${{ needs.review-plan.outputs.provider }}
+      selection: ${{ needs.review-plan.outputs.selection }}
       stage: ${{ needs.review-plan.outputs.stage }}
       area: ${{ fromJSON(needs.review-plan.outputs.area-numbers)[matrix.name] }}
       name: ${{ matrix.name }}
@@ -184,13 +228,15 @@ jobs:
   # fact or rule now in two places. It leaves its answer for the posting step.
   review-across:
     needs: [review-plan, review-area]
-    if: ${{ !cancelled() && needs.review-area.result != 'skipped' }}
+    if: ${{ !cancelled() && needs.review-plan.outputs.provider == 'claude' && needs.review-area.result != 'skipped' }}
     runs-on: ubuntu-latest
     timeout-minutes: 40
     permissions:
       contents: read
       pull-requests: read
     env:
+      REVIEW_PROVIDER: ${{ needs.review-plan.outputs.provider }}
+      REVIEW_SELECTION: ${{ needs.review-plan.outputs.selection }}
       REVIEW_MERGE: ${{ needs.review-plan.outputs.merge }}
       STAGE: ${{ needs.review-plan.outputs.stage }}
     steps:
@@ -235,7 +281,7 @@ jobs:
             You check what the reviewers of pull request #${{ github.event.pull_request.number }} in ${{ github.repository }} found, across every area of its change, before anything is posted. Its change is split into areas by what the files are about, and one reviewer read each area and listed every problem it found, unsure ones included. Their candidates are in `.review/candidates.json`, each with an id.
 
             1. Read `.review/REVIEW.md`, the review guide as the default branch has it, and `.review/AGENTS.md`, each whole. AGENTS.md and the rule files `.review/${{ env.STAGE }}.md` lists for each area hold the rules the code keeps.
-            2. Read `.review/pull-request.md`, with the pull request's description and every review thread on it so far, `.review/${{ env.STAGE }}.md`, which lists each area's diff files and rule files, which you read as you need, and `.review/candidates.json`.
+            2. Read `.review/test-context.md`, with the observed CI checks and test-source inventory, `.review/pull-request.md`, with the pull request's description and every review thread on it so far, `.review/${{ env.STAGE }}.md`, which lists each area's diff files and rule files, which you read as you need, and `.review/candidates.json`.
             3. Check each candidate's claim against the code: read the lines it names, trace the path from a real caller or input to what goes wrong, and see what the base did with `node ${{ runner.temp }}/trusted/worker/review-git.mjs show HEAD^1:<path>`. Use Read, which reaches only this checkout. Search and history come from `node ${{ runner.temp }}/trusted/worker/review-git.mjs`, which runs git grep, git log, or git show: `node ${{ runner.temp }}/trusted/worker/review-git.mjs grep -n -F -e <text> -- <path>` finds text in tracked checkout files, and `node ${{ runner.temp }}/trusted/worker/review-git.mjs grep -l -i -w -E -e <pattern> -- <path>` lists matching files. Search takes `-n`, `-l`, `-i`, `-w`, `-F`, `-E`, and one or more `-e <pattern>` arguments; paths follow `--`. History's base is HEAD^1: `node ${{ runner.temp }}/trusted/worker/review-git.mjs log -p -- <path>` for a file's changes, `node ${{ runner.temp }}/trusted/worker/review-git.mjs log -L<start>,<end>:<path>` or `node ${{ runner.temp }}/trusted/worker/review-git.mjs log -L:<function>:<path>` for a range's or a function's, `node ${{ runner.temp }}/trusted/worker/review-git.mjs show HEAD^1:<path>` for the base's copy, and `node ${{ runner.temp }}/trusted/worker/review-git.mjs show --diff-merges=first-parent HEAD -- <path>` for a file's whole change. It refuses options other than those its usage lists and any path outside this checkout. Run each command on its own, with no pipes or redirects.
             4. Give each a verdict. Confirmed: the code does what it says, and it matters as the guide weighs it. Rejected: the claim is wrong, the path can't happen, a thread already raised it and its answer holds, or it's a matter of taste. The guide's numbered items are never taste: a rule now in two places, a leftover, or a doc the change makes wrong is a finding whenever the code shows it. Unsure: it would matter and you can't settle it; say what would.
             5. Merge candidates that are the same problem into one finding, in one area or across areas, whether they name one place or several, naming every id it merges: one problem is one finding, however many places it shows, in both apps too. Every candidate's id appears in exactly one finding, rejected ones too: a step after you checks.
@@ -274,12 +320,46 @@ jobs:
           echo "::error::The check across areas didn't finish, or left problems unchecked."
           exit 1
 
+  review-codex:
+    needs: review-plan
+    if: ${{ !cancelled() && needs.review-plan.outputs.provider == 'codex' && needs.review-plan.outputs.count > 0 }}
+    permissions:
+      contents: read
+      pull-requests: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.review-plan.outputs.areas || '[]') }}
+    uses: ./.github/workflows/trusted-codex-review.yml
+    with:
+      portion: ${{ format('{0}', fromJSON(needs.review-plan.outputs.area-numbers)[matrix.name]) }}
+      selection: ${{ needs.review-plan.outputs.selection }}
+      merge: ${{ needs.review-plan.outputs.merge }}
+    secrets:
+      TRUSTED_REVIEW_OPENAI_API_KEY: ${{ secrets.TRUSTED_REVIEW_OPENAI_API_KEY }}
+
+  review-codex-across:
+    needs: [review-plan, review-codex]
+    if: ${{ !cancelled() && needs.review-plan.outputs.provider == 'codex' && needs.review-plan.outputs.integration == 'true' && needs.review-codex.result == 'success' }}
+    permissions:
+      contents: read
+      pull-requests: read
+    uses: ./.github/workflows/trusted-codex-review.yml
+    with:
+      portion: integration
+      selection: ${{ needs.review-plan.outputs.selection }}
+      merge: ${{ needs.review-plan.outputs.merge }}
+    secrets:
+      TRUSTED_REVIEW_OPENAI_API_KEY: ${{ secrets.TRUSTED_REVIEW_OPENAI_API_KEY }}
+
   # Posts what the check across areas confirmed or left unsure (worker/post-review.mjs). It's the
-  # only review job but the summary that can write to the pull request, and runs no Claude.
+  # only finding publisher. Provider selection and the summary write only their own comments.
   review-post:
     env:
+      REVIEW_PROVIDER: ${{ needs.review-plan.outputs.provider }}
+      REVIEW_SELECTION: ${{ needs.review-plan.outputs.selection }}
       REVIEW_MERGE: ${{ needs.review-plan.outputs.merge }}
-    needs: [review-plan, review-across]
+    needs: [review-plan, review-across, review-codex, review-codex-across]
     if: ${{ !cancelled() && needs.review-plan.outputs.count > 0 }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -313,8 +393,10 @@ jobs:
   # was, until the review label asks again.
   review:
     env:
+      REVIEW_PROVIDER: ${{ needs.review-plan.outputs.provider }}
+      REVIEW_SELECTION: ${{ needs.review-plan.outputs.selection }}
       REVIEW_MERGE: ${{ needs.review-plan.outputs.merge }}
-    needs: [review-plan, review-area, review-across, review-post]
+    needs: [review-plan, review-area, review-across, review-codex, review-codex-across, review-post]
     if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -370,7 +452,18 @@ jobs:
 
   review-publish:
     needs:
-      [review-begin, review-plan, review-label, review-area, review-across, review-post, review]
+      [
+        review-select,
+        review-begin,
+        review-plan,
+        review-label,
+        review-area,
+        review-across,
+        review-codex,
+        review-codex-across,
+        review-post,
+        review,
+      ]
     if: ${{ always() && vars.TRUSTED_REVIEW_PUBLISHER_ENABLED == 'true' && github.event.pull_request.base.ref == 'main' }}
     permissions:
       contents: read

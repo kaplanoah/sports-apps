@@ -22,6 +22,7 @@ import {
   prepareReviewCheckout,
   resolveReviewMerge,
   verifyReviewEvent,
+  writeTrustedReviewPlan,
 } from "../worker/trusted-review.mjs";
 import {
   isReviewPath,
@@ -109,6 +110,89 @@ function writePlanFiles(folder) {
     writeFileSync(join(folder, path), "first\nsecond\n");
 }
 
+for (const { provider, secondFile, count, integration } of [
+  { provider: "claude", secondFile: "b.js", count: 2, integration: false },
+  { provider: "codex", secondFile: "b.js", count: 1, integration: false },
+  { provider: "codex", secondFile: "shared/page/b.js", count: 2, integration: true },
+])
+  test(`trusted plan preparation binds ${provider} with ${count} areas, supplies observed tests and seals its job matrix`, async (context) => {
+    const folder = createFolder();
+    const upload = createFolder();
+    const env = {
+      ...ID_ENV,
+      PR: "1",
+      REVIEW_PROVIDER: provider,
+      REVIEW_SELECTION: "8",
+      REVIEW_FOLDER: folder,
+      REVIEW_UPLOAD: upload,
+      REVIEW_CHECKOUT: "/reviewed",
+    };
+    const outputs = [];
+    context.mock.method(console, "log", (text) => outputs.push(text));
+    const scripts = [];
+    await writeTrustedReviewPlan(env, {
+      invokeScript: (script, args) => {
+        assert.deepEqual(args, [folder]);
+        scripts.push(script);
+        if (script === "plan-review.mjs") {
+          writePlanFiles(folder);
+          const plan = createPlan();
+          const second = {
+            area: 2,
+            name: "two",
+            files: [secondFile],
+            rules: [],
+            partsByFile: { [secondFile]: ["first/b.js.diff"] },
+          };
+          const expanded = { ...plan, areas: [...plan.areas, second] };
+          writeFileSync(join(folder, "first/b.js.diff"), "a complete diff\n");
+          writeJson(folder, "plan.json", expanded);
+        }
+        return Buffer.from("");
+      },
+      readRepository: (args, checkout) => {
+        assert.deepEqual(args, ["ls-files"]);
+        assert.equal(checkout, env.REVIEW_CHECKOUT);
+        return `a.js\n${secondFile}\ntests/a.test.js\napps/mlb/tests/browser/page.spec.js\nREADME.md`;
+      },
+      readGitHub: async (path) => {
+        assert.equal(path, `/commits/${SHA}/check-runs?per_page=100&page=1`);
+        return {
+          check_runs: [
+            { name: "checks", status: "completed", conclusion: "failure", irrelevant: "discard" },
+          ],
+        };
+      },
+    });
+    assert.deepEqual(scripts, ["plan-review.mjs", "review-context.mjs"]);
+    const sealed = join(upload, "trusted-review-plan");
+    const plan = JSON.parse(readFileSync(join(sealed, "plan.json"), "utf8"));
+    assert.equal(plan.provider, provider);
+    assert.equal(plan.selection, "8");
+    assert.equal(plan.areas.length, count);
+    assert.deepEqual(
+      plan.areas.flatMap((area) => area.files),
+      ["a.js", secondFile],
+    );
+    const tests = JSON.parse(readFileSync(join(sealed, "test-context.md"), "utf8"));
+    assert.equal(tests.head, SHA);
+    assert.deepEqual(tests.checks, [
+      { name: "checks", status: "completed", conclusion: "failure" },
+    ]);
+    assert.deepEqual(tests.testSources, ["tests/a.test.js", "apps/mlb/tests/browser/page.spec.js"]);
+    assert.equal(readFileSync(join(sealed, "REVIEW.md"), "utf8"), readRepoFile("REVIEW.md"));
+    assert.equal(readFileSync(join(sealed, "AGENTS.md"), "utf8"), readRepoFile("AGENTS.md"));
+    assert.deepEqual(outputs, [
+      "stage=first",
+      [
+        `areas=${JSON.stringify(plan.areas.map(({ name }) => ({ name })))}`,
+        `area-numbers=${JSON.stringify(Object.fromEntries(plan.areas.map(({ area, name }) => [name, area])))}`,
+        `count=${plan.areas.length}`,
+      ].join("\n"),
+      `integration=${integration}`,
+    ]);
+  });
+
 test("trusted review pins workflow authority, source, Node and isolated artifacts before reviewing data", () => {
   const main = readRepoFile(".github/workflows/review.yml");
   const area = readRepoFile(".github/workflows/trusted-review-area.yml");
@@ -137,7 +221,7 @@ test("trusted review pins workflow authority, source, Node and isolated artifact
       if (/run:.*node /.test(step)) {
         assert.match(
           step,
-          /node "\$RUNNER_TEMP\/trusted\/worker\/(?:trusted-review|review-diagnostics)\.mjs"/,
+          /node "\$RUNNER_TEMP\/trusted\/worker\/(?:trusted-review|review-diagnostics|review-provider)\.mjs"/,
         );
         assert.doesNotMatch(step, /npm |npx |node worker\//);
       }
@@ -656,6 +740,7 @@ async function verifyHostileReviewIsolation(baseRef) {
   }
   for (const changed of [
     { ...pull, state: "closed" },
+    { ...pull, base: { sha: "f".repeat(40) } },
     { ...pull, head: { sha: base } },
     { ...pull, base: { ...pull.base, sha: head } },
     { ...pull, mergeable: false },
@@ -984,13 +1069,17 @@ test("missing merge metadata leaves review owed without following a moving ref",
   assert.equal(readFileSync(output, "utf8"), "available=false\n");
 });
 
-test("posting rechecks the open pull and head but retains its immutable reviewed base", async () => {
-  const pull = { state: "open", head: { sha: SHA }, base: { sha: "f".repeat(40), ref: "main" } };
+test("posting rechecks the open pull and head while retaining its immutable reviewed base", async () => {
+  const pull = {
+    state: "open",
+    head: { sha: SHA },
+    base: { sha: ID_ENV.REVIEW_BASE, ref: "main" },
+  };
   const env = { ...ID_ENV, PR: "1" };
   for (const ref of ["main", "stack"])
     await verifyReviewEvent(env, async (path) => {
       assert.equal(path, "/pulls/1");
-      return { ...pull, base: { ...pull.base, ref } };
+      return { ...pull, base: { sha: "f".repeat(40), ref } };
     });
   for (const changed of [
     { ...pull, state: "closed" },

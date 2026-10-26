@@ -113,6 +113,29 @@ test("trusted state retains the reviewed head and base for incremental planning"
   );
 });
 
+test("provider completion state binds the full selection and rejects malformed identities", () => {
+  const base = "a".repeat(40);
+  const state = `${SUMMARY_MARKER}\n${writeReviewedHead(HEAD, base, "codex", "17")}`;
+  assert.deepEqual(readReviewedState(state), {
+    head: HEAD,
+    base,
+    provider: "codex",
+    selection: "17",
+  });
+  for (const [provider, selection] of [
+    ["", "initial"],
+    ["other", "initial"],
+    ["codex", "bad"],
+    ["claude", ""],
+  ])
+    assert.equal(
+      readReviewedState(
+        `${SUMMARY_MARKER}\n<!-- claude-review-state ${JSON.stringify({ head: HEAD, base, provider, selection })} -->`,
+      ),
+      null,
+    );
+});
+
 test("neutralized marker quotes retain visible text in plain text, code spans and blocks", () => {
   const text =
     "Quote <!-- claude-review-state {} --> and `<!-- claude-finding -->`\n```html\n<!-- trusted-review-summary -->\n```";

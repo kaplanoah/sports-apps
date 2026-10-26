@@ -39,6 +39,8 @@ In order of what has mattered here.
    - `worker/rule-files.mjs`
    - `worker/trusted-review.mjs`
    - `worker/review-data.mjs`
+   - `worker/review-provider.mjs`, `worker/review-codex.mjs`, and `worker/review-supplied.mjs`
+   - `.github/workflows/trusted-codex-review.yml`
    - `worker/review-repository.mjs`
    - `worker/find-trusted-review.mjs`
    - `worker/publish-trusted-review.mjs`, `worker/review-publication.mjs`, and `worker/review-artifact.mjs`
@@ -59,7 +61,9 @@ Skip what lint, Prettier, TypeScript, knip, and the repo's guard tests already c
 
 ## How to report
 
-In CI, one reviewer an area looks for every item above and lists every problem it finds. One check across every area, one area too, confirms each against the code before anything is posted, merges repeats, weighs each, and adds what spans areas, and a step posts what it confirmed or left unsure.
+In CI, the selected provider performs the whole review. Claude keeps one reviewer per area and a check across every area. Codex uses one native session for a contained semantic area, investigating and verifying its findings. Multiple Codex portions require a separate integration pass, even without candidates. Every path verifies claims, merges repeats, weighs findings, and checks what spans areas before publishing.
+
+`TRUSTED_REVIEW_SETUP.md` defines provider selection. Codex records supplied content and native results, rather than Claude Read events. Missing required coverage or a stale provider selection blocks either provider. For Codex, unfinished or unjudged work also blocks approval. Claude lists unjudged work in its summary.
 
 - Report every problem you find, not a sample, each as one finding that names every place it shows, in both apps too, rather than one finding for each place. Include one you're unsure of, with your confidence, rather than leaving it out.
 - Before a finding is posted, check it by reading more of the code: trace the path from a real caller or input to what goes wrong, and see what the base did. If it would matter and still can't be settled, post it as **Unsure** with what would settle it.
@@ -69,4 +73,4 @@ In CI, one reviewer an area looks for every item above and lists every problem i
 - The numbered items above are never matters of taste: a rule now in two places, a leftover, or a doc the change makes wrong is a finding whenever the code shows it.
 - Read the pull request's threads first. Never raise again what a thread already raised, an item of a checklist of Nits too, whether it was fixed, answered, or left open, unless its answer is wrong or a fix it claims didn't hold, and then say so.
 - No praise.
-- The review ends with one summary comment: the commit reviewed, what it read, the findings by weight, how many of the problems the reviewers listed the check across areas turned down, how many of the changed files were read in full out of how many, each one that wasn't and why, and anything read but not judged. In CI, a step writes it from the findings posted, what each reviewer actually read, and what each said it couldn't judge. Each later review updates that one comment in place.
+- The review ends with one summary comment: the commit reviewed, findings by weight, candidates the verifying pass turned down, files read or supplied in full out of those required, each omission and why, and anything read but not judged. CI derives it from posted findings, actual coverage evidence and reported limitations. Each later review updates that comment in place.
