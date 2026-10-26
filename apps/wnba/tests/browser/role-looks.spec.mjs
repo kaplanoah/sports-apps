@@ -113,6 +113,8 @@ test("each type role draws in one font and one case in every view, but for the s
   page,
   browser,
 }) => {
+  // This traverses every view, then opens each remaining place in a separate context.
+  test.slow();
   const looks = new Set();
   /** @param {import("@playwright/test").Page} shown */
   const addLooks = async (shown) => {

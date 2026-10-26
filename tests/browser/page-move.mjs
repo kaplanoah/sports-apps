@@ -13,7 +13,7 @@ import { ANDROID_PHONE, IPHONE, takeAwayPush } from "./devices.mjs";
 import { LOCKED_PAGE_PATH, matchPath } from "./harness.mjs";
 import { holdRequests } from "./hold-requests.mjs";
 import { WELCOME } from "./home-screen-help.mjs";
-import { PUSH_STUB, stubPushManager } from "./push-stub.mjs";
+import { PUSH_STUB, stubPushManager, stubPushRegistration } from "./push-stub.mjs";
 import { waitForLoadToSettle } from "./at-rest.mjs";
 import { findCenter } from "./season-scroll.mjs";
 import { openSeasonPart } from "./season-tab.mjs";
@@ -542,19 +542,6 @@ export async function checkMovingWelcomeCloses(app) {
   await safariPage.context().close();
 }
 
-// A real service worker's requests skip the test's routes for the page's fake hosts, so the page
-// gets a registration whose push manager is the stand-in's, held until the test releases it, so
-// a tap can land while the page still reads whether the phone is subscribed.
-function standInForServiceWorker() {
-  const registration = /** @type {ServiceWorkerRegistration} */ (
-    /** @type {unknown} */ ({ pushManager: Object.create(PushManager.prototype) })
-  );
-  const registered = new Promise((resolve) => {
-    Object.assign(window, { releaseServiceWorker: () => resolve(registration) });
-  });
-  navigator.serviceWorker.register = () => registered;
-}
-
 /** @param {import("@playwright/test").Page} page */
 const releaseServiceWorker = (page) =>
   page.evaluate(() => /** @type {any} */ (window).releaseServiceWorker());
@@ -567,7 +554,7 @@ const releaseServiceWorker = (page) =>
 export async function checkMoveCarriesNotifications(app) {
   const { page } = app;
   await page.addInitScript(stubPushManager, PUSH_STUB);
-  await page.addInitScript(standInForServiceWorker);
+  await page.addInitScript(stubPushRegistration, { isHeld: true });
   await openOldHomeScreenApp(app);
   await page.evaluate(async () => {
     await Notification.requestPermission();
@@ -591,7 +578,7 @@ export async function checkMoveCarriesNotifications(app) {
 async function openNewHomeScreenApp({ page, serve, pageHost }, { canSubscribe = false } = {}) {
   if (canSubscribe) {
     await page.addInitScript(stubPushManager, PUSH_STUB);
-    await page.addInitScript(standInForServiceWorker);
+    await page.addInitScript(stubPushRegistration, { isHeld: true });
   } else await page.addInitScript(leaveNotificationsUnanswered);
   await serve(page, { accessCode: ACCESS_CODE, pageHost });
   await signIn(page, findNewAddress(pageHost));
@@ -645,9 +632,12 @@ export async function checkNotificationsAskGoes(app, buttonName) {
  * subscribes it, and saves the subscription with the Worker, and the ask goes for good, across a
  * reload.
  * @param {MovingApp} app
- * @param {{ beforeSettings?: boolean }} [options]
+ * @param {{ beforeSettings?: boolean, rejectSubscription?: boolean }} [options]
  */
-export async function checkTurnOn(app, { beforeSettings = false } = {}) {
+export async function checkTurnOn(
+  app,
+  { beforeSettings = false, rejectSubscription = false } = {},
+) {
   const { page } = app;
   await openNewHomeScreenApp(app, { canSubscribe: true });
   let releaseStartup = () => {};
@@ -663,14 +653,32 @@ export async function checkTurnOn(app, { beforeSettings = false } = {}) {
     (response) =>
       response.url().endsWith("/push/subscription") && response.request().method() === "PUT",
   );
+  if (rejectSubscription)
+    await page.route("**/push/subscription", (route) =>
+      route.fulfill({
+        status: 429,
+        json: { error: { code: "too_many_devices", message: "Full" } },
+      }),
+    );
   try {
     await tapUpdatesButton(page, TURN_ON_BUTTON);
     await releaseServiceWorker(page);
-    expect((await saving).ok()).toBe(true);
+    const response = await saving;
+    if (rejectSubscription) {
+      expect(response.status()).toBe(429);
+      await expect
+        .poll(() => page.evaluate((key) => sessionStorage.getItem(key), PUSH_STUB.keptKey))
+        .toBeNull();
+    } else expect(response.ok()).toBe(true);
   } finally {
     releaseStartup();
   }
   await expect(page.locator("#notifySwitch")).toBeEnabled();
+  if (rejectSubscription) {
+    await expect(page.locator("#notifySwitch")).toHaveAttribute("aria-checked", "false");
+    await expect(page.locator("#notifyNote")).toContainText("Too many devices");
+    return;
+  }
   await expect(page.locator("#notifySwitch")).toHaveAttribute("aria-checked", "true");
   const updates = findUpdates(page);
   await expect(updates).toBeHidden();

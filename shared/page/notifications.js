@@ -413,5 +413,6 @@ export async function startNotifications(words) {
       if (note) return;
     }
   }
-  setStatus(describeStartStatus());
+  if (note) renderNotifications();
+  else setStatus(describeStartStatus());
 }

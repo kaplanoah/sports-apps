@@ -1,3 +1,4 @@
+import { checkSelectArrow } from "../../../../tests/browser/settings.mjs";
 import { test, expect, matchPath, openApp } from "./harness.mjs";
 import { waitForTimedAnimations } from "../../../../tests/browser/animations.mjs";
 import { serveReleases } from "../../../../tests/browser/serve-releases.mjs";
@@ -63,8 +64,14 @@ test("settings' header holds its title, its close button, and the room under the
 test("the Season picker sets 16px, which an iPhone doesn't zoom into on a tap, and looks as big as the detail role's text", async ({
   page,
 }) => {
-  await openApp(page);
+  await openApp(page, ONE_PAST_SEASON);
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
   const picker = page.locator("#seasonPicker");
+  for (const colorScheme of /** @type {const} */ (["light", "dark"])) {
+    await page.emulateMedia({ colorScheme });
+    await expect(page.locator("html")).toHaveAttribute("data-theme", colorScheme);
+    await checkSelectArrow(picker);
+  }
   await expect(picker).toHaveCSS("font-size", "16px");
   const widths = await measureFieldFace(picker, "--type-detail-size");
   expect(widths.field).toBeCloseTo(widths.role, 0);

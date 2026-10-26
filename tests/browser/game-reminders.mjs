@@ -1,3 +1,4 @@
+import { checkSelectArrow } from "./settings.mjs";
 import { matchPath } from "./harness.mjs";
 import { holdRequests } from "./hold-requests.mjs";
 import { showTheme, listThemeLayoutChanges } from "./theme-layout.mjs";
@@ -455,13 +456,6 @@ export function testGameReminderSettings(test, expect, app) {
             pickerWidth: bounds(picker).width,
             pickerHeight: bounds(picker).height,
             pickerOutline: getComputedStyle(picker).borderTopStyle,
-            pickerArrow: getComputedStyle(timing, "::after").maskImage,
-            arrowColor: getComputedStyle(timing, "::after").backgroundColor,
-            arrowHitsPicker:
-              document.elementFromPoint(
-                bounds(picker).right - 8,
-                bounds(picker).top + bounds(picker).height / 2,
-              ) === picker,
             pickerAppearance: getComputedStyle(picker).appearance,
             groupFill: groupStyle.backgroundColor,
             groupOutline: groupStyle.outlineStyle,
@@ -482,13 +476,7 @@ export function testGameReminderSettings(test, expect, app) {
         expect(layout.pickerWidth).toBe(145);
         expect(layout.pickerHeight).toBeGreaterThanOrEqual(40);
         expect(layout.pickerOutline).toBe("solid");
-        expect(layout.pickerArrow).toContain("data:image/svg+xml");
-        expect(layout.arrowColor).toBe(
-          await page
-            .locator("#reminderTimingTitle")
-            .evaluate((label) => getComputedStyle(label).color),
-        );
-        expect(layout.arrowHitsPicker).toBe(true);
+        await checkSelectArrow(page.locator("#reminderTiming"));
         expect(layout.pickerAppearance).toBe("none");
         expect(layout.groupFill).toBe("rgba(0, 0, 0, 0)");
         expect(layout.groupOutline).toBe("none");

@@ -6,12 +6,19 @@ export const PUSH_STUB = {
   nextEndpointKey: "test-next-endpoint",
 };
 
-// Layout checks need push controls without a service worker taking over their routed requests.
-export function stubPushRegistration() {
-  navigator.serviceWorker.register = async () =>
-    /** @type {ServiceWorkerRegistration} */ (
-      /** @type {unknown} */ ({ pushManager: Object.create(PushManager.prototype) })
-    );
+// A real service worker's requests skip the test's routes for its fake hosts. Holding the
+// stand-in also lets a tap land before the page knows whether the phone is subscribed.
+/** @param {{ isHeld?: boolean }} [options] */
+export function stubPushRegistration({ isHeld = false } = {}) {
+  const registration = /** @type {ServiceWorkerRegistration} */ (
+    /** @type {unknown} */ ({ pushManager: Object.create(PushManager.prototype) })
+  );
+  const registered = isHeld
+    ? new Promise((resolve) => {
+        Object.assign(window, { releaseServiceWorker: () => resolve(registration) });
+      })
+    : Promise.resolve(registration);
+  navigator.serviceWorker.register = () => registered;
 }
 
 // Headless Chromium has no push service, and its headless shell denies notifications outright,

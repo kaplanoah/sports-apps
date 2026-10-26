@@ -1,3 +1,4 @@
+import { checkSelectArrow } from "../../../../tests/browser/settings.mjs";
 import {
   test,
   expect,
@@ -325,8 +326,14 @@ const buildEmptySeasonSnapshot = (season, springStart) => ({
 test("the Season picker sets 16px, which an iPhone doesn't zoom into on a tap, and looks as big as the detail role's numbers", async ({
   page,
 }) => {
-  await openApp(page);
+  await openApp(page, { store: { "seasons/2025": SEASON_2025 } });
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
   const picker = page.locator("#seasonPicker");
+  for (const colorScheme of /** @type {const} */ (["light", "dark"])) {
+    await page.emulateMedia({ colorScheme });
+    await expect(page.locator("html")).toHaveAttribute("data-theme", colorScheme);
+    await checkSelectArrow(picker);
+  }
   await expect(picker).toHaveCSS("font-size", "16px");
   const widths = await measureFieldFace(picker, "--type-detail-size", "var(--numbers)");
   expect(widths.field).toBeCloseTo(widths.role, 0);

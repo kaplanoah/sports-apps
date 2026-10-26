@@ -80,6 +80,16 @@ test.describe("on an iPhone", () => {
   }) => {
     await checkTurnOn({ page, browser, ...MOVING_APP }, { beforeSettings: true });
   });
+
+  test("a Turn on rejected before settings starts keeps its device-limit guidance", async ({
+    page,
+    browser,
+  }) => {
+    await checkTurnOn(
+      { page, browser, ...MOVING_APP },
+      { beforeSettings: true, rejectSubscription: true },
+    );
+  });
 });
 
 // An iPhone's Home Screen app hands Safari the new site under a scheme no test browser follows,
