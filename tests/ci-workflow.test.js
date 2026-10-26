@@ -22,6 +22,7 @@ import {
 } from "./workflow-step.js";
 import { PHONE_CONTEXT as EXPECTED_PHONE_CONTEXT } from "../worker/labeling.mjs";
 import { MUTATION_TARGETS } from "../worker/mutation-targets.mjs";
+import { WEBKIT_TEST_MATCH } from "../worker/browser-projects.mjs";
 
 const WORKFLOWS = readdirSync(new URL(".github/workflows/", REPO_ROOT)).filter((name) =>
   name.endsWith(".yml"),
@@ -201,7 +202,10 @@ test("only the nightly run writes the issue Flaky browser tests, from main's cod
   const workflow = readRepoFile(".github/workflows/flaky.yml");
   assert.doesNotMatch(workflow.split(/^jobs:$/m)[0], /issues: write/);
   const report = readJob("report", "flaky.yml");
-  assert.match(report, /if: \$\{\{ !cancelled\(\) && github\.event_name == 'schedule' \}\}/);
+  assert.match(
+    report,
+    /if: \$\{\{ !cancelled\(\) && github\.event_name == 'schedule' && needs\.browser\.outputs\.report-artifact != '' \}\}/,
+  );
   assert.match(report, /permissions:\n\s+contents: read\n\s+actions: read\n\s+issues: write/);
   assert.match(report, /run: node worker\/report-flaky-tests\.mjs nightly-report\/report\.json/);
   assert.match(report, /GH_REPO: \$\{\{ github\.repository \}\}/);
@@ -252,14 +256,13 @@ test("each job that runs the at-rest specs in WebKit installs WebKit with its sy
   for (const [job, workflow] of [
     ["burn-in", "ci.yml"],
     ["webkit", "ci.yml"],
-    ["browser", "flaky.yml"],
   ])
     assert.match(
       readJob(job, workflow),
       /run: node worker\/install-browsers\.mjs --with-deps .*\bwebkit\b/,
       `${workflow}: ${job}`,
     );
-  const webkitSpec = readRepoFile("playwright.config.mjs").match(/testMatch: "([^"]+)"/)?.[1];
+  const webkitSpec = WEBKIT_TEST_MATCH;
   assert.ok(webkitSpec, "the Playwright config names the spec its WebKit projects run");
   assert.match(
     readJob("burn-in"),
@@ -268,6 +271,34 @@ test("each job that runs the at-rest specs in WebKit installs WebKit with its sy
     ),
     "burn-in installs WebKit whenever a spec the config's WebKit projects run is among the ones it repeats",
   );
+});
+
+test("repeat setup selects browsers from the same unexpanded inputs as the tests", () => {
+  const browser = readJob("browser", "flaky.yml");
+  const install = browser
+    .split(/^ {6}- /m)
+    .find((step) => /run: node worker\/install-browsers\.mjs\b/.test(step));
+  assert.ok(install);
+  assert.match(install, /--with-deps --only-shell \$\{\{ steps\.browsers\.outputs\.browsers \}\}/);
+  const selection = browser.split(/^ {6}- /m).find((step) => /^id: browsers\n/.test(step));
+  assert.ok(selection);
+  assert.match(selection, /TESTS: \$\{\{ inputs\.tests \}\}/);
+  assert.match(selection, /PROJECT: \$\{\{ inputs\.project \}\}/);
+  assert.match(selection, /run: node worker\/browser-projects\.mjs/);
+});
+
+test("nightly setup failures retain their failure without a missing-report download", () => {
+  const browser = readJob("browser", "flaky.yml");
+  const upload = browser.split(/^ {6}- /m).find((step) => /id: nightly-report/.test(step));
+  assert.ok(upload);
+  assert.match(
+    upload,
+    /if: \$\{\{ !cancelled\(\) && github\.event_name == 'schedule' && hashFiles\('test-results\/report\.json'\) != '' \}\}/,
+  );
+  assert.match(upload, /if-no-files-found: error/);
+  assert.match(browser, /report-artifact: \$\{\{ steps\.nightly-report\.outputs\.artifact-id \}\}/);
+  const report = readJob("report", "flaky.yml");
+  assert.match(report, /needs\.browser\.outputs\.report-artifact != ''/);
 });
 
 // A cache saved with WebKit in it would have the browser job, whose machines lack WebKit's system
