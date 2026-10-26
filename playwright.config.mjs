@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { defineConfig, devices, webkit } from "@playwright/test";
 import { listAppsWithBrowserTests } from "./worker/apps.mjs";
+import { nameWebKitProject, WEBKIT_TEST_MATCH } from "./tests/browser/projects.mjs";
 import { ASSERTION_TIMEOUT_MS } from "./tests/browser/limits.mjs";
 
 // Another checkout's browser tests can run alongside on other ports.
@@ -71,9 +72,9 @@ export default defineConfig({
     ...(hasWebKit
       ? [
           {
-            name: `${app}-webkit`,
+            name: nameWebKitProject(app),
             testDir: `apps/${app}/tests/browser`,
-            testMatch: "at-rest.spec.mjs",
+            testMatch: WEBKIT_TEST_MATCH,
             use: { ...devices["Desktop Safari"], baseURL: `http://127.0.0.1:${findPort(index)}` },
           },
         ]

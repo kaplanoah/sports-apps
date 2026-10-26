@@ -14,8 +14,8 @@ import { fileURLToPath } from "node:url";
 import { BROWSER_SETUP_FILES, listBrowserTestReach } from "./browser-scope.mjs";
 import { CI_WORKFLOW, isPullRequestRun } from "./find-passed-ci.mjs";
 import { createGitHub, readAllPages } from "./github-api.mjs";
+import { isBrowserSpec } from "../tests/browser/projects.mjs";
 
-const SPEC = /^apps\/[^/]+\/tests\/browser\/.+\.spec\.mjs$/;
 // What every spec runs with beyond what it imports: the dependencies, the Node version every job
 // runs them on, and browser setup, which says how burn-in installs and runs each spec.
 const RUN_SETUP = new Set(["package.json", "package-lock.json", ".nvmrc", ...BROWSER_SETUP_FILES]);
@@ -33,14 +33,14 @@ const RUNS_READ = 30;
  * @param {Set<string>} reached every file the browser specs, their helpers, and the config reach
  */
 const isSharedBySpecs = (path, reached) =>
-  !SPEC.test(path) && (RUN_SETUP.has(path) || (reached.has(path) && !TESTED_CODE.test(path)));
+  !isBrowserSpec(path) && (RUN_SETUP.has(path) || (reached.has(path) && !TESTED_CODE.test(path)));
 
 /**
  * The browser specs among the files a pull request adds or changes, at any depth under an app's
  * tests/browser/, as Playwright runs them and as judge-burn-in's diff names them.
  * @param {string[]} paths
  */
-export const listBrowserSpecs = (paths) => paths.filter((path) => SPEC.test(path));
+export const listBrowserSpecs = (paths) => paths.filter(isBrowserSpec);
 
 /**
  * @param {string[]} changedSpecs the specs the pull request adds or changes

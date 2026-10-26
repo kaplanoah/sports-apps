@@ -122,6 +122,7 @@
     "tests/report-flaky-tests.test.js",
     "tests/resume.test.js",
     "tests/retry.test.js",
+    "tests/review-codex.test.js",
     "tests/review-git.test.js",
     "tests/review-publication.test.js",
     "tests/rework.test.js",
