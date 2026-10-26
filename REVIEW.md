@@ -63,7 +63,7 @@ Skip what lint, Prettier, TypeScript, knip, and the repo's guard tests already c
 
 In CI, the selected provider performs the whole review. Claude keeps one reviewer per area and a check across every area. Codex uses one native session for a contained semantic area, investigating and verifying its findings. Multiple Codex portions require a separate integration pass, even without candidates. Every path verifies claims, merges repeats, weighs findings, and checks what spans areas before publishing.
 
-`TRUSTED_REVIEW_SETUP.md` defines provider selection. Codex records supplied content and native results, rather than Claude Read events. Missing coverage, unfinished investigation, unjudged work, or a stale provider selection cannot approve.
+`TRUSTED_REVIEW_SETUP.md` defines provider selection. Codex records supplied content and native results, rather than Claude Read events. Missing required coverage or a stale provider selection blocks either provider. For Codex, unfinished or unjudged work also blocks approval. Claude lists unjudged work in its summary.
 
 - Report every problem you find, not a sample, each as one finding that names every place it shows, in both apps too, rather than one finding for each place. Include one you're unsure of, with your confidence, rather than leaving it out.
 - Before a finding is posted, check it by reading more of the code: trace the path from a real caller or input to what goes wrong, and see what the base did. If it would matter and still can't be settled, post it as **Unsure** with what would settle it.

@@ -25,7 +25,7 @@ Judge each reported finding against the code and reproducer, separately for each
 
 ## Measurements
 
-`node worker/review-evaluation.mjs measure <trial.json> <telemetry-file>` emits detection, false findings, unresolved findings, completion, token counters and elapsed time for one provider and case. Retain its telemetry hash and the raw artifacts privately. Claude telemetry is its SDK execution-message JSON array; Codex telemetry is the native `codex exec --json` event stream captured in the one-day answer artifact. Include every session, including integration. The collector sums final usage events rather than intermediate Claude messages.
+`node worker/review-evaluation.mjs measure <trial.json> <telemetry-file>` emits detection, false findings, unresolved findings, completion, token counters and elapsed time for one provider and case. Retain its telemetry hash and any raw offline-trial artifacts privately; public GitHub artifacts are not private storage. Claude telemetry is its SDK execution-message JSON array; Codex telemetry is `usage.jsonl`, containing only validated numeric usage from native `turn.completed` events in the one-day answer artifact. Raw turns and tool output never enter that artifact. Include every session, including integration. The collector sums final usage events rather than intermediate Claude messages.
 
 The trial JSON requires `case`, `head`, `fix`, `provider`, `model`, `toolVersion`, `status`, `elapsedSeconds` and `adjudications`. Status is `completed`, `failed` or `interrupted`. The snapshot and fix must match a frozen case. Each adjudication has a unique nonempty `id`, `verdict` and an evidence-based `reason`. Missing usage cannot be reported as zero.
 

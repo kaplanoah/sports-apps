@@ -95,14 +95,19 @@ export function reproduceReviewCases(destination) {
 }
 
 /** @param {string} text @param {string} provider */
-export function measureReviewTokens(text, provider) {
-  const events =
-    provider === "claude"
-      ? JSON.parse(text)
-      : text
-          .split("\n")
-          .filter((line) => line.trim().startsWith("{"))
-          .map((line) => JSON.parse(line));
+function readReviewUsage(text, provider) {
+  let events;
+  try {
+    events =
+      provider === "claude"
+        ? JSON.parse(text)
+        : text
+            .split("\n")
+            .filter((line) => line.trim().startsWith("{"))
+            .map((line) => JSON.parse(line));
+  } catch {
+    throw new Error("Invalid evaluation telemetry.");
+  }
   if (!Array.isArray(events) || !["claude", "codex"].includes(provider))
     throw new Error("Invalid evaluation telemetry.");
   const usages = events
@@ -130,7 +135,24 @@ export function measureReviewTokens(text, provider) {
     )
   )
     throw new Error("Evaluation token usage is missing.");
-  return usages.reduce(
+  return usages;
+}
+
+/** @param {string} text */
+export function retainCodexUsage(text) {
+  return readReviewUsage(text, "codex")
+    .map(({ input_tokens, cached_input_tokens, output_tokens }) =>
+      JSON.stringify({
+        type: "turn.completed",
+        usage: { input_tokens, cached_input_tokens, output_tokens },
+      }),
+    )
+    .join("\n");
+}
+
+/** @param {string} text @param {string} provider */
+export function measureReviewTokens(text, provider) {
+  return readReviewUsage(text, provider).reduce(
     (total, usage) => ({
       input:
         total.input + usage.input_tokens - (provider === "codex" ? usage.cached_input_tokens : 0),

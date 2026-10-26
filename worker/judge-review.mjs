@@ -368,10 +368,16 @@ function describeReview(judged, { plan, sha }) {
     ? `, and found ${pluralize(judged.repeated, "finding")} already on it`
     : "";
   const lead = LEADS[/** @type {"first" | "push"} */ (plan.stage)];
+  const verification =
+    plan.provider === "codex"
+      ? plan.areas.length === 1
+        ? "the contained session"
+        : "the integration pass"
+      : "the check across areas";
   const lines = [
     `${plan.provider === "codex" ? "Codex" : "Claude"} reviewed ${sha}: it ${lead(plan.areas.length, plan.since ?? "")}, and posted ${describeFound(judged.weights)}${repeated}.`,
     "",
-    `Checked: the check across areas turned down ${judged.rejected} of ${pluralize(judged.checked, "candidate")} the reviewers listed, after merging repeats.`,
+    `Checked: ${verification} turned down ${judged.rejected} of ${pluralize(judged.checked, "candidate")} ${plan.provider === "codex" ? "listed during investigation" : "the reviewers listed"}, after merging repeats.`,
     `${plan.provider === "codex" ? "Supplied in full" : "Read in full"}: ${judged.fileCount - judged.unreadFiles.length} of ${pluralize(judged.fileCount, "changed file")} to read.`,
   ];
   if (judged.unreadFiles.length)

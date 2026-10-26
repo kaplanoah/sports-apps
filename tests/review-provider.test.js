@@ -121,6 +121,8 @@ test("credential gates execute only the selected provider and never fall back", 
     ["codex", "", "example", "example", 1],
     ["codex", "true", "", "example", 1],
     ["claude", "true", "example", "", 1],
+    ["", "true", "example", "example", 1],
+    ["other", "true", "example", "example", 1],
   ]) {
     const output = join(mkdtempSync(join(tmpdir(), "provider-gate-")), "output");
     const result = spawnSync("bash", ["-c", script], {

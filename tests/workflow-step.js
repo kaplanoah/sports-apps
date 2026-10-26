@@ -70,6 +70,7 @@ export function readNativeReviewName(env) {
 
 /** @param {Record<string,string>} env */
 export const createReviewDecisionEnvironment = (env) => ({
+  REVIEW_PROVIDER: "claude",
   ...env,
   REVIEW_RUN_NAME: readNativeReviewName(env),
 });

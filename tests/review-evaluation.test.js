@@ -1,6 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { measureReviewTokens, measureReviewTrial } from "../worker/review-evaluation.mjs";
+import {
+  measureReviewTokens,
+  measureReviewTrial,
+  retainCodexUsage,
+} from "../worker/review-evaluation.mjs";
 
 const CODEX = [
   { type: "turn.started" },
@@ -45,6 +49,31 @@ const TRIAL = {
     { id: "2", verdict: "false", reason: "This caller cannot pass that input." },
   ],
 };
+
+test("retained Codex telemetry contains only validated native usage, with no transcript or parse-error disclosure", () => {
+  const events = CODEX.split("\n").map((line) => JSON.parse(line));
+  events.unshift({ type: "item.completed", item: { text: "private command and output" } });
+  events[2].usage.extra = "private metadata";
+  events[2].private = "private prompt";
+  const raw = "stderr: private details\n" + events.map((event) => JSON.stringify(event)).join("\n");
+  const retained = retainCodexUsage(raw);
+  assert.equal(retained.split("\n").length, 2);
+  assert.doesNotMatch(retained, /private|item.completed|turn.started|extra/);
+  assert.deepEqual(measureReviewTokens(retained, "codex"), measureReviewTokens(CODEX, "codex"));
+  for (const text of [
+    "",
+    '{"private":secret}',
+    CODEX.replace('"input_tokens":100', '"input_tokens":"private"'),
+  ])
+    assert.throws(
+      () => retainCodexUsage(text),
+      (error) => {
+        assert.ok(error instanceof Error);
+        assert.doesNotMatch(error.message, /private|secret/);
+        return true;
+      },
+    );
+});
 
 test("evaluation counts native provider usage separately without counting intermediate Claude messages twice", () => {
   assert.deepEqual(measureReviewTokens(CODEX, "codex"), {

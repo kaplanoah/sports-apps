@@ -177,15 +177,35 @@ test("the trusted shell capture keeps native events out of stdout and preserves 
   assert.equal(result.status, 7);
   assert.equal(result.stdout + result.stderr, "");
   assert.equal(
-    readFileSync(join(folder, "codex-answer/events.jsonl"), "utf8"),
+    readFileSync(join(folder, "codex-events.jsonl"), "utf8"),
     '{"type":"turn.completed"}\ntool output\n',
   );
   const workflow = readRepoFile(".github/workflows/trusted-codex-review.yml");
   assert.match(workflow, /BASH_ENV: \$\{\{ runner.temp \}\}\/codex-log-capture.sh/);
-  assert.match(workflow, /# Only transports data[\s\S]*?if: always\(\)/);
+  assert.match(workflow, /name: Retain only native usage counters\n {8}if: always\(\)/);
+  assert.match(workflow, /review-codex.mjs" usage/);
+  const upload = workflow.split("name: trusted-codex-answer-")[1].split("  validate:")[0];
+  assert.doesNotMatch(upload, /codex-events|events.jsonl/);
   assert.match(
-    workflow,
-    /path: \$\{\{ runner.temp \}\}\/codex-answer\/\n[\s\S]*?retention-days: 1\n/,
+    upload,
+    /path: \|\n {12}\$\{\{ runner.temp \}\}\/codex-answer\/answer.json\n {12}\$\{\{ runner.temp \}\}\/codex-answer\/usage.jsonl\n/,
+  );
+  assert.match(upload, /retention-days: 1\n/);
+  writeFileSync(
+    join(folder, "codex-events.jsonl"),
+    '{"type":"item.completed","secret":"raw tool output"}\n' +
+      '{"type":"turn.completed","usage":{"input_tokens":12,"cached_input_tokens":2,"output_tokens":3,"secret":"private"}}\n',
+  );
+  const usage = spawnSync(
+    process.execPath,
+    [fileURLToPath(new URL("worker/review-codex.mjs", REPO_ROOT)), "usage"],
+    { env, encoding: "utf8" },
+  );
+  assert.equal(usage.status, 0, usage.stderr);
+  assert.equal(usage.stdout + usage.stderr, "");
+  assert.equal(
+    readFileSync(join(folder, "codex-answer/usage.jsonl"), "utf8"),
+    '{"type":"turn.completed","usage":{"input_tokens":12,"cached_input_tokens":2,"output_tokens":3}}',
   );
 });
 

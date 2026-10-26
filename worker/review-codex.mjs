@@ -6,6 +6,7 @@ import { isTestPath } from "./deploy-scope.mjs";
 import { readJson, gatherCandidates } from "./judge-review.mjs";
 import { readReviewAnswer, readReviewIdentity, validateAcrossCandidates } from "./review-data.mjs";
 import { describeSuppliedContent, hashReviewContent } from "./review-supplied.mjs";
+import { retainCodexUsage } from "./review-evaluation.mjs";
 
 const CANDIDATE_FIELDS = {
   path: { type: "string" },
@@ -232,7 +233,7 @@ function writeCodexConfig(env) {
     join(env.RUNNER_TEMP, "codex-log-capture.sh"),
     [
       'if [ -n "${CODEX_PROMPT_FILE:-}" ]; then',
-      '  exec > "$RUNNER_TEMP/codex-answer/events.jsonl" 2>&1',
+      '  exec > "$RUNNER_TEMP/codex-events.jsonl" 2>&1',
       "fi",
       "",
     ].join("\n"),
@@ -244,6 +245,11 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const portion = argument === "integration" ? argument : Number(argument);
   if (command === "request") writeCodexRequest(process.env, portion);
   else if (command === "config") writeCodexConfig(process.env);
+  else if (command === "usage")
+    writeFileSync(
+      join(process.env.RUNNER_TEMP, "codex-answer/usage.jsonl"),
+      retainCodexUsage(readFileSync(join(process.env.RUNNER_TEMP, "codex-events.jsonl"), "utf8")),
+    );
   else if (command === "accept") {
     acceptCodexAnswer(
       process.env.REVIEW_FOLDER,
