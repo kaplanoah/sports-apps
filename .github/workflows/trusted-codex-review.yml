@@ -110,6 +110,8 @@ jobs:
         run: mkdir "$RUNNER_TEMP/codex-answer"
       - name: Investigate with native Codex
         uses: openai/codex-action@c05cfd74ad95c626cdf05c6685e62becc3bf7813
+        env:
+          BASH_ENV: ${{ runner.temp }}/codex-log-capture.sh
         with:
           openai-api-key: ${{ secrets.TRUSTED_REVIEW_OPENAI_API_KEY }}
           codex-version: 0.164.0
@@ -125,11 +127,12 @@ jobs:
           codex-args: '["--ephemeral", "--json"]'
       # Only transports data after model execution. All validation and publishing use fresh hosts.
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        if: always()
         with:
           name: trusted-codex-answer-${{ inputs.portion }}
-          path: ${{ runner.temp }}/codex-answer/answer.json
+          path: ${{ runner.temp }}/codex-answer/
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 1
           overwrite: true
 
   validate:

@@ -116,16 +116,30 @@ export function measureReviewTokens(text, provider) {
       (usage) =>
         !usage ||
         !Number.isSafeInteger(usage.input_tokens) ||
-        !Number.isSafeInteger(usage.output_tokens),
+        !Number.isSafeInteger(usage.output_tokens) ||
+        usage.input_tokens < 0 ||
+        usage.output_tokens < 0 ||
+        (provider === "codex"
+          ? !Number.isSafeInteger(usage.cached_input_tokens) ||
+            usage.cached_input_tokens < 0 ||
+            usage.cached_input_tokens > usage.input_tokens
+          : !Number.isSafeInteger(usage.cache_read_input_tokens) ||
+            !Number.isSafeInteger(usage.cache_creation_input_tokens) ||
+            usage.cache_read_input_tokens < 0 ||
+            usage.cache_creation_input_tokens < 0),
     )
   )
     throw new Error("Evaluation token usage is missing.");
   return usages.reduce(
     (total, usage) => ({
-      input: total.input + usage.input_tokens,
+      input:
+        total.input + usage.input_tokens - (provider === "codex" ? usage.cached_input_tokens : 0),
       output: total.output + usage.output_tokens,
-      cached: total.cached + (usage.cached_input_tokens ?? usage.cache_read_input_tokens ?? 0),
-      cacheWrite: total.cacheWrite + (usage.cache_creation_input_tokens ?? 0),
+      cached:
+        total.cached +
+        (provider === "codex" ? usage.cached_input_tokens : usage.cache_read_input_tokens),
+      cacheWrite:
+        total.cacheWrite + (provider === "claude" ? usage.cache_creation_input_tokens : 0),
     }),
     { input: 0, output: 0, cached: 0, cacheWrite: 0 },
   );
@@ -151,10 +165,13 @@ export function measureReviewTrial(trial, telemetry) {
   if (
     trial.adjudications.some(
       (item) =>
+        typeof item.id !== "string" ||
+        !item.id.trim() ||
         !["confirmed-target", "confirmed-other", "false", "unsure"].includes(item.verdict) ||
         typeof item.reason !== "string" ||
         !item.reason.trim(),
-    )
+    ) ||
+    new Set(trial.adjudications.map((item) => item.id)).size !== trial.adjudications.length
   )
     throw new Error("Evaluation requires evidence-based adjudication.");
   return {

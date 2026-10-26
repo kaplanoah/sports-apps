@@ -615,6 +615,7 @@ test("a label change skips tests once a run passed every test on the same code",
 
 test("only validated trusted review can satisfy the CI review gate", () => {
   const plan = readJob("review-join");
+  assert.match(plan, /pull-requests: read/);
   assert.match(
     plan,
     /owed: \$\{\{ steps.find.outputs.owed \|\| steps.decision.outputs.owed \|\| 'true' \}\}/,

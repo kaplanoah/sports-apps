@@ -1,7 +1,7 @@
 import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { findTestedFile, nameCodeArea } from "./plan-review.mjs";
+import { findTestedFile, nameCodeArea, nameTestArea } from "./plan-review.mjs";
 import { isTestPath } from "./deploy-scope.mjs";
 import { readJson, gatherCandidates } from "./judge-review.mjs";
 import { readReviewAnswer, readReviewIdentity, validateAcrossCandidates } from "./review-data.mjs";
@@ -40,7 +40,7 @@ export function arrangeCodexPortions(plan, repoFiles) {
   const groups = new Map();
   for (const file of files) {
     const tested = isTestPath(file) ? findTestedFile(file, files, repoFiles) : null;
-    const name = nameCodeArea(tested ?? file);
+    const name = isTestPath(file) ? nameTestArea(file, tested) : nameCodeArea(file);
     if (!groups.has(name)) groups.set(name, []);
     groups.get(name).push(file);
   }
@@ -102,14 +102,14 @@ export function buildCodexRequest(folder, portion, identity) {
       ? "This is the mandatory independent integration pass, even when candidates are empty. Check interactions across all portions and both apps. Verify every candidate, merge duplicates, and find problems portions missed."
       : `Investigate portion ${portion} completely. Follow callers, shared state, related code, failure paths, relevant tests and the other app. Inspect beyond changed lines using native shell/search tools and git history; the base is HEAD^1.`,
     "All required diffs and trusted rules for this session are supplied below without truncation. Use native tools for any additional context. Do not run PR code or tests, publish, modify files, or access credentials. Test context contains observed CI state, not proof tests passed.",
-    "Do not repeat findings whose earlier thread answer holds. Report every problem, including uncertain claims. Follow the guide's reporting weights and locate findings on the nearest changed line.",
+    "Do not repeat findings whose earlier thread answer holds. Report every problem, including uncertain claims. Follow the guide's reporting weights and locate findings on the nearest changed line in any file the complete plan changes, including another portion. Mention related unchanged code in the claim rather than anchoring a candidate outside the plan.",
     integrated || contained
       ? "Verify candidate claims against actual callers/inputs and the base before finalizing. Give every candidate exactly one confirmed, rejected or unsure disposition; merge duplicate ids and explain why. Add interaction findings with empty ids."
       : "Return all candidates for a separate integration pass. Do not make a final approval.",
     contained
       ? "In this one session, first investigate and list candidates, then verify every claim and produce findings. Candidate ids are 1.1, 1.2, etc., in candidates array order."
       : "Candidate ids for integration are supplied in candidates.json.",
-    "Return complete=false and list unfinished work if any required investigation or verification remains. Never claim completion after partial coverage. Use unjudged for anything read but unsettled. Echo the exact binding in the structured answer.",
+    "Return complete=false and list unfinished work if any required investigation or verification remains. Never claim completion after partial coverage. Use unjudged for anything read but unsettled; any unfinished or unjudged work prevents approval. Echo the exact binding in the structured answer.",
   ].join("\n");
   const prompt =
     instructions +
@@ -156,8 +156,9 @@ export function acceptCodexAnswer(folder, portion, identity, output) {
   if (portion !== "integration") {
     const area = plan.areas.find((area) => area.area === portion);
     const answer = readReviewAnswer(output, "candidates");
-    if (answer.items.some((candidate) => !area.files.includes(candidate.path)))
-      throw new Error("Codex candidate does not belong to its review portion.");
+    const changedFiles = new Set(plan.areas.flatMap((portion) => portion.files));
+    if (answer.items.some((candidate) => !changedFiles.has(candidate.path)))
+      throw new Error("Codex candidate does not belong to the reviewed change.");
     const required = [...Object.values(area.partsByFile).flat(), ...area.rules];
     const record = {
       provider: "codex",
@@ -224,6 +225,15 @@ function writeCodexConfig(env) {
       'PATH = "/usr/local/bin:/usr/bin:/bin"',
       `[projects.${JSON.stringify(env.REVIEW_CHECKOUT)}]`,
       'trust_level = "untrusted"',
+      "",
+    ].join("\n"),
+  );
+  writeFileSync(
+    join(env.RUNNER_TEMP, "codex-log-capture.sh"),
+    [
+      'if [ -n "${CODEX_PROMPT_FILE:-}" ]; then',
+      '  exec > "$RUNNER_TEMP/codex-answer/events.jsonl" 2>&1',
+      "fi",
       "",
     ].join("\n"),
   );

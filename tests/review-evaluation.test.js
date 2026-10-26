@@ -38,16 +38,17 @@ const TRIAL = {
   elapsedSeconds: 120,
   adjudications: [
     {
+      id: "1",
       verdict: "confirmed-target",
       reason: "The reported path throws for the reproduced unknown frame.",
     },
-    { verdict: "false", reason: "This caller cannot pass that input." },
+    { id: "2", verdict: "false", reason: "This caller cannot pass that input." },
   ],
 };
 
 test("evaluation counts native provider usage separately without counting intermediate Claude messages twice", () => {
   assert.deepEqual(measureReviewTokens(CODEX, "codex"), {
-    input: 150,
+    input: 120,
     output: 35,
     cached: 30,
     cacheWrite: 0,
@@ -67,6 +68,33 @@ test("evaluation counts native provider usage separately without counting interm
     assert.throws(() => measureReviewTokens(text, provider));
 });
 
+test("cache telemetry must be observed, nonnegative and consistent with native input totals", () => {
+  for (const [provider, text, field] of [
+    ["codex", CODEX, "cached_input_tokens"],
+    ["claude", CLAUDE, "cache_read_input_tokens"],
+    ["claude", CLAUDE, "cache_creation_input_tokens"],
+  ]) {
+    const events =
+      provider === "claude" ? JSON.parse(text) : text.split("\n").map((line) => JSON.parse(line));
+    for (const value of [undefined, -1, 1.5]) {
+      const changed = structuredClone(events);
+      for (const event of changed)
+        if (event.usage?.output_tokens !== undefined) event.usage[field] = value;
+      const telemetry =
+        provider === "claude"
+          ? JSON.stringify(changed)
+          : changed.map((event) => JSON.stringify(event)).join("\n");
+      assert.throws(() => measureReviewTokens(telemetry, provider), /usage is missing/);
+    }
+  }
+  assert.throws(() =>
+    measureReviewTokens(
+      CODEX.replace('"cached_input_tokens":20', '"cached_input_tokens":101'),
+      "codex",
+    ),
+  );
+});
+
 test("detection, false findings, completion, tokens and elapsed time require an adjudicated exact historical trial", () => {
   const measurement = measureReviewTrial(TRIAL, CODEX);
   assert.equal(measurement.detected, true);
@@ -82,6 +110,9 @@ test("detection, false findings, completion, tokens and elapsed time require an 
     { status: "unknown" },
     { model: "" },
     { adjudications: [{ verdict: "confirmed-target", reason: "" }] },
+    { adjudications: [{ verdict: "confirmed-target", reason: "Evidence without identity" }] },
+    { adjudications: [{ ...TRIAL.adjudications[0], id: " " }] },
+    { adjudications: [TRIAL.adjudications[0], TRIAL.adjudications[0]] },
   ])
     assert.throws(() => measureReviewTrial({ ...TRIAL, ...change }, CODEX));
 });

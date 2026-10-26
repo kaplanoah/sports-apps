@@ -147,18 +147,23 @@ test("credential gates execute only the selected provider and never fall back", 
 test("switching provider or selection discards completion reuse and requires the whole change", async () => {
   const head = "a".repeat(40),
     base = "b".repeat(40);
-  const readGitHub = async () => [
+  const comments = [
     {
       user: { login: "github-actions[bot]" },
       body: `${SUMMARY_MARKER}\n${writeReviewedHead(head, base, "claude", "initial")}\nReview.`,
     },
   ];
+  const readGitHub = async () => comments;
   const env = {
     GITHUB_REPOSITORY: "example/repository",
     PR: "1",
     REVIEW_PROVIDER: "claude",
     REVIEW_SELECTION: "initial",
   };
+  assert.equal((await readLastReview(env, readGitHub)).head, head);
+  assert.equal(await readLastReview({ ...env, REVIEW_PROVIDER: "codex" }, readGitHub), null);
+  assert.equal(await readLastReview({ ...env, REVIEW_SELECTION: "8" }, readGitHub), null);
+  comments[0].body = `${SUMMARY_MARKER}\n${writeReviewedHead(head, base)}\nLegacy review.`;
   assert.equal((await readLastReview(env, readGitHub)).head, head);
   assert.equal(await readLastReview({ ...env, REVIEW_PROVIDER: "codex" }, readGitHub), null);
   assert.equal(await readLastReview({ ...env, REVIEW_SELECTION: "8" }, readGitHub), null);

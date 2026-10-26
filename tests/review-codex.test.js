@@ -1,5 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -10,7 +12,7 @@ import {
 } from "../worker/review-codex.mjs";
 import { recomputeReviewCoverage, readReviewIdentity } from "../worker/review-data.mjs";
 import { exportReviewArtifact, importReviewArtifacts } from "../worker/trusted-review.mjs";
-import { readRepoFile } from "./repo-files.js";
+import { readRepoFile, REPO_ROOT } from "./repo-files.js";
 
 const ENV = {
   GITHUB_REPOSITORY: "example/repository",
@@ -108,6 +110,83 @@ test("native portions follow semantic code and tests rather than Claude area cou
   const arranged = arrangeCodexPortions({ ...plan, areas: [one, two, plan.areas[1]] }, []);
   assert.equal(arranged.areas.length, 2);
   assert.deepEqual(arranged.areas[0].files, [CANDIDATE.path, "shared/page/other.js"]);
+});
+
+test("an app test without a matching source belongs with that app rather than tooling", () => {
+  const { plan } = createFixture();
+  const file = "apps/mlb/tests/schedule.test.js";
+  const area = { ...plan.areas[0], files: [file], partsByFile: { [file]: ["first/test.diff"] } };
+  assert.equal(arrangeCodexPortions({ ...plan, areas: [area] }, []).areas[0].name, "mlb page");
+});
+
+test("a portion can anchor cross-area candidates on any changed file, while foreign paths fail", () => {
+  const { folder, plan } = createFixture(true);
+  const candidate = { ...CANDIDATE, path: plan.areas[1].files[0] };
+  assert.match(buildCodexRequest(folder, 1, IDENTITY).prompt, /including another portion/);
+  acceptCodexAnswer(folder, 1, IDENTITY, createAnswer(folder, 1, { candidates: [candidate] }));
+  assert.equal(
+    JSON.parse(readFileSync(join(folder, "find-1.json"), "utf8")).tries[0].answer.items[0].path,
+    candidate.path,
+  );
+  assert.throws(
+    () =>
+      acceptCodexAnswer(
+        folder,
+        1,
+        IDENTITY,
+        createAnswer(folder, 1, {
+          candidates: [{ ...candidate, path: "unrelated.js" }],
+        }),
+      ),
+    /reviewed change/,
+  );
+});
+
+test("Codex instructions disclose that unjudged work prevents approval", () => {
+  const { folder } = createFixture();
+  assert.match(
+    buildCodexRequest(folder, 1, IDENTITY).prompt,
+    /any unfinished or unjudged work prevents approval/,
+  );
+});
+
+test("the trusted shell capture keeps native events out of stdout and preserves failure status", () => {
+  const folder = mkdtempSync(join(tmpdir(), "codex-capture-"));
+  mkdirSync(join(folder, "codex-answer"));
+  const env = { ...process.env, RUNNER_TEMP: folder, REVIEW_CHECKOUT: folder };
+  const config = spawnSync(
+    process.execPath,
+    [fileURLToPath(new URL("worker/review-codex.mjs", REPO_ROOT)), "config"],
+    { env, encoding: "utf8" },
+  );
+  assert.equal(config.status, 0, config.stderr);
+  const script = join(folder, "step.sh");
+  writeFileSync(
+    script,
+    "printf '%s\\n' '{\"type\":\"turn.completed\"}'; printf '%s\\n' 'tool output' >&2; exit 7\n",
+  );
+  const result = spawnSync("bash", ["--noprofile", "--norc", "-e", "-o", "pipefail", script], {
+    env: {
+      PATH: process.env.PATH,
+      RUNNER_TEMP: folder,
+      CODEX_PROMPT_FILE: "prompt.txt",
+      BASH_ENV: join(folder, "codex-log-capture.sh"),
+    },
+    encoding: "utf8",
+  });
+  assert.equal(result.status, 7);
+  assert.equal(result.stdout + result.stderr, "");
+  assert.equal(
+    readFileSync(join(folder, "codex-answer/events.jsonl"), "utf8"),
+    '{"type":"turn.completed"}\ntool output\n',
+  );
+  const workflow = readRepoFile(".github/workflows/trusted-codex-review.yml");
+  assert.match(workflow, /BASH_ENV: \$\{\{ runner.temp \}\}\/codex-log-capture.sh/);
+  assert.match(workflow, /# Only transports data[\s\S]*?if: always\(\)/);
+  assert.match(
+    workflow,
+    /path: \$\{\{ runner.temp \}\}\/codex-answer\/\n[\s\S]*?retention-days: 1\n/,
+  );
 });
 
 test("a contained session receives all content and verifies every candidate without fake Read events", () => {

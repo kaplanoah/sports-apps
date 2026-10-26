@@ -17,6 +17,7 @@ import { fileURLToPath } from "node:url";
 import { readPullMerge } from "./pull-merge.mjs";
 import { verifyReviewProvider } from "./review-provider.mjs";
 import { arrangeCodexPortions, buildCodexRequest } from "./review-codex.mjs";
+import { formatJobOutputs, listJobs } from "./plan-review.mjs";
 import { WEIGHTS } from "./review-state.mjs";
 import { createGitHub, readAllPages } from "./github-api.mjs";
 import { createReviewGitEnvironment } from "./review-repository.mjs";
@@ -308,25 +309,32 @@ export async function verifyReviewEvent(
   callGitHub = createGitHub({ repository: env.GITHUB_REPOSITORY, env, fetchImpl: fetch }),
 ) {
   const pull = await callGitHub(`/pulls/${env.PR}`);
-  if (!isCurrentReviewPull(pull, env) || pull.base?.sha !== env.REVIEW_BASE)
+  if (!isCurrentReviewPull(pull, env))
     throw new Error("The pull request moved after this review started.");
   await verifyReviewProvider(env, callGitHub);
 }
 
-/** @param {NodeJS.ProcessEnv} env */
-async function writeTrustedReviewPlan(env) {
+/**
+ * @param {NodeJS.ProcessEnv} env
+ * @param {{ invokeScript?: typeof invokeReviewScript, readRepository?: typeof readGit, readGitHub?: ReturnType<typeof createGitHub> }} [options]
+ */
+export async function writeTrustedReviewPlan(env, options = {}) {
+  const invokeScript = options.invokeScript ?? invokeReviewScript;
+  const readRepository = options.readRepository ?? readGit;
   const folder = env.REVIEW_FOLDER;
-  invokeReviewScript("plan-review.mjs", [folder], env, true);
-  invokeReviewScript("review-context.mjs", [folder], env);
+  invokeScript("plan-review.mjs", [folder], env, true);
+  invokeScript("review-context.mjs", [folder], env);
   for (const name of ["REVIEW.md", "AGENTS.md"])
     copyFileSync(join(SOURCE, name), join(folder, name));
   let plan = readJson(join(folder, "plan.json"));
   if (env.REVIEW_PROVIDER)
     plan = { ...plan, provider: env.REVIEW_PROVIDER, selection: env.REVIEW_SELECTION };
   if (env.REVIEW_PROVIDER) {
-    const repoFiles = readGit(["ls-files"], env.REVIEW_CHECKOUT).split("\n");
+    const repoFiles = readRepository(["ls-files"], env.REVIEW_CHECKOUT).split("\n");
     if (env.REVIEW_PROVIDER === "codex") plan = arrangeCodexPortions(plan, repoFiles);
-    const readGitHub = createGitHub({ repository: env.GITHUB_REPOSITORY, env, fetchImpl: fetch });
+    const readGitHub =
+      options.readGitHub ??
+      createGitHub({ repository: env.GITHUB_REPOSITORY, env, fetchImpl: fetch });
     const checks = await readAllPages(
       readGitHub,
       `/commits/${env.REVIEW_HEAD}/check-runs`,
@@ -348,12 +356,7 @@ async function writeTrustedReviewPlan(env) {
   }
   writeFileSync(join(folder, "plan.json"), JSON.stringify(plan));
   console.log(`stage=${plan.stage}`);
-  console.log(`provider=${plan.provider ?? "claude"}`);
-  console.log(`count=${plan.areas.length}`);
-  console.log(`areas=${JSON.stringify(plan.areas.map(({ name }) => ({ name })))}`);
-  console.log(
-    `area-numbers=${JSON.stringify(Object.fromEntries(plan.areas.map(({ area, name }) => [name, area])))}`,
-  );
+  console.log(formatJobOutputs(listJobs(plan.areas)));
   exportReviewArtifact(folder, "plan", env);
 }
 

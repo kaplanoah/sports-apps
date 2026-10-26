@@ -39,12 +39,16 @@ jobs:
         with:
           node-version-file: .nvmrc
           package-manager-cache: false
+      - name: Preserve trusted selection controls
+        run: |
+          mkdir "$RUNNER_TEMP/trusted"
+          git archive "$REVIEW_TRUSTED" | tar -x -C "$RUNNER_TEMP/trusted"
       - name: Pin the provider choice from trusted source
         id: select
         env:
           GH_TOKEN: ${{ github.token }}
-          REVIEW_DEFAULT_PROVIDER: ${{ vars.TRUSTED_REVIEW_DEFAULT_PROVIDER || 'claude' }}
-        run: node worker/review-provider.mjs
+          REVIEW_DEFAULT_PROVIDER: ${{ vars.TRUSTED_REVIEW_DEFAULT_PROVIDER }}
+        run: node "$RUNNER_TEMP/trusted/worker/review-provider.mjs"
 
   review-begin:
     if: vars.TRUSTED_REVIEW_PUBLISHER_ENABLED == 'true' && github.event.pull_request.base.ref == 'main'

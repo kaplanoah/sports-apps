@@ -58,7 +58,7 @@ export async function readReviewProvider(env, readGitHub) {
     comments,
     events,
     owner: env.GITHUB_REPOSITORY.split("/")[0],
-    defaultProvider: env.REVIEW_DEFAULT_PROVIDER || "claude",
+    defaultProvider: env.REVIEW_DEFAULT_PROVIDER || undefined,
   });
   return { choice, comment: findProviderComment(comments) };
 }

@@ -10,6 +10,7 @@ import { createReviewGitEnvironment } from "./review-repository.mjs";
 import { isGitObjectId } from "./git-object.mjs";
 import { waitFor } from "./check-timing.mjs";
 import { readReviewProvider } from "./review-provider.mjs";
+import { matchesReviewProvider } from "./review-state.mjs";
 import { readReviewRun, REVIEW_RESULT_PREFIX } from "./review-run.mjs";
 
 const FINISH_BUDGET_MS = 10 * 60 * 1000;
@@ -23,8 +24,7 @@ export function verifyTrustedReviewResult(folder, env) {
   const identity = readReviewIdentity({
     ...env,
     ...(!result?.identity?.provider &&
-    env.REVIEW_PROVIDER === "claude" &&
-    env.REVIEW_SELECTION === "initial"
+    matchesReviewProvider(undefined, env.REVIEW_PROVIDER, env.REVIEW_SELECTION)
       ? { REVIEW_PROVIDER: undefined, REVIEW_SELECTION: undefined }
       : {}),
     GITHUB_RUN_ID: env.REVIEW_RUN,

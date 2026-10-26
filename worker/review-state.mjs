@@ -21,6 +21,10 @@ const STATE_PREFIX = "<!-- claude-review-state ";
 const STATE = /^<!-- claude-review-state (\{.*?\}) -->$/;
 const FINDING_MARK = /<!-- claude-finding ([0-9a-f]{16}) ([0-9a-f]{40}) -->/g;
 
+/** @param {{ provider?: string, selection?: string } | null | undefined} recorded @param {string | undefined} provider @param {string | undefined} selection */
+export const matchesReviewProvider = (recorded, provider, selection) =>
+  (recorded?.provider ?? "claude") === provider && (recorded?.selection ?? "initial") === selection;
+
 /**
  * The review's own summary among a pull request's comments, never anyone else's that starts the
  * same way.

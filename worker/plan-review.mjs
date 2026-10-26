@@ -22,7 +22,7 @@ import { isTestPath } from "./deploy-scope.mjs";
 import { createGitHub, readAllPages } from "./github-api.mjs";
 import { resolvePackageImport } from "./package-imports.mjs";
 import { createReviewGitEnvironment } from "./review-repository.mjs";
-import { findSummary, readReviewedState } from "./review-state.mjs";
+import { findSummary, readReviewedState, matchesReviewProvider } from "./review-state.mjs";
 import { RULES_FOLDER, listRulesFor, readRuleFiles, readRulePaths } from "./rule-files.mjs";
 
 const AREA_LINES = 2000;
@@ -135,7 +135,7 @@ export function findTestedFile(test, changed, repoFiles, readImports = readTestI
  * @param {string} test
  * @param {string | null} tested
  */
-function nameTestArea(test, tested) {
+export function nameTestArea(test, tested) {
   if (tested) return nameCodeArea(tested);
   const app = test.match(/^apps\/([^/]+)\//)?.[1];
   return app ? `${app} page` : "tooling";
@@ -775,7 +775,7 @@ export async function readLastReview(
   const state = readReviewedState(findSummary(comments)?.body);
   if (
     env.REVIEW_PROVIDER &&
-    (state?.provider !== env.REVIEW_PROVIDER || state?.selection !== env.REVIEW_SELECTION)
+    !matchesReviewProvider(state, env.REVIEW_PROVIDER, env.REVIEW_SELECTION)
   )
     return null;
   return state;

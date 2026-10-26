@@ -64,11 +64,11 @@ If publication fails, repair credentials or publishing and rerun the appropriate
 
 # Selecting Claude or Codex
 
-Claude is the initial repository default. `TRUSTED_REVIEW_DEFAULT_PROVIDER` may name `claude` or `codex`; the first trusted selection pins that default per PR. Changing the repository default does not change existing PR choices.
+`TRUSTED_REVIEW_DEFAULT_PROVIDER` may name `claude` or `codex`, and defaults to `claude` when unset. The first trusted selection pins that default per PR. Changing the repository default does not change existing PR choices. Set a Codex default only after satisfying its activation gate below. PRs pinned to gated Codex require an owner `review-provider:claude` selection to use Claude.
 
 The owner selects a provider by adding `review-provider:claude` or `review-provider:codex`. Only the repository owner's label events count. Removing a label does not change the choice. Remove and re-add an existing provider label to select it again. The latest owner selection wins, even when both labels remain. Each selection event starts a complete review with a new selection identity. The ordinary `review` label requests another round with the current provider.
 
-The trusted bot comment stores the initial choice. Timeline events retain explicit choices through failed or interrupted runs. Artifacts bind the provider and selection alongside the repository, run, head, base, merge and trusted source. Publishing and CI's join recheck the live choice. A switch away and back cannot reuse an older result. Unfinished work is never shared between providers.
+The trusted bot comment records the PR's current choice, which only an owner's provider label changes. Timeline events retain explicit choices through failed or interrupted runs. Artifacts bind the provider and selection alongside the repository, run, head, base, merge and trusted source. Publishing and CI's join recheck the live choice. A switch away and back cannot reuse an older result. Unfinished work is never shared between providers.
 
 ## Codex activation gate
 
@@ -83,9 +83,11 @@ Before activation, record the separate provider measurements described in `TRUST
 
 ## Verified official Codex configuration
 
-The implementation was checked against the official [action README](https://github.com/openai/codex-action/blob/c05cfd74ad95c626cdf05c6685e62becc3bf7813/README.md), [action inputs](https://github.com/openai/codex-action/blob/c05cfd74ad95c626cdf05c6685e62becc3bf7813/action.yml), and [security guidance](https://github.com/openai/codex-action/blob/c05cfd74ad95c626cdf05c6685e62becc3bf7813/docs/security.md) on October 25, 2026. The action is pinned to that commit and the CLI and API proxy to `0.164.0`. Permission profiles require CLI `0.138.0` or later. The pinned CLI's official model catalog includes `gpt-6.1-sol`; this path uses that model with high reasoning effort. No quality comparison is implied.
+The official [action README](https://github.com/openai/codex-action/blob/c05cfd74ad95c626cdf05c6685e62becc3bf7813/README.md), [action inputs](https://github.com/openai/codex-action/blob/c05cfd74ad95c626cdf05c6685e62becc3bf7813/action.yml), and [security guidance](https://github.com/openai/codex-action/blob/c05cfd74ad95c626cdf05c6685e62becc3bf7813/docs/security.md) define the pinned action's behavior. The CLI and API proxy are pinned to `0.164.0`. Permission profiles require CLI `0.138.0` or later. The pinned CLI's official model catalog includes `gpt-6.1-sol`; this path uses that model with high reasoning effort.
 
-`trusted-codex-review.yml` uses disposable GitHub-hosted Linux runners, `openai-api-key`, `prompt-file`, `output-schema-file`, `output-file`, `permission-profile: ":read-only"` and `safety-strategy: drop-sudo`. The official action invokes native `codex exec`. Native search, shell and history remain available within its sandbox. No Claude tools, Read events, agent counts, chunk limits or turn limits are imitated.
+`trusted-codex-review.yml` uses disposable GitHub-hosted Linux runners, `openai-api-key`, `prompt-file`, `output-schema-file`, `output-file`, `permission-profile: ":read-only"` and `safety-strategy: drop-sudo`. The official action invokes native `codex exec`. Native search, shell and history remain available within its sandbox.
+
+The trusted `BASH_ENV` capture redirects the action's execution step stdout and stderr to `events.jsonl` in the answer artifact, retained for one day. The pinned action removes `BASH_ENV` before starting the Linux model process. Native transcripts therefore stay out of public job logs without changing Codex's command or privilege protections. Hosted proof of capture is required before activation.
 
 Trusted Codex configuration lives outside the reviewed checkout. Project instructions are disabled and that checkout is explicitly untrusted, preventing its Codex configuration from becoming trusted settings. Shell commands inherit no credentials. The action protects its API credential through its own proxy and privilege removal. Model jobs receive no Claude or publisher credentials. The only step after model execution transports the answer as an artifact. Validation and privileged publishing run on fresh hosts from trusted source.
 
@@ -97,4 +99,4 @@ Codex groups code and tests by semantic repository area. One contained area uses
 
 Coverage records hash the actual complete content supplied by trusted preparation, not a model assertion that it read everything. The summary says "Supplied in full" for Codex and retains Claude's Read-based accounting. Native tools inspect callers, shared state, related code, both apps, failure paths and tests beyond the diff. Supplied coverage establishes delivery, not the depth of reasoning. Incomplete investigation, unjudged work, context exhaustion, malformed output or interruption fails closed. No automatic retry starts another provider.
 
-Claude's runner, retry policy, coverage checks and integration responsibilities remain intact. Both providers produce the common candidate, disposition and posting contract, with different coverage evidence. Structured answers and sealed artifacts are revalidated before privileged posting or approval.
+Both providers produce the common candidate, disposition and posting contract, with different coverage evidence. Structured answers and sealed artifacts are revalidated before privileged posting or approval.
