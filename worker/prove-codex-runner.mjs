@@ -151,6 +151,20 @@ export function readCodexProofConfiguration(workflow) {
 }
 
 /** @param {NodeJS.ProcessEnv} env */
+function readAvailableProofUsage(env) {
+  try {
+    return {
+      tokens: measureReviewTokens(
+        retainCodexUsage(readFileSync(join(env.RUNNER_TEMP, "codex-events.jsonl"), "utf8")),
+        "codex",
+      ),
+    };
+  } catch {
+    return { telemetryUnavailable: true };
+  }
+}
+
+/** @param {NodeJS.ProcessEnv} env */
 function collectCodexProof(env) {
   requireCodexProofAuthority(env);
   const configuration = readCodexProofConfiguration(
@@ -196,6 +210,7 @@ function collectCodexProof(env) {
         source: env.GITHUB_SHA,
         run: env.GITHUB_RUN_ID,
         nativeToolProof: false,
+        ...readAvailableProofUsage(env),
         failureStage: env.MODEL_OUTCOME === "success" ? "validation" : "provider-action",
       }),
     );

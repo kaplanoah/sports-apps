@@ -1,4 +1,5 @@
 // Runs Git against reviewed data without inheriting credentials or executable Git configuration.
+import { execFileSync } from "node:child_process";
 import { isGitObjectId } from "./git-object.mjs";
 
 /** @param {NodeJS.ProcessEnv} [env] */
@@ -25,4 +26,14 @@ export function createReviewGitEnvironment(env = process.env) {
     GIT_ATTR_NOSYSTEM: "1",
     ...(env.REVIEW_TRUSTED ? { GIT_ATTR_SOURCE: env.REVIEW_TRUSTED } : {}),
   };
+}
+
+/** @overload @param {string} cwd @param {string[]} args @returns {string} */
+/** @overload @param {string} cwd @param {string[]} args @param {"buffer"} encoding @returns {Buffer} */
+/** @param {string} cwd @param {string[]} args @param {"utf8" | "buffer"} [encoding] @returns {string | Buffer} */
+export function readReviewGit(cwd, args, encoding = "utf8") {
+  const command = ["-c", "core.hooksPath=/dev/null", "-c", "core.quotePath=false", ...args];
+  const options = { cwd, env: createReviewGitEnvironment(), maxBuffer: 64 * 1024 * 1024 };
+  if (encoding === "buffer") return execFileSync("git", command, options);
+  return execFileSync("git", command, { ...options, encoding: "utf8" });
 }

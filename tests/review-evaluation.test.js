@@ -4,6 +4,7 @@ import {
   measureReviewTokens,
   measureReviewTrial,
   retainCodexUsage,
+  readReviewEvaluationCase,
 } from "../worker/review-evaluation.mjs";
 
 const CODEX = [
@@ -36,6 +37,7 @@ const TRIAL = {
   head: "950a11002a35bab3d2671c2d858615ff86587fd7",
   fix: "1b90fd34f64459f960ff0e735c1eb1f1266fcc11",
   provider: "codex",
+  comparisonProfile: "native-offline",
   model: "example-model",
   toolVersion: "example-version",
   status: "completed",
@@ -137,6 +139,8 @@ test("detection, false findings, completion, tokens and elapsed time require an 
     { fix: "b".repeat(40) },
     { elapsedSeconds: 0 },
     { status: "unknown" },
+    { comparisonProfile: undefined },
+    { comparisonProfile: "production" },
     { model: "" },
     { adjudications: [{ verdict: "confirmed-target", reason: "" }] },
     { adjudications: [{ verdict: "confirmed-target", reason: "Evidence without identity" }] },
@@ -144,4 +148,26 @@ test("detection, false findings, completion, tokens and elapsed time require an 
     { adjudications: [TRIAL.adjudications[0], TRIAL.adjudications[0]] },
   ])
     assert.throws(() => measureReviewTrial({ ...TRIAL, ...change }, CODEX));
+});
+
+test("a comments-only historical range is a completion case, never a changed-code detection target", () => {
+  const entry = readReviewEvaluationCase("range-734");
+  const trial = { ...TRIAL, case: entry.id, head: entry.head, fix: entry.fix, adjudications: [] };
+  assert.equal(measureReviewTrial(trial, CODEX).detected, null);
+  assert.throws(
+    () => measureReviewTrial({ ...trial, adjudications: [TRIAL.adjudications[0]] }, CODEX),
+    /no changed-code detection target/,
+  );
+});
+
+test("Claude measurements retain their explicit first-attempt comparison profile", () => {
+  const trial = {
+    ...TRIAL,
+    provider: "claude",
+    comparisonProfile: "production-prompt-single-attempt",
+  };
+  assert.equal(measureReviewTrial(trial, CLAUDE).comparisonProfile, trial.comparisonProfile);
+  assert.throws(() =>
+    measureReviewTrial({ ...trial, comparisonProfile: "native-offline" }, CLAUDE),
+  );
 });

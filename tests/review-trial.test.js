@@ -1,4 +1,5 @@
 import test from "node:test";
+import { createTrialFixture } from "./review-trial-fixture.js";
 import { createEvidenceCertificate } from "./evaluation-certificate.js";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
@@ -14,7 +15,6 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
 import {
   prepareTrialEvidenceCertificate,
   encryptReviewTrialEvidence,
@@ -27,8 +27,10 @@ import {
   renderTrialComponent,
 } from "../worker/review-trial.mjs";
 import { buildCodexRequest, acceptCodexAnswer } from "../worker/review-codex.mjs";
+import { readReviewGit } from "../worker/review-repository.mjs";
+import { verifyEvaluationSnapshot } from "../worker/review-evaluation.mjs";
 import { readCodexProofConfiguration } from "../worker/prove-codex-runner.mjs";
-import { readRepoFile, REPO_ROOT } from "./repo-files.js";
+import { readRepoFile } from "./repo-files.js";
 
 const OWNER = {
   GITHUB_REPOSITORY: "kaplanoah/sports-apps",
@@ -74,9 +76,11 @@ test("offline trials require a first owner dispatch, a frozen snapshot and one e
 test("a blind large-range bundle contains only historical ancestors and complete trusted coverage", (context) => {
   const root = mkdtempSync(join(tmpdir(), "review-trial-"));
   context.after(() => rmSync(root, { recursive: true, force: true }));
+  const fixture = createTrialFixture(root, "range-694");
   const env = {
     ...process.env,
     ...OWNER,
+    TRIAL_TEST_FIXTURE: fixture.path,
     RUNNER_TEMP: root,
     GITHUB_OUTPUT: join(root, "outputs"),
     GITHUB_SHA: "a".repeat(40),
@@ -84,12 +88,12 @@ test("a blind large-range bundle contains only historical ancestors and complete
     TRIAL_CASE: "range-694",
     TRIAL_EVIDENCE_CERTIFICATE: createEvidenceCertificate(root),
   };
-  const command = fileURLToPath(new URL("worker/review-trial.mjs", REPO_ROOT));
+  const { command } = fixture;
   const prepared = spawnSync(process.execPath, [command, "prepare"], { env, encoding: "utf8" });
   assert.equal(prepared.status, 0, prepared.stderr);
   const metadata = JSON.parse(readFileSync(join(root, "trial/identity.json"), "utf8"));
-  assert.equal(metadata.head, "54e0ca728ecd43d12a670b8a35aebb97b63335c2");
-  assert.equal(metadata.base, "2f94ca2b07ac1683356b6cff542b0ca68869faad");
+  assert.equal(metadata.head, fixture.snapshot.entry.head);
+  assert.equal(metadata.base, fixture.base);
   const plan = JSON.parse(readFileSync(join(root, "trial/data/plan.json"), "utf8"));
   assert.ok(plan.areas.length > 1);
   const files = plan.areas.flatMap((area) => area.files);
@@ -122,11 +126,8 @@ test("a blind large-range bundle contains only historical ancestors and complete
     metadata.head,
   );
   assert.notEqual(
-    spawnSync(
-      "git",
-      ["-C", clone, "cat-file", "-e", "1b90fd34f64459f960ff0e735c1eb1f1266fcc11^{commit}"],
-      { stdio: "pipe" },
-    ).status,
+    spawnSync("git", ["-C", clone, "cat-file", "-e", `${fixture.fix}^{commit}`], { stdio: "pipe" })
+      .status,
     0,
   );
   assert.equal(existsSync(join(root, "trial/rubric.json")), false);
@@ -438,6 +439,18 @@ test("integration imports every complete exact-provider portion even when all ca
     { record: { ...artifacts[0].artifact.record, provider: "claude" } },
     {
       record: {
+        ...artifacts[0].artifact.record,
+        tries: artifacts[0].artifact.record.tries.map((attempt) => ({
+          ...attempt,
+          answer: {
+            ...attempt.answer,
+            unjudged: [{ file: "shared/page/value-1.js", why: "Required callers unjudged." }],
+          },
+        })),
+      },
+    },
+    {
+      record: {
         provider: "claude",
         area: 1,
         tries: [{ reads: [["part-1.diff", [[1, 1]]]], answer: { items: [], unjudged: [] } }],
@@ -495,10 +508,12 @@ test("trial workflows isolate provider credentials and guard paid reruns with no
 test("Claude trials use real Read evidence and verify empty integration coverage independently", (context) => {
   const root = mkdtempSync(join(tmpdir(), "claude-trial-"));
   context.after(() => rmSync(root, { recursive: true, force: true }));
-  const command = fileURLToPath(new URL("worker/review-trial.mjs", REPO_ROOT));
+  const fixture = createTrialFixture(root, "case-1");
+  const { command } = fixture;
   const env = {
     ...process.env,
     ...OWNER,
+    TRIAL_TEST_FIXTURE: fixture.path,
     TRIAL_PROVIDER: "claude",
     RUNNER_TEMP: root,
     GITHUB_OUTPUT: join(root, "outputs"),
@@ -511,8 +526,8 @@ test("Claude trials use real Read evidence and verify empty integration coverage
   const plan = JSON.parse(readFileSync(join(root, "trial/data/plan.json"), "utf8"));
   const portions = join(root, "portions");
   mkdirSync(portions);
-  function collectClaudeFixture(portion, omitted) {
-    const attempt = join(root, `${portion}-${omitted ? "missing" : "full"}`);
+  function collectClaudeFixture(portion, omitted, limited = false) {
+    const attempt = join(root, `${portion}-${limited ? "limited" : omitted ? "missing" : "full"}`);
     mkdirSync(attempt);
     cpSync(join(root, "trial"), join(attempt, "trial"), { recursive: true });
     if (portion === "integration")
@@ -527,17 +542,25 @@ test("Claude trials use real Read evidence and verify empty integration coverage
       GITHUB_OUTPUT: join(attempt, "outputs"),
       MODEL_OUTCOME: "success",
       EXECUTION_FILE: join(attempt, "execution.json"),
-      STRUCTURED_OUTPUT: JSON.stringify(
-        portion === "integration"
-          ? { findings: [], unjudged: [] }
-          : { candidates: [], unjudged: [] },
-      ),
+      STRUCTURED_OUTPUT: JSON.stringify({
+        [portion === "integration" ? "findings" : "candidates"]: [],
+        unjudged: limited
+          ? [{ file: plan.areas[0].files[0], why: "Hosted behavior remains unjudged." }]
+          : [],
+      }),
     };
     const requested = spawnSync(process.execPath, [command, "request", `${portion}`], {
       env: fixtureEnv,
       encoding: "utf8",
     });
     assert.equal(requested.status, 0, requested.stderr);
+    const requestPrompt = readFileSync(join(attempt, "trial/prompt.txt"), "utf8");
+    assert.match(requestPrompt, /grep -n -F -e <text> -- <path>/);
+    assert.match(requestPrompt, /single-attempt trial results/);
+    if (portion !== "integration") {
+      assert.match(requestPrompt, /For each change to behavior, find the test/);
+      assert.match(requestPrompt, /stale-names.md/);
+    }
     const areas =
       portion === "integration" ? plan.areas : plan.areas.filter((area) => area.area === portion);
     const paths = [
@@ -588,6 +611,10 @@ test("Claude trials use real Read evidence and verify empty integration coverage
     assert.equal(collected.status, omitted ? 1 : 0, collected.stderr);
     const session = JSON.parse(readFileSync(join(attempt, "trial-result/session.json"), "utf8"));
     assert.equal(session.status, omitted ? "failed" : "completed");
+    if (limited)
+      assert.deepEqual(session.unjudged, [
+        { file: plan.areas[0].files[0], why: "Hosted behavior remains unjudged." },
+      ]);
     if (!omitted && portion !== "integration") {
       assert.ok(session.record.tries[0].reads.length > 0);
       assert.ok(session.record.tries[0].reads.every(([path]) => !path.startsWith("/")));
@@ -601,16 +628,19 @@ test("Claude trials use real Read evidence and verify empty integration coverage
   }
   for (const area of plan.areas) collectClaudeFixture(area.area, false);
   collectClaudeFixture(plan.areas[0].area, true);
+  collectClaudeFixture(plan.areas[0].area, false, true);
   collectClaudeFixture("integration", true);
   collectClaudeFixture("integration", false);
+  collectClaudeFixture("integration", false, true);
 });
 
 test("trial actions and provider configurations agree with the trusted production pins", () => {
   const session = readRepoFile(".github/workflows/provider-review-session.yml");
-  assert.deepEqual(
-    readTrialProviderConfiguration("codex", 1),
-    readCodexProofConfiguration(readRepoFile(".github/workflows/trusted-codex-review.yml")),
-  );
+  assert.deepEqual(readTrialProviderConfiguration("codex", 1), {
+    ...readCodexProofConfiguration(readRepoFile(".github/workflows/trusted-codex-review.yml")),
+    comparisonProfile: "native-offline",
+    offlineWebSearch: "disabled",
+  });
   for (const portion of /** @type {const} */ ([1, "integration"])) {
     const workflow = portion === "integration" ? "review.yml" : "trusted-review-area.yml";
     const production = readRepoFile(`.github/workflows/${workflow}`);
@@ -621,5 +651,93 @@ test("trial actions and provider configurations agree with the trusted productio
     );
     assert.equal(configured.configuredModel, production.match(/--model ([\w.-]+)/)[1]);
     assert.equal(configured.maxTurns, Number(production.match(/--max-turns (\d+)/)[1]));
+    assert.equal(
+      configured.timeoutMinutes,
+      Number(
+        production.match(/timeout-minutes: (\d+)\n\s*uses: anthropics\/claude-code-action@/)[1],
+      ),
+    );
+    assert.equal(configured.comparisonProfile, "production-prompt-single-attempt");
+    assert.equal(configured.automaticReadRetry, false);
+  }
+});
+
+test("snapshot validation verifies actual objects, fix ancestry and immediate component parents", (context) => {
+  const root = mkdtempSync(join(tmpdir(), "trial-snapshot-"));
+  context.after(() => rmSync(root, { recursive: true, force: true }));
+  const { snapshot, base, fix } = createTrialFixture(root, "case-1");
+  const entry = { ...snapshot.entry, fix };
+  const bytes = readReviewGit(
+    snapshot.repository,
+    ["show", `${entry.head}:apps/mlb/page/js/app.js`],
+    "buffer",
+  );
+  assert.equal(Buffer.isBuffer(bytes), true);
+  assert.equal(bytes.toString(), "export const value = 2;\n");
+  const configuration = join(root, "host.gitconfig");
+  writeFileSync(configuration, "[credential]\nhelper = example-fixture-helper\n");
+  const previous = process.env.GIT_CONFIG_GLOBAL;
+  try {
+    process.env.GIT_CONFIG_GLOBAL = configuration;
+    assert.throws(() =>
+      readReviewGit(snapshot.repository, ["config", "--get", "credential.helper"]),
+    );
+  } finally {
+    if (previous === undefined) delete process.env.GIT_CONFIG_GLOBAL;
+    else process.env.GIT_CONFIG_GLOBAL = previous;
+  }
+  assert.equal(verifyEvaluationSnapshot(entry, snapshot.repository), entry.head);
+  assert.equal(
+    verifyEvaluationSnapshot(
+      { ...entry, targets: ["apps/mlb/page/js/app.js"] },
+      snapshot.repository,
+    ),
+    entry.head,
+  );
+  assert.throws(() =>
+    verifyEvaluationSnapshot({ ...entry, head: "f".repeat(40) }, snapshot.repository),
+  );
+  assert.throws(() =>
+    verifyEvaluationSnapshot({ ...entry, head: fix, fix: base }, snapshot.repository),
+  );
+  assert.throws(() =>
+    verifyEvaluationSnapshot(
+      { ...entry, head: base, targets: ["apps/mlb/page/js/app.js"] },
+      snapshot.repository,
+    ),
+  );
+});
+
+test("proof and trial workflows collect and upload failure evidence without another model attempt", () => {
+  for (const [path, ids, collector, artifact] of [
+    ["codex-runner-proof.yml", ["model"], "provecodex", "codex-proof-private"],
+    ["provider-review-session.yml", ["codex", "claude"], "trial", "review-trial-private-"],
+  ]) {
+    const workflow = readRepoFile(`.github/workflows/${path}`);
+    const steps = workflow.split("\n  model:\n")[1].split(/^ {6}- /m);
+    for (const id of ids) {
+      const model = steps.find((step) => new RegExp(`^ *id: ${id}$`, "m").test(step));
+      assert.ok(model, `${path} ${id}`);
+      assert.match(model, /continue-on-error: true/);
+    }
+    const checkout = steps.find((step) => /path: (?:controls|trial-validator)/.test(step));
+    assert.match(checkout, /if: always\(\)/);
+    const collect = steps.find((step) => /run: node .* collect/.test(step));
+    assert.match(collect, /if: always\(\)/);
+    assert.match(
+      collect,
+      collector === "trial"
+        ? /MODEL_OUTCOME: .*steps.codex.outcome.*steps.claude.outcome/
+        : /MODEL_OUTCOME: .*steps.model.outcome/,
+    );
+    const uploads = steps.filter((step) => step.includes("uses: actions/upload-artifact@"));
+    assert.equal(uploads.length, 2);
+    for (const upload of uploads) assert.match(upload, /if: always\(\)/);
+    const encrypted = uploads.find((step) => step.includes(`name: ${artifact}`));
+    assert.match(encrypted, /if-no-files-found: error/);
+    assert.match(encrypted, /trial-private\/evidence.cms/);
+    const claude = steps.find((step) => /id: claude/.test(step));
+    if (claude)
+      assert.match(claude, /timeout-minutes: \$\{\{ needs.request.outputs.claude-timeout \}\}/);
   }
 });

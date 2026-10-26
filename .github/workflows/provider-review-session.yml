@@ -38,6 +38,7 @@ jobs:
       node-version: ${{ steps.node.outputs.node-version }}
       claude-model: ${{ steps.request.outputs.claude-model }}
       claude-turns: ${{ steps.request.outputs.claude-turns }}
+      claude-timeout: ${{ steps.request.outputs.claude-timeout }}
       claude-schema: ${{ steps.request.outputs.claude-schema }}
       claude-prompt: ${{ steps.request.outputs.claude-prompt }}
     steps:
@@ -119,6 +120,7 @@ jobs:
       - name: Claude investigation
         id: claude
         if: inputs.provider == 'claude'
+        timeout-minutes: ${{ needs.request.outputs.claude-timeout }}
         continue-on-error: true
         uses: anthropics/claude-code-action@e4a6faad497d33dbc7144135c75e41f82f0bf6c0 # v1.0.255
         with:

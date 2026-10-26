@@ -2,7 +2,7 @@ import test from "node:test";
 import { createEvidenceCertificate } from "./evaluation-certificate.js";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -293,7 +293,12 @@ test("the collector records configured pins and observed CLI, rejecting an insta
 });
 
 test("failed and interrupted native proofs retain encrypted diagnostics and never claim success", () => {
-  for (const outcome of ["failure", "cancelled"]) {
+  for (const [outcome, hasUsage] of /** @type {const} */ ([
+    ["failure", false],
+    ["failure", true],
+    ["cancelled", false],
+    ["cancelled", true],
+  ])) {
     const root = mkdtempSync(join(tmpdir(), "codex-proof-failure-"));
     const command = fileURLToPath(new URL("worker/prove-codex-runner.mjs", REPO_ROOT));
     const env = {
@@ -307,7 +312,11 @@ test("failed and interrupted native proofs retain encrypted diagnostics and neve
     };
     const prepared = spawnSync(process.execPath, [command, "prepare"], { env, encoding: "utf8" });
     assert.equal(prepared.status, 0, prepared.stderr);
-    const diagnostic = '{"type":"error","message":"private execution diagnostic"}';
+    const diagnostic =
+      '{"type":"error","message":"private execution diagnostic"}' +
+      (hasUsage
+        ? '\n{"type":"turn.completed","usage":{"input_tokens":10,"cached_input_tokens":2,"output_tokens":3}}'
+        : "");
     writeFileSync(join(root, "codex-events.jsonl"), diagnostic);
     const failed = spawnSync(process.execPath, [command, "collect"], { env, encoding: "utf8" });
     assert.notEqual(failed.status, 0);
@@ -317,7 +326,11 @@ test("failed and interrupted native proofs retain encrypted diagnostics and neve
     assert.equal(proof.failureStage, "provider-action");
     assert.equal(proof.source, env.GITHUB_SHA);
     assert.equal(proof.run, "7");
-    assert.equal("tokens" in proof, false);
+    if (hasUsage) assert.deepEqual(proof.tokens, { input: 8, output: 3, cached: 2, cacheWrite: 0 });
+    else {
+      assert.equal("tokens" in proof, false);
+      assert.equal(proof.telemetryUnavailable, true);
+    }
     const decoded = join(root, "decoded.tgz");
     assert.equal(
       spawnSync(
@@ -345,5 +358,31 @@ test("failed and interrupted native proofs retain encrypted diagnostics and neve
       spawnSync("tar", ["-xOf", decoded, "./transcript.json"], { encoding: "utf8" }).stdout,
       diagnostic,
     );
+  }
+});
+
+test("missing or private evidence certificates fail preparation before a model input is uploaded", () => {
+  for (const certificate of [
+    undefined,
+    "-----BEGIN PRIVATE KEY-----",
+    "-----BEGIN PUBLIC KEY-----",
+  ]) {
+    const root = mkdtempSync(join(tmpdir(), "codex-proof-certificate-"));
+    const result = spawnSync(
+      process.execPath,
+      [fileURLToPath(new URL("worker/prove-codex-runner.mjs", REPO_ROOT)), "prepare"],
+      {
+        env: {
+          ...process.env,
+          ...OWNER,
+          RUNNER_TEMP: root,
+          CODEX_EVIDENCE_CERTIFICATE: certificate,
+        },
+        encoding: "utf8",
+      },
+    );
+    assert.notEqual(result.status, 0);
+    assert.equal(existsSync(join(root, "codex-proof-input.tgz")), false);
+    assert.doesNotMatch(result.stderr, /BEGIN PRIVATE KEY|BEGIN PUBLIC KEY/);
   }
 });
