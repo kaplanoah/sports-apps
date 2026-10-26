@@ -87,7 +87,17 @@ test.describe("on an iPhone", () => {
   }) => {
     await checkTurnOn(
       { page, browser, ...MOVING_APP },
-      { beforeSettings: true, rejectSubscription: true },
+      { beforeSettings: true, subscriptionFailure: "full" },
+    );
+  });
+
+  test("a temporary Turn on failure before settings starts clears its guidance after sync recovers", async ({
+    page,
+    browser,
+  }) => {
+    await checkTurnOn(
+      { page, browser, ...MOVING_APP },
+      { beforeSettings: true, subscriptionFailure: "temporary" },
     );
   });
 });

@@ -408,6 +408,7 @@ export async function startNotifications(words) {
     };
     try {
       await syncSubscription();
+      note = "";
     } catch (error) {
       showFailedSync(error);
       if (note) return;

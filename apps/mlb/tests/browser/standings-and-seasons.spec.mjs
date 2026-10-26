@@ -327,7 +327,7 @@ test("the Season picker sets 16px, which an iPhone doesn't zoom into on a tap, a
   page,
 }) => {
   await openApp(page, { store: { "seasons/2025": SEASON_2025 } });
-  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await openSettings(page);
   const picker = page.locator("#seasonPicker");
   for (const colorScheme of /** @type {const} */ (["light", "dark"])) {
     await page.emulateMedia({ colorScheme });

@@ -632,11 +632,11 @@ export async function checkNotificationsAskGoes(app, buttonName) {
  * subscribes it, and saves the subscription with the Worker, and the ask goes for good, across a
  * reload.
  * @param {MovingApp} app
- * @param {{ beforeSettings?: boolean, rejectSubscription?: boolean }} [options]
+ * @param {{ beforeSettings?: boolean, subscriptionFailure?: "full" | "temporary" | null }} [options]
  */
 export async function checkTurnOn(
   app,
-  { beforeSettings = false, rejectSubscription = false } = {},
+  { beforeSettings = false, subscriptionFailure = null } = {},
 ) {
   const { page } = app;
   await openNewHomeScreenApp(app, { canSubscribe: true });
@@ -653,33 +653,52 @@ export async function checkTurnOn(
     (response) =>
       response.url().endsWith("/push/subscription") && response.request().method() === "PUT",
   );
-  if (rejectSubscription)
-    await page.route("**/push/subscription", (route) =>
-      route.fulfill({
-        status: 429,
-        json: { error: { code: "too_many_devices", message: "Full" } },
-      }),
-    );
+  const failedRead =
+    subscriptionFailure === "temporary"
+      ? page.waitForResponse(
+          (response) =>
+            response.url().endsWith("/push/preferences") && response.request().method() === "POST",
+        )
+      : null;
+  if (subscriptionFailure) {
+    let hasFailed = false;
+    await page.route("**/push/subscription", (route) => {
+      if (subscriptionFailure === "temporary" && hasFailed) return route.fallback();
+      hasFailed = true;
+      return route.fulfill({
+        status: subscriptionFailure === "full" ? 429 : 503,
+        json: {
+          error: {
+            code: subscriptionFailure === "full" ? "too_many_devices" : "unavailable",
+            message: "Not saved",
+          },
+        },
+      });
+    });
+  }
   try {
     await tapUpdatesButton(page, TURN_ON_BUTTON);
     await releaseServiceWorker(page);
     const response = await saving;
-    if (rejectSubscription) {
-      expect(response.status()).toBe(429);
-      await expect
-        .poll(() => page.evaluate((key) => sessionStorage.getItem(key), PUSH_STUB.keptKey))
-        .toBeNull();
+    if (subscriptionFailure) {
+      expect(response.status()).toBe(subscriptionFailure === "full" ? 429 : 503);
+      if (subscriptionFailure === "full")
+        await expect
+          .poll(() => page.evaluate((key) => sessionStorage.getItem(key), PUSH_STUB.keptKey))
+          .toBeNull();
+      else if (failedRead) await (await failedRead).finished();
     } else expect(response.ok()).toBe(true);
   } finally {
     releaseStartup();
   }
   await expect(page.locator("#notifySwitch")).toBeEnabled();
-  if (rejectSubscription) {
+  if (subscriptionFailure === "full") {
     await expect(page.locator("#notifySwitch")).toHaveAttribute("aria-checked", "false");
     await expect(page.locator("#notifyNote")).toContainText("Too many devices");
     return;
   }
   await expect(page.locator("#notifySwitch")).toHaveAttribute("aria-checked", "true");
+  await expect(page.locator("#notifyNote")).toBeEmpty();
   const updates = findUpdates(page);
   await expect(updates).toBeHidden();
   await page.reload();

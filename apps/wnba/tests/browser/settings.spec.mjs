@@ -1,10 +1,9 @@
-import { checkSelectArrow } from "../../../../tests/browser/settings.mjs";
 import { test, expect, matchPath, openApp } from "./harness.mjs";
 import { waitForTimedAnimations } from "../../../../tests/browser/animations.mjs";
 import { serveReleases } from "../../../../tests/browser/serve-releases.mjs";
 import { measureFieldFace, readRole } from "../../../../tests/browser/type-roles.mjs";
 import { keepInOtherTab } from "../../../../tests/browser/other-tab.mjs";
-import { SETTINGS, openSettings } from "../../../../tests/browser/settings.mjs";
+import { SETTINGS, openSettings, checkSelectArrow } from "../../../../tests/browser/settings.mjs";
 import {
   checkFailedPickPutBack,
   checkNewCurrentSeasonListed,
@@ -65,7 +64,7 @@ test("the Season picker sets 16px, which an iPhone doesn't zoom into on a tap, a
   page,
 }) => {
   await openApp(page, ONE_PAST_SEASON);
-  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await openSettings(page);
   const picker = page.locator("#seasonPicker");
   for (const colorScheme of /** @type {const} */ (["light", "dark"])) {
     await page.emulateMedia({ colorScheme });
