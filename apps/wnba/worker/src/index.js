@@ -1,4 +1,3 @@
-import { createContactOutbox } from "../../../../shared/worker/contact-outbox.js";
 import PAGE_FILES from "#page-files/wnba";
 import { createAppWorker } from "../../../../shared/worker/app-worker.js";
 import { createBoxScoreServer } from "./box-score.js";
@@ -24,6 +23,7 @@ const rosters = createRosterServer();
 const players = createPlayerServer({ loadRoster: rosters.loadRoster });
 
 export default createAppWorker({
+  name: "wnba",
   pageFiles: PAGE_FILES,
   forwardToStore,
   isStoreAnswering,
@@ -43,5 +43,3 @@ export default createAppWorker({
 });
 
 export { SeasonStore };
-
-export const ContactOutbox = createContactOutbox("WNBA");

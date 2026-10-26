@@ -207,14 +207,14 @@ test("a beta deploy uploads to the beta Worker, with the same bindings", async (
   const metadata = JSON.parse(await upload.init.body.get("metadata").text());
   assert.deepEqual(
     metadata.bindings.map((binding) => binding.name),
-    ["STORE", "ACCESS_LIMIT", "CONTACT", "ACCOUNTS"],
+    ["STORE", "ACCESS_LIMIT", "ACCOUNTS", "EMAIL"],
   );
-  assert.deepEqual(metadata.bindings[3], {
+  assert.deepEqual(metadata.bindings[2], {
     type: "service",
     name: "ACCOUNTS",
     service: "accounts-beta",
   });
-  assert.deepEqual(metadata.migrations.new_tag, "v2");
+  assert.deepEqual(metadata.migrations.new_tag, "v1");
 });
 
 test("upload, route, and the Worker URL", async () => {
@@ -256,14 +256,14 @@ test("upload, route, and the Worker URL", async () => {
         namespace_id: "2701",
         simple: { limit: 10, period: 60 },
       },
-      { type: "durable_object_namespace", name: "CONTACT", class_name: "ContactOutbox" },
       { type: "service", name: "ACCOUNTS", service: "accounts" },
+      { type: "service", name: "EMAIL", service: "email" },
     ],
     keep_bindings: ["secret_text"],
     annotations: { "workers/message": NEW_COMMIT, "workers/tag": NEW_COMMIT.slice(0, 7) },
     migrations: {
-      new_tag: "v2",
-      steps: [{ new_sqlite_classes: ["SeasonStore"] }, { new_sqlite_classes: ["ContactOutbox"] }],
+      new_tag: "v1",
+      steps: [{ new_sqlite_classes: ["SeasonStore"] }],
     },
   });
   const file = form.get("worker.mjs");
@@ -338,19 +338,19 @@ test("a live version with no recorded commit, or changes that can't be listed, d
 
 test("a migration already applied isn't sent again", async () => {
   const { deploy, listPendingMigrations } = await loadDeployModule();
-  assert.equal(listPendingMigrations("v2", "SeasonStore"), null);
-  assert.deepEqual(listPendingMigrations("v1", "SeasonStore"), {
-    old_tag: "v1",
-    new_tag: "v2",
-    steps: [{ new_sqlite_classes: ["ContactOutbox"] }],
+  assert.equal(listPendingMigrations("v1", "SeasonStore"), null);
+  assert.deepEqual(listPendingMigrations(undefined, "EmailOutbox"), {
+    old_tag: undefined,
+    new_tag: "v1",
+    steps: [{ new_sqlite_classes: ["EmailOutbox"] }],
   });
   assert.deepEqual(listPendingMigrations(undefined, "SeasonStore"), {
     old_tag: undefined,
-    new_tag: "v2",
-    steps: [{ new_sqlite_classes: ["SeasonStore"] }, { new_sqlite_classes: ["ContactOutbox"] }],
+    new_tag: "v1",
+    steps: [{ new_sqlite_classes: ["SeasonStore"] }],
   });
 
-  const cloudflare = createFakeCloudflare({ migrationTag: "v2" });
+  const cloudflare = createFakeCloudflare({ migrationTag: "v1" });
   await deploy({
     worker: "mlb",
     fetchImpl: cloudflare.fetchImpl,

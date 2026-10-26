@@ -54,14 +54,10 @@ period = 60
 binding = "ACCOUNTS"
 service = "accounts-beta"
 
-[[durable_objects.bindings]]
-name = "CONTACT"
-class_name = "ContactOutbox"
+[[services]]
+binding = "EMAIL"
+service = "email"
 
-[[migrations]]
-tag = "v2"
-new_sqlite_classes = ["ContactOutbox"]
-
-[[env.beta.durable_objects.bindings]]
-name = "CONTACT"
-class_name = "ContactOutbox"
+[[env.beta.services]]
+binding = "EMAIL"
+service = "email-beta"

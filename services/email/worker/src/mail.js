@@ -1,4 +1,4 @@
-import { CONTACT_CATEGORIES } from "../page/contact-rules.js";
+import { CONTACT_CATEGORIES } from "../../../../shared/page/contact-rules.js";
 
 /** @param {any} submission @param {any} env */
 export function buildContactMail(submission, env) {
@@ -7,9 +7,9 @@ export function buildContactMail(submission, env) {
     from: env.CONTACT_FROM,
     to: [env.CONTACT_TO],
     ...(submission.email && { reply_to: submission.email }),
-    subject: `${submission.app}: ${category}`,
+    subject: `${submission.app.toUpperCase()}: ${category}`,
     text: [
-      `${submission.app}: ${category}`,
+      `${submission.app.toUpperCase()}: ${category}`,
       `Report: ${submission.id}`,
       submission.email ? `Reply email: ${submission.email}` : "No reply email was provided",
       submission.message,
@@ -49,7 +49,7 @@ export async function sendContactMail(submission, env, fetchImpl) {
     "/emails",
     {
       method: "POST",
-      headers: { "idempotency-key": `contact/${submission.id}` },
+      headers: { "idempotency-key": `contact/${submission.app}/${submission.id}` },
       body: JSON.stringify(buildContactMail(submission, env)),
     },
     fetchImpl,
