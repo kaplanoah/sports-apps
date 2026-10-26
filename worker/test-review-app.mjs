@@ -99,7 +99,7 @@ export async function validateAppProofTarget(env, readMetadata) {
   );
   if (checks.some((check) => check.name === REVIEW_CHECK_NAME))
     throw new AppProofError(
-      "Proof target already has a trusted-review check; no replacement is allowed.",
+      `Proof target already has a ${REVIEW_CHECK_NAME} check; no replacement is allowed.`,
     );
   return proof;
 }
