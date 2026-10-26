@@ -663,92 +663,155 @@ test("every open-PR and check page is inspected for collisions", async () => {
 });
 
 test("pass requires a ready, conflict-free native hold and the exact Actions success", async () => {
-  for (const change of [
-    (f) => {
-      f.data["/pulls/7"].draft = true;
-    },
-    (f) => {
-      f.data["/pulls/7"].mergeable = false;
-    },
-    (f) => {
-      f.data["/pulls/7"].mergeable_state = "clean";
-    },
-    (f) => {
-      f.actions.app.id = 24;
-    },
-    (f) => {
-      f.actions.head_sha = SOURCE;
-    },
-    (f) => {
-      f.actions.conclusion = "failure";
-    },
-    (f) => {
-      f.actions.status = "in_progress";
-    },
-    (f) => {
-      f.env.ISSUER_ACTIONS_CHECK = "93";
-    },
-  ]) {
+  for (const [change, diagnostic] of /** @type {Array<[(fixture:any)=>void, RegExp]>} */ ([
+    [
+      (f) => {
+        f.data["/pulls/7"].draft = true;
+      },
+      /blocked PR/,
+    ],
+    [
+      (f) => {
+        f.data["/pulls/7"].mergeable = false;
+      },
+      /blocked PR/,
+    ],
+    [
+      (f) => {
+        f.data["/pulls/7"].mergeable_state = "clean";
+      },
+      /blocked PR/,
+    ],
+    [
+      (f) => {
+        f.actions.app.id = 24;
+      },
+      /lookalike check/,
+    ],
+    [
+      (f) => {
+        f.actions.head_sha = SOURCE;
+      },
+      /lookalike check/,
+    ],
+    [
+      (f) => {
+        f.actions.conclusion = "failure";
+      },
+      /lookalike check/,
+    ],
+    [
+      (f) => {
+        f.actions.status = "in_progress";
+      },
+      /lookalike check/,
+    ],
+    [
+      (f) => {
+        f.env.ISSUER_ACTIONS_CHECK = "93";
+      },
+      /lookalike check/,
+    ],
+  ])) {
     const fixture = createFixture("pass");
     change(fixture);
-    await assert.rejects(fixture.publish(), /blocked PR|lookalike check/);
+    await assert.rejects(fixture.publish(), diagnostic);
     assert.equal(fixture.writes.length, 0);
   }
 });
 
 test("duplicate owned checks, wrong IDs, stale and forged phase records cannot authorize success", async () => {
-  for (const change of [
-    (f) => {
-      f.state.checks.push({ ...f.owned, id: 93 });
-    },
-    (f) => {
-      f.env.ISSUER_CHECK = "93";
-    },
-    (f) => {
-      f.owned.external_id = "foreign";
-    },
-    (f) => {
-      f.owned.conclusion = "success";
-    },
-    (f) => {
-      f.owned.status = "in_progress";
-    },
-    (f) => {
-      f.owned.output.text = "not json";
-    },
-    (f) => {
-      f.record.schema = "foreign";
-    },
-    (f) => {
-      f.record.source = HEAD;
-    },
-    (f) => {
-      f.record.head = SOURCE;
-    },
-    (f) => {
-      f.record.pull = 8;
-    },
-    (f) => {
-      f.record.ruleset = 9;
-    },
-    (f) => {
-      f.record.rulesetDigest = "foreign";
-    },
-    (f) => {
-      f.record.phase = "reset";
-    },
-    (f) => {
-      f.record.run = "100";
-    },
-  ]) {
+  for (const [change, diagnostic] of /** @type {Array<[(fixture:any)=>void, RegExp]>} */ ([
+    [
+      (f) => {
+        f.state.checks.push({ ...f.owned, id: 93 });
+      },
+      /one exact owned/,
+    ],
+    [
+      (f) => {
+        f.env.ISSUER_CHECK = "93";
+      },
+      /one exact owned/,
+    ],
+    [
+      (f) => {
+        f.owned.external_id = "foreign";
+      },
+      /identity/,
+    ],
+    [
+      (f) => {
+        f.owned.conclusion = "success";
+      },
+      /phases must advance/,
+    ],
+    [
+      (f) => {
+        f.owned.status = "in_progress";
+      },
+      /identity/,
+    ],
+    [
+      (f) => {
+        f.owned.output.text = "not json";
+      },
+      /phase record/,
+    ],
+    [
+      (f) => {
+        f.record.schema = "foreign";
+      },
+      /phases must advance/,
+    ],
+    [
+      (f) => {
+        f.record.source = HEAD;
+      },
+      /phases must advance/,
+    ],
+    [
+      (f) => {
+        f.record.head = SOURCE;
+      },
+      /phases must advance/,
+    ],
+    [
+      (f) => {
+        f.record.pull = 8;
+      },
+      /phases must advance/,
+    ],
+    [
+      (f) => {
+        f.record.ruleset = 9;
+      },
+      /phases must advance/,
+    ],
+    [
+      (f) => {
+        f.record.rulesetDigest = "foreign";
+      },
+      /phases must advance/,
+    ],
+    [
+      (f) => {
+        f.record.phase = "reset";
+      },
+      /phases must advance/,
+    ],
+    [
+      (f) => {
+        f.record.run = "100";
+      },
+      /phases must advance/,
+    ],
+  ])) {
     const fixture = createFixture("pass");
     change(fixture);
     if (fixture.owned.output.text !== "not json")
       fixture.owned.output.text = JSON.stringify(fixture.record);
-    await assert.rejects(
-      fixture.publish(),
-      /one exact owned|identity|phase record|phases must advance/,
-    );
+    await assert.rejects(fixture.publish(), diagnostic);
     assert.equal(fixture.writes.length, 0);
   }
 });
