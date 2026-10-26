@@ -5,7 +5,11 @@ import { findTestedFile, nameCodeArea, nameTestArea } from "./plan-review.mjs";
 import { isTestPath } from "./deploy-scope.mjs";
 import { readJson, gatherCandidates } from "./judge-review.mjs";
 import { readReviewAnswer, readReviewIdentity, validateAcrossCandidates } from "./review-data.mjs";
-import { describeSuppliedContent, hashReviewContent } from "./review-supplied.mjs";
+import {
+  describeSuppliedContent,
+  hashReviewContent,
+  isContainedCodexReview,
+} from "./review-supplied.mjs";
 import { retainCodexUsage } from "./review-evaluation.mjs";
 
 const CANDIDATE_FIELDS = {
@@ -91,7 +95,7 @@ export function buildCodexRequest(folder, portion, identity) {
   if (plan.provider !== "codex" || identity.provider !== "codex")
     throw new Error("Codex cannot consume another provider's work.");
   const integrated = portion === "integration";
-  const contained = plan.areas.length === 1;
+  const contained = isContainedCodexReview(plan.areas.length);
   const paths = listCodexInputs(plan, portion);
   const supplied = describeSuppliedContent(folder, paths);
   const binding = hashReviewContent(JSON.stringify({ identity, portion, supplied }));
@@ -179,7 +183,7 @@ export function acceptCodexAnswer(folder, portion, identity, output) {
     };
     writeFileSync(join(folder, `find-${portion}.json`), JSON.stringify(record));
   }
-  if (portion === "integration" || plan.areas.length === 1) {
+  if (portion === "integration" || isContainedCodexReview(plan.areas.length)) {
     const records = plan.areas.map((area) => readJson(join(folder, `find-${area.area}.json`)));
     const candidates = gatherCandidates(records);
     const answer = readReviewAnswer(output, "findings");
@@ -240,16 +244,26 @@ function writeCodexConfig(env) {
   );
 }
 
+/** @param {NodeJS.ProcessEnv} env */
+function writeCodexUsage(env) {
+  try {
+    writeFileSync(
+      join(env.RUNNER_TEMP, "codex-answer/usage.jsonl"),
+      retainCodexUsage(readFileSync(join(env.RUNNER_TEMP, "codex-events.jsonl"), "utf8")),
+    );
+  } catch {
+    console.log(
+      "::warning::Native usage unavailable; review answer validation remains required. Evaluation cannot report missing usage as zero.",
+    );
+  }
+}
+
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const [command, argument] = process.argv.slice(2);
   const portion = argument === "integration" ? argument : Number(argument);
   if (command === "request") writeCodexRequest(process.env, portion);
   else if (command === "config") writeCodexConfig(process.env);
-  else if (command === "usage")
-    writeFileSync(
-      join(process.env.RUNNER_TEMP, "codex-answer/usage.jsonl"),
-      retainCodexUsage(readFileSync(join(process.env.RUNNER_TEMP, "codex-events.jsonl"), "utf8")),
-    );
+  else if (command === "usage") writeCodexUsage(process.env);
   else if (command === "accept") {
     acceptCodexAnswer(
       process.env.REVIEW_FOLDER,
@@ -260,7 +274,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     const plan = readJson(join(process.env.REVIEW_FOLDER, "plan.json"));
     appendFileSync(
       process.env.GITHUB_OUTPUT,
-      `integrated=${portion === "integration" || plan.areas.length === 1}\n`,
+      `integrated=${portion === "integration" || isContainedCodexReview(plan.areas.length)}\n`,
     );
   } else throw new Error("Unknown Codex review command.");
 }

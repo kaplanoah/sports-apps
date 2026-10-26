@@ -110,8 +110,12 @@ function writePlanFiles(folder) {
     writeFileSync(join(folder, path), "first\nsecond\n");
 }
 
-for (const provider of ["claude", "codex"])
-  test(`trusted plan preparation binds ${provider}, supplies observed tests and seals its job matrix`, async (context) => {
+for (const { provider, secondFile, count, integration } of [
+  { provider: "claude", secondFile: "b.js", count: 2, integration: false },
+  { provider: "codex", secondFile: "b.js", count: 1, integration: false },
+  { provider: "codex", secondFile: "shared/page/b.js", count: 2, integration: true },
+])
+  test(`trusted plan preparation binds ${provider} with ${count} areas, supplies observed tests and seals its job matrix`, async (context) => {
     const folder = createFolder();
     const upload = createFolder();
     const env = {
@@ -136,9 +140,9 @@ for (const provider of ["claude", "codex"])
           const second = {
             area: 2,
             name: "two",
-            files: ["b.js"],
+            files: [secondFile],
             rules: [],
-            partsByFile: { "b.js": ["first/b.js.diff"] },
+            partsByFile: { [secondFile]: ["first/b.js.diff"] },
           };
           const expanded = { ...plan, areas: [...plan.areas, second] };
           writeFileSync(join(folder, "first/b.js.diff"), "a complete diff\n");
@@ -149,7 +153,7 @@ for (const provider of ["claude", "codex"])
       readRepository: (args, checkout) => {
         assert.deepEqual(args, ["ls-files"]);
         assert.equal(checkout, env.REVIEW_CHECKOUT);
-        return "a.js\nb.js\ntests/a.test.js\napps/mlb/tests/browser/page.spec.js\nREADME.md";
+        return `a.js\n${secondFile}\ntests/a.test.js\napps/mlb/tests/browser/page.spec.js\nREADME.md`;
       },
       readGitHub: async (path) => {
         assert.equal(path, `/commits/${SHA}/check-runs?per_page=100&page=1`);
@@ -165,10 +169,10 @@ for (const provider of ["claude", "codex"])
     const plan = JSON.parse(readFileSync(join(sealed, "plan.json"), "utf8"));
     assert.equal(plan.provider, provider);
     assert.equal(plan.selection, "8");
-    assert.equal(plan.areas.length, provider === "codex" ? 1 : 2);
+    assert.equal(plan.areas.length, count);
     assert.deepEqual(
       plan.areas.flatMap((area) => area.files),
-      ["a.js", "b.js"],
+      ["a.js", secondFile],
     );
     const tests = JSON.parse(readFileSync(join(sealed, "test-context.md"), "utf8"));
     assert.equal(tests.head, SHA);
@@ -185,6 +189,7 @@ for (const provider of ["claude", "codex"])
         `area-numbers=${JSON.stringify(Object.fromEntries(plan.areas.map(({ area, name }) => [name, area])))}`,
         `count=${plan.areas.length}`,
       ].join("\n"),
+      `integration=${integration}`,
     ]);
   });
 

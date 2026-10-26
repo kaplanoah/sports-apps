@@ -18,6 +18,7 @@ import { readPullMerge } from "./pull-merge.mjs";
 import { verifyReviewProvider } from "./review-provider.mjs";
 import { arrangeCodexPortions, buildCodexRequest } from "./review-codex.mjs";
 import { formatJobOutputs, listJobs } from "./plan-review.mjs";
+import { isContainedCodexReview } from "./review-supplied.mjs";
 import { WEIGHTS } from "./review-state.mjs";
 import { createGitHub, readAllPages } from "./github-api.mjs";
 import { createReviewGitEnvironment } from "./review-repository.mjs";
@@ -275,7 +276,7 @@ export function importReviewArtifacts(input, folder, env) {
     );
     const across = readJson(join(folder, "across.json"));
     if (identity.provider === "codex") {
-      const portion = plan.areas.length === 1 ? 1 : "integration";
+      const portion = isContainedCodexReview(plan.areas.length) ? 1 : "integration";
       const request = buildCodexRequest(folder, portion, identity);
       const expected = {
         kind: "supplied-content",
@@ -357,6 +358,9 @@ export async function writeTrustedReviewPlan(env, options = {}) {
   writeFileSync(join(folder, "plan.json"), JSON.stringify(plan));
   console.log(`stage=${plan.stage}`);
   console.log(formatJobOutputs(listJobs(plan.areas)));
+  console.log(
+    `integration=${plan.provider === "codex" && plan.areas.length > 0 && !isContainedCodexReview(plan.areas.length)}`,
+  );
   exportReviewArtifact(folder, "plan", env);
 }
 

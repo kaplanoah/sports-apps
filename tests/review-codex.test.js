@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -230,6 +230,36 @@ test("a contained session receives all content and verifies every candidate with
   );
 });
 
+test("unavailable optional telemetry preserves the valid answer for required fresh-runner validation", () => {
+  const workflow = readRepoFile(".github/workflows/trusted-codex-review.yml");
+  assert.match(workflow, /validate:\n {4}needs: model/);
+  assert.doesNotMatch(workflow, /continue-on-error/);
+  for (const telemetry of [null, "{private malformed telemetry", "no completed turn"]) {
+    const { folder } = createFixture();
+    const runner = mkdtempSync(join(tmpdir(), "codex-optional-usage-"));
+    mkdirSync(join(runner, "codex-answer"));
+    const answer = createAnswer(folder, 1);
+    writeFileSync(join(runner, "codex-answer/answer.json"), answer);
+    if (telemetry !== null) writeFileSync(join(runner, "codex-events.jsonl"), telemetry);
+    const result = spawnSync(
+      process.execPath,
+      [fileURLToPath(new URL("worker/review-codex.mjs", REPO_ROOT)), "usage"],
+      { env: { ...process.env, RUNNER_TEMP: runner }, encoding: "utf8" },
+    );
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /Native usage unavailable/);
+    assert.doesNotMatch(result.stdout + result.stderr, /private|malformed/);
+    assert.equal(existsSync(join(runner, "codex-answer/usage.jsonl")), false);
+    acceptCodexAnswer(
+      folder,
+      1,
+      IDENTITY,
+      readFileSync(join(runner, "codex-answer/answer.json"), "utf8"),
+    );
+    assert.equal(existsSync(join(folder, "across.json")), true);
+  }
+});
+
 test("malformed, unfinished, interrupted, unbound and undisposed answers cannot approve", () => {
   for (const changes of [
     { complete: false },
@@ -305,6 +335,9 @@ test("sealed native artifacts revalidate supplied content, exact code, provider 
 
 test("native execution has pinned official tooling, isolated credentials and no privileged publishing", () => {
   const workflow = readRepoFile(".github/workflows/trusted-codex-review.yml");
+  const routing = readRepoFile(".github/workflows/review.yml");
+  assert.match(routing, /integration: \$\{\{ steps.plan.outputs.integration \}\}/);
+  assert.match(routing, /needs.review-plan.outputs.integration == 'true'/);
   assert.match(workflow, /openai\/codex-action@c05cfd74ad95c626cdf05c6685e62becc3bf7813/);
   assert.match(workflow, /codex-version: 0.164.0/);
   assert.match(workflow, /permission-profile: ":read-only"/);

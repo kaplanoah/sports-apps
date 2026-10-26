@@ -17,6 +17,7 @@ import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createGitHub, readAllPages } from "./github-api.mjs";
+import { isContainedCodexReview } from "./review-supplied.mjs";
 import {
   SUMMARY_MARKER,
   WEIGHTS,
@@ -370,7 +371,7 @@ function describeReview(judged, { plan, sha }) {
   const lead = LEADS[/** @type {"first" | "push"} */ (plan.stage)];
   const verification =
     plan.provider === "codex"
-      ? plan.areas.length === 1
+      ? isContainedCodexReview(plan.areas.length)
         ? "the contained session"
         : "the integration pass"
       : "the check across areas";

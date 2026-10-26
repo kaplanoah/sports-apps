@@ -83,6 +83,7 @@ jobs:
       areas: ${{ steps.plan.outputs.areas }}
       area-numbers: ${{ steps.plan.outputs.area-numbers }}
       count: ${{ steps.plan.outputs.count }}
+      integration: ${{ steps.plan.outputs.integration }}
       merge: ${{ steps.prepare.outputs.merge }}
       available: ${{ steps.prepare.outputs.available }}
     steps:
@@ -339,7 +340,7 @@ jobs:
 
   review-codex-across:
     needs: [review-plan, review-codex]
-    if: ${{ !cancelled() && needs.review-plan.outputs.provider == 'codex' && needs.review-plan.outputs.count > 1 && needs.review-codex.result == 'success' }}
+    if: ${{ !cancelled() && needs.review-plan.outputs.provider == 'codex' && needs.review-plan.outputs.integration == 'true' && needs.review-codex.result == 'success' }}
     permissions:
       contents: read
       pull-requests: read

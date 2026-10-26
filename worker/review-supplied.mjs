@@ -2,6 +2,9 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
+/** @param {number} areaCount */
+export const isContainedCodexReview = (areaCount) => areaCount === 1;
+
 /** @param {string | Buffer} content */
 export const hashReviewContent = (content) => createHash("sha256").update(content).digest("hex");
 

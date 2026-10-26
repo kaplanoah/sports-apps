@@ -1,5 +1,6 @@
 import { readReviewRun, REVIEW_CHECK_NAME } from "./review-run.mjs";
 import { createHash } from "node:crypto";
+import { isContainedCodexReview } from "./review-supplied.mjs";
 
 /** @param {any} evidence */
 export const createPublicationStamp = (evidence) =>
@@ -118,7 +119,7 @@ export function validatePublicationJobs(jobs, attempt, needs) {
     "review-area": count > 0 && !codex,
     "review-across": count > 0 && !codex,
     "review-codex": count > 0 && codex,
-    "review-codex-across": count > 1 && codex,
+    "review-codex-across": count > 0 && !isContainedCodexReview(count) && codex,
     "review-post": count > 0,
   };
   const selected = [];
