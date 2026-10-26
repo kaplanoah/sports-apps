@@ -258,6 +258,7 @@ export function createPushService({ storage, now, fetchImpl }) {
       if (!activePrevious && !(await makeRoomFor(key)))
         return respondError(429, "too_many_devices", "Too many devices get notifications already.");
       const { retiredAt, ...kept } = stored ?? previous ?? {};
+      // A returning device gets a fresh failure window.
       if (!stored) delete kept.failingSince;
       const preferences = readNotificationPreferences(kept);
       await storage.put(key, {
@@ -312,10 +313,8 @@ export function createPushService({ storage, now, fetchImpl }) {
   }
 
   async function archiveDevice(key, device) {
-    // A returning device gets a fresh failure window.
-    const { failingSince, ...history } = device;
     await storage.put(key.replace(SUBSCRIPTION_PREFIX, RETIRED_PREFIX), {
-      ...history,
+      ...device,
       deviceId: device.deviceId ?? key,
       retiredAt: now(),
     });
