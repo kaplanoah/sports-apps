@@ -41,6 +41,8 @@ In order of what has mattered here.
    - `worker/review-data.mjs`
    - `worker/review-repository.mjs`
    - `worker/find-trusted-review.mjs`
+   - `worker/publish-trusted-review.mjs`, `worker/review-publication.mjs`, and `worker/review-artifact.mjs`
+   - `.github/workflows/publish-trusted-review.yml` and `.github/workflows/trusted-review-publisher.yml`
    - their imports, like `shared/page/escape-pattern.js`
    - guard tests
 

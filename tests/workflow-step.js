@@ -1,3 +1,5 @@
+import { runInNewContext } from "node:vm";
+import { readRepoFile } from "./repo-files.js";
 import { escapePattern } from "../shared/page/escape-pattern.js";
 
 /**
@@ -30,3 +32,42 @@ export function readStepInput(workflow, step, input) {
       ?.trim() ?? ""
   );
 }
+
+/** @param {Record<string,string>} env */
+export function readNativeReviewName(env) {
+  const github = {
+    repository: env.REPOSITORY ?? "example/repository",
+    sha: env.REVIEW_TRUSTED ?? "d".repeat(40),
+    event: {
+      action: env.ACTION,
+      label: { name: env.LABEL },
+      pull_request: {
+        number: Number(env.PR ?? "1"),
+        draft: env.IS_DRAFT === "true",
+        user: { login: env.AUTHOR },
+        author_association: env.ASSOCIATION,
+        head: { sha: env.REVIEW_HEAD ?? "a".repeat(40), repo: { full_name: env.HEAD_REPOSITORY } },
+        base: { sha: env.REVIEW_BASE ?? "b".repeat(40), ref: env.BASE_REF ?? "main" },
+      },
+    },
+  };
+  const title = readRepoFile(".github/workflows/review.yml").match(
+    /^run-name: &review-name (.*)$/m,
+  )?.[1];
+  if (!title) throw new Error("Missing native review title anchor");
+  return title.replace(/\$\{\{ (.*?) \}\}/g, (_, expression) =>
+    String(
+      runInNewContext(
+        expression,
+        { github, contains: (list, value) => list.includes(value), fromJSON: JSON.parse },
+        { timeout: 1000 },
+      ),
+    ),
+  );
+}
+
+/** @param {Record<string,string>} env */
+export const createReviewDecisionEnvironment = (env) => ({
+  ...env,
+  REVIEW_RUN_NAME: readNativeReviewName(env),
+});

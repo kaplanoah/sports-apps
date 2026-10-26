@@ -133,6 +133,10 @@ Versions follow [semantic versioning](https://semver.org). Each pull request's t
 
 Every deploy checks that the Worker answers afterward. If it doesn't, the deploy puts the previous version back and fails. An open page reloads itself for a deploy the next time it comes back into view, and otherwise reads what changed while it was away, so a home-screen app never needs quitting to catch up. A page that loads again first shows what it last showed, so it doesn't flash empty while it waits for its data.
 
+### Independent review enforcement
+
+The optional [trusted-review publisher](TRUSTED_REVIEW_SETUP.md) uses a separate GitHub App to publish validated review. Enforcement requires protected credentials, installation, live proofs, and a required-check rule that accepts only that App. The publisher remains disabled until setup is explicitly enabled.
+
 ### Deploying on merge
 
 GitHub can deploy each Worker, each app's page included, after each merge: at once when the pull request's checks passed on exactly the code `main` now has, which is when it was up to date with `main` as it merged, and otherwise once the checks pass on `main`. First create each app's live Worker, `<app>-app`, and each service's, named in its `wrangler.toml`, in Cloudflare's dashboard, since a token can be limited only to Workers that exist. Create each Worker from the **Hello World** starter, which the first deploy replaces, and leave **Protect with Cloudflare Access** off: the deploy checks each app's workers.dev address, and a service answers only its apps. Then, in the repo's **Settings > Environments**, create an environment named `production`, limit its deployment branches to `main`, and add:
