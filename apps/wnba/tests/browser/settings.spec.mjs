@@ -183,9 +183,9 @@ test("settings list Notifications, the News switches, and Appearance, with lines
   await page.getByRole("button", { name: "Settings", exact: true }).click();
   const rows = page.locator(`${SETTINGS} .settings-controls .control-row`);
   await expect(rows.locator(".control-label > span:first-child")).toHaveText([
+    "Game starts",
+    "Time before tipoff",
     "Final scores",
-    "Game reminders",
-    "Before the game",
     "Include dedicated Liberty sources",
     "Include content from The Athletic",
     "Appearance",

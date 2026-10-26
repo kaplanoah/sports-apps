@@ -31,6 +31,7 @@
  *   --tabs-chosen-ink                          the open tab's words
  *   --switch-knob                              a switch's knob, one light color in every theme, as the
  *                                              phone keeps its own
+ *   --select-text-face                         a select with words rather than years, if different
  *   --select-arrow                             a url() of a select field's down arrow, in --ink-dim, if
  *                                              the app has one
  *   --select-face                              a select field's face, drawn at --type-field-size as big
@@ -542,6 +543,25 @@ body.kbd :is(.sheet-close, .sheet-back, .welcome-close):focus {
 }
 .settings-group .control-row:not([hidden]) ~ .control-row {
   border-top: 0;
+}
+.reminder-timing {
+  min-height: 48px;
+  margin-top: -8px;
+  padding-block: 4px;
+  padding-left: 16px;
+}
+.reminder-timing .control-label {
+  font-size: var(--type-subsetting-size);
+  font-weight: var(--type-subsetting-weight);
+  color: var(--ink-dim);
+}
+.reminder-timing .select-field {
+  font-family: var(--select-text-face, var(--select-face));
+  padding-inline: 6px 14px;
+  background-position: right 4px center;
+  width: 145px;
+  min-height: 40px;
+  flex-shrink: 0;
 }
 .settings-group-label {
   margin: 0;

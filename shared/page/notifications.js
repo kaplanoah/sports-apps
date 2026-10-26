@@ -1,5 +1,5 @@
 // Device push categories and reminder timing in Settings, with inline permission guidance.
-import { DEFAULT_NOTIFICATION_PREFERENCES, REMINDER_PRESETS } from "./notification-preferences.js";
+import { DEFAULT_NOTIFICATION_PREFERENCES } from "./notification-preferences.js";
 import { readStoredJson, storeJson, forgetStored } from "./local-storage.js";
 import { readDeviceTimeZone } from "./days.js";
 import { reloadWhenSignedOut } from "./access.js";
@@ -7,6 +7,7 @@ import { reloadWhenSignedOut } from "./access.js";
 import { isIos, isOnHomeScreen } from "./device.js";
 import { isAskingToAdd, openWelcome } from "./home-screen.js";
 import { html, setHtml } from "./html.js";
+import { renderNotificationRows } from "./notifications-view.js";
 import {
   CHANGE_FAILED,
   chooseFailedSyncStatus,
@@ -26,7 +27,8 @@ let registration = null;
 let subscription = null;
 let status = "loading";
 let note = "";
-let updatesLabel = "";
+/** @type {Pick<import("./league-words.js").LeagueWords, "notificationUpdates" | "reminderTiming">} */
+let notificationWords;
 let preferences = { ...DEFAULT_NOTIFICATION_PREFERENCES };
 let revision = 0;
 const PREFERENCES_KEY = "device-notifications";
@@ -56,31 +58,9 @@ function renderNote() {
 function renderNotifications() {
   const controls = chooseNotificationControls({ status, isBusy, preferences });
   const row = findElement("notifyRow");
-  const renderToggle = (id, title, checked, extra = html``) => html`<div class="control-row">
-    <span class="control-label"><span id="${id}Title">${title}</span>${extra}</span>
-    <button type="button" role="switch" class="switch" id="${id}Switch" aria-checked="${String(checked)}" aria-labelledby="${id}Title" ${controls.areSwitchesHidden ? "hidden" : ""} ${controls.areSwitchesDisabled ? "disabled" : ""}>
-      <span class="switch-knob" aria-hidden="true"></span>
-    </button></div>`;
   setHtml(
     row,
-    html`<h3 class="settings-group-label" id="notificationsSettingsTitle">Notifications</h3>
-    ${renderToggle(
-      "notify",
-      updatesLabel,
-      controls.areUpdatesOn,
-      html`<span class="control-note" id="notifyNote" role="status">${renderNote()}</span>`,
-    )}
-    ${
-      controls.areSwitchesHidden
-        ? html``
-        : html`${renderToggle("reminders", "Game reminders", controls.areRemindersOn)}
-    <label class="control-row" data-setting="settings:reminders">
-      <span class="control-label"><span id="reminderTimingTitle">Before the game</span></span>
-      <select class="select-field" id="reminderTiming" aria-labelledby="reminderTimingTitle" ${controls.isTimingDisabled ? "disabled" : ""}>
-        ${REMINDER_PRESETS.map(({ minutes, label }) => html`<option value="${minutes}" ${preferences.minutes === minutes ? "selected" : ""}>${label}</option>`)}
-      </select>
-    </label>`
-    }`,
+    renderNotificationRows({ controls, preferences, words: notificationWords, note: renderNote() }),
   );
   row.hidden = status === "loading";
 }
@@ -397,10 +377,10 @@ export async function hasNotificationsSubscription() {
 }
 
 /**
- * @param {Pick<import("./league-words.js").LeagueWords, "notificationUpdates">} words
+ * @param {Pick<import("./league-words.js").LeagueWords, "notificationUpdates" | "reminderTiming">} words
  */
 export async function startNotifications(words) {
-  updatesLabel = words.notificationUpdates;
+  notificationWords = words;
   preferences = {
     ...DEFAULT_NOTIFICATION_PREFERENCES,
     ...readStoredJson(PREFERENCES_KEY),

@@ -1,3 +1,4 @@
+import { PUSH_STUB, stubPushManager } from "../../../../tests/browser/push-stub.mjs";
 import {
   test,
   expect,
@@ -15,7 +16,11 @@ import { listRoleLooks } from "../../../../tests/browser/type-roles.mjs";
 import { IPHONE } from "../../../../tests/browser/devices.mjs";
 import { openOldHomeScreenApp } from "../../../../tests/browser/page-move.mjs";
 
-test.use({ contextOptions: { reducedMotion: "reduce" }, viewport: { width: 390, height: 844 } });
+test.use({
+  serviceWorkers: "allow",
+  contextOptions: { reducedMotion: "reduce" },
+  viewport: { width: 390, height: 844 },
+});
 
 // The one font and case each type role draws in.
 const ROLE_LOOKS = {
@@ -32,6 +37,7 @@ const ROLE_LOOKS = {
   label: "Libre Franklin, capitals",
   caption: "Libre Franklin",
   setting: "Libre Franklin",
+  subsetting: "Libre Franklin",
   "setting-note": "Libre Franklin",
   "notice-title": "Libre Franklin",
   "notice-text": "Libre Franklin",
@@ -138,6 +144,7 @@ test("each type role draws in one font and one case in every view, but for the s
   const addLooks = async (shown) => {
     for (const look of await listRoleLooks(shown)) looks.add(look);
   };
+  await page.addInitScript(stubPushManager, PUSH_STUB);
   await openWithEverything(page);
   await checkEachView(page, Object.values(VIEW_GROUPS).flat(), () => addLooks(page));
   for (const place of OTHER_PLACES) {

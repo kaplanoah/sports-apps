@@ -200,6 +200,8 @@ testGameReminderSettings(test, expect, {
   openApp,
   openLockedApp,
   openSettings,
+  timing: "Time before game",
+  timingSize: 13,
   game: "824623",
   updates: "Game updates",
 });

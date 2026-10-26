@@ -66,12 +66,16 @@ export const describeNotificationsSetting = (words) => ({
   words: [...NOTIFICATIONS_SETTING.words, words.notificationUpdates],
 });
 
-/** @type {SettingRow} */
-export const REMINDERS_SETTING = {
+const REMINDERS_SETTING = {
   key: "settings:reminders",
-  name: ["Game reminders", "Before the game"],
   words: ["remind", "reminders", "before game", "before the game", "game notifications", "timing"],
 };
+/** @param {Pick<import("./league-words.js").LeagueWords, "reminderTiming">} words */
+export const describeRemindersSetting = (words) => ({
+  ...REMINDERS_SETTING,
+  name: ["Game starts", words.reminderTiming],
+  words: [...REMINDERS_SETTING.words, "game starts", words.reminderTiming],
+});
 /** @type {SettingRow} */
 export const ATHLETIC_SETTING = {
   key: "settings:paywalled",

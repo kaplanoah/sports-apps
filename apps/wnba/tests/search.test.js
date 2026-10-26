@@ -381,7 +381,7 @@ function listPagePlaces() {
     ...listMatches(sheets, /data-tab="([^"]+)"/g).map((key) => `section:${key}`),
     ...listMatches(page, /data-setting="([^"]+)"/g),
     ...listMatches(
-      readFileSync(`${import.meta.dirname}/../../../shared/page/notifications.js`, "utf8"),
+      readFileSync(`${import.meta.dirname}/../../../shared/page/notifications-view.js`, "utf8"),
       /data-setting="([^"]+)"/g,
     ),
   ];

@@ -5,7 +5,7 @@ import { listLowContrastText } from "./contrast.mjs";
 import { listTextOffRoles } from "./type-roles.mjs";
 import { PUSH_STUB, stubPushManager } from "./push-stub.mjs";
 
-/** @param {any} test @param {any} expect @param {{ openApp: Function, openSettings: Function, openLockedApp: Function, game: string, updates: string }} app */
+/** @param {any} test @param {any} expect @param {{ openApp: Function, openSettings: Function, openLockedApp: Function, game: string, updates: string, timing: string, timingSize: number }} app */
 export function testGameReminderSettings(test, expect, app) {
   test.use({ serviceWorkers: "allow", contextOptions: { reducedMotion: "reduce" } });
 
@@ -13,9 +13,9 @@ export function testGameReminderSettings(test, expect, app) {
     await page.addInitScript(stubPushManager, PUSH_STUB);
     await app.openApp(page);
     await app.openSettings(page);
-    const reminders = page.getByRole("switch", { name: "Game reminders", exact: true });
+    const reminders = page.getByRole("switch", { name: "Game starts", exact: true });
     const updates = page.getByRole("switch", { name: app.updates, exact: true });
-    const timing = page.getByLabel("Before the game", { exact: true });
+    const timing = page.getByLabel(app.timing, { exact: true });
     await expect(timing).toHaveValue("15");
     await expect(timing).toBeDisabled();
     await reminders.click();
@@ -61,7 +61,7 @@ export function testGameReminderSettings(test, expect, app) {
     });
     await app.openApp(page);
     await app.openSettings(page);
-    for (const name of [app.updates, "Game reminders"]) {
+    for (const name of [app.updates, "Game starts"]) {
       const toggle = page.getByRole("switch", { name, exact: true });
       await page.evaluate(() => sessionStorage.removeItem("test-permission-gesture"));
       await toggle.click();
@@ -88,13 +88,13 @@ export function testGameReminderSettings(test, expect, app) {
         });
       } else await route.fallback();
     });
-    const reminders = page.getByRole("switch", { name: "Game reminders", exact: true });
+    const reminders = page.getByRole("switch", { name: "Game starts", exact: true });
     await reminders.click();
     await expect(page.locator("#notifyNote")).toContainText("Couldn't change notifications");
     await expect(reminders).toHaveAttribute("aria-checked", "false");
     await reminders.click();
     await expect(reminders).toHaveAttribute("aria-checked", "true");
-    await expect(page.getByLabel("Before the game", { exact: true })).toBeEnabled();
+    await expect(page.getByLabel(app.timing, { exact: true })).toBeEnabled();
     await page.reload({ waitUntil: "domcontentloaded" });
     await expect(reminders).toHaveAttribute("aria-checked", "true");
   });
@@ -105,7 +105,7 @@ export function testGameReminderSettings(test, expect, app) {
     await page.addInitScript(stubPushManager, PUSH_STUB);
     await app.openApp(page);
     await app.openSettings(page);
-    const reminders = page.getByRole("switch", { name: "Game reminders", exact: true });
+    const reminders = page.getByRole("switch", { name: "Game starts", exact: true });
     await reminders.click();
     await expect(reminders).toHaveAttribute("aria-checked", "true");
     await page.evaluate(() => sessionStorage.setItem("test-notification-permission", "default"));
@@ -127,8 +127,8 @@ export function testGameReminderSettings(test, expect, app) {
     const group = page.getByRole("group", { name: "Notifications", exact: true });
     await expect(group).toContainText("This browser can't show notifications");
     await expect(group.getByRole("switch")).toHaveCount(0);
-    await expect(group.getByText("Game reminders", { exact: true })).toHaveCount(0);
-    await expect(group.getByLabel("Before the game", { exact: true })).toHaveCount(0);
+    await expect(group.getByText("Game starts", { exact: true })).toHaveCount(0);
+    await expect(group.getByLabel(app.timing, { exact: true })).toHaveCount(0);
   });
 
   test("reminder search words open their timing control on a device that supports push", async ({
@@ -138,9 +138,7 @@ export function testGameReminderSettings(test, expect, app) {
     await app.openApp(page);
     await page.getByRole("tab", { name: "Search", exact: true }).click();
     const input = page.locator("#gameSearch .search-input");
-    const row = page
-      .locator("#gameSearch .search-suggestion")
-      .filter({ hasText: "Game reminders" });
+    const row = page.locator("#gameSearch .search-suggestion").filter({ hasText: "Game starts" });
     for (const words of ["remind", "before game", "game notifications"]) {
       await input.fill(words);
       await input.press("Enter");
@@ -158,7 +156,7 @@ export function testGameReminderSettings(test, expect, app) {
     await page.addInitScript(stubPushManager, PUSH_STUB);
     await app.openApp(page);
     await app.openSettings(page);
-    const reminders = page.getByRole("switch", { name: "Game reminders", exact: true });
+    const reminders = page.getByRole("switch", { name: "Game starts", exact: true });
     await reminders.click();
     await expect(reminders).toHaveAttribute("aria-checked", "true");
     await page.route("**/push/preferences", (route) =>
@@ -199,7 +197,7 @@ export function testGameReminderSettings(test, expect, app) {
     await page.addInitScript(stubPushManager, PUSH_STUB);
     await app.openApp(page);
     await app.openSettings(page);
-    const reminders = page.getByRole("switch", { name: "Game reminders", exact: true });
+    const reminders = page.getByRole("switch", { name: "Game starts", exact: true });
     await reminders.click();
     await expect(reminders).toHaveAttribute("aria-checked", "true");
     await page.route("**/push/preferences", (route) =>
@@ -216,7 +214,7 @@ export function testGameReminderSettings(test, expect, app) {
         json: { error: { code: "too_many_devices", message: "Full" } },
       }),
     );
-    const timing = page.getByLabel("Before the game", { exact: true });
+    const timing = page.getByLabel(app.timing, { exact: true });
     await timing.selectOption("60");
     await expect(reminders).toHaveAttribute("aria-checked", "false");
     await expect(timing).toBeDisabled();
@@ -243,7 +241,7 @@ export function testGameReminderSettings(test, expect, app) {
       await page.addInitScript(stubPushManager, PUSH_STUB);
       await app.openApp(page);
       await app.openSettings(page);
-      const reminders = page.getByRole("switch", { name: "Game reminders", exact: true });
+      const reminders = page.getByRole("switch", { name: "Game starts", exact: true });
       const updates = page.getByRole("switch", { name: app.updates, exact: true });
       await reminders.click();
       await expect(reminders).toHaveAttribute("aria-checked", "true");
@@ -401,7 +399,7 @@ export function testGameReminderSettings(test, expect, app) {
       await page.addInitScript(stubPushManager, PUSH_STUB);
       await app.openApp(page);
       await app.openSettings(page);
-      const reminders = page.getByRole("switch", { name: "Game reminders", exact: true });
+      const reminders = page.getByRole("switch", { name: "Game starts", exact: true });
       await reminders.click();
       await expect(reminders).toHaveAttribute("aria-checked", "true");
       expect(await listThemeLayoutChanges(page)).toEqual([]);
@@ -409,6 +407,78 @@ export function testGameReminderSettings(test, expect, app) {
         await showTheme(page, theme);
         expect(await listLowContrastText(page)).toEqual([]);
         expect(await listTextOffRoles(page)).toEqual([]);
+        const layout = await page.locator("#notifyRow").evaluate(async (group) => {
+          const start = group.querySelector("#remindersTitle");
+          const timing = group.querySelector(".reminder-timing");
+          const updates = group.querySelector("#notifyTitle").closest(".control-row");
+          const picker = group.querySelector("select");
+          const pickerStyle = getComputedStyle(picker);
+          await document.fonts.load(
+            pickerStyle.font,
+            [...picker.options].map((option) => option.text).join(" "),
+          );
+          const probe = document.createElement("span");
+          probe.style.position = "absolute";
+          probe.style.width = "max-content";
+          probe.style.font = pickerStyle.font;
+          probe.style.whiteSpace = "pre";
+          document.body.append(probe);
+          const widestPreset = Math.max(
+            ...[...picker.options].map((option) => {
+              probe.textContent = option.text;
+              return probe.getBoundingClientRect().width;
+            }),
+          );
+          probe.remove();
+          const textWidth =
+            picker.clientWidth -
+            parseFloat(pickerStyle.paddingLeft) -
+            parseFloat(pickerStyle.paddingRight);
+          const bounds = (element) => element.getBoundingClientRect();
+          const style = getComputedStyle(timing);
+          const labelStyle = getComputedStyle(timing.querySelector(".control-label"));
+          const groupStyle = getComputedStyle(group);
+          return {
+            startsFirst:
+              bounds(start).top < bounds(timing).top && bounds(timing).top < bounds(updates).top,
+            indent: bounds(timing.querySelector(".control-label")).left - bounds(start).left,
+            mainHeights: [start.closest(".control-row"), updates].map((row) => bounds(row).height),
+            timingHeight: bounds(timing).height,
+            timingMargin: style.marginTop,
+            updatesGap: bounds(updates).top - bounds(timing).bottom,
+            labelSize: parseFloat(labelStyle.fontSize),
+            isMuted: labelStyle.color === getComputedStyle(group.querySelector("h3")).color,
+            presetWidth: widestPreset,
+            textWidth,
+            pickerWidth: bounds(picker).width,
+            pickerHeight: bounds(picker).height,
+            pickerOutline: getComputedStyle(picker).borderTopStyle,
+            pickerArrow: getComputedStyle(picker).backgroundImage,
+            pickerAppearance: getComputedStyle(picker).appearance,
+            groupFill: groupStyle.backgroundColor,
+            groupOutline: groupStyle.outlineStyle,
+            rowBorders: [...group.querySelectorAll(".control-row")].map(
+              (row) => getComputedStyle(row).borderTopStyle,
+            ),
+          };
+        });
+        expect(layout.startsFirst).toBe(true);
+        expect(layout.indent).toBe(16);
+        expect(layout.mainHeights.every((height) => height >= 56)).toBe(true);
+        expect(layout.timingHeight).toBe(48);
+        expect(layout.timingMargin).toBe("-8px");
+        expect(layout.updatesGap).toBe(6);
+        expect(layout.labelSize).toBe(app.timingSize);
+        expect(layout.isMuted).toBe(true);
+        expect(layout.presetWidth).toBeLessThanOrEqual(layout.textWidth);
+        expect(layout.pickerWidth).toBe(145);
+        expect(layout.pickerHeight).toBeGreaterThanOrEqual(40);
+        expect(layout.pickerOutline).toBe("solid");
+        expect(layout.pickerArrow).toContain("data:image/svg+xml");
+        expect(layout.pickerAppearance).toBe("none");
+        expect(layout.groupFill).toBe("rgba(0, 0, 0, 0)");
+        expect(layout.groupOutline).toBe("none");
+        expect(layout.rowBorders).toEqual(["none", "none", "none"]);
         await page.screenshot({ path: testInfo.outputPath(`settings-${screen}-${theme}.png`) });
       }
     });
