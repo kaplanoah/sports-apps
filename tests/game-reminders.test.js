@@ -172,7 +172,7 @@ test("device writes reject stale revisions and invalid preferences and never exp
   );
 });
 
-test("endpoint replacement transfers flags, revision, failures and sent receipts", async () => {
+test("endpoint replacement retains preferences and receipts with a fresh failure window", async () => {
   const harness = createHarness();
   const { subscription } = await harness.subscribe();
   const [key, device] = [...(await harness.push.listSubscriptions())][0];
@@ -197,8 +197,14 @@ test("endpoint replacement transfers flags, revision, failures and sent receipts
   const [kept] = devices.values();
   assert.deepEqual(kept.preferences, PREFERENCES);
   assert.equal(kept.revision, 4);
-  assert.equal(kept.failingSince, NOW);
   assert.equal(kept.reminderReceipts["123"].state, "sent");
+  harness.clock.now += 7 * 24 * 60 * 60_000;
+  harness.upstream.status = 503;
+  const [renewedKey] = devices.keys();
+  await harness.push.deliver(renewedKey, kept, { title: "Next update" });
+  const active = await harness.push.listSubscriptions();
+  assert.equal(active.size, 1);
+  assert.equal(active.get(renewedKey).failingSince, harness.clock.now);
 });
 
 test("device leads have independent persisted deadlines and share verification", async () => {

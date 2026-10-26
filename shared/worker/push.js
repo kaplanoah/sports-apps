@@ -94,7 +94,7 @@ async function readBody(request) {
  * @param {Map<string, { savedAt?: number }>} stored
  * @param {number} now
  */
-function findForgettable(stored, now) {
+function findRetirable(stored, now) {
   const [oldest] = [...stored]
     .map(([key, device]) => ({ key, savedAt: device.savedAt ?? 0 }))
     .sort((first, second) => first.savedAt - second.savedAt);
@@ -258,6 +258,7 @@ export function createPushService({ storage, now, fetchImpl }) {
       if (!activePrevious && !(await makeRoomFor(key)))
         return respondError(429, "too_many_devices", "Too many devices get notifications already.");
       const { retiredAt, ...kept } = stored ?? previous ?? {};
+      if (!stored) delete kept.failingSince;
       const preferences = readNotificationPreferences(kept);
       await storage.put(key, {
         ...kept,
@@ -285,9 +286,9 @@ export function createPushService({ storage, now, fetchImpl }) {
     if (await storage.get(key)) return true;
     const stored = await listSubscriptions();
     if (stored.size < MAX_SUBSCRIPTIONS) return true;
-    const forgettable = findForgettable(stored, now());
-    if (forgettable === undefined) return false;
-    await archiveDevice(forgettable, stored.get(forgettable));
+    const retirable = findRetirable(stored, now());
+    if (retirable === undefined) return false;
+    await archiveDevice(retirable, stored.get(retirable));
     return true;
   }
 

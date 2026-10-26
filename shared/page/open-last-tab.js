@@ -18,7 +18,8 @@ const LAST_DRAWN_KEY = "lastDrawn";
 
 function readSavedParts() {
   try {
-    return JSON.parse(readStored(LAST_DRAWN_KEY) ?? "null") ?? {};
+    const saved = JSON.parse(readStored(LAST_DRAWN_KEY) ?? "null");
+    return saved && typeof saved === "object" ? saved : {};
   } catch {
     return {};
   }
