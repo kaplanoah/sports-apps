@@ -1,0 +1,95 @@
+name: Test isolated trusted review issuer
+
+on:
+  workflow_dispatch:
+    inputs:
+      source:
+        description: Approved current main source SHA
+        required: true
+        type: string
+      proof-head:
+        description: Approved marker-only issuer head SHA
+        required: true
+        type: string
+      proof-pr:
+        description: Approved isolated issuer PR number
+        required: true
+        type: string
+      proof-ruleset:
+        description: Approved isolated issuer ruleset ID
+        required: true
+        type: string
+      phase:
+        description: Approved phase, once each in order
+        required: true
+        type: choice
+        options: [fail, pass, reset]
+      proof-check:
+        description: Zero for fail; exact App proof check ID for pass/reset
+        required: true
+        default: "0"
+        type: string
+      actions-check:
+        description: Zero for fail; exact successful Actions lookalike check ID otherwise
+        required: true
+        default: "0"
+        type: string
+      approval:
+        description: Type APPROVE_ISOLATED_ISSUER_PROTOCOL after exact protocol approval
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  pull-requests: read
+  checks: read
+
+jobs:
+  issuer:
+    if: github.ref == 'refs/heads/main' && github.actor == github.repository_owner && github.triggering_actor == github.repository_owner && github.run_attempt == 1 && vars.TRUSTED_REVIEW_PUBLISHER_ENABLED != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: trusted-review-publisher
+    concurrency:
+      group: issue-809-isolated-issuer
+      cancel-in-progress: false
+      queue: max
+    env:
+      ISSUER_SOURCE: ${{ inputs.source }}
+      ISSUER_HEAD: ${{ inputs.proof-head }}
+      ISSUER_PULL: ${{ inputs.proof-pr }}
+      ISSUER_RULESET: ${{ inputs.proof-ruleset }}
+      ISSUER_PHASE: ${{ inputs.phase }}
+      ISSUER_CHECK: ${{ inputs.proof-check }}
+      ISSUER_ACTIONS_CHECK: ${{ inputs.actions-check }}
+      ISSUER_APPROVAL: ${{ inputs.approval }}
+      ISSUER_EXPECTED_APP: "5481243"
+      TRUSTED_REVIEW_APP_ID: ${{ vars.TRUSTED_REVIEW_APP_ID }}
+      TRUSTED_REVIEW_PUBLISHER_ENABLED: ${{ vars.TRUSTED_REVIEW_PUBLISHER_ENABLED }}
+      TRUSTED_CODEX_REVIEW_ENABLED: ${{ vars.TRUSTED_CODEX_REVIEW_ENABLED }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version-file: .nvmrc
+          package-manager-cache: false
+      - name: Validate exact isolated source, rule, PR and phase before key use
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node worker/test-review-issuer.mjs validate
+      - name: Mint a repository-only Checks token for the approved phase
+        id: app
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3
+        with:
+          app-id: ${{ vars.TRUSTED_REVIEW_APP_ID }}
+          private-key: ${{ secrets.TRUSTED_REVIEW_APP_PRIVATE_KEY }}
+          repositories: ${{ github.event.repository.name }}
+          permission-checks: write
+      - name: Apply and read back the isolated synthetic phase
+        env:
+          GH_TOKEN: ${{ github.token }}
+          APP_TOKEN: ${{ steps.app.outputs.token }}
+        run: node worker/test-review-issuer.mjs publish

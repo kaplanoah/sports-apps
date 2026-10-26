@@ -1,0 +1,665 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { publishIssuerProof, validateIssuerProof } from "../worker/test-review-issuer.mjs";
+
+const SOURCE = "a".repeat(40);
+const HEAD = "b".repeat(40);
+const MERGE = "c".repeat(40);
+const REPOSITORY = "example/repository";
+const BASE_REF = "issue-809-issuer-base";
+const HEAD_REF = "issue-809-issuer-head";
+const MARKER = ".github/issue-809-issuer-proof.md";
+const TEXT = "Issue #809 isolated issuer proof only.\n";
+const EXTERNAL = `issue-809-issuer:${SOURCE}:${HEAD}`;
+
+/** @param {'fail'|'pass'|'reset'} [phase] */
+function createFixture(phase = "fail") {
+  const env = {
+    GITHUB_REPOSITORY: REPOSITORY,
+    GITHUB_REPOSITORY_OWNER: "example",
+    GITHUB_ACTOR: "example",
+    GITHUB_TRIGGERING_ACTOR: "example",
+    GITHUB_REF: "refs/heads/main",
+    GITHUB_EVENT_NAME: "workflow_dispatch",
+    GITHUB_WORKFLOW_REF: `${REPOSITORY}/.github/workflows/trusted-review-issuer-test.yml@refs/heads/main`,
+    GITHUB_WORKFLOW_SHA: SOURCE,
+    GITHUB_SHA: SOURCE,
+    GITHUB_RUN_ATTEMPT: "1",
+    GITHUB_RUN_ID: "100",
+    ISSUER_SOURCE: SOURCE,
+    ISSUER_HEAD: HEAD,
+    ISSUER_PULL: "7",
+    ISSUER_RULESET: "8",
+    ISSUER_PHASE: phase,
+    ISSUER_CHECK: phase === "fail" ? "0" : "91",
+    ISSUER_ACTIONS_CHECK: phase === "fail" ? "0" : "92",
+    ISSUER_APPROVAL: "APPROVE_ISOLATED_ISSUER_PROTOCOL",
+    ISSUER_EXPECTED_APP: "23",
+    TRUSTED_REVIEW_APP_ID: "23",
+  };
+  const rule = {
+    type: "required_status_checks",
+    parameters: {
+      strict_required_status_checks_policy: false,
+      do_not_enforce_on_create: false,
+      required_status_checks: [{ context: "trusted-review", integration_id: 23 }],
+    },
+  };
+  const pull = {
+    number: 7,
+    state: "open",
+    draft: phase === "fail",
+    mergeable: true,
+    mergeable_state: "blocked",
+    merge_commit_sha: MERGE,
+    base: { ref: BASE_REF, sha: SOURCE, repo: { full_name: REPOSITORY } },
+    head: { ref: HEAD_REF, sha: HEAD, repo: { full_name: REPOSITORY } },
+  };
+  const previous = phase === "reset" ? "pass" : "fail";
+  const record = {
+    schema: "issue-809-issuer-proof/v1",
+    phase: previous,
+    source: SOURCE,
+    head: HEAD,
+    pull: 7,
+    ruleset: 8,
+    run: "99",
+  };
+  const owned = {
+    id: 91,
+    app: { id: 23 },
+    name: "trusted-review",
+    head_sha: HEAD,
+    status: "completed",
+    conclusion: previous === "pass" ? "success" : "failure",
+    external_id: EXTERNAL,
+    output: { text: JSON.stringify(record) },
+  };
+  const actions = {
+    id: 92,
+    app: { id: 15368 },
+    name: "trusted-review",
+    head_sha: HEAD,
+    status: "completed",
+    conclusion: "success",
+  };
+  const data = {
+    "": { full_name: REPOSITORY, default_branch: "main", fork: false },
+    "/git/ref/heads/main": { ref: "refs/heads/main", object: { type: "commit", sha: SOURCE } },
+    [`/git/ref/heads/${BASE_REF}`]: {
+      ref: `refs/heads/${BASE_REF}`,
+      object: { type: "commit", sha: SOURCE },
+    },
+    [`/git/ref/heads/${HEAD_REF}`]: {
+      ref: `refs/heads/${HEAD_REF}`,
+      object: { type: "commit", sha: HEAD },
+    },
+    [`/git/commits/${HEAD}`]: { sha: HEAD, parents: [{ sha: SOURCE }] },
+    [`/compare/${SOURCE}...${HEAD}`]: {
+      status: "ahead",
+      ahead_by: 1,
+      behind_by: 0,
+      merge_base_commit: { sha: SOURCE },
+      commits: [{ sha: HEAD }],
+      files: [{ filename: MARKER, status: "added" }],
+    },
+    [`/contents/${MARKER}?ref=${HEAD}`]: {
+      type: "file",
+      path: MARKER,
+      encoding: "base64",
+      content: Buffer.from(TEXT).toString("base64"),
+    },
+    "/pulls/7": pull,
+    "/rulesets/8": {
+      id: 8,
+      name: "Issue 809 issuer proof",
+      target: "branch",
+      enforcement: "active",
+      source_type: "Repository",
+      source: REPOSITORY,
+      bypass_actors: [],
+      conditions: { ref_name: { include: [`refs/heads/${BASE_REF}`], exclude: [] } },
+      rules: [structuredClone(rule)],
+    },
+    [`/rules/branches/${BASE_REF}`]: [structuredClone(rule)],
+  };
+  const state = /** @type {any} */ ({
+    env,
+    data,
+    owned,
+    actions,
+    record,
+    pulls: [pull],
+    checks: phase === "fail" ? [] : [owned, actions],
+    requests: [],
+    writes: [],
+    scope: { total_count: 1, repositories: [{ full_name: REPOSITORY }] },
+  });
+  const readMetadata = async (path) => {
+    state.requests.push(path);
+    const url = new URL(path || "/", "https://example.com");
+    if (url.pathname === "/pulls" || url.pathname === `/commits/${HEAD}/check-runs`) {
+      assert.equal(url.searchParams.get("per_page"), "100");
+      const page = Number(url.searchParams.get("page"));
+      const all = url.pathname === "/pulls" ? state.pulls : state.checks;
+      const values = all.slice((page - 1) * 100, page * 100);
+      return url.pathname === "/pulls" ? values : { check_runs: values };
+    }
+    assert.ok(Object.hasOwn(state.data, path), `Unexpected metadata request: ${path}`);
+    return state.data[path];
+  };
+  let result;
+  const writeChecks = async (path, request) => {
+    if (request) {
+      state.writes.push({ path, ...request });
+      result = { id: 91, app: { id: 23 }, head_sha: HEAD, ...request.body };
+    }
+    return result;
+  };
+  return {
+    ...state,
+    state,
+    readMetadata,
+    writeChecks,
+    publish: () => publishIssuerProof(env, readMetadata, writeChecks, async () => state.scope),
+  };
+}
+
+test("isolated phases create one failure, then update the same check to success and back", async () => {
+  for (const phase of /** @type {const} */ (["fail", "pass", "reset"])) {
+    const fixture = createFixture(phase);
+    const evidence = await fixture.publish();
+    assert.equal(evidence.check, 91);
+    assert.equal(evidence.phase, phase);
+    assert.equal(evidence.conclusion, phase === "pass" ? "success" : "failure");
+    assert.equal(fixture.writes.length, 1);
+    assert.equal(fixture.writes[0].method, phase === "fail" ? "POST" : "PATCH");
+    assert.equal(fixture.writes[0].path, phase === "fail" ? "/check-runs" : "/check-runs/91");
+    assert.equal(fixture.writes[0].body.external_id, EXTERNAL);
+    assert.equal(Object.hasOwn(fixture.writes[0].body, "head_sha"), phase === "fail");
+    assert.doesNotMatch(fixture.writes[0].body.output.summary, /review passed/i);
+  }
+});
+
+const authorityChanges = {
+  GITHUB_ACTOR: "outsider",
+  GITHUB_TRIGGERING_ACTOR: "outsider",
+  GITHUB_REF: "refs/heads/other",
+  GITHUB_EVENT_NAME: "pull_request_target",
+  GITHUB_WORKFLOW_REF: "foreign/workflow@refs/heads/main",
+  GITHUB_WORKFLOW_SHA: HEAD,
+  GITHUB_SHA: HEAD,
+  GITHUB_RUN_ATTEMPT: "2",
+  GITHUB_RUN_ID: "0",
+  GITHUB_REPOSITORY: "outsider/repository",
+  GITHUB_REPOSITORY_OWNER: "outsider",
+  ISSUER_SOURCE: "d".repeat(40),
+  ISSUER_HEAD: SOURCE,
+  ISSUER_PULL: "7suffix",
+  ISSUER_RULESET: "0",
+  ISSUER_PHASE: "toString",
+  ISSUER_CHECK: "91",
+  ISSUER_ACTIONS_CHECK: "92",
+  ISSUER_APPROVAL: "not approved",
+  TRUSTED_REVIEW_APP_ID: "24",
+  ISSUER_EXPECTED_APP: "24",
+  TRUSTED_REVIEW_PUBLISHER_ENABLED: "false",
+  TRUSTED_CODEX_REVIEW_ENABLED: "true",
+};
+for (const [name, value] of Object.entries(authorityChanges)) {
+  test(`authority rejects ${name} before metadata or any App write`, async () => {
+    const fixture = createFixture();
+    fixture.env[name] = value;
+    await assert.rejects(
+      validateIssuerProof(fixture.env, fixture.readMetadata),
+      /owner\/main authority/,
+    );
+    assert.deepEqual(fixture.requests, []);
+    assert.deepEqual(fixture.writes, []);
+  });
+}
+
+/** @type {Array<[string, (fixture:any)=>void]>} */
+const targetChanges = [
+  [
+    "foreign repository",
+    (f) => {
+      f.data[""].full_name = "other/repository";
+    },
+  ],
+  [
+    "non-main default",
+    (f) => {
+      f.data[""].default_branch = "other";
+    },
+  ],
+  [
+    "fork",
+    (f) => {
+      f.data[""].fork = true;
+    },
+  ],
+  [
+    "moved main",
+    (f) => {
+      f.data["/git/ref/heads/main"].object.sha = HEAD;
+    },
+  ],
+  [
+    "wrong base ref",
+    (f) => {
+      f.data[`/git/ref/heads/${BASE_REF}`].ref = "refs/heads/main";
+    },
+  ],
+  [
+    "moved proof base",
+    (f) => {
+      f.data[`/git/ref/heads/${BASE_REF}`].object.sha = HEAD;
+    },
+  ],
+  [
+    "moved proof head",
+    (f) => {
+      f.data[`/git/ref/heads/${HEAD_REF}`].object.sha = SOURCE;
+    },
+  ],
+  [
+    "extra parent",
+    (f) => {
+      f.data[`/git/commits/${HEAD}`].parents.push({ sha: HEAD });
+    },
+  ],
+  [
+    "wrong parent",
+    (f) => {
+      f.data[`/git/commits/${HEAD}`].parents[0].sha = HEAD;
+    },
+  ],
+  [
+    "extra diff",
+    (f) => {
+      f.data[`/compare/${SOURCE}...${HEAD}`].files.push({ filename: "ci.yml", status: "modified" });
+    },
+  ],
+  [
+    "wrong merge base",
+    (f) => {
+      f.data[`/compare/${SOURCE}...${HEAD}`].merge_base_commit.sha = HEAD;
+    },
+  ],
+  [
+    "wrong marker",
+    (f) => {
+      f.data[`/contents/${MARKER}?ref=${HEAD}`].content = Buffer.from("other\n").toString("base64");
+    },
+  ],
+  [
+    "Main PR",
+    (f) => {
+      f.data["/pulls/7"].base.ref = "main";
+    },
+  ],
+  [
+    "foreign PR head",
+    (f) => {
+      f.data["/pulls/7"].head.repo.full_name = "outsider/repository";
+    },
+  ],
+  [
+    "wrong PR head",
+    (f) => {
+      f.data["/pulls/7"].head.sha = SOURCE;
+    },
+  ],
+  [
+    "closed initial PR",
+    (f) => {
+      f.data["/pulls/7"].state = "closed";
+    },
+  ],
+];
+for (const [name, change] of targetChanges) {
+  test(`target rejects ${name} with no write`, async () => {
+    const fixture = createFixture();
+    change(fixture);
+    await assert.rejects(fixture.publish(), /exact isolated marker-only PR/);
+    assert.equal(fixture.writes.length, 0);
+  });
+}
+
+/** @type {Array<[string, (rule:any)=>void]>} */
+const ruleChanges = [
+  [
+    "Main include",
+    (r) => {
+      r.conditions.ref_name.include = ["~DEFAULT_BRANCH"];
+    },
+  ],
+  [
+    "extra include",
+    (r) => {
+      r.conditions.ref_name.include.push("refs/heads/beta");
+    },
+  ],
+  [
+    "exclude",
+    (r) => {
+      r.conditions.ref_name.exclude.push("refs/heads/other");
+    },
+  ],
+  [
+    "tag rule",
+    (r) => {
+      r.target = "tag";
+    },
+  ],
+  [
+    "inactive",
+    (r) => {
+      r.enforcement = "disabled";
+    },
+  ],
+  [
+    "foreign source",
+    (r) => {
+      r.source = "foreign/repository";
+    },
+  ],
+  [
+    "bypass",
+    (r) => {
+      r.bypass_actors.push({ actor_id: 1 });
+    },
+  ],
+  [
+    "wrong issuer",
+    (r) => {
+      r.rules[0].parameters.required_status_checks[0].integration_id = 15368;
+    },
+  ],
+  [
+    "wrong context",
+    (r) => {
+      r.rules[0].parameters.required_status_checks[0].context = "check";
+    },
+  ],
+  [
+    "strict on",
+    (r) => {
+      r.rules[0].parameters.strict_required_status_checks_policy = true;
+    },
+  ],
+  [
+    "create exemption",
+    (r) => {
+      r.rules[0].parameters.do_not_enforce_on_create = true;
+    },
+  ],
+  [
+    "extra required check",
+    (r) => {
+      r.rules[0].parameters.required_status_checks.push({ context: "other", integration_id: 23 });
+    },
+  ],
+];
+for (const [name, change] of ruleChanges) {
+  test(`isolated rule rejects ${name}`, async () => {
+    const fixture = createFixture();
+    change(fixture.data["/rulesets/8"]);
+    await assert.rejects(fixture.publish(), /exact disposable base/);
+    assert.equal(fixture.writes.length, 0);
+  });
+}
+
+test("additional inherited rules and effective issuer mismatches stop the proof", async () => {
+  for (const effective of [[], [{ type: "pull_request" }], "extra"]) {
+    const fixture = createFixture();
+    if (effective === "extra")
+      fixture.data[`/rules/branches/${BASE_REF}`].push({ type: "pull_request" });
+    else fixture.data[`/rules/branches/${BASE_REF}`] = effective;
+    await assert.rejects(fixture.publish(), /additional effective rules/);
+    assert.equal(fixture.writes.length, 0);
+  }
+});
+
+test("every open-PR and check page is inspected for collisions", async () => {
+  for (const collision of ["head", "merge", "check"]) {
+    const fixture = createFixture();
+    fixture.state.pulls = Array.from({ length: 100 }, (_, index) => ({ number: index + 1000 }));
+    if (collision === "check") {
+      fixture.state.checks = Array.from({ length: 100 }, () => ({ name: "unrelated" }));
+      fixture.state.checks.push({ name: "trusted-review", app: { id: 23 } });
+    } else
+      fixture.state.pulls.push({
+        number: 900,
+        ...(collision === "head" ? { head: { sha: HEAD } } : { merge_commit_sha: HEAD }),
+      });
+    await assert.rejects(fixture.publish(), collision === "check" ? /already has/ : /collides/);
+    assert.equal(fixture.writes.length, 0);
+    assert.ok(fixture.requests.some((path) => path.includes("page=2")));
+  }
+});
+
+test("pass requires a ready, conflict-free native hold and the exact Actions success", async () => {
+  for (const change of [
+    (f) => {
+      f.data["/pulls/7"].draft = true;
+    },
+    (f) => {
+      f.data["/pulls/7"].mergeable = false;
+    },
+    (f) => {
+      f.data["/pulls/7"].mergeable_state = "clean";
+    },
+    (f) => {
+      f.actions.app.id = 24;
+    },
+    (f) => {
+      f.actions.head_sha = SOURCE;
+    },
+    (f) => {
+      f.actions.conclusion = "failure";
+    },
+    (f) => {
+      f.actions.status = "in_progress";
+    },
+    (f) => {
+      f.env.ISSUER_ACTIONS_CHECK = "93";
+    },
+  ]) {
+    const fixture = createFixture("pass");
+    change(fixture);
+    await assert.rejects(fixture.publish(), /blocked PR|lookalike check/);
+    assert.equal(fixture.writes.length, 0);
+  }
+});
+
+test("duplicate owned checks, wrong IDs, stale and forged phase records cannot authorize success", async () => {
+  for (const change of [
+    (f) => {
+      f.state.checks.push({ ...f.owned, id: 93 });
+    },
+    (f) => {
+      f.env.ISSUER_CHECK = "93";
+    },
+    (f) => {
+      f.owned.external_id = "foreign";
+    },
+    (f) => {
+      f.owned.conclusion = "success";
+    },
+    (f) => {
+      f.owned.output.text = "not json";
+    },
+    (f) => {
+      f.record.schema = "foreign";
+    },
+    (f) => {
+      f.record.source = HEAD;
+    },
+    (f) => {
+      f.record.head = SOURCE;
+    },
+    (f) => {
+      f.record.pull = 8;
+    },
+    (f) => {
+      f.record.ruleset = 9;
+    },
+    (f) => {
+      f.record.phase = "reset";
+    },
+    (f) => {
+      f.record.run = "100";
+    },
+  ]) {
+    const fixture = createFixture("pass");
+    change(fixture);
+    if (fixture.owned.output.text !== "not json")
+      fixture.owned.output.text = JSON.stringify(fixture.record);
+    await assert.rejects(
+      fixture.publish(),
+      /one exact owned|identity|phase record|phases must advance/,
+    );
+    assert.equal(fixture.writes.length, 0);
+  }
+});
+
+test("reset may fail a closed isolated PR but cannot repeat a completed reset", async () => {
+  const fixture = createFixture("reset");
+  fixture.data["/pulls/7"].state = "closed";
+  assert.equal((await fixture.publish()).conclusion, "failure");
+  const repeated = createFixture("reset");
+  repeated.record.phase = "reset";
+  repeated.owned.output.text = JSON.stringify(repeated.record);
+  await assert.rejects(repeated.publish(), /phases must advance/);
+  assert.equal(repeated.writes.length, 0);
+});
+
+test("listing identity uses fields supplied by GitHub's PR collection", async () => {
+  const fixture = createFixture("pass");
+  const listed = structuredClone(fixture.data["/pulls/7"]);
+  delete listed.mergeable;
+  delete listed.mergeable_state;
+  fixture.state.pulls = [listed];
+  assert.equal((await fixture.publish()).conclusion, "success");
+  const retargeted = createFixture("pass");
+  retargeted.state.pulls = [{ ...retargeted.data["/pulls/7"], base: { ref: "main" } }];
+  await assert.rejects(retargeted.publish(), /collides/);
+  assert.equal(retargeted.writes.length, 0);
+});
+
+test("latest source, refs and PR identity are checked after complete listings", async () => {
+  for (const change of [
+    (f) => {
+      f.data["/git/ref/heads/main"].object.sha = HEAD;
+    },
+    (f) => {
+      f.data[`/git/ref/heads/${BASE_REF}`].object.sha = HEAD;
+    },
+    (f) => {
+      f.data[`/git/ref/heads/${HEAD_REF}`].object.sha = SOURCE;
+    },
+    (f) => {
+      f.data["/pulls/7"].base.ref = "main";
+    },
+    (f) => {
+      f.data["/pulls/7"].draft = true;
+    },
+  ]) {
+    const fixture = createFixture("pass");
+    const read = async (path) => {
+      const value = await fixture.readMetadata(path);
+      if (path.includes("/check-runs?")) change(fixture);
+      return value;
+    };
+    await assert.rejects(
+      publishIssuerProof(fixture.env, read, fixture.writeChecks, async () => fixture.state.scope),
+      /exact isolated marker-only PR/,
+    );
+    assert.equal(fixture.writes.length, 0);
+  }
+});
+
+test("repository-only scope, current metadata and readback are required without automatic retries", async () => {
+  const scope = createFixture();
+  scope.state.scope.repositories.push({ full_name: "example/other" });
+  await assert.rejects(scope.publish(), /exactly this repository/);
+  assert.equal(scope.requests.length, 0);
+  const changed = createFixture("pass");
+  await validateIssuerProof(changed.env, changed.readMetadata);
+  changed.data["/git/ref/heads/main"].object.sha = HEAD;
+  await assert.rejects(changed.publish(), /exact isolated marker-only PR/);
+  assert.equal(changed.writes.length, 0);
+  const fixture = createFixture();
+  let writes = 0;
+  await assert.rejects(
+    publishIssuerProof(
+      fixture.env,
+      fixture.readMetadata,
+      async () => {
+        writes += 1;
+        throw new Error("transport failed");
+      },
+      async () => fixture.state.scope,
+    ),
+    /transport failed/,
+  );
+  assert.equal(writes, 1);
+  for (const field of ["app", "head_sha", "conclusion", "output", "id"]) {
+    const bad = createFixture();
+    let calls = 0;
+    await assert.rejects(
+      publishIssuerProof(
+        bad.env,
+        bad.readMetadata,
+        async (path, request) => {
+          const result = await bad.writeChecks(path, request);
+          calls += 1;
+          return calls === 2 ? { ...result, [field]: null } : result;
+        },
+        async () => bad.state.scope,
+      ),
+    );
+    assert.equal(bad.writes.length, 1);
+  }
+});
+
+test("main-only key use and permission-free lookalike stay distinct from production activation", () => {
+  const workflow = readFileSync(
+    new URL("../.github/workflows/trusted-review-issuer-test.yml", import.meta.url),
+    "utf8",
+  );
+  const lookalike = readFileSync(
+    new URL("../.github/workflows/trusted-review-lookalike-test.yml", import.meta.url),
+    "utf8",
+  );
+  assert.match(workflow, /workflow_dispatch:/);
+  assert.doesNotMatch(workflow, /^ {2}(?:push|pull_request|workflow_run):/m);
+  assert.match(workflow, /github\.run_attempt == 1/);
+  assert.match(workflow, /environment: trusted-review-publisher/);
+  assert.match(workflow, /ref: \$\{\{ github.sha \}\}/);
+  assert.match(workflow, /persist-credentials: false/);
+  assert.match(workflow, /timeout-minutes: 5/);
+  assert.match(workflow, /options: \[fail, pass, reset\]/);
+  assert.equal((workflow.match(/secrets\./g) ?? []).length, 1);
+  assert.match(workflow, /ISSUER_EXPECTED_APP: "5481243"/);
+  assert.match(
+    workflow,
+    /actions\/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510/,
+  );
+  assert.match(workflow, /permission-checks: write/);
+  assert.match(workflow, /repositories: \$\{\{ github.event.repository.name \}\}/);
+  assert.doesNotMatch(workflow, /skip-token-revoke|npm |cache@|secrets: inherit/);
+  assert.doesNotMatch(workflow, /^ {2}(?:actions|contents|checks): write/m);
+  assert.ok(
+    workflow.indexOf("test-review-issuer.mjs validate") <
+      workflow.indexOf("actions/create-github-app-token@"),
+  );
+  assert.match(lookalike, /permissions: \{\}/);
+  assert.match(lookalike, /name: trusted-review/);
+  assert.match(lookalike, /github.sha == inputs.proof-head/);
+  assert.match(lookalike, /refs\/heads\/issue-809-issuer-head/);
+  assert.doesNotMatch(lookalike, /secrets\.|github.token|environment:|uses:|APP_TOKEN|checkout/);
+});
