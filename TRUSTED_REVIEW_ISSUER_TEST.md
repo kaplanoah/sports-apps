@@ -16,7 +16,7 @@ Create one same-repository draft PR from issuer-head into issuer-base, never Mai
 
 The proposed budget is three first-attempt owner dispatches of `trusted-review-issuer-test.yml` from the approved unchanged main, in order `fail`, `pass`, `reset`; one first-attempt dispatch of `trusted-review-lookalike-test.yml` at the exact issuer-head; and one isolated proof PR. Each issuer job lasts at most five minutes and mints one repository-only Checks-write token with the pinned action's default post-job revocation. The lookalike has no token permissions, environment, checkout, dependencies or credentials.
 
-Making the isolated PR ready starts its ordinary CI and one normal trusted Claude review request under existing repository policy. Include that model work explicitly in the eventual execution approval; it is not a Codex trial. No model retry, additional request, rerun or replacement invocation is included. No approved live workflow has been invoked by preparing this package. The operator enforces the dispatch budget; first-attempt guards alone do not prevent a new replacement run ID.
+Making the isolated PR ready starts its ordinary CI and one normal trusted Claude review request under existing repository policy. Include that model work, its area matrix and existing automatic-attempt limits explicitly in the eventual execution approval; it is not a Codex trial. No agent-requested model retry, additional review request, workflow rerun or replacement invocation is included. No approved live workflow has been invoked by preparing this package. The operator enforces the dispatch budget; first-attempt guards alone do not prevent a new replacement run ID.
 
 | Order | Action | Required observation |
 | --- | --- | --- |
