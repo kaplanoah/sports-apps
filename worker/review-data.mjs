@@ -11,6 +11,7 @@ import {
 import { dirname, isAbsolute, join, relative } from "node:path";
 import { isGitObjectId } from "./git-object.mjs";
 import { findUnreadParts, gatherCandidates, readAnswer } from "./judge-review.mjs";
+import { verifyCodexCoverage } from "./review-supplied.mjs";
 import { isObject } from "./review-json.mjs";
 
 /** @param {unknown} path */
@@ -179,6 +180,9 @@ export function readReviewIdentity(env) {
     merge: env.REVIEW_MERGE,
     trusted: env.REVIEW_TRUSTED,
     workflow: env.GITHUB_WORKFLOW_REF,
+    ...(env.REVIEW_PROVIDER
+      ? { provider: env.REVIEW_PROVIDER, selection: env.REVIEW_SELECTION }
+      : {}),
   };
   requireData(
     /^[\w.-]+\/[\w.-]+$/.test(identity.repository ?? "") && /^\d+$/.test(identity.run ?? ""),
@@ -194,6 +198,12 @@ export function readReviewIdentity(env) {
     identity.workflow === `${identity.repository}/.github/workflows/review.yml@refs/heads/main`,
     "workflow authority",
   );
+  if (identity.provider !== undefined)
+    requireData(
+      ["claude", "codex"].includes(identity.provider) &&
+        /^(initial|\d+)$/.test(identity.selection ?? ""),
+      "provider identity",
+    );
   return identity;
 }
 
@@ -241,6 +251,7 @@ export const listPlanFiles = (plan) => [
   "REVIEW.md",
   "AGENTS.md",
   "pull-request.md",
+  ...(plan.provider ? ["test-context.md"] : []),
   ...(plan.areas.length
     ? [
         "stale-names.md",
@@ -264,6 +275,12 @@ export function copyReviewFiles(source, destination, names) {
 
 /** @param {any} record @param {any} area @param {string} folder */
 export function recomputeReviewCoverage(record, area, folder) {
+  if (record.provider === "codex") {
+    const checked = verifyCodexCoverage(record, area, folder);
+    if (checked.tries[0].answer !== null)
+      validateReviewAnswer(checked.tries[0].answer, "candidates");
+    return checked;
+  }
   requireData(
     record.area === area.area &&
       Array.isArray(record.tries) &&

@@ -423,6 +423,7 @@ jobs:
     permissions:
       contents: read
       actions: read
+      pull-requests: read
     outputs:
       owed: ${{ steps.find.outputs.owed || steps.decision.outputs.owed || 'true' }}
       tree: ${{ steps.verify.outputs.tree }}
@@ -475,6 +476,8 @@ jobs:
         id: verify
         if: steps.find.outputs.run != ''
         env:
+          GH_TOKEN: ${{ github.token }}
+          REVIEW_DEFAULT_PROVIDER: ${{ vars.TRUSTED_REVIEW_DEFAULT_PROVIDER }}
           REVIEW_RUN: ${{ steps.find.outputs.run }}
           REVIEW_TREE: ${{ steps.find.outputs.tree }}
           REVIEW_TRUSTED: ${{ steps.find.outputs.source }}

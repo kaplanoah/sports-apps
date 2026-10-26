@@ -44,6 +44,13 @@ const createRun = (changes = {}) => ({
 test("actual producer names and CI download inputs agree with the trusted join", async () => {
   const producer = readRepoFile(".github/workflows/review.yml");
   const consumer = readRepoFile(".github/workflows/ci.yml");
+  const verify = consumer
+    .split(/^ {6}- /m)
+    .find((step) =>
+      step.startsWith("name: Validate the trusted result's code and producer identity"),
+    );
+  assert.match(verify, /GH_TOKEN: \$\{\{ github.token \}\}/);
+  assert.match(verify, /REVIEW_DEFAULT_PROVIDER:/);
   const steps = producer.split(/^ {6}- /m);
   const record = steps.findIndex((step) =>
     step.startsWith("name: Record the trusted review result\n"),
@@ -334,6 +341,7 @@ function invokeJoin(fixture, changes = {}, args = []) {
           conclusion: fixture.failure ? 'failure' : 'success'
         }] });
       }
+      if (path.includes('/issues/1/comments?') || path.includes('/issues/1/timeline?')) return Response.json(fixture.providerEvents ?? []);
       if (path.includes('/actions/runs/7/artifacts?'))
         return Response.json({ artifacts: [{ name: 'trusted-review-passed-' + fixture.tree, workflow_run: { id: 7 } }] });
       throw new Error('Unexpected API request: ' + path);
