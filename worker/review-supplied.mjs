@@ -5,6 +5,14 @@ import { join } from "node:path";
 /** @param {number} areaCount */
 export const isContainedCodexReview = (areaCount) => areaCount === 1;
 
+/** @param {string | undefined} provider @param {number} areaCount */
+export const needsCodexIntegration = (provider, areaCount) =>
+  provider === "codex" && areaCount > 0 && !isContainedCodexReview(areaCount);
+
+/** @param {number | "integration"} portion @param {number} areaCount */
+export const integratesCodexPortion = (portion, areaCount) =>
+  portion === "integration" || isContainedCodexReview(areaCount);
+
 /** @param {string | Buffer} content */
 export const hashReviewContent = (content) => createHash("sha256").update(content).digest("hex");
 

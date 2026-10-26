@@ -9,6 +9,7 @@ import {
   describeSuppliedContent,
   hashReviewContent,
   isContainedCodexReview,
+  integratesCodexPortion,
 } from "./review-supplied.mjs";
 import { retainCodexUsage } from "./review-evaluation.mjs";
 
@@ -96,6 +97,7 @@ export function buildCodexRequest(folder, portion, identity) {
     throw new Error("Codex cannot consume another provider's work.");
   const integrated = portion === "integration";
   const contained = isContainedCodexReview(plan.areas.length);
+  const integrates = integratesCodexPortion(portion, plan.areas.length);
   const paths = listCodexInputs(plan, portion);
   const supplied = describeSuppliedContent(folder, paths);
   const binding = hashReviewContent(JSON.stringify({ identity, portion, supplied }));
@@ -108,7 +110,7 @@ export function buildCodexRequest(folder, portion, identity) {
       : `Investigate portion ${portion} completely. Follow callers, shared state, related code, failure paths, relevant tests and the other app. Inspect beyond changed lines using native shell/search tools and git history; the base is HEAD^1.`,
     "All required diffs and trusted rules for this session are supplied below without truncation. Use native tools for any additional context. Do not run PR code or tests, publish, modify files, or access credentials. Test context contains observed CI state, not proof tests passed.",
     "Do not repeat findings whose earlier thread answer holds. Report every problem, including uncertain claims. Follow the guide's reporting weights and locate findings on the nearest changed line in any file the complete plan changes, including another portion. Mention related unchanged code in the claim rather than anchoring a candidate outside the plan.",
-    integrated || contained
+    integrates
       ? "Verify candidate claims against actual callers/inputs and the base before finalizing. Give every candidate exactly one confirmed, rejected or unsure disposition; merge duplicate ids and explain why. Add interaction findings with empty ids."
       : "Return all candidates for a separate integration pass. Do not make a final approval.",
     contained
@@ -136,7 +138,7 @@ export function buildCodexRequest(folder, portion, identity) {
     ...(!integrated
       ? { candidates: { type: "array", items: defineObjectSchema(CANDIDATE_FIELDS) } }
       : {}),
-    ...(integrated || contained
+    ...(integrates
       ? { findings: { type: "array", items: defineObjectSchema(FINDING_FIELDS) } }
       : {}),
   });
@@ -183,7 +185,7 @@ export function acceptCodexAnswer(folder, portion, identity, output) {
     };
     writeFileSync(join(folder, `find-${portion}.json`), JSON.stringify(record));
   }
-  if (portion === "integration" || isContainedCodexReview(plan.areas.length)) {
+  if (integratesCodexPortion(portion, plan.areas.length)) {
     const records = plan.areas.map((area) => readJson(join(folder, `find-${area.area}.json`)));
     const candidates = gatherCandidates(records);
     const answer = readReviewAnswer(output, "findings");
@@ -274,7 +276,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     const plan = readJson(join(process.env.REVIEW_FOLDER, "plan.json"));
     appendFileSync(
       process.env.GITHUB_OUTPUT,
-      `integrated=${portion === "integration" || isContainedCodexReview(plan.areas.length)}\n`,
+      `integrated=${integratesCodexPortion(portion, plan.areas.length)}\n`,
     );
   } else throw new Error("Unknown Codex review command.");
 }
