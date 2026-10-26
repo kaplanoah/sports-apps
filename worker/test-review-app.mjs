@@ -1,7 +1,8 @@
 import { appendFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { createGitHub, GitHubError, readAllPages } from "./github-api.mjs";
+import { createGitHub, createGitHubRoot, GitHubError, readAllPages } from "./github-api.mjs";
 import { isGitObjectId } from "./git-object.mjs";
+import { REVIEW_CHECK_NAME } from "./review-run.mjs";
 
 const PROOF_REF = "refs/heads/issue-809-app-identity-proof";
 const PROOF_PATH = ".github/issue-809-app-identity-proof.md";
@@ -54,7 +55,7 @@ export async function validateAppProofTarget(env, readMetadata) {
   const proof = requireAppProofAuthority(env);
   const repository = await readMetadata("");
   const main = await readMetadata("/git/ref/heads/main");
-  const ref = await readMetadata("/git/ref/heads/issue-809-app-identity-proof");
+  const ref = await readMetadata(`/git/ref/${PROOF_REF.slice("refs/".length)}`);
   const commit = await readMetadata(`/git/commits/${proof.head}`);
   const comparison = await readMetadata(`/compare/${proof.source}...${proof.head}`);
   const marker = await readMetadata(`/contents/${PROOF_PATH}?ref=${proof.head}`);
@@ -96,7 +97,7 @@ export async function validateAppProofTarget(env, readMetadata) {
     `/commits/${proof.head}/check-runs?filter=all`,
     (answer) => requireProofList(answer.check_runs),
   );
-  if (checks.some((check) => check.name === "trusted-review"))
+  if (checks.some((check) => check.name === REVIEW_CHECK_NAME))
     throw new AppProofError(
       "Proof target already has a trusted-review check; no replacement is allowed.",
     );
@@ -110,7 +111,7 @@ function requireFailingProofCheck(check, proof, external) {
     check.id < 1 ||
     check.app?.id !== proof.app ||
     check.head_sha !== proof.head ||
-    check.name !== "trusted-review" ||
+    check.name !== REVIEW_CHECK_NAME ||
     check.external_id !== external ||
     check.status !== "completed" ||
     check.conclusion !== "failure"
@@ -141,7 +142,7 @@ export async function publishAppIdentityProof(env, readMetadata, writeChecks, re
   const created = await writeChecks("/check-runs", {
     method: "POST",
     body: {
-      name: "trusted-review",
+      name: REVIEW_CHECK_NAME,
       head_sha: proof.head,
       external_id: external,
       status: "completed",
@@ -168,21 +169,6 @@ export async function publishAppIdentityProof(env, readMetadata, writeChecks, re
   };
 }
 
-/** @param {NodeJS.ProcessEnv} env */
-async function readProofInstallation(env) {
-  const response = await fetch("https://api.github.com/installation/repositories?per_page=100", {
-    headers: {
-      accept: "application/vnd.github+json",
-      authorization: `Bearer ${env.APP_TOKEN}`,
-      "x-github-api-version": "2022-11-28",
-    },
-    signal: AbortSignal.timeout(10000),
-  });
-  if (!response.ok)
-    throw new AppProofError("GitHub refused the proof token repository-scope read.");
-  return response.json();
-}
-
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   try {
     const env = process.env;
@@ -194,13 +180,15 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
       console.log("Owner/main authority and unused disposable target verified before key use.");
     } else if (process.argv[2] === "publish") {
       if (!env.APP_TOKEN) throw new AppProofError("Missing proof App token.");
-      const writeChecks = createGitHub({
+      const appOptions = {
         repository: env.GITHUB_REPOSITORY,
         fetchImpl: fetch,
         env: { GH_TOKEN: env.APP_TOKEN },
-      });
+      };
+      const writeChecks = createGitHub(appOptions);
+      const readRoot = createGitHubRoot(appOptions);
       const evidence = await publishAppIdentityProof(env, readMetadata, writeChecks, () =>
-        readProofInstallation(env),
+        readRoot("/installation/repositories?per_page=100"),
       );
       appendFileSync(
         env.GITHUB_STEP_SUMMARY,

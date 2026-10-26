@@ -31,12 +31,22 @@ const writeHeaders = (env) => ({
  * @param {NodeJS.ProcessEnv} options.env
  */
 export function createGitHub({ repository, fetchImpl, env }) {
+  return createGitHubRequest({ prefix: `/repos/${repository}`, fetchImpl, env });
+}
+
+/** @param {{fetchImpl:typeof fetch,env:NodeJS.ProcessEnv}} options */
+export function createGitHubRoot(options) {
+  return createGitHubRequest({ ...options, prefix: "" });
+}
+
+/** @param {{prefix:string,fetchImpl:typeof fetch,env:NodeJS.ProcessEnv}} options */
+function createGitHubRequest({ prefix, fetchImpl, env }) {
   /**
    * @param {string} path
    * @param {{ method?: string, body?: unknown }} [request]
    */
   return async (path, { method = "GET", body } = {}) => {
-    const response = await fetchImpl(`${API}/repos/${repository}${path}`, {
+    const response = await fetchImpl(`${API}${prefix}${path}`, {
       method,
       headers: { ...writeHeaders(env), ...(body ? { "content-type": "application/json" } : {}) },
       body: body ? JSON.stringify(body) : undefined,
