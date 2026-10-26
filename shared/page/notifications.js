@@ -56,6 +56,7 @@ function renderNote() {
 
 // The row is drawn whole, so a reload puts it back as it was before the status is known again.
 function renderNotifications() {
+  if (!notificationWords) return;
   const controls = chooseNotificationControls({ status, isBusy, preferences });
   const row = findElement("notifyRow");
   setHtml(

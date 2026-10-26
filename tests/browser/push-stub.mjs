@@ -6,6 +6,14 @@ export const PUSH_STUB = {
   nextEndpointKey: "test-next-endpoint",
 };
 
+// Layout checks need push controls without a service worker taking over their routed requests.
+export function stubPushRegistration() {
+  navigator.serviceWorker.register = async () =>
+    /** @type {ServiceWorkerRegistration} */ (
+      /** @type {unknown} */ ({ pushManager: Object.create(PushManager.prototype) })
+    );
+}
+
 // Headless Chromium has no push service, and its headless shell denies notifications outright,
 // so the permission prompt and the subscription are stand-ins. The subscription has real keys,
 // which is all the Worker needs. Both last through a reload, as the browser's do. A test can name

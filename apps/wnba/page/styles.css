@@ -41,7 +41,7 @@
 }
 /* Fields set 16px, which an iPhone doesn't zoom into when they're tapped, so these draw Barlow
    smaller to look as it does at their role: the search at the body's 14.75px (14.75 / 16) and the
-   Season picker at the detail's 13.5px (13.5 / 16). */
+   Season and reminder timing pickers at the detail's 13.5px (13.5 / 16). */
 @font-face {
   font-family: "Barlow Search";
   font-weight: 300;
@@ -128,7 +128,6 @@
   --divider: #ddccb3;
   --ink: #2a0e02;
   --ink-dim: #735344;
-  --select-arrow: url("data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23735344' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   /* Dark ink fading toward the light floor shows less than light ink fading toward the walnut, so
      Maple's lines fade further as the page catches up. */
   --catch-up-fade: 0.5;
@@ -309,7 +308,6 @@
   --divider: #392619;
   --ink: #f4e8e1;
   --ink-dim: #b39988;
-  --select-arrow: url("data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23b39988' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   --quiet-stat-ink: var(--ink-mid);
   --catch-up-fade: 0.75;
   --orange: #f87145;

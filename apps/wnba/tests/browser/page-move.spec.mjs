@@ -73,6 +73,13 @@ test.describe("on an iPhone", () => {
   }) => {
     await checkTurnOn({ page, browser, ...MOVING_APP });
   });
+
+  test("Turn on before settings starts subscribes without disabling the later controls", async ({
+    page,
+    browser,
+  }) => {
+    await checkTurnOn({ page, browser, ...MOVING_APP }, { beforeSettings: true });
+  });
 });
 
 // An iPhone's Home Screen app hands Safari the new site under a scheme no test browser follows,

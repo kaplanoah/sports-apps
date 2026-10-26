@@ -2,7 +2,7 @@ import { matchPath } from "./harness.mjs";
 import { holdRequests } from "./hold-requests.mjs";
 import { showTheme, listThemeLayoutChanges } from "./theme-layout.mjs";
 import { listLowContrastText } from "./contrast.mjs";
-import { listTextOffRoles } from "./type-roles.mjs";
+import { listTextOffRoles, measureFieldFace } from "./type-roles.mjs";
 import { PUSH_STUB, stubPushManager } from "./push-stub.mjs";
 
 /** @param {any} test @param {any} expect @param {{ openApp: Function, openSettings: Function, openLockedApp: Function, game: string, updates: string, timing: string, timingSize: number }} app */
@@ -407,6 +407,8 @@ export function testGameReminderSettings(test, expect, app) {
         await showTheme(page, theme);
         expect(await listLowContrastText(page)).toEqual([]);
         expect(await listTextOffRoles(page)).toEqual([]);
+        const face = await measureFieldFace(page.locator("#reminderTiming"), "--type-detail-size");
+        expect(face.field).toBeCloseTo(face.role, 0);
         const layout = await page.locator("#notifyRow").evaluate(async (group) => {
           const start = group.querySelector("#remindersTitle");
           const timing = group.querySelector(".reminder-timing");
@@ -453,7 +455,13 @@ export function testGameReminderSettings(test, expect, app) {
             pickerWidth: bounds(picker).width,
             pickerHeight: bounds(picker).height,
             pickerOutline: getComputedStyle(picker).borderTopStyle,
-            pickerArrow: getComputedStyle(picker).backgroundImage,
+            pickerArrow: getComputedStyle(timing, "::after").maskImage,
+            arrowColor: getComputedStyle(timing, "::after").backgroundColor,
+            arrowHitsPicker:
+              document.elementFromPoint(
+                bounds(picker).right - 8,
+                bounds(picker).top + bounds(picker).height / 2,
+              ) === picker,
             pickerAppearance: getComputedStyle(picker).appearance,
             groupFill: groupStyle.backgroundColor,
             groupOutline: groupStyle.outlineStyle,
@@ -475,6 +483,12 @@ export function testGameReminderSettings(test, expect, app) {
         expect(layout.pickerHeight).toBeGreaterThanOrEqual(40);
         expect(layout.pickerOutline).toBe("solid");
         expect(layout.pickerArrow).toContain("data:image/svg+xml");
+        expect(layout.arrowColor).toBe(
+          await page
+            .locator("#reminderTimingTitle")
+            .evaluate((label) => getComputedStyle(label).color),
+        );
+        expect(layout.arrowHitsPicker).toBe(true);
         expect(layout.pickerAppearance).toBe("none");
         expect(layout.groupFill).toBe("rgba(0, 0, 0, 0)");
         expect(layout.groupOutline).toBe("none");

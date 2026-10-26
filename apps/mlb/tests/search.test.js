@@ -597,7 +597,14 @@ test("every setting's row names the place a search opens", () => {
 
 test("each place search opens is listed by its search, and each game by a search of games", () => {
   const pages = listSearchPages({ index: INDEX, isSettingShown: () => true });
-  for (const query of ["remind", "before game", "game notifications"]) {
+  for (const query of [
+    "remind",
+    "before game",
+    "game notifications",
+    "game starts",
+    "game sta",
+    "time before game",
+  ]) {
     const found = findPages(query, { dictionary: CONTEXT.dictionary, pages, isTyping: false });
     assert.ok(found.rows.map(nameOpened).includes("settings:reminders"), query);
   }

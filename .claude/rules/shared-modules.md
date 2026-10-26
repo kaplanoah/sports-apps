@@ -63,8 +63,8 @@ The Worker serves every file here, its `networks/` logos too, under `shared/`, b
 
 - `settings-sheet.js`: the settings sheet
 - `season-picker.js`: settings' Season picker
-- `notifications.js`: drawing the Notifications group, its switches, permission notes and timing
-- `notifications-view.js`: the Notifications group's markup, labels and timing presets
+- `notifications.js`: the Notifications group's permission, saving and timing changes
+- `notifications-view.js`: the Notifications group's rows, from its state and the league's words
 - `notification-preferences.js`: device push categories, timing presets, and validation
 - `notification-intent.js`: the game a notification asks to open, from its message or the page's address
 - `notification-navigation.js`: opening a game from a notification through reloads and the access gate

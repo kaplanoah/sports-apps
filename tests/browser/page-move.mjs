@@ -10,7 +10,8 @@ import {
 } from "../../shared/page/move-cards.js";
 import { listLowContrastText } from "./contrast.mjs";
 import { ANDROID_PHONE, IPHONE, takeAwayPush } from "./devices.mjs";
-import { LOCKED_PAGE_PATH } from "./harness.mjs";
+import { LOCKED_PAGE_PATH, matchPath } from "./harness.mjs";
+import { holdRequests } from "./hold-requests.mjs";
 import { WELCOME } from "./home-screen-help.mjs";
 import { PUSH_STUB, stubPushManager } from "./push-stub.mjs";
 import { waitForLoadToSettle } from "./at-rest.mjs";
@@ -644,17 +645,33 @@ export async function checkNotificationsAskGoes(app, buttonName) {
  * subscribes it, and saves the subscription with the Worker, and the ask goes for good, across a
  * reload.
  * @param {MovingApp} app
+ * @param {{ beforeSettings?: boolean }} [options]
  */
-export async function checkTurnOn(app) {
+export async function checkTurnOn(app, { beforeSettings = false } = {}) {
   const { page } = app;
   await openNewHomeScreenApp(app, { canSubscribe: true });
+  let releaseStartup = () => {};
+  if (beforeSettings) {
+    await expect(page.locator("#loadNote")).toHaveCount(0);
+    releaseStartup = await holdRequests(page, matchPath("/store/seasons"));
+    const reading = page.waitForRequest(matchPath("/store/seasons"));
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await reading;
+    await expect(page.locator("#notifyRow")).toHaveAttribute("hidden");
+  }
   const saving = page.waitForResponse(
     (response) =>
       response.url().endsWith("/push/subscription") && response.request().method() === "PUT",
   );
-  await tapUpdatesButton(page, TURN_ON_BUTTON);
-  await releaseServiceWorker(page);
-  expect((await saving).ok()).toBe(true);
+  try {
+    await tapUpdatesButton(page, TURN_ON_BUTTON);
+    await releaseServiceWorker(page);
+    expect((await saving).ok()).toBe(true);
+  } finally {
+    releaseStartup();
+  }
+  await expect(page.locator("#notifySwitch")).toBeEnabled();
+  await expect(page.locator("#notifySwitch")).toHaveAttribute("aria-checked", "true");
   const updates = findUpdates(page);
   await expect(updates).toBeHidden();
   await page.reload();
