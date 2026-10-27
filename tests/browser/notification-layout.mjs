@@ -21,6 +21,9 @@ export function testNotificationAlignment(test, expect, app) {
           await openFromHomeScreen(page);
           await page.addInitScript(stubPushManager, PUSH_STUB);
           await page.addInitScript(stubPushRegistration);
+          // Keep the wide bracket's paint cost out of this Settings geometry check.
+          if (screen === "desktop")
+            await page.addInitScript(() => localStorage.setItem("lastTab", "news"));
           await app.openApp(page);
           await app.openSettings(page);
           const reminders = page.locator("#remindersSwitch");
