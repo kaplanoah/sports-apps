@@ -190,14 +190,16 @@ export function renderStampLines(season, now) {
 
 /**
  * The feeds that didn't answer, but those with nothing to send, like the scoreboard on a day
- * without games.
+ * without games, and the scoreboard while ESPN's scores stand in for it, since fans still see
+ * scores then.
  * @param {UpdateStatus} status
  */
 function listMissedFeeds(status) {
-  const idle = String(status.idle ?? "").split(", ");
+  const covered = String(status.idle ?? "").split(", ");
+  if (status.standIn) covered.push("scoreboard");
   return String(status.detail ?? "")
     .split(", ")
-    .filter((feed) => !idle.includes(feed));
+    .filter((feed) => !covered.includes(feed));
 }
 
 /**
@@ -209,13 +211,10 @@ function describeFeedProblem(status) {
   if (status.error !== "wnba_feeds_missing") return "The WNBA isn't answering right now";
   const feeds = listMissedFeeds(status);
   if (!feeds.length) return "";
-  const stopped = `The WNBA stopped sending ${joinNames(
+  return `The WNBA stopped sending ${joinNames(
     feeds.map((feed) => FEED_NAMES[feed] ?? feed),
     "and",
   )}`;
-  return feeds.includes("scoreboard") && status.standIn === "espn"
-    ? `${stopped}. Scores are from ESPN for now.`
-    : stopped;
 }
 
 /**
