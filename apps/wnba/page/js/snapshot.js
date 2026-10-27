@@ -468,6 +468,16 @@ function matchBackupGames(games, backupGames) {
   );
 }
 
+// While the scoreboard is down, ESPN covers it once it answers for one of the league's games, started
+// or not, so the page doesn't warn of the scoreboard only until a game tips off.
+/**
+ * @param {any[]} games
+ * @param {{ scoreboard?: any }} responses
+ * @param {any[]} backupGames
+ */
+const isEspnCovering = (games, responses, backupGames) =>
+  !responses.scoreboard && games.some((game) => !!findEspnGame(game, backupGames));
+
 function applyBackupGame(game, backup) {
   const { state, status, period, clock } = backup;
   return {
@@ -644,6 +654,7 @@ export function buildSnapshot(responses, { season, now = Date.now() }) {
     standings: readStandingsRows(responses.standings),
     missing: LEAGUE_FEEDS.filter((name) => !responses[name]),
     standIn: standIns.size ? "espn" : null,
+    scoreboardCover: isEspnCovering(leagueGames, responses, backupGames) ? "espn" : null,
     isScoreboardIdle:
       !!responses.schedule && !seasonGames.some((game) => isScoreboardGame(game, seriesById, now)),
     openingDay: readOpeningDay(responses.schedule, season),

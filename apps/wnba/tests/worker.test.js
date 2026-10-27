@@ -188,7 +188,7 @@ test("a game ESPN doesn't answer for doesn't keep its others from standing in", 
   assert.deepEqual([readState("1042600132"), readState("1042600112")], ["final", "pre"]);
 });
 
-test("ESPN doesn't stand in until one of its games has started", async () => {
+test("while the scoreboard doesn't answer, ESPN covers it before any of its games has started, and its scores stand in for none", async () => {
   const espn = structuredClone(ESPN.answers);
   const listing = Object.keys(espn).find((url) => url.includes("/events?dates="));
   espn[listing].items = espn[listing].items.filter((item) => item.$ref.includes("401918022"));
@@ -200,7 +200,48 @@ test("ESPN doesn't stand in until one of its games has started", async () => {
 
   const snapshot = await loader.loadSnapshot(2026);
 
-  assert.deepEqual([snapshot.missing, snapshot.standIn], [["scoreboard"], null]);
+  assert.deepEqual(
+    [snapshot.missing, snapshot.standIn, snapshot.scoreboardCover],
+    [["scoreboard"], null, "espn"],
+  );
+  assert.equal(describeSnapshotStatus(snapshot).standIn, "espn");
+  assert.equal(snapshot.games.find((game) => game.id === "1042600132").state, "pre");
+});
+
+test("while neither the scoreboard nor ESPN answers, nothing covers it", async () => {
+  const league = createLeague({ refuse: { scoreboard: "page" } });
+  const loader = createSnapshotLoader({
+    fetchImpl: league.fetchImpl,
+    now: () => Date.parse(ESPN.now),
+  });
+
+  const snapshot = await loader.loadSnapshot(2026);
+
+  assert.deepEqual(
+    [snapshot.missing, snapshot.standIn, snapshot.scoreboardCover],
+    [["scoreboard"], null, null],
+  );
+  assert.equal(describeSnapshotStatus(snapshot).standIn, "");
+});
+
+test("while the scoreboard doesn't answer, ESPN lists its games but answers for none of them, nothing covers it", async () => {
+  const espn = structuredClone(ESPN.answers);
+  for (const url of Object.keys(espn).filter((each) => each.includes("/status?"))) {
+    delete espn[url];
+  }
+  const league = createLeague({ refuse: { scoreboard: "page" }, espn });
+  const loader = createSnapshotLoader({
+    fetchImpl: league.fetchImpl,
+    now: () => Date.parse(ESPN.now),
+  });
+
+  const snapshot = await loader.loadSnapshot(2026);
+
+  assert.deepEqual(
+    [snapshot.missing, snapshot.standIn, snapshot.scoreboardCover],
+    [["scoreboard"], null, null],
+  );
+  assert.equal(describeSnapshotStatus(snapshot).standIn, "");
 });
 
 test("while the scoreboard answers, ESPN's game-by-game feeds aren't read", async () => {

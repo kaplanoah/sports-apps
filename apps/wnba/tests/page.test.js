@@ -1504,20 +1504,19 @@ test("the header names a problem with the page's server or the league's feeds", 
     describeStampProblem({ status, problem: "" }),
     "The WNBA stopped sending the bracket and the standings",
   );
+});
+
+test("the header says nothing of the scoreboard while ESPN's scores stand in for it", () => {
   const standingIn = { error: "wnba_feeds_missing", detail: "scoreboard", standIn: "espn" };
+  assert.equal(describeStampProblem({ status: standingIn, problem: "" }), "");
   assert.equal(
-    describeStampProblem({ status: standingIn, problem: "" }),
-    "The WNBA stopped sending today's scores. Scores are from ESPN for now.",
+    describeStampProblem({ status: { ...standingIn, detail: "bracket, scoreboard" }, problem: "" }),
+    "The WNBA stopped sending the bracket",
   );
 });
 
 test("the header leaves out a feed the store's status says has nothing to send", () => {
-  const idle = {
-    error: "wnba_feeds_missing",
-    detail: "scoreboard",
-    idle: "scoreboard",
-    standIn: "espn",
-  };
+  const idle = { error: "wnba_feeds_missing", detail: "scoreboard", idle: "scoreboard" };
   assert.equal(describeStampProblem({ status: idle, problem: "" }), "");
   assert.equal(
     describeStampProblem({ status: { ...idle, detail: "scoreboard, standings" }, problem: "" }),
