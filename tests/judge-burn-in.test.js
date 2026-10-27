@@ -76,7 +76,7 @@ test("a change inside a test edits only that test", () => {
 test("a change outside every test, like a helper or a test.use, edits every test in its spec", () => {
   for (const line of [3, 9, 12]) {
     const edited = listEditedTests(new Map([[SPEC, [line]]]), readSpec);
-    assert.deepEqual([...edited], [`${SPEC}:5`, `${SPEC}:13`], `line ${line}`);
+    assert.deepEqual([...edited], [`${SPEC}:*`, `${SPEC}:5`, `${SPEC}:13`], `line ${line}`);
   }
 });
 
@@ -139,4 +139,39 @@ test("burn-in fails the pull request only on a test it wrote or edited, and call
 test("a run that broke outside its tests, like on a config error, names what broke it", () => {
   const broken = { suites: [], errors: [{ message: "Error: No tests found\nmore" }] };
   assert.deepEqual(sortBurnInFailures(broken, new Set()).runErrors, ["Error: No tests found"]);
+});
+
+const HELPER = "tests/browser/notification-layout.mjs";
+const ADAPTER =
+  'import { defineTests } from "../../../../tests/browser/notification-layout.mjs";\ndefineTests(test);';
+
+test("an edited adapter owns failures whose declarations are in a shared helper", () => {
+  const editedTests = listEditedTests(new Map([[SPEC, [2]]]), () => ADAPTER);
+  const helperSpec = { ...reportSpec(5, "controls align", ["passed", "failed"]), file: HELPER };
+  const report = {
+    suites: [
+      { file: SPEC, suites: [{ file: HELPER, specs: [helperSpec] }] },
+      { file: "apps/mlb/tests/browser/layout.spec.mjs", specs: [helperSpec] },
+    ],
+  };
+  const { edited, flaky } = sortBurnInFailures(report, editedTests);
+  assert.equal(edited.length, 1);
+  assert.equal(edited[0].failures, 1);
+  assert.equal(flaky.length, 1);
+});
+
+test("an edited helper declaration fails every app that runs that test", () => {
+  const editedTests = listEditedTests(new Map([[HELPER, [6]]]), () => SOURCE);
+  const helperSpec = { ...reportSpec(5, "controls align", ["passed", "failed"]), file: HELPER };
+  const report = {
+    suites: [SPEC, "apps/mlb/tests/browser/layout.spec.mjs"].map((file) => ({
+      file,
+      specs: [helperSpec],
+    })),
+  };
+  const { edited, flaky } = sortBurnInFailures(report, editedTests);
+  assert.equal(edited.length, 1);
+  assert.equal(edited[0].runs, 4);
+  assert.equal(edited[0].failures, 2);
+  assert.deepEqual(flaky, []);
 });

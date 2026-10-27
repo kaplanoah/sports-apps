@@ -13,9 +13,7 @@ export function testNotificationAlignment(test, expect, app) {
     test.describe(screen, () => {
       test.use({ ...(screen === "phone" ? IPHONE : {}), viewport });
       for (const theme of /** @type {const} */ (["light", "dark"])) {
-        test(`notification controls share the News right edge in ${theme}`, async ({
-          page,
-        }, testInfo) => {
+        test(`notification controls share the News right edge in ${theme}`, async ({ page }) => {
           test.slow();
           await page.emulateMedia({ colorScheme: theme });
           await openFromHomeScreen(page);
@@ -28,12 +26,16 @@ export function testNotificationAlignment(test, expect, app) {
           await app.openSettings(page);
           const reminders = page.locator("#remindersSwitch");
           await expect(reminders).toHaveAttribute("aria-checked", "false");
-          for (const state of ["off", "on", "off-again", "reload"]) {
+          for (const state of ["off", "on", "off-again", "long-label", "reload"]) {
             if (state === "reload") {
               await page.reload({ waitUntil: "domcontentloaded" });
               await waitForLoadToSettle(page);
               await expect(page.locator("#settingsDialog")).toBeVisible();
-            } else if (state !== "off") await reminders.click();
+            } else if (state === "long-label")
+              await page.locator("#remindersTitle").evaluate((label) => {
+                label.textContent = "W".repeat(80);
+              });
+            else if (state === "on" || state === "off-again") await reminders.click();
             await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
             await expect(reminders).toHaveAttribute("aria-checked", String(state === "on"));
             await expect(reminders).toBeEnabled();
@@ -48,8 +50,6 @@ export function testNotificationAlignment(test, expect, app) {
                 ),
               };
             });
-            if (state === "off")
-              await page.screenshot({ path: testInfo.outputPath("off.png"), scale: "css" });
             expect(alignment.group).toBeCloseTo(alignment.newsGroup, 2);
             for (const offset of alignment.controls) expect(offset).toBeCloseTo(0, 2);
           }

@@ -70,7 +70,7 @@ export function findTestLines(source) {
 }
 
 /**
- * Each test the diff wrote or edited, as its spec's path and the line its test(...) starts on.
+ * Each edited test by declaration path and line, or a whole spec that delegates its declarations.
  * @param {Map<string, number[]>} changedLines
  * @param {(path: string) => string | null} readSource the spec as the pull request leaves it, or
  *   null once it's deleted
@@ -86,6 +86,7 @@ export function listEditedTests(changedLines, readSource) {
     const findTest = (/** @type {number} */ line) =>
       tests.find((test) => test.line <= line && line <= test.endLine);
     const editsEveryTest = lines.some((line) => !findTest(line));
+    if (editsEveryTest) edited.add(`${path}:*`);
     for (const test of tests) {
       if (editsEveryTest || lines.some((line) => findTest(line) === test)) {
         edited.add(`${path}:${test.line}`);
@@ -98,13 +99,14 @@ export function listEditedTests(changedLines, readSource) {
 /**
  * A Playwright JSON report with only the specs `isKept` keeps.
  * @param {any} suite
- * @param {(spec: any) => boolean} isKept
+ * @param {(spec: any, owner: string) => boolean} isKept
+ * @param {string} owner the outer spec, even when a nested suite names a shared helper
  * @returns {any}
  */
-const keepSpecs = (suite, isKept) => ({
+const keepSpecs = (suite, isKept, owner) => ({
   ...suite,
-  specs: (suite.specs ?? []).filter(isKept),
-  suites: (suite.suites ?? []).map((/** @type {any} */ inner) => keepSpecs(inner, isKept)),
+  specs: (suite.specs ?? []).filter((spec) => isKept(spec, owner)),
+  suites: (suite.suites ?? []).map((/** @type {any} */ inner) => keepSpecs(inner, isKept, owner)),
 });
 
 /**
@@ -114,14 +116,19 @@ const keepSpecs = (suite, isKept) => ({
  * @param {Set<string>} editedTests
  */
 export function sortBurnInFailures(report, editedTests) {
-  const isEdited = (/** @type {any} */ spec) => editedTests.has(`${spec.file}:${spec.line}`);
-  const keep = (/** @type {(spec: any) => boolean} */ isKept) => ({
+  const isEdited = (/** @type {any} */ spec, /** @type {string} */ owner) =>
+    editedTests.has(`${spec.file}:${spec.line}`) ||
+    editedTests.has(`${spec.file}:*`) ||
+    editedTests.has(`${owner}:*`);
+  const keep = (/** @type {(spec: any, owner: string) => boolean} */ isKept) => ({
     ...report,
-    suites: (report.suites ?? []).map((/** @type {any} */ suite) => keepSpecs(suite, isKept)),
+    suites: (report.suites ?? []).map((/** @type {any} */ suite) =>
+      keepSpecs(suite, isKept, suite.file),
+    ),
   });
   return {
     edited: listFailedTests([keep(isEdited)]),
-    flaky: listFailedTests([keep((spec) => !isEdited(spec))]),
+    flaky: listFailedTests([keep((spec, owner) => !isEdited(spec, owner))]),
     runErrors: (report.errors ?? []).map((/** @type {any} */ error) =>
       readFirstLine(error.message),
     ),
