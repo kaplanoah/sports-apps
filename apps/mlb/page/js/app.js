@@ -4,6 +4,7 @@ import { listRankedOrder, renderTeamDot } from "./clubs.js";
 import { startCatchUpNote } from "#shared/catch-up-note.js";
 import { startCaughtUpSweep } from "#shared/caught-up-sweep.js";
 import { startChannelTag } from "#shared/channel-tag.js";
+import { startDailyCount } from "#shared/daily-count.js";
 import { startPullToRefresh } from "#shared/pull-to-refresh.js";
 import { startHomeScreen } from "#shared/home-screen.js";
 import { showJobStatuses, startDiagnostics } from "#shared/diagnostics.js";
@@ -305,6 +306,7 @@ function drawLoadedSeason() {
 async function boot() {
   startDiagnostics();
   watchReturns({ isBusy: () => session.isReordering, catchUp, pause: () => session.db.pause() });
+  startDailyCount();
   trackKeyboardFocus();
   watchPresses();
   wireControls();

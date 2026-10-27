@@ -16,6 +16,7 @@ import {
   serveHandoff,
   serveMoveHandoff,
 } from "./access-gate.js";
+import { COUNT_PATH, serveCount } from "./daily-count.js";
 import { createHealthServer } from "./health.js";
 
 const PAGE_HEADERS = {
@@ -235,20 +236,22 @@ const GATE_PATH = "/gate.html";
  * An app's Worker: its page, its store, and any reads of its own, all under the APP_KEY secret or
  * at the PAGE_HOST address, and behind the ACCESS_CODE secret when the Worker has one.
  * @param {object} app
+ * @param {string} app.name the app's name, which its daily counts carry
  * @param {Parameters<typeof decodePageFiles>[0]} app.pageFiles
  * @param {(request: Request, env: any, storePath: string) => Response | Promise<Response>} app.forwardToStore
  * @param {(env: any) => Promise<boolean>} app.isStoreAnswering
  * @param {Record<string, (url: URL, env: any) => Response | Promise<Response>>} [app.reads] more GET
  *   paths, each handed the Worker's bindings, so it can read the store
  */
-export function createAppWorker({ pageFiles, forwardToStore, isStoreAnswering, reads = {} }) {
+export function createAppWorker({ name, pageFiles, forwardToStore, isStoreAnswering, reads = {} }) {
   const releaseCommit = readReleaseCommit(pageFiles);
   const releaseFolder = releaseCommit && nameReleaseFolder(releaseCommit);
   const servePageFile = createPageServer(pageFiles, releaseFolder);
   // Decided by the file a path names, since the release's folder names the page too.
   const isIndexPath = (appPath) => findPageFile(appPath, releaseFolder).path === "index.html";
   const serveHealth = createHealthServer({ isStoreAnswering, release: releaseCommit });
-  const isDataPath = (appPath) => isStorePath(appPath) || Object.hasOwn(reads, appPath);
+  const isDataPath = (appPath) =>
+    isStorePath(appPath) || appPath === COUNT_PATH || Object.hasOwn(reads, appPath);
 
   // Until the phone sends the access code, the page's address shows the gate instead, or, for a
   // phone that never sent one under a key that's moving, the same page at PAGE_HOST, whose gate
@@ -288,6 +291,7 @@ export function createAppWorker({ pageFiles, forwardToStore, isStoreAnswering, r
       const access = await readAccess(request, env);
       if (access !== "open") return serveLocked(request, env, { url, appPath, prefix, access });
       if (isStorePath(appPath)) return forwardToStore(request, env, appPath);
+      if (appPath === COUNT_PATH) return serveCount(request, env, name);
       if (request.method === "GET" && Object.hasOwn(reads, appPath))
         return reads[appPath](url, env);
       if (isIndexPath(appPath)) return servePage(request, env, appPath, prefix);

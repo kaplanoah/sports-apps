@@ -256,6 +256,7 @@ test("upload, route, and the Worker URL", async () => {
         namespace_id: "2701",
         simple: { limit: 10, period: 60 },
       },
+      { type: "analytics_engine", name: "DAILY_OPENS", dataset: "daily_opens" },
       { type: "service", name: "ACCOUNTS", service: "accounts" },
     ],
     keep_bindings: ["secret_text"],
@@ -374,6 +375,11 @@ test("each app's wrangler.toml declares the same bindings and migrations", async
       toml,
       /\[\[env\.beta\.ratelimits\]\]\nname = "ACCESS_LIMIT"\nnamespace_id = "2701"\n\n\[env\.beta\.ratelimits\.simple\]\nlimit = 10\nperiod = 60/,
     );
+    assert.match(
+      toml,
+      /\[\[analytics_engine_datasets\]\]\nbinding = "DAILY_OPENS"\ndataset = "daily_opens"/,
+    );
+    assert.doesNotMatch(toml, /env\.beta\.analytics_engine_datasets/);
     for (const { tag, new_sqlite_classes: classes } of listMigrations("SeasonStore")) {
       const declared = `[[migrations]]\ntag = "${tag}"\nnew_sqlite_classes = ${JSON.stringify(classes)}`;
       assert.ok(toml.includes(declared), declared);

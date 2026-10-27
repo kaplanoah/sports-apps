@@ -125,6 +125,13 @@ const ACCESS_LIMIT_BINDING = {
 };
 // The version a service runs, as its upload's tag names it, which its health reports.
 const VERSION_BINDING = { type: "version_metadata", name: "VERSION" };
+// Each device's one count a day (shared/worker/daily-count.js). Only production's apps count, so
+// testing on beta adds nothing to the counts.
+const DAILY_OPENS_BINDING = {
+  type: "analytics_engine",
+  name: "DAILY_OPENS",
+  dataset: "daily_opens",
+};
 
 /**
  * An app's binding to each service, named for it, to its Worker on the app's own channel.
@@ -144,7 +151,8 @@ const listServiceBindings = (channel, roots) =>
 function listBindings({ storeClass, isPageless, channel, roots }) {
   const store = { type: "durable_object_namespace", name: "STORE", class_name: storeClass };
   if (isPageless) return [store, VERSION_BINDING];
-  return [store, ACCESS_LIMIT_BINDING, ...listServiceBindings(channel, roots)];
+  const counts = channel === "production" ? [DAILY_OPENS_BINDING] : [];
+  return [store, ACCESS_LIMIT_BINDING, ...counts, ...listServiceBindings(channel, roots)];
 }
 
 // Cloudflare records the last tag applied and rejects an upload that repeats one.

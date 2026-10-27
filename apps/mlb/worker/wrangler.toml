@@ -29,12 +29,17 @@ period = 60
 binding = "ACCOUNTS"
 service = "accounts"
 
+# Each device's one count a day, on production alone, so testing on beta adds nothing to them.
+[[analytics_engine_datasets]]
+binding = "DAILY_OPENS"
+dataset = "daily_opens"
+
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["SeasonStore"]
 
 # The beta channel's Worker, deployed from the beta branch to use a change on a phone before it
-# merges, with its own store, key, and address. Durable Objects and rate limits aren't inherited.
+# merges, with its own store, key, and address. Durable Objects, rate limits, and datasets aren't inherited.
 [env.beta]
 name = "mlb-app-beta"
 
