@@ -468,14 +468,15 @@ function matchBackupGames(games, backupGames) {
   );
 }
 
-// While the scoreboard is down and ESPN answers, ESPN stands in before its first game starts too,
-// so the page doesn't warn of the scoreboard only until a game tips off.
+// While the scoreboard is down, ESPN covers it once it answers for one of the league's games, started
+// or not, so the page doesn't warn of the scoreboard only until a game tips off.
 /**
- * @param {{ scoreboard?: any, backup?: { games: any[] } | null }} responses
- * @param {Map<string, any>} standIns
+ * @param {any[]} games
+ * @param {{ scoreboard?: any }} responses
+ * @param {any[]} backupGames
  */
-const isEspnStandingIn = (responses, standIns) =>
-  standIns.size > 0 || (!responses.scoreboard && !!responses.backup);
+const isEspnCovering = (games, responses, backupGames) =>
+  !responses.scoreboard && games.some((game) => !!findEspnGame(game, backupGames));
 
 function applyBackupGame(game, backup) {
   const { state, status, period, clock } = backup;
@@ -652,7 +653,8 @@ export function buildSnapshot(responses, { season, now = Date.now() }) {
     series,
     standings: readStandingsRows(responses.standings),
     missing: LEAGUE_FEEDS.filter((name) => !responses[name]),
-    standIn: isEspnStandingIn(responses, standIns) ? "espn" : null,
+    standIn: standIns.size ? "espn" : null,
+    isScoreboardCovered: isEspnCovering(leagueGames, responses, backupGames),
     isScoreboardIdle:
       !!responses.schedule && !seasonGames.some((game) => isScoreboardGame(game, seriesById, now)),
     openingDay: readOpeningDay(responses.schedule, season),
