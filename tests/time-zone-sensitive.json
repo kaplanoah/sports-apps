@@ -83,6 +83,7 @@
     "tests/check-push.test.js",
     "tests/ci-workflow.test.js",
     "tests/context-limit.test.js",
+    "tests/daily-count.test.js",
     "tests/day-strip-rules.test.js",
     "tests/days.test.js",
     "tests/deploy-service.test.js",
