@@ -5,14 +5,12 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
-  readdirSync,
-  realpathSync,
   rmSync,
   symlinkSync,
   writeFileSync,
   appendFileSync,
 } from "node:fs";
-import { join, relative } from "node:path";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { readPullMerge } from "./pull-merge.mjs";
 import { verifyReviewProvider } from "./review-provider.mjs";
@@ -21,7 +19,7 @@ import { formatJobOutputs, listJobs } from "./plan-review.mjs";
 import { isContainedCodexReview, needsCodexIntegration } from "./review-supplied.mjs";
 import { WEIGHTS } from "./review-state.mjs";
 import { createGitHub, readAllPages } from "./github-api.mjs";
-import { createReviewGitEnvironment } from "./review-repository.mjs";
+import { runReviewGit } from "./review-repository.mjs";
 import { isGitObjectId } from "./git-object.mjs";
 import {
   readJson,
@@ -39,9 +37,11 @@ import {
   copyReviewFiles,
   listPlanFiles,
   listReviewFiles,
+  listReviewArtifactFolders,
   readReviewIdentity,
   readReviewAnswer,
   recomputeReviewCoverage,
+  normalizeClaudeReadEvidence,
   sealReviewArtifact,
   validateAcrossCandidates,
   validateReviewArtifact,
@@ -58,14 +58,6 @@ const stageRecords = (stage) =>
 
 const SOURCE = fileURLToPath(new URL("..", import.meta.url));
 
-/** @param {string[]} args @param {string} cwd */
-const readGit = (args, cwd) =>
-  execFileSync("git", ["-c", "core.hooksPath=/dev/null", ...args], {
-    cwd,
-    encoding: "utf8",
-    env: createReviewGitEnvironment(),
-  }).trim();
-
 const REVIEW_OWED_NOTICE =
   "::notice::No matching merge is available; review remains owed. Re-add the review label when the PR can merge.";
 
@@ -79,9 +71,9 @@ function requireReviewAuthority(env) {
 function matchesReviewMerge(merge, env) {
   if (!merge) return false;
   if (!isGitObjectId(merge)) throw new Error("Review requires an immutable merge revision.");
-  readGit(["fetch", "--no-tags", "origin", merge], env.GITHUB_WORKSPACE);
+  runReviewGit(env.GITHUB_WORKSPACE, ["fetch", "--no-tags", "origin", merge]);
   return (
-    readGit(["show", "--no-patch", "--format=%P", merge], env.GITHUB_WORKSPACE) ===
+    runReviewGit(env.GITHUB_WORKSPACE, ["show", "--no-patch", "--format=%P", merge]) ===
     `${env.REVIEW_BASE} ${env.REVIEW_HEAD}`
   );
 }
@@ -160,7 +152,7 @@ export function prepareReviewCheckout(env) {
     appendFileSync(env.GITHUB_OUTPUT, "available=false\n");
     return;
   }
-  readGit(["checkout", "--detach", merge], checkout);
+  runReviewGit(checkout, ["checkout", "--detach", merge]);
   const folder = mkdtempSync(join(env.RUNNER_TEMP, "review-data-"));
   const view = join(checkout, ".review");
   // Remove the directory entry, including a PR-provided symlink, before linking fresh data.
@@ -198,15 +190,7 @@ export function exportReviewArtifact(folder, stage, env) {
     const area = readJson(join(folder, "plan.json")).areas.find(
       (area) => nameFindRecord(area.area) === `${stage}.json`,
     );
-    const parts = new Set([...Object.values(area.partsByFile).flat(), ...area.rules]);
-    for (const attempt of record.tries)
-      attempt.reads = attempt.reads.flatMap(([path, ranges]) => {
-        const relativeView = relative(folder, path);
-        const part = parts.has(relativeView) ? relativeView : relative(realpathSync(folder), path);
-        return parts.has(part) ? [[part, ranges]] : [];
-      });
-    recomputeReviewCoverage(record, area, folder);
-    writeFileSync(recordPath, JSON.stringify(record));
+    writeFileSync(recordPath, JSON.stringify(normalizeClaudeReadEvidence(record, area, folder)));
   }
   sealReviewArtifact(destination, stage, identity, names);
 }
@@ -216,13 +200,9 @@ function collectReviewArtifacts(input) {
   /** @type {Map<string, string>} */
   const artifacts = new Map();
   listReviewFiles(input);
-  const isFlat = existsSync(join(input, "provenance.json"));
-  const folders = isFlat
-    ? [[readJson(join(input, "provenance.json")).stage, input]]
-    : readdirSync(input).map((name) => [name.replace(/^trusted-review-/, ""), join(input, name)]);
-  for (const [stage, path] of folders) {
-    if (!isFlat && path !== join(input, `trusted-review-${stage}`))
-      throw new Error("Unexpected review artifact.");
+  const folders = listReviewArtifactFolders(input, "trusted-review-", "provenance.json");
+  for (const { name, path } of folders) {
+    const stage = name ?? readJson(join(path, "provenance.json")).stage;
     artifacts.set(stage, path);
   }
   return artifacts;
@@ -317,11 +297,11 @@ export async function verifyReviewEvent(
 
 /**
  * @param {NodeJS.ProcessEnv} env
- * @param {{ invokeScript?: typeof invokeReviewScript, readRepository?: typeof readGit, readGitHub?: ReturnType<typeof createGitHub> }} [options]
+ * @param {{ invokeScript?: typeof invokeReviewScript, readRepository?: typeof runReviewGit, readGitHub?: ReturnType<typeof createGitHub> }} [options]
  */
 export async function writeTrustedReviewPlan(env, options = {}) {
   const invokeScript = options.invokeScript ?? invokeReviewScript;
-  const readRepository = options.readRepository ?? readGit;
+  const readRepository = options.readRepository ?? runReviewGit;
   const folder = env.REVIEW_FOLDER;
   invokeScript("plan-review.mjs", [folder], env, true);
   invokeScript("review-context.mjs", [folder], env);
@@ -331,7 +311,7 @@ export async function writeTrustedReviewPlan(env, options = {}) {
   if (env.REVIEW_PROVIDER)
     plan = { ...plan, provider: env.REVIEW_PROVIDER, selection: env.REVIEW_SELECTION };
   if (env.REVIEW_PROVIDER) {
-    const repoFiles = readRepository(["ls-files"], env.REVIEW_CHECKOUT).split("\n");
+    const repoFiles = readRepository(env.REVIEW_CHECKOUT, ["ls-files"]).split("\n");
     if (env.REVIEW_PROVIDER === "codex") plan = arrangeCodexPortions(plan, repoFiles);
     const readGitHub =
       options.readGitHub ??
@@ -445,7 +425,7 @@ async function postTrustedReview(command, env) {
 /** @param {NodeJS.ProcessEnv} env */
 function recordTrustedResult(env) {
   if (env.REVIEW_OWED !== "false") throw new Error("A review is still owed on this code.");
-  const tree = readGit(["rev-parse", "HEAD^{tree}"], env.REVIEW_CHECKOUT);
+  const tree = runReviewGit(env.REVIEW_CHECKOUT, ["rev-parse", "HEAD^{tree}"]);
   const destination = join(env.REVIEW_UPLOAD, "trusted-review-result");
   mkdirSync(destination);
   const identity = readReviewIdentity(env);

@@ -1,0 +1,25 @@
+name: Test Actions issuer lookalike
+
+on:
+  workflow_dispatch:
+    inputs:
+      proof-head:
+        description: Exact approved isolated issuer head SHA
+        required: true
+        type: string
+      approval:
+        description: Type APPROVE_ISOLATED_ISSUER_PROTOCOL after exact protocol approval
+        required: true
+        type: string
+
+permissions: {}
+
+jobs:
+  lookalike:
+    name: trusted-review
+    if: github.ref == 'refs/heads/issue-809-issuer-head' && github.sha == inputs.proof-head && github.actor == github.repository_owner && github.triggering_actor == github.repository_owner && github.run_attempt == 1 && inputs.approval == 'APPROVE_ISOLATED_ISSUER_PROTOCOL' && vars.TRUSTED_REVIEW_PUBLISHER_ENABLED != 'true' && vars.TRUSTED_CODEX_REVIEW_ENABLED != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    steps:
+      - name: Produce only an Actions-owned same-name result
+        run: echo 'Synthetic Actions lookalike only. No trusted review was performed.'

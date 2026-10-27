@@ -6,6 +6,7 @@ import {
   mkdirSync,
   readFileSync,
   readdirSync,
+  realpathSync,
   writeFileSync,
 } from "node:fs";
 import { dirname, isAbsolute, join, relative } from "node:path";
@@ -144,6 +145,19 @@ export function validateReviewPlan(plan) {
     );
   }
   return plan;
+}
+
+/** @param {string} folder @param {string} prefix @param {string} marker @returns {{name: string | null, path: string}[]} */
+export function listReviewArtifactFolders(folder, prefix, marker) {
+  const names = readdirSync(folder).sort();
+  if (names.includes(marker)) {
+    requireData(!names.some((name) => name.startsWith(prefix)), "ambiguous artifact layout");
+    return [{ name: null, path: folder }];
+  }
+  return names.map((name) => {
+    if (!name.startsWith(prefix)) throw new Error("Unexpected review artifact.");
+    return { name: name.slice(prefix.length), path: join(folder, name) };
+  });
 }
 
 /** @param {string} folder @returns {string[]} */
@@ -331,6 +345,19 @@ export function recomputeReviewCoverage(record, area, folder) {
     ),
     isAnswered: record.tries.at(-1).answer !== null,
   };
+}
+
+/** @param {any} record @param {any} area @param {string} folder */
+export function normalizeClaudeReadEvidence(record, area, folder) {
+  const parts = new Set([...Object.values(area.partsByFile).flat(), ...area.rules]);
+  for (const attempt of record.tries)
+    attempt.reads = attempt.reads.flatMap(([path, ranges]) => {
+      const relativeView = relative(folder, path);
+      const part = parts.has(relativeView) ? relativeView : relative(realpathSync(folder), path);
+      return parts.has(part) ? [[part, ranges]] : [];
+    });
+  recomputeReviewCoverage(record, area, folder);
+  return record;
 }
 
 /** @param {any[]} records @param {any} across @param {any[]} candidates */

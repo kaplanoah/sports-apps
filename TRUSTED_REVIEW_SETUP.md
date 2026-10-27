@@ -11,6 +11,8 @@ The separate GitHub App publishes `trusted-review` on the PR head. Main's expect
 
 The SHA-pinned token action requests one repository explicitly and revokes its token after the job. The protected publisher runs on fresh GitHub-hosted runners with trusted main source, no PR checkout, dependency installation, restored cache, PR actions, or model credentials. Main-authorized workflows are part of this trust boundary; an environment does not pin access to a particular workflow file.
 
+Each caller explicitly passes the publisher's named key secret into the reusable workflow, which declares it required. The job's protected environment supplies its value; keep the key there. GitHub requires this [caller handoff even for environment-only secrets](https://docs.github.com/en/actions/how-tos/reuse-automations/reuse-workflows#using-inputs-and-secrets-in-a-reusable-workflow). An omitted handoff resolves to an empty input. If token creation reports an empty private key, check that handoff before asking the owner to replace credentials. The required declaration checks the handoff, not whether its value is non-empty.
+
 ## Publication and evidence
 
 The initial job replaces prior success with a documented completed/failure conclusion while review is pending. This deliberate non-success avoids assuming that setting an old completed check to in-progress clears its successful conclusion. Titles explain whether review is pending, invalid, or conflicting. Final success requires exact authenticated evidence; the selected provider must finish every required stage.
@@ -36,6 +38,8 @@ An outsider can cause a hold by opening a conflicting PR at an existing head. Gi
 Strict up-to-date checks stay off. Main advancing after publication remains outside the guarantee; retain existing tree and shipping checks. Dependabot's authenticated existing exemption is published explicitly as review not required, not as reviewed evidence. Other fork authors still require the existing maintainer review request.
 
 ## Live acceptance before enforcement
+
+The [isolated issuer protocol](TRUSTED_REVIEW_ISSUER_TEST.md) tests expected-source association and same-name Actions rejection.
 
 Use an owner-approved isolated target/ruleset, not a weakened Main rule. Synthetic fixtures can test publication mechanics; a real positive uses existing authenticated review evidence without an extra Claude probe. A throwaway repository cannot prove this repository's environment protection: inspect the actual configuration and use an approved harmless canary for access denial.
 
@@ -83,9 +87,11 @@ Before activation, record the separate provider measurements described in `TRUST
 
 ### Hosted runner proof
 
-After the owner saves the API secret, run `gh workflow run codex-runner-proof.yml --ref main` once. Only the owner can dispatch this proof, on main, with live Codex still disabled. The disposable model host receives a hostile fixture and trusted configuration; current source, historical fixes and evaluation rubrics arrive only after the model exits.
+After the owner saves the API secret, dispatch `codex-runner-proof.yml` once on main with the public `evidence-certificate` prepared by `TRUSTED_REVIEW_EVALUATION.md`. Only the owner can dispatch it, with live Codex still disabled. The disposable model host receives a hostile fixture and trusted configuration; current source, historical fixes and evaluation rubrics arrive only after the model exits.
 
-The native tool must execute the trusted probe successfully. It checks non-root execution, unavailable sudo, absent credential and canary variables in its shell, and refused checkout writes. A model's completion claim or a command that merely prints the markers cannot pass. The workflow retains only fixed proof facts, a transcript hash and numeric usage. Raw turns and tool output stay on the runner.
+The native tool must execute the trusted probe successfully. It checks non-root execution, unavailable sudo, absent credential and canary variables in its shell, and refused checkout writes. It checks variable presence without reading or printing their values. A model's completion claim or a command that merely prints the markers cannot pass. The public proof artifact retains only fixed facts, a transcript hash and observed numeric usage.
+
+The one-day codex-proof-input artifact holds the synthetic project, prompt, schema and trusted configuration in public plaintext before execution. It must contain no private values. Collection also runs when the action fails and keeps that failure red; abrupt runner termination can still prevent collection. Post-execution copies of complete input, answer and execution evidence are encrypted to the session-held evidence key before upload, as for historical trials. Inspect it privately instead of guessing a failure's cause. Missing usage is unavailable, never zero. A failed proof cannot become activation evidence merely because its diagnostic artifact exists.
 
 Read the completed job log separately: neither `TRUSTED_CODEX_TOOL_PROOF_OK` nor `TRUSTED_CODEX_CAPTURE_PROOF` may appear there. Record the source SHA, run, proof artifact, observed CLI, configured action and model, observed usage and log inspection. Apply the activation gate above; this proof establishes only the tested runner behavior. A model-started failure needs fresh owner authorization before another attempt.
 

@@ -631,6 +631,31 @@ test("artifact reading rejects foreign provenance, unexpected ZIP members, diges
   }
 });
 
+test("reusable publisher requires only its named environment secret", () => {
+  const publisher = readRepoFile(".github/workflows/publish-trusted-review.yml");
+  const contract = publisher.split("  workflow_call:\n")[1].split("\npermissions:")[0];
+  assert.equal(
+    contract.match(/^ {4}secrets:\n((?: {6}.+\n)+)/m)?.[1],
+    "      TRUSTED_REVIEW_APP_PRIVATE_KEY:\n        required: true\n",
+  );
+});
+
+for (const [path, job] of [
+  [".github/workflows/review.yml", "review-begin"],
+  [".github/workflows/review.yml", "review-publish"],
+  [".github/workflows/trusted-review-publisher.yml", "reconcile"],
+]) {
+  test(`${job} passes only the named publisher environment secret`, () => {
+    const workflow = readRepoFile(path);
+    const caller = workflow.split(`\n  ${job}:\n`)[1].split(/\n {2}[\w-]+:\n/)[0];
+    assert.match(caller, /^ {4}uses: \.\/\.github\/workflows\/publish-trusted-review\.yml$/m);
+    assert.equal(
+      caller.match(/^ {4}secrets:\n((?: {6}.+\n)+)/m)?.[1],
+      "      TRUSTED_REVIEW_APP_PRIVATE_KEY: ${{ secrets.TRUSTED_REVIEW_APP_PRIVATE_KEY }}\n",
+    );
+  });
+}
+
 test("publisher workflows keep credentials isolated, token scope explicit, and model stages unchanged", () => {
   const publisher = readRepoFile(".github/workflows/publish-trusted-review.yml");
   const observer = readRepoFile(".github/workflows/trusted-review-publisher.yml");
