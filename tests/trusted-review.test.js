@@ -476,6 +476,28 @@ test("sealed stage import rejects PR-seeded or unexpected records and preserves 
   );
 });
 
+test("production imports reject mixed layouts and keep unexpected artifact folders visible", () => {
+  const source = createFolder();
+  const upload = createFolder();
+  const env = { ...ID_ENV, REVIEW_UPLOAD: upload };
+  writePlanFiles(source);
+  exportReviewArtifact(source, "plan", env);
+  const flat = downloadReviewArtifacts(upload, ["plan"]);
+  cpSync(join(upload, "trusted-review-plan"), join(flat, "trusted-review-plan"), {
+    recursive: true,
+  });
+  assert.throws(
+    () => importReviewArtifacts(flat, createFolder(), env),
+    /ambiguous artifact layout/,
+  );
+  mkdirSync(join(upload, "foreign"));
+  writeFileSync(join(upload, "foreign/record.json"), "{}");
+  assert.throws(
+    () => importReviewArtifacts(upload, createFolder(), env),
+    /Unexpected review artifact/,
+  );
+});
+
 /** @param {string} upload @param {string[]} stages */
 function downloadReviewArtifacts(upload, stages) {
   const destination = createFolder();
