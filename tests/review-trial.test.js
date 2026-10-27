@@ -501,6 +501,83 @@ test("integration imports every complete exact-provider portion even when all ca
   }
 });
 
+test("a single trial portion imports the action's flat layout with unchanged identity and coverage checks", (context) => {
+  const root = mkdtempSync(join(tmpdir(), "single-trial-artifact-"));
+  context.after(() => rmSync(root, { recursive: true, force: true }));
+  const folder = join(root, "data");
+  const input = join(root, "download");
+  mkdirSync(folder);
+  mkdirSync(input);
+  const identity = { provider: "claude", source: "a".repeat(40), run: "7" };
+  const area = {
+    area: 1,
+    files: ["shared/page/example.js"],
+    partsByFile: { "shared/page/example.js": ["part.diff"] },
+    rules: ["REVIEW.md"],
+  };
+  const plan = { provider: "claude", areas: [area] };
+  const planFile = join(folder, "plan.json");
+  writeFileSync(planFile, JSON.stringify(plan));
+  writeFileSync(join(folder, "part.diff"), "Complete supplied change.\n");
+  writeFileSync(join(folder, "REVIEW.md"), "Complete supplied rule.\n");
+  const record = {
+    area: 1,
+    tries: [
+      {
+        reads: [
+          ["part.diff", [[1, 1]]],
+          ["REVIEW.md", [[1, 1]]],
+        ],
+        answer: { items: [], unjudged: [] },
+      },
+    ],
+  };
+  const artifact = { identity, portion: 1, status: "completed", record };
+  const flatFile = join(input, "session.json");
+  writeFileSync(flatFile, JSON.stringify(artifact));
+  importTrialPortions(folder, input, identity);
+  assert.deepEqual(JSON.parse(readFileSync(join(folder, "candidates.json"), "utf8")), []);
+
+  for (const changed of [
+    { ...artifact, identity: { ...identity, source: "b".repeat(40) } },
+    { ...artifact, identity: { ...identity, run: "8" } },
+    { ...artifact, identity: { ...identity, provider: "codex" } },
+    { ...artifact, portion: 2 },
+    { ...artifact, status: "failed" },
+    { ...artifact, record: { ...record, tries: [{ ...record.tries[0], answer: null }] } },
+    { ...artifact, record: { ...record, tries: [{ ...record.tries[0], reads: [] }] } },
+  ]) {
+    writeFileSync(flatFile, JSON.stringify(changed));
+    assert.throws(() => importTrialPortions(folder, input, identity));
+  }
+  writeFileSync(flatFile, JSON.stringify(artifact));
+  const named = join(input, "review-trial-session-1");
+  mkdirSync(named);
+  writeFileSync(join(named, "session.json"), JSON.stringify(artifact));
+  assert.throws(
+    () => importTrialPortions(folder, input, identity),
+    /Ambiguous trial portion layout/,
+  );
+  rmSync(flatFile);
+  importTrialPortions(folder, input, identity);
+  assert.deepEqual(JSON.parse(readFileSync(join(folder, "find-1.json"), "utf8")), record);
+
+  writeFileSync(flatFile, JSON.stringify(artifact));
+  rmSync(named, { recursive: true });
+  const secondArea = {
+    ...area,
+    area: 2,
+    files: ["shared/worker/example.js"],
+    partsByFile: { "shared/worker/example.js": ["part-2.diff"] },
+  };
+  writeFileSync(join(folder, "part-2.diff"), "Another supplied change.\n");
+  writeFileSync(planFile, JSON.stringify({ ...plan, areas: [area, secondArea] }));
+  assert.throws(
+    () => importTrialPortions(folder, input, identity),
+    /Ambiguous trial portion layout/,
+  );
+});
+
 test("Claude telemetry retains only numeric final usage and rejects missing counters", () => {
   const events = [
     { type: "assistant", message: { content: "private raw turn" } },
