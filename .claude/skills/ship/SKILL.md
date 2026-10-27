@@ -15,7 +15,7 @@ This skill holds what "Shipping a change" in AGENTS.md leaves out, most of it un
 ## Status
 
 - After each push, and whenever the owner asks how a PR is going, list the steps left before the phone and before the merge, each with what it waits on, like CI, Trusted review, beta, a conflict, or the owner's `phone-ok`.
-- Say a change is ready to try only once its beta Deploy run says `worker check: ok` for each Worker it changes.
+- Say a change is ready to try only once step 7 of "To put a PR on beta" below says so.
 
 ## Issues
 
