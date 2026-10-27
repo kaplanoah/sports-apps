@@ -1,4 +1,5 @@
 // Runs Git against reviewed data without inheriting credentials or executable Git configuration.
+import { execFileSync } from "node:child_process";
 import { isGitObjectId } from "./git-object.mjs";
 
 /** @param {NodeJS.ProcessEnv} [env] */
@@ -25,4 +26,29 @@ export function createReviewGitEnvironment(env = process.env) {
     GIT_ATTR_NOSYSTEM: "1",
     ...(env.REVIEW_TRUSTED ? { GIT_ATTR_SOURCE: env.REVIEW_TRUSTED } : {}),
   };
+}
+
+/** @typedef {{ environment?: NodeJS.ProcessEnv, maxBuffer?: number }} ReviewGitOptions */
+
+/** @overload @param {string} cwd @param {string[]} args @returns {string} */
+/** @overload @param {string} cwd @param {string[]} args @param {"buffer"} encoding @param {ReviewGitOptions} [options] @returns {Buffer} */
+/** @overload @param {string} cwd @param {string[]} args @param {"utf8"} encoding @param {ReviewGitOptions} [options] @returns {string} */
+/** @param {string} cwd @param {string[]} args @param {"utf8" | "buffer"} [encoding] @param {ReviewGitOptions} [options] @returns {string | Buffer} */
+export function readReviewGit(cwd, args, encoding = "utf8", options = {}) {
+  const command = ["-c", "core.hooksPath=/dev/null", "-c", "core.quotePath=false", ...args];
+  const settings = {
+    cwd,
+    env: createReviewGitEnvironment(options.environment),
+    maxBuffer: options.maxBuffer ?? 64 * 1024 * 1024,
+  };
+  if (encoding === "buffer") return execFileSync("git", command, settings);
+  return execFileSync("git", command, { ...settings, encoding: "utf8" });
+}
+
+/** @param {string} cwd @param {string[]} args @param {ReviewGitOptions} [options] */
+export function runReviewGit(cwd, args, options = {}) {
+  return readReviewGit(cwd, args, "utf8", {
+    ...options,
+    maxBuffer: options.maxBuffer ?? 1024 * 1024,
+  }).trim();
 }

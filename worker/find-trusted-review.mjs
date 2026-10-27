@@ -1,12 +1,11 @@
 // Joins a code-bound result from the trusted review workflow using read-only Actions access.
-import { execFileSync } from "node:child_process";
 import { appendFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 import { createGitHub, readAllPages } from "./github-api.mjs";
 import { readReviewIdentity, validateReviewArtifact } from "./review-data.mjs";
 import { readJson } from "./judge-review.mjs";
-import { createReviewGitEnvironment } from "./review-repository.mjs";
+import { runReviewGit } from "./review-repository.mjs";
 import { isGitObjectId } from "./git-object.mjs";
 import { waitFor } from "./check-timing.mjs";
 import { readReviewProvider } from "./review-provider.mjs";
@@ -135,16 +134,14 @@ async function waitForTrustedReview(env) {
 /** @param {string} folder @param {NodeJS.ProcessEnv} env */
 function verifyReviewedMerge(folder, env) {
   const result = verifyTrustedReviewResult(folder, env);
-  /** @param {string[]} args */
-  const readGit = (args) =>
-    execFileSync("git", ["-c", "core.hooksPath=/dev/null", ...args], {
-      cwd: env.GITHUB_WORKSPACE,
-      env: createReviewGitEnvironment(env),
-      encoding: "utf8",
-    }).trim();
-  readGit(["fetch", "--no-tags", "origin", result.merge]);
-  const parents = readGit(["show", "--no-patch", "--format=%P", result.merge]);
-  const tree = readGit(["rev-parse", `${result.merge}^{tree}`]);
+  const options = { environment: env };
+  runReviewGit(env.GITHUB_WORKSPACE, ["fetch", "--no-tags", "origin", result.merge], options);
+  const parents = runReviewGit(
+    env.GITHUB_WORKSPACE,
+    ["show", "--no-patch", "--format=%P", result.merge],
+    options,
+  );
+  const tree = runReviewGit(env.GITHUB_WORKSPACE, ["rev-parse", `${result.merge}^{tree}`], options);
   if (parents !== `${env.REVIEW_BASE} ${env.REVIEW_HEAD}` || tree !== result.tree)
     throw new Error("The reviewed merge does not match its head, base and tree.");
   return tree;

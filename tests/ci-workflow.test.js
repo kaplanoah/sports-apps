@@ -1015,13 +1015,20 @@ test("every Claude step keeps its transcript out of the log and reads only the c
     assert.equal(readStepInput(workflow, step, "show_full_output"), "false", name);
     const args = readStepInput(workflow, step, "claude_args");
     const tools = [...args.matchAll(/--allowedTools "([^"]*)"/g)].map(([, list]) => list);
-    assert.ok([REVIEW_WORKFLOW, AREA_WORKFLOW].includes(name));
-    const wrapper = "${{ runner.temp }}/trusted/worker/review-git.mjs";
+    const trial = name === "provider-review-session.yml";
+    assert.ok([REVIEW_WORKFLOW, AREA_WORKFLOW, "provider-review-session.yml"].includes(name));
+    const wrapper = trial
+      ? "${{ runner.temp }}/trial/controls/review-git.mjs"
+      : "${{ runner.temp }}/trusted/worker/review-git.mjs";
     assert.deepEqual(tools, [`Bash(node ${wrapper}:*)`], name);
     assert.doesNotMatch(args, /--disallowedTools/, name);
     const sources = [...args.matchAll(/--setting-sources (\S+)/g)].map(([, list]) => list);
     assert.deepEqual(sources, ["user"], name);
     const prompt = readStepInput(workflow, step, "prompt");
+    if (trial) {
+      assert.equal(prompt, "${{ needs.request.outputs.claude-prompt }}");
+      continue;
+    }
     assert.match(prompt, /\bRead\b/, name);
     assert.doesNotMatch(prompt, /\b(?:Grep|Glob)\b/, name);
     assert.ok(prompt.includes(`node ${wrapper} grep -n -F -e <text> -- <path>`), name);
