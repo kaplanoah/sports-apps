@@ -1,0 +1,2 @@
+#!/bin/sh
+exec node .claude/hooks/check-push.mjs

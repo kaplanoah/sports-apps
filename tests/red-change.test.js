@@ -1706,7 +1706,7 @@ const RED_DIFF =
  * @param {string} message
  */
 function assertSendsToBetaClaim(message) {
-  assert.match(message, /ship skill's "The beta channel" \(\.claude\/skills\/ship\/SKILL\.md\)/);
+  assert.match(message, /ship skill's "The beta channel" \(\.agents\/skills\/ship\/SKILL\.md\)/);
   assert.match(message, /claims beta first/);
   assert.doesNotMatch(message, /git push/);
 }

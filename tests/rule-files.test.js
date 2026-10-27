@@ -1,7 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  RULES_FOLDER,
   isRuleFile,
   listRulesFor,
   matchesGlob,
@@ -49,8 +48,8 @@ test("AGENTS.md names each rule file and skill", () => {
   const agents = readRepoFile("AGENTS.md");
   const skills = repoFiles.flatMap((path) => readSkillName(path) ?? []);
   const unnamed = [
-    ...ruleFiles.filter((path) => !agents.includes(`\`${path.slice(RULES_FOLDER.length)}\``)),
-    ...skills.filter((name) => !agents.includes(`\`${name}\` skill`)),
+    ...ruleFiles.filter((path) => !agents.includes(`\`${path}\``)),
+    ...skills.filter((name) => !agents.includes(`\`.agents/skills/${name}/SKILL.md\``)),
   ];
   assert.deepEqual(unnamed, []);
 });
@@ -86,7 +85,7 @@ test("a glob's ** matches across folders, or none before a slash, its * within o
 });
 
 test("the repo's rule files are read with their text, and no other file is", () => {
-  const files = [".claude/rules/page.md", "AGENTS.md", ".claude/skills/x/SKILL.md"];
+  const files = [".claude/rules/page.md", "AGENTS.md", ".agents/skills/x/SKILL.md"];
   assert.deepEqual(
     readRuleFiles(files, (path) => `text of ${path}`),
     [{ path: ".claude/rules/page.md", text: "text of .claude/rules/page.md" }],

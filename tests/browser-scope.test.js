@@ -33,7 +33,9 @@ test("a change to the docs, the other workflows, or the tooling no browser test 
     listApps([
       "README.md",
       "apps/mlb/README.md",
-      ".claude/skills/steward/SKILL.md",
+      ".githooks/pre-push",
+      ".agents/skills/scripts/check.mjs",
+      ".agents/skills/steward/SKILL.md",
       ".github/workflows/flaky.yml",
       "worker/plan-review.mjs",
       "tests/plan-review.test.js",

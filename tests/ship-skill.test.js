@@ -37,7 +37,7 @@ test("each phrase the ship skill reads in a deploy's log shows once in the deplo
     .map((path) => dropComments(readRepoFile(path)))
     .join("\n");
   const quoted = listQuotedLines(
-    readRepoFile(".claude/skills/ship/SKILL.md"),
+    readRepoFile(".agents/skills/ship/SKILL.md"),
     "Step 10: reading a deploy's log",
   );
   assert.ok(quoted.length > 0);
