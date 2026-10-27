@@ -39,7 +39,7 @@ jobs:
       group: deploy-${{ github.ref_name }}
       cancel-in-progress: false
     outputs:
-      deploy-outcome: ${{ steps.deploy.outcome }}
+      checked-commit: ${{ steps.deploy.outputs.checked-commit }}
     steps:
       # All of main's history, so the merge can be compared with the live version's commit.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -117,19 +117,19 @@ jobs:
           overwrite: true
           retention-days: 90
 
-  # Keeps one open issue while production's deploy fails, which closes once a deploy goes through
-  # (worker/report-deploy.mjs). Its own job, so the job that holds the Cloudflare token can't write
-  # issues.
+  # Keeps one open issue while production's deploy fails, which closes once a run checks the live
+  # apps (worker/report-deploy.mjs). Its own job, so the job that holds the Cloudflare token can't
+  # write issues, and one whose failure leaves the run's conclusion to the deploy, which the
+  # production receipts read.
   report:
     needs: deploy
     if: always() && github.ref_name != 'beta' && needs.deploy.result != 'skipped'
+    continue-on-error: true
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
+      contents: read
       issues: write
-    concurrency:
-      group: deploy-report
-      cancel-in-progress: false
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -143,4 +143,4 @@ jobs:
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           COMMIT: ${{ github.event.workflow_run.head_sha || github.sha }}
           JOB_RESULT: ${{ needs.deploy.result }}
-          DEPLOY_OUTCOME: ${{ needs.deploy.outputs.deploy-outcome }}
+          CHECKED_COMMIT: ${{ needs.deploy.outputs.checked-commit }}
