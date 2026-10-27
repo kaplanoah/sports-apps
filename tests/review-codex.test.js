@@ -230,6 +230,41 @@ test("a contained session receives all content and verifies every candidate with
   );
 });
 
+test("native candidate instructions match the inputs for each review phase", () => {
+  const contained = createFixture();
+  const containedRequest = buildCodexRequest(contained.folder, 1, IDENTITY);
+  assert.match(
+    containedRequest.prompt,
+    /first investigate and list candidates, then verify every claim/,
+  );
+  assert.doesNotMatch(containedRequest.prompt, /BEGIN SUPPLIED "candidates.json"/);
+
+  const { folder, plan } = createFixture(true);
+  for (const area of plan.areas) {
+    const request = buildCodexRequest(folder, area.area, IDENTITY);
+    assert.match(
+      request.prompt,
+      /No candidates.json or prior candidate ids are supplied or required in this stage/,
+    );
+    assert.doesNotMatch(request.prompt, /Candidate ids for integration are supplied/);
+    assert.doesNotMatch(request.prompt, /BEGIN SUPPLIED "candidates.json"/);
+    acceptCodexAnswer(folder, area.area, IDENTITY, createAnswer(folder, area.area));
+  }
+  writeFileSync(join(folder, "candidates.json"), "[]");
+  const integrated = buildCodexRequest(folder, "integration", IDENTITY);
+  assert.match(integrated.prompt, /Candidate ids for integration are supplied in candidates.json/);
+  assert.match(integrated.prompt, /BEGIN SUPPLIED "candidates.json"/);
+  assert.doesNotMatch(integrated.prompt, /No candidates.json or prior candidate ids/);
+
+  const offline = buildCodexRequest(folder, 1, { ...IDENTITY, kind: "offline-trial" });
+  assert.match(
+    offline.prompt,
+    /trusted trial context in supplied pull-request.md defines the review scope/,
+  );
+  assert.doesNotMatch(offline.prompt, /the base is HEAD\^1/);
+  assert.doesNotMatch(integrated.prompt, /trusted trial context/);
+});
+
 test("unavailable optional telemetry preserves the valid answer for required fresh-runner validation", () => {
   const workflow = readRepoFile(".github/workflows/trusted-codex-review.yml");
   assert.match(workflow, /validate:\n {4}needs: model/);

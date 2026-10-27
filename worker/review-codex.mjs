@@ -108,11 +108,12 @@ export function buildCodexRequest(folder, portion, identity) {
     ...(identity.kind === "offline-trial"
       ? [
           "This is a blind offline historical trial. Use only the supplied snapshot and its ancestors. Do not access the network, web search, later commits, sibling fixes or evaluation rubrics. Investigate with native local files, search and history.",
+          "The trusted trial context in supplied pull-request.md defines the review scope. Follow that scope rather than inferring a different task from commit subjects or ancestor diffs.",
         ]
       : []),
     integrated
       ? "This is the mandatory independent integration pass, even when candidates are empty. Check interactions across all portions and both apps. Verify every candidate, merge duplicates, and find problems portions missed."
-      : `Investigate portion ${portion} completely. Follow callers, shared state, related code, failure paths, relevant tests and the other app. Inspect beyond changed lines using native shell/search tools and git history; the base is HEAD^1.`,
+      : `Investigate portion ${portion} completely. Follow callers, shared state, related code, failure paths, relevant tests and the other app. Inspect beyond changed lines using native shell/search tools and git history.`,
     "All required diffs and trusted rules for this session are supplied below without truncation. Use native tools for any additional context. Do not run PR code or tests, publish, modify files, or access credentials. Test context contains observed CI state, not proof tests passed.",
     "Do not repeat findings whose earlier thread answer holds. Report every problem, including uncertain claims. Follow the guide's reporting weights and locate findings on the nearest changed line in any file the complete plan changes, including another portion. Mention related unchanged code in the claim rather than anchoring a candidate outside the plan.",
     integrates
@@ -120,7 +121,9 @@ export function buildCodexRequest(folder, portion, identity) {
       : "Return all candidates for a separate integration pass. Do not make a final approval.",
     contained
       ? "In this one session, first investigate and list candidates, then verify every claim and produce findings. Candidate ids are 1.1, 1.2, etc., in candidates array order."
-      : "Candidate ids for integration are supplied in candidates.json.",
+      : integrated
+        ? "Candidate ids for integration are supplied in candidates.json."
+        : "No candidates.json or prior candidate ids are supplied or required in this stage. Generate candidates for the later integration pass.",
     "Return complete=false and list unfinished work if any required investigation or verification remains. Never claim completion after partial coverage. Use unjudged for anything read but unsettled; any unfinished or unjudged work prevents approval. Echo the exact binding in the structured answer.",
   ].join("\n");
   const prompt =

@@ -26,6 +26,8 @@ import {
   importTrialPortions,
   retainClaudeTrialUsage,
   renderTrialComponent,
+  prepareReviewTrial,
+  prepareTrialSession,
 } from "../worker/review-trial.mjs";
 import { buildCodexRequest, acceptCodexAnswer } from "../worker/review-codex.mjs";
 import { readReviewGit, runReviewGit } from "../worker/review-repository.mjs";
@@ -72,6 +74,73 @@ test("offline trials require a first owner dispatch, a frozen snapshot and one e
     ["TRIAL_CASE", "unfrozen"],
   ])
     assert.throws(() => requireReviewTrialAuthority({ ...OWNER, [name]: value }));
+});
+
+test("both providers receive bound scope for unchanged component audits and real historical ranges", (context) => {
+  const root = mkdtempSync(join(tmpdir(), "review-trial-scope-"));
+  context.after(() => rmSync(root, { recursive: true, force: true }));
+  const certificate = createEvidenceCertificate(root);
+  for (const { id, targets } of [
+    { id: "case-1", targets: ["shared/page/worker-store.js"] },
+    { id: "range-694", targets: [] },
+  ]) {
+    const caseRoot = join(root, id);
+    mkdirSync(caseRoot);
+    const fixture = createTrialFixture(caseRoot, id, targets);
+    if (targets.length) {
+      runReviewGit(fixture.snapshot.repository, [
+        "commit",
+        "--quiet",
+        "--allow-empty",
+        "-m",
+        "Example audit head",
+      ]);
+      fixture.snapshot.entry.head = readReviewGit(fixture.snapshot.repository, [
+        "rev-parse",
+        "HEAD",
+      ]).trim();
+      assert.equal(readReviewGit(fixture.snapshot.repository, ["diff", "HEAD^1", "HEAD"]), "");
+    }
+    const identities = [];
+    const contexts = [];
+    for (const provider of ["claude", "codex"]) {
+      const folder = join(caseRoot, provider);
+      mkdirSync(folder);
+      const env = {
+        ...process.env,
+        ...OWNER,
+        TRIAL_CASE: id,
+        TRIAL_PROVIDER: provider,
+        RUNNER_TEMP: folder,
+        GITHUB_OUTPUT: join(folder, "outputs"),
+        GITHUB_SHA: "a".repeat(40),
+        GITHUB_RUN_ID: "7",
+        TRIAL_EVIDENCE_CERTIFICATE: certificate,
+      };
+      prepareReviewTrial(env, fixture.snapshot);
+      const path = join(folder, "trial/data/pull-request.md");
+      const supplied = readFileSync(path, "utf8");
+      contexts.push(supplied);
+      identities.push(JSON.parse(readFileSync(join(folder, "trial/identity.json"), "utf8")));
+      if (targets.length) {
+        assert.match(supplied, /addition-formatted delivery is synthetic coverage/);
+        assert.match(supplied, /may be unchanged between the frozen base and head/);
+        assert.match(supplied, /existing defects in these supplied components are in scope/);
+        assert.doesNotMatch(supplied, /Review the actual diff/);
+      } else {
+        assert.match(supplied, /Review the actual diff from the frozen head's first parent/);
+        assert.match(supplied, /outside what this range changes are Pre-existing/);
+        assert.doesNotMatch(supplied, /synthetic coverage/);
+      }
+      writeFileSync(path, supplied + "Changed review scope.\n");
+      assert.throws(
+        () => prepareTrialSession(env, 1, fixture.snapshot),
+        /Changed trial coverage input/,
+      );
+    }
+    assert.equal(contexts[0], contexts[1]);
+    assert.equal(identities[0].inputSha256, identities[1].inputSha256);
+  }
 });
 
 test("a blind large-range bundle contains only historical ancestors and complete trusted coverage", (context) => {
