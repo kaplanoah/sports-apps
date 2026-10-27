@@ -58,6 +58,8 @@ jobs:
       actions: read
       pull-requests: read
     uses: ./.github/workflows/publish-trusted-review.yml
+    secrets:
+      TRUSTED_REVIEW_APP_PRIVATE_KEY: ${{ secrets.TRUSTED_REVIEW_APP_PRIVATE_KEY }}
     with:
       head: ${{ github.event.pull_request.head.sha }}
       phase: begin
@@ -470,6 +472,8 @@ jobs:
       actions: read
       pull-requests: read
     uses: ./.github/workflows/publish-trusted-review.yml
+    secrets:
+      TRUSTED_REVIEW_APP_PRIVATE_KEY: ${{ secrets.TRUSTED_REVIEW_APP_PRIVATE_KEY }}
     with:
       head: ${{ github.event.pull_request.head.sha }}
       phase: finish
