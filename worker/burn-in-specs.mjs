@@ -27,7 +27,7 @@ const RUN_SETUP = new Set(["package.json", "package-lock.json", ".nvmrc", ...BRO
 // What a spec tests rather than runs with.
 const TESTED_CODE = /^(?:apps\/[^/]+\/(?:page|worker)|shared\/(?:page|worker))\//;
 // A branch's last thirty completed runs reach past the label changes, cancelled runs, and pushes
-// that burned nothing in since its last burn-in. Past those, every changed spec burns in again,
+// that burned nothing in since its last burn-in. Past those, every selected spec burns in again,
 // which costs only time.
 const RUNS_READ = 30;
 
@@ -62,15 +62,15 @@ export function listBrowserSpecs(paths, { browserFiles, readText }) {
 }
 
 /**
- * @param {string[]} changedSpecs candidates selected from spec and test-declaring helper edits
+ * @param {string[]} selectedSpecs candidates selected from spec and test-declaring helper edits
  * @param {string[] | null} sinceBurnedIn the files changed since the last head that passed burn-in,
  *   or null with no such head
  * @param {Set<string>} reached every file the browser specs, their helpers, and the config reach
  */
-export function listSpecsToBurnIn(changedSpecs, sinceBurnedIn, reached) {
+export function listSpecsToBurnIn(selectedSpecs, sinceBurnedIn, reached) {
   if (sinceBurnedIn === null || sinceBurnedIn.some((path) => isSharedBySpecs(path, reached)))
-    return changedSpecs;
-  return changedSpecs.filter((spec) => sinceBurnedIn.includes(spec));
+    return selectedSpecs;
+  return selectedSpecs.filter((spec) => sinceBurnedIn.includes(spec));
 }
 
 /**
@@ -84,7 +84,7 @@ export const isBurnedIn = (jobs) => {
 
 /**
  * The newest head of the branch, this one too, on which burn-in passed, or null when there's none
- * or GitHub couldn't say, which burns every changed spec in.
+ * or GitHub couldn't say, which burns every selected spec in.
  * @param {object} options
  * @param {(path: string) => Promise<any>} options.readJson
  * @param {string} options.branch
@@ -107,7 +107,7 @@ export async function findBurnedInHead({ readJson, branch, log = console.log }) 
     return null;
   } catch (error) {
     log(
-      `::warning::Couldn't read the branch's earlier burn-ins, so every changed spec burns in: ${error instanceof Error ? error.message : String(error)}`,
+      `::warning::Couldn't read the branch's earlier burn-ins, so every selected spec burns in: ${error instanceof Error ? error.message : String(error)}`,
     );
     return null;
   }
@@ -141,7 +141,7 @@ export function listChangedSince(since, git = runGit) {
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const changedSpecs = listBrowserSpecs(
+  const selectedSpecs = listBrowserSpecs(
     listLines(
       runGit(["diff", "--name-only", "--no-renames", "--diff-filter=AM", "HEAD^1", "HEAD"]),
     ),
@@ -152,15 +152,15 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     fetchImpl: fetch,
     env: process.env,
   });
-  const burnedIn = changedSpecs.length
+  const burnedIn = selectedSpecs.length
     ? await findBurnedInHead({ readJson, branch: String(process.env.BRANCH) })
     : null;
   const specs = listSpecsToBurnIn(
-    changedSpecs,
+    selectedSpecs,
     burnedIn && listChangedSince(burnedIn),
     listBrowserTestReach(),
   );
-  const passed = changedSpecs.filter((spec) => !specs.includes(spec));
+  const passed = selectedSpecs.filter((spec) => !specs.includes(spec));
   console.log(
     passed.length
       ? `Passed burn-in on ${burnedIn} and unchanged since: ${passed.join(", ")}.`

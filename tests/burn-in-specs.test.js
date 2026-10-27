@@ -14,11 +14,11 @@ const PAGE = "apps/mlb/tests/browser/page.spec.mjs";
 const REACHED = listBrowserTestReach();
 
 /**
- * @param {string[]} changedSpecs
+ * @param {string[]} selectedSpecs
  * @param {string[] | null} sinceBurnedIn
  */
-const listSpecs = (changedSpecs, sinceBurnedIn) =>
-  listSpecsToBurnIn(changedSpecs, sinceBurnedIn, REACHED);
+const listSpecs = (selectedSpecs, sinceBurnedIn) =>
+  listSpecsToBurnIn(selectedSpecs, sinceBurnedIn, REACHED);
 
 test("the specs a change touches are an app's browser specs at any depth, as Playwright runs them", () => {
   const nested = "apps/wnba/tests/browser/sheets/drag.spec.mjs";
@@ -77,7 +77,7 @@ test("a spec that passed burn-in and hasn't changed since isn't burned in again,
     assert.deepEqual(listSpecs([SHEETS, PAGE], [tested]), [], tested);
 });
 
-test("every changed spec burns in with no earlier burn-in, or once what every spec runs with changed", () => {
+test("every selected spec burns in with no earlier burn-in, or once what every spec runs with changed", () => {
   assert.deepEqual(listSpecs([SHEETS, PAGE], null), [SHEETS, PAGE]);
   for (const shared of [
     "tests/browser/touch.mjs",
@@ -226,7 +226,7 @@ test("a run's jobs are read past their first page", async () => {
   assert.equal(await findBurnedInHead({ readJson, branch: "x" }), "earlier");
 });
 
-test("a branch's burn-ins GitHub won't give burn every changed spec in, and say why", async () => {
+test("a branch's burn-ins GitHub won't give burn every selected spec in, and say why", async () => {
   /** @type {string[]} */
   const logged = [];
   const readJson = async () => {

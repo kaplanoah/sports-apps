@@ -64,6 +64,7 @@ test("a merge of only docs, tests, and tooling skips the deploy", () => {
     "tests/deploy.test.js",
     "tests/time-zone-sensitive.json",
     "worker/browser-scope.mjs",
+    "worker/browser-test-calls.mjs",
     "worker/burn-in-specs.mjs",
     "worker/find-trusted-review.mjs",
     "worker/mutation-targets.mjs",

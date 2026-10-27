@@ -1,7 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { findTestLines } from "../worker/browser-test-calls.mjs";
-import { listEditedTests, readChangedLines, sortBurnInFailures } from "../worker/judge-burn-in.mjs";
+import {
+  listEditedBrowserTests,
+  listEditedTests,
+  readChangedLines,
+  sortBurnInFailures,
+} from "../worker/judge-burn-in.mjs";
 
 const SPEC = "apps/wnba/tests/browser/standings.spec.mjs";
 
@@ -175,7 +180,7 @@ test("an edited helper declaration fails every app that runs that test", () => {
   assert.deepEqual(flaky, []);
 });
 
-test("the shared browser file list includes js helpers and excludes production files", () => {
+test("an allowed js helper is gated while production files stay unread", () => {
   const helper = "tests/browser/shared.js";
   const page = "apps/mlb/page/index.html";
   const editedTests = listEditedTests(
@@ -193,4 +198,25 @@ test("the shared browser file list includes js helpers and excludes production f
     suites: [{ file: SPEC, specs: [{ ...reportSpec(5, "align", ["failed"]), file: helper }] }],
   };
   assert.equal(sortBurnInFailures(report, editedTests).edited.length, 1);
+});
+
+test("the judge uses the repository inventory for root helpers and app specs", () => {
+  const helper = "tests/browser/notification-layout.mjs";
+  const page = "apps/mlb/page/index.html";
+  const diff = [helper, SPEC, page]
+    .map((path) =>
+      [
+        `diff --git a/${path} b/${path}`,
+        `--- a/${path}`,
+        `+++ b/${path}`,
+        "@@ -1 +1 @@",
+        "-old",
+        "+new",
+      ].join("\n"),
+    )
+    .join("\n");
+  const edited = listEditedBrowserTests(diff);
+  assert.ok(edited.has(`${helper}:*`));
+  assert.ok(edited.has(`${SPEC}:*`));
+  assert.ok(![...edited].some((key) => key.startsWith(`${page}:`)));
 });

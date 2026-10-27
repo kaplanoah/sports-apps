@@ -1,17 +1,18 @@
 // Sorts burn-in's failures into the pull request's and everyone else's. A test the pull request
 // wrote or edited that failed in any of its runs fails the pull request, since a test that passes
-// only some of the time should never merge. Any other test that failed in a spec it changed goes
+// only some of the time should never merge. Any other test that failed in a spec it burned in goes
 // to the issue Flaky browser tests (worker/report-flaky-tests.mjs) instead, as a test that passed
 // on its retry does, and the pull request goes on. A change in a spec outside every test, like an
 // import, a helper, or a test.use, counts every test it owns, including delegated declarations.
 // Changed helpers also count their own declarations. A run broken outside its tests fails too.
-// Usage: git diff -U0 --no-renames <base> <head> -- <browser-files> | node worker/judge-burn-in.mjs <report>
+// The shared browser-file inventory filters the full diff.
+// Usage: git diff -U0 --no-renames <base> <head> | node worker/judge-burn-in.mjs <report>
 // It writes the flaky tests beside the report, in burn-in-flaky.json.
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { findTestLines } from "./browser-test-calls.mjs";
-import { listBrowserTestFiles } from "./browser-scope.mjs";
+import { listBrowserTestFiles, readRepoText } from "./browser-scope.mjs";
 import { listFailedTests, readFirstLine } from "./report-flaky-tests.mjs";
 
 /**
@@ -71,6 +72,10 @@ export function listEditedTests(changedLines, readSource, browserFiles) {
   return edited;
 }
 
+/** @param {string} diff */
+export const listEditedBrowserTests = (diff) =>
+  listEditedTests(readChangedLines(diff), readRepoText, new Set(listBrowserTestFiles()));
+
 /**
  * A Playwright JSON report with only the specs `isKept` keeps.
  * @param {any} suite
@@ -114,11 +119,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     console.log(`::error::Burn-in's run broke before writing its report, ${reportPath}.`);
     process.exit(1);
   }
-  const editedTests = listEditedTests(
-    readChangedLines(readFileSync(0, "utf8")),
-    (path) => (existsSync(path) ? readFileSync(path, "utf8") : null),
-    new Set(listBrowserTestFiles()),
-  );
+  const editedTests = listEditedBrowserTests(readFileSync(0, "utf8"));
   const { edited, flaky, runErrors } = sortBurnInFailures(
     JSON.parse(readFileSync(reportPath, "utf8")),
     editedTests,

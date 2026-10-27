@@ -4,6 +4,7 @@ paths:
   - "apps/*/tests/browser/**"
   - "playwright.config.mjs"
   - "worker/browser-scope.mjs"
+  - "worker/browser-test-calls.mjs"
   - "worker/burn-in-specs.mjs"
   - "worker/judge-burn-in.mjs"
   - "worker/report-flaky-tests.mjs"

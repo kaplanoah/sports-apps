@@ -274,13 +274,6 @@ test("each job that runs WebKit specs installs WebKit with its system libraries"
   );
 });
 
-test("burn-in lets the shared browser file inventory filter the complete diff", () => {
-  assert.match(
-    readJob("burn-in"),
-    /git diff -U0 --no-renames HEAD\^1 HEAD \| node worker\/judge-burn-in\.mjs/,
-  );
-});
-
 test("scope installs the parser dependencies before selecting helper-declared tests", () => {
   const scope = readJob("scope");
   assert.match(scope, /- \*restore-modules\n\s+- \*install-modules/);
@@ -412,10 +405,7 @@ test("the browser job's traces leave out the page at each step, which burn-in's 
 test("burn-in runs every test ten times however many fail, and fails only on a test the pull request wrote or edited", () => {
   const burnIn = readJob("burn-in");
   assert.match(burnIn, /--repeat-each=10 --retries=0 --max-failures=0/);
-  assert.match(
-    burnIn,
-    /git diff -U0 --no-renames HEAD\^1 HEAD .*\| node worker\/judge-burn-in\.mjs/,
-  );
+  assert.match(burnIn, /git diff -U0 --no-renames HEAD\^1 HEAD \| node worker\/judge-burn-in\.mjs/);
   assert.match(burnIn, /name: burn-in-flaky-/);
 });
 
