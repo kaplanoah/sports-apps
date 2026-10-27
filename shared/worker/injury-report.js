@@ -1,4 +1,4 @@
-import { fetchUpstream } from "./upstream.js";
+import { fetchUpstream, readFeedJson } from "./upstream.js";
 
 // ESPN's injury report for a league lists every player hurt or away across it in one answer:
 // what's wrong and on which side, the league's status for it, and RotoWire's sentence on it, which
@@ -49,7 +49,7 @@ export async function fetchInjuryReport(
     cacheSeconds,
   });
   if (!response.ok) throw new Error(`ESPN answered ${response.status} for its injury report`);
-  return response.json();
+  return readFeedJson(response, { feed: "ESPN", path: "its injury report" });
 }
 
 /**

@@ -1,6 +1,6 @@
 import { readEasternDay } from "#shared/days.js";
 import { createSeasonParam } from "../../../../shared/worker/seasons.js";
-import { fetchUpstream } from "../../../../shared/worker/upstream.js";
+import { fetchUpstream, readFeedJson } from "../../../../shared/worker/upstream.js";
 
 // Reading the league's own feeds, which every route the Worker serves shares.
 
@@ -32,14 +32,6 @@ export const ESPN_HEADERS = {
   "user-agent": FEED_HEADERS["user-agent"],
 };
 
-function parseJson(text) {
-  try {
-    return JSON.parse(text);
-  } catch {
-    return null;
-  }
-}
-
 /**
  * Reads one of the league's feeds, letting Cloudflare's edge keep the answer for `cacheSeconds`, or
  * not at all when it's null. A refusal comes back as a web page with a 200, which the edge keeps
@@ -56,9 +48,7 @@ export async function fetchWnbaJson(fetchImpl, url, cacheSeconds, hasData) {
     throw Object.assign(new Error(`The WNBA answered ${response.status} for ${path}`), {
       status: response.status,
     });
-  const answer = parseJson(await response.text());
-  if (!hasData(answer)) throw new Error(`The WNBA answered ${path} with something other than data`);
-  return answer;
+  return readFeedJson(response, { feed: "The WNBA", path, hasData });
 }
 
 /**

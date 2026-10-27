@@ -1,7 +1,7 @@
 import { readEasternDay } from "#shared/days.js";
 import { MLB_API } from "../../page/js/snapshot.js";
 import { createSeasonParam, LAST_SEASON } from "../../../../shared/worker/seasons.js";
-import { fetchUpstream } from "../../../../shared/worker/upstream.js";
+import { fetchUpstream, readFeedJson } from "../../../../shared/worker/upstream.js";
 
 const FIRST_SEASON = 1995;
 // MLB's live feed changes with every pitch, so a read of it is reused only moments.
@@ -36,7 +36,7 @@ export async function fetchMlbJson(fetchImpl, path, cacheSeconds) {
     headers: MLB_HEADERS,
     cacheSeconds,
   });
-  if (!response.ok)
-    throw new Error(`MLB Stats API answered ${response.status} for ${path.split("?")[0]}`);
-  return response.json();
+  const feedPath = path.split("?")[0];
+  if (!response.ok) throw new Error(`MLB Stats API answered ${response.status} for ${feedPath}`);
+  return readFeedJson(response, { feed: "MLB Stats API", path: feedPath });
 }
