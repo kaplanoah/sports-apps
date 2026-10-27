@@ -1516,12 +1516,7 @@ test("the header says nothing of the scoreboard while ESPN's scores stand in for
 });
 
 test("the header leaves out a feed the store's status says has nothing to send", () => {
-  const idle = {
-    error: "wnba_feeds_missing",
-    detail: "scoreboard",
-    idle: "scoreboard",
-    standIn: "espn",
-  };
+  const idle = { error: "wnba_feeds_missing", detail: "scoreboard", idle: "scoreboard" };
   assert.equal(describeStampProblem({ status: idle, problem: "" }), "");
   assert.equal(
     describeStampProblem({ status: { ...idle, detail: "scoreboard, standings" }, problem: "" }),
