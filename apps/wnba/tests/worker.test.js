@@ -201,8 +201,8 @@ test("while the scoreboard doesn't answer, ESPN covers it before any of its game
   const snapshot = await loader.loadSnapshot(2026);
 
   assert.deepEqual(
-    [snapshot.missing, snapshot.standIn, snapshot.isScoreboardCovered],
-    [["scoreboard"], null, true],
+    [snapshot.missing, snapshot.standIn, snapshot.scoreboardCover],
+    [["scoreboard"], null, "espn"],
   );
   assert.equal(describeSnapshotStatus(snapshot).standIn, "espn");
   assert.equal(snapshot.games.find((game) => game.id === "1042600132").state, "pre");
@@ -218,8 +218,8 @@ test("while neither the scoreboard nor ESPN answers, nothing covers it", async (
   const snapshot = await loader.loadSnapshot(2026);
 
   assert.deepEqual(
-    [snapshot.missing, snapshot.standIn, snapshot.isScoreboardCovered],
-    [["scoreboard"], null, false],
+    [snapshot.missing, snapshot.standIn, snapshot.scoreboardCover],
+    [["scoreboard"], null, null],
   );
   assert.equal(describeSnapshotStatus(snapshot).standIn, "");
 });
@@ -238,8 +238,8 @@ test("while the scoreboard doesn't answer, ESPN lists its games but answers for 
   const snapshot = await loader.loadSnapshot(2026);
 
   assert.deepEqual(
-    [snapshot.missing, snapshot.standIn, snapshot.isScoreboardCovered],
-    [["scoreboard"], null, false],
+    [snapshot.missing, snapshot.standIn, snapshot.scoreboardCover],
+    [["scoreboard"], null, null],
   );
   assert.equal(describeSnapshotStatus(snapshot).standIn, "");
 });

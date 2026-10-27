@@ -225,7 +225,7 @@ export function describeSnapshotStatus(snapshot) {
     error: missing.length ? "wnba_feeds_missing" : "",
     detail: missing.join(", "),
     idle: missing.filter(isIdle).join(", "),
-    standIn: snapshot.standIn || (snapshot.isScoreboardCovered ? "espn" : ""),
+    standIn: snapshot.standIn || snapshot.scoreboardCover || "",
     reasons: describeFailures(snapshot.failures ?? {}),
   };
 }

@@ -654,7 +654,7 @@ export function buildSnapshot(responses, { season, now = Date.now() }) {
     standings: readStandingsRows(responses.standings),
     missing: LEAGUE_FEEDS.filter((name) => !responses[name]),
     standIn: standIns.size ? "espn" : null,
-    isScoreboardCovered: isEspnCovering(leagueGames, responses, backupGames),
+    scoreboardCover: isEspnCovering(leagueGames, responses, backupGames) ? "espn" : null,
     isScoreboardIdle:
       !!responses.schedule && !seasonGames.some((game) => isScoreboardGame(game, seriesById, now)),
     openingDay: readOpeningDay(responses.schedule, season),

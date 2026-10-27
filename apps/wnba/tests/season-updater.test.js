@@ -482,7 +482,7 @@ test("the games stay as they were while ESPN covers the scoreboard before its sc
   const docs = createDocs();
   await saveSnapshot(docs, SNAPSHOT);
 
-  await saveSnapshot(docs, { ...buildWithout(["scoreboard"]), isScoreboardCovered: true });
+  await saveSnapshot(docs, { ...buildWithout(["scoreboard"]), scoreboardCover: "espn" });
 
   assert.deepEqual((await readUpdates(docs, 2026)).games, SNAPSHOT.games);
 });
