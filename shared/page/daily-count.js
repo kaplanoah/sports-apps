@@ -1,6 +1,7 @@
 // Counts each browser or Home Screen app once per Eastern day at each of the app's addresses, since
-// each keeps its own storage, so the owner can learn how many open the app. It keeps only the last day it was counted, which every one counted that day shares, and
-// the count it sends carries nothing at all, so nothing tells one from another.
+// each keeps its own storage, so the owner can learn how many open the app. It keeps only the last
+// day it was counted, which every one counted that day shares, and the count it sends carries
+// nothing at all, so nothing tells one from another.
 
 import { reloadWhenSignedOut } from "./access.js";
 import { COUNT_ROUTE } from "./count-path.js";
