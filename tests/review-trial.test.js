@@ -554,10 +554,7 @@ test("a single trial portion imports the action's flat layout with unchanged ide
   const named = join(input, "review-trial-session-1");
   mkdirSync(named);
   writeFileSync(join(named, "session.json"), JSON.stringify(artifact));
-  assert.throws(
-    () => importTrialPortions(folder, input, identity),
-    /Ambiguous trial portion layout/,
-  );
+  assert.throws(() => importTrialPortions(folder, input, identity), /ambiguous artifact layout/);
   rmSync(flatFile);
   importTrialPortions(folder, input, identity);
   assert.deepEqual(JSON.parse(readFileSync(join(folder, "find-1.json"), "utf8")), record);
@@ -640,6 +637,7 @@ test("Claude trials use real Read evidence and verify empty integration coverage
   const prepared = spawnSync(process.execPath, [command, "prepare"], { env, encoding: "utf8" });
   assert.equal(prepared.status, 0, prepared.stderr);
   const plan = JSON.parse(readFileSync(join(root, "trial/data/plan.json"), "utf8"));
+  assert.equal(plan.areas.length, 1);
   assert.deepEqual(
     plan.areas.flatMap((area) => area.files).sort(),
     [...fixture.snapshot.entry.targets].sort(),
@@ -662,7 +660,11 @@ test("Claude trials use real Read evidence and verify empty integration coverage
     mkdirSync(attempt);
     cpSync(join(root, "trial"), join(attempt, "trial"), { recursive: true });
     if (portion === "integration")
-      cpSync(portions, join(attempt, "trial-portions"), { recursive: true });
+      cpSync(
+        join(portions, `review-trial-session-${plan.areas[0].area}`),
+        join(attempt, "trial-portions"),
+        { recursive: true },
+      );
     const workspace = join(attempt, "workspace");
     mkdirSync(workspace);
     symlinkSync(join(attempt, "trial/data"), join(workspace, ".review"));

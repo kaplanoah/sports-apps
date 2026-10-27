@@ -5,13 +5,12 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
-  readdirSync,
   rmSync,
   symlinkSync,
   writeFileSync,
   appendFileSync,
 } from "node:fs";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { readPullMerge } from "./pull-merge.mjs";
 import { verifyReviewProvider } from "./review-provider.mjs";
@@ -38,6 +37,7 @@ import {
   copyReviewFiles,
   listPlanFiles,
   listReviewFiles,
+  listReviewArtifactFolders,
   readReviewIdentity,
   readReviewAnswer,
   recomputeReviewCoverage,
@@ -200,12 +200,16 @@ function collectReviewArtifacts(input) {
   /** @type {Map<string, string>} */
   const artifacts = new Map();
   listReviewFiles(input);
-  const isFlat = existsSync(join(input, "provenance.json"));
-  const folders = isFlat
-    ? [[readJson(join(input, "provenance.json")).stage, input]]
-    : readdirSync(input).map((name) => [name.replace(/^trusted-review-/, ""), join(input, name)]);
+  const folders = listReviewArtifactFolders(input, "trusted-review-", "provenance.json").map(
+    (path) => [
+      path === input
+        ? readJson(join(path, "provenance.json")).stage
+        : basename(path).replace(/^trusted-review-/, ""),
+      path,
+    ],
+  );
   for (const [stage, path] of folders) {
-    if (!isFlat && path !== join(input, `trusted-review-${stage}`))
+    if (path !== input && path !== join(input, `trusted-review-${stage}`))
       throw new Error("Unexpected review artifact.");
     artifacts.set(stage, path);
   }

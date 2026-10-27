@@ -147,6 +147,14 @@ export function validateReviewPlan(plan) {
   return plan;
 }
 
+/** @param {string} folder @param {string} prefix @param {string} marker @returns {string[]} */
+export function listReviewArtifactFolders(folder, prefix, marker) {
+  const names = readdirSync(folder).sort();
+  if (!names.includes(marker)) return names.map((name) => join(folder, name));
+  requireData(!names.some((name) => name.startsWith(prefix)), "ambiguous artifact layout");
+  return [folder];
+}
+
 /** @param {string} folder @returns {string[]} */
 export function listReviewFiles(folder) {
   requireData(lstatSync(folder).isDirectory(), "artifact directory");

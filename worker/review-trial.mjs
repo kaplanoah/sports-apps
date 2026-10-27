@@ -24,6 +24,7 @@ import {
   readReviewAnswer,
   recomputeReviewCoverage,
   normalizeClaudeReadEvidence,
+  listReviewArtifactFolders,
   validateAcrossCandidates,
 } from "./review-data.mjs";
 import { gatherCandidates, recordFindTry, listReads, readJson } from "./judge-review.mjs";
@@ -277,21 +278,18 @@ export function readTrialProviderConfiguration(provider, portion) {
   };
 }
 
-/** @param {string} input @param {number} portion @param {number} portionCount */
-function readTrialPortionArtifact(input, portion, portionCount) {
-  const namedFolder = join(input, `review-trial-session-${portion}`);
-  const hasFlatPortion = existsSync(join(input, "session.json"));
-  if (hasFlatPortion && (portionCount !== 1 || existsSync(namedFolder)))
-    throw new Error("Ambiguous trial portion layout.");
-  return readJson(join(hasFlatPortion ? input : namedFolder, "session.json"));
-}
-
 /** @param {string} folder @param {string} input @param {any} identity */
 export function importTrialPortions(folder, input, identity) {
   const plan = readJson(join(folder, "plan.json"));
   if (identity.provider !== plan.provider) throw new Error("Foreign trial provider.");
+  const isFlat = listReviewArtifactFolders(input, "review-trial-session-", "session.json").includes(
+    input,
+  );
+  if (isFlat && plan.areas.length !== 1) throw new Error("Ambiguous trial portion layout.");
   const records = plan.areas.map((area) => {
-    const artifact = readTrialPortionArtifact(input, area.area, plan.areas.length);
+    const artifact = readJson(
+      join(isFlat ? input : join(input, `review-trial-session-${area.area}`), "session.json"),
+    );
     if (
       JSON.stringify(artifact.identity) !== JSON.stringify(identity) ||
       artifact.portion !== area.area ||
