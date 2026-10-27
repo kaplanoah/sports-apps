@@ -215,17 +215,21 @@ export const readUpdates = (docs, year) => docs.read(nameSeasonKey(year));
 
 export const readSchedule = (docs, year) => docs.read(nameScheduleKey(year));
 
+// A feed with nothing to send is idle, like the scoreboard on a day without games, which the league
+// may not send at all, so the page doesn't warn of it.
 export function describeSnapshotStatus(snapshot) {
   const missing = snapshot.missing || [];
+  const isIdle = (feed) => feed === "scoreboard" && !!snapshot.isScoreboardIdle;
   return {
     error: missing.length ? "wnba_feeds_missing" : "",
     detail: missing.join(", "),
+    idle: missing.filter(isIdle).join(", "),
     standIn: snapshot.standIn || "",
     reasons: describeFailures(snapshot.failures ?? {}),
   };
 }
 
-export const STATUS_FIELDS = { standIn: "", reasons: "" };
+export const STATUS_FIELDS = { idle: "", standIn: "", reasons: "" };
 
 // A playoff final reads as the Updates box says it, and any other final as its result.
 function describeFinal(game, games) {

@@ -54,21 +54,19 @@ test("a score the Worker saves shows up without a reload", async ({ page }) => {
   await expect(page.locator("#stamp")).toHaveCSS("font-size", `${detail.size}px`);
 });
 
-test("the header says the WNBA stopped sending today's scores while today has a game, and not once it has none", async ({
+test("the header says the WNBA stopped sending today's scores, but not while the Worker says it has none to send", async ({
   page,
 }) => {
   const app = await openApp(page);
-  await app.writeDocument("live/status", {
+  const missingScores = {
     at: new Date(NOW).toISOString(),
     error: "wnba_feeds_missing",
     detail: "scoreboard",
-  });
+  };
+  await app.writeDocument("live/status", missingScores);
   const problem = page.locator("#stamp .stamp-err");
   await expect(problem).toHaveText("The WNBA stopped sending today's scores");
-  await app.changeSeason((season) => {
-    for (const game of season.games) if (game.state === "pre") game.status = "Postponed";
-    return season;
-  });
+  await app.writeDocument("live/status", { ...missingScores, idle: "scoreboard" });
   await expect(problem).toHaveCount(0);
 });
 

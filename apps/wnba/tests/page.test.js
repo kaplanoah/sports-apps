@@ -1493,149 +1493,36 @@ test("the header never names a game the league put off as the next tip-off", () 
     assert.doesNotMatch(readStampLines(putOff, NOW)[1] ?? "", /Dream @ Mystics/);
   }));
 
-const NO_GAMES = { games: [], nearestGames: [] };
-
-/**
- * A season whose one game starts at `start`, in `state`.
- * @param {string} start
- * @param {string} state
- */
-const seasonWithGame = (start, state) => ({
-  games: [{ ...SEASON.games[0], id: "only", start, isTimeSet: true, state }],
-  nearestGames: [],
-});
-
 test("the header names a problem with the page's server or the league's feeds", () => {
-  const quiet = { season: NO_GAMES, schedule: null, now: NOW };
   assert.equal(
-    describeStampProblem({
-      ...quiet,
-      status: null,
-      problem: "Can't reach the page's server right now",
-    }),
+    describeStampProblem({ status: null, problem: "Can't reach the page's server right now" }),
     "Can't reach the page's server right now",
   );
-  assert.equal(describeStampProblem({ ...quiet, status: null, problem: "" }), "");
+  assert.equal(describeStampProblem({ status: null, problem: "" }), "");
   const status = { error: "wnba_feeds_missing", detail: "bracket, standings" };
   assert.equal(
-    describeStampProblem({ ...quiet, status, problem: "" }),
+    describeStampProblem({ status, problem: "" }),
     "The WNBA stopped sending the bracket and the standings",
+  );
+  const standingIn = { error: "wnba_feeds_missing", detail: "scoreboard", standIn: "espn" };
+  assert.equal(
+    describeStampProblem({ status: standingIn, problem: "" }),
+    "The WNBA stopped sending today's scores. Scores are from ESPN for now.",
   );
 });
 
-test("the header says the WNBA stopped sending today's scores only on a day with scores to miss", () =>
-  inEastern(() => {
-    const now = Date.parse("2026-10-27T18:40:00Z");
-    const standingIn = { error: "wnba_feeds_missing", detail: "scoreboard", standIn: "espn" };
-    const stopped = "The WNBA stopped sending today's scores. Scores are from ESPN for now.";
-    const tonight = seasonWithGame("2026-10-27T23:30:00Z", "pre");
-    assert.equal(
-      describeStampProblem({
-        status: standingIn,
-        problem: "",
-        season: tonight,
-        schedule: null,
-        now,
-      }),
-      stopped,
-    );
-    const pastMidnight = seasonWithGame("2026-10-27T02:00:00Z", "live");
-    assert.equal(
-      describeStampProblem({
-        status: standingIn,
-        problem: "",
-        season: pastMidnight,
-        schedule: null,
-        now,
-      }),
-      stopped,
-    );
-    const thursday = seasonWithGame("2026-10-29T16:30:00Z", "pre");
-    assert.equal(
-      describeStampProblem({
-        status: standingIn,
-        problem: "",
-        season: thursday,
-        schedule: null,
-        now,
-      }),
-      "",
-    );
-    const withStandings = { ...standingIn, detail: "scoreboard, standings" };
-    assert.equal(
-      describeStampProblem({
-        status: withStandings,
-        problem: "",
-        season: thursday,
-        schedule: null,
-        now,
-      }),
-      "The WNBA stopped sending the standings",
-    );
-  }));
-
-test("the header counts today's games from the season's whole schedule, as the Games list does", () =>
-  inEastern(() => {
-    const now = Date.parse("2026-10-27T18:40:00Z");
-    const status = { error: "wnba_feeds_missing", detail: "scoreboard" };
-    const schedule = seasonWithGame("2026-10-27T23:30:00Z", "pre");
-    assert.equal(
-      describeStampProblem({ status, problem: "", season: NO_GAMES, schedule, now }),
-      "The WNBA stopped sending today's scores",
-    );
-  }));
-
-test("the header doesn't miss today's scores for a game that won't be played or whose teams aren't known", () =>
-  inEastern(() => {
-    const now = Date.parse("2026-10-27T18:40:00Z");
-    const status = { error: "wnba_feeds_missing", detail: "scoreboard" };
-    const stopped = "The WNBA stopped sending today's scores";
-    const tonight = seasonWithGame("2026-10-27T23:30:00Z", "pre");
-    const [game] = tonight.games;
-    /** @param {any} season */
-    const describe = (season) =>
-      describeStampProblem({ status, problem: "", season, schedule: null, now });
-    assert.equal(describe(tonight), stopped);
-    const calledOff = {
-      ...tonight,
-      games: [{ ...game, series: "finals", isIfNeeded: true }],
-      series: [{ id: "finals", winner: game.home.team }],
-    };
-    assert.equal(describe(calledOff), "");
-    assert.equal(describe({ ...tonight, games: [{ ...game, status: "Postponed" }] }), "");
-    const teamless = { ...game, home: { ...game.home, team: null } };
-    assert.equal(describe({ ...tonight, games: [teamless] }), "");
-  }));
-
-test("the header misses today's scores for a game from the league's yesterday that isn't over", () =>
-  inEastern(() => {
-    const now = Date.parse("2026-10-27T18:40:00Z");
-    const status = { error: "wnba_feeds_missing", detail: "scoreboard" };
-    const lastNight = seasonWithGame("2026-10-26T23:30:00Z", "pre");
-    assert.equal(
-      describeStampProblem({ status, problem: "", season: lastNight, schedule: null, now }),
-      "The WNBA stopped sending today's scores",
-    );
-  }));
-
-test("whether today's scores are missed goes by the league's day, in a viewer's zone on either side of it", () => {
-  const status = { error: "wnba_feeds_missing", detail: "scoreboard" };
-  const stopped = "The WNBA stopped sending today's scores";
-  /**
-   * @param {string} zone
-   * @param {string} now
-   * @param {any} season
-   */
-  const describeIn = (zone, now, season) =>
-    checkInTimeZone(zone, () =>
-      describeStampProblem({ status, problem: "", season, schedule: null, now: Date.parse(now) }),
-    );
-  const tonight = seasonWithGame("2026-10-28T23:30:00Z", "pre");
-  assert.equal(describeIn("Asia/Tokyo", "2026-10-28T13:00:00Z", tonight), stopped);
-  const thursday = seasonWithGame("2026-10-29T23:30:00Z", "pre");
-  assert.equal(describeIn("Pacific/Honolulu", "2026-10-29T05:00:00Z", thursday), stopped);
-  const lastNight = seasonWithGame("2026-10-27T23:30:00Z", "final");
-  assert.equal(describeIn("Pacific/Honolulu", "2026-10-28T05:00:00Z", lastNight), "");
+test("the header leaves out a feed the store's status says has nothing to send", () => {
+  const idle = {
+    error: "wnba_feeds_missing",
+    detail: "scoreboard",
+    idle: "scoreboard",
+    standIn: "espn",
+  };
+  assert.equal(describeStampProblem({ status: idle, problem: "" }), "");
+  assert.equal(
+    describeStampProblem({ status: { ...idle, detail: "scoreboard, standings" }, problem: "" }),
+    "The WNBA stopped sending the standings",
+  );
 });
 
 test("a score shows in scoreboard digits, and still reads as its number", () => {

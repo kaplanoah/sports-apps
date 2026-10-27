@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import { buildSnapshot, readPlayoffGameId } from "../page/js/snapshot.js";
 import { listUpcomingMeetings } from "../worker/src/preview.js";
 import {
+  describeSnapshotStatus,
   listNotifications,
   loadCurrentSnapshot,
   readSchedule,
@@ -102,6 +103,24 @@ test("without the league's scoreboard, the schedule is saved only on a day with 
   await saveSnapshot(gameDayDocs, gameDay);
   assert.ok(!gameDayDocs.writes.includes("schedules/2026"));
   assert.equal((await readUpdates(gameDayDocs, 2026)).games, undefined);
+});
+
+test("the status calls a missing scoreboard idle only on a day with no game for it to score", () => {
+  const { scoreboard, backup, ...withoutScores } = RESPONSES;
+  const gameDay = Date.parse(GAMES.now);
+  const describeOn = (schedule) =>
+    describeSnapshotStatus(
+      buildSnapshot({ ...withoutScores, schedule }, { season: 2026, now: gameDay }),
+    );
+  const { detail, idle } = describeOn(GAMES.preview.schedule);
+  assert.deepEqual([detail, idle], ["scoreboard", ""]);
+
+  const putOff = structuredClone(GAMES.preview.schedule);
+  const tonight = putOff.leagueSchedule.gameDates
+    .flatMap((day) => day.games)
+    .find((game) => game.gameId === "1042600123");
+  tonight.gameStatusText = "PPD";
+  assert.equal(describeOn(putOff).idle, "scoreboard");
 });
 
 test("each upcoming game's meetings are saved for its two teams, only when they change, and stay as they were without the schedule", async () => {

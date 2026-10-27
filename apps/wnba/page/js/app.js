@@ -80,15 +80,11 @@ const findElement = (id) => /** @type {HTMLElement} */ (document.getElementById(
 
 // The store's status is about the current season's updates, so a past season's page leaves it out.
 function renderStamp() {
-  const now = Date.now();
   const problem = describeStampProblem({
     status: isPastSeason() ? null : session.status,
     problem: session.problem,
-    season: session.season,
-    schedule: session.schedule,
-    now,
   });
-  const lines = renderStampLines(session.season, now);
+  const lines = renderStampLines(session.season, Date.now());
   fillStamp(findElement("stamp"), [...renderCatchUpLines(), ...lines], problem ? [problem] : []);
 }
 

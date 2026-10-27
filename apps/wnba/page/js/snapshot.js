@@ -9,7 +9,13 @@
 import { readEasternDay } from "#shared/days.js";
 import * as PollSchedule from "#shared/poll-schedule.js";
 import { findTeamCode, findTeamCodeByEspnId, TEAMS } from "./teams.js";
-import { findTeamNearestGames, isPutOff, isToBePlayed, mapSeriesById } from "./nearest-games.js";
+import {
+  findTeamNearestGames,
+  isPlayable,
+  isPutOff,
+  isToBePlayed,
+  mapSeriesById,
+} from "./nearest-games.js";
 import { REGULATION_PERIODS } from "./periods.js";
 
 // The shape of a snapshot, and of the season record saved from it, which a page reads only when it
@@ -497,8 +503,8 @@ function readNetworkGame(event) {
   };
 }
 
-/** @param {{ home?: { team?: string | null }, away?: { team?: string | null } }} game */
-const hasBothTeams = (game) => !!(game.home?.team && game.away?.team);
+// Until ESPN names both teams, its game could be any of a round's games at that time.
+const hasBothTeams = (networkGame) => !!(networkGame.home?.team && networkGame.away?.team);
 
 const readStartDay = (game) => readEasternDay(Date.parse(game.start)).date;
 const isOnSameDay = (game, espnGame) => readStartDay(game) === readStartDay(espnGame);
@@ -523,7 +529,7 @@ function isOnOrBeforeLeagueToday({ start }, now) {
  */
 export function isScoreboardGame(game, seriesById, now) {
   if (game.state !== "pre") return game.state === "live";
-  return isOnOrBeforeLeagueToday(game, now) && hasBothTeams(game) && isToBePlayed(game, seriesById);
+  return isOnOrBeforeLeagueToday(game, now) && isPlayable(game, seriesById);
 }
 
 // Matched by day rather than by the nearest start, since the league's placeholder start, at midnight
@@ -549,7 +555,6 @@ function addEspnStart(game, networkGames) {
  * @param {any[]} networkGames
  */
 function addEspnListings(games, networkGames) {
-  // Until ESPN names both teams, its game could be any of a round's games at that time.
   const known = networkGames.filter(hasBothTeams);
   return sortByStart(
     games
