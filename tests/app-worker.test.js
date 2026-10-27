@@ -320,7 +320,7 @@ test("too many tries from one address are turned away, even with the right code"
 /** @param {any[]} written */
 const createDailyOpens = (written) => ({ writeDataPoint: (point) => written.push(point) });
 
-test("a phone signed in counts with a data point that holds the app's name and nothing from the request", async () => {
+test("a phone signed in under the key counts with the app's name and the key address's host, and nothing about the phone", async () => {
   const written = [];
   const env = { ...LOCKED_ENV, DAILY_OPENS: createDailyOpens(written) };
   const cookie = await signIn(env);
@@ -339,7 +339,7 @@ test("a phone signed in counts with a data point that holds the app's name and n
     env,
   );
   assert.equal(response.status, 204);
-  assert.deepEqual(written, [{ indexes: ["mlb"] }]);
+  assert.deepEqual(written, [{ indexes: ["mlb"], blobs: ["worker.example"] }]);
 });
 
 test("a count answers only a POST, and only from a phone signed in", async () => {
@@ -538,6 +538,20 @@ test("at the page's own address, the page and its data answer without the key, b
   assert.equal(page.headers.get("set-cookie").split("; ")[1], "Path=/");
   for (const path of DATA_PATHS)
     assert.equal((await requestAtPageHost(path, { cookie })).status, 200, path);
+});
+
+test("at the page's own address, a count holds the app's name and that address's host", async () => {
+  const written = [];
+  const env = { ...PAGE_HOST_ENV, DAILY_OPENS: createDailyOpens(written) };
+  const signedIn = await requestAtPageHost("/access", {
+    method: "POST",
+    body: { code: "FASTBREAK" },
+    env,
+  });
+  const cookie = readCookie(signedIn);
+  const response = await requestAtPageHost("/count", { method: "POST", cookie, env });
+  assert.equal(response.status, 204);
+  assert.deepEqual(written, [{ indexes: ["mlb"], blobs: [PAGE_HOST] }]);
 });
 
 test("at the page's own address, a handoff opens the page there", async () => {
