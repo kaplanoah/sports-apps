@@ -22,12 +22,14 @@ test("notifications can be turned on and off, with no note while the switch work
 
   await toggle.click();
   await expect(toggle).toHaveAttribute("aria-checked", "true");
+  await expect(toggle).toBeEnabled();
   expect(app.countSubscriptions()).toBe(1);
   await expect(note).toBeHidden();
   await expect(page.getByRole("button", { name: /test/i })).toHaveCount(0);
 
   await toggle.click();
   await expect(toggle).toHaveAttribute("aria-checked", "false");
+  await expect(toggle).toBeEnabled();
   expect(app.countSubscriptions()).toBe(0);
 });
 
@@ -40,6 +42,7 @@ test("a device subscribed under the Worker's old signing key subscribes again, a
   const toggle = page.getByRole("switch", { name: "Game updates" });
   await toggle.click();
   await expect(toggle).toHaveAttribute("aria-checked", "true");
+  await expect(toggle).toBeEnabled();
   await page.evaluate(([{ keptKey, nextEndpointKey }, nextEndpoint]) => {
     const kept = JSON.parse(/** @type {string} */ (sessionStorage.getItem(keptKey)));
     sessionStorage.setItem(keptKey, JSON.stringify({ ...kept, serverKey: [1, 2, 3] }));
@@ -98,6 +101,7 @@ test("a device the Worker no longer has room for on a later visit is turned off"
   const toggle = page.getByRole("switch", { name: "Game updates" });
   await toggle.click();
   await expect(toggle).toHaveAttribute("aria-checked", "true");
+  await expect(toggle).toBeEnabled();
   await page.route(matchPath("/push/subscription"), (route) =>
     route.request().method() === "PUT"
       ? route.fulfill({
@@ -132,6 +136,7 @@ test("a new signing key whose save fails for a moment keeps the subscription, wh
   const toggle = page.getByRole("switch", { name: "Game updates" });
   await toggle.click();
   await expect(toggle).toHaveAttribute("aria-checked", "true");
+  await expect(toggle).toBeEnabled();
   const newKey = Buffer.from(new Uint8Array(65).fill(4)).toString("base64url");
   await page.route(matchPath("/push/key"), (route) =>
     route.fulfill({ json: { publicKey: newKey } }),
