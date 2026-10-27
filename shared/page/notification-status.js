@@ -99,17 +99,17 @@ export function chooseNotificationControls({
   timingMinutes = null,
 }) {
   const isOn = status === "on";
+  const areRemindersOn =
+    pending?.category === "reminders" ? pending.isEnabled : isOn && preferences.reminders;
   return {
     areSwitchesHidden: !["off", "on", "failed", "blocked"].includes(status),
     areSwitchesDisabled: isBusy || status === "blocked",
     areUpdatesOn: pending?.category === "updates" ? pending.isEnabled : isOn && preferences.updates,
-    areRemindersOn:
-      pending?.category === "reminders" ? pending.isEnabled : isOn && preferences.reminders,
+    areRemindersOn,
     pendingCategory: pending?.category ?? "",
     spinnerCategory: pending && pending.elapsedMs >= PENDING_SPINNER_MS ? pending.category : "",
     isTimingDisabled: (isBusy && pending !== null) || !["off", "on", "failed"].includes(status),
-    hasTimingChoice:
-      (isOn && preferences.reminders) || (pending?.category === "reminders" && pending.isEnabled),
+    hasTimingChoice: areRemindersOn,
     timingMinutes: timingMinutes ?? pending?.minutes ?? preferences.minutes,
   };
 }

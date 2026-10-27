@@ -589,6 +589,9 @@ body.kbd :is(.sheet-close, .sheet-back, .welcome-close):focus {
   -webkit-mask: var(--select-caret-mask) center / contain no-repeat;
   mask: var(--select-caret-mask) center / contain no-repeat;
 }
+.control-row:has(> .select-field:disabled)::after {
+  opacity: 0.5;
+}
 .reminder-timing:has(> .select-field)::after {
   right: var(--reminder-caret-right, 3px);
 }

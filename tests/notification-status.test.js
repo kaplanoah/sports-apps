@@ -143,6 +143,52 @@ test("pending category intent changes only its switch and exposes only a delayed
   }
 });
 
+test("the timing prompt follows the reminder switch including both pending intents", () => {
+  const preferences = { updates: true, reminders: true, minutes: 10 };
+  for (const isEnabled of [false, true]) {
+    const controls = chooseNotificationControls({
+      status: "on",
+      isBusy: true,
+      preferences: { ...preferences, reminders: !isEnabled },
+      pending: { category: "reminders", isEnabled, elapsedMs: 0 },
+    });
+    assert.equal(controls.areRemindersOn, isEnabled);
+    assert.equal(controls.hasTimingChoice, isEnabled);
+    assert.equal(controls.areUpdatesOn, true);
+  }
+  for (const reminders of [false, true]) {
+    const controls = chooseNotificationControls({
+      status: "on",
+      isBusy: false,
+      preferences: { ...preferences, reminders },
+    });
+    assert.equal(controls.hasTimingChoice, reminders);
+  }
+});
+
+test("timing minutes use the latest request then pending intent then saved choice", () => {
+  const preferences = { updates: false, reminders: false, minutes: 10 };
+  for (const [requested, pendingMinutes, expected] of [
+    [null, undefined, 10],
+    [null, 30, 30],
+    [0, 30, 0],
+    [60, 0, 60],
+    [null, 0, 0],
+  ]) {
+    const controls = chooseNotificationControls({
+      status: "off",
+      isBusy: true,
+      preferences,
+      timingMinutes: requested,
+      pending: { category: "reminders", isEnabled: true, elapsedMs: 0, minutes: pendingMinutes },
+    });
+    assert.equal(controls.timingMinutes, expected);
+    assert.equal(controls.hasTimingChoice, true);
+    assert.equal(preferences.minutes, 10);
+    assert.equal(preferences.reminders, false);
+  }
+});
+
 test("permission denial keeps the other category's status and returns plain guidance", () => {
   for (const device of [IPHONE_APP, COMPUTER])
     for (const previousStatus of ["on", "off", "failed"])

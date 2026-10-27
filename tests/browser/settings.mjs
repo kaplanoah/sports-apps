@@ -26,11 +26,14 @@ export async function checkSelectArrow(picker) {
       mask: style.maskImage,
       color: style.backgroundColor,
       dimInk,
+      opacity: Number(style.opacity),
+      fieldOpacity: Number(getComputedStyle(field).opacity),
       hitsPicker:
         document.elementFromPoint(bounds.right - 8, bounds.top + bounds.height / 2) === field,
     };
   });
   expect(arrow.mask).toContain("data:image/svg+xml");
   expect(arrow.color).toBe(arrow.dimInk);
+  expect(arrow.opacity).toBe(arrow.fieldOpacity);
   expect(arrow.hitsPicker).toBe(true);
 }

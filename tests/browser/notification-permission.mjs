@@ -1,3 +1,4 @@
+import { checkSelectArrow } from "./settings.mjs";
 import { holdClock } from "./harness.mjs";
 import { PUSH_STUB, stubPushManager, stubPushRegistration } from "./push-stub.mjs";
 
@@ -59,6 +60,7 @@ export function testNotificationPermission(test, expect, app) {
         expect(requestedInTap).toBe(true);
         await expect(toggle).toHaveAttribute("aria-checked", "true");
         await expect(toggle).toBeDisabled();
+        await checkSelectArrow(page.locator("#reminderTiming"));
         await expect(other).toHaveAttribute("aria-checked", "false");
         expect(await page.evaluate(() => Reflect.get(window, "permissionSwitchWasOn"))).toBe(
           "true",
