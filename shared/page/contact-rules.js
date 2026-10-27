@@ -1,6 +1,6 @@
 export const CONTACT_CATEGORIES = [
-  { key: "bug", name: "Bug report", label: "What happened?" },
-  { key: "feature", name: "Feature request", label: "What would you like to add?" },
+  { key: "bug", name: "Bug report", label: "What happened, and what did you expect to happen?" },
+  { key: "feature", name: "Feature request", label: "What would make the app better?" },
   { key: "other", name: "Something else", label: "Message" },
 ];
 

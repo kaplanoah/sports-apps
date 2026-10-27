@@ -73,6 +73,7 @@ export function closeSheet(dialog) {
  */
 export function closeOnCancel(dialog) {
   dialog.addEventListener("cancel", (event) => {
+    if (event.target !== dialog) return;
     event.preventDefault();
     closeSheet(dialog);
   });

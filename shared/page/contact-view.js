@@ -36,7 +36,7 @@ export function renderContact(view) {
     return html`${renderHeader("Contact", null)}<div class="contact-success" role="status"><h3>Message received</h3><p data-quoted>${view.receiptEmail ? `Replies will go to ${view.receiptEmail}.` : "No email address was provided, so a reply isn\u2019t possible."}</p><button type="button" class="contact-primary" data-contact="done">Done</button></div>`;
   if (view.screen === "menu")
     return html`${renderHeader("Contact", "Settings")}<div class="contact-menu">${CONTACT_CATEGORIES.map(({ key, name }) => html`<button type="button" class="settings-page-row" data-contact="category" data-category="${key}">${name}${SETTINGS_CARET}</button>`)}</div>
-      ${view.email && html`<p class="contact-domain"><a href="mailto:${view.email}">${view.email}</a></p>`}`;
+      ${view.email && html`<p class="contact-domain">Or email directly at <a href="mailto:${view.email}">${view.email}</a></p>`}`;
   const category = CONTACT_CATEGORIES.find(({ key }) => key === view.category);
   const draft = view.draft;
   return html`${renderHeader(category.name, "Contact")}

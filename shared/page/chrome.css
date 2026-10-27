@@ -186,12 +186,14 @@ button:focus,
 select:focus,
 [role="region"]:focus,
 dialog:focus,
-.sheet-page:focus {
+.sheet-page:focus,
+:is(h1, h2, h3, h4, h5, h6)[tabindex="-1"]:focus {
   outline: none;
 }
 body.kbd button:focus,
 body.kbd select:focus,
-body.kbd [role="region"]:focus {
+body.kbd [role="region"]:focus,
+body.kbd :is(h1, h2, h3, h4, h5, h6)[tabindex="-1"]:focus {
   outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
@@ -579,6 +581,9 @@ body.kbd :is(.sheet-close, .sheet-back, .welcome-close):focus {
 .settings-controls.grouped > :not([hidden]) ~ :not([hidden]) {
   margin-top: 10px;
   padding-top: 10px;
+  border-top: 1px solid var(--divider);
+}
+.settings-main > .settings-page-row + .settings-page-row {
   border-top: 1px solid var(--divider);
 }
 .settings-group {

@@ -10,8 +10,12 @@
   background: var(--contact-menu-surface);
 }
 .contact-domain {
-  margin-top: 14px;
+  margin: 0;
+  padding-inline-start: 1px;
   overflow-wrap: anywhere;
+  color: var(--ink-dim);
+  font-size: var(--type-setting-note-size);
+  font-weight: var(--type-setting-note-weight);
 }
 .contact-domain a,
 .contact-quiet {
@@ -34,6 +38,9 @@
   margin-bottom: 7px;
   font-size: var(--type-setting-size);
   font-weight: var(--type-setting-weight);
+}
+.contact-field label:has(+ .contact-note) {
+  margin-bottom: 3px;
 }
 .contact-field :is(input, textarea) {
   display: block;

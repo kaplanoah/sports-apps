@@ -11,8 +11,8 @@ import { renderContact } from "../shared/page/contact-view.js";
 
 test("all categories use their selected labels, stacked fields and exact email explanation", () => {
   const categories = [
-    { key: "bug", name: "Bug report", label: "What happened?" },
-    { key: "feature", name: "Feature request", label: "What would you like to add?" },
+    { key: "bug", name: "Bug report", label: "What happened, and what did you expect to happen?" },
+    { key: "feature", name: "Feature request", label: "What would make the app better?" },
     { key: "other", name: "Something else", label: "Message" },
   ];
   assert.deepEqual(CONTACT_CATEGORIES, categories);
@@ -42,6 +42,7 @@ test("menu uses only the selected category labels and never invents a domain add
   assert.doesNotMatch(markup, /mailto:|your-domain|description/);
   const configured = String(renderContact({ screen: "menu", email: "owner@example.com" }));
   assert.match(configured, /mailto:owner@example.com/);
+  assert.match(configured, /Or email directly at <a[^>]+>owner@example.com<\/a>/);
 });
 
 test("optional email, required message, bounds and safe screenshot formats", () => {

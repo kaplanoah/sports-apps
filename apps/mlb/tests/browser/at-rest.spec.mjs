@@ -1,3 +1,4 @@
+import { registerSettingsContactInteractions } from "../../../../tests/browser/settings-contact-interactions.mjs";
 import { test, expect, openApp, ON_A_PHONE } from "./harness.mjs";
 import {
   expectAtRest,
@@ -94,3 +95,5 @@ test("a shown list that grows loops no ResizeObserver", async ({ page }) => {
     .toBeGreaterThan(3000);
   expect(await readResizeLoops()).toEqual([]);
 });
+
+registerSettingsContactInteractions({ test, expect, openApp, app: "mlb" });

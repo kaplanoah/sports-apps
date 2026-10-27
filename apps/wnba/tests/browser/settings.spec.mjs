@@ -168,7 +168,7 @@ test("a reload with settings open while the store can't list its seasons lists t
   });
 });
 
-test("settings list Notifications, the News switches, and Appearance, with lines only between the three", async ({
+test("settings separate Notifications, News, Appearance and Contact with section lines", async ({
   page,
 }) => {
   await page.addInitScript(() => {
@@ -200,13 +200,13 @@ test("settings list Notifications, the News switches, and Appearance, with lines
     ]);
   // The Season row stays hidden while the store keeps only the current season.
   expect(await readBorders()).toEqual([
-    ["none", "none", "solid", "solid"],
+    ["none", "none", "solid", "solid", "solid"],
     ["none", "none", "none", "none", "solid"],
     "none",
   ]);
 
   await page.locator("#notifyRow").evaluate((row) => row.setAttribute("hidden", ""));
-  expect((await readBorders())[0]).toEqual(["none", "none", "none", "solid"]);
+  expect((await readBorders())[0]).toEqual(["none", "none", "none", "solid", "solid"]);
 });
 
 test("on System, the page and its icons follow the phone's dark or light setting", async ({

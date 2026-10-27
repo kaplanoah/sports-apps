@@ -290,6 +290,7 @@ export function registerContactTests({ test, expect, openApp, app }) {
           await page
             .locator("#settingsDialog")
             .screenshot({ path: `${folder}/${app}-${width}-${theme}-settings.png` });
+        await expect(page.locator("#contactBtn")).toHaveCSS("border-top-style", "solid");
         await page.locator("#contactBtn").click();
         const dialog = page.locator("#contactDialog");
         const checkView = async (name) => {
@@ -324,9 +325,19 @@ export function registerContactTests({ test, expect, openApp, app }) {
           expect(row.matchesSettingsType).toBe(true);
           expect(row.caret).toEqual([18, 18]);
         }
+        const address = dialog.locator(".contact-domain");
+        await expect(address).toHaveText("Or email directly at owner@example.com");
+        await expect(address).toHaveCSS("padding-inline-start", "1px");
+        const addressGap = await address.evaluate((element) => {
+          const previous = element.previousElementSibling.getBoundingClientRect();
+          return element.getBoundingClientRect().top - previous.bottom;
+        });
+        expect(addressGap).toBe(14);
         for (const name of ["Bug report", "Feature request", "Something else"]) {
           await dialog.getByRole("button", { name, exact: true }).click();
           await checkView(name.replaceAll(" ", "-"));
+          await expect(dialog.locator("label[for=contactEmail]")).toHaveCSS("margin-bottom", "3px");
+          await expect(dialog.locator("#contactEmailHint")).toHaveCSS("margin-bottom", "8px");
           if (name === "Bug report") {
             await dialog.getByRole("button", { name: "View diagnostics" }).click();
             await checkView("diagnostics");
