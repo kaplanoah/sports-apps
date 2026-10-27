@@ -45,6 +45,6 @@
     ".claude/hooks/*.mjs"
   ],
   "ignore": ["apps/*/page/js/sortable.min.js"],
-  "ignoreBinaries": ["jq", "codex"],
+  "ignoreBinaries": ["jq", "codex", "openssl"],
   "ignoreDependencies": ["cloudflare"]
 }

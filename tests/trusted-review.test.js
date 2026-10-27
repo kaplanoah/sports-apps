@@ -150,7 +150,7 @@ for (const { provider, secondFile, count, integration } of [
         }
         return Buffer.from("");
       },
-      readRepository: (args, checkout) => {
+      readRepository: (checkout, args) => {
         assert.deepEqual(args, ["ls-files"]);
         assert.equal(checkout, env.REVIEW_CHECKOUT);
         return `a.js\n${secondFile}\ntests/a.test.js\napps/mlb/tests/browser/page.spec.js\nREADME.md`;

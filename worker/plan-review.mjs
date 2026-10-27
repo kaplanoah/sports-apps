@@ -13,7 +13,6 @@
 // GITHUB_REPOSITORY, and PR set to read the last review's summary. It prints the stage, its areas,
 // and their count for $GITHUB_OUTPUT. REVIEW_RULE_ROOT selects preserved trusted rules;
 // REVIEW_BASE binds completion reuse, while the reviewed head selects the incremental range.
-import { execFileSync } from "node:child_process";
 import { mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -21,7 +20,7 @@ import { escapePattern } from "../shared/page/escape-pattern.js";
 import { isTestPath } from "./deploy-scope.mjs";
 import { createGitHub, readAllPages } from "./github-api.mjs";
 import { resolvePackageImport } from "./package-imports.mjs";
-import { createReviewGitEnvironment } from "./review-repository.mjs";
+import { readReviewGit } from "./review-repository.mjs";
 import { findSummary, readReviewedState, matchesReviewProvider } from "./review-state.mjs";
 import { RULES_FOLDER, listRulesFor, readRuleFiles, readRulePaths } from "./rule-files.mjs";
 
@@ -677,19 +676,14 @@ export function writeReview(
   return plan;
 }
 
-// Paths as they are, not quoted and escaped, so the two diffs name each file alike.
 /** @param {string[]} args */
-const runGit = (args) =>
-  execFileSync("git", ["-c", "core.quotePath=false", ...args], {
-    encoding: "utf8",
-    env: createReviewGitEnvironment(),
-    maxBuffer: 1 << 30,
-  });
+const readPlanningGit = (args) =>
+  readReviewGit(process.cwd(), args, "utf8", { maxBuffer: 1 << 30 });
 
 /** @param {string[]} args */
 const tryGit = (args) => {
   try {
-    return runGit(args);
+    return readPlanningGit(args);
   } catch {
     return null;
   }
@@ -785,7 +779,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const folder = process.argv[2];
   const reviewed = await readLastReview(process.env);
   const reviewedHead = reviewed?.head ?? null;
-  const head = readPullHead(runGit);
+  const head = readPullHead(readPlanningGit);
   const isOnBranch = isReviewedOnBranch(reviewedHead, head, tryGit);
   /** @type {Map<string, { numstat: string, diff: string }>} */
   const diffs = new Map();
@@ -795,7 +789,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     const paths = files.length ? ["--", ...files] : [];
     if (!diffs.has(key))
       diffs.set(key, {
-        numstat: runGit([
+        numstat: readPlanningGit([
           "diff",
           "--numstat",
           "--text",
@@ -805,7 +799,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
           ...range,
           ...paths,
         ]),
-        diff: runGit([
+        diff: readPlanningGit([
           "diff",
           "--text",
           "--no-textconv",
@@ -820,7 +814,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   /** @type {string[] | undefined} */
   let pushedRange;
   const readPushedRange = () =>
-    (pushedRange ??= findPushedRange(/** @type {string} */ (reviewedHead), runGit));
+    (pushedRange ??= findPushedRange(/** @type {string} */ (reviewedHead), readPlanningGit));
   const choice = chooseStage({
     reviewedHead,
     head,
@@ -829,7 +823,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     listChanged: () => listPushedFiles(readPushedRange(), readDiff),
   });
   const pushed = choice.stage === "push" ? readPushedRange() : null;
-  const repoFiles = runGit(["ls-files"]).split("\n").filter(Boolean);
+  const repoFiles = readPlanningGit(["ls-files"]).split("\n").filter(Boolean);
   const plan = writeReview(folder, {
     choice,
     since: reviewedHead,
@@ -840,7 +834,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
       listStaleNames(
         readDiff(WHOLE_CHANGE).diff,
         (pattern, isWord) => grepRepo(pattern, isWord, tryGit),
-        listDeletedFiles(runGit),
+        listDeletedFiles(readPlanningGit),
       ),
     rules: readRuleFiles(
       process.env.REVIEW_RULE_ROOT
