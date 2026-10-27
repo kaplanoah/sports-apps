@@ -1,11 +1,13 @@
 .contact-menu {
-  background: var(--raised);
-  border: 1px solid var(--edge);
-  border-radius: var(--radius-contact);
-  padding: 0 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
-.contact-menu .settings-page-row + .settings-page-row {
-  border-top: 1px solid var(--divider);
+.contact-menu .settings-page-row {
+  padding: 12px 14px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-contact);
+  background: var(--contact-menu-surface);
 }
 .contact-domain {
   margin-top: 14px;

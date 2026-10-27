@@ -48,6 +48,48 @@ async function openContact(page) {
   await page.locator("#contactBtn").click();
 }
 
+/** @param {import("@playwright/test").Page} page @param {string} app */
+async function readContactMenuLayout(page, app) {
+  return page.locator("#contactDialog .contact-menu").evaluate((menu, league) => {
+    const menuStyle = getComputedStyle(menu);
+    const menuBox = menu.getBoundingClientRect();
+    const settingsStyle = getComputedStyle(document.getElementById("contactBtn"));
+    const probe = document.createElement("span");
+    probe.style.color = league === "mlb" ? "var(--bg)" : "var(--raised)";
+    document.body.append(probe);
+    const surface = getComputedStyle(probe).color;
+    probe.remove();
+    const buttons = [...menu.querySelectorAll("button")];
+    return {
+      background: menuStyle.backgroundColor,
+      border: menuStyle.borderWidth,
+      rows: buttons.map((button, index) => {
+        const style = getComputedStyle(button);
+        const box = button.getBoundingClientRect();
+        const previous = buttons[index - 1]?.getBoundingClientRect();
+        const caret = button.querySelector("svg").getBoundingClientRect();
+        return {
+          height: box.height,
+          width: box.width,
+          menuWidth: menuBox.width,
+          gap: previous ? box.top - previous.bottom : null,
+          padding: style.padding,
+          border: style.borderWidth,
+          borderColor: style.borderColor,
+          radius: style.borderRadius,
+          background: style.backgroundColor,
+          surface,
+          matchesSettingsType:
+            style.fontSize === settingsStyle.fontSize &&
+            style.fontWeight === settingsStyle.fontWeight &&
+            style.fontFamily === settingsStyle.fontFamily,
+          caret: [caret.width, caret.height],
+        };
+      }),
+    };
+  }, app);
+}
+
 /** @param {any} options */
 export function registerContactTests({ test, expect, openApp, app }) {
   test.use({ contextOptions: { reducedMotion: "reduce" } });
@@ -266,6 +308,22 @@ export function registerContactTests({ test, expect, openApp, app }) {
             await dialog.screenshot({ path: `${folder}/${app}-${width}-${theme}-${name}.png` });
         };
         await checkView("menu");
+        const menu = await readContactMenuLayout(page, app);
+        expect(menu.background).toBe("rgba(0, 0, 0, 0)");
+        expect(menu.border).toBe("0px");
+        expect(menu.rows).toHaveLength(3);
+        for (const [index, row] of menu.rows.entries()) {
+          expect(row.height).toBe(56);
+          expect(row.width).toBe(row.menuWidth);
+          expect(row.gap).toBe(index ? 12 : null);
+          expect(row.padding).toBe("12px 14px");
+          expect(row.border).toBe("1px");
+          expect(row.borderColor).toBe("rgba(0, 0, 0, 0)");
+          expect(row.radius).toBe("2px");
+          expect(row.background).toBe(row.surface);
+          expect(row.matchesSettingsType).toBe(true);
+          expect(row.caret).toEqual([18, 18]);
+        }
         for (const name of ["Bug report", "Feature request", "Something else"]) {
           await dialog.getByRole("button", { name, exact: true }).click();
           await checkView(name.replaceAll(" ", "-"));

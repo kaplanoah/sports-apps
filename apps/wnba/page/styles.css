@@ -175,6 +175,7 @@
     0 16px 40px -10px color-mix(in srgb, var(--shadow-ink) 32%, transparent);
   --edge: color-mix(in srgb, var(--line), var(--tile));
   --radius-contact: 2px;
+  --contact-menu-surface: var(--raised);
   --radius-card: 2px;
   --radius-chip: 2px;
   --radius-control: 3px;

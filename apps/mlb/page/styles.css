@@ -176,6 +176,7 @@
   --gate-code-font: var(--numbers);
   --gate-problem: var(--now);
   --radius-contact: 2px;
+  --contact-menu-surface: var(--bg);
   --radius-card: 3px;
   --radius-chip: 3px;
   /* Chivo Mono's capitals land its baseline on a whole pixel only in an even height. */
