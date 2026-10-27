@@ -1,6 +1,6 @@
 // Keeps one open issue for a problem the workflows watch, found by its title, and closes it once
 // the problem is gone.
-import { createGitHub } from "./github-api.mjs";
+/** @typedef {ReturnType<typeof import('./github-api.mjs').createGitHub>} GitHub */
 
 /**
  * @param {any[]} openIssues
@@ -10,7 +10,7 @@ export const findOpenIssue = (openIssues, title) =>
   openIssues.find((issue) => issue.title === title && !issue.pull_request);
 
 /**
- * @param {ReturnType<typeof createGitHub>} github
+ * @param {GitHub} github
  * @param {string} title
  * @param {string} body
  * @returns {Promise<number>} the new issue's number
@@ -21,7 +21,7 @@ export async function openIssue(github, title, body) {
 }
 
 /**
- * @param {ReturnType<typeof createGitHub>} github
+ * @param {GitHub} github
  * @param {number} number
  * @param {string} comment
  */
