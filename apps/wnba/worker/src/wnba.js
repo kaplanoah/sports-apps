@@ -1,6 +1,6 @@
 import { readEasternDay } from "#shared/days.js";
 import { createSeasonParam } from "../../../../shared/worker/seasons.js";
-import { fetchUpstream, readFeedJson } from "../../../../shared/worker/upstream.js";
+import { fetchFeedJson } from "../../../../shared/worker/upstream.js";
 
 // Reading the league's own feeds, which every route the Worker serves shares.
 
@@ -41,15 +41,26 @@ export const ESPN_HEADERS = {
  * @param {number | null} cacheSeconds
  * @param {(answer: any) => boolean} hasData
  */
-export async function fetchWnbaJson(fetchImpl, url, cacheSeconds, hasData) {
-  const response = await fetchUpstream(fetchImpl, url, { headers: FEED_HEADERS, cacheSeconds });
-  const path = new URL(url).pathname;
-  if (!response.ok)
-    throw Object.assign(new Error(`The WNBA answered ${response.status} for ${path}`), {
-      status: response.status,
-    });
-  return readFeedJson(response, { feed: "The WNBA", path, hasData });
-}
+export const fetchWnbaJson = (fetchImpl, url, cacheSeconds, hasData) =>
+  fetchFeedJson(fetchImpl, url, {
+    feed: "The WNBA",
+    headers: FEED_HEADERS,
+    cacheSeconds,
+    hasData,
+  });
+
+/**
+ * Reads one of ESPN's feeds, letting Cloudflare's edge keep the answer for `cacheSeconds`.
+ * @param {(input: string, init: object) => Promise<Response>} fetchImpl
+ * @param {string} url
+ * @param {number} cacheSeconds
+ */
+export const fetchEspnJson = (fetchImpl, url, cacheSeconds) =>
+  fetchFeedJson(fetchImpl, url, {
+    feed: "ESPN",
+    headers: ESPN_HEADERS,
+    cacheSeconds,
+  });
 
 /**
  * The rows of one of the stats site's tables, each keyed by its column names.

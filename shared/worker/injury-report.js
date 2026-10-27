@@ -1,4 +1,4 @@
-import { fetchUpstream, readFeedJson } from "./upstream.js";
+import { fetchFeedJson } from "./upstream.js";
 
 // ESPN's injury report for a league lists every player hurt or away across it in one answer:
 // what's wrong and on which side, the league's status for it, and RotoWire's sentence on it, which
@@ -39,18 +39,17 @@ export const nameInjuryReportRequest = (sport) => `${ESPN_SITE}/${sport}/injurie
  * @param {string} sport
  * @param {{ headers?: Record<string, string>, cacheSeconds?: number | null }} [options]
  */
-export async function fetchInjuryReport(
+export const fetchInjuryReport = (
   fetchImpl,
   sport,
   { headers = JSON_HEADERS, cacheSeconds = null } = {},
-) {
-  const response = await fetchUpstream(fetchImpl, nameInjuryReportRequest(sport), {
+) =>
+  fetchFeedJson(fetchImpl, nameInjuryReportRequest(sport), {
+    feed: "ESPN",
+    path: "its injury report",
     headers,
     cacheSeconds,
   });
-  if (!response.ok) throw new Error(`ESPN answered ${response.status} for its injury report`);
-  return readFeedJson(response, { feed: "ESPN", path: "its injury report" });
-}
 
 /**
  * A name's letters alone, in lowercase, to match one player across two spellings of his name.

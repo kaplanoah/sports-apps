@@ -2,8 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   createReusedLoader,
+  fetchFeedJson,
   fetchUpstream,
-  readFeedJson,
   UPSTREAM_TIMEOUT_MS,
 } from "../shared/worker/upstream.js";
 
@@ -78,15 +78,24 @@ test("a feed's whole answer is read before its timer stops", async (context) => 
   );
 });
 
-const SOURCE = { feed: "The league", path: "/scoreboard.json" };
+const FEED_URL = "https://feed.example/scoreboard.json?day=1";
+const SOURCE = { feed: "The league", path: "/scoreboard.json", headers: HEADERS, cacheSeconds: 5 };
 const hasGames = (answer) => Array.isArray(answer?.scoreboard?.games);
+
+/**
+ * Reads a feed that answers with `body` and `status`.
+ * @param {string} body
+ * @param {{ status?: number, hasData?: (answer: any) => boolean }} [options]
+ */
+const readFeed = (body, { status = 200, hasData } = {}) =>
+  fetchFeedJson(async () => new Response(body, { status }), FEED_URL, { ...SOURCE, hasData });
 
 /**
  * Why reading a feed whose answer is `body` fails, when its data is `scoreboard.games`.
  * @param {string} body
  */
 async function readFailure(body) {
-  const error = await readFeedJson(new Response(body), { ...SOURCE, hasData: hasGames }).then(
+  const error = await readFeed(body, { hasData: hasGames }).then(
     () => assert.fail("the feed answered with data"),
     (/** @type {Error} */ failure) => failure,
   );
@@ -95,14 +104,28 @@ async function readFailure(body) {
 
 test("a feed's answer is its JSON once its data is in it, or any JSON when the caller names no data", async () => {
   const answer = { scoreboard: { games: [] } };
-  assert.deepEqual(
-    await readFeedJson(new Response(JSON.stringify(answer)), { ...SOURCE, hasData: hasGames }),
-    answer,
-  );
-  assert.equal(await readFeedJson(new Response("null"), SOURCE), null);
-  await assert.rejects(readFeedJson(new Response("<html></html>"), SOURCE), {
+  assert.deepEqual(await readFeed(JSON.stringify(answer), { hasData: hasGames }), answer);
+  assert.equal(await readFeed("null"), null);
+  await assert.rejects(readFeed("<html></html>"), {
     message: "The league answered /scoreboard.json with a web page rather than data",
   });
+});
+
+test("a feed that answers with a status that isn't ok says the status, and keeps it on the error", async () => {
+  await assert.rejects(readFeed("{}", { status: 503 }), {
+    message: "The league answered 503 for /scoreboard.json",
+    status: 503,
+  });
+});
+
+test("a feed is read with the caller's headers and edge cache time", async () => {
+  const { requests, fetchImpl } = recordFetches();
+
+  await fetchFeedJson(fetchImpl, FEED_URL, SOURCE);
+
+  assert.equal(requests[0].url, FEED_URL);
+  assert.deepEqual(requests[0].init.headers, HEADERS);
+  assert.deepEqual(requests[0].init.cf, { cacheTtl: 5, cacheEverything: true });
 });
 
 test("a feed that refuses with a web page says so, with the page's title on one line", async () => {
