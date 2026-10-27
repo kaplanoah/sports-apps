@@ -148,12 +148,28 @@ function writeTrialPlan(folder, checkout, entry, repoFiles, provider) {
   return plan;
 }
 
+/** @param {any} entry */
+function describeTrialScope(entry) {
+  return entry.targets.length
+    ? {
+        name: "component audit",
+        instruction:
+          "Audit the complete supplied target files as components at the frozen head. Their addition-formatted delivery is synthetic coverage, not a claim that this commit adds them. They may be unchanged between the frozen base and head. For this audit, existing defects in these supplied components are in scope. Use ancestor comparisons for context, not to narrow the audit.",
+      }
+    : {
+        name: "complete historical PR range",
+        instruction:
+          "Review the actual diff from the frozen head's first parent to the frozen head. Existing defects outside what this range changes are Pre-existing. The supplied plan covers the complete selected change.",
+      };
+}
+
 /** @param {string} folder @param {string} checkout @param {any} entry @param {string[]} repoFiles */
 function writeTrialContext(folder, checkout, entry, repoFiles) {
+  const scope = describeTrialScope(entry);
   for (const name of ["REVIEW.md", "AGENTS.md"]) cpSync(join(SOURCE, name), join(folder, name));
   writeFileSync(
     join(folder, "pull-request.md"),
-    `Blind offline ${entry.targets.length ? "component audit" : "complete historical PR range"}: ${readReviewGit(checkout, ["log", "-1", "--format=%s"]).trim()}\nNo previous findings or fix information supplied. This is not a live PR.\n`,
+    `Blind offline ${scope.name}: ${readReviewGit(checkout, ["log", "-1", "--format=%s"]).trim()}\n\n${scope.instruction}\n\nNo previous findings or fix information supplied. This is not a live PR.\n`,
   );
   writeFileSync(
     join(folder, "test-context.md"),
