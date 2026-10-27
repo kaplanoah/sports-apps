@@ -88,10 +88,16 @@ export function chooseDeniedStatus({ previousStatus, permission, device }) {
 }
 
 /**
- * @typedef {{ category: string, isEnabled: boolean, elapsedMs: number }} PendingCategory
- * @param {{ status: string, isBusy: boolean, preferences: { updates: boolean, reminders: boolean }, pending?: PendingCategory | null }} state
+ * @typedef {{ category: string, isEnabled: boolean, elapsedMs: number, minutes?: number }} PendingCategory
+ * @param {{ status: string, isBusy: boolean, preferences: { updates: boolean, reminders: boolean, minutes?: number }, pending?: PendingCategory | null, timingMinutes?: number | null }} state
  */
-export function chooseNotificationControls({ status, isBusy, preferences, pending = null }) {
+export function chooseNotificationControls({
+  status,
+  isBusy,
+  preferences,
+  pending = null,
+  timingMinutes = null,
+}) {
   const isOn = status === "on";
   return {
     areSwitchesHidden: !["off", "on", "failed", "blocked"].includes(status),
@@ -101,6 +107,9 @@ export function chooseNotificationControls({ status, isBusy, preferences, pendin
       pending?.category === "reminders" ? pending.isEnabled : isOn && preferences.reminders,
     pendingCategory: pending?.category ?? "",
     spinnerCategory: pending && pending.elapsedMs >= PENDING_SPINNER_MS ? pending.category : "",
-    isTimingDisabled: !isOn || !preferences.reminders || isBusy,
+    isTimingDisabled: (isBusy && pending !== null) || !["off", "on", "failed"].includes(status),
+    hasTimingChoice:
+      (isOn && preferences.reminders) || (pending?.category === "reminders" && pending.isEnabled),
+    timingMinutes: timingMinutes ?? pending?.minutes ?? preferences.minutes,
   };
 }

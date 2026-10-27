@@ -43,6 +43,10 @@ let isBusy = false;
 /** @type {import("./notification-status.js").PendingCategory | null} */
 let pending = null;
 let reading = null;
+/** @type {number | null} */
+let requestedMinutes = null;
+/** @type {Promise<void> | null} */
+let savingTiming = null;
 
 const findElement = (id) => /** @type {HTMLElement} */ (document.getElementById(id));
 
@@ -65,11 +69,17 @@ function renderNote() {
 // The group is drawn whole, so a reload puts it back as it was before the status is known again.
 function renderNotifications() {
   if (!notificationWords) return;
-  const controls = chooseNotificationControls({ status, isBusy, preferences, pending });
+  const controls = chooseNotificationControls({
+    status,
+    isBusy,
+    preferences,
+    pending,
+    timingMinutes: requestedMinutes,
+  });
   const group = findElement("notificationsGroup");
   setHtml(
     group,
-    renderNotificationRows({ controls, preferences, words: notificationWords, note: renderNote() }),
+    renderNotificationRows({ controls, words: notificationWords, note: renderNote() }),
   );
   group.hidden = status === "loading";
 }
@@ -202,6 +212,8 @@ function showFailedSync(error) {
 
 function restoreControlFocus(id) {
   if (!id) return;
+  // Focusing an iPhone select can reopen or dismiss its native picker.
+  if (id === "reminderTiming" && !document.body.classList.contains("kbd")) return;
   const dialog = findElement("settingsDialog");
   const hasFocusMoved =
     document.activeElement !== document.body && document.activeElement !== dialog;
@@ -241,6 +253,8 @@ async function readPreferences() {
   rememberPreferences(result.preferences);
   revision = result.revision;
   forgetStored(PENDING_KEY);
+  const timeZone = readDeviceTimeZone();
+  if (preferences.timeZone !== timeZone) await savePreferences({ ...preferences, timeZone });
   renderNotifications();
 }
 
@@ -295,10 +309,10 @@ async function removeSubscription(next) {
   forgetCategories(next);
 }
 
-async function changeCategory(category, isEnabled) {
+async function changeCategory(category, isEnabled, minutes = preferences.minutes) {
   const before = preferences;
   const previousStatus = status;
-  const next = { ...before, [category]: isEnabled, timeZone: readDeviceTimeZone() };
+  const next = { ...before, minutes, [category]: isEnabled, timeZone: readDeviceTimeZone() };
   try {
     // Keep permission in the tap stack, before registration or network work.
     if (isEnabled && (await Notification.requestPermission()) !== "granted") {
@@ -352,21 +366,51 @@ function toggleNotifications(event) {
   if (target.closest("#remindersSwitch")) toggleCategory("reminders");
 }
 
-async function changeTiming() {
-  const timing = /** @type {HTMLSelectElement} */ (findElement("reminderTiming"));
-  const next = { ...preferences, minutes: Number(timing.value) };
-  await showBusyDuring(async () => {
+async function saveRequestedTiming() {
+  while (requestedMinutes !== null) {
+    const minutes = requestedMinutes;
+    const next = { ...preferences, minutes, timeZone: readDeviceTimeZone() };
     try {
       await saveOrRestorePreferences(next);
       note = "";
     } catch (error) {
-      if (isTurnedAway(error)) setStatus("off", TOO_MANY_DEVICES);
-      else {
-        await readPreferences().catch(() => {});
-        note = CHANGE_FAILED;
+      if (isTurnedAway(error)) {
+        requestedMinutes = null;
+        setStatus("off", TOO_MANY_DEVICES);
+        return;
       }
+      await readPreferences().catch(() => {});
+      note = CHANGE_FAILED;
     }
-  });
+    if (requestedMinutes === minutes) requestedMinutes = null;
+  }
+}
+
+async function changeTiming() {
+  if (isBusy && !savingTiming) return;
+  const timing = /** @type {HTMLSelectElement} */ (findElement("reminderTiming"));
+  const minutes = Number(timing.value);
+  const controls = chooseNotificationControls({ status, isBusy, preferences, pending });
+  if (!controls.areRemindersOn) {
+    await showBusyDuring(() => changeCategory("reminders", true, minutes), {
+      category: "reminders",
+      isEnabled: true,
+      elapsedMs: 0,
+      minutes,
+    });
+    return;
+  }
+  requestedMinutes = minutes;
+  if (savingTiming) {
+    renderNotifications();
+    return;
+  }
+  savingTiming = showBusyDuring(saveRequestedTiming);
+  try {
+    await savingTiming;
+  } finally {
+    savingTiming = null;
+  }
 }
 
 /** @param {Event} event */

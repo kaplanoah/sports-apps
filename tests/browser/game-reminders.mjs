@@ -17,15 +17,19 @@ export function testGameReminderSettings(test, expect, app) {
     const reminders = page.getByRole("switch", { name: "Game starts", exact: true });
     const updates = page.getByRole("switch", { name: app.updates, exact: true });
     const timing = page.getByLabel(app.timing, { exact: true });
-    await expect(timing).toHaveValue("10");
-    await expect(timing).toBeDisabled();
+    await expect(timing).toHaveValue("");
+    await expect(page.locator("#remindersSwitch")).toBeEnabled();
+    await expect(timing).toBeEnabled();
     await reminders.click();
     await expect(reminders).toHaveAttribute("aria-checked", "true");
     await expect(reminders).toBeEnabled();
     await expect(updates).toHaveAttribute("aria-checked", "false");
+    await expect(page.locator("#remindersSwitch")).toBeEnabled();
     await expect(timing).toBeEnabled();
+    await page.keyboard.press("Tab");
     await timing.focus();
     await timing.selectOption("60");
+    await expect(page.locator("#remindersSwitch")).toBeEnabled();
     await expect(timing).toBeEnabled();
     await expect(timing).toBeFocused();
     await updates.click();
@@ -35,14 +39,19 @@ export function testGameReminderSettings(test, expect, app) {
     await expect(reminders).toHaveAttribute("aria-checked", "false");
     await expect(updates).toHaveAttribute("aria-checked", "true");
     await expect(updates).toBeEnabled();
-    await expect(timing).toBeDisabled();
+    await expect(page.locator("#remindersSwitch")).toBeEnabled();
+    await expect(timing).toBeEnabled();
+    await expect(timing).toHaveValue("");
     const synced = page.waitForResponse(matchPath("/push/preferences"));
     await page.reload({ waitUntil: "domcontentloaded" });
     await (await synced).finished();
     await expect(updates).toHaveAttribute("aria-checked", "true");
     await expect(updates).toBeEnabled();
     await expect(reminders).toHaveAttribute("aria-checked", "false");
-    await expect(timing).toHaveValue("60");
+    await expect(timing).toHaveValue("");
+    expect(
+      await page.evaluate(() => JSON.parse(localStorage.getItem("device-notifications")).minutes),
+    ).toBe(60);
     await updates.click();
     await expect(updates).toHaveAttribute("aria-checked", "false");
     await reminders.click();
@@ -230,8 +239,9 @@ export function testGameReminderSettings(test, expect, app) {
     const timing = page.getByLabel(app.timing, { exact: true });
     await timing.selectOption("60");
     await expect(reminders).toHaveAttribute("aria-checked", "false");
-    await expect(timing).toBeDisabled();
-    await expect(timing).toHaveValue("60");
+    await expect(page.locator("#remindersSwitch")).toBeEnabled();
+    await expect(timing).toBeEnabled();
+    await expect(timing).toHaveValue("");
     await expect(page.locator("#notifyNote")).toContainText("Too many devices");
     expect(await page.evaluate((key) => sessionStorage.getItem(key), PUSH_STUB.keptKey)).toBeNull();
     await page.unroute("**/push/preferences");
@@ -495,8 +505,12 @@ export function testGameReminderSettings(test, expect, app) {
       await app.openSettings(page);
       const timing = page.locator("#reminderTiming");
       const reminders = page.locator("#remindersSwitch");
-      await expect(timing).toHaveValue("10");
+      await expect(timing).toHaveValue("");
+      const initialSave = page.waitForRequest(
+        (request) => request.url().endsWith("/push/subscription") && request.method() === "PUT",
+      );
       await reminders.click();
+      expect((await initialSave).postDataJSON().preferences.minutes).toBe(10);
       await expect(reminders).toBeEnabled();
       await expect(reminders).toHaveAttribute("aria-checked", "true");
       const readSaved = () =>
@@ -571,6 +585,7 @@ export function testGameReminderSettings(test, expect, app) {
     await expect(reminders).toBeEnabled();
     const timing = page.locator("#reminderTiming");
     await timing.selectOption("60");
+    await expect(page.locator("#remindersSwitch")).toBeEnabled();
     await expect(timing).toBeEnabled();
     await page.evaluate(() => {
       const preferences = JSON.parse(localStorage.getItem("device-notifications"));
@@ -590,5 +605,61 @@ export function testGameReminderSettings(test, expect, app) {
     await expect(page.locator("#reminderTiming")).toHaveValue("10");
     await expect(reminders).toHaveAttribute("aria-checked", "true");
     await expect(page.locator("#notifySwitch")).toHaveAttribute("aria-checked", "false");
+  });
+  test("travel refreshes reminder time zones on timing edits and later visits", async ({
+    page,
+  }) => {
+    await page.addInitScript(stubPushManager, PUSH_STUB);
+    await app.openApp(page);
+    await app.openSettings(page);
+    for (const id of ["remindersSwitch", "notifySwitch"]) {
+      await page.locator(`#${id}`).click();
+      await expect(page.locator(`#${id}`)).toBeEnabled();
+    }
+    const changeZone = (timeZone) => {
+      Intl.DateTimeFormat = new Proxy(Intl.DateTimeFormat, {
+        apply(target, receiver, argumentsList) {
+          const formatter = Reflect.apply(target, receiver, argumentsList);
+          const read = formatter.resolvedOptions.bind(formatter);
+          formatter.resolvedOptions = () => ({ ...read(), timeZone });
+          return formatter;
+        },
+      });
+    };
+    await page.evaluate(changeZone, "America/Los_Angeles");
+    expect(await page.evaluate(() => Intl.DateTimeFormat().resolvedOptions().timeZone)).toBe(
+      "America/Los_Angeles",
+    );
+    const saved = page.waitForRequest(
+      (request) => request.url().endsWith("/push/preferences") && request.method() === "PUT",
+    );
+    await page.locator("#reminderTiming").selectOption("60");
+    expect((await saved).postDataJSON().preferences).toMatchObject({
+      timeZone: "America/Los_Angeles",
+      minutes: 60,
+      reminders: true,
+      updates: true,
+    });
+    await expect(page.locator("#remindersSwitch")).toBeEnabled();
+    const release = await holdRequests(page, matchPath("/push/preferences"));
+    const reading = page.waitForRequest(matchPath("/push/preferences"));
+    const refreshed = page.waitForResponse(
+      (response) =>
+        response.url().endsWith("/push/preferences") && response.request().method() === "PUT",
+    );
+    try {
+      await page.reload({ waitUntil: "domcontentloaded" });
+      await reading;
+      await page.evaluate(changeZone, "America/Chicago");
+    } finally {
+      release();
+    }
+    await (await refreshed).finished();
+    await page.waitForFunction(
+      () => JSON.parse(localStorage.getItem("device-notifications")).timeZone === "America/Chicago",
+    );
+    expect(
+      await page.evaluate(() => JSON.parse(localStorage.getItem("device-notifications"))),
+    ).toMatchObject({ timeZone: "America/Chicago", minutes: 60, reminders: true, updates: true });
   });
 }

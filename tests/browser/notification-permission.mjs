@@ -155,6 +155,87 @@ export function testNotificationPermission(test, expect, app) {
     }
   }
 
+  for (const result of ["granted", "denied", "default", "failure"])
+    test(`choosing a time enables reminders directly and handles ${result}`, async ({ page }) => {
+      await app.openApp(page);
+      await app.openSettings(page);
+      const updates = page.locator("#notifySwitch");
+      if (result !== "granted") {
+        await updates.click();
+        await expect(updates).toBeEnabled();
+      }
+      await page.evaluate(holdPermission);
+      const timing = page.locator("#reminderTiming");
+      await expect(timing).toBeEnabled();
+      await expect(timing).toHaveValue("");
+      const direct = await timing.evaluate((element) => {
+        element.value = "180";
+        element.dispatchEvent(new Event("change", { bubbles: true }));
+        return typeof Reflect.get(window, "finishPermission") === "function";
+      });
+      expect(direct).toBe(true);
+      await expect(page.locator("#remindersSwitch")).toHaveAttribute("aria-checked", "true");
+      await expect(timing).toHaveValue("180");
+      const before = await page.evaluate(() => localStorage.getItem("device-notifications"));
+      if (before) expect(JSON.parse(before).reminders).toBe(false);
+      await page.evaluate((answer) => Reflect.get(window, "finishPermission")(answer), result);
+      await expect(page.locator("#remindersSwitch")).toHaveAttribute("aria-busy", "false");
+      await expect(page.locator("#remindersSwitch")).toHaveAttribute(
+        "aria-checked",
+        String(result === "granted"),
+      );
+      await expect(updates).toHaveAttribute("aria-checked", String(result !== "granted"));
+      await expect(timing).toHaveValue(result === "granted" ? "180" : "");
+      const stored = await page.evaluate(() =>
+        JSON.parse(localStorage.getItem("device-notifications")),
+      );
+      expect(stored.reminders).toBe(result === "granted");
+      expect(stored.minutes).toBe(result === "granted" ? 180 : 10);
+    });
+
+  test("timing completion restores keyboard focus without activating a touch picker", async ({
+    page,
+  }) => {
+    await app.openApp(page);
+    await app.openSettings(page);
+    await page.locator("#remindersSwitch").click();
+    await expect(page.locator("#remindersSwitch")).toBeEnabled();
+    for (const keyboard of [false, true]) {
+      await page.evaluate((keyboard) => document.body.classList.toggle("kbd", keyboard), keyboard);
+      let release;
+      const held = new Promise((resolve) => {
+        release = resolve;
+      });
+      await page.route("**/push/preferences", async (route) => {
+        await held;
+        await route.fallback();
+      });
+      const timing = page.locator("#reminderTiming");
+      await timing.focus();
+      await timing.evaluate((element) => {
+        Reflect.set(window, "timingFocusCalls", 0);
+        const focus = element.focus.bind(element);
+        element.focus = (options) => {
+          Reflect.set(window, "timingFocusCalls", Reflect.get(window, "timingFocusCalls") + 1);
+          focus(options);
+        };
+      });
+      await timing.selectOption(keyboard ? "30" : "60");
+      await expect(timing).toBeEnabled();
+      await page.locator("#settingsDialog").focus();
+      release();
+      await expect(page.locator("#remindersSwitch")).toBeEnabled();
+      await expect(timing).toBeEnabled();
+      expect(await page.evaluate(() => Reflect.get(window, "timingFocusCalls"))).toBe(
+        keyboard ? 1 : 0,
+      );
+      await page.unroute("**/push/preferences");
+      await timing.evaluate((element) => {
+        Reflect.deleteProperty(element, "focus");
+      });
+    }
+  });
+
   test("fast completion never shows a spinner and timing saves have no category feedback", async ({
     page,
   }) => {
@@ -177,15 +258,49 @@ export function testNotificationPermission(test, expect, app) {
     });
     try {
       await page.locator("#reminderTiming").selectOption("180");
-      await expect(page.locator("#reminderTiming")).toBeDisabled();
+      await expect(page.locator("#reminderTiming")).toBeEnabled();
       await page.clock.runFor(1000);
       await expect(page.locator(".notification-spinner:visible")).toHaveCount(0);
       await expect(toggle).toHaveAttribute("aria-busy", "false");
+      await page.locator("#reminderTiming").selectOption("30");
+      await page.locator("#reminderTiming").selectOption("60");
+      await expect(page.locator("#reminderTiming")).toHaveValue("60");
+      await page.locator("#reminderTiming").evaluate((element) => {
+        const descriptor = Object.getOwnPropertyDescriptor(
+          HTMLSelectElement.prototype,
+          "selectedIndex",
+        );
+        Reflect.set(window, "timingSelectionWrites", 0);
+        Reflect.set(window, "keptTimingElement", element);
+        Object.defineProperty(element, "selectedIndex", {
+          get() {
+            return descriptor.get.call(this);
+          },
+          set(value) {
+            Reflect.set(
+              window,
+              "timingSelectionWrites",
+              Reflect.get(window, "timingSelectionWrites") + 1,
+            );
+            descriptor.set.call(this, value);
+          },
+        });
+      });
     } finally {
       release();
     }
+    await expect(toggle).toBeEnabled();
     await expect(page.locator("#reminderTiming")).toBeEnabled();
-    await expect(page.locator("#reminderTiming")).toHaveValue("180");
+    await expect(page.locator("#reminderTiming")).toHaveValue("60");
+    await page.waitForFunction(
+      () => JSON.parse(localStorage.getItem("device-notifications")).minutes === 60,
+    );
+    expect(await page.evaluate(() => Reflect.get(window, "timingSelectionWrites"))).toBe(0);
+    expect(
+      await page
+        .locator("#reminderTiming")
+        .evaluate((element) => element === Reflect.get(window, "keptTimingElement")),
+    ).toBe(true);
   });
 
   for (const result of ["denied", "failure"])

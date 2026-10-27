@@ -877,6 +877,7 @@ body.kbd .notify-help:focus {
 .switch[aria-checked="true"] .switch-knob {
   transform: translateX(18px);
 }
+.select-field:disabled,
 .switch:disabled {
   cursor: default;
   opacity: 0.5;

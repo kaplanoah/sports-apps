@@ -11,7 +11,6 @@ const renderRows = (words, preferences = DEFAULT_NOTIFICATION_PREFERENCES, statu
   String(
     renderNotificationRows({
       words,
-      preferences,
       controls: chooseNotificationControls({ status, preferences, isBusy: false }),
       note: "Permission guidance",
     }),
@@ -38,20 +37,22 @@ for (const [league, words, timing, updates] of /** @type {const} */ ([
       markup,
       /<label class="control-row reminder-timing" data-setting="settings:reminders">/,
     );
-    assert.match(markup, /<select[^>]+aria-labelledby="reminderTimingTitle" disabled>/);
+    assert.match(markup, /<select[^>]+aria-labelledby="reminderTimingTitle" >/);
   });
 }
 
-test("reminders default off with 10 minutes selected and the approved presets", () => {
+test("reminders default off with a prompt, a saved 10-minute default and the approved presets", () => {
   const markup = renderRows(MLB_WORDS);
   assert.match(markup, /id="remindersSwitch" aria-checked="false"/);
+  assert.equal(DEFAULT_NOTIFICATION_PREFERENCES.minutes, 10);
+  assert.match(markup, /<option value="" disabled selected>Choose time<\/option>/);
   assert.deepEqual(
     [...markup.matchAll(/<option value="(\d+)" (selected)?>([^<]+)<\/option>/g)].map(
       ([, minutes, selected, label]) => [Number(minutes), !!selected, label],
     ),
     [
       [0, false, "At scheduled first pitch"],
-      [10, true, "10 minutes before"],
+      [10, false, "10 minutes before"],
       [30, false, "30 minutes before"],
       [60, false, "1 hour before"],
       [180, false, "3 hours before"],
@@ -68,8 +69,9 @@ test("either category can remain on independently and timing keeps its saved cho
     );
     assert.match(markup, new RegExp(`id="remindersSwitch" aria-checked="${reminders}"`));
     assert.match(markup, new RegExp(`id="notifySwitch" aria-checked="${!reminders}"`));
-    assert.equal(/<select[^>]+ disabled>/.test(markup), !reminders);
-    assert.match(markup, /<option value="60" selected>1 hour before<\/option>/);
+    assert.equal(/<select[^>]+ disabled>/.test(markup), false);
+    if (reminders) assert.match(markup, /<option value="60" selected>1 hour before<\/option>/);
+    else assert.match(markup, /Choose time/);
   }
 });
 

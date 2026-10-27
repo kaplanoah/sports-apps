@@ -5,11 +5,10 @@ import { REMINDER_PRESETS, nameReminderPreset } from "./notification-preferences
 /**
  * @param {object} state
  * @param {ReturnType<typeof import("./notification-status.js").chooseNotificationControls>} state.controls
- * @param {typeof import("./notification-preferences.js").DEFAULT_NOTIFICATION_PREFERENCES} state.preferences
  * @param {Pick<import("./league-words.js").LeagueWords, "notificationUpdates" | "reminderTiming" | "reminderAtStart">} state.words
  * @param {ReturnType<typeof html> | string} state.note
  */
-export function renderNotificationRows({ controls, preferences, words, note }) {
+export function renderNotificationRows({ controls, words, note }) {
   const renderToggle = (
     id,
     category,
@@ -31,7 +30,8 @@ export function renderNotificationRows({ controls, preferences, words, note }) {
     <label class="control-row reminder-timing" data-setting="settings:reminders">
       <span class="control-label"><span id="reminderTimingTitle">${words.reminderTiming}</span></span>
       <select class="select-field" id="reminderTiming" aria-labelledby="reminderTimingTitle" ${controls.isTimingDisabled ? "disabled" : ""}>
-        ${REMINDER_PRESETS.map((minutes) => html`<option value="${minutes}" ${preferences.minutes === minutes ? "selected" : ""}>${nameReminderPreset(minutes, words)}</option>`)}
+        ${controls.hasTimingChoice ? html`` : html`<option value="" disabled selected>Choose time</option>`}
+        ${REMINDER_PRESETS.map((minutes) => html`<option value="${minutes}" ${controls.hasTimingChoice && controls.timingMinutes === minutes ? "selected" : ""}>${nameReminderPreset(minutes, words)}</option>`)}
       </select>
     </label>`
     }
