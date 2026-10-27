@@ -1,11 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {
-  findTestLines,
-  listEditedTests,
-  readChangedLines,
-  sortBurnInFailures,
-} from "../worker/judge-burn-in.mjs";
+import { findTestLines } from "../worker/browser-test-calls.mjs";
+import { listEditedTests, readChangedLines, sortBurnInFailures } from "../worker/judge-burn-in.mjs";
 
 const SPEC = "apps/wnba/tests/browser/standings.spec.mjs";
 
@@ -69,19 +65,22 @@ test("each test call spans its first line to its last, a test in a loop once", (
 });
 
 test("a change inside a test edits only that test", () => {
-  const edited = listEditedTests(new Map([[SPEC, [6]]]), readSpec);
+  const edited = listEditedTests(new Map([[SPEC, [6]]]), readSpec, new Set([SPEC]));
   assert.deepEqual([...edited], [`${SPEC}:5`]);
 });
 
 test("a change outside every test, like a helper or a test.use, edits every test in its spec", () => {
   for (const line of [3, 9, 12]) {
-    const edited = listEditedTests(new Map([[SPEC, [line]]]), readSpec);
+    const edited = listEditedTests(new Map([[SPEC, [line]]]), readSpec, new Set([SPEC]));
     assert.deepEqual([...edited], [`${SPEC}:*`, `${SPEC}:5`, `${SPEC}:13`], `line ${line}`);
   }
 });
 
 test("a deleted spec edits no test", () => {
-  assert.deepEqual([...listEditedTests(new Map([["gone.spec.mjs", [1]]]), readSpec)], []);
+  assert.deepEqual(
+    [...listEditedTests(new Map([["gone.spec.mjs", [1]]]), readSpec, new Set(["gone.spec.mjs"]))],
+    [],
+  );
 });
 
 /**
@@ -146,7 +145,7 @@ const ADAPTER =
   'import { defineTests } from "../../../../tests/browser/notification-layout.mjs";\ndefineTests(test);';
 
 test("an edited adapter owns failures whose declarations are in a shared helper", () => {
-  const editedTests = listEditedTests(new Map([[SPEC, [2]]]), () => ADAPTER);
+  const editedTests = listEditedTests(new Map([[SPEC, [2]]]), () => ADAPTER, new Set([SPEC]));
   const helperSpec = { ...reportSpec(5, "controls align", ["passed", "failed"]), file: HELPER };
   const report = {
     suites: [
@@ -161,7 +160,7 @@ test("an edited adapter owns failures whose declarations are in a shared helper"
 });
 
 test("an edited helper declaration fails every app that runs that test", () => {
-  const editedTests = listEditedTests(new Map([[HELPER, [6]]]), () => SOURCE);
+  const editedTests = listEditedTests(new Map([[HELPER, [6]]]), () => SOURCE, new Set([HELPER]));
   const helperSpec = { ...reportSpec(5, "controls align", ["passed", "failed"]), file: HELPER };
   const report = {
     suites: [SPEC, "apps/mlb/tests/browser/layout.spec.mjs"].map((file) => ({
@@ -174,4 +173,24 @@ test("an edited helper declaration fails every app that runs that test", () => {
   assert.equal(edited[0].runs, 4);
   assert.equal(edited[0].failures, 2);
   assert.deepEqual(flaky, []);
+});
+
+test("the shared browser file list includes js helpers and excludes production files", () => {
+  const helper = "tests/browser/shared.js";
+  const page = "apps/mlb/page/index.html";
+  const editedTests = listEditedTests(
+    new Map([
+      [helper, [6]],
+      [page, [1]],
+    ]),
+    (path) => {
+      if (path !== helper) throw new Error("Read a non-browser file");
+      return SOURCE;
+    },
+    new Set([helper]),
+  );
+  const report = {
+    suites: [{ file: SPEC, specs: [{ ...reportSpec(5, "align", ["failed"]), file: helper }] }],
+  };
+  assert.equal(sortBurnInFailures(report, editedTests).edited.length, 1);
 });

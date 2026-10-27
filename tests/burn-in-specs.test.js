@@ -25,26 +25,28 @@ test("the specs a change touches are an app's browser specs at any depth, as Pla
   assert.deepEqual(
     listBrowserSpecs(
       [SHEETS, nested, "apps/wnba/tests/browser/harness.mjs", "apps/wnba/tests/page.test.js", PAGE],
-      { specs: [], readText: () => null },
+      { browserFiles: [], readText: () => null },
     ),
     [SHEETS, nested, PAGE],
   );
 });
 
 test("a helper-only change burns in each importing spec through shared adapters", () => {
-  const helper = "tests/browser/game-reminders.mjs";
-  const adapter = "tests/browser/reminder-adapter.mjs";
-  const sources = {
-    [SHEETS]: `import '../../../../${adapter}';`,
-    [PAGE]: `import '../../../../${helper}';`,
-    [adapter]: "export * from './game-reminders.mjs';",
-    [helper]: 'export function defineTests(test) { test("reminders", () => {}); }',
-    "apps/mlb/tests/browser/other.spec.mjs": 'test("other", () => {});',
-  };
-  const specs = [SHEETS, PAGE, "apps/mlb/tests/browser/other.spec.mjs"];
-  const readText = (path) => sources[path] ?? null;
-  assert.deepEqual(listBrowserSpecs([helper], { specs, readText }), [SHEETS, PAGE]);
-  assert.deepEqual(listBrowserSpecs([PAGE, helper], { specs, readText }), [PAGE, SHEETS]);
+  for (const extension of ["mjs", "js"]) {
+    const helper = `tests/browser/game-reminders.${extension}`;
+    const adapter = "tests/browser/reminder-adapter.mjs";
+    const sources = {
+      [SHEETS]: `import '../../../../${adapter}';`,
+      [PAGE]: `import '../../../../${helper}';`,
+      [adapter]: `export * from './game-reminders.${extension}';`,
+      [helper]: 'export function defineTests(test) { test("reminders", () => {}); }',
+      "apps/mlb/tests/browser/other.spec.mjs": 'test("other", () => {});',
+    };
+    const browserFiles = Object.keys(sources);
+    const readText = (path) => sources[path] ?? null;
+    assert.deepEqual(listBrowserSpecs([helper], { browserFiles, readText }), [SHEETS, PAGE]);
+    assert.deepEqual(listBrowserSpecs([PAGE, helper], { browserFiles, readText }), [PAGE, SHEETS]);
+  }
 });
 
 test("a general helper does not select specs that declare no changed tests", () => {
@@ -54,7 +56,10 @@ test("a general helper does not select specs that declare no changed tests", () 
     [helper]: "export function openApp() {}",
   };
   assert.deepEqual(
-    listBrowserSpecs([helper], { specs: [PAGE], readText: (path) => sources[path] ?? null }),
+    listBrowserSpecs([helper], {
+      browserFiles: Object.keys(sources),
+      readText: (path) => sources[path] ?? null,
+    }),
     [],
   );
 });

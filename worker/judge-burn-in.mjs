@@ -10,7 +10,8 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { Linter } from "eslint";
+import { findTestLines } from "./browser-test-calls.mjs";
+import { listBrowserTestFiles } from "./browser-scope.mjs";
 import { listFailedTests, readFirstLine } from "./report-flaky-tests.mjs";
 
 /**
@@ -41,45 +42,19 @@ export function readChangedLines(diff) {
   return byPath;
 }
 
-/** @param {any} node */
-const isTestCall = (node) =>
-  node.type === "CallExpression" &&
-  node.callee.type === "Identifier" &&
-  node.callee.name === "test";
-
-/**
- * The first and last line of each test(...) call in a spec or helper, a test in a loop once.
- * @param {string} source
- * @returns {{ line: number, endLine: number }[]}
- */
-export function findTestLines(source) {
-  const linter = new Linter({ configType: "flat" });
-  linter.verify(source, [{ languageOptions: { ecmaVersion: "latest", sourceType: "module" } }]);
-  const { ast, visitorKeys } = linter.getSourceCode();
-  /** @type {{ line: number, endLine: number }[]} */
-  const tests = [];
-  /** @param {any} node */
-  const visit = (node) => {
-    if (isTestCall(node)) tests.push({ line: node.loc.start.line, endLine: node.loc.end.line });
-    for (const key of visitorKeys[node.type] ?? []) {
-      for (const child of [node[key]].flat()) if (child?.type) visit(child);
-    }
-  };
-  visit(ast);
-  return tests;
-}
-
 /**
  * Each edited test by declaration path and line, or a whole spec that delegates its declarations.
  * @param {Map<string, number[]>} changedLines
  * @param {(path: string) => string | null} readSource the browser file as the pull request leaves it, or
  *   null once it's deleted
+ * @param {Set<string>} browserFiles the shared browser-file inventory
  * @returns {Set<string>}
  */
-export function listEditedTests(changedLines, readSource) {
+export function listEditedTests(changedLines, readSource, browserFiles) {
   /** @type {Set<string>} */
   const edited = new Set();
   for (const [path, lines] of changedLines) {
+    if (!browserFiles.has(path)) continue;
     const source = readSource(path);
     if (source === null) continue;
     const tests = findTestLines(source);
@@ -139,8 +114,10 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     console.log(`::error::Burn-in's run broke before writing its report, ${reportPath}.`);
     process.exit(1);
   }
-  const editedTests = listEditedTests(readChangedLines(readFileSync(0, "utf8")), (path) =>
-    existsSync(path) ? readFileSync(path, "utf8") : null,
+  const editedTests = listEditedTests(
+    readChangedLines(readFileSync(0, "utf8")),
+    (path) => (existsSync(path) ? readFileSync(path, "utf8") : null),
+    new Set(listBrowserTestFiles()),
   );
   const { edited, flaky, runErrors } = sortBurnInFailures(
     JSON.parse(readFileSync(reportPath, "utf8")),

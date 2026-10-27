@@ -274,10 +274,10 @@ test("each job that runs WebKit specs installs WebKit with its system libraries"
   );
 });
 
-test("burn-in judges declarations in shared and app browser helpers", () => {
+test("burn-in lets the shared browser file inventory filter the complete diff", () => {
   assert.match(
     readJob("burn-in"),
-    /git diff -U0 --no-renames HEAD\^1 HEAD -- 'apps\/\*\/tests\/browser\/\*\.mjs' 'tests\/browser\/\*\.mjs' \| node worker\/judge-burn-in\.mjs/,
+    /git diff -U0 --no-renames HEAD\^1 HEAD \| node worker\/judge-burn-in\.mjs/,
   );
 });
 

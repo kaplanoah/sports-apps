@@ -280,15 +280,12 @@ jobs:
             playwright-report/
             test-results/
 
-  # Each browser spec scope lists, the ones a pull request adds or changes but for one that passed
-  # burn-in in an earlier run and hasn't changed since, with what it runs with unchanged too
-  # (worker/burn-in-specs.mjs), runs ten times over, with no retry, so a test that passes only some
-  # of the time fails on the pull request that brings it, rather than on later ones. Only a test
-  # the pull request wrote or edited fails it: any other that failed goes to the issue Flaky
-  # browser tests from the next nightly run (worker/judge-burn-in.mjs). Ten runs of every spec a
-  # large pull request changes take longer than one machine's limit, so they're split across
-  # machines too, and a machine whose share holds no test passes. Specs matched by WebKit's
-  # projects in tests/browser/projects.mjs install and repeat in that engine too.
+  # Scope selects edited specs and those importing an edited helper that declares tests
+  # (worker/burn-in-specs.mjs). Earlier passes are reused when their inputs are unchanged.
+  # Each selected spec runs ten times without retries. Tests this pull request wrote or edited
+  # fail its gate; other failures go to the nightly workflow's Flaky browser tests issue
+  # (worker/judge-burn-in.mjs). Shards split large selections, and empty shards pass. Specs matched
+  # by WebKit's projects in tests/browser/projects.mjs install and repeat in that engine too.
   burn-in:
     needs: scope
     if: ${{ !cancelled() && needs.scope.result == 'success' && needs.scope.outputs.specs != '' }}
@@ -328,7 +325,7 @@ jobs:
             --shard=${{ matrix.shard }}/${{ strategy.job-total }} "${specs[@]}" || true
       - name: Fail only on a test this pull request wrote or edited
         shell: bash
-        run: git diff -U0 --no-renames HEAD^1 HEAD -- 'apps/*/tests/browser/*.mjs' 'tests/browser/*.mjs' | node worker/judge-burn-in.mjs test-results/report.json
+        run: git diff -U0 --no-renames HEAD^1 HEAD | node worker/judge-burn-in.mjs test-results/report.json
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         if: ${{ !cancelled() && hashFiles('test-results/burn-in-flaky.json') != '' }}
         with:
