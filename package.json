@@ -12,6 +12,7 @@
     "node": ">=22.21"
   },
   "scripts": {
+    "prepare": "git config --local core.hooksPath .githooks",
     "rework": "node worker/rework.mjs",
     "test": "node worker/node-tests.mjs",
     "lint": "eslint .",

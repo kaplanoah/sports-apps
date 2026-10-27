@@ -27,7 +27,7 @@ const CHANNELS = {
     label: "beta",
     // Beta holds one pull request at a time, so a change gets there only by the steps that claim it.
     howToShip:
-      'Put it on beta by the ship skill\'s "The beta channel" (.claude/skills/ship/SKILL.md), which claims beta first',
+      'Put it on beta by the ship skill\'s "The beta channel" (.agents/skills/ship/SKILL.md), which claims beta first',
     isForcePushed: true,
   },
 };
