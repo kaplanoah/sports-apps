@@ -159,7 +159,7 @@ test("a save keeps every control's look while blocked notifications fade them", 
   }
 });
 
-test("the timing prompt follows the reminder switch including both pending intents", () => {
+test("the reminder switch follows both pending intents and the saved choice", () => {
   const preferences = { updates: true, reminders: true, minutes: 10 };
   for (const isEnabled of [false, true]) {
     const controls = chooseNotificationControls({
