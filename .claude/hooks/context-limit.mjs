@@ -42,7 +42,7 @@ const HANDOFF_COMMANDS = [
   /^gh\s+pr\s+(?:view|checks|diff|create|edit|comment|merge)\b/,
   /^gh\s+run\s+(?:view|list|watch)\b/,
 ];
-const PUSH_OPTIONS = new Set(["-u", "--set-upstream"]);
+const PUSH_OPTIONS = new Set(["-u", "--set-upstream", "--no-verify"]);
 const SHARED_BRANCHES = new Set(["main", "beta"]);
 const GH_API_VALUE_OPTIONS = new Set([
   "-X",
@@ -84,6 +84,8 @@ const HANDOFF_STEPS =
   "To hand off, commit and push your work, " +
   "and write a Handoff section in the PR description, opening the PR as a draft if there's none: " +
   "what happened, what was done, what's known, and what isn't. " +
+  "Record any failed checks there and in the continuation prompt; " +
+  "tell the next session to fix them before normal shipping. " +
   "Then give the owner a standalone prompt for a new session that takes over the PR and its branch, " +
   'with the line "Paste this in a new session now." above it, and stop. ' +
   "Don't start the new session yourself.";
@@ -161,7 +163,7 @@ const countReminderSteps = (tokens) =>
 
 /**
  * Whether a push's arguments push only the branch checked out, to its own name on origin, with
- * no force: `git push [-u] [origin] [HEAD | <branch>]`.
+ * no force: `git push [--no-verify] [-u] [origin] [HEAD | <branch>]`.
  * @param {string[]} pushArguments
  * @param {string} branch the branch checked out, or "" when it couldn't be read
  */
@@ -356,6 +358,7 @@ const writeStopReason = (tokens) =>
   "leading ~, pipes, redirects, or command substitutions. " +
   "Quote arguments containing {, (, or ), except the literal {owner}/{repo} placeholders. " +
   "Use a quoted heredoc on stdin for a commit message or PR body, as git commit -F - <<'EOF' does. " +
+  "For this handoff push only, use git push --no-verify origin HEAD to save work even if checks fail. " +
   HANDOFF_STEPS;
 
 /**

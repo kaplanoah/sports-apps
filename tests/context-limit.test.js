@@ -145,6 +145,14 @@ test("at 300,000 tokens the hook denies an edit and a push, and lets a read, a d
     assert.equal(output.permissionDecision, "deny", tool_name);
     assert.match(output.permissionDecisionReason, /context is at 300,000 tokens/);
     assert.match(output.permissionDecisionReason, /Past 300,000, only what a handoff needs runs/);
+    assert.match(
+      output.permissionDecisionReason,
+      /For this handoff push only, use git push --no-verify origin HEAD/,
+    );
+    assert.match(
+      output.permissionDecisionReason,
+      /Record any failed checks there and in the continuation prompt; tell the next session to fix them before normal shipping\./,
+    );
     assert.match(output.permissionDecisionReason, /"Paste this in a new session now\."/);
   }
   for (const [tool_name, tool_input] of allowed)
@@ -262,8 +270,20 @@ test("at 300,000 tokens a push lands only on the branch checked out, under its o
   ])
     assert.ok(answerStopCommand(command), command);
   assert.equal(answerStopCommand(`git push -u origin ${BRANCH}`), null);
+  assert.equal(answerStopCommand("git push --no-verify origin HEAD"), null);
+  assert.equal(answerStopCommand(`git push --no-verify -u origin ${BRANCH}`), null);
+  for (const command of [
+    "git push --no-verify --force origin HEAD",
+    "git push --no-verify origin HEAD:main",
+    "git push --no-verify origin other",
+    "git push --no-verify upstream HEAD",
+  ])
+    assert.ok(answerStopCommand(command), command);
   for (const branch of ["beta", "main", ""])
-    assert.ok(answerStopCall("Bash", { command: "git push origin HEAD" }, branch), branch);
+    assert.ok(
+      answerStopCall("Bash", { command: "git push --no-verify origin HEAD" }, branch),
+      branch,
+    );
 });
 
 test("at 300,000 tokens gh api reads anything but writes only the PR, its comments, and its merge", () => {
