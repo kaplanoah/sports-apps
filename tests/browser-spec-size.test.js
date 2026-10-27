@@ -4,7 +4,8 @@ import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { REPO_ROOT } from "./repo-files.js";
 
-// Burn-in's ten passes keep each selected spec small, including its shared declarations.
+// Burn-in repeats each selected spec ten times, including its helpers' tests, so the size limit
+// keeps one change from repeating too many tests.
 const MOST_TESTS_PER_SPEC = 30;
 
 /**
