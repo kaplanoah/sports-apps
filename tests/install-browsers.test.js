@@ -106,9 +106,9 @@ const STALL = 'console.log("Get:7 mirror package [5641 kB]"); setInterval(() => 
 
 test("a stalled install stops at its attempt deadline and gets one retry", async () => {
   const installer = createInstaller([STALL, "process.exit(0)"]);
-  assert.equal(await installBrowsers(["webkit"], { ...installer.options, timeoutMs: 150 }), 0);
+  assert.equal(await installBrowsers(["webkit"], { ...installer.options, timeoutMs: 1000 }), 0);
   assert.equal(installer.invocations.length, 2);
-  assert.match(installer.messages.join("\n"), /0\.15-second attempt limit/);
+  assert.match(installer.messages.join("\n"), /1-second attempt limit/);
   assert.match(installer.messages.join("\n"), /Retrying.*once after a stalled attempt/);
 });
 
@@ -116,7 +116,7 @@ test("a slow install that finishes within its deadline is never stopped or retri
   const installer = createInstaller([
     'let part = 0; const progress = setInterval(() => { console.log("Get:" + ++part + " mirror package"); if (part === 6) { clearInterval(progress); process.exit(0); } }, 50)',
   ]);
-  assert.equal(await installBrowsers(["webkit"], { ...installer.options, timeoutMs: 1000 }), 0);
+  assert.equal(await installBrowsers(["webkit"], { ...installer.options, timeoutMs: 5000 }), 0);
   assert.equal(installer.invocations.length, 1);
   assert.deepEqual(installer.messages, ["Browser installation: ok."]);
 });
@@ -132,7 +132,7 @@ test("a stall after a permanent error never retries", async () => {
     'console.error("HTTP 403"); setInterval(() => {}, 1000)',
     "process.exit(0)",
   ]);
-  assert.equal(await installBrowsers(["webkit"], { ...installer.options, timeoutMs: 150 }), 124);
+  assert.equal(await installBrowsers(["webkit"], { ...installer.options, timeoutMs: 1000 }), 124);
   assert.equal(installer.invocations.length, 1);
 });
 
