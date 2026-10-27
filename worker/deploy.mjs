@@ -125,8 +125,8 @@ const ACCESS_LIMIT_BINDING = {
 };
 // The version a service runs, as its upload's tag names it, which its health reports.
 const VERSION_BINDING = { type: "version_metadata", name: "VERSION" };
-// Each browser's or Home Screen app's one count a day (shared/worker/daily-count.js). Only production's apps count, so
-// testing on beta adds nothing to the counts.
+// Each browser's or Home Screen app's one count a day (shared/worker/daily-count.js). Only
+// production's apps count, so testing on beta adds nothing to the counts.
 const DAILY_OPENS_BINDING = {
   type: "analytics_engine",
   name: "DAILY_OPENS",
