@@ -513,12 +513,17 @@ export function testGameReminderSettings(test, expect, app) {
       const saved = page.waitForRequest(
         (request) => request.url().endsWith("/push/subscription") && request.method() === "PUT",
       );
+      const synced = page.waitForResponse(matchPath("/push/preferences"));
       await page.reload({ waitUntil: "domcontentloaded" });
       expect((await saved).postDataJSON().preferences).toMatchObject({
         minutes: 10,
         updates: false,
         reminders: true,
       });
+      await (await synced).finished();
+      await page.waitForFunction(
+        () => JSON.parse(localStorage.getItem("device-notifications")).minutes === 10,
+      );
       await expect(reminders).toBeEnabled();
       await expect(timing).toHaveValue("10");
       await expect(page.locator("#notifyNote")).toBeEmpty();
@@ -541,11 +546,49 @@ export function testGameReminderSettings(test, expect, app) {
         ? route.fulfill({ json: { revision: 1, preferences: { ...preferences, minutes: 15 } } })
         : route.fallback(),
     );
+    await page.evaluate(() => {
+      const preferences = JSON.parse(localStorage.getItem("device-notifications"));
+      localStorage.setItem("device-notifications", JSON.stringify({ ...preferences, minutes: 30 }));
+    });
+    const synced = page.waitForResponse(matchPath("/push/preferences"));
     await page.reload({ waitUntil: "domcontentloaded" });
+    await (await synced).finished();
+    await page.waitForFunction(
+      () => JSON.parse(localStorage.getItem("device-notifications")).minutes === 10,
+    );
     await expect(page.locator("#remindersSwitch")).toBeEnabled();
     await expect(page.locator("#reminderTiming")).toHaveValue("10");
     expect(
       await page.evaluate(() => JSON.parse(localStorage.getItem("device-notifications")).minutes),
     ).toBe(10);
+  });
+  test("an obsolete subscribed choice normalizes when the visit cannot sync", async ({ page }) => {
+    await page.addInitScript(stubPushManager, PUSH_STUB);
+    await app.openApp(page);
+    await app.openSettings(page);
+    const reminders = page.locator("#remindersSwitch");
+    await reminders.click();
+    await expect(reminders).toBeEnabled();
+    const timing = page.locator("#reminderTiming");
+    await timing.selectOption("60");
+    await expect(timing).toBeEnabled();
+    await page.evaluate(() => {
+      const preferences = JSON.parse(localStorage.getItem("device-notifications"));
+      localStorage.setItem("device-notifications", JSON.stringify({ ...preferences, minutes: 15 }));
+    });
+    await page.route("**/push/subscription", (route) =>
+      route.request().method() === "PUT"
+        ? route.fulfill({
+            status: 503,
+            json: { error: { code: "unavailable", message: "Try again" } },
+          })
+        : route.fallback(),
+    );
+    const failed = page.waitForResponse(matchPath("/push/subscription"));
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await (await failed).finished();
+    await expect(page.locator("#reminderTiming")).toHaveValue("10");
+    await expect(reminders).toHaveAttribute("aria-checked", "true");
+    await expect(page.locator("#notifySwitch")).toHaveAttribute("aria-checked", "false");
   });
 }

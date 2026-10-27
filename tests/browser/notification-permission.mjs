@@ -210,12 +210,16 @@ export function testNotificationPermission(test, expect, app) {
       await expect(toggle.locator("..").locator(".notification-spinner")).toBeVisible();
       expect(await readGeometry(page)).toEqual(before);
       const overlap = await page.locator("#notifyNote").evaluate((note) => {
-        const toggle = document.getElementById("notifySwitch").getBoundingClientRect();
+        const shell = document.getElementById("notifySwitch").parentElement;
+        const spinner = /** @type {HTMLElement} */ (shell.querySelector(".notification-spinner"));
+        const bounds = shell.getBoundingClientRect();
+        const left = bounds.left + spinner.offsetLeft;
+        const top = bounds.top + spinner.offsetTop;
         const ring = {
-          left: toggle.left - 22,
-          right: toggle.left - 8,
-          top: toggle.top + 7,
-          bottom: toggle.top + 21,
+          left,
+          right: left + spinner.offsetWidth,
+          top,
+          bottom: top + spinner.offsetHeight,
         };
         const range = document.createRange();
         range.selectNodeContents(note);

@@ -31,13 +31,12 @@
  *   --tabs-chosen-ink                          the open tab's words
  *   --switch-knob                              a switch's knob, one light color in every theme, as the
  *                                              phone keeps its own
- *   Optional reminder field overrides (defaults shown):
- *   --reminder-width                           145px
- *   --reminder-caret-right                     3px
- *   --reminder-text-rendering                  auto
- *   --reminder-padding-top                    7px
- *   --reminder-padding-right                  20px
- *   --reminder-padding-bottom                 7px
+ *   --reminder-width                           the timing field's width, 145px if unset
+ *   --reminder-caret-right                     the timing caret's right offset, 3px if unset
+ *   --reminder-text-rendering                  the timing text's rendering, auto if unset
+ *   --reminder-padding-top                     the timing field's top inset, 7px if unset
+ *   --reminder-padding-right                   the timing field's right inset, 20px if unset
+ *   --reminder-padding-bottom                  the timing field's bottom inset, 7px if unset
  *   --select-text-face                         a select with words rather than years, if different
  *   --select-face                              a select field's face, drawn at --type-field-size as big
  *                                              as the page's text at --type-detail-size
@@ -363,6 +362,7 @@ section.view.active:not([data-follows]):has(> :is(.day-view, .season-parts)) {
   }
 }
 
+/* Reserve space before loading so guidance stays clear of the ring without moving the row. */
 #notifyNote {
   padding-inline-end: 14px;
 }
