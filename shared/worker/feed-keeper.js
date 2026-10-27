@@ -6,8 +6,8 @@ import { describeError } from "./responses.js";
 // and once more a few minutes later, and again every few minutes while another feed shows its
 // answer is still behind. Each keeps its last good answer to stand in when a read fails, and one
 // that didn't answer isn't asked again for a while, since a hung read holds up each update until
-// it times out, and meanwhile fails for the same reason its last read did. What it keeps goes in `storage`, since a Durable Object leaves memory between
-// updates.
+// it times out, and meanwhile fails for the same reason its last read did. What it keeps goes in
+// `storage`, since a Durable Object leaves memory between updates.
 
 const SETTLE_MS = 10 * 60 * 1000;
 const FAILED_FEED_WAIT_MS = 5 * 60 * 1000;
