@@ -14,7 +14,7 @@ import {
 } from "#shared/news.js";
 import { readNewsChoices } from "#shared/news-choices.js";
 import { listShownStories } from "#shared/page-places.js";
-import { showJobStatuses, startDiagnostics } from "#shared/diagnostics.js";
+import { showJobStatuses, showUpdateStatus, startDiagnostics } from "#shared/diagnostics.js";
 import { redrawEased } from "#shared/eased-redraw.js";
 import { fillDayStrip, showStartDay, startDayStrip, startOverDayStrip } from "#shared/day-strip.js";
 import { refreshGameSearch, startGameSearch } from "#shared/game-search-view.js";
@@ -322,6 +322,7 @@ async function boot() {
   startBracketStandings();
   session.db = createWorkerStore({ isShowing: hasDrawing });
   showJobStatuses(session.db, BACKGROUND_JOBS);
+  showUpdateStatus(() => session.status);
   drawLastSeen();
   reopenLastSheets();
   startCatchUpNote(session.db, renderStamp);

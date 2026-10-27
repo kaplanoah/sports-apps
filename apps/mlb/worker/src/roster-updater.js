@@ -58,7 +58,6 @@ const CLUBS_PER_RUN = 6;
 // Every rostered player's first read spreads over a few runs, while a night's games need few.
 const GAME_LOG_BATCHES_PER_RUN = 4;
 const ROSTER_MAX_AGE_MS = 24 * HOUR_MS;
-const LEAGUE_NAME = "MLB";
 const STATUS_KEY = "rosters/status";
 
 const FEEDS = {
@@ -493,7 +492,6 @@ function createStoreUpdate() {
   async function keepRosters(context) {
     keeper ??= createFeedKeeper({
       feeds: FEEDS,
-      leagueName: LEAGUE_NAME,
       now: context.now,
       storage: context.storage,
     });
