@@ -2,6 +2,7 @@ import { openNotificationGame } from "#shared/notification-navigation.js";
 import { renderCatchUpLines, startCatchUpNote } from "#shared/catch-up-note.js";
 import { startCaughtUpSweep } from "#shared/caught-up-sweep.js";
 import { startChannelTag } from "#shared/channel-tag.js";
+import { startDailyCount } from "#shared/daily-count.js";
 import { startPullToRefresh } from "#shared/pull-to-refresh.js";
 import { startHomeScreen } from "#shared/home-screen.js";
 import { setHtml } from "#shared/html.js";
@@ -290,6 +291,7 @@ async function boot() {
   startDiagnostics();
   startAppearance(LOOKS);
   watchReturns({ catchUp, pause: () => session.db.pause() });
+  startDailyCount();
   trackKeyboardFocus();
   watchPresses([".team-line .team-open"]);
   startPageTabs();

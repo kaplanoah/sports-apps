@@ -16,6 +16,7 @@ const RELEASE = {
 /** @param {Record<string, { contentType: string, text?: string }>} pageFiles */
 const createPageWorker = (pageFiles) =>
   createAppWorker({
+    name: "mlb",
     pageFiles,
     forwardToStore: answerNothing,
     isStoreAnswering: storeAnswers,
@@ -51,6 +52,7 @@ test("health answers without the key, saying whether the store answers and which
   assert.equal(healthy.headers.get("x-robots-tag"), "noindex, nofollow");
 
   const unhealthy = await createAppWorker({
+    name: "mlb",
     pageFiles,
     forwardToStore: answerNothing,
     isStoreAnswering: async () => false,
@@ -123,6 +125,7 @@ const answerOk = () => new Response("data");
 
 function createLockedWorker() {
   return createAppWorker({
+    name: "mlb",
     pageFiles: PAGE_FILES,
     forwardToStore: answerOk,
     isStoreAnswering: storeAnswers,
@@ -160,6 +163,7 @@ test("an app's own read gets the Worker's bindings, so it can read the store", a
   /** @type {any[]} */
   const handed = [];
   const worker = createAppWorker({
+    name: "mlb",
     pageFiles: PAGE_FILES,
     forwardToStore: answerNothing,
     isStoreAnswering: storeAnswers,
@@ -210,6 +214,7 @@ test("until the code is sent, the page's address shows the gate and its data sta
 
 test("the page's address in its release's folder shows the gate too, until the code is sent", async () => {
   const worker = createAppWorker({
+    name: "mlb",
     pageFiles: {
       ...PAGE_FILES,
       "version.json": { contentType: "application/json", text: JSON.stringify(RELEASE) },
@@ -309,7 +314,65 @@ test("too many tries from one address are turned away, even with the right code"
   assert.equal(response.status, 429);
   assert.equal((await response.json()).error.code, "too_many_tries");
   assert.equal(response.headers.get("set-cookie"), null);
-  assert.deepEqual(keys, ["worker.example 203.0.113.7"]);
+  assert.deepEqual(keys, ["code worker.example 203.0.113.7"]);
+});
+
+/** @param {any[]} written */
+const createDailyOpens = (written) => ({ writeDataPoint: (point) => written.push(point) });
+
+test("a phone signed in counts with a data point that holds the app's name and nothing from the request", async () => {
+  const written = [];
+  const env = { ...LOCKED_ENV, DAILY_OPENS: createDailyOpens(written) };
+  const cookie = await signIn(env);
+  const worker = createLockedWorker();
+  const response = await worker.fetch(
+    new Request("https://worker.example/key/count?team=NYM", {
+      method: "POST",
+      headers: {
+        cookie,
+        "cf-connecting-ip": "203.0.113.7",
+        "user-agent": IPHONE_AGENT,
+        referer: "https://worker.example/key/",
+      },
+      body: "anything",
+    }),
+    env,
+  );
+  assert.equal(response.status, 204);
+  assert.deepEqual(written, [{ indexes: ["mlb"] }]);
+});
+
+test("a count answers only a POST, and only from a phone signed in", async () => {
+  const written = [];
+  const env = { ...LOCKED_ENV, DAILY_OPENS: createDailyOpens(written) };
+  const locked = await requestLocked("/count", { method: "POST", env });
+  assert.equal(locked.status, 401);
+  const cookie = await signIn(env);
+  for (const method of ["GET", "PUT", "DELETE"]) {
+    const response = await requestLocked("/count", { method, cookie, env });
+    assert.equal(response.status, 405, method);
+    assert.equal(response.headers.get("allow"), "POST");
+  }
+  assert.deepEqual(written, []);
+});
+
+test("a Worker without the dataset, as on beta, takes a count and writes nothing", async () => {
+  const response = await requestLocked("/count", { method: "POST", env: { APP_KEY: "key" } });
+  assert.equal(response.status, 204);
+});
+
+test("too many counts from one address are turned away apart from the code's tries", async () => {
+  const keys = [];
+  const written = [];
+  const env = {
+    APP_KEY: "key",
+    ACCESS_LIMIT: { limit: async ({ key }) => (keys.push(key), { success: false }) },
+    DAILY_OPENS: createDailyOpens(written),
+  };
+  const response = await requestLocked("/count", { method: "POST", env });
+  assert.equal(response.status, 429);
+  assert.deepEqual(keys, ["count worker.example 203.0.113.7"]);
+  assert.deepEqual(written, []);
 });
 
 test("a page served over plain http, as on a laptop, gets a cookie it can keep", async () => {

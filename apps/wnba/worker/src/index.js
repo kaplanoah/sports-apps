@@ -23,6 +23,7 @@ const rosters = createRosterServer();
 const players = createPlayerServer({ loadRoster: rosters.loadRoster });
 
 export default createAppWorker({
+  name: "wnba",
   pageFiles: PAGE_FILES,
   forwardToStore,
   isStoreAnswering,

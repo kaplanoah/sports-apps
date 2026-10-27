@@ -48,6 +48,7 @@ The Worker serves every file here, its `networks/` logos too, under `shared/`, b
 - `caught-up-sweep.js`: the sweep through the header once caught up
 - `pull-to-refresh.js`: pulling down on the Home Screen to catch up
 - `resume.js`: the release check and catching up on return
+- `daily-count.js`: counting each browser or Home Screen app once a day, with nothing about who
 - `last-seen.js`: what the page last showed, drawn first on its next load
 - `element-path.js`: where a part sits, so a later load finds it
 - `stamp.js`: the header's lines on the latest score and the next game
@@ -173,6 +174,7 @@ The Worker serves every file here, its `networks/` logos too, under `shared/`, b
 - `worker-error.js`: reading the Worker's error answers
 - `worker-store.js`: the store client
 - `store-path.js`: names and document paths shared by the store client and Worker
+- `count-path.js`: the route the daily count is sent to, shared by the page and Worker
 - `season-reader.js`: reading the current season, its record, and the store's status
 - `season-doc-follower.js`: following a document the store keeps for the season shown
 - `poll-schedule.js`: how long a league's next update waits
@@ -225,6 +227,7 @@ Pages link these before their own stylesheet, and theme them with the tokens the
 
 - `app-worker.js`: the Worker's routing, under the key or at its own address, and moving the page there
 - `access-gate.js`: asking for the access code before the page opens
+- `daily-count.js`: taking each browser's or Home Screen app's one count a day into Analytics Engine
 - `health.js`: the Worker's health, for an uptime monitor, and what each service it binds answers
 - `services.js`: the services an app may bind, and each one's binding name
 - `season-store.js`: the store's Durable Object, which each app's store hands its league

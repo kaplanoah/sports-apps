@@ -22,6 +22,7 @@ const rotations = createRotationServer();
 const createLeagueReadCounter = (env) => () => addToJobCount(env, PITCHER_JOB, LEAGUE_READS_COUNT);
 
 export default createAppWorker({
+  name: "mlb",
   pageFiles: PAGE_FILES,
   forwardToStore,
   isStoreAnswering,
