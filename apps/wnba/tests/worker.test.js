@@ -5,7 +5,8 @@ import { NETWORKS_REQUEST, REQUESTS } from "../page/js/snapshot.js";
 import { TEAMS } from "../page/js/teams.js";
 import { nameScoreboardRequest, nameSummaryRequest } from "../worker/src/lead.js";
 import { describePreview } from "../worker/src/preview.js";
-import { createSnapshotLoader } from "../worker/src/snapshot.js";
+import { describeSnapshotStatus } from "../worker/src/season-updater.js";
+import { createSnapshotLoader, describeFailures } from "../worker/src/snapshot.js";
 import { nameFeedKey } from "../../../shared/worker/feed-keeper.js";
 
 const AFTERNOON = JSON.parse(
@@ -264,6 +265,51 @@ test("a schedule that holds a game as under way once the scoreboard has moved on
   now += 5 * 60 * 1000;
   await loader.loadSnapshot(2026);
   assert.deepEqual([league.countReads("schedule"), league.countReads("espn")], [3, espnReads]);
+});
+
+test("the store's status says why each feed that didn't answer failed", async () => {
+  const league = createLeague({ refuse: { scoreboard: "error", standings: "page" } });
+  const loader = createSnapshotLoader({ fetchImpl: league.fetchImpl, now: () => NOW });
+
+  const status = describeSnapshotStatus(await loader.loadSnapshot(2026));
+
+  assert.equal(status.detail, "scoreboard, standings");
+  const scoreboardPath = new URL(REQUESTS.scoreboard).pathname;
+  const standingsPath = new URL(REQUESTS.standings(2026)).pathname;
+  assert.equal(
+    status.reasons,
+    `scoreboard: The WNBA answered 503 for ${scoreboardPath}; standings: The WNBA answered ${standingsPath} with something other than data`,
+  );
+});
+
+test("the store's status gives no reasons while every feed answers", async () => {
+  const league = createLeague();
+  const loader = createSnapshotLoader({ fetchImpl: league.fetchImpl, now: () => NOW });
+
+  const status = describeSnapshotStatus(await loader.loadSnapshot(2026));
+
+  assert.deepEqual([status.error, status.reasons], ["", ""]);
+});
+
+test("the store's status gives a slow feed's same reason while it waits to be asked again, so it doesn't change with each update", async () => {
+  const league = createLeague({ refuse: { standings: "error" } });
+  let now = NOW;
+  const loader = createSnapshotLoader({ fetchImpl: league.fetchImpl, now: () => now });
+
+  const failed = describeSnapshotStatus(await loader.loadSnapshot(2026));
+  now += 60 * 1000;
+  const waiting = describeSnapshotStatus(await loader.loadSnapshot(2026));
+
+  assert.equal(league.countReads("standings"), 1);
+  assert.match(failed.reasons, /^standings: The WNBA answered 503 for \//);
+  assert.deepEqual(waiting, failed);
+});
+
+test("the reasons name the feeds in one order, whichever failed first", () => {
+  assert.equal(
+    describeFailures({ standings: "The WNBA answered 503", scoreboard: "The WNBA answered 403" }),
+    "scoreboard: The WNBA answered 403; standings: The WNBA answered 503",
+  );
 });
 
 test("a feed that answers JSON without its data counts as missing", async () => {
@@ -571,7 +617,10 @@ test("a snapshot says why it couldn't be read when no feed answers", async () =>
   });
   const loader = createSnapshotLoader({ fetchImpl: league.fetchImpl, now: () => NOW });
 
-  await assert.rejects(loader.loadSnapshot(2026), /None of the WNBA's feeds answered/);
+  await assert.rejects(
+    loader.loadSnapshot(2026),
+    /None of the WNBA's feeds answered with data: scoreboard: The WNBA answered 503 for \/.+; schedule: The WNBA answered 503 for \/.+; bracket: .+; standings: .+/,
+  );
 });
 
 test("the Worker bundles with its page, and exports its store", async () => {

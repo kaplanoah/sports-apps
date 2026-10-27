@@ -3,14 +3,14 @@
 // (each `data-last-drawn` element) shows, frame by frame. The last few records stay on this
 // device. Its button shares them, after the page as it is right then, as a report on a phone or
 // tablet, or copies it on a computer, after a header that names the release, the device, the
-// page's state, and how each of the store's background jobs last ran, and before the steps the
-// service worker kept (service-worker-steps.js), which it keeps on its own, since a load it never
-// let reach the page is what they're for, and the logs of the viewport's changes
-// (viewport-log.js), of what each dialog's row of sheets does (sheet-log.js), of what a season's
-// list of days does (day-strip-log.js), of what became of each touch on a season's standings and
-// bracket (bracket-standings-log.js), of each change of the phone's look (phone-look-log.js), and
-// of each error the page's code doesn't catch (error-log.js). It records nothing while it's off,
-// which it starts as.
+// page's state, how the store's updates stand, and how each of its background jobs last ran, and
+// before the steps the service worker kept (service-worker-steps.js), which it keeps on its own,
+// since a load it never let reach the page is what they're for, and the logs of the viewport's
+// changes (viewport-log.js), of what each dialog's row of sheets does (sheet-log.js), of what a
+// season's list of days does (day-strip-log.js), of what became of each touch on a season's
+// standings and bracket (bracket-standings-log.js), of each change of the phone's look
+// (phone-look-log.js), and of each error the page's code doesn't catch (error-log.js). It records
+// nothing while it's off, which it starts as.
 
 import {
   formatClockTime,
@@ -77,6 +77,7 @@ const SERVICE_WORKER_TITLE = "Service worker";
  *   openedAt: number,
  *   returns: number,
  *   jobs: JobStatus[],
+ *   update: UpdateStatus | null | undefined,
  *   now: Date,
  * }} PageFacts
  */
@@ -91,6 +92,12 @@ const SERVICE_WORKER_TITLE = "Service worker";
  *     | null
  *     | undefined,
  * }} JobStatus
+ */
+
+/**
+ * The status the store saves as each update of the season's data ends, from `live/status`, with
+ * when it last changed.
+ * @typedef {Record<string, string> & { at?: string }} UpdateStatus
  */
 
 /** @type {OpenRecord | null} */
@@ -108,6 +115,8 @@ let returns = 0;
 let readJobStatuses = null;
 /** @type {JobStatus[]} */
 let jobStatuses = [];
+/** @type {(() => UpdateStatus | null | undefined) | null} */
+let readUpdateStatus = null;
 /** @type {import("./step-log.js").StepLine[]} */
 let serviceWorkerSteps = [];
 
@@ -403,6 +412,23 @@ export function describeJobStatus({ name, status }) {
 }
 
 /**
+ * One line on how the store's updates of the season's data stand, from the status it last saved,
+ * naming each field that has something to report.
+ * @param {UpdateStatus | null | undefined} status
+ * @returns {string}
+ */
+export function describeUpdateStatus(status) {
+  if (!status?.at) return "Updates: no status read";
+  const since = formatMoment(new Date(status.at));
+  const fields = Object.entries(status)
+    .filter(([field, value]) => field !== "at" && value)
+    .map(([field, value]) => `${field} ${value}`);
+  return fields.length
+    ? `Updates since ${since}: ${fields.join(", ")}`
+    : `Updates ok since ${since}`;
+}
+
+/**
  * The lines that open the report, saying which release, on what device, in what state.
  * @param {PageFacts} facts
  * @returns {string}
@@ -418,6 +444,7 @@ export const writeHeader = (facts) =>
     `Opened ${formatMoment(new Date(facts.openedAt))}, ${formatDuration(facts.now.getTime() - facts.openedAt)} ago`,
     `Back from the background ${countTimes(facts.returns)} since`,
     `Now ${formatMoment(facts.now)}, ${facts.timeZone}`,
+    describeUpdateStatus(facts.update),
     ...facts.jobs.map(describeJobStatus),
   ]
     .filter(Boolean)
@@ -440,6 +467,7 @@ const readPageFacts = () => ({
   openedAt,
   returns,
   jobs: jobStatuses,
+  update: readUpdateStatus?.(),
   now: new Date(),
 });
 
@@ -473,6 +501,15 @@ export function showJobStatuses(store, names) {
       }),
     );
   if (isRecording()) refreshJobStatuses();
+}
+
+/**
+ * Has the report name how the store's updates of the season's data stand, from the status the
+ * page already follows.
+ * @param {() => UpdateStatus | null | undefined} readStatus
+ */
+export function showUpdateStatus(readStatus) {
+  readUpdateStatus = readStatus;
 }
 
 /**

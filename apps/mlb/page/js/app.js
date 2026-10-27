@@ -7,7 +7,7 @@ import { startChannelTag } from "#shared/channel-tag.js";
 import { startDailyCount } from "#shared/daily-count.js";
 import { startPullToRefresh } from "#shared/pull-to-refresh.js";
 import { startHomeScreen } from "#shared/home-screen.js";
-import { showJobStatuses, startDiagnostics } from "#shared/diagnostics.js";
+import { showJobStatuses, showUpdateStatus, startDiagnostics } from "#shared/diagnostics.js";
 import { redrawEased } from "#shared/eased-redraw.js";
 import { trackKeyboardFocus } from "#shared/keyboard-focus.js";
 import { showStartDay, startDayStrip, startOverDayStrip } from "#shared/day-strip.js";
@@ -312,6 +312,7 @@ async function boot() {
   wireControls();
   session.db = createWorkerStore({ isShowing: hasDrawing });
   showJobStatuses(session.db, BACKGROUND_JOBS);
+  showUpdateStatus(() => session.status);
   drawLastSeen();
   reopenLastSheets();
   startCatchUpNote(session.db, renderStamp);

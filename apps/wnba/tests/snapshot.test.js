@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { GAME_DAY_CHECK_MS } from "#shared/poll-schedule.js";
 import * as WNBASnapshot from "../page/js/snapshot.js";
+import { checkInTimeZone } from "../../../tests/time-zone.js";
 
 const AFTERNOON = JSON.parse(
   readFileSync(`${import.meta.dirname}/fixtures/2026-09-30-afternoon.json`, "utf8"),
@@ -534,4 +535,45 @@ test("a game the league plays at a neutral site says so", () => {
   const { schedule } = buildAfternoon({ ...RESPONSES, schedule: neutralSchedule });
   const neutral = schedule.find((each) => each.id === "1042600102");
   assert.deepEqual([neutral.isNeutral, neutral.arena.city], [true, "Vancouver"]);
+});
+
+const FINALS_GAME = {
+  id: "1042600406",
+  state: "pre",
+  status: "7:30 pm ET",
+  series: "finals",
+  isIfNeeded: true,
+  start: "2026-10-27T23:30:00Z",
+  away: { team: "NYL" },
+  home: { team: "LVA" },
+};
+const UNDECIDED = new Map([["finals", { winner: null }]]);
+// Noon Eastern on the day of the game above.
+const GAME_DAY_NOON = Date.parse("2026-10-27T16:00:00Z");
+
+test("the scoreboard has a game to score on the league's today or yesterday, one under way or to be played", () => {
+  const isScored = (change, now = GAME_DAY_NOON, seriesById = UNDECIDED) =>
+    WNBASnapshot.isScoreboardGame({ ...FINALS_GAME, ...change }, seriesById, now);
+  assert.equal(isScored({}), true);
+  assert.equal(isScored({ start: "2026-10-29T23:30:00Z" }), false);
+  assert.equal(isScored({ start: "2026-10-26T23:30:00Z" }), true);
+  assert.equal(isScored({ start: "2026-10-25T23:30:00Z" }), false);
+  assert.equal(
+    isScored({ state: "live", start: "2026-10-26T23:30:00Z" }, Date.parse("2026-10-27T04:30:00Z")),
+    true,
+  );
+  assert.equal(isScored({ state: "live", start: "2026-10-25T23:30:00Z" }), false);
+  assert.equal(isScored({ state: "final" }), false);
+  assert.equal(isScored({}, GAME_DAY_NOON, new Map([["finals", { winner: "LVA" }]])), false);
+  assert.equal(isScored({ status: "Postponed" }), false);
+  assert.equal(isScored({ home: { team: null } }), false);
+});
+
+test("the scoreboard's day is the league's, wherever the viewer is", () => {
+  const isScored = (zone, start, now) =>
+    checkInTimeZone(zone, () =>
+      WNBASnapshot.isScoreboardGame({ ...FINALS_GAME, start }, UNDECIDED, Date.parse(now)),
+    );
+  assert.equal(isScored("Asia/Tokyo", "2026-10-28T13:00:00Z", "2026-10-28T03:00:00Z"), false);
+  assert.equal(isScored("Pacific/Honolulu", "2026-10-28T23:30:00Z", "2026-10-28T05:00:00Z"), true);
 });

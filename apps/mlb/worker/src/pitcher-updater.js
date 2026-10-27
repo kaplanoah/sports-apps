@@ -51,7 +51,6 @@ import { nameCountKey } from "../../../../shared/worker/season-store.js";
 const MINUTE_MS = 60 * 1000;
 const HOUR_MS = 60 * MINUTE_MS;
 const RUN_DELAY_MS = 5 * MINUTE_MS;
-const LEAGUE_NAME = "MLB";
 const STATUS_KEY = "pitchers/status";
 export const PITCHER_JOB = "pitchers";
 // The count the Worker adds to each time a sheet reads MLB for what the store should have kept.
@@ -316,7 +315,6 @@ function createStoreUpdate() {
   async function keepPitchers(context) {
     keeper ??= createFeedKeeper({
       feeds: FEEDS,
-      leagueName: LEAGUE_NAME,
       now: context.now,
       storage: context.storage,
     });

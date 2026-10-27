@@ -41,6 +41,14 @@ export const mapSeriesById = (series) => new Map((series ?? []).map((each) => [e
 const hasBothTeams = (game) => !!(game.away.team && game.home.team);
 
 /**
+ * Whether a game will be played between two known teams.
+ * @param {SeasonGame} game
+ * @param {Map<string, DecidedSeries>} seriesById
+ */
+export const isPlayable = (game, seriesById) =>
+  hasBothTeams(game) && isToBePlayed(game, seriesById);
+
+/**
  * A team's last finished game, the one it's playing, and its next, each null when it has none. The
  * next is one whose other team is known, and one that will be played.
  * @template {SeasonGame} Game
@@ -52,5 +60,5 @@ const hasBothTeams = (game) => !!(game.away.team && game.home.team);
 export const findTeamNearestGames = (games, team, seriesById) =>
   findNearestGames(
     games.filter((game) => isPlaying(game, team)),
-    (game) => hasBothTeams(game) && isToBePlayed(game, seriesById),
+    (game) => isPlayable(game, seriesById),
   );

@@ -1,6 +1,7 @@
 import * as WNBASnapshot from "../../page/js/snapshot.js";
 import { readEasternDay } from "#shared/days.js";
 import { createFeedKeeper } from "../../../../shared/worker/feed-keeper.js";
+import { describeError } from "../../../../shared/worker/responses.js";
 import { createReusedLoader, fetchUpstream } from "../../../../shared/worker/upstream.js";
 import { createGameEnds } from "./game-ends.js";
 import { createEspnGameReader, readEndTime } from "./lead.js";
@@ -47,6 +48,18 @@ const upgradeLink = (link) => String(link).replace(/^http:/, "https:");
 
 const readEventId = (link) => String(link).match(/\/events\/(\d+)/)?.[1] ?? null;
 
+// In the feeds' own order rather than the order they failed in, so the store's status doesn't
+// change while the same feeds fail for the same reasons.
+/**
+ * Why each feed that didn't answer failed.
+ * @param {Record<string, string>} failures
+ */
+export const describeFailures = (failures) =>
+  Object.keys(FEED_DATA)
+    .filter((name) => name in failures)
+    .map((name) => `${name}: ${failures[name]}`)
+    .join("; ");
+
 const countFinals = (scoreboard) =>
   (scoreboard?.scoreboard?.games ?? []).filter((game) => game.gameStatus === 3).length;
 
@@ -62,7 +75,7 @@ export function createSnapshotLoader({
   now = () => Date.now(),
   storage = undefined,
 } = {}) {
-  const slowFeeds = createFeedKeeper({ feeds: SLOW_FEEDS, leagueName: "The WNBA", now, storage });
+  const slowFeeds = createFeedKeeper({ feeds: SLOW_FEEDS, now, storage });
   const networkMonths = new Map();
   const espnGames = createEspnGameReader({ fetchImpl });
   const gameEnds = createGameEnds({
@@ -172,25 +185,36 @@ export function createSnapshotLoader({
 
   async function fetchResponses(season) {
     await slowFeeds.forgetFeed("players", nameAveragesRequest(season));
+    /** @type {Record<string, string>} */
+    const failures = {};
+    /** @param {keyof typeof FEED_DATA} name */
+    const noteFailure = (name) => (/** @type {unknown} */ error) => {
+      failures[name] = describeError(error);
+      return null;
+    };
     const scoreboard = await fetchFeed("scoreboard", WNBASnapshot.REQUESTS.scoreboard).catch(
-      () => null,
+      noteFailure("scoreboard"),
     );
     await slowFeeds.noteFinalCount(scoreboard ? countFinals(scoreboard) : null);
     const hasGamesLeftLive = (schedule) =>
       WNBASnapshot.listGamesLeftLive(schedule, scoreboard, season).size > 0;
     const [schedule, bracket, standings] = await Promise.all([
-      readSlowFeed("schedule", WNBASnapshot.REQUESTS.schedule, hasGamesLeftLive).catch(() => null),
-      readSlowFeed("bracket", WNBASnapshot.REQUESTS.bracket(season)).catch(() => null),
-      readSlowFeed("standings", WNBASnapshot.REQUESTS.standings(season)).catch(() => null),
+      readSlowFeed("schedule", WNBASnapshot.REQUESTS.schedule, hasGamesLeftLive).catch(
+        noteFailure("schedule"),
+      ),
+      readSlowFeed("bracket", WNBASnapshot.REQUESTS.bracket(season)).catch(noteFailure("bracket")),
+      readSlowFeed("standings", WNBASnapshot.REQUESTS.standings(season)).catch(
+        noteFailure("standings"),
+      ),
     ]);
     if (!scoreboard && !schedule && !bracket)
-      throw new Error("None of the WNBA's feeds answered with data");
+      throw new Error(`None of the WNBA's feeds answered with data: ${describeFailures(failures)}`);
     const needsBackup = !scoreboard || hasGamesLeftLive(schedule);
     const [backup, networks] = await Promise.all([
       needsBackup ? fetchBackup().catch(() => null) : null,
       readNetworks(schedule, season),
     ]);
-    return { scoreboard, schedule, bracket, standings, backup, networks };
+    return { responses: { scoreboard, schedule, bracket, standings, backup, networks }, failures };
   }
 
   /**
@@ -198,11 +222,12 @@ export function createSnapshotLoader({
    * @param {number} requestedAt
    */
   async function fetchSnapshot(season, requestedAt) {
-    const responses = await fetchResponses(season);
+    const { responses, failures } = await fetchResponses(season);
     const snapshot = WNBASnapshot.buildSnapshot(responses, { season, now: requestedAt });
     const ended = await addGameEnds(snapshot);
     return {
       ...ended,
+      failures,
       meetings: listUpcomingMeetings(responses.schedule, ended),
     };
   }

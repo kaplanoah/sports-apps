@@ -1511,6 +1511,20 @@ test("the header names a problem with the page's server or the league's feeds", 
   );
 });
 
+test("the header leaves out a feed the store's status says has nothing to send", () => {
+  const idle = {
+    error: "wnba_feeds_missing",
+    detail: "scoreboard",
+    idle: "scoreboard",
+    standIn: "espn",
+  };
+  assert.equal(describeStampProblem({ status: idle, problem: "" }), "");
+  assert.equal(
+    describeStampProblem({ status: { ...idle, detail: "scoreboard, standings" }, problem: "" }),
+    "The WNBA stopped sending the standings",
+  );
+});
+
 test("a score shows in scoreboard digits, and still reads as its number", () => {
   const markup = renderScoreboard(89).text;
   assert.match(markup, /<span class="scoreboard-text">89<\/span>/);

@@ -17,7 +17,6 @@ function createKeeper() {
       standings: { maxAgeMs: 24 * HOUR_MS, changesWithGames: true },
       season: { maxAgeMs: 24 * HOUR_MS, changesWithGames: false },
     },
-    leagueName: "The league",
     now: () => clock.now,
   });
   const reads = { standings: 0, season: 0 };
@@ -107,23 +106,21 @@ test("a count that couldn't be read, or the first one, isn't a game ending", asy
   assert.equal(reads.standings, 1);
 });
 
-test("a feed that fails stands in with its last answer, and waits five minutes to be asked again", async () => {
+test("a feed that fails stands in with its last answer, and waits five minutes to be asked again, failing meanwhile as it last did", async () => {
   const clock = { now: 0 };
   const keeper = createFeedKeeper({
     feeds: { standings: { maxAgeMs: MINUTE_MS, changesWithGames: true } },
-    leagueName: "The league",
     now: () => clock.now,
   });
   let attempts = 0;
   const fail = async () => {
     attempts += 1;
-    throw new Error("503");
+    throw new Error(`The league answered 503 on try ${attempts}`);
   };
-  await assert.rejects(keeper.readFeed("standings", "/standings", fail), /503/);
-  await assert.rejects(
-    keeper.readFeed("standings", "/standings", fail),
-    /The league didn't answer standings a moment ago/,
-  );
+  const failure = { message: "The league answered 503 on try 1" };
+  await assert.rejects(keeper.readFeed("standings", "/standings", fail), failure);
+  clock.now = 4 * MINUTE_MS;
+  await assert.rejects(keeper.readFeed("standings", "/standings", fail), failure);
   assert.equal(attempts, 1);
 
   clock.now = 5 * MINUTE_MS;
@@ -139,7 +136,6 @@ test("what a keeper kept outlasts it, as a Durable Object's storage outlasts its
   const createKeeperOnStorage = () =>
     createFeedKeeper({
       feeds: { standings: { maxAgeMs: 24 * HOUR_MS, changesWithGames: true } },
-      leagueName: "The league",
       now: () => clock.now,
       storage,
     });
