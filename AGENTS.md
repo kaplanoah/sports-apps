@@ -23,9 +23,9 @@
 
 ## Repo
 
-- Apps: one per league, each in `apps/<app>/` with its own `page/`, `worker/`, and `tests/`, and deployed as its own Worker, named in `apps/<app>/worker/wrangler.toml`. Paths here, in the rule files, and in the skills are inside an app's or a service's folder, except `shared/`, `.github/`, `.agents/`, `.claude/`, and the ones named as the root's.
+- Apps: one per league, each in `apps/<app>/` with its own `page/`, `worker/`, and `tests/`, and deployed as its own Worker, named in `apps/<app>/worker/wrangler.toml`. Paths here, in the rule files, and in the skills are inside an app's or a service's folder, except `shared/`, `.github/`, `.agents/`, `.claude/`, `.githooks/`, and the ones named as the root's.
 - Services: a Worker with no page, which the apps reach by a binding and the public never does, each in `services/<name>/` with its own `worker/` and `tests/`, and built, deployed, and rolled back as an app is (`.claude/rules/tooling.md`).
-- Read the matching rule files before work on their paths, even when the client does not load them automatically:
+- Before reading or changing files, read every rule file whose `paths` frontmatter matches them, even when the client does not load rules automatically. The labels below describe topics, not scope:
   - `.claude/rules/page-look.md` for page appearance.
   - `.claude/rules/page-code.md` for page code.
   - `.claude/rules/worker.md` for app and service Workers.

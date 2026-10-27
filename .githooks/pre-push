@@ -1,2 +1,2 @@
 #!/bin/sh
-exec node .claude/hooks/check-push.mjs
+exec node .githooks/check-push.mjs

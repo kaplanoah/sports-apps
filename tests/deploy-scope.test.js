@@ -49,7 +49,6 @@ test("a merge of only docs, tests, and tooling skips the deploy", () => {
     ".claude/rules/page-look.md",
     ".claude/settings.json",
     ".githooks/pre-push",
-    ".agents/skills/scripts/check.mjs",
     ".agents/skills/add-league/SKILL.md",
     ".github/workflows/beta.yml",
     ".github/workflows/ci.yml",
@@ -194,4 +193,13 @@ test("changes are listed since the live version, with a moved file on both sides
   };
   assert.deepEqual(listChangedFiles("abc1234", git), ["page/js/old.js", "tests/old.test.js"]);
   assert.deepEqual(calls[0], ["diff", "--name-only", "--no-renames", "abc1234", "HEAD"]);
+});
+
+test("executable agent files and unlisted Git hooks still deploy", () => {
+  for (const path of [
+    ".agents/skills/scripts/check.mjs",
+    ".agents/shared.js",
+    ".githooks/future.mjs",
+  ])
+    assert.equal(decideDeploy([path]).isNeeded, true, path);
 });

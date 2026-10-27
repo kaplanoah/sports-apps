@@ -4,10 +4,10 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { decidePush } from "../.claude/hooks/check-push.mjs";
+import { decidePush } from "../.githooks/check-push.mjs";
 import { REPO_ROOT, readRepoFile } from "./repo-files.js";
 
-const HOOK = `${import.meta.dirname}/../.claude/hooks/check-push.mjs`;
+const HOOK = `${import.meta.dirname}/../.githooks/check-push.mjs`;
 const CHECKS = ["lint", "format:check", "typecheck", "deadcode"];
 
 /**
@@ -86,8 +86,6 @@ function makeRepo(failingScripts = []) {
   writeFileSync(join(repo, ".gitignore"), "node_modules/\n");
   mkdirSync(join(repo, "node_modules"));
   cpSync(new URL(".githooks", REPO_ROOT), join(repo, ".githooks"), { recursive: true });
-  mkdirSync(join(repo, ".claude/hooks"), { recursive: true });
-  cpSync(HOOK, join(repo, ".claude/hooks/check-push.mjs"));
   runGit(repo, ["init"]);
   runGit(repo, ["add", "."]);
   runGit(repo, ["commit", "-m", "start"]);
@@ -140,7 +138,7 @@ test("npm install installs the executable Git hook and a passing push reaches it
   assert.equal(runGit(clone, ["config", "--local", "core.hooksPath"]).trim(), ".githooks");
   assert.match(
     readFileSync(join(repo, ".githooks/pre-push"), "utf8"),
-    /exec node \.claude\/hooks\/check-push\.mjs/,
+    /exec node \.githooks\/check-push\.mjs/,
   );
   const pushed = pushRepo(clone);
   assert.equal(pushed.status, 0, pushed.stderr);
@@ -169,7 +167,13 @@ test("Git refuses a dirty tree and missing packages before running checks", (con
   context.after(() => rmSync(repo, { recursive: true, force: true }));
   installPackages(repo);
   writeFileSync(join(repo, "notes.md"), "draft");
-  assert.match(pushRepo(repo).stderr, /uncommitted changes/);
+  const rejected = pushRepo(repo);
+  assert.match(rejected.stderr, /uncommitted changes/);
+  assert.notEqual(rejected.status, 0);
+  assert.equal(
+    runGit(join(repo, "node_modules/remote.git"), ["for-each-ref", "--format=%(refname)"]).trim(),
+    "",
+  );
   rmSync(join(repo, "notes.md"));
   rmSync(join(repo, "node_modules"), { recursive: true });
   const head = runGit(repo, ["rev-parse", "HEAD"]).trim();

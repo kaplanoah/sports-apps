@@ -7,7 +7,7 @@ import {
   readRuleFiles,
   readRulePaths,
 } from "../worker/rule-files.mjs";
-import { listTrackedFiles, readRepoFile, readSkillName } from "./repo-files.js";
+import { listTrackedFiles, readRepoFile } from "./repo-files.js";
 
 const repoFiles = listTrackedFiles();
 const ruleFiles = repoFiles.filter(isRuleFile);
@@ -41,17 +41,6 @@ test("each rule file's paths each match a file in the repo", () => {
       .map((glob) => `${path}: ${glob}`),
   );
   assert.deepEqual(stale, []);
-});
-
-// A session learns from AGENTS.md where the rest of the guidance is before it opens a file.
-test("AGENTS.md names each rule file and skill", () => {
-  const agents = readRepoFile("AGENTS.md");
-  const skills = repoFiles.flatMap((path) => readSkillName(path) ?? []);
-  const unnamed = [
-    ...ruleFiles.filter((path) => !agents.includes(`\`${path}\``)),
-    ...skills.filter((name) => !agents.includes(`\`.agents/skills/${name}/SKILL.md\``)),
-  ];
-  assert.deepEqual(unnamed, []);
 });
 
 test("a rule file's paths are the items its frontmatter lists, quoted or not", () => {

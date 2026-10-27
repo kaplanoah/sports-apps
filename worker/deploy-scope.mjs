@@ -17,6 +17,8 @@ export const CONFIG_ONLY_FILES = new Set([
   "LICENSE",
   ".git-blame-ignore-revs",
   ".gitignore",
+  ".githooks/pre-push",
+  ".githooks/check-push.mjs",
   ".prettierignore",
   "eslint.config.mjs",
   "knip.json",
@@ -109,8 +111,7 @@ const TEST_FOLDERS = [/^tests\//, /^(?:apps|services)\/[^/]+\/tests\//];
  * Whether a path holds settings, hooks, rules, or skills that only sessions run.
  * @param {string} path
  */
-export const isSessionPath = (path) =>
-  [".claude/", ".agents/", ".githooks/"].some((folder) => path.startsWith(folder));
+export const isSessionPath = (path) => path.startsWith(".claude/");
 
 /**
  * Whether a path is in the root's tests or a Worker's.
