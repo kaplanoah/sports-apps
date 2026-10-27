@@ -135,6 +135,7 @@ test("a stall after a permanent error never retries", async () => {
   assert.equal(await installBrowsers(["webkit"], { ...installer.options, timeoutMs: 150 }), 124);
   assert.equal(installer.invocations.length, 1);
 });
+
 test("a permanent error before the retained output tail still forbids retry", async () => {
   const installer = createInstaller([
     'console.error("HTTP 403"); setTimeout(() => { process.stderr.write("x".repeat(20000)); setTimeout(() => { console.error("ECONNRESET"); process.exitCode = 1; }, 30); }, 30)',
