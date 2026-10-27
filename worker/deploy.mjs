@@ -149,7 +149,7 @@ const listServiceBindings = (channel, roots) =>
 /**
  * @param {{ storeClass: string, isPageless: boolean, channel: string, roots?: import("./apps.mjs").WorkerRoots }} worker
  */
-function listBindings({ storeClass, isPageless, channel, roots }) {
+export function listBindings({ storeClass, isPageless, channel, roots }) {
   const store = { type: "durable_object_namespace", name: "STORE", class_name: storeClass };
   if (isPageless) return [store, VERSION_BINDING];
   const counts = channel === "production" ? [DAILY_OPENS_BINDING] : [];
