@@ -16,6 +16,7 @@ import {
 } from "../worker/beta-claim.mjs";
 import { GitHubError } from "../worker/github-api.mjs";
 import { readRepoFile } from "./repo-files.js";
+import { createTimelineAnswer } from "./timeline.js";
 
 /** @typedef {import('../worker/beta-claim.mjs').PullRequest} PullRequest */
 /** @typedef {import('../worker/labeling.mjs').TimelineEvent} TimelineEvent */
@@ -371,8 +372,10 @@ function createGitHubFake({ open, closed, timelines, missingLabels = [] }) {
         closed.filter((issue) => issue.labels.some(({ name }) => name === label)),
       );
     }
-    const timeline = path.match(/^\/issues\/(\d+)\/timeline/)?.[1];
-    if (timeline) return Response.json(timelines[Number(timeline)] ?? []);
+    if (String(url) === "https://api.github.com/graphql") {
+      const { variables } = JSON.parse(String(init?.body));
+      return Response.json(createTimelineAnswer(timelines[variables.number] ?? []));
+    }
     if (path.includes("/check-suites"))
       return Response.json({ check_suites: [{ created_at: at(0) }] });
     return Response.json({});
@@ -414,7 +417,9 @@ test("a run adds and takes off one label at a time, comments to tell the next in
     told: 6,
     taken: null,
   });
-  const writes = requests.filter(({ method }) => method !== "GET");
+  const writes = requests.filter(
+    ({ method, path }) => method !== "GET" && path !== "https://api.github.com/graphql",
+  );
   assert.deepEqual(writes, [
     {
       method: "POST",
@@ -504,7 +509,10 @@ test("a run adds beta-wait beside the labels a pull request has, and a label som
     { number: 7, label: WAIT_LABEL, isAdded: true },
   ]);
   assert.deepEqual(
-    requests.filter(({ method }) => method === "POST" || method === "PUT"),
+    requests.filter(
+      ({ method, path }) =>
+        path !== "https://api.github.com/graphql" && (method === "POST" || method === "PUT"),
+    ),
     [{ method: "POST", path: "/issues/7/labels", body: { labels: [WAIT_LABEL] } }],
   );
 });
