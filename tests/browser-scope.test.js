@@ -34,6 +34,7 @@ test("a change to the docs, the other workflows, or the tooling no browser test 
       "README.md",
       "apps/mlb/README.md",
       ".githooks/pre-push",
+      ".githooks/check-push.mjs",
       ".agents/skills/steward/SKILL.md",
       ".github/workflows/flaky.yml",
       "worker/plan-review.mjs",

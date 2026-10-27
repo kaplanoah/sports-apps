@@ -149,6 +149,10 @@ test("at 300,000 tokens the hook denies an edit and a push, and lets a read, a d
       output.permissionDecisionReason,
       /For this handoff push only, use git push --no-verify origin HEAD/,
     );
+    assert.match(
+      output.permissionDecisionReason,
+      /Record any failed checks there and in the continuation prompt; tell the next session to fix them before normal shipping\./,
+    );
     assert.match(output.permissionDecisionReason, /"Paste this in a new session now\."/);
   }
   for (const [tool_name, tool_input] of allowed)

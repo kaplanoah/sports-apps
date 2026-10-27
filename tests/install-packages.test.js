@@ -101,6 +101,19 @@ test("the hook runs npm ci in the project's folder and says so in one line", () 
   assert.equal(readFileSync(join(folder, "npm-arguments.txt"), "utf8"), "ci\n");
 });
 
+test("failed Git hook setup still installs packages and lets the session start", () => {
+  const folder = mkdtempSync(join(tmpdir(), "install-packages-no-git-"));
+  writeFileSync(join(folder, "package-lock.json"), "{}");
+  const { status, stdout } = runHook(folder);
+  assert.equal(status, 0);
+  assert.match(
+    stdout,
+    /Git hook setup failed; run git config --local core.hooksPath .githooks before pushing\./,
+  );
+  assert.match(stdout, /Installed packages with npm ci/);
+  assert.equal(readFileSync(join(folder, "npm-arguments.txt"), "utf8"), "ci\n");
+});
+
 test("the hook lets the session start, and says so, when npm ci fails", () => {
   const folder = makeFolder();
   const { status, stdout } = runHook(folder, 1);

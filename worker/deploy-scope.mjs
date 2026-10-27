@@ -108,7 +108,7 @@ const SKIPPED_FILES = new Set([
 const TEST_FOLDERS = [/^tests\//, /^(?:apps|services)\/[^/]+\/tests\//];
 
 /**
- * Whether a path holds settings, hooks, rules, or skills that only sessions run.
+ * Whether a path is in the root's Claude configuration folder.
  * @param {string} path
  */
 export const isSessionPath = (path) => path.startsWith(".claude/");

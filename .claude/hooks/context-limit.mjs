@@ -84,6 +84,8 @@ const HANDOFF_STEPS =
   "To hand off, commit and push your work, " +
   "and write a Handoff section in the PR description, opening the PR as a draft if there's none: " +
   "what happened, what was done, what's known, and what isn't. " +
+  "Record any failed checks there and in the continuation prompt; " +
+  "tell the next session to fix them before normal shipping. " +
   "Then give the owner a standalone prompt for a new session that takes over the PR and its branch, " +
   'with the line "Paste this in a new session now." above it, and stop. ' +
   "Don't start the new session yourself.";

@@ -49,7 +49,9 @@ test("a merge of only docs, tests, and tooling skips the deploy", () => {
     ".claude/rules/page-look.md",
     ".claude/settings.json",
     ".githooks/pre-push",
+    ".githooks/check-push.mjs",
     ".agents/skills/add-league/SKILL.md",
+    ".agents/skills/ship/SKILL.md",
     ".github/workflows/beta.yml",
     ".github/workflows/ci.yml",
     ".github/workflows/flaky.yml",
@@ -120,7 +122,6 @@ test("anything in the root's .claude/ folder skips the deploy, a hook no list na
     ".claude/hooks/one-command.mjs",
     ".claude/hooks/install-packages.mjs",
     ".claude/hooks/a-hook-yet-to-come.mjs",
-    ".agents/skills/ship/SKILL.md",
   ]) {
     assert.equal(decideDeploy([path]).isNeeded, false, path);
   }

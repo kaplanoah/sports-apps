@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  fetchInjuryReport,
   listReportedPlayers,
   nameInjuryReportRequest,
   readNameLetters,
@@ -81,4 +82,11 @@ test("a name's letters match it across accents and punctuation, and each league'
     nameInjuryReportRequest("baseball/mlb"),
     "https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/injuries",
   );
+});
+
+test("a report ESPN answers with something other than JSON says what came back", async () => {
+  const fetchImpl = async () => new Response("");
+  await assert.rejects(fetchInjuryReport(fetchImpl, "basketball/wnba"), {
+    message: "ESPN answered its injury report with nothing rather than data",
+  });
 });
