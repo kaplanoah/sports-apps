@@ -77,6 +77,18 @@ jobs:
           TESTS: ${{ inputs.tests }}
           PROJECT: ${{ inputs.project }}
         run: node tests/browser/projects.mjs
+      # Ubuntu's mirror can stall, so the nightly run takes WebKit's system libraries from the
+      # packages CI's caches job saved on main, when they're there.
+      - id: image
+        run: echo "os=$ImageOS" >> "$GITHUB_OUTPUT"
+      - id: webkit-packages
+        if: github.event_name == 'schedule'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/webkit-packages
+          key: webkit-packages-${{ steps.image.outputs.os }}-${{ hashFiles('package-lock.json') }}
+      - if: steps.webkit-packages.outputs.cache-hit == 'true'
+        run: sudo cp ~/webkit-packages/*.deb /var/cache/apt/archives/
       - run: node worker/install-browsers.mjs --with-deps --only-shell ${{ steps.browsers.outputs.browsers }}
         timeout-minutes: 7
       # Every test runs to the end, however many fail, so the issue names each flaky one.
