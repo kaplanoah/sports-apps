@@ -265,9 +265,13 @@ test("each job that runs the at-rest specs in WebKit installs WebKit with its sy
   assert.match(
     readJob("burn-in"),
     new RegExp(
-      `- if: contains\\(needs\\.scope\\.outputs\\.specs, '${escapePattern(WEBKIT_TEST_MATCH)}'\\)\\n\\s+run: node worker/install-browsers.mjs --with-deps webkit\\n`,
+      `if: &runs-webkit-specs contains\\(needs\\.scope\\.outputs\\.specs, '${escapePattern(WEBKIT_TEST_MATCH)}'\\)\\n`,
     ),
     "burn-in installs WebKit whenever a spec the config's WebKit projects run is among the ones it repeats",
+  );
+  assert.match(
+    readJob("burn-in"),
+    /- if: \*runs-webkit-specs\n\s+run: node worker\/install-browsers\.mjs --with-deps webkit\n/,
   );
 });
 
@@ -299,10 +303,61 @@ test("nightly setup failures retain their failure without a missing-report downl
 });
 
 // A cache saved with WebKit in it would have the browser job, whose machines lack WebKit's system
-// libraries, run the WebKit projects, so only the jobs that install Chromium alone save it.
-test("no job that installs WebKit saves the browsers' cache", () => {
+// libraries, run the WebKit projects.
+test("the browsers' cache is saved only before WebKit is installed", () => {
   for (const job of ["burn-in", "webkit"])
     assert.doesNotMatch(readJob(job), /uses: actions\/cache(?:\/save)?@/, job);
+});
+
+// Ubuntu's mirror can stall for longer than both of the installer's tries, so CI's WebKit installs
+// and the nightly Flaky run first put back the packages main saved.
+test("each job that installs WebKit's system libraries first puts back main's saved packages", () => {
+  const key = "webkit-packages-${{ steps.image.outputs.os }}-${{ hashFiles('package-lock.json') }}";
+  assert.match(
+    readJob("burn-in"),
+    new RegExp(`key: &webkit-packages-key ${escapePattern(key)}\\n`),
+  );
+  assert.match(
+    readJob("burn-in"),
+    /- &stage-webkit-packages\n {8}if: steps\.webkit-packages\.outputs\.cache-hit == 'true'\n {8}run: sudo cp ~\/webkit-packages\/\*\.deb \/var\/cache\/apt\/archives\/\n/,
+  );
+  const nightly = readJob("browser", "flaky.yml");
+  assert.match(nightly, new RegExp(`key: ${escapePattern(key)}\\n`));
+  for (const [job, workflow] of [
+    ["burn-in", "ci.yml"],
+    ["webkit", "ci.yml"],
+    ["browser", "flaky.yml"],
+  ]) {
+    const steps = readJob(job, workflow).split(/^ {6}- /m);
+    const restore = steps.findIndex(
+      (step) =>
+        /uses: actions\/cache\/restore@/.test(step) && /path: ~\/webkit-packages\n/.test(step),
+    );
+    const stage = steps.findIndex(
+      (step) =>
+        /^[&*]stage-webkit-packages\n/.test(step) ||
+        /run: sudo cp ~\/webkit-packages\/\*\.deb \/var\/cache\/apt\/archives\/\n/.test(step),
+    );
+    const install = steps.findIndex((step) =>
+      /run: node worker\/install-browsers\.mjs --with-deps .*\bwebkit\b|--with-deps --only-shell/.test(
+        step,
+      ),
+    );
+    assert.ok(restore > 0 && restore < install, `${job} restores the packages before installing`);
+    assert.ok(stage > restore && stage < install, `${job} stages the packages before installing`);
+  }
+  const caches = readJob("caches").split(/^ {6}- /m);
+  const saveBrowsers = caches.findIndex(
+    (step) => /uses: actions\/cache\/save@/.test(step) && /key: \*browsers-key\n/.test(step),
+  );
+  const install = caches.findIndex((step) =>
+    /run: node worker\/install-browsers\.mjs --with-deps webkit\n/.test(step),
+  );
+  const savePackages = caches.findIndex(
+    (step) => /uses: actions\/cache\/save@/.test(step) && /key: \*webkit-packages-key\n/.test(step),
+  );
+  assert.ok(saveBrowsers > 0 && saveBrowsers < install, "WebKit stays out of the browsers' cache");
+  assert.ok(install < savePackages, "caches saves the packages WebKit's install downloaded");
 });
 
 // A Node test's failure is read from the end of the job's log, which a session reaches only so
@@ -358,8 +413,8 @@ test("manual browser runs never restore or save dependency caches", () => {
   const browser = readJob("browser", "flaky.yml");
   const steps = browser.split(/^ {6}- /m).slice(1);
   const caches = steps.filter((step) => /uses: actions\/cache(?:\/(?:restore|save))?@/.test(step));
-  assert.equal(caches.length, 1);
-  assert.match(caches[0], /^ {8}if: github\.event_name == 'schedule'$/m);
+  assert.equal(caches.length, 2);
+  for (const cache of caches) assert.match(cache, /^ {8}if: github\.event_name == 'schedule'$/m);
   const setup = steps.find((step) => /uses: actions\/setup-node@/.test(step));
   assert.ok(setup);
   assert.equal(readStepInput(workflow, setup, "package-manager-cache"), "false");
