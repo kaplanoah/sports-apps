@@ -3,15 +3,24 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { hashReviewContent } from "./review-supplied.mjs";
-import { createReviewGitEnvironment } from "./review-repository.mjs";
+import { readReviewGit } from "./review-repository.mjs";
+
+export const TRIAL_COMPARISON_PROFILES = Object.freeze({
+  claude: "production-prompt-single-attempt",
+  codex: "native-offline",
+});
+
+const SOCKET_CASE = {
+  fix: "1b90fd34f64459f960ff0e735c1eb1f1266fcc11",
+  test: "tests/worker-store.test.js",
+  pattern: "an unknown socket message leaves watched documents",
+};
 
 const CASES = [
   {
     id: "case-1",
     head: "950a11002a35bab3d2671c2d858615ff86587fd7",
-    fix: "1b90fd34f64459f960ff0e735c1eb1f1266fcc11",
-    test: "tests/worker-store.test.js",
-    pattern: "an unknown socket message leaves watched documents",
+    ...SOCKET_CASE,
     targets: ["shared/page/worker-store.js", "shared/worker/season-store.js"],
     bug: "An unknown socket frame reaches receivePush without a document path and throws instead of preserving watches.",
   },
@@ -28,23 +37,51 @@ const CASES = [
     ],
     bug: "A stored playoff month remains after the current schedule drops every game it contained.",
   },
+  {
+    id: "range-694",
+    head: "54e0ca728ecd43d12a670b8a35aebb97b63335c2",
+    ...SOCKET_CASE,
+    targets: [],
+    bug: "The unknown socket frame failure is also reproduced in the complete historical PR #694 snapshot.",
+  },
+  {
+    id: "range-734",
+    detectionTarget: false,
+    head: "a6105d72d8706dc280d162b890a6cd82b21888dc",
+    ...SOCKET_CASE,
+    targets: [],
+    bug: "The unknown socket frame failure is also reproduced in the complete historical PR #734 snapshot.",
+  },
 ];
 
-/** @param {string[]} args */
-const readEvaluationGit = (args) =>
-  execFileSync("git", ["-c", "core.hooksPath=/dev/null", ...args], {
-    env: createReviewGitEnvironment(),
-    maxBuffer: 64 * 1024 * 1024,
-  });
+/** @param {string} id */
+export function readReviewEvaluationCase(id) {
+  const entry = CASES.find((entry) => entry.id === id);
+  if (!entry) throw new Error("Unknown frozen review case.");
+  return entry;
+}
+
+/** @param {any} entry @param {string} [repository] */
+export function verifyEvaluationSnapshot(entry, repository = process.cwd()) {
+  const head = readReviewGit(repository, [
+    "rev-parse",
+    "--verify",
+    `${entry.head}^{commit}`,
+  ]).trim();
+  readReviewGit(repository, ["merge-base", "--is-ancestor", head, entry.fix]);
+  if (
+    entry.targets.length &&
+    readReviewGit(repository, ["rev-parse", `${entry.fix}^1`]).trim() !== head
+  )
+    throw new Error("Component snapshot is not its fix's parent.");
+  return head;
+}
 
 /** @param {string} destination */
 export function reproduceReviewCases(destination) {
   mkdirSync(destination);
   return CASES.map((entry) => {
-    const head = readEvaluationGit(["rev-parse", `${entry.fix}^`])
-      .toString()
-      .trim();
-    if (head !== entry.head) throw new Error("Historical snapshot changed.");
+    const head = verifyEvaluationSnapshot(entry);
     const folder = join(destination, entry.id);
     mkdirSync(folder);
     const results = {};
@@ -55,12 +92,12 @@ export function reproduceReviewCases(destination) {
       const checkout = join(folder, name);
       mkdirSync(checkout);
       execFileSync("tar", ["-x", "-C", checkout], {
-        input: readEvaluationGit(["archive", revision]),
+        input: readReviewGit(process.cwd(), ["archive", revision], "buffer"),
       });
       const original = readFileSync(join(checkout, entry.test));
       writeFileSync(
         join(checkout, entry.test),
-        readEvaluationGit(["show", `${entry.fix}:${entry.test}`]),
+        readReviewGit(process.cwd(), ["show", `${entry.fix}:${entry.test}`], "buffer"),
       );
       const trial = spawnSync(
         process.execPath,
@@ -176,6 +213,7 @@ export function measureReviewTrial(trial, telemetry) {
       (entry) => entry.id === trial.case && entry.fix === trial.fix && entry.head === trial.head,
     ) ||
     !["claude", "codex"].includes(trial.provider) ||
+    trial.comparisonProfile !== TRIAL_COMPARISON_PROFILES[trial.provider] ||
     !Number.isFinite(trial.elapsedSeconds) ||
     trial.elapsedSeconds <= 0 ||
     !["completed", "failed", "interrupted"].includes(trial.status) ||
@@ -198,16 +236,22 @@ export function measureReviewTrial(trial, telemetry) {
     new Set(trial.adjudications.map((item) => item.id)).size !== trial.adjudications.length
   )
     throw new Error("Evaluation requires evidence-based adjudication.");
+  const entry = readReviewEvaluationCase(trial.case);
+  const hasDetectionTarget = !("detectionTarget" in entry && entry.detectionTarget === false);
+  const detected = trial.adjudications.some((item) => item.verdict === "confirmed-target");
+  if (!hasDetectionTarget && detected)
+    throw new Error("This historical range has no changed-code detection target.");
   return {
     case: trial.case,
     provider: trial.provider,
+    comparisonProfile: trial.comparisonProfile,
     fix: trial.fix,
     head: trial.head,
     model: trial.model,
     toolVersion: trial.toolVersion,
     status: trial.status,
     completed: trial.status === "completed",
-    detected: trial.adjudications.some((item) => item.verdict === "confirmed-target"),
+    detected: hasDetectionTarget ? detected : null,
     falseFindings: trial.adjudications.filter((item) => item.verdict === "false").length,
     unsure: trial.adjudications.filter((item) => item.verdict === "unsure").length,
     tokens: measureReviewTokens(telemetry, trial.provider),

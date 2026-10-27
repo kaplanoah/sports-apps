@@ -125,6 +125,7 @@
     "tests/review-codex.test.js",
     "tests/review-git.test.js",
     "tests/review-publication.test.js",
+    "tests/review-trial.test.js",
     "tests/rework.test.js",
     "tests/rollback.test.js",
     "tests/season-days.test.js",

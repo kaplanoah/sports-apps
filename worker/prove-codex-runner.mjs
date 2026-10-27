@@ -1,28 +1,18 @@
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { copyFileSync, cpSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { measureReviewTokens, retainCodexUsage, readCodexEvents } from "./review-evaluation.mjs";
 import { TOOL_PROOF, CAPTURE_PROOF } from "./codex-runner-probe.mjs";
+import {
+  prepareTrialEvidenceCertificate,
+  retainPrivateTrialEvidence,
+} from "./review-trial-evidence.mjs";
+
+import { requireOwnerTrialAuthority, TrialAuthorityError } from "./review-trial-authority.mjs";
 
 class CodexProofError extends Error {}
-
-/** @param {NodeJS.ProcessEnv} env */
-export function requireCodexProofAuthority(env) {
-  if (
-    env.GITHUB_REPOSITORY !== "kaplanoah/sports-apps" ||
-    env.GITHUB_EVENT_NAME !== "workflow_dispatch" ||
-    env.GITHUB_REF !== "refs/heads/main" ||
-    env.GITHUB_ACTOR !== "kaplanoah" ||
-    env.GITHUB_TRIGGERING_ACTOR !== "kaplanoah" ||
-    env.GITHUB_RUN_ATTEMPT !== "1" ||
-    env.TRUSTED_CODEX_REVIEW_ENABLED === "true"
-  )
-    throw new CodexProofError(
-      "Codex proof requires one owner dispatch on main with live Codex disabled.",
-    );
-}
 
 /** @param {string} folder */
 function writeCodexProofFixture(folder) {
@@ -66,10 +56,11 @@ function writeCodexProofRequest(folder) {
 
 /** @param {NodeJS.ProcessEnv} env */
 function prepareCodexProof(env) {
-  requireCodexProofAuthority(env);
+  requireOwnerTrialAuthority(env);
   const folder = join(env.RUNNER_TEMP, "codex-proof");
   writeCodexProofFixture(folder);
   writeCodexProofRequest(folder);
+  prepareTrialEvidenceCertificate(folder, env.CODEX_EVIDENCE_CERTIFICATE);
   execFileSync(
     process.execPath,
     [fileURLToPath(new URL("./review-codex.mjs", import.meta.url)), "config"],
@@ -146,21 +137,71 @@ export function readCodexProofConfiguration(workflow) {
 }
 
 /** @param {NodeJS.ProcessEnv} env */
+function readAvailableProofUsage(env) {
+  try {
+    return {
+      tokens: measureReviewTokens(
+        retainCodexUsage(readFileSync(join(env.RUNNER_TEMP, "codex-events.jsonl"), "utf8")),
+        "codex",
+      ),
+    };
+  } catch {
+    return { telemetryUnavailable: true };
+  }
+}
+
+/** @param {NodeJS.ProcessEnv} env */
 function collectCodexProof(env) {
-  requireCodexProofAuthority(env);
-  const proof = verifyCodexProof(
-    readFileSync(join(env.RUNNER_TEMP, "codex-events.jsonl"), "utf8"),
-    readFileSync(join(env.RUNNER_TEMP, "codex-answer/answer.json"), "utf8"),
-    join(env.RUNNER_TEMP, "codex-proof/probe.mjs"),
-  );
+  requireOwnerTrialAuthority(env);
   const configuration = readCodexProofConfiguration(
     readFileSync(new URL("../.github/workflows/codex-runner-proof.yml", import.meta.url), "utf8"),
   );
-  const observedCli = execFileSync("codex", ["--version"], { encoding: "utf8" }).trim();
-  if (observedCli !== `codex-cli ${configuration.cli}`)
-    throw new CodexProofError("Unexpected installed Codex CLI.");
+  const root = join(env.RUNNER_TEMP, "codex-proof");
+  writeFileSync(
+    join(root, "identity.json"),
+    JSON.stringify({ source: env.GITHUB_SHA, run: env.GITHUB_RUN_ID, kind: "hosted-proof" }),
+  );
+  writeFileSync(join(root, "configuration.json"), JSON.stringify(configuration));
+  cpSync(join(root, "checkout"), join(root, "data/checkout"), { recursive: true });
+  copyFileSync(join(root, "probe.mjs"), join(root, "data/probe.mjs"));
+  retainPrivateTrialEvidence(
+    {
+      ...env,
+      TRIAL_PROVIDER: "codex",
+      TRIAL_ANSWER_FILE: join(env.RUNNER_TEMP, "codex-answer/answer.json"),
+    },
+    root,
+  );
   const folder = join(env.RUNNER_TEMP, "codex-proof-result");
   mkdirSync(folder);
+  let proof;
+  let observedCli;
+  try {
+    if (env.MODEL_OUTCOME !== "success")
+      throw new CodexProofError(
+        "Native Codex execution failed; inspect encrypted evidence without rerunning the model.",
+      );
+    proof = verifyCodexProof(
+      readFileSync(join(env.RUNNER_TEMP, "codex-events.jsonl"), "utf8"),
+      readFileSync(join(env.RUNNER_TEMP, "codex-answer/answer.json"), "utf8"),
+      join(root, "probe.mjs"),
+    );
+    observedCli = execFileSync("codex", ["--version"], { encoding: "utf8" }).trim();
+    if (observedCli !== `codex-cli ${configuration.cli}`)
+      throw new CodexProofError("Unexpected installed Codex CLI.");
+  } catch (error) {
+    writeFileSync(
+      join(folder, "proof.json"),
+      JSON.stringify({
+        source: env.GITHUB_SHA,
+        run: env.GITHUB_RUN_ID,
+        nativeToolProof: false,
+        ...readAvailableProofUsage(env),
+        failureStage: env.MODEL_OUTCOME === "success" ? "validation" : "provider-action",
+      }),
+    );
+    throw error;
+  }
   writeFileSync(
     join(folder, "proof.json"),
     JSON.stringify(
@@ -180,7 +221,8 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     else if (process.argv[2] === "collect") collectCodexProof(process.env);
     else throw new CodexProofError("Unknown proof command.");
   } catch (error) {
-    if (error instanceof CodexProofError) console.error(error.message);
+    if (error instanceof CodexProofError || error instanceof TrialAuthorityError)
+      console.error(error.message);
     console.error(
       "Codex runner proof failed. Keep Codex disabled; inspect the failed step without retrying model work.",
     );

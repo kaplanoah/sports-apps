@@ -150,7 +150,7 @@ for (const { provider, secondFile, count, integration } of [
         }
         return Buffer.from("");
       },
-      readRepository: (args, checkout) => {
+      readRepository: (checkout, args) => {
         assert.deepEqual(args, ["ls-files"]);
         assert.equal(checkout, env.REVIEW_CHECKOUT);
         return `a.js\n${secondFile}\ntests/a.test.js\napps/mlb/tests/browser/page.spec.js\nREADME.md`;
@@ -470,6 +470,28 @@ test("sealed stage import rejects PR-seeded or unexpected records and preserves 
   assert.throws(() => importReviewArtifacts(upload, seeded, env), /EEXIST/);
   mkdirSync(join(upload, "trusted-review-find-2"));
   writeFileSync(join(upload, "trusted-review-find-2/unexpected"), "unexpected");
+  assert.throws(
+    () => importReviewArtifacts(upload, createFolder(), env),
+    /Unexpected review artifact/,
+  );
+});
+
+test("production imports reject mixed layouts and keep unexpected artifact folders visible", () => {
+  const source = createFolder();
+  const upload = createFolder();
+  const env = { ...ID_ENV, REVIEW_UPLOAD: upload };
+  writePlanFiles(source);
+  exportReviewArtifact(source, "plan", env);
+  const flat = downloadReviewArtifacts(upload, ["plan"]);
+  cpSync(join(upload, "trusted-review-plan"), join(flat, "trusted-review-plan"), {
+    recursive: true,
+  });
+  assert.throws(
+    () => importReviewArtifacts(flat, createFolder(), env),
+    /ambiguous artifact layout/,
+  );
+  mkdirSync(join(upload, "foreign"));
+  writeFileSync(join(upload, "foreign/record.json"), "{}");
   assert.throws(
     () => importReviewArtifacts(upload, createFolder(), env),
     /Unexpected review artifact/,
