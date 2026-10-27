@@ -391,7 +391,9 @@ test("integration imports every complete exact-provider portion even when all ca
   const root = mkdtempSync(join(tmpdir(), "review-trial-portions-"));
   context.after(() => rmSync(root, { recursive: true, force: true }));
   const folder = join(root, "data");
+  const input = join(root, "download");
   mkdirSync(folder);
+  mkdirSync(input);
   const identity = {
     kind: "offline-trial",
     case: "case-1",
@@ -446,12 +448,12 @@ test("integration imports every complete exact-provider portion even when all ca
       status: "completed",
       record: JSON.parse(readFileSync(join(folder, `find-${area}.json`), "utf8")),
     };
-    const destination = join(root, `review-trial-session-${area}`);
+    const destination = join(input, `review-trial-session-${area}`);
     mkdirSync(destination);
     writeFileSync(join(destination, "session.json"), JSON.stringify(artifact));
     artifacts.push({ artifact, destination });
   }
-  importTrialPortions(folder, root, identity);
+  importTrialPortions(folder, input, identity);
   const request = buildCodexRequest(folder, "integration", identity);
   assert.match(
     request.prompt,
@@ -497,7 +499,7 @@ test("integration imports every complete exact-provider portion even when all ca
       join(artifacts[0].destination, "session.json"),
       JSON.stringify({ ...artifacts[0].artifact, ...change }),
     );
-    assert.throws(() => importTrialPortions(folder, root, identity));
+    assert.throws(() => importTrialPortions(folder, input, identity));
   }
 });
 
@@ -559,8 +561,22 @@ test("a single trial portion imports the action's flat layout with unchanged ide
   importTrialPortions(folder, input, identity);
   assert.deepEqual(JSON.parse(readFileSync(join(folder, "find-1.json"), "utf8")), record);
 
-  writeFileSync(flatFile, JSON.stringify(artifact));
+  const foreign = join(input, "foreign");
+  mkdirSync(foreign);
+  writeFileSync(join(foreign, "session.json"), JSON.stringify(artifact));
+  assert.throws(() => importTrialPortions(folder, input, identity), /Unexpected review artifact/);
+  rmSync(foreign, { recursive: true });
   rmSync(named, { recursive: true });
+  const wrongPortion = join(input, "review-trial-session-2");
+  mkdirSync(wrongPortion);
+  writeFileSync(join(wrongPortion, "session.json"), JSON.stringify(artifact));
+  assert.throws(
+    () => importTrialPortions(folder, input, identity),
+    /Missing trial portion artifact/,
+  );
+  rmSync(wrongPortion, { recursive: true });
+
+  writeFileSync(flatFile, JSON.stringify(artifact));
   const secondArea = {
     ...area,
     area: 2,

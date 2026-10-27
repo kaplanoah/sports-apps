@@ -10,7 +10,7 @@ import {
   writeFileSync,
   appendFileSync,
 } from "node:fs";
-import { basename, join } from "node:path";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { readPullMerge } from "./pull-merge.mjs";
 import { verifyReviewProvider } from "./review-provider.mjs";
@@ -200,17 +200,9 @@ function collectReviewArtifacts(input) {
   /** @type {Map<string, string>} */
   const artifacts = new Map();
   listReviewFiles(input);
-  const folders = listReviewArtifactFolders(input, "trusted-review-", "provenance.json").map(
-    (path) => [
-      path === input
-        ? readJson(join(path, "provenance.json")).stage
-        : basename(path).replace(/^trusted-review-/, ""),
-      path,
-    ],
-  );
-  for (const [stage, path] of folders) {
-    if (path !== input && path !== join(input, `trusted-review-${stage}`))
-      throw new Error("Unexpected review artifact.");
+  const folders = listReviewArtifactFolders(input, "trusted-review-", "provenance.json");
+  for (const { name, path } of folders) {
+    const stage = name ?? readJson(join(path, "provenance.json")).stage;
     artifacts.set(stage, path);
   }
   return artifacts;

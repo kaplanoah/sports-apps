@@ -282,14 +282,17 @@ export function readTrialProviderConfiguration(provider, portion) {
 export function importTrialPortions(folder, input, identity) {
   const plan = readJson(join(folder, "plan.json"));
   if (identity.provider !== plan.provider) throw new Error("Foreign trial provider.");
-  const isFlat = listReviewArtifactFolders(input, "review-trial-session-", "session.json").includes(
-    input,
+  const portions = new Map(
+    listReviewArtifactFolders(input, "review-trial-session-", "session.json").map(
+      ({ name, path }) => [name, path],
+    ),
   );
-  if (isFlat && plan.areas.length !== 1) throw new Error("Ambiguous trial portion layout.");
+  const flatFolder = portions.get(null);
+  if (flatFolder && plan.areas.length !== 1) throw new Error("Ambiguous trial portion layout.");
   const records = plan.areas.map((area) => {
-    const artifact = readJson(
-      join(isFlat ? input : join(input, `review-trial-session-${area.area}`), "session.json"),
-    );
+    const portionFolder = flatFolder ?? portions.get(String(area.area));
+    if (!portionFolder) throw new Error("Missing trial portion artifact.");
+    const artifact = readJson(join(portionFolder, "session.json"));
     if (
       JSON.stringify(artifact.identity) !== JSON.stringify(identity) ||
       artifact.portion !== area.area ||
