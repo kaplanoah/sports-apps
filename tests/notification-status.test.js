@@ -153,7 +153,6 @@ test("the timing prompt follows the reminder switch including both pending inten
       pending: { category: "reminders", isEnabled, elapsedMs: 0 },
     });
     assert.equal(controls.areRemindersOn, isEnabled);
-    assert.equal(controls.hasTimingChoice, isEnabled);
     assert.equal(controls.areUpdatesOn, true);
   }
   for (const reminders of [false, true]) {
@@ -162,7 +161,7 @@ test("the timing prompt follows the reminder switch including both pending inten
       isBusy: false,
       preferences: { ...preferences, reminders },
     });
-    assert.equal(controls.hasTimingChoice, reminders);
+    assert.equal(controls.areRemindersOn, reminders);
   }
 });
 
@@ -183,7 +182,7 @@ test("timing minutes use the latest request then pending intent then saved choic
       pending: { category: "reminders", isEnabled: true, elapsedMs: 0, minutes: pendingMinutes },
     });
     assert.equal(controls.timingMinutes, expected);
-    assert.equal(controls.hasTimingChoice, true);
+    assert.equal(controls.areRemindersOn, true);
     assert.equal(preferences.minutes, 10);
     assert.equal(preferences.reminders, false);
   }

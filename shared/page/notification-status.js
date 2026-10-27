@@ -109,7 +109,6 @@ export function chooseNotificationControls({
     pendingCategory: pending?.category ?? "",
     spinnerCategory: pending && pending.elapsedMs >= PENDING_SPINNER_MS ? pending.category : "",
     isTimingDisabled: (isBusy && pending !== null) || !["off", "on", "failed"].includes(status),
-    hasTimingChoice: areRemindersOn,
     timingMinutes: timingMinutes ?? pending?.minutes ?? preferences.minutes,
   };
 }

@@ -30,8 +30,8 @@ export function renderNotificationRows({ controls, words, note }) {
     <label class="control-row reminder-timing" data-setting="settings:reminders">
       <span class="control-label"><span id="reminderTimingTitle">${words.reminderTiming}</span></span>
       <select class="select-field" id="reminderTiming" aria-labelledby="reminderTimingTitle" ${controls.isTimingDisabled ? "disabled" : ""}>
-        ${controls.hasTimingChoice ? html`` : html`<option value="" disabled selected>Choose time</option>`}
-        ${REMINDER_PRESETS.map((minutes) => html`<option value="${minutes}" ${controls.hasTimingChoice && controls.timingMinutes === minutes ? "selected" : ""}>${nameReminderPreset(minutes, words)}</option>`)}
+        ${controls.areRemindersOn ? html`` : html`<option value="" disabled selected>Choose time</option>`}
+        ${REMINDER_PRESETS.map((minutes) => html`<option value="${minutes}" ${controls.areRemindersOn && controls.timingMinutes === minutes ? "selected" : ""}>${nameReminderPreset(minutes, words)}</option>`)}
       </select>
     </label>`
     }
