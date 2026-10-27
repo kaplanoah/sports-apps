@@ -55,9 +55,9 @@ This skill holds what "Shipping a change" in AGENTS.md leaves out, most of it un
 
 ## Step 3: a review of your own first
 
-- Before marking a PR ready, have a fresh subagent review the diff against the PR's base by the root's `REVIEW.md`. Hand it the diff and `REVIEW.md`, not your own reading of the change, so it reads the change as Trusted review will.
-- Before a push that answers Trusted review's Important or Unsure findings, have one review the diff since the last reviewed commit, with the PR's review threads, so it raises nothing a thread already settled.
-- Answer each finding as the steward skill says to answer Trusted review's, then run step 2 again for what the fixes touch. A finding caught here costs no round of CI and Trusted review.
+- Before marking a PR ready, have a fresh subagent review the PR's diff against its base by the root's `REVIEW.md` as `main` has it (`git show origin/main:REVIEW.md`). Hand it the diff and that `REVIEW.md`, not your own reading of the change, so it reads the change as Trusted review will.
+- Before a push that answers Trusted review's Important or Unsure findings, hand one the same, plus the PR's review threads and the commit Trusted review last read. Have it raise only what the PR changed since that commit, in files the PR still changes, and nothing a thread already settled.
+- Fix each finding that holds up. Open an issue for one outside the PR's one thing, as step 12 says, and tell the user why you dropped any other. A finding caught here costs no round of CI and Trusted review.
 - Each of these reviews runs once a round: its fixes go to Trusted review, not to another review of your own. Where a session can't start a subagent, say so to the user and go on.
 
 ## Step 4: conflicts
