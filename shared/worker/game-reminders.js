@@ -219,9 +219,11 @@ export function createGameReminders({ storage, push, now, verify }) {
   }
 
   function checkDue() {
-    checking ??= deliverDue().finally(() => {
-      checking = null;
-    });
+    checking ??= refreshDevices()
+      .then(deliverDue)
+      .finally(() => {
+        checking = null;
+      });
     return checking;
   }
 

@@ -213,7 +213,7 @@ test("settings list Notifications, the News switches, and Appearance, with lines
     "none",
   ]);
 
-  await page.locator("#notificationsGroup").evaluate((row) => row.setAttribute("hidden", ""));
+  await page.locator("#notificationsGroup").evaluate((group) => group.setAttribute("hidden", ""));
   expect((await readBorders())[0]).toEqual(["none", "none", "none", "solid"]);
 });
 

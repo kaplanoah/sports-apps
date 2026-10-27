@@ -84,6 +84,7 @@ const TERMS = {
     pastRegulation: { name: "Overtime", words: ["overtime", "ot"], games: "overtime games" },
     crossConference: null,
     neverShown: ["postseason", "post season"],
+    reminderAtStart: "At scheduled tipoff",
     reminderTiming: "Time before tipoff",
     notificationUpdates: "Final scores",
     seasonSpansYears: false,

@@ -58,7 +58,11 @@ test("nightly, all-test, WebKit and ambiguous selections keep both engines", () 
 test("Playwright and browser installation share WebKit's test match", () => {
   assert.match(readRepoFile("playwright.config.mjs"), /testMatch: WEBKIT_TEST_MATCH/);
   assert.match(readRepoFile("playwright.config.mjs"), /name: nameWebKitProject\(app\)/);
-  assert.deepEqual(WEBKIT_TEST_MATCH, ["at-rest.spec.mjs", "notification-layout.spec.mjs"]);
+  assert.deepEqual(WEBKIT_TEST_MATCH, [
+    "at-rest.spec.mjs",
+    "notification-layout.spec.mjs",
+    "notification-permission.spec.mjs",
+  ]);
 });
 
 test("the selection command publishes only browser names as workflow arguments", () => {

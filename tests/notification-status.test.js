@@ -111,3 +111,28 @@ test("category controls stay independent and timing is enabled only for active r
     true,
   );
 });
+
+test("pending category intent changes only its switch and exposes only a delayed indicator", () => {
+  for (const category of ["updates", "reminders"]) {
+    const preferences = { updates: category !== "updates", reminders: category !== "reminders" };
+    for (const showSpinner of [false, true]) {
+      const controls = chooseNotificationControls({
+        status: "on",
+        isBusy: true,
+        preferences,
+        pending: { category, isEnabled: true, showSpinner },
+      });
+      assert.equal(controls.areUpdatesOn, true);
+      assert.equal(controls.areRemindersOn, true);
+      assert.equal(controls.areSwitchesDisabled, true);
+      assert.equal(controls.isTimingDisabled, true);
+      assert.equal(controls.pendingCategory, category);
+      assert.equal(controls.spinnerCategory, showSpinner ? category : "");
+      assert.equal(preferences[category], false);
+    }
+    const restored = chooseNotificationControls({ status: "on", isBusy: false, preferences });
+    assert.equal(restored.areUpdatesOn, preferences.updates);
+    assert.equal(restored.areRemindersOn, preferences.reminders);
+    assert.equal(restored.spinnerCategory, "");
+  }
+});

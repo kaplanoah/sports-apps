@@ -76,14 +76,20 @@ export function chooseFailedSyncStatus(error, isSubscribed) {
   return isSubscribed ? null : { status: "off", note: "" };
 }
 
-/** @param {{ status: string, isBusy: boolean, preferences: { updates: boolean, reminders: boolean } }} state */
-export function chooseNotificationControls({ status, isBusy, preferences }) {
+/**
+ * @typedef {{ category: string, isEnabled: boolean, showSpinner: boolean }} PendingCategory
+ * @param {{ status: string, isBusy: boolean, preferences: { updates: boolean, reminders: boolean }, pending?: PendingCategory | null }} state
+ */
+export function chooseNotificationControls({ status, isBusy, preferences, pending = null }) {
   const isOn = status === "on";
   return {
     areSwitchesHidden: !["off", "on", "failed", "blocked"].includes(status),
     areSwitchesDisabled: isBusy || status === "blocked",
-    areUpdatesOn: isOn && preferences.updates,
-    areRemindersOn: isOn && preferences.reminders,
+    areUpdatesOn: pending?.category === "updates" ? pending.isEnabled : isOn && preferences.updates,
+    areRemindersOn:
+      pending?.category === "reminders" ? pending.isEnabled : isOn && preferences.reminders,
+    pendingCategory: pending?.category ?? "",
+    spinnerCategory: pending?.showSpinner ? pending.category : "",
     isTimingDisabled: !isOn || !preferences.reminders || isBusy,
   };
 }

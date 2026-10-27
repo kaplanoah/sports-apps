@@ -1,5 +1,8 @@
 // Device push categories and reminder timing in Settings, with inline permission guidance.
-import { DEFAULT_NOTIFICATION_PREFERENCES } from "./notification-preferences.js";
+import {
+  DEFAULT_NOTIFICATION_PREFERENCES,
+  normalizeNotificationPreferences,
+} from "./notification-preferences.js";
 import { readStoredJson, storeJson, forgetStored } from "./local-storage.js";
 import { readDeviceTimeZone } from "./days.js";
 import { reloadWhenSignedOut } from "./access.js";
@@ -27,7 +30,7 @@ let registration = null;
 let subscription = null;
 let status = "loading";
 let note = "";
-/** @type {Pick<import("./league-words.js").LeagueWords, "notificationUpdates" | "reminderTiming">} */
+/** @type {Pick<import("./league-words.js").LeagueWords, "notificationUpdates" | "reminderTiming" | "reminderAtStart">} */
 let notificationWords;
 let preferences = { ...DEFAULT_NOTIFICATION_PREFERENCES };
 let revision = 0;
@@ -35,6 +38,8 @@ const PREFERENCES_KEY = "device-notifications";
 const PREVIOUS_KEY = "previous-push-subscription";
 const PENDING_KEY = "pending-push-preferences";
 let isBusy = false;
+/** @type {import("./notification-status.js").PendingCategory | null} */
+let pending = null;
 let reading = null;
 
 const findElement = (id) => /** @type {HTMLElement} */ (document.getElementById(id));
@@ -42,13 +47,17 @@ const findElement = (id) => /** @type {HTMLElement} */ (document.getElementById(
 export const canPush = () =>
   "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
 
-function renderNote() {
+function renderNote(noteStatus = status) {
   const device = {
     isIos: isIos(),
     isOnHomeScreen: isOnHomeScreen(),
     canOpenWelcome: isAskingToAdd(),
   };
-  const { text, hasHelp } = chooseNotifyNote({ status, message: note, device });
+  const { text, hasHelp } = chooseNotifyNote({
+    status: noteStatus,
+    message: noteStatus === status ? note : "",
+    device,
+  });
   if (!hasHelp) return text;
   const [lead, lastWord] = splitAtLastWord(text);
   return html`${lead}<span class="notify-help-end">${lastWord}${HELP_BUTTON}</span>`;
@@ -57,7 +66,7 @@ function renderNote() {
 // The group is drawn whole, so a reload puts it back as it was before the status is known again.
 function renderNotifications() {
   if (!notificationWords) return;
-  const controls = chooseNotificationControls({ status, isBusy, preferences });
+  const controls = chooseNotificationControls({ status, isBusy, preferences, pending });
   const group = findElement("notificationsGroup");
   setHtml(
     group,
@@ -178,7 +187,9 @@ async function syncSubscription() {
   }
   await saveOrForget(
     subscription,
-    readStoredJson(PENDING_KEY) ?? undefined,
+    readStoredJson(PENDING_KEY)
+      ? normalizeNotificationPreferences(readStoredJson(PENDING_KEY))
+      : undefined,
     readStoredJson(PREVIOUS_KEY) ?? undefined,
   );
   forgetStored(PREVIOUS_KEY);
@@ -200,14 +211,24 @@ function restoreControlFocus(id) {
     findElement(id)?.focus({ preventScroll: true });
 }
 
-async function showBusyDuring(task) {
+/** @param {() => Promise<void>} task @param {import("./notification-status.js").PendingCategory | null} [intent] */
+async function showBusyDuring(task, intent = null) {
   const focused = document.activeElement;
   const focusedId = findElement("notificationsGroup").contains(focused) ? focused?.id : null;
   isBusy = true;
+  pending = intent;
+  const indicator =
+    intent &&
+    setTimeout(() => {
+      intent.showSpinner = true;
+      renderNotifications();
+    }, 700);
   renderNotifications();
   try {
     await task();
   } finally {
+    if (indicator) clearTimeout(indicator);
+    pending = null;
     isBusy = false;
     renderNotifications();
     restoreControlFocus(focusedId);
@@ -236,7 +257,7 @@ async function savePreferences(next) {
 }
 
 function rememberPreferences(next) {
-  preferences = next;
+  preferences = normalizeNotificationPreferences(next);
   storeJson(PREFERENCES_KEY, preferences);
 }
 
@@ -276,12 +297,16 @@ async function removeSubscription(next) {
   forgetCategories(next);
 }
 
-async function changeCategory(category, isEnabled, permissionPromise) {
+async function changeCategory(category, isEnabled) {
   const before = preferences;
+  const previousStatus = status;
   const next = { ...before, [category]: isEnabled, timeZone: readDeviceTimeZone() };
   try {
-    if (permissionPromise && (await permissionPromise) !== "granted") {
-      setStatus(Notification.permission === "denied" ? "blocked" : "off");
+    // Keep permission in the tap stack, before registration or network work.
+    if (isEnabled && (await Notification.requestPermission()) !== "granted") {
+      const deniedStatus = Notification.permission === "denied" ? "blocked" : "off";
+      const guidance = renderNote(deniedStatus);
+      setStatus(previousStatus === "on" ? previousStatus : deniedStatus, String(guidance));
       return;
     }
     await readSubscriptionOnce();
@@ -309,11 +334,13 @@ async function changeCategory(category, isEnabled, permissionPromise) {
 }
 
 function toggleCategory(category) {
-  const controls = chooseNotificationControls({ status, isBusy, preferences });
+  const controls = chooseNotificationControls({ status, isBusy, preferences, pending });
   const isEnabled = !(category === "updates" ? controls.areUpdatesOn : controls.areRemindersOn);
-  // Permission is requested in the click stack, before registration or network reads.
-  const permission = isEnabled ? Notification.requestPermission() : null;
-  showBusyDuring(() => changeCategory(category, isEnabled, permission));
+  showBusyDuring(() => changeCategory(category, isEnabled), {
+    category,
+    isEnabled,
+    showSpinner: false,
+  });
 }
 
 /** @param {Event} event */
@@ -366,7 +393,7 @@ const readSubscriptionOnce = () => (reading ??= readSubscription());
 
 /** Turns notifications on from a tap elsewhere on the page, as the switch does. */
 export function turnOnNotifications() {
-  const controls = chooseNotificationControls({ status, isBusy, preferences });
+  const controls = chooseNotificationControls({ status, isBusy, preferences, pending });
   if (!isBusy && !controls.areUpdatesOn) toggleCategory("updates");
 }
 
@@ -378,16 +405,15 @@ export async function hasNotificationsSubscription() {
 }
 
 /**
- * @param {Pick<import("./league-words.js").LeagueWords, "notificationUpdates" | "reminderTiming">} words
+ * @param {Pick<import("./league-words.js").LeagueWords, "notificationUpdates" | "reminderTiming" | "reminderAtStart">} words
  */
 export async function startNotifications(words) {
   notificationWords = words;
-  preferences = {
-    ...DEFAULT_NOTIFICATION_PREFERENCES,
+  preferences = normalizeNotificationPreferences({
     ...readStoredJson(PREFERENCES_KEY),
     updates: false,
     reminders: false,
-  };
+  });
   findElement("notificationsGroup").addEventListener("click", toggleNotifications);
   findElement("notificationsGroup").addEventListener("click", openHomeScreenSteps);
   findElement("notificationsGroup").addEventListener("change", changeTiming);
@@ -401,11 +427,13 @@ export async function startNotifications(words) {
     return;
   }
   if (subscription) {
-    preferences = readStoredJson(PREFERENCES_KEY) ?? {
-      ...preferences,
-      updates: true,
-      reminders: false,
-    };
+    preferences = normalizeNotificationPreferences(
+      readStoredJson(PREFERENCES_KEY) ?? {
+        ...preferences,
+        updates: true,
+        reminders: false,
+      },
+    );
     try {
       await syncSubscription();
       note = "";

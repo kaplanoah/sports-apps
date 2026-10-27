@@ -3,7 +3,11 @@ import { basename } from "node:path";
 import { fileURLToPath } from "node:url";
 import { listAppsWithBrowserTests } from "../../worker/apps.mjs";
 
-export const WEBKIT_TEST_MATCH = ["at-rest.spec.mjs", "notification-layout.spec.mjs"];
+export const WEBKIT_TEST_MATCH = [
+  "at-rest.spec.mjs",
+  "notification-layout.spec.mjs",
+  "notification-permission.spec.mjs",
+];
 
 /** @param {string} app */
 export const nameWebKitProject = (app) => `${app}-webkit`;

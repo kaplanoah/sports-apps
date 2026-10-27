@@ -29,6 +29,9 @@ for (const [league, words, timing, updates] of /** @type {const} */ ([
     assert.deepEqual(titles, ["Game starts", timing, updates]);
     assert.deepEqual(describeRemindersSetting(words).name, ["Game starts", timing]);
     assert.ok(describeRemindersSetting(words).words.includes(timing));
+    assert.ok(
+      markup.includes(league === "MLB" ? "At scheduled first pitch" : "At scheduled tipoff"),
+    );
     assert.match(markup, /id="notifyNote" role="status">Permission guidance</);
     assert.equal((markup.match(/role="switch"/g) ?? []).length, 2);
     assert.match(
@@ -39,7 +42,7 @@ for (const [league, words, timing, updates] of /** @type {const} */ ([
   });
 }
 
-test("reminders default off with 15 minutes selected and all existing presets", () => {
+test("reminders default off with 10 minutes selected and the approved presets", () => {
   const markup = renderRows(MLB_WORDS);
   assert.match(markup, /id="remindersSwitch" aria-checked="false"/);
   assert.deepEqual(
@@ -47,11 +50,11 @@ test("reminders default off with 15 minutes selected and all existing presets", 
       ([, minutes, selected, label]) => [Number(minutes), !!selected, label],
     ),
     [
-      [0, false, "At start"],
-      [5, false, "5 minutes before"],
-      [15, true, "15 minutes before"],
+      [0, false, "At scheduled first pitch"],
+      [10, true, "10 minutes before"],
       [30, false, "30 minutes before"],
       [60, false, "1 hour before"],
+      [180, false, "3 hours before"],
     ],
   );
 });

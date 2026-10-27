@@ -238,6 +238,12 @@
   --search-face: "Libre Franklin Search", system-ui, sans-serif;
   --search-words-lift: 0px;
   --select-face: "Chivo Mono Select", "JetBrains Mono", monospace;
+  --reminder-width: 173px;
+  --reminder-text-rendering: geometricPrecision;
+  --reminder-caret-right: 6.5px;
+  --reminder-padding-right: 25.5px;
+  --reminder-padding-top: 6.5px;
+  --reminder-padding-bottom: 7.5px;
   --select-text-face: "Libre Franklin Select", system-ui, sans-serif;
   --strip-edge-inset: 0.5px;
   --day-gap: 18px;

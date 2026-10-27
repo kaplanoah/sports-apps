@@ -3,7 +3,7 @@ import { IPHONE } from "./devices.mjs";
 import { openFromHomeScreen } from "./touch.mjs";
 import { waitForLoadToSettle } from "./at-rest.mjs";
 
-/** @param {any} test @param {any} expect @param {{openApp: Function, openSettings: Function}} app */
+/** @param {any} test @param {any} expect @param {{openApp: Function, openSettings: Function, isMlb: boolean}} app */
 export function testNotificationAlignment(test, expect, app) {
   test.use({ contextOptions: { reducedMotion: "reduce" } });
   for (const [screen, viewport] of Object.entries({
@@ -74,6 +74,69 @@ export function testNotificationAlignment(test, expect, app) {
                     ),
                   };
                 });
+              const field = await page.locator("#reminderTiming").evaluate(async (select) => {
+                const style = getComputedStyle(select);
+                await document.fonts.load(style.font, select.options[0].text);
+                const probe = document.createElement("span");
+                probe.style.position = "absolute";
+                probe.style.width = "max-content";
+                probe.style.font = style.font;
+                probe.style.letterSpacing = style.letterSpacing;
+                probe.style.textRendering = style.textRendering;
+                probe.style.whiteSpace = "pre";
+                probe.textContent = select.options[0].text;
+                document.body.append(probe);
+                const textWidth = probe.getBoundingClientRect().width;
+                probe.remove();
+                const row = select.closest(".reminder-timing");
+                const caret = getComputedStyle(row, "::after");
+                return {
+                  width: select.getBoundingClientRect().width,
+                  height: select.getBoundingClientRect().height,
+                  top: parseFloat(style.paddingTop),
+                  bottom: parseFloat(style.paddingBottom),
+                  left: parseFloat(style.paddingLeft),
+                  right: parseFloat(style.paddingRight),
+                  caretRight: parseFloat(caret.right),
+                  caretWidth: parseFloat(caret.width),
+                  gap:
+                    select.clientWidth -
+                    parseFloat(style.paddingLeft) -
+                    textWidth -
+                    parseFloat(caret.width) -
+                    (parseFloat(caret.right) - 1),
+                  available:
+                    select.clientWidth -
+                    parseFloat(style.paddingLeft) -
+                    parseFloat(style.paddingRight),
+                  textWidth,
+                };
+              });
+              expect(field).toMatchObject(
+                app.isMlb
+                  ? {
+                      width: 173,
+                      height: 40,
+                      top: 6.5,
+                      bottom: 7.5,
+                      left: 8,
+                      right: 25.5,
+                      caretRight: 6.5,
+                      caretWidth: 16,
+                    }
+                  : {
+                      width: 145,
+                      height: 40,
+                      top: 7,
+                      bottom: 7,
+                      left: 8,
+                      right: 20,
+                      caretRight: 3,
+                      caretWidth: 16,
+                    },
+              );
+              expect(field.textWidth).toBeLessThanOrEqual(field.available);
+              if (app.isMlb) expect(field.gap).toBeGreaterThanOrEqual(4);
               expect(alignment.group).toBeCloseTo(alignment.newsGroup, 2);
               expect(alignment.heading).toBeCloseTo(0, 2);
               for (const offset of alignment.labels) expect(offset).toBeCloseTo(0, 2);

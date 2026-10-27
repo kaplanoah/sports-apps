@@ -1033,10 +1033,10 @@ test("enabling reminders and changing their lead brings an existing three-hour a
     await request("preferences", "PUT", {
       ...device,
       revision: initial.revision,
-      preferences: { ...initial.preferences, reminders: true, minutes: 15 },
+      preferences: { ...initial.preferences, reminders: true, minutes: 10 },
     })
   ).json();
-  assert.equal(await context.ctx.storage.getAlarm(), game.start - 15 * 60_000 - 30_000);
+  assert.equal(await context.ctx.storage.getAlarm(), game.start - 10 * 60_000 - 30_000);
   await request("preferences", "PUT", {
     ...device,
     revision: enabled.revision,

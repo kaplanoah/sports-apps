@@ -4,6 +4,8 @@ import { createGameReminders, describeGameReminder } from "../shared/worker/game
 import { createPushService } from "../shared/worker/push.js";
 import {
   isNotificationPreferences,
+  normalizeNotificationPreferences,
+  readNotificationPreferences,
   REMINDER_PRESETS,
 } from "../shared/page/notification-preferences.js";
 import { createDurableObjectContext } from "./durable-object-context.js";
@@ -80,6 +82,8 @@ test("only the five approved presets, booleans and real time zones are accepted"
     assert.ok(isNotificationPreferences({ ...PREFERENCES, minutes }));
   for (const invalid of [
     { minutes: "15" },
+    { minutes: 5 },
+    { minutes: 15 },
     { minutes: -1 },
     { minutes: 16 },
     { updates: 1 },
@@ -271,7 +275,7 @@ test("rescheduling moves unsent deadlines, while sent receipts survive game and 
   await harness.reminders.checkDue();
   await harness.request("PUT", "preferences", {
     ...subscription,
-    preferences: { ...PREFERENCES, minutes: 15 },
+    preferences: { ...PREFERENCES, minutes: 10 },
     revision: 0,
   });
   const movedAgain = { ...moved, start: moved.start + 60 * 60_000 };
@@ -280,7 +284,7 @@ test("rescheduling moves unsent deadlines, while sent receipts survive game and 
   const [kept] = (await harness.push.listSubscriptions()).values();
   assert.equal(kept.reminderReceipts[GAME.id].state, "sent");
   assert.equal(await harness.reminders.findNextDeadline(), Infinity);
-  harness.clock.now = movedAgain.start - 15 * 60_000;
+  harness.clock.now = movedAgain.start - 10 * 60_000;
   await harness.reminders.checkDue();
   assert.equal(harness.sent.length, 1);
 });
@@ -290,7 +294,7 @@ test("opting in or changing a lead past its deadline never bursts old reminders"
   const { subscription } = await harness.subscribe({
     ...PREFERENCES,
     reminders: false,
-    minutes: 15,
+    minutes: 10,
   });
   await harness.reminders.saveGames([GAME]);
   harness.clock.now = GAME.start - 60 * 60_000 + 30_000;
@@ -376,7 +380,7 @@ test("concurrent preference edits accept one revision and reject the stale write
   const harness = createHarness();
   const { subscription } = await harness.subscribe();
   const changes = await Promise.all(
-    [15, 30].map((minutes) =>
+    [10, 30].map((minutes) =>
       harness.request("PUT", "preferences", {
         ...subscription,
         preferences: { ...PREFERENCES, minutes },
@@ -451,7 +455,7 @@ test("an unsent reminder skipped after its deadline can follow a later start or 
     await harness.reminders.saveGames([GAME]);
     assert.equal(await harness.reminders.findNextDeadline(), Infinity);
     const game = change === "start" ? { ...GAME, start: GAME.start + 60 * 60_000 } : GAME;
-    const minutes = change === "lead" ? 15 : 60;
+    const minutes = change === "lead" ? 10 : 60;
     if (change === "lead")
       await harness.request("PUT", "preferences", {
         ...subscription,
@@ -738,3 +742,96 @@ for (const change of ["endpoint", "keys"]) {
     assert.equal(harness.sent.length, 2);
   });
 }
+
+test("obsolete saved leads normalize without changing opt-ins or device history", async () => {
+  for (const minutes of [5, 15]) {
+    const preferences = { ...PREFERENCES, minutes, updates: true };
+    assert.deepEqual(normalizeNotificationPreferences(preferences), {
+      ...preferences,
+      minutes: 10,
+    });
+    assert.equal(preferences.minutes, minutes);
+    const harness = createHarness();
+    const { subscription } = await harness.subscribe();
+    const [key, device] = [...(await harness.push.listSubscriptions())][0];
+    const receipts = { other: { state: "sent", start: NOW, dueAt: NOW, attempts: 1 } };
+    await harness.ctx.storage.put(key, {
+      ...device,
+      preferences,
+      revision: 7,
+      reminderReceipts: receipts,
+    });
+    const response = await (await harness.request("POST", "preferences", subscription)).json();
+    assert.deepEqual(response, { preferences: { ...preferences, minutes: 10 }, revision: 7 });
+    await harness.reminders.saveGames([GAME]);
+    const kept = await harness.ctx.storage.get(key);
+    assert.equal(kept.revision, 7);
+    assert.deepEqual(kept.reminderReceipts.other, receipts.other);
+    assert.equal(kept.reminderReceipts[GAME.id].dueAt, GAME.start - 10 * 60_000);
+    assert.deepEqual(readNotificationPreferences(kept), response.preferences);
+    assert.equal(
+      (await harness.request("POST", "preferences", { ...subscription, keys: {} })).status,
+      400,
+    );
+  }
+});
+
+test("every approved lead survives scheduler restart with its persisted deadline and sends once", async () => {
+  for (const minutes of [0, 10, 30, 60, 180]) {
+    const harness = createHarness();
+    const game = { ...GAME, start: NOW + 4 * 60 * 60_000 };
+    const { keys } = await harness.subscribe({ ...PREFERENCES, minutes });
+    harness.upstream.games = [game];
+    await harness.reminders.saveGames([game]);
+    const [device] = (await harness.push.listSubscriptions()).values();
+    const dueAt = game.start - minutes * 60_000;
+    assert.equal(device.reminderReceipts[game.id].dueAt, dueAt);
+    const restarted = createGameReminders({
+      storage: harness.ctx.storage,
+      push: harness.push,
+      now: () => harness.clock.now,
+      verify: async () => {
+        await restarted.saveGames([game], true);
+      },
+    });
+    assert.equal(await restarted.findNextDeadline(), dueAt - 30_000);
+    harness.clock.now = dueAt;
+    await restarted.checkDue();
+    assert.equal(harness.sent.length, 1);
+    const message = await readPushMessage(harness.sent[0].init.body, keys);
+    assert.equal(message.game, game.id);
+    assert.equal(harness.sent[0].init.headers.ttl, minutes === 0 ? "60" : "120");
+    await restarted.checkDue();
+    assert.equal(harness.sent.length, 1);
+  }
+});
+
+test("an obsolete persisted deadline is replanned before delivery even with fresh facts", async () => {
+  for (const minutes of [5, 15]) {
+    const harness = createHarness();
+    await harness.subscribe();
+    await harness.reminders.saveGames([GAME]);
+    const [key, device] = [...(await harness.push.listSubscriptions())][0];
+    const dueAt = GAME.start - minutes * 60_000;
+    await harness.ctx.storage.put(key, {
+      ...device,
+      preferences: { ...PREFERENCES, minutes },
+      reminderReceipts: {
+        [GAME.id]: {
+          state: "pending",
+          dueAt,
+          nextAt: dueAt,
+          expiresAt: dueAt + 120_000,
+          attempts: 0,
+        },
+      },
+    });
+    harness.clock.now = dueAt;
+    await harness.ctx.storage.put("push:reminder-games", { games: [GAME], verifiedAt: dueAt });
+    await harness.reminders.checkDue();
+    assert.equal(harness.sent.length, 0);
+    const kept = await harness.ctx.storage.get(key);
+    assert.equal(kept.reminderReceipts[GAME.id].dueAt, GAME.start - 10 * 60_000);
+    assert.equal(kept.reminderReceipts[GAME.id].state, minutes === 5 ? "skipped" : "pending");
+  }
+});
