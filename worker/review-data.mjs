@@ -147,6 +147,19 @@ export function validateReviewPlan(plan) {
   return plan;
 }
 
+/** @param {string} folder @param {string} prefix @param {string} marker @returns {{name: string | null, path: string}[]} */
+export function listReviewArtifactFolders(folder, prefix, marker) {
+  const names = readdirSync(folder).sort();
+  if (names.includes(marker)) {
+    requireData(!names.some((name) => name.startsWith(prefix)), "ambiguous artifact layout");
+    return [{ name: null, path: folder }];
+  }
+  return names.map((name) => {
+    if (!name.startsWith(prefix)) throw new Error("Unexpected review artifact.");
+    return { name: name.slice(prefix.length), path: join(folder, name) };
+  });
+}
+
 /** @param {string} folder @returns {string[]} */
 export function listReviewFiles(folder) {
   requireData(lstatSync(folder).isDirectory(), "artifact directory");

@@ -5,7 +5,6 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
-  readdirSync,
   rmSync,
   symlinkSync,
   writeFileSync,
@@ -38,6 +37,7 @@ import {
   copyReviewFiles,
   listPlanFiles,
   listReviewFiles,
+  listReviewArtifactFolders,
   readReviewIdentity,
   readReviewAnswer,
   recomputeReviewCoverage,
@@ -200,13 +200,9 @@ function collectReviewArtifacts(input) {
   /** @type {Map<string, string>} */
   const artifacts = new Map();
   listReviewFiles(input);
-  const isFlat = existsSync(join(input, "provenance.json"));
-  const folders = isFlat
-    ? [[readJson(join(input, "provenance.json")).stage, input]]
-    : readdirSync(input).map((name) => [name.replace(/^trusted-review-/, ""), join(input, name)]);
-  for (const [stage, path] of folders) {
-    if (!isFlat && path !== join(input, `trusted-review-${stage}`))
-      throw new Error("Unexpected review artifact.");
+  const folders = listReviewArtifactFolders(input, "trusted-review-", "provenance.json");
+  for (const { name, path } of folders) {
+    const stage = name ?? readJson(join(path, "provenance.json")).stage;
     artifacts.set(stage, path);
   }
   return artifacts;
