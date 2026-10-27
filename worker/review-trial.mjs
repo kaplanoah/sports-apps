@@ -357,7 +357,7 @@ function renderClaudeTrialPrompt(plan, portion, env) {
       `Exact historical head: ${env.TRIAL_HEAD}. No prior findings or observed CI pass is asserted.`,
       ...(integration
         ? [
-            "Integration is mandatory even with zero candidates. In this measured variant, also read every diff and rule listed in .review/first.md in full. This additional Read-coverage requirement is recorded separately from production's across-area policy. Keep all limitations in unjudged.",
+            "Integration is mandatory even with zero candidates. Use the Read tool for .review/candidates.json and every diff and rule listed in .review/first.md, in full. Shell output does not satisfy this profile's Read-coverage check. This additional Read-coverage requirement is recorded separately from production's across-area policy. Keep all limitations in unjudged.",
           ]
         : []),
     ].join("\n\n");
