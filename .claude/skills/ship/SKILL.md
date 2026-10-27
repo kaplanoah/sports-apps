@@ -1,6 +1,6 @@
 ---
 name: ship
-description: "What the Shipping a change steps in AGENTS.md leave out: major bumps, issues for what's left out, the beta channel, red changes and phone-ok, CI's review and its failures, the deploy's log, and one thing a PR, stacked or not"
+description: "What the Shipping a change steps in AGENTS.md leave out: major bumps, issues for what's left out, the beta channel, a review of your own before Trusted review's, red changes and phone-ok, CI's review and its failures, the deploy's log, and one thing a PR, stacked or not"
 ---
 
 # Shipping a change
@@ -52,6 +52,13 @@ This skill holds what "Shipping a change" in AGENTS.md leaves out, most of it un
 
 - Take a red change to its branch and PR, put it on beta once its CI passes, as "The beta channel" above says, and stop there: tell the user what to use on the phone, and wait, keeping to steps 4 to 6 of AGENTS.md's list meanwhile. Its PR stays a draft while the owner tries its design on beta: CI tests a draft, and beta deploys it, as for any PR, but Trusted review reviews it only once it's ready for review. Once the owner says the design is the one to keep, take `beta` off, since answering the review is going back to work, mark the PR ready for review, which starts its first full review, go on to step 7 and answer the review, and then put its reviewed head on beta for the owner's `phone-ok`. When you ask the owner to add `phone-ok`, link the PR in the same message. Never add `phone-ok`. Only the owner labels it, once they've used the change on beta, which runs `gate` again without a push and gives beta up. A push after the label, a merge of `main` too, holds the PR again until the owner has used that commit on beta and labeled it again, so put it on beta again and ask.
 - One red change goes live per deploy. From a red PR's push to beta until it has merged and its deploy has finished, or it has closed unmerged, no other red PR merges. This window outlasts the beta claim, which ends at `phone-ok`. The gate holds an approved red PR when its tested head lacks any red commit on `main`, or when a red commit on `main` lacks verified production coverage. For a missing red commit, follow the re-approval steps above after merging `main`. The Red approvals workflow refreshes phone statuses after a merge to `main` and a completed main Deploy run. Those refreshes are asynchronous; a passing status is not an atomic merge lock. A production receipt records the target commit only after every repository Worker has fresh verification or runtime equivalent to earlier verified coverage. A skipped Worker without that proof creates no receipt. Receipts are retained for 90 days. The gate reads the last ten successful main Deploy runs and stays held when none has an unexpired receipt. A production deploy that verifies every Worker restores that evidence. When verification was unavailable, repair it and rerun the current eligible Deploy run, following `.claude/rules/tooling.md`, rather than bypassing the hold.
+
+## Step 3: a review of your own first
+
+- Before marking a PR ready, have a fresh subagent review the PR's diff against its base by the root's `REVIEW.md` as `main` has it (`git show origin/main:REVIEW.md`). Hand it the diff and that `REVIEW.md`, not your own reading of the change, so it reads the change as Trusted review will.
+- Before a push that answers Trusted review's Important or Unsure findings, hand one the same, plus the PR's review threads and the commit Trusted review last read. Have it raise only what the PR changed since that commit, in files the PR still changes, and nothing a thread already settled.
+- Fix each finding that holds up. Open an issue for one outside the PR's one thing, as step 12 says, and tell the user why you dropped any other. A finding caught here costs no round of CI and Trusted review.
+- Each of these reviews runs once a round: its fixes go to Trusted review, not to another review of your own. Where a session can't start a subagent, say so to the user and go on.
 
 ## Step 4: conflicts
 
