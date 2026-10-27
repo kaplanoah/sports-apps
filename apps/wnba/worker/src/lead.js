@@ -2,11 +2,10 @@ import { readEasternDay } from "#shared/days.js";
 import { OVERTIME_SECONDS, QUARTER_SECONDS, REGULATION_PERIODS } from "../../page/js/periods.js";
 import { findTeamCodeByEspnId, TEAMS } from "../../page/js/teams.js";
 import { describeError, respondError, respondJson } from "../../../../shared/worker/responses.js";
-import { fetchUpstream } from "../../../../shared/worker/upstream.js";
 import { GAME_ID } from "./box-score.js";
 import { nameGameDetailsKey } from "./store-docs.js";
 import { readKeptDoc } from "../../../../shared/worker/store-reads.js";
-import { ESPN_HEADERS } from "./wnba.js";
+import { fetchEspnJson } from "./wnba.js";
 
 // Reads ESPN for the score through one game, for the game sheet's chart of the lead: the score
 // after each basket, and when in the game it came, from the scoring plays in ESPN's game summary.
@@ -133,21 +132,12 @@ export function createEspnGameReader({ fetchImpl = (input, init) => fetch(input,
   /** @type {Map<string, string>} */
   const eventIds = new Map();
 
-  /**
-   * @param {string} url
-   * @param {number} cacheSeconds
-   */
-  async function fetchEspnJson(url, cacheSeconds) {
-    const response = await fetchUpstream(fetchImpl, url, { headers: ESPN_HEADERS, cacheSeconds });
-    if (!response.ok) throw new Error(`ESPN answered ${response.status}`);
-    return response.json();
-  }
-
   /** @param {{ away: string, home: string, start: string }} game */
   async function findGameEventId(game) {
     const key = nameGameKey(game);
     if (eventIds.has(key)) return eventIds.get(key);
     const scoreboard = await fetchEspnJson(
+      fetchImpl,
       nameScoreboardRequest(game.start),
       SCOREBOARD_CACHE_SECONDS,
     );
@@ -163,7 +153,9 @@ export function createEspnGameReader({ fetchImpl = (input, init) => fetch(input,
      */
     async fetchSummary(game) {
       const eventId = await findGameEventId(game);
-      return eventId && fetchEspnJson(nameSummaryRequest(eventId), SUMMARY_CACHE_SECONDS);
+      return (
+        eventId && fetchEspnJson(fetchImpl, nameSummaryRequest(eventId), SUMMARY_CACHE_SECONDS)
+      );
     },
   };
 }
