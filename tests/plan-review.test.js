@@ -175,7 +175,7 @@ test("each file of code belongs to the area of what it's about", () => {
   assert.equal(nameCodeArea("shared/worker/push.js"), "shared Worker");
   assert.equal(nameCodeArea("AGENTS.md"), "docs");
   assert.equal(nameCodeArea(".claude/rules/page-look.md"), "docs");
-  assert.equal(nameCodeArea(".claude/skills/add-league/SKILL.md"), "docs");
+  assert.equal(nameCodeArea(".agents/skills/add-league/SKILL.md"), "docs");
   assert.equal(nameCodeArea(".github/workflows/ci.yml"), "tooling");
   assert.equal(nameCodeArea("worker/deploy.mjs"), "tooling");
 });

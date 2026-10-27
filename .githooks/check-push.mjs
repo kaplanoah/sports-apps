@@ -1,51 +1,19 @@
-// Runs AGENTS.md's fast checks before a push, so a push that would turn CI red stops here instead,
-// in seconds rather than a CI run and a review. The beta force-push skips them, since it pushes a
-// commit that already passed, and so does any push past the context limit's stop, so a session
-// handing off can always push.
-
 import { execFile, execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
-import { readSessionTokens, STOP_TOKENS } from "./context-limit.mjs";
 
-const PUSH = /^git((?:\s+-[Cc]\s+\S+)*)\s+push(?:\s|$)/;
-const FOLDER_OPTION = /-C\s+(\S+)/g;
-const BETA_PUSH = /^git\s+push\s+-f\s+origin\s+\S+:beta$/;
 const CHECK_SCRIPTS = ["lint", "format:check", "typecheck", "deadcode"];
 const OUTPUT_LINE_LIMIT = 40;
 
 /**
  * @typedef {object} PushState
- * @property {string} command the Bash command
  * @property {boolean} isTreeClean whether `git status --porcelain` lists nothing
  * @property {boolean} hasPackages whether node_modules is there
- * @property {number[]} recentTokens the context of the transcript's last replies, latest first
  */
 
 /** @typedef {{ isPassed: boolean, output: string }} CheckResult */
-
-/**
- * Whether a command pushes and isn't the beta force-push.
- * @param {string} command
- */
-function isCheckedPush(command) {
-  const trimmed = command.trim();
-  return PUSH.test(trimmed) && !BETA_PUSH.test(trimmed);
-}
-
-/**
- * The folder a push runs in: the session's, moved by each `-C` git is given before `push`, as git
- * moves for each in turn.
- * @param {string} command a push
- * @param {string} sessionFolder
- */
-export function findPushFolder(command, sessionFolder) {
-  const options = PUSH.exec(command.trim())?.[1] ?? "";
-  const folders = Array.from(options.matchAll(FOLDER_OPTION), ([, folder]) => folder);
-  return resolve(sessionFolder, ...folders);
-}
 
 /**
  * A check's output, up to its first lines, without blank ones.
@@ -59,15 +27,12 @@ function trimOutput(output) {
 }
 
 /**
- * Why a push is blocked, or null to let the call through. Checks run only once the push is one
- * they judge: the commit being pushed is the working tree, and the packages they run on are there.
+ * Why a push is blocked, or null when the clean working tree passes every check.
  * @param {PushState} state
  * @param {(script: string) => Promise<CheckResult>} runCheck runs one npm script
  * @returns {Promise<string | null>}
  */
-export async function decidePush({ command, isTreeClean, hasPackages, recentTokens }, runCheck) {
-  if (!isCheckedPush(command)) return null;
-  if ((recentTokens[0] ?? 0) >= STOP_TOKENS) return null;
+export async function decidePush({ isTreeClean, hasPackages }, runCheck) {
   if (!isTreeClean)
     return (
       "The working tree has uncommitted changes, so the checks would judge it rather than the commit being pushed. " +
@@ -114,27 +79,64 @@ async function runNpmScript(folder, script) {
 const isTreeCleanIn = (folder) =>
   execFileSync("git", ["status", "--porcelain"], { cwd: folder, encoding: "utf8" }).trim() === "";
 
-/** Reads the hook's input and blocks a push, with exit code 2 and the reason, when it shouldn't go. */
-async function checkHookInput() {
-  const input = JSON.parse(readFileSync(0, "utf8"));
-  const command = String(input.tool_input?.command ?? "");
-  if (!isCheckedPush(command)) return;
-  const folder = findPushFolder(
-    command,
-    input.cwd ?? process.env.CLAUDE_PROJECT_DIR ?? process.cwd(),
+/** @param {string[]} args */
+const readGit = (args) => execFileSync("git", args, { encoding: "utf8" }).trim();
+
+/** @param {string} line */
+function readPushedCommit(line) {
+  const fields = line.trim().split(/\s+/);
+  const object = fields[1];
+  if (fields.length !== 4 || !/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(object))
+    throw new Error("Git supplied an invalid pre-push ref update.");
+  if (/^0+$/.test(object)) return null;
+  return readGit(["rev-parse", "--verify", `${object}^{commit}`]);
+}
+
+/** @param {string} input */
+function listPushedCommits(input) {
+  const commits = input
+    .trim()
+    .split("\n")
+    .filter(Boolean)
+    .map(readPushedCommit)
+    .filter((commit) => commit !== null);
+  return [...new Set(commits)];
+}
+
+/** @param {string} commit */
+const isOnOrigin = (commit) =>
+  readGit([
+    "for-each-ref",
+    `--contains=${commit}`,
+    "--format=%(refname)",
+    "refs/remotes/origin/",
+  ]) !== "";
+
+/** Checks only unpublished commits, using the working tree only when it is the pushed commit. */
+async function checkPush() {
+  const unpublished = listPushedCommits(readFileSync(0, "utf8")).filter(
+    (commit) => !isOnOrigin(commit),
   );
+  if (!unpublished.length) return;
+  const head = readGit(["rev-parse", "HEAD"]);
+  if (unpublished.some((commit) => commit !== head)) {
+    process.stderr.write(
+      "The push includes an unpublished commit other than HEAD. Check out that commit and push it separately so the checks judge the code being pushed.\n",
+    );
+    process.exitCode = 1;
+    return;
+  }
+  const folder = process.cwd();
   const reason = await decidePush(
     {
-      command,
       isTreeClean: isTreeCleanIn(folder),
       hasPackages: existsSync(join(folder, "node_modules")),
-      recentTokens: readSessionTokens(input),
     },
     (script) => runNpmScript(folder, script),
   );
   if (!reason) return;
   process.stderr.write(`${reason}\n`);
-  process.exitCode = 2;
+  process.exitCode = 1;
 }
 
-if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) await checkHookInput();
+if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) await checkPush();

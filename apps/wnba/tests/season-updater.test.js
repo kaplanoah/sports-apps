@@ -478,6 +478,15 @@ test("the games stay as they were unless both the scoreboard and the schedule an
   assert.deepEqual((await readUpdates(docs, 2026)).games, finished.games);
 });
 
+test("the games stay as they were while ESPN covers the scoreboard before its scores stand in for any game", async () => {
+  const docs = createDocs();
+  await saveSnapshot(docs, SNAPSHOT);
+
+  await saveSnapshot(docs, { ...buildWithout(["scoreboard"]), scoreboardCover: "espn" });
+
+  assert.deepEqual((await readUpdates(docs, 2026)).games, SNAPSHOT.games);
+});
+
 test("the games are saved while ESPN stands in for the scoreboard", async () => {
   const docs = createDocs();
   await saveSnapshot(docs, SNAPSHOT);

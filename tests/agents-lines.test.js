@@ -59,7 +59,7 @@ test("the guidance files include AGENTS.md, REVIEW.md, the rule files, and the s
   assert.ok(GUIDANCE.includes("AGENTS.md"));
   assert.ok(GUIDANCE.includes("REVIEW.md"));
   assert.ok(GUIDANCE.some(isRuleFile));
-  assert.ok(GUIDANCE.some((path) => path.startsWith(".claude/skills/")));
+  assert.ok(GUIDANCE.some((path) => path.startsWith(".agents/skills/")));
 });
 
 test("AGENTS.md stays short enough for every session to follow", () => {

@@ -33,7 +33,9 @@ test("a change to the docs, the other workflows, or the tooling no browser test 
     listApps([
       "README.md",
       "apps/mlb/README.md",
-      ".claude/skills/steward/SKILL.md",
+      ".githooks/pre-push",
+      ".githooks/check-push.mjs",
+      ".agents/skills/steward/SKILL.md",
       ".github/workflows/flaky.yml",
       "worker/plan-review.mjs",
       "tests/plan-review.test.js",
@@ -197,4 +199,13 @@ test("the repo's browser tests reach the tooling and helpers they import, throug
   ])
     assert.ok(reached.has(path), path);
   assert.ok(!reached.has("worker/plan-review.mjs"));
+});
+
+test("executable agent files and unlisted Git hooks retain browser coverage", () => {
+  for (const path of [
+    ".agents/skills/scripts/check.mjs",
+    ".agents/shared.js",
+    ".githooks/future.mjs",
+  ])
+    assert.deepEqual(listApps([path]), APPS, path);
 });

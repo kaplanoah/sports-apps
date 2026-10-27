@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { lstatSync, readFileSync, readlinkSync } from "node:fs";
 
 export const REPO_ROOT = new URL("../", import.meta.url);
 
@@ -16,7 +16,10 @@ export const listTrackedFiles = () =>
  * A file's text, by its path from the repo's root.
  * @param {string} path
  */
-export const readRepoFile = (path) => readFileSync(new URL(path, REPO_ROOT), "utf8");
+export const readRepoFile = (path) => {
+  const file = new URL(path, REPO_ROOT);
+  return lstatSync(file).isSymbolicLink() ? readlinkSync(file) : readFileSync(file, "utf8");
+};
 
 /**
  * Whether a path is one of the PNG images or fonts the repo holds on purpose, which alone go
@@ -38,4 +41,4 @@ export const readTextFiles = () =>
  * The name of the skill a path holds, or none when it holds no skill.
  * @param {string} path
  */
-export const readSkillName = (path) => path.match(/^\.claude\/skills\/([^/]+)\/SKILL\.md$/)?.[1];
+export const readSkillName = (path) => path.match(/^\.agents\/skills\/([^/]+)\/SKILL\.md$/)?.[1];

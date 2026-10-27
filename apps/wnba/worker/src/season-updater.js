@@ -216,7 +216,8 @@ export const readUpdates = (docs, year) => docs.read(nameSeasonKey(year));
 export const readSchedule = (docs, year) => docs.read(nameScheduleKey(year));
 
 // A feed with nothing to send is idle, like the scoreboard on a day without games, which the league
-// may not send at all, so the page doesn't warn of it.
+// may not send at all, so the page doesn't warn of it. Nor does it warn of the scoreboard while ESPN
+// covers it, before ESPN's scores stand in for a game it has started.
 export function describeSnapshotStatus(snapshot) {
   const missing = snapshot.missing || [];
   const isIdle = (feed) => feed === "scoreboard" && !!snapshot.isScoreboardIdle;
@@ -224,7 +225,7 @@ export function describeSnapshotStatus(snapshot) {
     error: missing.length ? "wnba_feeds_missing" : "",
     detail: missing.join(", "),
     idle: missing.filter(isIdle).join(", "),
-    standIn: snapshot.standIn || "",
+    standIn: snapshot.standIn || snapshot.scoreboardCover || "",
     reasons: describeFailures(snapshot.failures ?? {}),
   };
 }

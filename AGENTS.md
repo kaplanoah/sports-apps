@@ -23,11 +23,27 @@
 
 ## Repo
 
-- Apps: one per league, each in `apps/<app>/` with its own `page/`, `worker/`, and `tests/`, and deployed as its own Worker, named in `apps/<app>/worker/wrangler.toml`. Paths here, in the rule files, and in the skills are inside an app's or a service's folder, except `shared/`, `.github/`, `.claude/`, and the ones named as the root's.
+- Apps: one per league, each in `apps/<app>/` with its own `page/`, `worker/`, and `tests/`, and deployed as its own Worker, named in `apps/<app>/worker/wrangler.toml`. Paths here, in the rule files, and in the skills are inside an app's or a service's folder, except `shared/`, `.github/`, `.agents/`, `.claude/`, `.githooks/`, and the ones named as the root's.
 - Services: a Worker with no page, which the apps reach by a binding and the public never does, each in `services/<name>/` with its own `worker/` and `tests/`, and built, deployed, and rolled back as an app is (`.claude/rules/tooling.md`).
-- More rules load from `.claude/rules/` once a session reads or edits a file they cover. They are `page-look.md` and `page-code.md` for the pages, `worker.md` for the Workers, `season-and-store.md` for the current season and the store, and `red-change.md` for what only a phone can test. They are also `shared-modules.md` for what each shared module does, `mlb.md` and `wnba.md` for what each app holds, `tests.md` and `browser-tests.md` for tests, and `tooling.md` for the root's `worker/`, `.github/`, and the hooks. The `ship` skill holds the rest of shipping a change, the `steward` skill how to answer CI's review, and the `add-league` skill how to add a league.
+- Before reading or changing files, read every rule file whose `paths` frontmatter matches them, even when the client does not load rules automatically. The labels below describe topics, not scope:
+  - `.claude/rules/page-look.md` for page appearance.
+  - `.claude/rules/page-code.md` for page code.
+  - `.claude/rules/worker.md` for app and service Workers.
+  - `.claude/rules/season-and-store.md` for seasons and stored data.
+  - `.claude/rules/red-change.md` for changes that need a phone test.
+  - `.claude/rules/shared-modules.md` for shared modules.
+  - `.claude/rules/mlb.md` for the MLB app.
+  - `.claude/rules/wnba.md` for the WNBA app.
+  - `.claude/rules/tests.md` for tests.
+  - `.claude/rules/browser-tests.md` for browser tests.
+  - `.claude/rules/tooling.md` for root tooling, workflows, and hooks.
+- Read these skills:
+  - `.agents/skills/ship/SKILL.md` before shipping any change.
+  - `.agents/skills/steward/SKILL.md` before answering CI's review.
+  - `.agents/skills/add-league/SKILL.md` before adding a league.
+- `.agents/skills/` holds the skills; `.claude/skills` links to it. Codex has no enforcement equivalent for Claude's one-command or context-limit hooks. Follow the command rules here; when a context-limit stop requires handoff, follow the handoff steps in `.claude/hooks/context-limit.mjs`.
 - Shared code: `shared/page/` and `shared/worker/` hold what every app uses, which `.claude/rules/shared-modules.md` lists. A change there reaches every app, so shared code never imports an app's modules: an app hands it what it needs, as `watchReturns({ isBusy, catchUp })` does. Logic or a view that more than one app needs lives there once, and each league hands it only what differs, as each app's `readGameDay`, `renderGameRow`, and `listSeasonDays` calls do; never copy it into a second app.
-- Tests: each app's `tests/`, with its browser tests in `tests/browser/`, and the root's `tests/` for `shared/` and the tooling. How to write them is under "Tests" above and in `.claude/rules/tests.md` and `browser-tests.md`.
+- Tests: each app's `tests/`, with its browser tests in `tests/browser/`, and the root's `tests/` for `shared/` and the tooling. How to write them is under "Tests" above and in `.claude/rules/tests.md` and `.claude/rules/browser-tests.md`.
 - Commands: `npm run check` runs everything CI does, but locally run only what step 2 of "Shipping a change" names. `npm run format` fixes formatting. Types are checked from JSDoc by `npm run typecheck`; the code stays plain JavaScript. `npm run deadcode` runs knip, which fails on unused files, exports, and dependencies: delete them rather than ignoring them.
 
 ## Workflow
@@ -48,10 +64,10 @@
 
 ### Shipping a change
 
-Follow these steps in order, with the `ship` skill loaded, which adds to most of them. When a step says to go back to an earlier step, continue in order from there.
+Follow these steps in order, with `.agents/skills/ship/SKILL.md` loaded, which adds to most of them. When a step says to go back to an earlier step, continue in order from there.
 
 1. Fetch `main` and start your branch from it, or, for a stacked PR (step 12), from the branch of the PR it builds on. If the branch's last PR has merged, reset the branch to `origin/main` first.
-2. A hook runs `npm run lint`, `format:check`, `typecheck`, and `deadcode` before each push, and blocks the push when one fails. Run the tests that cover what you changed: a test file with `node --test <file>`, or a browser spec with `npx playwright test <file>`. Name each spec that exercises the change, a change to shared code too, found by searching the tests for the module or what it draws; never pass a folder. Don't run the full test suite locally (`npm test`, `npm run test:browser`, or `npm run check`): CI runs the Node tests, and the browser tests a change reaches, on every push. If anything fails, fix it and run it again. Repeat until it passes. Never push while it fails.
+2. The Git pre-push hook checks unpublished commits with `npm run lint`, `format:check`, `typecheck`, and `deadcode`. Bypass checks only for your own branch's handoff push after the context-limit stop, following its message. Run the tests that cover what you changed: a test file with `node --test <file>`, or a browser spec with `npx playwright test <file>`. Name each spec that exercises the change, a change to shared code too, found by searching the tests for the module or what it draws; never pass a folder. Don't run the full test suite locally (`npm test`, `npm run test:browser`, or `npm run check`): CI runs the Node tests, and the browser tests a change reaches, on every push. If anything fails, fix it and run it again. Repeat until it passes. Never push failing work except for that handoff.
 3. Commit, push, and open a draft PR into `main`, or a stacked draft PR into the branch it builds on. If the PR is already open, the push updates it. Merge `main` into your branch only for step 4's conflicts, or as the `ship` skill says for a red or stacked PR, since CI and Trusted review read the PR merged into `main`. Mark it ready for review once step 2 passes and you've read its whole diff against `main`, which is when Trusted review reviews it. If `git diff --text --no-textconv --no-ext-diff --no-renames origin/main... | node worker/red-change.mjs` says the change is red, ship it by the `ship` skill's steps for one.
 4. Check whether the PR has merge conflicts with its base branch. GitHub runs no CI on a PR with conflicts, so waiting on one would never end. If it has them, merge the base branch into your branch, resolve the conflicts, and go back to step 2. If resolving a conflict would drop behavior from either side, resolve it in the way that best serves the spirit of both changes, and confirm with the user.
 5. Wait until every CI job on the PR's latest commit has finished. The `check` job is the one that must pass; it fails whenever any other CI job fails. Each time you look while waiting, and whenever no CI run has started on the latest commit a few minutes after the push, go back to step 4 first, since another PR may have merged into `main` and left this one in conflict.
