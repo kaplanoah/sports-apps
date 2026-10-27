@@ -511,8 +511,8 @@ const isOnSameDay = (game, espnGame) =>
   readLeagueDate(game.start) === readLeagueDate(espnGame.start);
 
 // A game from the league's yesterday that isn't over is one the scoreboard still holds past
-// midnight, or one the schedule hasn't caught up on. An older one left unplayed is the schedule's to
-// settle, not the scoreboard's to score.
+// midnight, or one the schedule hasn't caught up on. An older one left unplayed or unfinished is the
+// schedule's to settle, not the scoreboard's to score.
 /**
  * @param {{ start: string | null }} game
  * @param {number} now
@@ -524,15 +524,15 @@ function isOnScoreboardDay({ start }, now) {
 }
 
 /**
- * Whether a game's score is the league scoreboard's to send: one under way, or one to be played
- * between known teams on the league's today or yesterday.
+ * Whether a game's score is the league scoreboard's to send: one on the league's today or yesterday
+ * that's under way, or to be played between known teams.
  * @param {import("./nearest-games.js").SeasonGame & { start: string | null }} game
  * @param {Map<string, import("./nearest-games.js").DecidedSeries>} seriesById
  * @param {number} now
  */
 export function isScoreboardGame(game, seriesById, now) {
-  if (game.state !== "pre") return game.state === "live";
-  return isOnScoreboardDay(game, now) && isPlayable(game, seriesById);
+  if (!isOnScoreboardDay(game, now)) return false;
+  return game.state === "live" || (game.state === "pre" && isPlayable(game, seriesById));
 }
 
 // Matched by day rather than by the nearest start, since the league's placeholder start, at midnight

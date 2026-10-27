@@ -551,7 +551,7 @@ const UNDECIDED = new Map([["finals", { winner: null }]]);
 // Noon Eastern on the day of the game above.
 const GAME_DAY_NOON = Date.parse("2026-10-27T16:00:00Z");
 
-test("the scoreboard has a game to score while one is under way, or one is to be played on the league's today or yesterday", () => {
+test("the scoreboard has a game to score on the league's today or yesterday, one under way or to be played", () => {
   const isScored = (change, now = GAME_DAY_NOON, seriesById = UNDECIDED) =>
     WNBASnapshot.isScoreboardGame({ ...FINALS_GAME, ...change }, seriesById, now);
   assert.equal(isScored({}), true);
@@ -562,6 +562,7 @@ test("the scoreboard has a game to score while one is under way, or one is to be
     isScored({ state: "live", start: "2026-10-26T23:30:00Z" }, Date.parse("2026-10-27T04:30:00Z")),
     true,
   );
+  assert.equal(isScored({ state: "live", start: "2026-10-25T23:30:00Z" }), false);
   assert.equal(isScored({ state: "final" }), false);
   assert.equal(isScored({}, GAME_DAY_NOON, new Map([["finals", { winner: "LVA" }]])), false);
   assert.equal(isScored({ status: "Postponed" }), false);
