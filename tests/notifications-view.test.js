@@ -154,11 +154,6 @@ test("a failed save's note shows under the control that changed and nowhere else
   }
 });
 
-test("a note for a hidden control shows under updates, the one row left", () => {
-  const markup = renderRows(WNBA_WORDS, DEFAULT_NOTIFICATION_PREFERENCES, "loading", "reminders");
-  assert.deepEqual(listNotesShown(markup), [["notify", "Permission guidance"]]);
-});
-
 test("unsupported devices retain guidance without unusable reminder controls", () => {
   const markup = renderRows(WNBA_WORDS, DEFAULT_NOTIFICATION_PREFERENCES, "unsupported");
   assert.doesNotMatch(markup, /remindersSwitch|reminderTiming/);

@@ -37,8 +37,9 @@ function describeStatus(status, device) {
 }
 
 /**
- * The note below the updates label: a message it was given, else what its status says. Where
- * notifications come only from the Home Screen, its ? opens the welcome's steps.
+ * The note under the control a save answers, else under the updates label: a message it was
+ * given, else what its status says. Where notifications come only from the Home Screen, its ?
+ * opens the welcome's steps.
  * @param {{ status: string, message: string, device: NoteDevice }} state
  * @returns {{ text: string, hasHelp: boolean }}
  */

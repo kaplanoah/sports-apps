@@ -197,6 +197,7 @@ export function testGameReminderSettings(test, expect, app) {
     await expect(reminders).toHaveAttribute("aria-checked", "false");
     await expect(reminders).toBeEnabled();
     await expect(page.locator("#notifyNote")).toBeEmpty();
+    await expect(page.locator("#remindersNote")).toBeEmpty();
     expect(subscriptionWrites).toBe(0);
     expect(await page.evaluate((key) => sessionStorage.getItem(key), PUSH_STUB.keptKey)).toBeNull();
     await page.unroute("**/push/preferences");

@@ -10,7 +10,7 @@ import { reloadWhenSignedOut } from "./access.js";
 import { isIos, isOnHomeScreen } from "./device.js";
 import { isAskingToAdd, openWelcome } from "./home-screen.js";
 import { html, setHtml } from "./html.js";
-import { renderNotificationRows } from "./notifications-view.js";
+import { NOTE_PLACES, renderNotificationRows } from "./notifications-view.js";
 import {
   CHANGE_FAILED,
   PENDING_SPINNER_MS,
@@ -319,8 +319,7 @@ async function removeSubscription(next) {
  * @param {{ minutes?: number, place?: import("./notifications-view.js").NotePlace }} [request]
  */
 async function changeCategory(category, isEnabled, request = {}) {
-  const { minutes = preferences.minutes, place = category === "updates" ? "notify" : "reminders" } =
-    request;
+  const { minutes = preferences.minutes, place = NOTE_PLACES[category] } = request;
   const before = preferences;
   const previousStatus = status;
   const next = { ...before, minutes, [category]: isEnabled, timeZone: readDeviceTimeZone() };
@@ -373,8 +372,9 @@ function toggleCategory(category) {
 function toggleNotifications(event) {
   if (isBusy) return;
   const target = /** @type {Element} */ (event.target);
-  if (target.closest("#notifySwitch")) toggleCategory("updates");
-  if (target.closest("#remindersSwitch")) toggleCategory("reminders");
+  for (const category of /** @type {const} */ (["updates", "reminders"])) {
+    if (target.closest(`#${NOTE_PLACES[category]}Switch`)) toggleCategory(category);
+  }
 }
 
 async function saveRequestedTiming() {

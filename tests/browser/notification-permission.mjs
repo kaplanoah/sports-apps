@@ -1,5 +1,6 @@
 import { checkSelectArrow } from "./settings.mjs";
-import { holdClock } from "./harness.mjs";
+import { holdClock, matchPath } from "./harness.mjs";
+import { holdRequests } from "./hold-requests.mjs";
 import { PUSH_STUB, stubPushManager, stubPushRegistration } from "./push-stub.mjs";
 
 function holdPermission() {
@@ -82,23 +83,16 @@ async function expectSteadyLooks(page, expect, checked) {
   }
 }
 
-/** @param {"fallback" | "fail"} [answer] */
-async function holdSaves(page, answer = "fallback") {
-  let release;
-  const held = new Promise((resolve) => {
-    release = resolve;
-  });
-  await page.route("**/push/preferences", async (route) => {
-    await held;
-    if (answer === "fail" && route.request().method() === "PUT")
-      await route.fulfill({
+const PREFERENCES = matchPath("/push/preferences");
+
+/** @param {import("@playwright/test").Route} route */
+const failSave = (route) =>
+  route.request().method() === "PUT"
+    ? route.fulfill({
         status: 503,
         json: { error: { code: "unavailable", message: "The store is busy." } },
-      });
-    else await route.fallback();
-  });
-  return release;
-}
+      })
+    : route.fallback();
 
 const readGeometry = (page) =>
   page.locator("#notificationsGroup").evaluate((group) =>
@@ -290,14 +284,7 @@ export function testNotificationPermission(test, expect, app) {
     await expect(page.locator("#remindersSwitch")).toBeEnabled();
     for (const keyboard of [false, true]) {
       await page.evaluate((keyboard) => document.body.classList.toggle("kbd", keyboard), keyboard);
-      let release;
-      const held = new Promise((resolve) => {
-        release = resolve;
-      });
-      await page.route("**/push/preferences", async (route) => {
-        await held;
-        await route.fallback();
-      });
+      const release = await holdRequests(page, PREFERENCES);
       const timing = page.locator("#reminderTiming");
       await timing.focus();
       await timing.evaluate((element) => {
@@ -317,7 +304,7 @@ export function testNotificationPermission(test, expect, app) {
       expect(await page.evaluate(() => Reflect.get(window, "timingFocusCalls"))).toBe(
         keyboard ? 1 : 0,
       );
-      await page.unroute("**/push/preferences");
+      await page.unroute(PREFERENCES);
       await timing.evaluate((element) => {
         Reflect.deleteProperty(element, "focus");
       });
@@ -336,14 +323,7 @@ export function testNotificationPermission(test, expect, app) {
     await expect(toggle).toHaveAttribute("aria-checked", "true");
     await page.clock.runFor(1000);
     await expect(page.locator(".notification-spinner:visible")).toHaveCount(0);
-    let release;
-    const held = new Promise((resolve) => {
-      release = resolve;
-    });
-    await page.route("**/push/preferences", async (route) => {
-      await held;
-      await route.fallback();
-    });
+    const release = await holdRequests(page, PREFERENCES);
     try {
       await page.locator("#reminderTiming").selectOption("180");
       await expect(page.locator("#reminderTiming")).toBeEnabled();
@@ -401,7 +381,7 @@ export function testNotificationPermission(test, expect, app) {
     await reminders.click();
     await expect(reminders).toBeEnabled();
     await page.evaluate(watchControlLooks);
-    const releaseSlow = await holdSaves(page);
+    const releaseSlow = await holdRequests(page, PREFERENCES);
     await timing.selectOption("180");
     await expect(reminders).toBeDisabled();
     await timing.selectOption("30");
@@ -411,13 +391,13 @@ export function testNotificationPermission(test, expect, app) {
       () => JSON.parse(localStorage.getItem("device-notifications")).minutes === 60,
     );
     await expect(reminders).toBeEnabled();
-    await page.unroute("**/push/preferences");
+    await page.unroute(PREFERENCES);
     await timing.selectOption("0");
     await page.waitForFunction(
       () => JSON.parse(localStorage.getItem("device-notifications")).minutes === 0,
     );
     await expect(reminders).toBeEnabled();
-    const releaseFailure = await holdSaves(page, "fail");
+    const releaseFailure = await holdRequests(page, PREFERENCES, { answer: failSave });
     await timing.selectOption("10");
     await expect(reminders).toBeDisabled();
     releaseFailure();
@@ -425,7 +405,7 @@ export function testNotificationPermission(test, expect, app) {
     await expect(page.locator("#notificationsGroup .control-note:not(:empty)")).toHaveCount(1);
     await expect(reminders).toBeEnabled();
     await expect(timing).toHaveValue("0");
-    await page.unroute("**/push/preferences");
+    await page.unroute(PREFERENCES);
     await expectSteadyLooks(page, expect, { reminders: "true", updates: "false" });
   });
 
@@ -442,7 +422,7 @@ export function testNotificationPermission(test, expect, app) {
       await expect(other).toBeEnabled();
       await page.evaluate(watchControlLooks);
       await holdClock(page);
-      const releaseSlow = await holdSaves(page);
+      const releaseSlow = await holdRequests(page, PREFERENCES);
       await toggle.click();
       await expect(toggle).toHaveAttribute("aria-checked", "true");
       await expect(toggle).toBeDisabled();
@@ -451,9 +431,9 @@ export function testNotificationPermission(test, expect, app) {
       releaseSlow();
       await expect(toggle).toBeEnabled();
       await expect(toggle).toHaveAttribute("aria-checked", "true");
-      await page.unroute("**/push/preferences");
+      await page.unroute(PREFERENCES);
       await page.evaluate(() => document.body.classList.add("kbd"));
-      const releaseFailure = await holdSaves(page, "fail");
+      const releaseFailure = await holdRequests(page, PREFERENCES, { answer: failSave });
       await toggle.focus();
       await page.keyboard.press("Space");
       await expect(toggle).toHaveAttribute("aria-checked", "false");
@@ -467,7 +447,7 @@ export function testNotificationPermission(test, expect, app) {
         page.locator(category === "reminders" ? "#remindersNote" : "#notifyNote"),
       ).toHaveText(/Couldn't update/);
       await expect(page.locator("#notificationsGroup .control-note:not(:empty)")).toHaveCount(1);
-      await page.unroute("**/push/preferences");
+      await page.unroute(PREFERENCES);
       await expectSteadyLooks(page, expect, {
         [category === "reminders" ? "updates" : "reminders"]: "true",
       });

@@ -841,7 +841,7 @@ body.kbd .notify-help:focus {
   cursor: pointer;
   appearance: none;
   -webkit-appearance: none;
-  /* Chromium fades a disabled select on its own, so only the rule below fades one. */
+  /* Browsers fade a disabled control on their own, so only the rule below fades one. */
   opacity: 1;
 }
 @media (hover: hover) {
@@ -860,6 +860,8 @@ body.kbd .notify-help:focus {
   border-radius: 14px;
   background: var(--divider);
   cursor: pointer;
+  /* As the select's: only the rule below fades a disabled switch. */
+  opacity: 1;
   transition: background 0.2s;
 }
 .switch-knob {
