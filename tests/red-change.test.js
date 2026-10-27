@@ -16,6 +16,7 @@ import {
   readRedApproval,
 } from "../worker/red-change.mjs";
 import { PHONE_CONTEXT } from "../worker/labeling.mjs";
+import { createTimelineAnswer } from "./timeline.js";
 import { refreshRedApprovals } from "../worker/red-approval.mjs";
 import { findDeployedChanges } from "../worker/deploy-scope.mjs";
 import { REPO_ROOT, readRepoFile } from "./repo-files.js";
@@ -1914,15 +1915,15 @@ function createApprovalApi(history, head, deployed) {
           labels: [{ name: "phone-ok" }],
         },
       ];
-    else if (url.pathname.endsWith("/timeline"))
-      answer = [
+    else if (url.pathname === "/graphql")
+      answer = createTimelineAnswer([
         {
           event: "labeled",
           label: { name: "phone-ok" },
           actor: { login: "owner" },
           created_at: "2026-10-07T10:00:00Z",
         },
-      ];
+      ]);
     else if (url.pathname.endsWith("/check-suites"))
       answer = { check_suites: [{ created_at: "2026-10-07T09:45:00Z" }] };
     else if (url.pathname.endsWith("/deploy.yml/runs"))
@@ -2003,7 +2004,7 @@ test("trusted refresh invalidates an old phone status after a red merge and rest
   const unavailable = createApprovalApi(history, head, history.base);
   const originalFetch = unavailable.fetchImpl;
   unavailable.fetchImpl = async (input, options) =>
-    String(input).includes("/timeline")
+    String(input).endsWith("/graphql")
       ? new Response("{}", { status: 403 })
       : originalFetch(input, options);
   await refreshRedApprovals(unavailable);
