@@ -50,6 +50,8 @@ test("a merge of only docs, tests, and tooling skips the deploy", () => {
     ".github/workflows/publish-trusted-review.yml",
     ".github/workflows/review.yml",
     ".github/workflows/trusted-review-area.yml",
+    ".github/workflows/trusted-review-issuer-test.yml",
+    ".github/workflows/trusted-review-lookalike-test.yml",
     ".github/workflows/trusted-review-publisher.yml",
     "AGENTS.md",
     "README.md",
@@ -86,6 +88,7 @@ test("a merge of only docs, tests, and tooling skips the deploy", () => {
     "worker/rule-files.mjs",
     "worker/set-app-key.mjs",
     "worker/test-time-zone.mjs",
+    "worker/test-review-issuer.mjs",
     "worker/time-zone-scope.mjs",
     "worker/trusted-review.mjs",
   ]);
