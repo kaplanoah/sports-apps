@@ -570,8 +570,18 @@ test("Claude trials use real Read evidence and verify empty integration coverage
   assert.match(readFileSync(join(root, "trial/data/pull-request.md"), "utf8"), /component audit/);
   const portions = join(root, "portions");
   mkdirSync(portions);
-  function collectClaudeFixture(portion, omitted, limited = false) {
-    const attempt = join(root, `${portion}-${limited ? "limited" : omitted ? "missing" : "full"}`);
+  function collectClaudeFixture(
+    portion,
+    { omitted = false, limited = false, readCandidatesWithShell = false } = {},
+  ) {
+    const variant = readCandidatesWithShell
+      ? "shell-candidates"
+      : limited
+        ? "limited"
+        : omitted
+          ? "missing"
+          : "full";
+    const attempt = join(root, `${portion}-${variant}`);
     mkdirSync(attempt);
     cpSync(join(root, "trial"), join(attempt, "trial"), { recursive: true });
     if (portion === "integration")
@@ -604,6 +614,15 @@ test("Claude trials use real Read evidence and verify empty integration coverage
     if (portion !== "integration") {
       assert.match(requestPrompt, /For each change to behavior, find the test/);
       assert.match(requestPrompt, /stale-names.md/);
+    } else {
+      assert.match(
+        requestPrompt,
+        /Use the Read tool for \.review\/candidates\.json and every diff and rule/,
+      );
+      assert.match(
+        requestPrompt,
+        /Shell output does not satisfy this profile's Read-coverage check/,
+      );
     }
     const areas =
       portion === "integration" ? plan.areas : plan.areas.filter((area) => area.area === portion);
@@ -613,8 +632,11 @@ test("Claude trials use real Read evidence and verify empty integration coverage
       ),
     ];
     if (portion === "integration") paths.push("candidates.json");
+    const readPaths = (omitted ? paths.slice(1) : paths).filter(
+      (path) => !readCandidatesWithShell || path !== "candidates.json",
+    );
     /** @type {any[]} */
-    const messages = (omitted ? paths.slice(1) : paths).flatMap((path, index) => [
+    const messages = readPaths.flatMap((path, index) => [
       {
         type: "assistant",
         message: {
@@ -637,6 +659,35 @@ test("Claude trials use real Read evidence and verify empty integration coverage
         message: { content: [{ type: "tool_result", tool_use_id: `${index}`, is_error: false }] },
       },
     ]);
+    if (readCandidatesWithShell)
+      messages.push(
+        {
+          type: "assistant",
+          message: {
+            content: [
+              {
+                type: "tool_use",
+                id: "shell-candidates",
+                name: "Bash",
+                input: { command: `cat ${join(workspace, ".review/candidates.json")}` },
+              },
+            ],
+          },
+        },
+        {
+          type: "user",
+          message: {
+            content: [
+              {
+                type: "tool_result",
+                tool_use_id: "shell-candidates",
+                is_error: false,
+                content: readFileSync(join(workspace, ".review/candidates.json"), "utf8"),
+              },
+            ],
+          },
+        },
+      );
     messages.push({
       type: "result",
       usage: {
@@ -652,9 +703,15 @@ test("Claude trials use real Read evidence and verify empty integration coverage
       env: fixtureEnv,
       encoding: "utf8",
     });
-    assert.equal(collected.status, omitted ? 1 : 0, collected.stderr);
+    const incomplete = omitted || readCandidatesWithShell;
+    assert.equal(collected.status, incomplete ? 1 : 0, collected.stderr);
     const session = JSON.parse(readFileSync(join(attempt, "trial-result/session.json"), "utf8"));
-    assert.equal(session.status, omitted ? "failed" : "completed");
+    assert.equal(session.status, incomplete ? "failed" : "completed");
+    if (readCandidatesWithShell) {
+      assert.equal(session.failureStage, "answer-validation");
+      assert.equal(session.tokens.input, 10);
+      assert.ok(existsSync(join(attempt, "trial-private/evidence.cms")));
+    }
     if (limited)
       assert.deepEqual(session.unjudged, [
         { file: plan.areas[0].files[0], why: "Hosted behavior remains unjudged." },
@@ -667,15 +724,16 @@ test("Claude trials use real Read evidence and verify empty integration coverage
         recursive: true,
       });
     }
-    if (!omitted && portion === "integration")
+    if (!incomplete && portion === "integration")
       assert.ok(session.integrationCoverage.tries[0].reads.length > 0);
   }
-  for (const area of plan.areas) collectClaudeFixture(area.area, false);
-  collectClaudeFixture(plan.areas[0].area, true);
-  collectClaudeFixture(plan.areas[0].area, false, true);
-  collectClaudeFixture("integration", true);
-  collectClaudeFixture("integration", false);
-  collectClaudeFixture("integration", false, true);
+  for (const area of plan.areas) collectClaudeFixture(area.area);
+  collectClaudeFixture(plan.areas[0].area, { omitted: true });
+  collectClaudeFixture(plan.areas[0].area, { limited: true });
+  collectClaudeFixture("integration", { omitted: true });
+  collectClaudeFixture("integration", { readCandidatesWithShell: true });
+  collectClaudeFixture("integration");
+  collectClaudeFixture("integration", { limited: true });
 });
 
 test("trial actions and provider configurations agree with the trusted production pins", () => {
