@@ -309,8 +309,8 @@ test("the browsers' cache is saved only before WebKit is installed", () => {
     assert.doesNotMatch(readJob(job), /uses: actions\/cache(?:\/save)?@/, job);
 });
 
-// Ubuntu's mirror can stall for longer than both of the installer's tries, so each job that
-// installs WebKit's system libraries first puts back the packages main saved.
+// Ubuntu's mirror can stall for longer than both of the installer's tries, so CI's WebKit installs
+// and the nightly Flaky run first put back the packages main saved.
 test("each job that installs WebKit's system libraries first puts back main's saved packages", () => {
   const key = "webkit-packages-${{ steps.image.outputs.os }}-${{ hashFiles('package-lock.json') }}";
   assert.match(

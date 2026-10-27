@@ -438,8 +438,9 @@ jobs:
         with:
           path: ~/.cache/ms-playwright
           key: *browsers-key
-      # WebKit's system libraries come from Ubuntu's mirror, which can stall for minutes, so each
-      # job that installs WebKit puts back the packages saved here and downloads only what's newer.
+      # WebKit's system libraries come from Ubuntu's mirror, which can stall for minutes, so CI's
+      # WebKit installs and the nightly Flaky run put back the packages saved here and download only
+      # what's newer.
       # WebKit goes in after the browsers' cache is saved, which must hold Chromium alone.
       - if: steps.webkit-packages.outputs.cache-hit != 'true'
         run: node worker/install-browsers.mjs --with-deps webkit
