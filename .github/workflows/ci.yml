@@ -286,7 +286,7 @@ jobs:
   # browser tests from the next nightly run (worker/judge-burn-in.mjs). Ten runs of every spec a
   # large pull request changes take longer than one machine's limit, so ten machines each run every
   # test once. Each then has the same share however slow some tests are, where Playwright's shards,
-  # split by count in project order, would hand the last one every test of the last project,
+  # split by count in project order, would give the last machines only the last project's tests,
   # WebKit's, the slowest. When an at-rest spec is among them, it installs WebKit too, as the
   # webkit job does, so they repeat in WebKit, where they've failed most.
   burn-in:

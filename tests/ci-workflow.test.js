@@ -448,8 +448,8 @@ test("the browser job's traces leave out the page at each step, which burn-in's 
   assert.doesNotMatch(readJob("burn-in"), /TRACE_SNAPSHOTS/);
 });
 
-// Playwright's shards split tests by count in project order, handing the last machine every test
-// of the slowest project, so each machine runs every test once instead.
+// Playwright's shards split tests by count in project order, giving the last machines only the
+// last project's tests, WebKit's, the slowest, so each machine runs every test once instead.
 test("burn-in runs every test ten times however many fail, once on each of ten machines, and fails only on a test the pull request wrote or edited", () => {
   const burnIn = readJob("burn-in");
   assert.match(burnIn, /run: \[1, 2, 3, 4, 5, 6, 7, 8, 9, 10\]\n/);
