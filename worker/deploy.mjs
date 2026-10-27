@@ -115,8 +115,8 @@ export function checkRelease(
 
 const NO_CREDENTIALS = new Set([9106, 1001]);
 
-// Counts each phone's tries at the access code. The namespace is the account's own number for
-// these counts, and each Worker keys its counts by its own address.
+// Counts each phone's tries at the access code and its daily counts. The namespace is the
+// account's own number for these limits, and each Worker keys them by its own address.
 const ACCESS_LIMIT_BINDING = {
   type: "ratelimit",
   name: "ACCESS_LIMIT",
@@ -125,7 +125,7 @@ const ACCESS_LIMIT_BINDING = {
 };
 // The version a service runs, as its upload's tag names it, which its health reports.
 const VERSION_BINDING = { type: "version_metadata", name: "VERSION" };
-// Each device's one count a day (shared/worker/daily-count.js). Only production's apps count, so
+// Each browser's or Home Screen app's one count a day (shared/worker/daily-count.js). Only production's apps count, so
 // testing on beta adds nothing to the counts.
 const DAILY_OPENS_BINDING = {
   type: "analytics_engine",

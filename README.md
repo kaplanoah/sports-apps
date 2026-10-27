@@ -27,7 +27,7 @@ A Cloudflare Worker serves the page and reads the WNBA's own feeds on its own, e
 
 Pages deployed with this repo's tooling require an access code, which the deploy's check also uses. Each phone types it once and remembers it, whether the page is private or shared.
 
-Each live app counts how many devices open it each day, Eastern time: one count per device per day, and nothing about who.
+Each live app counts how many browsers and Home Screen apps open it each day, Eastern time: one count for each per day, and nothing about who.
 
 ## Setup (for humans)
 
