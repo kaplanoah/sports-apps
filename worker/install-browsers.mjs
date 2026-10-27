@@ -4,7 +4,10 @@ import { fileURLToPath } from "node:url";
 /** @typedef {(command: string, arguments_: string[], options: import("node:child_process").SpawnOptions) => import("node:child_process").ChildProcess} InstallerSpawn */
 /** @typedef {(command: string, arguments_: string[], options: import("node:child_process").SpawnSyncOptionsWithStringEncoding) => import("node:child_process").SpawnSyncReturns<string>} CleanupSpawn */
 
-export const ATTEMPT_TIMEOUT_MS = 3 * 60 * 1000;
+// An install with its system packages takes about a minute, but a mirror download sometimes
+// trickles on without ever tripping apt's own timeout, so a stalled attempt stops and tries
+// once more on a fresh connection.
+export const ATTEMPT_TIMEOUT_MS = 2 * 60 * 1000;
 export const MAX_ATTEMPTS = 2;
 export const CLEANUP_GRACE_MS = 1000;
 export const CLEANUP_TIMEOUT_MS = 2000;
@@ -75,7 +78,7 @@ function installAttempt(arguments_, { spawnImpl, cleanupSpawn, timeoutMs, signal
         code: timedOut ? 124 : (code ?? 1),
         output,
         timedOut,
-        retryable: transientFailure && !permanentReason,
+        retryable: (timedOut || transientFailure) && !permanentReason,
         permanentReason,
       });
     };
@@ -160,9 +163,11 @@ export async function installBrowsers(
     if (result.output.trim()) log(result.output.trim());
     if (result.permanentReason)
       log(`A permanent error was reported (${result.permanentReason}); no retry.`);
-    if (result.timedOut || !result.retryable) return result.code;
+    if (!result.retryable) return result.code;
     if (attempt < MAX_ATTEMPTS)
-      log("Retrying browser installation once after a transient transport failure.");
+      log(
+        `Retrying browser installation once after ${result.timedOut ? "a stalled attempt" : "a transient transport failure"}.`,
+      );
   }
   return lastCode;
 }
