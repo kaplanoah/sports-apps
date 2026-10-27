@@ -105,7 +105,7 @@ test("without the league's scoreboard, the schedule is saved only on a day with 
   assert.equal((await readUpdates(gameDayDocs, 2026)).games, undefined);
 });
 
-test("the status calls a missing scoreboard idle only on a day with no game for it to score", () => {
+test("the status calls a missing scoreboard idle only on a day the schedule says has no game for it to score", () => {
   const { scoreboard, backup, ...withoutScores } = RESPONSES;
   const gameDay = Date.parse(GAMES.now);
   const describeOn = (schedule) =>
@@ -121,6 +121,9 @@ test("the status calls a missing scoreboard idle only on a day with no game for 
     .find((game) => game.gameId === "1042600123");
   tonight.gameStatusText = "PPD";
   assert.equal(describeOn(putOff).idle, "scoreboard");
+
+  const withoutSchedule = describeOn(undefined);
+  assert.deepEqual([withoutSchedule.detail, withoutSchedule.idle], ["schedule, scoreboard", ""]);
 });
 
 test("each upcoming game's meetings are saved for its two teams, only when they change, and stay as they were without the schedule", async () => {

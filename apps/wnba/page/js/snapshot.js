@@ -6,8 +6,9 @@
 // ESPN's scoreboard does, and it says when a game starts while the league's schedule still has its
 // time to be decided.
 
-import { readEasternDay } from "#shared/days.js";
+import { addDays, readEasternDay } from "#shared/days.js";
 import * as PollSchedule from "#shared/poll-schedule.js";
+import { readLeagueDate } from "./days.js";
 import { findTeamCode, findTeamCodeByEspnId, TEAMS } from "./teams.js";
 import {
   findTeamNearestGames,
@@ -506,30 +507,32 @@ function readNetworkGame(event) {
 // Until ESPN names both teams, its game could be any of a round's games at that time.
 const hasBothTeams = (networkGame) => !!(networkGame.home?.team && networkGame.away?.team);
 
-const readStartDay = (game) => readEasternDay(Date.parse(game.start)).date;
-const isOnSameDay = (game, espnGame) => readStartDay(game) === readStartDay(espnGame);
+const isOnSameDay = (game, espnGame) =>
+  readLeagueDate(game.start) === readLeagueDate(espnGame.start);
 
+// A game from the league's yesterday that isn't over is one the scoreboard still holds past
+// midnight, or one the schedule hasn't caught up on. An older one left unplayed is the schedule's to
+// settle, not the scoreboard's to score.
 /**
  * @param {{ start: string | null }} game
  * @param {number} now
  */
-function isOnOrBeforeLeagueToday({ start }, now) {
-  const startMs = Date.parse(start ?? "");
-  return Number.isFinite(startMs) && readEasternDay(startMs).date <= readEasternDay(now).date;
+function isOnScoreboardDay({ start }, now) {
+  const date = readLeagueDate(start);
+  const today = readEasternDay(now).date;
+  return !!date && date >= addDays(today, -1) && date <= today;
 }
 
-// A game from before the league's today that isn't over is one the scoreboard still holds past
-// midnight, or one the schedule hasn't caught up on.
 /**
  * Whether a game's score is the league scoreboard's to send: one under way, or one to be played
- * between known teams on or before the league's today.
+ * between known teams on the league's today or yesterday.
  * @param {import("./nearest-games.js").SeasonGame & { start: string | null }} game
  * @param {Map<string, import("./nearest-games.js").DecidedSeries>} seriesById
  * @param {number} now
  */
 export function isScoreboardGame(game, seriesById, now) {
   if (game.state !== "pre") return game.state === "live";
-  return isOnOrBeforeLeagueToday(game, now) && isPlayable(game, seriesById);
+  return isOnScoreboardDay(game, now) && isPlayable(game, seriesById);
 }
 
 // Matched by day rather than by the nearest start, since the league's placeholder start, at midnight
@@ -641,7 +644,8 @@ export function buildSnapshot(responses, { season, now = Date.now() }) {
     standings: readStandingsRows(responses.standings),
     missing: LEAGUE_FEEDS.filter((name) => !responses[name]),
     standIn: standIns.size ? "espn" : null,
-    isScoreboardIdle: !seasonGames.some((game) => isScoreboardGame(game, seriesById, now)),
+    isScoreboardIdle:
+      !!responses.schedule && !seasonGames.some((game) => isScoreboardGame(game, seriesById, now)),
     openingDay: readOpeningDay(responses.schedule, season),
   };
 }
