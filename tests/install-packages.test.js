@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -17,6 +17,7 @@ const LOCKFILE_TIME = new Date("2026-10-01T12:00:00Z");
  */
 function makeFolder({ installedAt, hasRecord = true } = {}) {
   const folder = mkdtempSync(join(tmpdir(), "install-packages-"));
+  execFileSync("git", ["init", folder], { stdio: "ignore" });
   const lockfile = join(folder, "package-lock.json");
   writeFileSync(lockfile, "{}");
   utimesSync(lockfile, LOCKFILE_TIME, LOCKFILE_TIME);
@@ -70,12 +71,21 @@ function runHook(folder, exitCode = 0) {
   });
 }
 
-test("the hook says nothing and lets the session start when the install is current", () => {
+test("session start installs the Git hook even when packages are current, without running npm", () => {
   const installedAt = new Date(LOCKFILE_TIME.getTime() + 60_000);
   const folder = makeFolder({ installedAt });
   const { status, stdout } = runHook(folder);
   assert.deepEqual({ status, stdout }, { status: 0, stdout: "" });
   assert.throws(() => readFileSync(join(folder, "npm-arguments.txt")), { code: "ENOENT" });
+  const readHookPath = () =>
+    execFileSync("git", ["config", "--local", "core.hooksPath"], {
+      cwd: folder,
+      encoding: "utf8",
+    }).trim();
+  assert.equal(readHookPath(), ".githooks");
+  execFileSync("git", ["config", "--local", "core.hooksPath", "other-hooks"], { cwd: folder });
+  assert.equal(runHook(folder).status, 0);
+  assert.equal(readHookPath(), ".githooks");
 });
 
 test("the hook runs npm ci in the project's folder and says so in one line", () => {
@@ -92,7 +102,15 @@ test("the hook runs npm ci in the project's folder and says so in one line", () 
 });
 
 test("the hook lets the session start, and says so, when npm ci fails", () => {
-  const { status, stdout } = runHook(makeFolder(), 1);
+  const folder = makeFolder();
+  const { status, stdout } = runHook(folder, 1);
+  assert.equal(
+    execFileSync("git", ["config", "--local", "core.hooksPath"], {
+      cwd: folder,
+      encoding: "utf8",
+    }).trim(),
+    ".githooks",
+  );
   assert.deepEqual(
     { status, stdout },
     { status: 0, stdout: "npm ci failed; run it before AGENTS.md's checks.\n" },

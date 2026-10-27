@@ -121,11 +121,11 @@ function installPackages(folder, command = "install") {
   runGit(folder, ["commit", "--allow-empty", "-m", "lock"]);
 }
 
-/** @param {string} folder */
-function pushRepo(folder) {
+/** @param {string} folder @param {string[]} [refs] */
+function pushRepo(folder, refs = ["HEAD:refs/heads/test"]) {
   const remote = join(folder, "node_modules/remote.git");
   execFileSync("git", ["init", "--bare", remote], { stdio: "pipe" });
-  return spawnSync("git", ["-C", folder, "push", remote, "HEAD:refs/heads/test"], {
+  return spawnSync("git", ["-C", folder, "push", remote, ...refs], {
     encoding: "utf8",
   });
 }
@@ -172,11 +172,131 @@ test("Git refuses a dirty tree and missing packages before running checks", (con
   assert.match(pushRepo(repo).stderr, /uncommitted changes/);
   rmSync(join(repo, "notes.md"));
   rmSync(join(repo, "node_modules"), { recursive: true });
-  const result = spawnSync("node", [HOOK], { cwd: repo, encoding: "utf8" });
+  const head = runGit(repo, ["rev-parse", "HEAD"]).trim();
+  const result = spawnSync("node", [HOOK], {
+    cwd: repo,
+    encoding: "utf8",
+    input: `HEAD ${head} refs/heads/test ${"0".repeat(40)}\n`,
+  });
   assert.equal(result.status, 1);
   assert.match(result.stderr, /node_modules is missing/);
 });
 
 test("Claude settings do not duplicate the Git push check", () => {
   assert.doesNotMatch(readRepoFile(".claude/settings.json"), /check-push\.mjs/);
+});
+
+/** @param {string} repo */
+function publishToOrigin(repo) {
+  const pushed = pushRepo(repo);
+  assert.equal(pushed.status, 0, pushed.stderr);
+  runGit(repo, ["remote", "add", "origin", join(repo, "node_modules/remote.git")]);
+  runGit(repo, ["fetch", "origin"]);
+}
+
+test("a commit already on origin can be pushed to another branch without checking a dirty tree", (context) => {
+  const repo = makeRepo();
+  context.after(() => rmSync(repo, { recursive: true, force: true }));
+  installPackages(repo);
+  publishToOrigin(repo);
+  writeFileSync(join(repo, "package.json"), "invalid JSON that would fail every check");
+  const pushed = pushRepo(repo, ["HEAD:refs/heads/preview"]);
+  assert.equal(pushed.status, 0, pushed.stderr);
+  const remoteHead = runGit(join(repo, "node_modules/remote.git"), [
+    "rev-parse",
+    "refs/heads/preview",
+  ]).trim();
+  assert.equal(remoteHead, runGit(repo, ["rev-parse", "HEAD"]).trim());
+});
+
+test("an already published other branch skips checks even when HEAD differs", (context) => {
+  const repo = makeRepo();
+  context.after(() => rmSync(repo, { recursive: true, force: true }));
+  installPackages(repo);
+  publishToOrigin(repo);
+  runGit(repo, ["branch", "reviewed"]);
+  runGit(repo, ["commit", "--allow-empty", "-m", "unpublished"]);
+  writeFileSync(join(repo, "notes.md"), "dirty");
+  const pushed = pushRepo(repo, ["reviewed:refs/heads/preview"]);
+  assert.equal(pushed.status, 0, pushed.stderr);
+});
+
+test("an unpublished other branch is rejected instead of checking HEAD", (context) => {
+  const repo = makeRepo();
+  context.after(() => rmSync(repo, { recursive: true, force: true }));
+  installPackages(repo);
+  runGit(repo, ["checkout", "-b", "other"]);
+  runGit(repo, ["commit", "--allow-empty", "-m", "other commit"]);
+  runGit(repo, ["checkout", "-"]);
+  const pushed = pushRepo(repo, ["other:refs/heads/other"]);
+  assert.notEqual(pushed.status, 0);
+  assert.match(pushed.stderr, /unpublished commit other than HEAD/);
+});
+
+test("a push mixing published and unpublished commits still checks the unpublished HEAD", (context) => {
+  const repo = makeRepo();
+  context.after(() => rmSync(repo, { recursive: true, force: true }));
+  installPackages(repo);
+  publishToOrigin(repo);
+  runGit(repo, ["branch", "reviewed"]);
+  const manifest = JSON.parse(readFileSync(join(repo, "package.json"), "utf8"));
+  manifest.scripts.lint = "echo lint broke && exit 1";
+  writeFileSync(join(repo, "package.json"), JSON.stringify(manifest));
+  runGit(repo, ["add", "package.json"]);
+  runGit(repo, ["commit", "-m", "failing lint"]);
+  const pushed = pushRepo(repo, ["reviewed:refs/heads/preview", "HEAD:refs/heads/new"]);
+  assert.notEqual(pushed.status, 0);
+  assert.match(pushed.stderr, /npm run lint failed/);
+  const remoteRefs = runGit(join(repo, "node_modules/remote.git"), [
+    "for-each-ref",
+    "--format=%(refname)",
+  ]);
+  assert.doesNotMatch(remoteRefs, /refs\/heads\/(preview|new)/);
+});
+
+test("a commit on another remote alone does not skip checks", (context) => {
+  const repo = makeRepo(["lint"]);
+  context.after(() => rmSync(repo, { recursive: true, force: true }));
+  installPackages(repo);
+  runGit(repo, ["update-ref", "refs/remotes/upstream/test", "HEAD"]);
+  const pushed = pushRepo(repo);
+  assert.notEqual(pushed.status, 0);
+  assert.match(pushed.stderr, /npm run lint failed/);
+});
+
+test("deleting a branch runs no working-tree check", (context) => {
+  const repo = makeRepo();
+  context.after(() => rmSync(repo, { recursive: true, force: true }));
+  installPackages(repo);
+  publishToOrigin(repo);
+  writeFileSync(join(repo, "notes.md"), "dirty");
+  const pushed = pushRepo(repo, [":refs/heads/test"]);
+  assert.equal(pushed.status, 0, pushed.stderr);
+  assert.equal(
+    runGit(join(repo, "node_modules/remote.git"), ["for-each-ref", "--format=%(refname)"]).trim(),
+    "",
+  );
+});
+
+test("annotated tags check the commit they name", (context) => {
+  const repo = makeRepo(["lint"]);
+  context.after(() => rmSync(repo, { recursive: true, force: true }));
+  installPackages(repo);
+  runGit(repo, ["tag", "-a", "release", "-m", "release"]);
+  const pushed = pushRepo(repo, ["refs/tags/release"]);
+  assert.notEqual(pushed.status, 0);
+  assert.match(pushed.stderr, /npm run lint failed/);
+});
+
+test("the handoff escape can save a committed branch despite a failing check and dirty tree", (context) => {
+  const repo = makeRepo(["lint"]);
+  context.after(() => rmSync(repo, { recursive: true, force: true }));
+  installPackages(repo);
+  writeFileSync(join(repo, "notes.md"), "uncommitted scratch");
+  const pushed = pushRepo(repo, ["--no-verify", "HEAD:refs/heads/handoff"]);
+  assert.equal(pushed.status, 0, pushed.stderr);
+  assert.equal(
+    runGit(join(repo, "node_modules/remote.git"), ["rev-parse", "refs/heads/handoff"]).trim(),
+    runGit(repo, ["rev-parse", "HEAD"]).trim(),
+  );
 });

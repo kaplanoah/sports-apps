@@ -1,5 +1,5 @@
 import { execFile, execFileSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
@@ -79,8 +79,53 @@ async function runNpmScript(folder, script) {
 const isTreeCleanIn = (folder) =>
   execFileSync("git", ["status", "--porcelain"], { cwd: folder, encoding: "utf8" }).trim() === "";
 
-/** Checks the working tree before Git sends any refs to the remote. */
+/** @param {string[]} args */
+const readGit = (args) => execFileSync("git", args, { encoding: "utf8" }).trim();
+
+/** @param {string} line */
+function readPushedCommit(line) {
+  const fields = line.trim().split(/\s+/);
+  const object = fields[1];
+  if (fields.length !== 4 || !/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(object))
+    throw new Error("Git supplied an invalid pre-push ref update.");
+  if (/^0+$/.test(object)) return null;
+  return readGit(["rev-parse", "--verify", `${object}^{commit}`]);
+}
+
+/** @param {string} input */
+function listPushedCommits(input) {
+  const commits = input
+    .trim()
+    .split("\n")
+    .filter(Boolean)
+    .map(readPushedCommit)
+    .filter((commit) => commit !== null);
+  return [...new Set(commits)];
+}
+
+/** @param {string} commit */
+const isOnOrigin = (commit) =>
+  readGit([
+    "for-each-ref",
+    `--contains=${commit}`,
+    "--format=%(refname)",
+    "refs/remotes/origin/",
+  ]) !== "";
+
+/** Checks only unpublished commits, using the working tree only when it is the pushed commit. */
 async function checkPush() {
+  const unpublished = listPushedCommits(readFileSync(0, "utf8")).filter(
+    (commit) => !isOnOrigin(commit),
+  );
+  if (!unpublished.length) return;
+  const head = readGit(["rev-parse", "HEAD"]);
+  if (unpublished.some((commit) => commit !== head)) {
+    process.stderr.write(
+      "The push includes an unpublished commit other than HEAD. Check out that commit and push it separately so the checks judge the code being pushed.\n",
+    );
+    process.exitCode = 1;
+    return;
+  }
   const folder = process.cwd();
   const reason = await decidePush(
     {
