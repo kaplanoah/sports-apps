@@ -251,8 +251,8 @@ test("the check job needs every other job but caches", () => {
 });
 
 // The config leaves out the WebKit projects wherever WebKit isn't installed, so a job that stopped
-// installing it would skip the at-rest specs in WebKit and still pass.
-test("each job that runs the at-rest specs in WebKit installs WebKit with its system libraries", () => {
+// installing it would skip its WebKit specs and still pass.
+test("each job that runs WebKit specs installs WebKit with its system libraries", () => {
   for (const [job, workflow] of [
     ["burn-in", "ci.yml"],
     ["webkit", "ci.yml"],
@@ -262,10 +262,13 @@ test("each job that runs the at-rest specs in WebKit installs WebKit with its sy
       /run: node worker\/install-browsers\.mjs --with-deps .*\bwebkit\b/,
       `${workflow}: ${job}`,
     );
+  const condition = WEBKIT_TEST_MATCH.map(
+    (spec) => `contains(needs.scope.outputs.specs, '${spec}')`,
+  ).join(" || ");
   assert.match(
     readJob("burn-in"),
     new RegExp(
-      `- if: contains\\(needs\\.scope\\.outputs\\.specs, '${escapePattern(WEBKIT_TEST_MATCH)}'\\)\\n\\s+run: node worker/install-browsers.mjs --with-deps webkit\\n`,
+      `- if: ${escapePattern(condition)}\\n\\s+run: node worker/install-browsers.mjs --with-deps webkit\\n`,
     ),
     "burn-in installs WebKit whenever a spec the config's WebKit projects run is among the ones it repeats",
   );

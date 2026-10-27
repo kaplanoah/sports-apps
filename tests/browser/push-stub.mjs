@@ -26,6 +26,11 @@ export function stubPushRegistration({ isHeld = false } = {}) {
 // which is all the Worker needs. Both last through a reload, as the browser's do. A test can name
 // the endpoint the next subscription gets, as a push service hands out a new one.
 export function stubPushManager({ endpoint, keptKey, nextEndpointKey }) {
+  // WebKit's test host has no push service; layout checks still need the supported-device UI.
+  if (!("PushManager" in window))
+    Object.defineProperty(window, "PushManager", { value: class {}, configurable: true });
+  if (!("Notification" in window))
+    Object.defineProperty(window, "Notification", { value: class {}, configurable: true });
   const PERMISSION_KEY = "test-notification-permission";
   Object.defineProperty(Notification, "permission", {
     get: () => sessionStorage.getItem(PERMISSION_KEY) ?? "default",

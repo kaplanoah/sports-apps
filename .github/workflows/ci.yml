@@ -313,7 +313,7 @@ jobs:
           path: ~/.cache/ms-playwright
           key: *browsers-key
       - *install-browsers
-      - if: contains(needs.scope.outputs.specs, 'at-rest.spec.mjs')
+      - if: contains(needs.scope.outputs.specs, 'at-rest.spec.mjs') || contains(needs.scope.outputs.specs, 'notification-layout.spec.mjs')
         run: node worker/install-browsers.mjs --with-deps webkit
       # Every test runs all ten times, however many fail, and the next step decides which
       # failures fail the pull request, so a failed test doesn't fail this one.
