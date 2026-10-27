@@ -213,6 +213,8 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - *setup-node
+      - *restore-modules
+      - *install-modules
       # Naming the shell adds pipefail, so a failed diff fails the job rather than reading as no
       # change.
       - id: apps

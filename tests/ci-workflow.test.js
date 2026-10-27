@@ -281,6 +281,12 @@ test("burn-in judges declarations in shared and app browser helpers", () => {
   );
 });
 
+test("scope installs the parser dependencies before selecting helper-declared tests", () => {
+  const scope = readJob("scope");
+  assert.match(scope, /- \*restore-modules\n\s+- \*install-modules/);
+  assert.ok(scope.indexOf("*install-modules") < scope.indexOf("node worker/burn-in-specs.mjs"));
+});
+
 test("repeat setup selects browsers from the same unexpanded inputs as the tests", () => {
   const browser = readJob("browser", "flaky.yml");
   const install = browser

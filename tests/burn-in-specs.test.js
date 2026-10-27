@@ -47,6 +47,18 @@ test("a helper-only change burns in each importing spec through shared adapters"
   assert.deepEqual(listBrowserSpecs([PAGE, helper], { specs, readText }), [PAGE, SHEETS]);
 });
 
+test("a general helper does not select specs that declare no changed tests", () => {
+  const helper = "tests/browser/harness.mjs";
+  const sources = {
+    [PAGE]: `import '../../../../${helper}';`,
+    [helper]: "export function openApp() {}",
+  };
+  assert.deepEqual(
+    listBrowserSpecs([helper], { specs: [PAGE], readText: (path) => sources[path] ?? null }),
+    [],
+  );
+});
+
 test("a spec that passed burn-in and hasn't changed since isn't burned in again, whatever the page and the Worker did", () => {
   assert.deepEqual(listSpecs([SHEETS, PAGE], [PAGE, "shared/page/sheet.js"]), [PAGE]);
   for (const tested of [

@@ -1,5 +1,5 @@
 // Lists the browser specs burn-in repeats: those a pull request edits or that import an edited
-// browser helper, except ones that passed earlier and have unchanged inputs. A file the specs
+// test-declaring browser helper, except ones that passed earlier with unchanged inputs. A file the specs
 // reach by import, or the dependencies, the Node version, or CI's own
 // workflow or browser installer they run with, that changed since then, on either side, burns
 // them all in again. A change to the page or the Worker alone doesn't, since the spec already ran
@@ -21,6 +21,7 @@ import {
 import { CI_WORKFLOW, isPullRequestRun } from "./find-passed-ci.mjs";
 import { createGitHub, readAllPages } from "./github-api.mjs";
 import { isBrowserSpec } from "../tests/browser/projects.mjs";
+import { findTestLines } from "./judge-burn-in.mjs";
 
 // What every spec runs with beyond what it imports: the dependencies, the Node version every job
 // runs them on, and browser setup, which says how burn-in installs and runs each spec.
@@ -41,20 +42,20 @@ const RUNS_READ = 30;
 const isSharedBySpecs = (path, reached) =>
   !isBrowserSpec(path) && (RUN_SETUP.has(path) || (reached.has(path) && !TESTED_CODE.test(path)));
 
+/** @param {string} path @param {(path: string) => string | null} readText */
+const declaresBrowserTests = (path, readText) =>
+  !isBrowserSpec(path) &&
+  /^(?:tests\/browser\/|apps\/[^/]+\/tests\/browser\/).+\.m?js$/.test(path) &&
+  findTestLines(readText(path) ?? "").length > 0;
+
 /**
- * Changed browser specs and those that import a changed browser helper, at any depth.
+ * Changed specs and those importing a changed helper that declares tests, at any depth.
  * @param {string[]} paths
  * @param {{specs: string[], readText: (path: string) => string | null}} options
  */
 export function listBrowserSpecs(paths, { specs, readText }) {
   const selected = new Set(paths.filter(isBrowserSpec));
-  const helpers = new Set(
-    paths.filter(
-      (path) =>
-        !isBrowserSpec(path) &&
-        /^(?:tests\/browser\/|apps\/[^/]+\/tests\/browser\/).+\.m?js$/.test(path),
-    ),
-  );
+  const helpers = new Set(paths.filter((path) => declaresBrowserTests(path, readText)));
   if (helpers.size)
     for (const spec of specs) {
       const reached = listReachedFiles([spec], readText);
