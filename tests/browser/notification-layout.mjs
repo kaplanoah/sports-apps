@@ -1,7 +1,6 @@
 import { PUSH_STUB, stubPushManager, stubPushRegistration } from "./push-stub.mjs";
 import { IPHONE } from "./devices.mjs";
 import { openFromHomeScreen } from "./touch.mjs";
-import { showTheme } from "./theme-layout.mjs";
 import { waitForLoadToSettle } from "./at-rest.mjs";
 
 /** @param {any} test @param {any} expect @param {{openApp: Function, openSettings: Function}} app */
@@ -18,12 +17,12 @@ export function testNotificationAlignment(test, expect, app) {
           page,
         }, testInfo) => {
           test.slow();
+          await page.emulateMedia({ colorScheme: theme });
           await openFromHomeScreen(page);
           await page.addInitScript(stubPushManager, PUSH_STUB);
           await page.addInitScript(stubPushRegistration);
           await app.openApp(page);
           await app.openSettings(page);
-          await showTheme(page, theme);
           const reminders = page.locator("#remindersSwitch");
           await expect(reminders).toHaveAttribute("aria-checked", "false");
           for (const state of ["off", "on", "off-again", "reload"]) {
@@ -32,6 +31,7 @@ export function testNotificationAlignment(test, expect, app) {
               await waitForLoadToSettle(page);
               await expect(page.locator("#settingsDialog")).toBeVisible();
             } else if (state !== "off") await reminders.click();
+            await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
             await expect(reminders).toHaveAttribute("aria-checked", String(state === "on"));
             await expect(reminders).toBeEnabled();
             const alignment = await page.locator("#notifyRow").evaluate((group) => {
