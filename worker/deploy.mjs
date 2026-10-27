@@ -115,8 +115,9 @@ export function checkRelease(
 
 const NO_CREDENTIALS = new Set([9106, 1001]);
 
-// Counts each phone's tries at the access code and its daily counts. The namespace is the
-// account's own number for these limits, and each Worker keys them by its own address.
+// Limits each phone's tries at the access code and its daily count's sends, each apart. The
+// namespace is the account's own number for these limits, and each Worker keys them by purpose,
+// its own address, and the phone's.
 const ACCESS_LIMIT_BINDING = {
   type: "ratelimit",
   name: "ACCESS_LIMIT",

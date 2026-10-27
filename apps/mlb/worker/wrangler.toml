@@ -29,7 +29,7 @@ period = 60
 binding = "ACCOUNTS"
 service = "accounts"
 
-# Each device's one count a day, on production alone, so testing on beta adds nothing to them.
+# Each browser's or Home Screen app's one count a day, on production alone, so testing on beta adds nothing to them.
 [[analytics_engine_datasets]]
 binding = "DAILY_OPENS"
 dataset = "daily_opens"

@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { isCountOwed, startDailyCount } from "../shared/page/daily-count.js";
+import { WAKING_REQUEST_TIMEOUT_MS } from "../shared/page/release.js";
 import { watchReturns } from "../shared/page/resume.js";
 
 const HOUR_MS = 60 * 60 * 1000;
@@ -250,4 +251,77 @@ test("a count whose send fails keeps no day, and the next return sends it again"
   await settle();
   assert.equal(counts.sent, 2);
   assert.deepEqual([...stored.values()], ["2026-11-02"]);
+});
+
+test("a count whose send never answers gives up in time, and the next return sends it again", async (context) => {
+  const page = createFakePage();
+  const timeout = new AbortController();
+  const timeoutsAsked = [];
+  context.mock.method(AbortSignal, "timeout", (milliseconds) => {
+    timeoutsAsked.push(milliseconds);
+    return timeout.signal;
+  });
+  let isHanging = true;
+  const { counts, fetch } = createCountFetch(() =>
+    Promise.resolve(new Response(null, { status: 204 })),
+  );
+  const hangingFetch = (url, init) => {
+    if (!String(url).endsWith("/count") || !isHanging) return fetch(url, init);
+    counts.sent += 1;
+    return new Promise((resolve, reject) =>
+      init.signal.addEventListener("abort", () => reject(init.signal.reason)),
+    );
+  };
+  const now = NOON_OCTOBER_30 + 4 * DAY_MS;
+  context.mock.timers.enable({ apis: ["Date", "setInterval", "setTimeout"], now });
+  replaceGlobals(context, {
+    ...page.globals,
+    localStorage: createFakeStorage(new Map()),
+    location: { href: "https://worker.example/k3y/" },
+    navigator: { webdriver: false },
+    fetch: hangingFetch,
+  });
+  watchReturns();
+
+  startDailyCount();
+  assert.deepEqual(timeoutsAsked, [WAKING_REQUEST_TIMEOUT_MS]);
+  isHanging = false;
+  timeout.abort(new DOMException("timed out", "TimeoutError"));
+  await settle();
+
+  page.leave();
+  context.mock.timers.setTime(now + HOUR_MS);
+  page.comeBack();
+  await settle();
+  assert.equal(counts.sent, 2);
+});
+
+test("a browser whose storage keeps an older day but refuses today's counts once that day", async (context) => {
+  const page = createFakePage();
+  const { counts, fetch } = createCountFetch(async () => new Response(null, { status: 204 }));
+  const now = NOON_OCTOBER_30 + 5 * DAY_MS;
+  context.mock.timers.enable({ apis: ["Date", "setInterval", "setTimeout"], now });
+  replaceGlobals(context, {
+    ...page.globals,
+    localStorage: {
+      getItem: () => "2026-11-03",
+      setItem: () => {
+        throw new DOMException("full", "QuotaExceededError");
+      },
+    },
+    location: { href: "https://worker.example/k3y/" },
+    navigator: { webdriver: false },
+    fetch,
+  });
+  watchReturns();
+
+  startDailyCount();
+  await settle();
+  assert.equal(counts.sent, 1);
+
+  page.leave();
+  context.mock.timers.setTime(now + HOUR_MS);
+  page.comeBack();
+  await settle();
+  assert.equal(counts.sent, 1);
 });

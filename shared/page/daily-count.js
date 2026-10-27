@@ -1,18 +1,15 @@
-// Counts each browser or Home Screen app once per Eastern day, so the owner can learn how many open
-// the app. It keeps only the last day it was counted, which every one counted that day shares, and
+// Counts each browser or Home Screen app once per Eastern day at each of the app's addresses, since
+// each keeps its own storage, so the owner can learn how many open the app. It keeps only the last day it was counted, which every one counted that day shares, and
 // the count it sends carries nothing at all, so nothing tells one from another.
 
 import { reloadWhenSignedOut } from "./access.js";
 import { COUNT_ROUTE } from "./count-path.js";
 import { readEasternDay } from "./days.js";
 import { readStoredText, storeText } from "./local-storage.js";
+import { WAKING_REQUEST_TIMEOUT_MS } from "./release.js";
 import { watchTimeAway } from "./resume.js";
 
 const COUNTED_DAY_KEY = "countedDay";
-
-// A phone waking a page can hold its first requests until they time out, so a count gives up
-// rather than keep the next return from trying again.
-const COUNT_TIMEOUT_MS = 10 * 1000;
 
 // A browser whose storage refuses still counts once a load, not on every return.
 /** @type {string | null} */
@@ -34,7 +31,7 @@ async function sendCount(today) {
   isSending = true;
   const response = await fetch(new URL(COUNT_ROUTE, location.href), {
     method: "POST",
-    signal: AbortSignal.timeout(COUNT_TIMEOUT_MS),
+    signal: AbortSignal.timeout(WAKING_REQUEST_TIMEOUT_MS),
   }).catch(() => null);
   isSending = false;
   if (!response) return;
