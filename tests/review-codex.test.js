@@ -238,6 +238,7 @@ test("native candidate instructions match the inputs for each review phase", () 
     /first investigate and list candidates, then verify every claim/,
   );
   assert.doesNotMatch(containedRequest.prompt, /BEGIN SUPPLIED "candidates.json"/);
+  assert.match(containedRequest.prompt, /the base is HEAD\^1/);
 
   const { folder, plan } = createFixture(true);
   for (const area of plan.areas) {
@@ -248,6 +249,7 @@ test("native candidate instructions match the inputs for each review phase", () 
     );
     assert.doesNotMatch(request.prompt, /Candidate ids for integration are supplied/);
     assert.doesNotMatch(request.prompt, /BEGIN SUPPLIED "candidates.json"/);
+    assert.match(request.prompt, /the base is HEAD\^1/);
     acceptCodexAnswer(folder, area.area, IDENTITY, createAnswer(folder, area.area));
   }
   writeFileSync(join(folder, "candidates.json"), "[]");
