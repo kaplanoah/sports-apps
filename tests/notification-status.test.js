@@ -143,6 +143,22 @@ test("pending category intent changes only its switch and exposes only a delayed
   }
 });
 
+test("a save keeps every control's look while blocked notifications fade them", () => {
+  const preferences = { updates: true, reminders: false, minutes: 10 };
+  for (const status of ["off", "on", "failed"]) {
+    assert.equal(chooseNotificationControls({ status, isBusy: true, preferences }).isSaving, true);
+    assert.equal(
+      chooseNotificationControls({ status, isBusy: false, preferences }).isSaving,
+      false,
+    );
+  }
+  for (const isBusy of [false, true]) {
+    const blocked = chooseNotificationControls({ status: "blocked", isBusy, preferences });
+    assert.equal(blocked.isSaving, false);
+    assert.equal(blocked.areSwitchesDisabled, true);
+  }
+});
+
 test("the timing prompt follows the reminder switch including both pending intents", () => {
   const preferences = { updates: true, reminders: true, minutes: 10 };
   for (const isEnabled of [false, true]) {

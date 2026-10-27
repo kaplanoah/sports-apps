@@ -21,6 +21,85 @@ function holdPermission() {
   };
 }
 
+function watchControlLooks() {
+  const looks = [];
+  const readSwitch = (id) => {
+    const element = document.getElementById(id);
+    const style = getComputedStyle(element);
+    return {
+      opacity: style.opacity,
+      look: [style.backgroundColor, style.borderColor, style.cursor].join(" "),
+      checked: element.getAttribute("aria-checked"),
+      disabled: element.hasAttribute("disabled"),
+    };
+  };
+  const recordLooks = () => {
+    const timing = document.getElementById("reminderTiming");
+    const timingStyle = getComputedStyle(timing);
+    const caretStyle = getComputedStyle(timing.parentElement, "::after");
+    looks.push({
+      reminders: readSwitch("remindersSwitch"),
+      updates: readSwitch("notifySwitch"),
+      timing: timingStyle.opacity,
+      caret: caretStyle.opacity,
+      timingLook: [
+        timingStyle.color,
+        timingStyle.backgroundColor,
+        timingStyle.borderColor,
+        caretStyle.backgroundColor,
+      ].join(" "),
+    });
+  };
+  const recordEachFrame = () => {
+    recordLooks();
+    requestAnimationFrame(recordEachFrame);
+  };
+  new MutationObserver(recordLooks).observe(document.getElementById("notificationsGroup"), {
+    subtree: true,
+    childList: true,
+    attributes: true,
+  });
+  recordEachFrame();
+  Reflect.set(window, "controlLooks", looks);
+}
+
+/** @param {any} expect @param {Record<string, string>} checked */
+async function expectSteadyLooks(page, expect, checked) {
+  const looks = await page.evaluate(() => Reflect.get(window, "controlLooks"));
+  expect(looks.some((look) => look.reminders.disabled && look.updates.disabled)).toBe(true);
+  for (const look of looks) {
+    expect([look.reminders.opacity, look.updates.opacity, look.timing, look.caret]).toEqual([
+      "1",
+      "1",
+      "1",
+      "1",
+    ]);
+    expect(look.timingLook).toBe(looks[0].timingLook);
+    for (const [category, state] of Object.entries(checked)) {
+      expect(look[category].checked).toBe(state);
+      expect(look[category].look).toBe(looks[0][category].look);
+    }
+  }
+}
+
+/** @param {"fallback" | "fail"} [answer] */
+async function holdSaves(page, answer = "fallback") {
+  let release;
+  const held = new Promise((resolve) => {
+    release = resolve;
+  });
+  await page.route("**/push/preferences", async (route) => {
+    await held;
+    if (answer === "fail" && route.request().method() === "PUT")
+      await route.fulfill({
+        status: 503,
+        json: { error: { code: "unavailable", message: "The store is busy." } },
+      });
+    else await route.fallback();
+  });
+  return release;
+}
+
 const readGeometry = (page) =>
   page.locator("#notificationsGroup").evaluate((group) =>
     [...group.querySelectorAll("h3, .control-row, button, select")].map((element) => {
@@ -150,9 +229,16 @@ export function testNotificationPermission(test, expect, app) {
         expect(await page.evaluate(() => localStorage.getItem("device-notifications"))).toBe(saved);
         await expect(page.locator(".notification-spinner:visible")).toHaveCount(0);
         if (result === "denied") await expect(page.locator("#notifyNote")).toContainText("blocked");
-        if (result === "failure")
-          await expect(page.locator("#notifyNote")).toContainText("Couldn't change");
-        if (result === "default") await expect(page.locator("#notifyNote")).toBeEmpty();
+        if (result === "failure") {
+          await expect(page.locator(`#${category}Note`)).toContainText("Couldn't update");
+          await expect(page.locator("#notificationsGroup .control-note:not(:empty)")).toHaveCount(
+            1,
+          );
+        }
+        if (result === "default")
+          await expect(page.locator("#notificationsGroup .control-note:not(:empty)")).toHaveCount(
+            0,
+          );
       });
     }
   }
@@ -169,7 +255,7 @@ export function testNotificationPermission(test, expect, app) {
       await page.evaluate(holdPermission);
       const timing = page.locator("#reminderTiming");
       await expect(timing).toBeEnabled();
-      await expect(timing).toHaveValue("");
+      await expect(timing).toHaveValue("10");
       const direct = await timing.evaluate((element) => {
         element.value = "180";
         element.dispatchEvent(new Event("change", { bubbles: true }));
@@ -187,7 +273,7 @@ export function testNotificationPermission(test, expect, app) {
         String(result === "granted"),
       );
       await expect(updates).toHaveAttribute("aria-checked", String(result !== "granted"));
-      await expect(timing).toHaveValue(result === "granted" ? "180" : "");
+      await expect(timing).toHaveValue(result === "granted" ? "180" : "10");
       const stored = await page.evaluate(() =>
         JSON.parse(localStorage.getItem("device-notifications")),
       );
@@ -303,6 +389,105 @@ export function testNotificationPermission(test, expect, app) {
         .locator("#reminderTiming")
         .evaluate((element) => element === Reflect.get(window, "keptTimingElement")),
     ).toBe(true);
+  });
+
+  test("timing saves, slow, quick, repeated, or failed, keep every control's look and both switches", async ({
+    page,
+  }) => {
+    await app.openApp(page);
+    await app.openSettings(page);
+    const reminders = page.locator("#remindersSwitch");
+    const timing = page.locator("#reminderTiming");
+    await reminders.click();
+    await expect(reminders).toBeEnabled();
+    await page.evaluate(watchControlLooks);
+    const releaseSlow = await holdSaves(page);
+    await timing.selectOption("180");
+    await expect(reminders).toBeDisabled();
+    await timing.selectOption("30");
+    await timing.selectOption("60");
+    releaseSlow();
+    await page.waitForFunction(
+      () => JSON.parse(localStorage.getItem("device-notifications")).minutes === 60,
+    );
+    await expect(reminders).toBeEnabled();
+    await page.unroute("**/push/preferences");
+    await timing.selectOption("0");
+    await page.waitForFunction(
+      () => JSON.parse(localStorage.getItem("device-notifications")).minutes === 0,
+    );
+    await expect(reminders).toBeEnabled();
+    const releaseFailure = await holdSaves(page, "fail");
+    await timing.selectOption("10");
+    await expect(reminders).toBeDisabled();
+    releaseFailure();
+    await expect(page.locator("#reminderTimingNote")).toHaveText(/Couldn't update/);
+    await expect(page.locator("#notificationsGroup .control-note:not(:empty)")).toHaveCount(1);
+    await expect(reminders).toBeEnabled();
+    await expect(timing).toHaveValue("0");
+    await page.unroute("**/push/preferences");
+    await expectSteadyLooks(page, expect, { reminders: "true", updates: "false" });
+  });
+
+  for (const category of /** @type {const} */ (["reminders", "updates"]))
+    test(`${category} saves by touch and keyboard, slow or failed, keep the other switch and the timing steady`, async ({
+      page,
+    }) => {
+      await app.openApp(page);
+      await app.openSettings(page);
+      const toggle = page.locator(category === "reminders" ? "#remindersSwitch" : "#notifySwitch");
+      const other = page.locator(category === "reminders" ? "#notifySwitch" : "#remindersSwitch");
+      const spinner = toggle.locator("..").locator(".notification-spinner");
+      await other.click();
+      await expect(other).toBeEnabled();
+      await page.evaluate(watchControlLooks);
+      await holdClock(page);
+      const releaseSlow = await holdSaves(page);
+      await toggle.click();
+      await expect(toggle).toHaveAttribute("aria-checked", "true");
+      await expect(toggle).toBeDisabled();
+      await page.clock.runFor(700);
+      await expect(spinner).toBeVisible();
+      releaseSlow();
+      await expect(toggle).toBeEnabled();
+      await expect(toggle).toHaveAttribute("aria-checked", "true");
+      await page.unroute("**/push/preferences");
+      await page.evaluate(() => document.body.classList.add("kbd"));
+      const releaseFailure = await holdSaves(page, "fail");
+      await toggle.focus();
+      await page.keyboard.press("Space");
+      await expect(toggle).toHaveAttribute("aria-checked", "false");
+      await page.clock.runFor(700);
+      await expect(spinner).toBeVisible();
+      releaseFailure();
+      await expect(toggle).toBeEnabled();
+      await expect(toggle).toHaveAttribute("aria-checked", "true");
+      await expect(toggle).toBeFocused();
+      await expect(
+        page.locator(category === "reminders" ? "#remindersNote" : "#notifyNote"),
+      ).toHaveText(/Couldn't update/);
+      await expect(page.locator("#notificationsGroup .control-note:not(:empty)")).toHaveCount(1);
+      await page.unroute("**/push/preferences");
+      await expectSteadyLooks(page, expect, {
+        [category === "reminders" ? "updates" : "reminders"]: "true",
+      });
+    });
+
+  test("blocked notifications fade both switches and the timing", async ({ page }) => {
+    await page.addInitScript(() => {
+      Object.defineProperty(Notification, "permission", { get: () => "denied" });
+    });
+    await app.openApp(page);
+    await app.openSettings(page);
+    for (const selector of ["#remindersSwitch", "#notifySwitch", "#reminderTiming"]) {
+      await expect(page.locator(selector)).toBeDisabled();
+      await expect(page.locator(selector)).toHaveCSS("opacity", "0.5");
+    }
+    expect(
+      await page
+        .locator(".reminder-timing")
+        .evaluate((row) => getComputedStyle(row, "::after").opacity),
+    ).toBe("0.5");
   });
 
   for (const result of ["denied", "failure"])

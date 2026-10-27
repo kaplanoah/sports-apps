@@ -17,7 +17,7 @@ export function testGameReminderSettings(test, expect, app) {
     const reminders = page.getByRole("switch", { name: "Game starts", exact: true });
     const updates = page.getByRole("switch", { name: app.updates, exact: true });
     const timing = page.getByLabel(app.timing, { exact: true });
-    await expect(timing).toHaveValue("");
+    await expect(timing).toHaveValue("10");
     await expect(page.locator("#remindersSwitch")).toBeEnabled();
     await expect(timing).toBeEnabled();
     await reminders.click();
@@ -41,14 +41,14 @@ export function testGameReminderSettings(test, expect, app) {
     await expect(updates).toBeEnabled();
     await expect(page.locator("#remindersSwitch")).toBeEnabled();
     await expect(timing).toBeEnabled();
-    await expect(timing).toHaveValue("");
+    await expect(timing).toHaveValue("60");
     const synced = page.waitForResponse(matchPath("/push/preferences"));
     await page.reload({ waitUntil: "domcontentloaded" });
     await (await synced).finished();
     await expect(updates).toHaveAttribute("aria-checked", "true");
     await expect(updates).toBeEnabled();
     await expect(reminders).toHaveAttribute("aria-checked", "false");
-    await expect(timing).toHaveValue("");
+    await expect(timing).toHaveValue("60");
     expect(
       await page.evaluate(() => JSON.parse(localStorage.getItem("device-notifications")).minutes),
     ).toBe(60);
@@ -105,7 +105,8 @@ export function testGameReminderSettings(test, expect, app) {
     });
     const reminders = page.getByRole("switch", { name: "Game starts", exact: true });
     await reminders.click();
-    await expect(page.locator("#notifyNote")).toContainText("Couldn't change notifications");
+    await expect(page.locator("#remindersNote")).toContainText("Couldn't update notifications");
+    await expect(page.locator("#notifyNote")).toBeEmpty();
     await expect(reminders).toHaveAttribute("aria-checked", "false");
     await reminders.click();
     await expect(reminders).toHaveAttribute("aria-checked", "true");
@@ -241,8 +242,9 @@ export function testGameReminderSettings(test, expect, app) {
     await expect(reminders).toHaveAttribute("aria-checked", "false");
     await expect(page.locator("#remindersSwitch")).toBeEnabled();
     await expect(timing).toBeEnabled();
-    await expect(timing).toHaveValue("");
-    await expect(page.locator("#notifyNote")).toContainText("Too many devices");
+    await expect(timing).toHaveValue("60");
+    await expect(page.locator("#reminderTimingNote")).toContainText("Too many devices");
+    await expect(page.locator("#notifyNote")).toBeEmpty();
     expect(await page.evaluate((key) => sessionStorage.getItem(key), PUSH_STUB.keptKey)).toBeNull();
     await page.unroute("**/push/preferences");
     await page.unroute("**/push/subscription");
@@ -256,6 +258,8 @@ export function testGameReminderSettings(test, expect, app) {
     );
     expect(stored.updates).toBe(true);
     expect(stored.reminders).toBe(false);
+    expect(stored.minutes).toBe(60);
+    await expect(timing).toHaveValue("60");
   });
 
   for (const source of ["a category edit", "a return visit"])
@@ -505,7 +509,7 @@ export function testGameReminderSettings(test, expect, app) {
       await app.openSettings(page);
       const timing = page.locator("#reminderTiming");
       const reminders = page.locator("#remindersSwitch");
-      await expect(timing).toHaveValue("");
+      await expect(timing).toHaveValue("10");
       const initialSave = page.waitForRequest(
         (request) => request.url().endsWith("/push/subscription") && request.method() === "PUT",
       );

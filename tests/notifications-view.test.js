@@ -7,14 +7,29 @@ import { describeRemindersSetting } from "../shared/page/page-places.js";
 import { LEAGUE_WORDS as MLB_WORDS } from "../apps/mlb/page/js/league-words.js";
 import { LEAGUE_WORDS as WNBA_WORDS } from "../apps/wnba/page/js/league-words.js";
 
-const renderRows = (words, preferences = DEFAULT_NOTIFICATION_PREFERENCES, status = "off") =>
+/** @typedef {import("../shared/page/notifications-view.js").NotePlace} NotePlace */
+
+const renderRows = (
+  words,
+  preferences = DEFAULT_NOTIFICATION_PREFERENCES,
+  status = "off",
+  /** @type {NotePlace} */ notePlace = "notify",
+) =>
   String(
     renderNotificationRows({
       words,
       controls: chooseNotificationControls({ status, preferences, isBusy: false }),
       note: "Permission guidance",
+      notePlace,
     }),
   );
+
+/** @param {string} markup */
+const listNotesShown = (markup) =>
+  [...markup.matchAll(/id="(\w+)Note" role="status">([^<]+)</g)].map(([, place, text]) => [
+    place,
+    text,
+  ]);
 
 for (const [league, words, timing, updates] of /** @type {const} */ ([
   ["MLB", MLB_WORDS, "Time before game", "Game updates"],
@@ -41,18 +56,18 @@ for (const [league, words, timing, updates] of /** @type {const} */ ([
   });
 }
 
-test("reminders default off with a prompt, a saved 10-minute default and the approved presets", () => {
+test("reminders default off showing the saved 10-minute default among the approved presets", () => {
   const markup = renderRows(MLB_WORDS);
   assert.match(markup, /id="remindersSwitch" aria-checked="false"/);
   assert.equal(DEFAULT_NOTIFICATION_PREFERENCES.minutes, 10);
-  assert.match(markup, /<option value="" disabled selected>Choose time<\/option>/);
+  assert.equal((markup.match(/<option/g) ?? []).length, 5);
   assert.deepEqual(
     [...markup.matchAll(/<option value="(\d+)" (selected)?>([^<]+)<\/option>/g)].map(
       ([, minutes, selected, label]) => [Number(minutes), !!selected, label],
     ),
     [
       [0, false, "At scheduled first pitch"],
-      [10, false, "10 minutes before"],
+      [10, true, "10 minutes before"],
       [30, false, "30 minutes before"],
       [60, false, "1 hour before"],
       [180, false, "3 hours before"],
@@ -70,9 +85,78 @@ test("either category can remain on independently and timing keeps its saved cho
     assert.match(markup, new RegExp(`id="remindersSwitch" aria-checked="${reminders}"`));
     assert.match(markup, new RegExp(`id="notifySwitch" aria-checked="${!reminders}"`));
     assert.equal(/<select[^>]+ disabled>/.test(markup), false);
-    if (reminders) assert.match(markup, /<option value="60" selected>1 hour before<\/option>/);
-    else assert.match(markup, /Choose time/);
+    assert.match(markup, /<option value="60" selected>1 hour before<\/option>/);
   }
+});
+
+test("Game starts on, off, or saving either way leaves the timing showing the same time", () => {
+  const preferences = { ...DEFAULT_NOTIFICATION_PREFERENCES, updates: true, minutes: 30 };
+  const states = [false, true].flatMap((reminders) => [
+    { preferences: { ...preferences, reminders }, isBusy: false, pending: null },
+    {
+      preferences: { ...preferences, reminders },
+      isBusy: true,
+      pending: { category: "reminders", isEnabled: !reminders, elapsedMs: 0 },
+    },
+  ]);
+  for (const state of states) {
+    const markup = String(
+      renderNotificationRows({
+        words: WNBA_WORDS,
+        controls: chooseNotificationControls({ status: "on", ...state }),
+        note: "",
+        notePlace: "notify",
+      }),
+    );
+    assert.deepEqual(
+      [...markup.matchAll(/<option value="(\d+)" selected>/g)].map(([, minutes]) => minutes),
+      ["30"],
+    );
+  }
+});
+
+test("a save marks both switches and the timing as saving, which blocked never is", () => {
+  const preferences = { ...DEFAULT_NOTIFICATION_PREFERENCES, updates: true, reminders: true };
+  for (const [status, isBusy, isSaving] of /** @type {const} */ ([
+    ["on", true, true],
+    ["off", true, true],
+    ["on", false, false],
+    ["blocked", true, false],
+    ["blocked", false, false],
+  ])) {
+    const markup = String(
+      renderNotificationRows({
+        words: MLB_WORDS,
+        controls: chooseNotificationControls({ status, preferences, isBusy }),
+        note: "",
+        notePlace: "notify",
+      }),
+    );
+    const savingIds = [...markup.matchAll(/class="[^"]*\bis-saving\b[^"]*" id="(\w+)"/g)].map(
+      ([, id]) => id,
+    );
+    assert.deepEqual(
+      savingIds,
+      isSaving ? ["remindersSwitch", "reminderTiming", "notifySwitch"] : [],
+    );
+  }
+});
+
+test("a failed save's note shows under the control that changed and nowhere else", () => {
+  for (const [league, words] of /** @type {const} */ ([
+    ["MLB", MLB_WORDS],
+    ["WNBA", WNBA_WORDS],
+  ])) {
+    for (const place of /** @type {NotePlace[]} */ (["reminders", "reminderTiming", "notify"])) {
+      const markup = renderRows(words, DEFAULT_NOTIFICATION_PREFERENCES, "on", place);
+      assert.deepEqual(listNotesShown(markup), [[place, "Permission guidance"]], league);
+    }
+  }
+});
+
+test("a note for a hidden control shows under updates, the one row left", () => {
+  const markup = renderRows(WNBA_WORDS, DEFAULT_NOTIFICATION_PREFERENCES, "loading", "reminders");
+  assert.deepEqual(listNotesShown(markup), [["notify", "Permission guidance"]]);
 });
 
 test("unsupported devices retain guidance without unusable reminder controls", () => {

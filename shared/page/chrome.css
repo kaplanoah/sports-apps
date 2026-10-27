@@ -363,6 +363,7 @@ section.view.active:not([data-follows]):has(> :is(.day-view, .season-parts)) {
 }
 
 /* Reserve space before loading so guidance stays clear of the ring without moving the row. */
+#remindersNote,
 #notifyNote {
   padding-inline-end: 14px;
 }
@@ -840,6 +841,8 @@ body.kbd .notify-help:focus {
   cursor: pointer;
   appearance: none;
   -webkit-appearance: none;
+  /* Chromium fades a disabled select on its own, so only the rule below fades one. */
+  opacity: 1;
 }
 @media (hover: hover) {
   .select-field:hover {
@@ -877,9 +880,10 @@ body.kbd .notify-help:focus {
 .switch[aria-checked="true"] .switch-knob {
   transform: translateX(18px);
 }
-.control-row:has(> .select-field:disabled)::after,
-.select-field:disabled,
-.switch:disabled {
+/* A notification control a save holds keeps its look (notification-status.js). */
+.control-row:has(> .select-field:disabled:not(.is-saving))::after,
+.select-field:disabled:not(.is-saving),
+.switch:disabled:not(.is-saving) {
   cursor: default;
   opacity: 0.5;
 }

@@ -3,7 +3,7 @@
 export const PENDING_SPINNER_MS = 700;
 
 export const TOO_MANY_DEVICES = "Too many devices get notifications already";
-export const CHANGE_FAILED = "Couldn't change notifications. Try again in a moment.";
+export const CHANGE_FAILED = "Couldn't update notifications. Try again in a moment.";
 
 const NOTES = {
   blockedOnIos:
@@ -104,6 +104,9 @@ export function chooseNotificationControls({
   return {
     areSwitchesHidden: !["off", "on", "failed", "blocked"].includes(status),
     areSwitchesDisabled: isBusy || status === "blocked",
+    // A save holds the controls only until it finishes, so they keep their look, while blocked
+    // notifications fade them.
+    isSaving: isBusy && status !== "blocked",
     areUpdatesOn: pending?.category === "updates" ? pending.isEnabled : isOn && preferences.updates,
     areRemindersOn,
     pendingCategory: pending?.category ?? "",

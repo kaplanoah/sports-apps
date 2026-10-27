@@ -32,6 +32,8 @@ let registration = null;
 let subscription = null;
 let status = "loading";
 let note = "";
+/** @type {import("./notifications-view.js").NotePlace} */
+let notePlace = "notify";
 /** @type {Pick<import("./league-words.js").LeagueWords, "notificationUpdates" | "reminderTiming" | "reminderAtStart">} */
 let notificationWords;
 let preferences = { ...DEFAULT_NOTIFICATION_PREFERENCES };
@@ -79,14 +81,16 @@ function renderNotifications() {
   const group = findElement("notificationsGroup");
   setHtml(
     group,
-    renderNotificationRows({ controls, words: notificationWords, note: renderNote() }),
+    renderNotificationRows({ controls, words: notificationWords, note: renderNote(), notePlace }),
   );
   group.hidden = status === "loading";
 }
 
-function setStatus(next, message = "") {
+/** @param {string} next @param {string} [message] @param {import("./notifications-view.js").NotePlace} [place] */
+function setStatus(next, message = "", place = "notify") {
   status = next;
   note = message;
+  notePlace = place;
   renderNotifications();
 }
 
@@ -309,7 +313,14 @@ async function removeSubscription(next) {
   forgetCategories(next);
 }
 
-async function changeCategory(category, isEnabled, minutes = preferences.minutes) {
+/**
+ * @param {"updates" | "reminders"} category
+ * @param {boolean} isEnabled
+ * @param {{ minutes?: number, place?: import("./notifications-view.js").NotePlace }} [request]
+ */
+async function changeCategory(category, isEnabled, request = {}) {
+  const { minutes = preferences.minutes, place = category === "updates" ? "notify" : "reminders" } =
+    request;
   const before = preferences;
   const previousStatus = status;
   const next = { ...before, minutes, [category]: isEnabled, timeZone: readDeviceTimeZone() };
@@ -339,11 +350,11 @@ async function changeCategory(category, isEnabled, minutes = preferences.minutes
       setStatus("off");
     }
   } catch (error) {
-    if (isTurnedAway(error)) setStatus("off", TOO_MANY_DEVICES);
+    if (isTurnedAway(error)) setStatus("off", TOO_MANY_DEVICES, place);
     else {
       preferences = before;
       if (subscription) await readPreferences().catch(() => {});
-      setStatus(subscription ? "on" : "failed", CHANGE_FAILED);
+      setStatus(subscription ? "on" : "failed", CHANGE_FAILED, place);
     }
   }
 }
@@ -376,11 +387,12 @@ async function saveRequestedTiming() {
     } catch (error) {
       if (isTurnedAway(error)) {
         requestedMinutes = null;
-        setStatus("off", TOO_MANY_DEVICES);
+        setStatus("off", TOO_MANY_DEVICES, "reminderTiming");
         return;
       }
       await readPreferences().catch(() => {});
       note = CHANGE_FAILED;
+      notePlace = "reminderTiming";
     }
     if (requestedMinutes === minutes) requestedMinutes = null;
   }
@@ -392,12 +404,15 @@ async function changeTiming() {
   const minutes = Number(timing.value);
   const controls = chooseNotificationControls({ status, isBusy, preferences, pending });
   if (!controls.areRemindersOn) {
-    await showBusyDuring(() => changeCategory("reminders", true, minutes), {
-      category: "reminders",
-      isEnabled: true,
-      elapsedMs: 0,
-      minutes,
-    });
+    await showBusyDuring(
+      () => changeCategory("reminders", true, { minutes, place: "reminderTiming" }),
+      {
+        category: "reminders",
+        isEnabled: true,
+        elapsedMs: 0,
+        minutes,
+      },
+    );
     return;
   }
   requestedMinutes = minutes;
