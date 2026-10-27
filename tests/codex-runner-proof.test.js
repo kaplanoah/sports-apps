@@ -6,11 +6,8 @@ import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, existsSync } from 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import {
-  requireCodexProofAuthority,
-  verifyCodexProof,
-  readCodexProofConfiguration,
-} from "../worker/prove-codex-runner.mjs";
+import { verifyCodexProof, readCodexProofConfiguration } from "../worker/prove-codex-runner.mjs";
+import { requireOwnerTrialAuthority } from "../worker/review-trial-authority.mjs";
 import { assertCodexSandbox } from "../worker/codex-runner-probe.mjs";
 import { readRepoFile, REPO_ROOT } from "./repo-files.js";
 
@@ -40,7 +37,7 @@ const ANSWER = '{"complete":true}';
 const renderEvents = (events = EVENTS) => events.map((event) => JSON.stringify(event)).join("\n");
 
 test("only a first owner dispatch on main can use the hosted proof", () => {
-  assert.doesNotThrow(() => requireCodexProofAuthority(OWNER));
+  assert.doesNotThrow(() => requireOwnerTrialAuthority(OWNER));
   for (const [name, value] of [
     ["GITHUB_REPOSITORY", "example/fork"],
     ["GITHUB_EVENT_NAME", "pull_request"],
@@ -50,7 +47,7 @@ test("only a first owner dispatch on main can use the hosted proof", () => {
     ["GITHUB_RUN_ATTEMPT", "2"],
     ["TRUSTED_CODEX_REVIEW_ENABLED", "true"],
   ])
-    assert.throws(() => requireCodexProofAuthority({ ...OWNER, [name]: value }));
+    assert.throws(() => requireOwnerTrialAuthority({ ...OWNER, [name]: value }));
 });
 
 test("a model's completion claim cannot substitute for successful native tool results", () => {

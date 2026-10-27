@@ -21,7 +21,7 @@ Reproduce with `node worker/review-evaluation.mjs reproduce /tmp/review-cases`. 
 
 Copy only a case's `buggy` checkout and `review-context.json` to a disposable runner. Never expose the sibling fixed checkout, regression replay or rubric to either model. Give each provider the same trusted rules, context and required snapshot content, with its native tools and the complete repository available. Record all supplied content and commands, including investigation beyond targets.
 
-Run Claude and Codex as independent trials, never together on a live PR. Use the pinned production provider configuration. Capture final structured answers, all portion and integration outcomes, native usage telemetry, elapsed wall time including setup and integration, model and tool versions, and the exact snapshot identity. Record failures and interruptions as trials too.
+Run Claude and Codex as independent trials, never together on a live PR. Use each provider's recorded comparison profile, as described under Hosted blind trials; these profiles do not represent full production-run measurements. Capture final structured answers, all portion and integration outcomes, native usage telemetry, elapsed wall time including setup and integration, model and tool versions, and the exact snapshot identity. Record failures and interruptions as trials too.
 
 These first two cases audit historical components; they do not establish full PR quality or large-change completion. Before enabling Codex, also replay the original complete historical PR ranges and large changes with multiple areas. Include both apps, interactions, empty candidates, malformed results and a deliberate interruption. Do not omit difficult cases or failed runs.
 

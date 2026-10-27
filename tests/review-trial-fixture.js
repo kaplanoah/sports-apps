@@ -2,14 +2,10 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { readReviewGit } from "../worker/review-repository.mjs";
-import {
-  prepareReviewTrial,
-  prepareTrialSession,
-  collectTrialSession,
-} from "../worker/review-trial.mjs";
+import { dispatchReviewTrial } from "../worker/review-trial.mjs";
 
-/** @param {string} root @param {string} id */
-export function createTrialFixture(root, id) {
+/** @param {string} root @param {string} id @param {string[]} [targets] */
+export function createTrialFixture(root, id, targets = []) {
   const repository = join(root, "source");
   readReviewGit(root, ["init", "--quiet", repository]);
   readReviewGit(repository, ["config", "user.name", "Example"]);
@@ -33,7 +29,7 @@ export function createTrialFixture(root, id) {
   writeFileSync(join(repository, paths[0]), "export const value = 3;\n");
   readReviewGit(repository, ["commit", "--quiet", "-am", "Example later fix"]);
   const fix = readReviewGit(repository, ["rev-parse", "HEAD"]).trim();
-  const snapshot = { repository, entry: { id, head, targets: [] } };
+  const snapshot = { repository, entry: { id, head, targets } };
   const path = join(root, "snapshot.json");
   writeFileSync(path, JSON.stringify(snapshot));
   return { snapshot, base, fix, path, command: fileURLToPath(import.meta.url) };
@@ -42,14 +38,9 @@ export function createTrialFixture(root, id) {
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   try {
     const snapshot = JSON.parse(readFileSync(process.env.TRIAL_TEST_FIXTURE, "utf8"));
-    const [command, selected] = process.argv.slice(2);
-    const portion = selected === "integration" ? selected : Number(selected);
-    if (command === "prepare") prepareReviewTrial(process.env, snapshot);
-    else if (command === "request") prepareTrialSession(process.env, portion, snapshot);
-    else if (command === "collect") collectTrialSession(process.env, portion, snapshot);
-    else throw new Error("Unknown fixture command.");
-  } catch {
-    console.error("Trial fixture preparation or validation failed.");
+    dispatchReviewTrial(process.argv.slice(2), process.env, snapshot);
+  } catch (error) {
+    console.error(error);
     process.exitCode = 1;
   }
 }

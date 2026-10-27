@@ -15,6 +15,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   prepareTrialEvidenceCertificate,
   encryptReviewTrialEvidence,
@@ -27,7 +28,7 @@ import {
   renderTrialComponent,
 } from "../worker/review-trial.mjs";
 import { buildCodexRequest, acceptCodexAnswer } from "../worker/review-codex.mjs";
-import { readReviewGit } from "../worker/review-repository.mjs";
+import { readReviewGit, readReviewMetadata } from "../worker/review-repository.mjs";
 import { verifyEvaluationSnapshot } from "../worker/review-evaluation.mjs";
 import { readCodexProofConfiguration } from "../worker/prove-codex-runner.mjs";
 import { readRepoFile } from "./repo-files.js";
@@ -132,6 +133,16 @@ test("a blind large-range bundle contains only historical ancestors and complete
   );
   assert.equal(existsSync(join(root, "trial/rubric.json")), false);
   assert.equal(existsSync(join(root, "trial/fixed")), false);
+  const production = spawnSync(
+    process.execPath,
+    [fileURLToPath(new URL("../worker/review-trial.mjs", import.meta.url)), "request", "1"],
+    {
+      env: { ...env, GITHUB_WORKSPACE: clone },
+      encoding: "utf8",
+    },
+  );
+  assert.notEqual(production.status, 0);
+  assert.equal(existsSync(join(root, "trial/prompt.txt")), false);
   const requested = spawnSync(process.execPath, [command, "request", "1"], {
     env: { ...env, GITHUB_WORKSPACE: clone },
     encoding: "utf8",
@@ -508,7 +519,10 @@ test("trial workflows isolate provider credentials and guard paid reruns with no
 test("Claude trials use real Read evidence and verify empty integration coverage independently", (context) => {
   const root = mkdtempSync(join(tmpdir(), "claude-trial-"));
   context.after(() => rmSync(root, { recursive: true, force: true }));
-  const fixture = createTrialFixture(root, "case-1");
+  const fixture = createTrialFixture(root, "case-1", [
+    "shared/page/worker-store.js",
+    "shared/worker/season-store.js",
+  ]);
   const { command } = fixture;
   const env = {
     ...process.env,
@@ -524,6 +538,11 @@ test("Claude trials use real Read evidence and verify empty integration coverage
   const prepared = spawnSync(process.execPath, [command, "prepare"], { env, encoding: "utf8" });
   assert.equal(prepared.status, 0, prepared.stderr);
   const plan = JSON.parse(readFileSync(join(root, "trial/data/plan.json"), "utf8"));
+  assert.deepEqual(
+    plan.areas.flatMap((area) => area.files).sort(),
+    [...fixture.snapshot.entry.targets].sort(),
+  );
+  assert.match(readFileSync(join(root, "trial/data/pull-request.md"), "utf8"), /component audit/);
   const portions = join(root, "portions");
   mkdirSync(portions);
   function collectClaudeFixture(portion, omitted, limited = false) {
@@ -674,6 +693,17 @@ test("snapshot validation verifies actual objects, fix ancestry and immediate co
   );
   assert.equal(Buffer.isBuffer(bytes), true);
   assert.equal(bytes.toString(), "export const value = 2;\n");
+  assert.equal(
+    readReviewMetadata(["show", `${entry.head}:apps/mlb/page/js/app.js`], snapshot.repository),
+    "export const value = 2;",
+  );
+  assert.throws(() =>
+    readReviewMetadata(["rev-parse", "HEAD"], snapshot.repository, {
+      PATH: process.env.PATH,
+      REVIEW_BASE: entry.head,
+      REVIEW_TRUSTED: "untrusted",
+    }),
+  );
   const configuration = join(root, "host.gitconfig");
   writeFileSync(configuration, "[credential]\nhelper = example-fixture-helper\n");
   const previous = process.env.GIT_CONFIG_GLOBAL;
@@ -738,6 +768,9 @@ test("proof and trial workflows collect and upload failure evidence without anot
     assert.match(encrypted, /trial-private\/evidence.cms/);
     const claude = steps.find((step) => /id: claude/.test(step));
     if (claude)
-      assert.match(claude, /timeout-minutes: \$\{\{ needs.request.outputs.claude-timeout \}\}/);
+      assert.match(
+        claude,
+        /timeout-minutes: \$\{\{ fromJSON\(needs.request.outputs.claude-timeout\) \}\}/,
+      );
   }
 });

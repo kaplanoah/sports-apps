@@ -28,12 +28,24 @@ export function createReviewGitEnvironment(env = process.env) {
   };
 }
 
+/** @typedef {{ environment?: NodeJS.ProcessEnv, maxBuffer?: number }} ReviewGitOptions */
+
 /** @overload @param {string} cwd @param {string[]} args @returns {string} */
-/** @overload @param {string} cwd @param {string[]} args @param {"buffer"} encoding @returns {Buffer} */
-/** @param {string} cwd @param {string[]} args @param {"utf8" | "buffer"} [encoding] @returns {string | Buffer} */
-export function readReviewGit(cwd, args, encoding = "utf8") {
+/** @overload @param {string} cwd @param {string[]} args @param {"buffer"} encoding @param {ReviewGitOptions} [options] @returns {Buffer} */
+/** @overload @param {string} cwd @param {string[]} args @param {"utf8"} encoding @param {ReviewGitOptions} [options] @returns {string} */
+/** @param {string} cwd @param {string[]} args @param {"utf8" | "buffer"} [encoding] @param {ReviewGitOptions} [options] @returns {string | Buffer} */
+export function readReviewGit(cwd, args, encoding = "utf8", options = {}) {
   const command = ["-c", "core.hooksPath=/dev/null", "-c", "core.quotePath=false", ...args];
-  const options = { cwd, env: createReviewGitEnvironment(), maxBuffer: 64 * 1024 * 1024 };
-  if (encoding === "buffer") return execFileSync("git", command, options);
-  return execFileSync("git", command, { ...options, encoding: "utf8" });
+  const settings = {
+    cwd,
+    env: createReviewGitEnvironment(options.environment),
+    maxBuffer: options.maxBuffer ?? 64 * 1024 * 1024,
+  };
+  if (encoding === "buffer") return execFileSync("git", command, settings);
+  return execFileSync("git", command, { ...settings, encoding: "utf8" });
+}
+
+/** @param {string[]} args @param {string} cwd @param {NodeJS.ProcessEnv} [environment] */
+export function readReviewMetadata(args, cwd, environment) {
+  return readReviewGit(cwd, args, "utf8", { environment, maxBuffer: 1024 * 1024 }).trim();
 }

@@ -82,6 +82,7 @@ const SKIPPED_FILES = new Set([
   "worker/review-run.mjs",
   "worker/review-state.mjs",
   "worker/review-trial.mjs",
+  "worker/review-trial-authority.mjs",
   "worker/review-trial-evidence.mjs",
   "worker/rework.mjs",
   "worker/rollback.mjs",

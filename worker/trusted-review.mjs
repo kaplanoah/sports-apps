@@ -20,7 +20,7 @@ import { formatJobOutputs, listJobs } from "./plan-review.mjs";
 import { isContainedCodexReview, needsCodexIntegration } from "./review-supplied.mjs";
 import { WEIGHTS } from "./review-state.mjs";
 import { createGitHub, readAllPages } from "./github-api.mjs";
-import { createReviewGitEnvironment } from "./review-repository.mjs";
+import { readReviewMetadata } from "./review-repository.mjs";
 import { isGitObjectId } from "./git-object.mjs";
 import {
   readJson,
@@ -58,14 +58,6 @@ const stageRecords = (stage) =>
 
 const SOURCE = fileURLToPath(new URL("..", import.meta.url));
 
-/** @param {string[]} args @param {string} cwd */
-const readGit = (args, cwd) =>
-  execFileSync("git", ["-c", "core.hooksPath=/dev/null", ...args], {
-    cwd,
-    encoding: "utf8",
-    env: createReviewGitEnvironment(),
-  }).trim();
-
 const REVIEW_OWED_NOTICE =
   "::notice::No matching merge is available; review remains owed. Re-add the review label when the PR can merge.";
 
@@ -79,9 +71,9 @@ function requireReviewAuthority(env) {
 function matchesReviewMerge(merge, env) {
   if (!merge) return false;
   if (!isGitObjectId(merge)) throw new Error("Review requires an immutable merge revision.");
-  readGit(["fetch", "--no-tags", "origin", merge], env.GITHUB_WORKSPACE);
+  readReviewMetadata(["fetch", "--no-tags", "origin", merge], env.GITHUB_WORKSPACE);
   return (
-    readGit(["show", "--no-patch", "--format=%P", merge], env.GITHUB_WORKSPACE) ===
+    readReviewMetadata(["show", "--no-patch", "--format=%P", merge], env.GITHUB_WORKSPACE) ===
     `${env.REVIEW_BASE} ${env.REVIEW_HEAD}`
   );
 }
@@ -160,7 +152,7 @@ export function prepareReviewCheckout(env) {
     appendFileSync(env.GITHUB_OUTPUT, "available=false\n");
     return;
   }
-  readGit(["checkout", "--detach", merge], checkout);
+  readReviewMetadata(["checkout", "--detach", merge], checkout);
   const folder = mkdtempSync(join(env.RUNNER_TEMP, "review-data-"));
   const view = join(checkout, ".review");
   // Remove the directory entry, including a PR-provided symlink, before linking fresh data.
@@ -309,11 +301,11 @@ export async function verifyReviewEvent(
 
 /**
  * @param {NodeJS.ProcessEnv} env
- * @param {{ invokeScript?: typeof invokeReviewScript, readRepository?: typeof readGit, readGitHub?: ReturnType<typeof createGitHub> }} [options]
+ * @param {{ invokeScript?: typeof invokeReviewScript, readRepository?: typeof readReviewMetadata, readGitHub?: ReturnType<typeof createGitHub> }} [options]
  */
 export async function writeTrustedReviewPlan(env, options = {}) {
   const invokeScript = options.invokeScript ?? invokeReviewScript;
-  const readRepository = options.readRepository ?? readGit;
+  const readRepository = options.readRepository ?? readReviewMetadata;
   const folder = env.REVIEW_FOLDER;
   invokeScript("plan-review.mjs", [folder], env, true);
   invokeScript("review-context.mjs", [folder], env);
@@ -437,7 +429,7 @@ async function postTrustedReview(command, env) {
 /** @param {NodeJS.ProcessEnv} env */
 function recordTrustedResult(env) {
   if (env.REVIEW_OWED !== "false") throw new Error("A review is still owed on this code.");
-  const tree = readGit(["rev-parse", "HEAD^{tree}"], env.REVIEW_CHECKOUT);
+  const tree = readReviewMetadata(["rev-parse", "HEAD^{tree}"], env.REVIEW_CHECKOUT);
   const destination = join(env.REVIEW_UPLOAD, "trusted-review-result");
   mkdirSync(destination);
   const identity = readReviewIdentity(env);

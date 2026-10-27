@@ -66,6 +66,7 @@ test("a merge of only docs, tests, and tooling skips the deploy", () => {
     "worker/find-trusted-review.mjs",
     "worker/mutation-targets.mjs",
     "worker/review-trial.mjs",
+    "worker/review-trial-authority.mjs",
     "worker/review-trial-evidence.mjs",
     "worker/mutation-tests.mjs",
     "worker/node-tests.mjs",

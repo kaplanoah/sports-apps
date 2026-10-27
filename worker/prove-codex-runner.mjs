@@ -10,23 +10,9 @@ import {
   retainPrivateTrialEvidence,
 } from "./review-trial-evidence.mjs";
 
-class CodexProofError extends Error {}
+import { requireOwnerTrialAuthority, TrialAuthorityError } from "./review-trial-authority.mjs";
 
-/** @param {NodeJS.ProcessEnv} env */
-export function requireCodexProofAuthority(env) {
-  if (
-    env.GITHUB_REPOSITORY !== "kaplanoah/sports-apps" ||
-    env.GITHUB_EVENT_NAME !== "workflow_dispatch" ||
-    env.GITHUB_REF !== "refs/heads/main" ||
-    env.GITHUB_ACTOR !== "kaplanoah" ||
-    env.GITHUB_TRIGGERING_ACTOR !== "kaplanoah" ||
-    env.GITHUB_RUN_ATTEMPT !== "1" ||
-    env.TRUSTED_CODEX_REVIEW_ENABLED === "true"
-  )
-    throw new CodexProofError(
-      "Codex proof requires one owner dispatch on main with live Codex disabled.",
-    );
-}
+class CodexProofError extends Error {}
 
 /** @param {string} folder */
 function writeCodexProofFixture(folder) {
@@ -70,7 +56,7 @@ function writeCodexProofRequest(folder) {
 
 /** @param {NodeJS.ProcessEnv} env */
 function prepareCodexProof(env) {
-  requireCodexProofAuthority(env);
+  requireOwnerTrialAuthority(env);
   const folder = join(env.RUNNER_TEMP, "codex-proof");
   writeCodexProofFixture(folder);
   writeCodexProofRequest(folder);
@@ -166,7 +152,7 @@ function readAvailableProofUsage(env) {
 
 /** @param {NodeJS.ProcessEnv} env */
 function collectCodexProof(env) {
-  requireCodexProofAuthority(env);
+  requireOwnerTrialAuthority(env);
   const configuration = readCodexProofConfiguration(
     readFileSync(new URL("../.github/workflows/codex-runner-proof.yml", import.meta.url), "utf8"),
   );
@@ -235,7 +221,8 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     else if (process.argv[2] === "collect") collectCodexProof(process.env);
     else throw new CodexProofError("Unknown proof command.");
   } catch (error) {
-    if (error instanceof CodexProofError) console.error(error.message);
+    if (error instanceof CodexProofError || error instanceof TrialAuthorityError)
+      console.error(error.message);
     console.error(
       "Codex runner proof failed. Keep Codex disabled; inspect the failed step without retrying model work.",
     );

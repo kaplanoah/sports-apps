@@ -32,7 +32,8 @@ import {
   describeSuppliedContent,
   needsCodexIntegration,
 } from "./review-supplied.mjs";
-import { readCodexProofConfiguration, requireCodexProofAuthority } from "./prove-codex-runner.mjs";
+import { readCodexProofConfiguration } from "./prove-codex-runner.mjs";
+import { requireOwnerTrialAuthority } from "./review-trial-authority.mjs";
 import {
   prepareTrialEvidenceCertificate,
   retainPrivateTrialEvidence,
@@ -51,7 +52,7 @@ const writeJson = (path, value) => writeFileSync(path, JSON.stringify(value, nul
 
 /** @param {NodeJS.ProcessEnv} env */
 export function requireReviewTrialAuthority(env) {
-  requireCodexProofAuthority(env);
+  requireOwnerTrialAuthority(env);
   if (!["claude", "codex"].includes(env.TRIAL_PROVIDER))
     throw new Error("Trial requires one explicit provider.");
   return readReviewEvaluationCase(env.TRIAL_CASE);
@@ -602,14 +603,19 @@ export function collectTrialSession(env, portion, snapshot) {
   writeJson(join(destination, "session.json"), session);
 }
 
+/** @param {string[]} args @param {NodeJS.ProcessEnv} env @param {{ entry: any, repository: string }} [snapshot] */
+export function dispatchReviewTrial(args, env, snapshot) {
+  const [command, selected] = args;
+  const portion = selected === "integration" ? selected : Number(selected);
+  if (command === "prepare") prepareReviewTrial(env, snapshot);
+  else if (command === "request") prepareTrialSession(env, portion, snapshot);
+  else if (command === "collect") collectTrialSession(env, portion, snapshot);
+  else throw new Error("Unknown trial command.");
+}
+
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   try {
-    const [command, selected] = process.argv.slice(2);
-    const portion = selected === "integration" ? selected : Number(selected);
-    if (command === "prepare") prepareReviewTrial(process.env);
-    else if (command === "request") prepareTrialSession(process.env, portion);
-    else if (command === "collect") collectTrialSession(process.env, portion);
-    else throw new Error("Unknown trial command.");
+    dispatchReviewTrial(process.argv.slice(2), process.env);
   } catch {
     console.error(
       "Offline trial preparation or validation failed. Keep Codex disabled; inspect the failed step without disclosing raw model diagnostics.",
