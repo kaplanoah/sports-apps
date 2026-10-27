@@ -349,6 +349,36 @@ test(
   },
 );
 
+test(
+  "a stall whose elevated cleanup is unconfirmed never retries",
+  {
+    skip: process.platform !== "linux" || process.getuid() === 0,
+  },
+  async () => {
+    const installer = createInstaller([
+      'process.on("SIGTERM", () => {}); setInterval(() => {}, 1000)',
+      "process.exit(0)",
+    ]);
+    assert.equal(
+      await installBrowsers(["--with-deps", "webkit"], {
+        ...installer.options,
+        timeoutMs: 1000,
+        cleanupSpawn: () => ({
+          pid: 0,
+          output: [],
+          stdout: "",
+          stderr: "",
+          status: 1,
+          signal: null,
+        }),
+      }),
+      124,
+    );
+    assert.equal(installer.invocations.length, 1);
+    assert.match(installer.messages.join("\n"), /Could not confirm privileged.*passwordless sudo/);
+  },
+);
+
 test("an already-cancelled installation starts no process", async () => {
   const installer = createInstaller([]);
   const cancellation = new AbortController();

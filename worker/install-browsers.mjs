@@ -60,6 +60,7 @@ function installAttempt(arguments_, { spawnImpl, cleanupSpawn, timeoutMs, signal
     let timedOut = false;
     let permanentReason = "";
     let transientFailure = false;
+    let cleanupUnconfirmed = false;
     let finished = false;
     let cleanup;
     const keepOutput = (chunk) => {
@@ -78,7 +79,7 @@ function installAttempt(arguments_, { spawnImpl, cleanupSpawn, timeoutMs, signal
         code: timedOut ? 124 : (code ?? 1),
         output,
         timedOut,
-        retryable: (timedOut || transientFailure) && !permanentReason,
+        retryable: (timedOut || transientFailure) && !permanentReason && !cleanupUnconfirmed,
         permanentReason,
       });
     };
@@ -98,7 +99,8 @@ function installAttempt(arguments_, { spawnImpl, cleanupSpawn, timeoutMs, signal
             stdio: "pipe",
           },
         );
-        if (result.status !== 0 && isProcessGroupPresent(child.pid))
+        cleanupUnconfirmed = result.status !== 0 && isProcessGroupPresent(child.pid);
+        if (cleanupUnconfirmed)
           keepOutput(
             "\nCould not confirm privileged browser installer cleanup; check passwordless sudo.\n",
           );
