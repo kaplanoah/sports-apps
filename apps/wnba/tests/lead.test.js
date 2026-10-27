@@ -36,12 +36,12 @@ const ESPN_ANSWERS = {
 };
 
 /**
- * @param {Record<string, any>} answers
+ * @param {(url: string) => Promise<Response>} fetchImpl
  * @param {Record<string, string>} params
  * @param {(key: string) => Promise<any>} [readDoc]
  */
-const askForLead = (answers, params, readDoc) =>
-  createLeadServer({ fetchImpl: createFetch(answers) }).serveLead(
+const askForLead = (fetchImpl, params, readDoc) =>
+  createLeadServer({ fetchImpl }).serveLead(
     new URL(`https://wnba.test/lead?${new URLSearchParams(params)}`),
     readDoc,
   );
@@ -87,7 +87,7 @@ test("a basket in a period's last minute counts its tenths of a second", () => {
 });
 
 test("the Worker answers a game's lead, says when ESPN has no such game, and turns away a bad ask", async () => {
-  const answer = await askForLead(ESPN_ANSWERS, GAME);
+  const answer = await askForLead(createFetch(ESPN_ANSWERS), GAME);
   const body = await answer.json();
   assert.equal(answer.status, 200);
   assert.deepEqual(
@@ -95,10 +95,14 @@ test("the Worker answers a game's lead, says when ESPN has no such game, and tur
     ["GSV", "DAL", LEAD.game.start, 5],
   );
 
-  const missing = await askForLead(ESPN_ANSWERS, { ...GAME, away: "IND", home: "LVA" });
+  const missing = await askForLead(createFetch(ESPN_ANSWERS), {
+    ...GAME,
+    away: "IND",
+    home: "LVA",
+  });
   await assertErrorAnswer(missing, 404, "not_found");
 
-  const refused = await askForLead({}, GAME);
+  const refused = await askForLead(createFetch({}), GAME);
   assert.match(await assertErrorAnswer(refused, 502, "upstream_error"), /^Couldn't read ESPN: /);
 
   for (const params of [
@@ -107,8 +111,31 @@ test("the Worker answers a game's lead, says when ESPN has no such game, and tur
     { ...GAME, id: "../x" },
     { ...GAME, home: "GSV" },
   ]) {
-    await assertErrorAnswer(await askForLead(ESPN_ANSWERS, params), 400, "invalid_argument");
+    await assertErrorAnswer(
+      await askForLead(createFetch(ESPN_ANSWERS), params),
+      400,
+      "invalid_argument",
+    );
   }
+});
+
+test("a lead ESPN can't send says what ESPN answered, and for which of its feeds", async () => {
+  const fetchImpl = async (/** @type {string} */ url) =>
+    url === nameSummaryRequest(LEAD.eventId)
+      ? new Response("")
+      : new Response(JSON.stringify(ESPN_ANSWERS[url] ?? {}), {
+          status: url in ESPN_ANSWERS ? 200 : 503,
+        });
+
+  assert.equal(
+    await assertErrorAnswer(await askForLead(fetchImpl, GAME), 502, "upstream_error"),
+    "Couldn't read ESPN: ESPN answered /apis/site/v2/sports/basketball/wnba/summary with nothing rather than data",
+  );
+  const otherDay = { ...GAME, start: "2026-09-20T23:00:00Z" };
+  assert.equal(
+    await assertErrorAnswer(await askForLead(fetchImpl, otherDay), 502, "upstream_error"),
+    "Couldn't read ESPN: ESPN answered 503 for /apis/site/v2/sports/basketball/wnba/scoreboard",
+  );
 });
 
 /**
@@ -129,7 +156,7 @@ function createCountedFetch(answers) {
 test("a finished game's lead comes from the store, and from ESPN while the store keeps none or the game isn't over", async () => {
   const espn = createCountedFetch(ESPN_ANSWERS);
   const server = createLeadServer({ fetchImpl: espn.fetchImpl });
-  const fromEspn = await (await askForLead(ESPN_ANSWERS, GAME)).json();
+  const fromEspn = await (await askForLead(createFetch(ESPN_ANSWERS), GAME)).json();
   /** @param {any} lead */
   const askWithKept = async (lead) => {
     const url = new URL(`https://wnba.test/lead?${new URLSearchParams(GAME)}`);
@@ -149,7 +176,7 @@ test("a finished game's lead comes from the store, and from ESPN while the store
 });
 
 test("a store that can't be read leaves the lead to ESPN", async () => {
-  const answer = await askForLead(ESPN_ANSWERS, GAME, async () => {
+  const answer = await askForLead(createFetch(ESPN_ANSWERS), GAME, async () => {
     throw new Error("The store answered 500");
   });
   assert.equal(answer.status, 200);

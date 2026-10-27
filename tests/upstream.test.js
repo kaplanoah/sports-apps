@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   createReusedLoader,
+  fetchFeedJson,
   fetchUpstream,
   UPSTREAM_TIMEOUT_MS,
 } from "../shared/worker/upstream.js";
@@ -74,6 +75,97 @@ test("a feed's whole answer is read before its timer stops", async (context) => 
   assert.deepEqual(
     [response.status, response.headers.get("x-feed"), await response.json()],
     [203, "1", { games: [] }],
+  );
+});
+
+const FEED_URL = "https://feed.example/scoreboard.json?day=1";
+const SOURCE = { feed: "The league", path: "/scoreboard.json", headers: HEADERS, cacheSeconds: 5 };
+const hasGames = (answer) => Array.isArray(answer?.scoreboard?.games);
+
+/**
+ * Reads a feed that answers with `body` and `status`.
+ * @param {string} body
+ * @param {{ status?: number, hasData?: (answer: any) => boolean }} [options]
+ */
+const readFeed = (body, { status = 200, hasData } = {}) =>
+  fetchFeedJson(async () => new Response(body, { status }), FEED_URL, { ...SOURCE, hasData });
+
+/**
+ * Why reading a feed whose answer is `body` fails, when its data is `scoreboard.games`.
+ * @param {string} body
+ */
+async function readFailure(body) {
+  const error = await readFeed(body, { hasData: hasGames }).then(
+    () => assert.fail("the feed answered with data"),
+    (/** @type {Error} */ failure) => failure,
+  );
+  return error.message.replace("The league answered /scoreboard.json with ", "");
+}
+
+test("a feed's answer is its JSON once its data is in it, or any JSON when the caller names no data", async () => {
+  const answer = { scoreboard: { games: [] } };
+  assert.deepEqual(await readFeed(JSON.stringify(answer), { hasData: hasGames }), answer);
+  assert.equal(await readFeed("null"), null);
+  await assert.rejects(readFeed("<html></html>"), {
+    message: "The league answered /scoreboard.json with a web page rather than data",
+  });
+});
+
+test("a feed that answers with a status that isn't ok says the status, and keeps it on the error", async () => {
+  await assert.rejects(readFeed("{}", { status: 503 }), {
+    message: "The league answered 503 for /scoreboard.json",
+    status: 503,
+  });
+});
+
+test("a feed is read with the caller's headers and edge cache time", async () => {
+  const { requests, fetchImpl } = recordFetches();
+
+  await fetchFeedJson(fetchImpl, FEED_URL, SOURCE);
+
+  assert.equal(requests[0].url, FEED_URL);
+  assert.deepEqual(requests[0].init.headers, HEADERS);
+  assert.deepEqual(requests[0].init.cf, { cacheTtl: 5, cacheEverything: true });
+});
+
+test("a feed that refuses with a web page says so, with the page's title on one line", async () => {
+  const refusal =
+    "<HTML><HEAD>\n<TITLE>Access Denied</TITLE>\n</HEAD><BODY>Reference</BODY></HTML>";
+  assert.equal(await readFailure(refusal), 'a web page titled "Access Denied" rather than data');
+  const challenge = '<title lang="en">\n  Just a\n\tmoment...  </title>';
+  assert.equal(
+    await readFailure(challenge),
+    'a web page titled "Just a moment..." rather than data',
+  );
+  assert.equal(await readFailure("<!DOCTYPE html><html></html>"), "a web page rather than data");
+});
+
+test("a feed that answers with nothing, or with text that isn't JSON, says which", async () => {
+  assert.equal(await readFailure(""), "nothing rather than data");
+  assert.equal(await readFailure("Service busy"), "text that isn't JSON rather than data");
+});
+
+test("a feed that answers with JSON without its data says the JSON's shape, without its values", async () => {
+  const empty = { scoreboard: { gameDate: "2026-10-27", games: null }, meta: { code: 200 } };
+  assert.equal(
+    await readFailure(JSON.stringify(empty)),
+    "JSON shaped {scoreboard: {gameDate: string, games: null}, meta: {code: number}} rather than data",
+  );
+  const deep = { scoreboard: { day: { games: [] } }, gameDates: [1, 2], teams: [] };
+  assert.equal(
+    await readFailure(JSON.stringify(deep)),
+    "JSON shaped {scoreboard: {day: {...}}, gameDates: list, teams: empty list} rather than data",
+  );
+  assert.equal(await readFailure("null"), "JSON shaped null rather than data");
+});
+
+test("what came back in place of a feed's data is cut short past 200 characters", async () => {
+  const names = Array.from({ length: 40 }, (_, index) => `field${index}`);
+  const wide = Object.fromEntries(names.map((name) => [name, 1]));
+  const shape = `JSON shaped {${names.map((name) => `${name}: number`).join(", ")}}`;
+  assert.equal(
+    await readFailure(JSON.stringify(wide)),
+    `${shape.slice(0, 200)}... rather than data`,
   );
 });
 
