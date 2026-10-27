@@ -11,6 +11,8 @@ The separate GitHub App publishes `trusted-review` on the PR head. Main's expect
 
 The SHA-pinned token action requests one repository explicitly and revokes its token after the job. The protected publisher runs on fresh GitHub-hosted runners with trusted main source, no PR checkout, dependency installation, restored cache, PR actions, or model credentials. Main-authorized workflows are part of this trust boundary; an environment does not pin access to a particular workflow file.
 
+Each caller explicitly passes the publisher's named key secret into the reusable workflow, which declares it required. The job's protected environment supplies its value; keep the key there. GitHub requires this [caller handoff even for environment-only secrets](https://docs.github.com/en/actions/how-tos/reuse-automations/reuse-workflows#using-inputs-and-secrets-in-a-reusable-workflow). An omitted handoff resolves to an empty input. If token creation reports an empty private key, check that handoff before asking the owner to replace credentials. The required declaration checks the handoff, not whether its value is non-empty.
+
 ## Publication and evidence
 
 The initial job replaces prior success with a documented completed/failure conclusion while review is pending. This deliberate non-success avoids assuming that setting an old completed check to in-progress clears its successful conclusion. Titles explain whether review is pending, invalid, or conflicting. Final success requires exact authenticated evidence; the selected provider must finish every required stage.

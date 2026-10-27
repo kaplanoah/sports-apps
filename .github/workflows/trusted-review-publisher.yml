@@ -52,6 +52,8 @@ jobs:
       matrix:
         head: ${{ fromJSON(needs.discover.outputs.heads) }}
     uses: ./.github/workflows/publish-trusted-review.yml
+    secrets:
+      TRUSTED_REVIEW_APP_PRIVATE_KEY: ${{ secrets.TRUSTED_REVIEW_APP_PRIVATE_KEY }}
     with:
       head: ${{ matrix.head }}
       phase: observe

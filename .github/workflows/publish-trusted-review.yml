@@ -12,6 +12,9 @@ on:
       producers:
         type: string
         default: "{}"
+    secrets:
+      TRUSTED_REVIEW_APP_PRIVATE_KEY:
+        required: true
 
 permissions:
   contents: read
