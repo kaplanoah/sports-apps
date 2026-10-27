@@ -23,15 +23,28 @@ const listSpecs = (changedSpecs, sinceBurnedIn) =>
 test("the specs a change touches are an app's browser specs at any depth, as Playwright runs them", () => {
   const nested = "apps/wnba/tests/browser/sheets/drag.spec.mjs";
   assert.deepEqual(
-    listBrowserSpecs([
-      SHEETS,
-      nested,
-      "apps/wnba/tests/browser/harness.mjs",
-      "apps/wnba/tests/page.test.js",
-      PAGE,
-    ]),
+    listBrowserSpecs(
+      [SHEETS, nested, "apps/wnba/tests/browser/harness.mjs", "apps/wnba/tests/page.test.js", PAGE],
+      { specs: [], readText: () => null },
+    ),
     [SHEETS, nested, PAGE],
   );
+});
+
+test("a helper-only change burns in each importing spec through shared adapters", () => {
+  const helper = "tests/browser/game-reminders.mjs";
+  const adapter = "tests/browser/reminder-adapter.mjs";
+  const sources = {
+    [SHEETS]: `import '../../../../${adapter}';`,
+    [PAGE]: `import '../../../../${helper}';`,
+    [adapter]: "export * from './game-reminders.mjs';",
+    [helper]: 'export function defineTests(test) { test("reminders", () => {}); }',
+    "apps/mlb/tests/browser/other.spec.mjs": 'test("other", () => {});',
+  };
+  const specs = [SHEETS, PAGE, "apps/mlb/tests/browser/other.spec.mjs"];
+  const readText = (path) => sources[path] ?? null;
+  assert.deepEqual(listBrowserSpecs([helper], { specs, readText }), [SHEETS, PAGE]);
+  assert.deepEqual(listBrowserSpecs([PAGE, helper], { specs, readText }), [PAGE, SHEETS]);
 });
 
 test("a spec that passed burn-in and hasn't changed since isn't burned in again, whatever the page and the Worker did", () => {

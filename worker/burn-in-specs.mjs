@@ -1,6 +1,6 @@
-// Lists the browser specs burn-in repeats: each one a pull request adds or changes, but for one
-// that has passed burn-in in an earlier run, on this push or one before it, and hasn't changed
-// since. A file the specs reach by import, or the dependencies, the Node version, or CI's own
+// Lists the browser specs burn-in repeats: those a pull request edits or that import an edited
+// browser helper, except ones that passed earlier and have unchanged inputs. A file the specs
+// reach by import, or the dependencies, the Node version, or CI's own
 // workflow or browser installer they run with, that changed since then, on either side, burns
 // them all in again. A change to the page or the Worker alone doesn't, since the spec already ran
 // ten times as it is, and the browser job and the nightly run catch a test the page made flaky.
@@ -11,7 +11,13 @@ import { appendFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { posix } from "node:path";
 import { fileURLToPath } from "node:url";
-import { BROWSER_SETUP_FILES, listBrowserTestReach } from "./browser-scope.mjs";
+import {
+  BROWSER_SETUP_FILES,
+  listBrowserTestFiles,
+  listBrowserTestReach,
+  listReachedFiles,
+  readRepoText,
+} from "./browser-scope.mjs";
 import { CI_WORKFLOW, isPullRequestRun } from "./find-passed-ci.mjs";
 import { createGitHub, readAllPages } from "./github-api.mjs";
 import { isBrowserSpec } from "../tests/browser/projects.mjs";
@@ -36,11 +42,26 @@ const isSharedBySpecs = (path, reached) =>
   !isBrowserSpec(path) && (RUN_SETUP.has(path) || (reached.has(path) && !TESTED_CODE.test(path)));
 
 /**
- * The browser specs among the files a pull request adds or changes, at any depth under an app's
- * tests/browser/, as Playwright runs them and as judge-burn-in's diff names them.
+ * Changed browser specs and those that import a changed browser helper, at any depth.
  * @param {string[]} paths
+ * @param {{specs: string[], readText: (path: string) => string | null}} options
  */
-export const listBrowserSpecs = (paths) => paths.filter(isBrowserSpec);
+export function listBrowserSpecs(paths, { specs, readText }) {
+  const selected = new Set(paths.filter(isBrowserSpec));
+  const helpers = new Set(
+    paths.filter(
+      (path) =>
+        !isBrowserSpec(path) &&
+        /^(?:tests\/browser\/|apps\/[^/]+\/tests\/browser\/).+\.m?js$/.test(path),
+    ),
+  );
+  if (helpers.size)
+    for (const spec of specs) {
+      const reached = listReachedFiles([spec], readText);
+      if ([...helpers].some((helper) => reached.has(helper))) selected.add(spec);
+    }
+  return [...selected];
+}
 
 /**
  * @param {string[]} changedSpecs the specs the pull request adds or changes
@@ -126,6 +147,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     listLines(
       runGit(["diff", "--name-only", "--no-renames", "--diff-filter=AM", "HEAD^1", "HEAD"]),
     ),
+    { specs: listBrowserTestFiles().filter(isBrowserSpec), readText: readRepoText },
   );
   const readJson = createGitHub({
     repository: String(process.env.GITHUB_REPOSITORY),

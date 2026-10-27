@@ -3,9 +3,9 @@
 // only some of the time should never merge. Any other test that failed in a spec it changed goes
 // to the issue Flaky browser tests (worker/report-flaky-tests.mjs) instead, as a test that passed
 // on its retry does, and the pull request goes on. A change in a spec outside every test, like an
-// import, a helper, or a test.use, can change how any of its tests runs, so it counts as editing
-// them all. A run that broke before its tests could, like on a config error, fails too.
-// Usage: git diff -U0 --no-renames <base> <head> -- <specs> | node worker/judge-burn-in.mjs <report>
+// import, a helper, or a test.use, counts every test it owns, including delegated declarations.
+// Changed helpers also count their own declarations. A run broken outside its tests fails too.
+// Usage: git diff -U0 --no-renames <base> <head> -- <browser-files> | node worker/judge-burn-in.mjs <report>
 // It writes the flaky tests beside the report, in burn-in-flaky.json.
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -48,7 +48,7 @@ const isTestCall = (node) =>
   node.callee.name === "test";
 
 /**
- * The first and last line of each test(...) call in a spec, a test in a loop once.
+ * The first and last line of each test(...) call in a spec or helper, a test in a loop once.
  * @param {string} source
  * @returns {{ line: number, endLine: number }[]}
  */
@@ -72,7 +72,7 @@ export function findTestLines(source) {
 /**
  * Each edited test by declaration path and line, or a whole spec that delegates its declarations.
  * @param {Map<string, number[]>} changedLines
- * @param {(path: string) => string | null} readSource the spec as the pull request leaves it, or
+ * @param {(path: string) => string | null} readSource the browser file as the pull request leaves it, or
  *   null once it's deleted
  * @returns {Set<string>}
  */
@@ -117,9 +117,7 @@ const keepSpecs = (suite, isKept, owner) => ({
  */
 export function sortBurnInFailures(report, editedTests) {
   const isEdited = (/** @type {any} */ spec, /** @type {string} */ owner) =>
-    editedTests.has(`${spec.file}:${spec.line}`) ||
-    editedTests.has(`${spec.file}:*`) ||
-    editedTests.has(`${owner}:*`);
+    editedTests.has(`${spec.file}:${spec.line}`) || editedTests.has(`${owner}:*`);
   const keep = (/** @type {(spec: any, owner: string) => boolean} */ isKept) => ({
     ...report,
     suites: (report.suites ?? []).map((/** @type {any} */ suite) =>
