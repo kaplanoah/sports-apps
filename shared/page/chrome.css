@@ -31,6 +31,13 @@
  *   --tabs-chosen-ink                          the open tab's words
  *   --switch-knob                              a switch's knob, one light color in every theme, as the
  *                                              phone keeps its own
+ *   Optional reminder field overrides (defaults shown):
+ *   --reminder-width                           145px
+ *   --reminder-caret-right                     3px
+ *   --reminder-text-rendering                  auto
+ *   --reminder-padding-top                    7px
+ *   --reminder-padding-right                  20px
+ *   --reminder-padding-bottom                 7px
  *   --select-text-face                         a select with words rather than years, if different
  *   --select-face                              a select field's face, drawn at --type-field-size as big
  *                                              as the page's text at --type-detail-size
@@ -355,9 +362,32 @@ section.view.active:not([data-follows]):has(> :is(.day-view, .season-parts)) {
     mask-position: 0 0;
   }
 }
+
+#notifyNote {
+  padding-inline-end: 14px;
+}
+
+.notification-switch {
+  position: relative;
+  display: flex;
+  flex: none;
+}
+.notification-spinner {
+  position: absolute;
+  left: -22px;
+  top: 7px;
+  width: 14px;
+  height: 14px;
+  box-sizing: border-box;
+  border: 2px solid var(--divider);
+  border-top-color: var(--ink-dim);
+  border-radius: 50%;
+  animation: catch-up-turn 0.8s linear infinite;
+}
 @media (prefers-reduced-motion: reduce) {
   .catch-up-ring,
-  .pull-refresh.turning {
+  .pull-refresh.turning,
+  .notification-spinner {
     animation-duration: 2.4s;
   }
 }
@@ -1334,36 +1364,5 @@ body.kbd .welcome-continue:focus {
       background: var(--tab-bar-tint);
       box-shadow: inset 0 0 0 1px var(--tab-bar-ink);
     }
-  }
-}
-
-.notification-switch {
-  position: relative;
-  display: flex;
-  flex: none;
-}
-.notification-spinner {
-  position: absolute;
-  left: -22px;
-  top: 7px;
-  width: 14px;
-  height: 14px;
-  box-sizing: border-box;
-  border: 2px solid var(--divider);
-  border-top-color: var(--ink-dim);
-  border-radius: 50%;
-  animation: notification-spin 0.8s linear infinite;
-}
-.notification-spinner[hidden] {
-  display: none;
-}
-@keyframes notification-spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .notification-spinner {
-    animation: none;
   }
 }

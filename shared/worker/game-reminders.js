@@ -161,6 +161,8 @@ export function createGameReminders({ storage, push, now, verify }) {
       const game = games.get(id);
       if (!preferences.reminders || !game || receipt?.state !== "pending" || receipt.nextAt > now())
         return null;
+      if (receipt.dueAt !== describeDeadline(game, preferences).dueAt)
+        return planDevice(device, [...games.values()], now());
       if (receipt.expiresAt <= now() || receipt.attempts >= MAX_ATTEMPTS) {
         return {
           ...device,
@@ -219,11 +221,9 @@ export function createGameReminders({ storage, push, now, verify }) {
   }
 
   function checkDue() {
-    checking ??= refreshDevices()
-      .then(deliverDue)
-      .finally(() => {
-        checking = null;
-      });
+    checking ??= deliverDue().finally(() => {
+      checking = null;
+    });
     return checking;
   }
 

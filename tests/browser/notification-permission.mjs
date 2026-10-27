@@ -1,3 +1,4 @@
+import { holdClock } from "./harness.mjs";
 import { PUSH_STUB, stubPushManager, stubPushRegistration } from "./push-stub.mjs";
 
 function holdPermission() {
@@ -46,8 +47,7 @@ export function testNotificationPermission(test, expect, app) {
         await app.openApp(page);
         await app.openSettings(page);
         await page.evaluate(holdPermission);
-        await page.clock.install({ time: 0 });
-        await page.clock.pauseAt(1000);
+        await holdClock(page);
         const toggle = page.locator(`#${category}Switch`);
         const other = page.locator(category === "notify" ? "#remindersSwitch" : "#notifySwitch");
         const spinner = toggle.locator("..").locator(".notification-spinner");
@@ -77,20 +77,19 @@ export function testNotificationPermission(test, expect, app) {
         await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
         const shape = await spinner.evaluate((element) => {
           const style = getComputedStyle(element);
-          const box = element.getBoundingClientRect();
-          const toggle = element.nextElementSibling.getBoundingClientRect();
           const root = getComputedStyle(document.documentElement);
           return {
-            width: box.width,
-            height: box.height,
-            gap: toggle.left - box.right,
-            top: box.top - toggle.top,
+            width: element.offsetWidth,
+            height: element.offsetHeight,
+            gap: -element.offsetLeft - element.offsetWidth,
+            top: element.offsetTop,
             ring: style.borderTopWidth,
             color: style.borderTopColor,
             track: style.borderRightColor,
             ink: root.getPropertyValue("--ink-dim").trim(),
             divider: root.getPropertyValue("--divider").trim(),
             animation: style.animationName,
+            duration: style.animationDuration,
           };
         });
         expect(shape).toMatchObject({
@@ -99,7 +98,8 @@ export function testNotificationPermission(test, expect, app) {
           gap: 8,
           top: 7,
           ring: "2px",
-          animation: "none",
+          animation: "catch-up-turn",
+          duration: "2.4s",
         });
         const colors = await spinner.evaluate((element) => {
           const probe = document.createElement("span");
@@ -115,7 +115,7 @@ export function testNotificationPermission(test, expect, app) {
         expect(shape.track).toBe(colors.divider);
         await page.emulateMedia({ reducedMotion: "no-preference" });
         await expect(spinner).toHaveCSS("animation-duration", "0.8s");
-        await expect(spinner).toHaveCSS("animation-name", "notification-spin");
+        await expect(spinner).toHaveCSS("animation-name", "catch-up-turn");
         await page.evaluate(() => Reflect.get(window, "finishPermission")("granted"));
         await expect(toggle).toBeEnabled();
         await expect(toggle).toHaveAttribute("aria-checked", "true");
@@ -160,8 +160,7 @@ export function testNotificationPermission(test, expect, app) {
   }) => {
     await app.openApp(page);
     await app.openSettings(page);
-    await page.clock.install({ time: 0 });
-    await page.clock.pauseAt(1000);
+    await holdClock(page);
     const toggle = page.locator("#remindersSwitch");
     await toggle.click();
     await expect(toggle).toBeEnabled();
@@ -188,4 +187,48 @@ export function testNotificationPermission(test, expect, app) {
     await expect(page.locator("#reminderTiming")).toBeEnabled();
     await expect(page.locator("#reminderTiming")).toHaveValue("180");
   });
+
+  for (const result of ["denied", "failure"])
+    test(`pending retry does not overlap ${result} guidance or move its rows on a phone`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width: 390, height: 844 });
+      await app.openApp(page);
+      await app.openSettings(page);
+      await page.locator("#remindersSwitch").click();
+      await expect(page.locator("#remindersSwitch")).toBeEnabled();
+      await page.evaluate(holdPermission);
+      const toggle = page.locator("#notifySwitch");
+      await toggle.click();
+      await page.evaluate((result) => Reflect.get(window, "finishPermission")(result), result);
+      await expect(toggle).toBeEnabled();
+      await expect(page.locator("#notifyNote")).not.toBeEmpty();
+      await holdClock(page);
+      const before = await readGeometry(page);
+      await toggle.click();
+      await page.clock.runFor(700);
+      await expect(toggle.locator("..").locator(".notification-spinner")).toBeVisible();
+      expect(await readGeometry(page)).toEqual(before);
+      const overlap = await page.locator("#notifyNote").evaluate((note) => {
+        const toggle = document.getElementById("notifySwitch").getBoundingClientRect();
+        const ring = {
+          left: toggle.left - 22,
+          right: toggle.left - 8,
+          top: toggle.top + 7,
+          bottom: toggle.top + 21,
+        };
+        const range = document.createRange();
+        range.selectNodeContents(note);
+        return [...range.getClientRects()].some(
+          (text) =>
+            text.left < ring.right &&
+            text.right > ring.left &&
+            text.top < ring.bottom &&
+            text.bottom > ring.top,
+        );
+      });
+      expect(overlap).toBe(false);
+      await page.evaluate(() => Reflect.get(window, "finishPermission")("default"));
+      await expect(toggle).toBeEnabled();
+    });
 }

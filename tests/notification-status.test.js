@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   chooseNotificationControls,
+  chooseDeniedStatus,
   CHANGE_FAILED,
   chooseFailedSyncStatus,
   chooseNotifyNote,
@@ -115,19 +116,19 @@ test("category controls stay independent and timing is enabled only for active r
 test("pending category intent changes only its switch and exposes only a delayed indicator", () => {
   for (const category of ["updates", "reminders"]) {
     const preferences = { updates: category !== "updates", reminders: category !== "reminders" };
-    for (const showSpinner of [false, true]) {
+    for (const elapsedMs of [0, 699, 700]) {
       const controls = chooseNotificationControls({
         status: "on",
         isBusy: true,
         preferences,
-        pending: { category, isEnabled: true, showSpinner },
+        pending: { category, isEnabled: true, elapsedMs },
       });
       assert.equal(controls.areUpdatesOn, true);
       assert.equal(controls.areRemindersOn, true);
       assert.equal(controls.areSwitchesDisabled, true);
       assert.equal(controls.isTimingDisabled, true);
       assert.equal(controls.pendingCategory, category);
-      assert.equal(controls.spinnerCategory, showSpinner ? category : "");
+      assert.equal(controls.spinnerCategory, elapsedMs >= 700 ? category : "");
       assert.equal(preferences[category], false);
     }
     const restored = chooseNotificationControls({ status: "on", isBusy: false, preferences });
@@ -135,4 +136,14 @@ test("pending category intent changes only its switch and exposes only a delayed
     assert.equal(restored.areRemindersOn, preferences.reminders);
     assert.equal(restored.spinnerCategory, "");
   }
+});
+
+test("permission denial keeps the other category's status and returns plain guidance", () => {
+  for (const device of [IPHONE_APP, COMPUTER])
+    for (const previousStatus of ["on", "off", "failed"])
+      for (const permission of ["default", "denied"])
+        assert.deepEqual(chooseDeniedStatus({ previousStatus, permission, device }), {
+          status: previousStatus === "on" ? "on" : permission === "denied" ? "blocked" : "off",
+          note: permission === "denied" ? readNote("blocked", device).text : "",
+        });
 });

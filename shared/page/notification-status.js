@@ -1,5 +1,7 @@
 // Permission guidance and category controls for this device's notification settings.
 
+export const PENDING_SPINNER_MS = 700;
+
 export const TOO_MANY_DEVICES = "Too many devices get notifications already";
 export const CHANGE_FAILED = "Couldn't change notifications. Try again in a moment.";
 
@@ -76,8 +78,17 @@ export function chooseFailedSyncStatus(error, isSubscribed) {
   return isSubscribed ? null : { status: "off", note: "" };
 }
 
+/** @param {{ previousStatus: string, permission: string, device: NoteDevice }} state */
+export function chooseDeniedStatus({ previousStatus, permission, device }) {
+  const deniedStatus = permission === "denied" ? "blocked" : "off";
+  return {
+    status: previousStatus === "on" ? previousStatus : deniedStatus,
+    note: chooseNotifyNote({ status: deniedStatus, message: "", device }).text,
+  };
+}
+
 /**
- * @typedef {{ category: string, isEnabled: boolean, showSpinner: boolean }} PendingCategory
+ * @typedef {{ category: string, isEnabled: boolean, elapsedMs: number }} PendingCategory
  * @param {{ status: string, isBusy: boolean, preferences: { updates: boolean, reminders: boolean }, pending?: PendingCategory | null }} state
  */
 export function chooseNotificationControls({ status, isBusy, preferences, pending = null }) {
@@ -89,7 +100,7 @@ export function chooseNotificationControls({ status, isBusy, preferences, pendin
     areRemindersOn:
       pending?.category === "reminders" ? pending.isEnabled : isOn && preferences.reminders,
     pendingCategory: pending?.category ?? "",
-    spinnerCategory: pending?.showSpinner ? pending.category : "",
+    spinnerCategory: pending && pending.elapsedMs >= PENDING_SPINNER_MS ? pending.category : "",
     isTimingDisabled: !isOn || !preferences.reminders || isBusy,
   };
 }

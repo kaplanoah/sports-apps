@@ -13,6 +13,8 @@ import { html, setHtml } from "./html.js";
 import { renderNotificationRows } from "./notifications-view.js";
 import {
   CHANGE_FAILED,
+  PENDING_SPINNER_MS,
+  chooseDeniedStatus,
   chooseFailedSyncStatus,
   chooseNotifyNote,
   chooseNotificationControls,
@@ -47,17 +49,14 @@ const findElement = (id) => /** @type {HTMLElement} */ (document.getElementById(
 export const canPush = () =>
   "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
 
-function renderNote(noteStatus = status) {
-  const device = {
-    isIos: isIos(),
-    isOnHomeScreen: isOnHomeScreen(),
-    canOpenWelcome: isAskingToAdd(),
-  };
-  const { text, hasHelp } = chooseNotifyNote({
-    status: noteStatus,
-    message: noteStatus === status ? note : "",
-    device,
-  });
+const readNoteDevice = () => ({
+  isIos: isIos(),
+  isOnHomeScreen: isOnHomeScreen(),
+  canOpenWelcome: isAskingToAdd(),
+});
+
+function renderNote() {
+  const { text, hasHelp } = chooseNotifyNote({ status, message: note, device: readNoteDevice() });
   if (!hasHelp) return text;
   const [lead, lastWord] = splitAtLastWord(text);
   return html`${lead}<span class="notify-help-end">${lastWord}${HELP_BUTTON}</span>`;
@@ -185,11 +184,10 @@ async function syncSubscription() {
     forgetStored(PREVIOUS_KEY);
     return;
   }
+  const pendingPreferences = readStoredJson(PENDING_KEY);
   await saveOrForget(
     subscription,
-    readStoredJson(PENDING_KEY)
-      ? normalizeNotificationPreferences(readStoredJson(PENDING_KEY))
-      : undefined,
+    pendingPreferences ? normalizeNotificationPreferences(pendingPreferences) : undefined,
     readStoredJson(PREVIOUS_KEY) ?? undefined,
   );
   forgetStored(PREVIOUS_KEY);
@@ -220,9 +218,9 @@ async function showBusyDuring(task, intent = null) {
   const indicator =
     intent &&
     setTimeout(() => {
-      intent.showSpinner = true;
+      intent.elapsedMs = PENDING_SPINNER_MS;
       renderNotifications();
-    }, 700);
+    }, PENDING_SPINNER_MS);
   renderNotifications();
   try {
     await task();
@@ -304,9 +302,12 @@ async function changeCategory(category, isEnabled) {
   try {
     // Keep permission in the tap stack, before registration or network work.
     if (isEnabled && (await Notification.requestPermission()) !== "granted") {
-      const deniedStatus = Notification.permission === "denied" ? "blocked" : "off";
-      const guidance = renderNote(deniedStatus);
-      setStatus(previousStatus === "on" ? previousStatus : deniedStatus, String(guidance));
+      const denied = chooseDeniedStatus({
+        previousStatus,
+        permission: Notification.permission,
+        device: readNoteDevice(),
+      });
+      setStatus(denied.status, denied.note);
       return;
     }
     await readSubscriptionOnce();
@@ -339,7 +340,7 @@ function toggleCategory(category) {
   showBusyDuring(() => changeCategory(category, isEnabled), {
     category,
     isEnabled,
-    showSpinner: false,
+    elapsedMs: 0,
   });
 }
 

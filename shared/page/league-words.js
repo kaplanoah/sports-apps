@@ -7,7 +7,7 @@ import { escapePattern } from "./escape-pattern.js";
  * @typedef {object} LeagueWords
  * @property {string} seasonOpener its season's first game, as a fan says it mid-sentence
  * @property {string} notificationUpdates what settings' switch for game updates is called, as its fans say it
- * @property {string} reminderAtStart the zero-lead reminder choice
+ * @property {string} reminderAtStart when the game is scheduled to start
  * @property {string} reminderTiming the nested timing label beneath Game starts
  * @property {string} allStar its All-Star Game
  * @property {string | null} cup its in-season cup, or null for a league without one

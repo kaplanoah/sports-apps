@@ -82,7 +82,7 @@ const TERMS = {
     },
     crossConference: { name: "Interleague", words: ["interleague"] },
     neverShown: ["postseason"],
-    reminderAtStart: "At scheduled tipoff",
+    reminderAtStart: "At scheduled first pitch",
     reminderTiming: "Time before game",
     notificationUpdates: "Game updates",
     seasonSpansYears: false,

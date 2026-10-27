@@ -3,7 +3,7 @@ import { IPHONE } from "./devices.mjs";
 import { openFromHomeScreen } from "./touch.mjs";
 import { waitForLoadToSettle } from "./at-rest.mjs";
 
-/** @param {any} test @param {any} expect @param {{openApp: Function, openSettings: Function, isMlb: boolean}} app */
+/** @param {any} test @param {any} expect @param {{openApp: Function, openSettings: Function, field: any}} app */
 export function testNotificationAlignment(test, expect, app) {
   test.use({ contextOptions: { reducedMotion: "reduce" } });
   for (const [screen, viewport] of Object.entries({
@@ -84,9 +84,13 @@ export function testNotificationAlignment(test, expect, app) {
                 probe.style.letterSpacing = style.letterSpacing;
                 probe.style.textRendering = style.textRendering;
                 probe.style.whiteSpace = "pre";
-                probe.textContent = select.options[0].text;
                 document.body.append(probe);
-                const textWidth = probe.getBoundingClientRect().width;
+                const textWidth = Math.max(
+                  ...[...select.options].map((option) => {
+                    probe.textContent = option.text;
+                    return probe.getBoundingClientRect().width;
+                  }),
+                );
                 probe.remove();
                 const row = select.closest(".reminder-timing");
                 const caret = getComputedStyle(row, "::after");
@@ -112,31 +116,10 @@ export function testNotificationAlignment(test, expect, app) {
                   textWidth,
                 };
               });
-              expect(field).toMatchObject(
-                app.isMlb
-                  ? {
-                      width: 173,
-                      height: 40,
-                      top: 6.5,
-                      bottom: 7.5,
-                      left: 8,
-                      right: 25.5,
-                      caretRight: 6.5,
-                      caretWidth: 16,
-                    }
-                  : {
-                      width: 145,
-                      height: 40,
-                      top: 7,
-                      bottom: 7,
-                      left: 8,
-                      right: 20,
-                      caretRight: 3,
-                      caretWidth: 16,
-                    },
-              );
+              const { minimumGap, ...expected } = app.field;
+              expect(field).toMatchObject(expected);
               expect(field.textWidth).toBeLessThanOrEqual(field.available);
-              if (app.isMlb) expect(field.gap).toBeGreaterThanOrEqual(4);
+              if (minimumGap) expect(field.gap).toBeGreaterThanOrEqual(minimumGap);
               expect(alignment.group).toBeCloseTo(alignment.newsGroup, 2);
               expect(alignment.heading).toBeCloseTo(0, 2);
               for (const offset of alignment.labels) expect(offset).toBeCloseTo(0, 2);

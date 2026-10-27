@@ -78,7 +78,7 @@ function createHarness() {
 
 test("only the five approved presets, booleans and real time zones are accepted", () => {
   assert.ok(isNotificationPreferences({ ...PREFERENCES, timeZone: "Etc/GMT+5" }));
-  for (const { minutes } of REMINDER_PRESETS)
+  for (const minutes of REMINDER_PRESETS)
     assert.ok(isNotificationPreferences({ ...PREFERENCES, minutes }));
   for (const invalid of [
     { minutes: "15" },

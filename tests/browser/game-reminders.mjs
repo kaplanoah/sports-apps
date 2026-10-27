@@ -410,7 +410,7 @@ export function testGameReminderSettings(test, expect, app) {
     phone: { width: 390, height: 844 },
     desktop: { width: 1280, height: 900 },
   })) {
-    test(`reminder settings preserve both themes on ${screen}`, async ({ page }, testInfo) => {
+    test(`reminder settings preserve both themes on ${screen}`, async ({ page }) => {
       await page.setViewportSize(viewport);
       await page.addInitScript(stubPushManager, PUSH_STUB);
       await app.openApp(page);
@@ -431,30 +431,6 @@ export function testGameReminderSettings(test, expect, app) {
           const timing = group.querySelector(".reminder-timing");
           const updates = group.querySelector("#notifyTitle").closest(".control-row");
           const picker = group.querySelector("select");
-          const pickerStyle = getComputedStyle(picker);
-          await document.fonts.load(
-            pickerStyle.font,
-            [...picker.options].map((option) => option.text).join(" "),
-          );
-          const probe = document.createElement("span");
-          probe.style.position = "absolute";
-          probe.style.width = "max-content";
-          probe.style.font = pickerStyle.font;
-          probe.style.letterSpacing = pickerStyle.letterSpacing;
-          probe.style.textRendering = pickerStyle.textRendering;
-          probe.style.whiteSpace = "pre";
-          document.body.append(probe);
-          const widestPreset = Math.max(
-            ...[...picker.options].map((option) => {
-              probe.textContent = option.text;
-              return probe.getBoundingClientRect().width;
-            }),
-          );
-          probe.remove();
-          const textWidth =
-            picker.clientWidth -
-            parseFloat(pickerStyle.paddingLeft) -
-            parseFloat(pickerStyle.paddingRight);
           const bounds = (element) => element.getBoundingClientRect();
           const style = getComputedStyle(timing);
           const labelStyle = getComputedStyle(timing.querySelector(".control-label"));
@@ -469,9 +445,6 @@ export function testGameReminderSettings(test, expect, app) {
             updatesGap: bounds(updates).top - bounds(timing).bottom,
             labelSize: parseFloat(labelStyle.fontSize),
             isMuted: labelStyle.color === getComputedStyle(group.querySelector("h3")).color,
-            presetWidth: widestPreset,
-            textWidth,
-            pickerWidth: bounds(picker).width,
             pickerHeight: bounds(picker).height,
             pickerOutline: getComputedStyle(picker).borderTopStyle,
             pickerAppearance: getComputedStyle(picker).appearance,
@@ -490,8 +463,6 @@ export function testGameReminderSettings(test, expect, app) {
         expect(layout.updatesGap).toBe(6);
         expect(layout.labelSize).toBe(app.timingSize);
         expect(layout.isMuted).toBe(true);
-        expect(layout.presetWidth).toBeLessThanOrEqual(layout.textWidth);
-        expect(layout.pickerWidth).toBe(app.timing === "Time before game" ? 173 : 145);
         expect(layout.pickerHeight).toBeGreaterThanOrEqual(40);
         expect(layout.pickerOutline).toBe("solid");
         await checkSelectArrow(page.locator("#reminderTiming"));
@@ -499,10 +470,82 @@ export function testGameReminderSettings(test, expect, app) {
         expect(layout.groupFill).toBe("rgba(0, 0, 0, 0)");
         expect(layout.groupOutline).toBe("none");
         expect(layout.rowBorders).toEqual(["none", "none", "none"]);
-        await page.locator("#reminderTiming").selectOption("0");
-        await expect(page.locator("#reminderTiming")).toBeEnabled();
-        await page.screenshot({ path: testInfo.outputPath(`settings-${screen}-${theme}.png`) });
       }
     });
   }
+
+  for (const minutes of [5, 15])
+    test(`obsolete ${minutes}-minute local and pending choices normalize before saving`, async ({
+      page,
+    }) => {
+      await page.addInitScript(stubPushManager, PUSH_STUB);
+      await page.addInitScript((minutes) => {
+        if (!localStorage.getItem("device-notifications"))
+          localStorage.setItem(
+            "device-notifications",
+            JSON.stringify({
+              updates: false,
+              reminders: false,
+              minutes,
+              timeZone: "America/New_York",
+            }),
+          );
+      }, minutes);
+      await app.openApp(page);
+      await app.openSettings(page);
+      const timing = page.locator("#reminderTiming");
+      const reminders = page.locator("#remindersSwitch");
+      await expect(timing).toHaveValue("10");
+      await reminders.click();
+      await expect(reminders).toBeEnabled();
+      await expect(reminders).toHaveAttribute("aria-checked", "true");
+      const readSaved = () =>
+        page.evaluate(() => JSON.parse(localStorage.getItem("device-notifications")));
+      expect(await readSaved()).toMatchObject({ minutes: 10, updates: false, reminders: true });
+      await page.evaluate((minutes) => {
+        const preferences = {
+          ...JSON.parse(localStorage.getItem("device-notifications")),
+          minutes,
+        };
+        localStorage.setItem("device-notifications", JSON.stringify(preferences));
+        localStorage.setItem("pending-push-preferences", JSON.stringify(preferences));
+      }, minutes);
+      const saved = page.waitForRequest(
+        (request) => request.url().endsWith("/push/subscription") && request.method() === "PUT",
+      );
+      await page.reload({ waitUntil: "domcontentloaded" });
+      expect((await saved).postDataJSON().preferences).toMatchObject({
+        minutes: 10,
+        updates: false,
+        reminders: true,
+      });
+      await expect(reminders).toBeEnabled();
+      await expect(timing).toHaveValue("10");
+      await expect(page.locator("#notifyNote")).toBeEmpty();
+      expect(await readSaved()).toMatchObject({ minutes: 10, updates: false, reminders: true });
+    });
+
+  test("an obsolete private preference answer is normalized before the page remembers it", async ({
+    page,
+  }) => {
+    await page.addInitScript(stubPushManager, PUSH_STUB);
+    await app.openApp(page);
+    await app.openSettings(page);
+    await page.locator("#remindersSwitch").click();
+    await expect(page.locator("#remindersSwitch")).toBeEnabled();
+    const preferences = await page.evaluate(() =>
+      JSON.parse(localStorage.getItem("device-notifications")),
+    );
+    await page.route("**/push/preferences", (route) =>
+      route.request().method() === "POST"
+        ? route.fulfill({ json: { revision: 1, preferences: { ...preferences, minutes: 15 } } })
+        : route.fallback(),
+    );
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await expect(page.locator("#remindersSwitch")).toBeEnabled();
+    await expect(page.locator("#reminderTiming")).toHaveValue("10");
+    expect(
+      await page.evaluate(() => JSON.parse(localStorage.getItem("device-notifications")).minutes),
+    ).toBe(10);
+  });
 }
