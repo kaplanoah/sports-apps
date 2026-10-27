@@ -647,7 +647,7 @@ export async function checkTurnOn(
     const reading = page.waitForRequest(matchPath("/store/seasons"));
     await page.reload({ waitUntil: "domcontentloaded" });
     await reading;
-    await expect(page.locator("#notifyRow")).toHaveAttribute("hidden");
+    await expect(page.locator("#notificationsGroup")).toHaveAttribute("hidden");
   }
   const saving = page.waitForResponse(
     (response) =>

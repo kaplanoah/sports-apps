@@ -368,7 +368,7 @@ export function testGameReminderSettings(test, expect, app) {
     try {
       await page.goto(url.href, { waitUntil: "domcontentloaded" });
       await requested;
-      await expect(page.locator("#notifyRow")).not.toHaveAttribute("hidden");
+      await expect(page.locator("#notificationsGroup")).not.toHaveAttribute("hidden");
       await expect(page.locator("#notifySwitch")).toBeEnabled();
     } finally {
       release();
@@ -410,7 +410,7 @@ export function testGameReminderSettings(test, expect, app) {
         expect(await listTextOffRoles(page)).toEqual([]);
         const face = await measureFieldFace(page.locator("#reminderTiming"), "--type-detail-size");
         expect(face.field).toBeCloseTo(face.role, 0);
-        const layout = await page.locator("#notifyRow").evaluate(async (group) => {
+        const layout = await page.locator("#notificationsGroup").evaluate(async (group) => {
           const start = group.querySelector("#remindersTitle");
           const timing = group.querySelector(".reminder-timing");
           const updates = group.querySelector("#notifyTitle").closest(".control-row");

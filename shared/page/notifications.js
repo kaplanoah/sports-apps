@@ -54,16 +54,16 @@ function renderNote() {
   return html`${lead}<span class="notify-help-end">${lastWord}${HELP_BUTTON}</span>`;
 }
 
-// The row is drawn whole, so a reload puts it back as it was before the status is known again.
+// The group is drawn whole, so a reload puts it back as it was before the status is known again.
 function renderNotifications() {
   if (!notificationWords) return;
   const controls = chooseNotificationControls({ status, isBusy, preferences });
-  const row = findElement("notifyRow");
+  const group = findElement("notificationsGroup");
   setHtml(
-    row,
+    group,
     renderNotificationRows({ controls, preferences, words: notificationWords, note: renderNote() }),
   );
-  row.hidden = status === "loading";
+  group.hidden = status === "loading";
 }
 
 function setStatus(next, message = "") {
@@ -202,7 +202,7 @@ function restoreControlFocus(id) {
 
 async function showBusyDuring(task) {
   const focused = document.activeElement;
-  const focusedId = findElement("notifyRow").contains(focused) ? focused?.id : null;
+  const focusedId = findElement("notificationsGroup").contains(focused) ? focused?.id : null;
   isBusy = true;
   renderNotifications();
   try {
@@ -388,9 +388,9 @@ export async function startNotifications(words) {
     updates: false,
     reminders: false,
   };
-  findElement("notifyRow").addEventListener("click", toggleNotifications);
-  findElement("notifyRow").addEventListener("click", openHomeScreenSteps);
-  findElement("notifyRow").addEventListener("change", changeTiming);
+  findElement("notificationsGroup").addEventListener("click", toggleNotifications);
+  findElement("notificationsGroup").addEventListener("click", openHomeScreenSteps);
+  findElement("notificationsGroup").addEventListener("change", changeTiming);
   if (!canPush()) {
     setStatus(isIos() && !isOnHomeScreen() ? "homeScreen" : "unsupported");
     return;

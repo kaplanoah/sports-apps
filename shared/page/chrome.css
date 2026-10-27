@@ -536,8 +536,7 @@ body.kbd :is(.sheet-close, .sheet-back, .welcome-close):focus {
   border-top: 1px solid var(--divider);
 }
 .settings-group {
-  display: flex;
-  flex-direction: column;
+  display: grid;
   gap: 6px;
 }
 .settings-group .control-row:not([hidden]) ~ .control-row {
