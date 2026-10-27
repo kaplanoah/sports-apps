@@ -188,11 +188,24 @@ test("a game ESPN doesn't answer for doesn't keep its others from standing in", 
   assert.deepEqual([readState("1042600132"), readState("1042600112")], ["final", "pre"]);
 });
 
-test("ESPN doesn't stand in until one of its games has started", async () => {
+test("while the scoreboard doesn't answer, ESPN stands in before any of its games has started", async () => {
   const espn = structuredClone(ESPN.answers);
   const listing = Object.keys(espn).find((url) => url.includes("/events?dates="));
   espn[listing].items = espn[listing].items.filter((item) => item.$ref.includes("401918022"));
   const league = createLeague({ refuse: { scoreboard: "page" }, espn });
+  const loader = createSnapshotLoader({
+    fetchImpl: league.fetchImpl,
+    now: () => Date.parse(ESPN.now),
+  });
+
+  const snapshot = await loader.loadSnapshot(2026);
+
+  assert.deepEqual([snapshot.missing, snapshot.standIn], [["scoreboard"], "espn"]);
+  assert.equal(snapshot.games.find((game) => game.id === "1042600132").state, "pre");
+});
+
+test("while neither the scoreboard nor ESPN answers, nothing stands in", async () => {
+  const league = createLeague({ refuse: { scoreboard: "page" } });
   const loader = createSnapshotLoader({
     fetchImpl: league.fetchImpl,
     now: () => Date.parse(ESPN.now),
