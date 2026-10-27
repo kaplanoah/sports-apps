@@ -102,11 +102,38 @@ test("authentication, policy, configuration and unknown failures never retry", a
   }
 });
 
-test("a stalled install stops at its attempt deadline without retrying", async () => {
-  const installer = createInstaller(['console.error("ECONNRESET"); setInterval(() => {}, 1000)']);
-  assert.equal(await installBrowsers(["webkit"], { ...installer.options, timeoutMs: 150 }), 124);
+const STALL = 'console.log("Get:7 mirror package [5641 kB]"); setInterval(() => {}, 1000)';
+
+test("a stalled install stops at its attempt deadline and gets one retry", async () => {
+  const installer = createInstaller([STALL, "process.exit(0)"]);
+  assert.equal(await installBrowsers(["webkit"], { ...installer.options, timeoutMs: 1000 }), 0);
+  assert.equal(installer.invocations.length, 2);
+  assert.match(installer.messages.join("\n"), /1-second attempt limit/);
+  assert.match(installer.messages.join("\n"), /Retrying.*once after a stalled attempt/);
+});
+
+test("a slow install that finishes within its deadline is never stopped or retried", async () => {
+  const installer = createInstaller([
+    'let part = 0; const progress = setInterval(() => { console.log("Get:" + ++part + " mirror package"); if (part === 6) { clearInterval(progress); process.exit(0); } }, 50)',
+  ]);
+  assert.equal(await installBrowsers(["webkit"], { ...installer.options, timeoutMs: 5000 }), 0);
   assert.equal(installer.invocations.length, 1);
-  assert.match(installer.messages.join("\n"), /0\.15-second attempt limit/);
+  assert.deepEqual(installer.messages, ["Browser installation: ok."]);
+});
+
+test("a second stall stops instead of retrying until green", async () => {
+  const installer = createInstaller([STALL, STALL, "process.exit(0)"]);
+  assert.equal(await installBrowsers(["webkit"], { ...installer.options, timeoutMs: 150 }), 124);
+  assert.equal(installer.invocations.length, 2);
+});
+
+test("a stall after a permanent error never retries", async () => {
+  const installer = createInstaller([
+    'console.error("HTTP 403"); setInterval(() => {}, 1000)',
+    "process.exit(0)",
+  ]);
+  assert.equal(await installBrowsers(["webkit"], { ...installer.options, timeoutMs: 1000 }), 124);
+  assert.equal(installer.invocations.length, 1);
 });
 
 test("a permanent error before the retained output tail still forbids retry", async () => {
@@ -125,9 +152,11 @@ test("deadline and cancellation stop the install's descendants", async () => {
     const marker = join(folder, "child-pid");
     const cancellation = new AbortController();
     const descendant = `const write = () => { require('node:fs').writeFileSync(${JSON.stringify(marker)} + '.next', process.pid + ':' + Date.now()); require('node:fs').renameSync(${JSON.stringify(marker)} + '.next', ${JSON.stringify(marker)}); }; write(); console.log("DESCENDANT READY"); setInterval(write, 30)`;
-    const installer = createInstaller([
-      `require('node:child_process').spawn(process.execPath, ['-e', ${JSON.stringify(descendant)}], { stdio: 'inherit' }); setInterval(() => {}, 1000)`,
-    ]);
+    const installer = createInstaller(
+      Array(2).fill(
+        `require('node:child_process').spawn(process.execPath, ['-e', ${JSON.stringify(descendant)}], { stdio: 'inherit' }); setInterval(() => {}, 1000)`,
+      ),
+    );
     if (shouldCancel) {
       const spawnImpl = installer.options.spawnImpl;
       installer.options.spawnImpl = (command, arguments_, options) => {
@@ -147,7 +176,7 @@ test("deadline and cancellation stop the install's descendants", async () => {
         } catch {
           /* The process group may have ended. */
         }
-    }, 2500);
+    }, 4500);
     try {
       assert.equal(
         await installBrowsers(["webkit"], {
@@ -316,6 +345,36 @@ test(
       }),
       130,
     );
+    assert.match(installer.messages.join("\n"), /Could not confirm privileged.*passwordless sudo/);
+  },
+);
+
+test(
+  "a stall whose elevated cleanup is unconfirmed never retries",
+  {
+    skip: process.platform !== "linux" || process.getuid() === 0,
+  },
+  async () => {
+    const installer = createInstaller([
+      'process.on("SIGTERM", () => {}); setInterval(() => {}, 1000)',
+      "process.exit(0)",
+    ]);
+    assert.equal(
+      await installBrowsers(["--with-deps", "webkit"], {
+        ...installer.options,
+        timeoutMs: 1000,
+        cleanupSpawn: () => ({
+          pid: 0,
+          output: [],
+          stdout: "",
+          stderr: "",
+          status: 1,
+          signal: null,
+        }),
+      }),
+      124,
+    );
+    assert.equal(installer.invocations.length, 1);
     assert.match(installer.messages.join("\n"), /Could not confirm privileged.*passwordless sudo/);
   },
 );
