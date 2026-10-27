@@ -45,7 +45,10 @@ export function readReviewGit(cwd, args, encoding = "utf8", options = {}) {
   return execFileSync("git", command, { ...settings, encoding: "utf8" });
 }
 
-/** @param {string[]} args @param {string} cwd @param {NodeJS.ProcessEnv} [environment] */
-export function readReviewMetadata(args, cwd, environment) {
-  return readReviewGit(cwd, args, "utf8", { environment, maxBuffer: 1024 * 1024 }).trim();
+/** @param {string} cwd @param {string[]} args @param {ReviewGitOptions} [options] */
+export function runReviewGit(cwd, args, options = {}) {
+  return readReviewGit(cwd, args, "utf8", {
+    ...options,
+    maxBuffer: options.maxBuffer ?? 1024 * 1024,
+  }).trim();
 }

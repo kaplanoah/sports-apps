@@ -28,7 +28,7 @@ import {
   renderTrialComponent,
 } from "../worker/review-trial.mjs";
 import { buildCodexRequest, acceptCodexAnswer } from "../worker/review-codex.mjs";
-import { readReviewGit, readReviewMetadata } from "../worker/review-repository.mjs";
+import { readReviewGit, runReviewGit } from "../worker/review-repository.mjs";
 import { verifyEvaluationSnapshot } from "../worker/review-evaluation.mjs";
 import { readCodexProofConfiguration } from "../worker/prove-codex-runner.mjs";
 import { readRepoFile } from "./repo-files.js";
@@ -142,6 +142,31 @@ test("a blind large-range bundle contains only historical ancestors and complete
     },
   );
   assert.notEqual(production.status, 0);
+  assert.match(production.stderr, /Foreign trial input\./);
+  const unknown = spawnSync(
+    process.execPath,
+    [fileURLToPath(new URL("../worker/review-trial.mjs", import.meta.url)), "unknown"],
+    {
+      env: { ...env, GITHUB_WORKSPACE: clone },
+      encoding: "utf8",
+    },
+  );
+  assert.notEqual(unknown.status, 0);
+  assert.doesNotMatch(unknown.stderr, /Foreign trial input\./);
+  const privateRoot = join(root, "private-diagnostic");
+  mkdirSync(privateRoot);
+  cpSync(join(root, "trial"), join(privateRoot, "trial"), { recursive: true });
+  writeFileSync(join(privateRoot, "trial/identity.json"), "privdiag");
+  const unexpected = spawnSync(
+    process.execPath,
+    [fileURLToPath(new URL("../worker/review-trial.mjs", import.meta.url)), "request", "1"],
+    {
+      env: { ...env, RUNNER_TEMP: privateRoot, GITHUB_WORKSPACE: clone },
+      encoding: "utf8",
+    },
+  );
+  assert.notEqual(unexpected.status, 0);
+  assert.doesNotMatch(unexpected.stderr, /privdiag|Foreign trial input\./);
   assert.equal(existsSync(join(root, "trial/prompt.txt")), false);
   const requested = spawnSync(process.execPath, [command, "request", "1"], {
     env: { ...env, GITHUB_WORKSPACE: clone },
@@ -694,14 +719,16 @@ test("snapshot validation verifies actual objects, fix ancestry and immediate co
   assert.equal(Buffer.isBuffer(bytes), true);
   assert.equal(bytes.toString(), "export const value = 2;\n");
   assert.equal(
-    readReviewMetadata(["show", `${entry.head}:apps/mlb/page/js/app.js`], snapshot.repository),
+    runReviewGit(snapshot.repository, ["show", `${entry.head}:apps/mlb/page/js/app.js`]),
     "export const value = 2;",
   );
   assert.throws(() =>
-    readReviewMetadata(["rev-parse", "HEAD"], snapshot.repository, {
-      PATH: process.env.PATH,
-      REVIEW_BASE: entry.head,
-      REVIEW_TRUSTED: "untrusted",
+    runReviewGit(snapshot.repository, ["rev-parse", "HEAD"], {
+      environment: {
+        PATH: process.env.PATH,
+        REVIEW_BASE: entry.head,
+        REVIEW_TRUSTED: "untrusted",
+      },
     }),
   );
   const configuration = join(root, "host.gitconfig");

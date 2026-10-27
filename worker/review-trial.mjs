@@ -39,6 +39,8 @@ import {
   retainPrivateTrialEvidence,
 } from "./review-trial-evidence.mjs";
 
+class TrialInputError extends Error {}
+
 const SOURCE = fileURLToPath(new URL("..", import.meta.url));
 const COMMON_TRIAL_FILES = [
   "REVIEW.md",
@@ -219,7 +221,7 @@ function validateTrialIdentity(identity, env, root, snapshot) {
     identity.planSha256 !== hashReviewContent(readFileSync(join(folder, "plan.json"))) ||
     identity.inputSha256 !== hashTrialInput(folder, readJson(join(folder, "plan.json")))
   )
-    throw new Error("Changed trial coverage input.");
+    throw new TrialInputError("Changed trial coverage input.");
   if (
     identity.head !== entry.head ||
     identity.source !== env.GITHUB_SHA ||
@@ -228,7 +230,7 @@ function validateTrialIdentity(identity, env, root, snapshot) {
     identity.case !== env.TRIAL_CASE ||
     identity.bundleSha256 !== hashReviewContent(readFileSync(join(root, "snapshot.bundle")))
   )
-    throw new Error("Foreign trial input.");
+    throw new TrialInputError("Foreign trial input.");
   readReviewGit(repository, [
     "fetch",
     "--quiet",
@@ -237,7 +239,7 @@ function validateTrialIdentity(identity, env, root, snapshot) {
     "HEAD",
   ]);
   if (identity.base !== readReviewGit(repository, ["rev-parse", `${entry.head}^1`]).trim())
-    throw new Error("Foreign historical base.");
+    throw new TrialInputError("Foreign historical base.");
 }
 
 /** @param {string} provider @param {number | "integration"} portion */
@@ -616,7 +618,8 @@ export function dispatchReviewTrial(args, env, snapshot) {
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   try {
     dispatchReviewTrial(process.argv.slice(2), process.env);
-  } catch {
+  } catch (error) {
+    if (error instanceof TrialInputError) console.error(error.message);
     console.error(
       "Offline trial preparation or validation failed. Keep Codex disabled; inspect the failed step without disclosing raw model diagnostics.",
     );

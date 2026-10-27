@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { createGitHub, readAllPages } from "./github-api.mjs";
 import { readReviewIdentity, validateReviewArtifact } from "./review-data.mjs";
 import { readJson } from "./judge-review.mjs";
-import { readReviewMetadata } from "./review-repository.mjs";
+import { runReviewGit } from "./review-repository.mjs";
 import { isGitObjectId } from "./git-object.mjs";
 import { waitFor } from "./check-timing.mjs";
 import { readReviewProvider } from "./review-provider.mjs";
@@ -134,17 +134,14 @@ async function waitForTrustedReview(env) {
 /** @param {string} folder @param {NodeJS.ProcessEnv} env */
 function verifyReviewedMerge(folder, env) {
   const result = verifyTrustedReviewResult(folder, env);
-  readReviewMetadata(["fetch", "--no-tags", "origin", result.merge], env.GITHUB_WORKSPACE, env);
-  const parents = readReviewMetadata(
+  const options = { environment: env };
+  runReviewGit(env.GITHUB_WORKSPACE, ["fetch", "--no-tags", "origin", result.merge], options);
+  const parents = runReviewGit(
+    env.GITHUB_WORKSPACE,
     ["show", "--no-patch", "--format=%P", result.merge],
-    env.GITHUB_WORKSPACE,
-    env,
+    options,
   );
-  const tree = readReviewMetadata(
-    ["rev-parse", `${result.merge}^{tree}`],
-    env.GITHUB_WORKSPACE,
-    env,
-  );
+  const tree = runReviewGit(env.GITHUB_WORKSPACE, ["rev-parse", `${result.merge}^{tree}`], options);
   if (parents !== `${env.REVIEW_BASE} ${env.REVIEW_HEAD}` || tree !== result.tree)
     throw new Error("The reviewed merge does not match its head, base and tree.");
   return tree;
