@@ -1,4 +1,4 @@
-import { test, expect, expectDayAtTop, openApp, readWholeSeasonSchedule } from "./harness.mjs";
+import { test, expect, expectDayAtTop, openApp, readWholeSeasonSchedule, NOW } from "./harness.mjs";
 import { readCapitals } from "../../../../tests/browser/capitals.mjs";
 import { readRole } from "../../../../tests/browser/type-roles.mjs";
 import { startValkyriesAtWings } from "./game-sheet-games.mjs";
@@ -52,6 +52,24 @@ test("a score the Worker saves shows up without a reload", async ({ page }) => {
   const detail = await readRole(page, "detail");
   await expect(page.locator("#stamp b.now")).toHaveCSS("font-size", `${caption.size}px`);
   await expect(page.locator("#stamp")).toHaveCSS("font-size", `${detail.size}px`);
+});
+
+test("the header says the WNBA stopped sending today's scores while today has a game, and not once it has none", async ({
+  page,
+}) => {
+  const app = await openApp(page);
+  await app.writeDocument("live/status", {
+    at: new Date(NOW).toISOString(),
+    error: "wnba_feeds_missing",
+    detail: "scoreboard",
+  });
+  const problem = page.locator("#stamp .stamp-err");
+  await expect(problem).toHaveText("The WNBA stopped sending today's scores");
+  await app.changeSeason((season) => {
+    for (const game of season.games) if (game.state === "pre") game.status = "Postponed";
+    return season;
+  });
+  await expect(problem).toHaveCount(0);
 });
 
 test("a team stays put as Bonus comes and goes, level with the score", async ({ page }) => {

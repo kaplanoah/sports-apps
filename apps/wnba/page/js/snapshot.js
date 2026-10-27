@@ -497,11 +497,34 @@ function readNetworkGame(event) {
   };
 }
 
-// Until ESPN names both teams, its game could be any of a round's games at that time.
-const hasBothTeams = (networkGame) => !!(networkGame.home?.team && networkGame.away?.team);
+/** @param {{ home?: { team?: string | null }, away?: { team?: string | null } }} game */
+const hasBothTeams = (game) => !!(game.home?.team && game.away?.team);
 
 const readStartDay = (game) => readEasternDay(Date.parse(game.start)).date;
 const isOnSameDay = (game, espnGame) => readStartDay(game) === readStartDay(espnGame);
+
+/**
+ * @param {{ start: string | null }} game
+ * @param {number} now
+ */
+function isOnOrBeforeLeagueToday({ start }, now) {
+  const startMs = Date.parse(start ?? "");
+  return Number.isFinite(startMs) && readEasternDay(startMs).date <= readEasternDay(now).date;
+}
+
+// A game from before the league's today that isn't over is one the scoreboard still holds past
+// midnight, or one the schedule hasn't caught up on.
+/**
+ * Whether a game's score is the league scoreboard's to send: one under way, or one to be played
+ * between known teams on or before the league's today.
+ * @param {import("./nearest-games.js").SeasonGame & { start: string | null }} game
+ * @param {Map<string, import("./nearest-games.js").DecidedSeries>} seriesById
+ * @param {number} now
+ */
+export function isScoreboardGame(game, seriesById, now) {
+  if (game.state !== "pre") return game.state === "live";
+  return isOnOrBeforeLeagueToday(game, now) && hasBothTeams(game) && isToBePlayed(game, seriesById);
+}
 
 // Matched by day rather than by the nearest start, since the league's placeholder start, at midnight
 // Eastern, can be nearer the same teams' game the night before.
@@ -526,6 +549,7 @@ function addEspnStart(game, networkGames) {
  * @param {any[]} networkGames
  */
 function addEspnListings(games, networkGames) {
+  // Until ESPN names both teams, its game could be any of a round's games at that time.
   const known = networkGames.filter(hasBothTeams);
   return sortByStart(
     games
@@ -599,6 +623,7 @@ export function buildSnapshot(responses, { season, now = Date.now() }) {
   const series = bracket
     ? combineSeries(bracket.map(readBracketSeries), countedSeries, games)
     : countedSeries;
+  const seriesById = mapSeriesById(series);
   return {
     version: SNAPSHOT_VERSION,
     season,
@@ -611,6 +636,7 @@ export function buildSnapshot(responses, { season, now = Date.now() }) {
     standings: readStandingsRows(responses.standings),
     missing: LEAGUE_FEEDS.filter((name) => !responses[name]),
     standIn: standIns.size ? "espn" : null,
+    isScoreboardIdle: !seasonGames.some((game) => isScoreboardGame(game, seriesById, now)),
     openingDay: readOpeningDay(responses.schedule, season),
   };
 }

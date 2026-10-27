@@ -1585,6 +1585,39 @@ test("the header counts today's games from the season's whole schedule, as the G
     );
   }));
 
+test("the header doesn't miss today's scores for a game that won't be played or whose teams aren't known", () =>
+  inEastern(() => {
+    const now = Date.parse("2026-10-27T18:40:00Z");
+    const status = { error: "wnba_feeds_missing", detail: "scoreboard" };
+    const stopped = "The WNBA stopped sending today's scores";
+    const tonight = seasonWithGame("2026-10-27T23:30:00Z", "pre");
+    const [game] = tonight.games;
+    /** @param {any} season */
+    const describe = (season) =>
+      describeStampProblem({ status, problem: "", season, schedule: null, now });
+    assert.equal(describe(tonight), stopped);
+    const calledOff = {
+      ...tonight,
+      games: [{ ...game, series: "finals", isIfNeeded: true }],
+      series: [{ id: "finals", winner: game.home.team }],
+    };
+    assert.equal(describe(calledOff), "");
+    assert.equal(describe({ ...tonight, games: [{ ...game, status: "Postponed" }] }), "");
+    const teamless = { ...game, home: { ...game.home, team: null } };
+    assert.equal(describe({ ...tonight, games: [teamless] }), "");
+  }));
+
+test("the header misses today's scores for a game from the league's yesterday that isn't over", () =>
+  inEastern(() => {
+    const now = Date.parse("2026-10-27T18:40:00Z");
+    const status = { error: "wnba_feeds_missing", detail: "scoreboard" };
+    const lastNight = seasonWithGame("2026-10-26T23:30:00Z", "pre");
+    assert.equal(
+      describeStampProblem({ status, problem: "", season: lastNight, schedule: null, now }),
+      "The WNBA stopped sending today's scores",
+    );
+  }));
+
 test("whether today's scores are missed goes by the league's day, in a viewer's zone on either side of it", () => {
   const status = { error: "wnba_feeds_missing", detail: "scoreboard" };
   const stopped = "The WNBA stopped sending today's scores";

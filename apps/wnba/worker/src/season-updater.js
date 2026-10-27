@@ -165,19 +165,20 @@ async function saveSchedule(docs, snapshot) {
 
 // The league's schedule holds one season at a time, so once it lists the next season's games, the
 // season before has no games in it and keeps the ones it saved.
-/** @param {{ missing: string[], standIn?: string | null, openingDay: string | null }} snapshot */
+/** @param {{ missing: string[], standIn?: string | null, isScoreboardIdle?: boolean, openingDay: string | null }} snapshot */
 function readGameFeeds(snapshot) {
   const missing = new Set(snapshot.missing);
   const isStandIn = missing.has("scoreboard") && !!snapshot.standIn;
+  const hasScores = !missing.has("scoreboard") || isStandIn || !!snapshot.isScoreboardIdle;
   const hasSchedule = !missing.has("schedule") && !!snapshot.openingDay;
-  const hasGames = (!missing.has("scoreboard") || isStandIn) && hasSchedule;
-  return { missing, isStandIn, hasGames };
+  return { missing, isStandIn, hasGames: hasScores && hasSchedule };
 }
 
 // The games need both of their feeds: the schedule alone can be behind on today's, and the
-// scoreboard alone has only today's, unless ESPN stood in for the scoreboard. Series counted from
-// games ESPN may lack wait for the bracket. The record's leading scorers are the player job's,
-// saved with every player's averages (player-updater.js), so an update leaves them as they are.
+// scoreboard alone has only today's, unless ESPN stood in for the scoreboard, or the scoreboard
+// has no game to score (`isScoreboardGame` in page/js/snapshot.js). Series counted from games ESPN
+// may lack wait for the bracket. The record's leading scorers are the player job's, saved with
+// every player's averages (player-updater.js), so an update leaves them as they are.
 const saveSeason = (docs, snapshot) =>
   docs.update(nameSeasonKey(snapshot.season), (saved) => describeSavedSeason(saved, snapshot));
 

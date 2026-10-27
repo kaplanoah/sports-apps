@@ -10,10 +10,11 @@ import {
   renderStampTime,
   renderStampWhen,
 } from "#shared/stamp.js";
-import { isGameOnLeagueToday, isGameToday, readGameDay } from "./days.js";
+import { isGameToday, readGameDay } from "./days.js";
 import { describeLiveMoment, listSeasonGames } from "./games-view.js";
 import { isToBePlayed, mapSeriesById } from "./nearest-games.js";
 import { nameTeam, orderBySeriesWins } from "./series.js";
+import { isScoreboardGame } from "./snapshot.js";
 
 // The header's lines on the latest score and the next tip-off, or on why the page isn't current.
 
@@ -189,35 +190,26 @@ export function renderStampLines(season, now) {
   return lines;
 }
 
-/**
- * @param {Game[]} games
- * @param {number} now
- */
-const hasScoresToMiss = (games, now) =>
-  games.some((game) => game.state === "live" || isGameOnLeagueToday(game, now));
-
-// Today's scores are missed only on a league day with a game to score, since the league may not send
-// them at all on a day without one.
+// Today's scores are missed only while the scoreboard has a game to score, since the league may
+// not send them at all on a day without one.
 /**
  * @param {UpdateStatus} status
- * @param {Game[]} games
- * @param {number} now
+ * @param {boolean} hasScoresToMiss
  */
-function listMissedFeeds(status, games, now) {
+function listMissedFeeds(status, hasScoresToMiss) {
   const feeds = String(status.detail ?? "").split(", ");
-  return hasScoresToMiss(games, now) ? feeds : feeds.filter((feed) => feed !== "scoreboard");
+  return hasScoresToMiss ? feeds : feeds.filter((feed) => feed !== "scoreboard");
 }
 
 /**
  * @param {UpdateStatus | null} status
- * @param {Game[]} games
- * @param {number} now
+ * @param {boolean} hasScoresToMiss
  * @returns {string}
  */
-function describeFeedProblem(status, games, now) {
+function describeFeedProblem(status, hasScoresToMiss) {
   if (!status?.error) return "";
   if (status.error !== "wnba_feeds_missing") return "The WNBA isn't answering right now";
-  const feeds = listMissedFeeds(status, games, now);
+  const feeds = listMissedFeeds(status, hasScoresToMiss);
   if (!feeds.length) return "";
   const stopped = `The WNBA stopped sending ${joinNames(
     feeds.map((feed) => FEED_NAMES[feed] ?? feed),
@@ -229,8 +221,18 @@ function describeFeedProblem(status, games, now) {
 }
 
 /**
- * @param {{ status: UpdateStatus | null, problem: string, season: { games?: Game[], nearestGames?: Game[] } | null, schedule: { games?: Game[] } | null, now: number }} state
+ * @param {{ games?: Game[], nearestGames?: Game[], series?: Series[] } | null} season
+ * @param {{ games?: Game[] } | null} schedule
+ * @param {number} now
+ */
+function hasScoresToMiss(season, schedule, now) {
+  const seriesById = mapSeriesById(season?.series);
+  return listSeasonGames(season, schedule).some((game) => isScoreboardGame(game, seriesById, now));
+}
+
+/**
+ * @param {{ status: UpdateStatus | null, problem: string, season: { games?: Game[], nearestGames?: Game[], series?: Series[] } | null, schedule: { games?: Game[] } | null, now: number }} state
  * @returns {string}
  */
 export const describeStampProblem = ({ status, problem, season, schedule, now }) =>
-  problem || describeFeedProblem(status, listSeasonGames(season, schedule), now);
+  problem || describeFeedProblem(status, hasScoresToMiss(season, schedule, now));
