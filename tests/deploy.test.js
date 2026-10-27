@@ -184,6 +184,35 @@ test("the beta channel's Worker is named by its environment, with the top level'
   assert.throws(() => readWorkerConfig(toml, "staging"), /no channel named staging/);
 });
 
+// Cloudflare refuses an upload with a binding to a product the account hasn't turned on, so each
+// deploy fails until its owner turns it on in the dashboard.
+const PRODUCTS_TURNED_ON = new Set([
+  "analytics_engine",
+  "durable_object_namespace",
+  "ratelimit",
+  "service",
+  "version_metadata",
+]);
+
+test("every Worker binds only Cloudflare products the account has turned on", async () => {
+  const { listBindings } = await loadDeployModule();
+  const workers = [
+    ...listApps().map((app) => ({ isPageless: false, storeClass: "SeasonStore", worker: app })),
+    ...listServices().map((service) => ({
+      isPageless: true,
+      storeClass: "Store",
+      worker: service,
+    })),
+  ];
+  for (const { worker, ...options } of workers)
+    for (const channel of ["production", "beta"])
+      for (const { type } of listBindings({ ...options, channel }))
+        assert.ok(
+          PRODUCTS_TURNED_ON.has(type),
+          `${worker} on ${channel} binds ${type}. Ask the owner to turn it on in the Cloudflare dashboard before this merges, then add it to PRODUCTS_TURNED_ON.`,
+        );
+});
+
 test("a beta deploy uploads to the beta Worker, with the same bindings", async () => {
   const { deploy } = await loadDeployModule();
   const cloudflare = createFakeCloudflare({ isNew: true });

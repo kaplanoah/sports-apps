@@ -27,7 +27,7 @@ This skill holds what "Shipping a change" in AGENTS.md leaves out, most of it un
 - Before building from an issue, check it still holds on `main`; if it doesn't, close it as not planned, or as a duplicate of the one that covers it, saying why.
 - The PR that does the work says "Fixes #N" in its description, which closes the issue as the PR merges into `main`. A PR that does only part of it says "Part of #N" and comments on the issue with what's left.
 - A PR's description names work outside it only by its issue.
-- Flaky browser tests, each app's outage and no-code issues, and each service's outage issue belong to their workflows, which find each by its title and read the flaky table back from its body: never edit or close one by hand.
+- Flaky browser tests, each app's outage and no-code issues, each service's outage issue, and the production deploy's failure issue belong to their workflows, which find each by its title and read the flaky table back from its body: never edit or close one by hand.
 - No labels, milestones, or projects on an issue. Labels like `beta` and `phone-ok` are for PRs.
 
 ## The beta channel
