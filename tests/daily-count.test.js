@@ -266,7 +266,7 @@ test("a count whose send never answers gives up in time, and the next return sen
     Promise.resolve(new Response(null, { status: 204 })),
   );
   const hangingFetch = (url, init) => {
-    if (!String(url).endsWith("/count") || !isHanging) return fetch(url, init);
+    if (!String(url).endsWith("/count") || !isHanging) return fetch(url);
     counts.sent += 1;
     return new Promise((resolve, reject) =>
       init.signal.addEventListener("abort", () => reject(init.signal.reason)),
