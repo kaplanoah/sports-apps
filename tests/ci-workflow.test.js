@@ -448,14 +448,21 @@ test("the browser job's traces leave out the page at each step, which burn-in's 
   assert.doesNotMatch(readJob("burn-in"), /TRACE_SNAPSHOTS/);
 });
 
-test("burn-in runs every test ten times however many fail, and fails only on a test the pull request wrote or edited", () => {
+// Playwright's shards split tests by count in project order, handing the last machine every test
+// of the slowest project, so each machine runs every test once instead.
+test("burn-in runs every test ten times however many fail, once on each of ten machines, and fails only on a test the pull request wrote or edited", () => {
   const burnIn = readJob("burn-in");
-  assert.match(burnIn, /--repeat-each=10 --retries=0 --max-failures=0/);
+  assert.match(burnIn, /run: \[1, 2, 3, 4, 5, 6, 7, 8, 9, 10\]\n/);
+  assert.match(burnIn, /npm run test:browser -- --retries=0 --max-failures=0 "\$\{specs\[@\]\}"/);
+  assert.match(
+    burnIn,
+    /name: burn-in-flaky-\$\{\{ matrix\.run \}\}\n/,
+    "each machine's list of flaky tests keeps a name of its own",
+  );
   assert.match(
     burnIn,
     /git diff -U0 --no-renames HEAD\^1 HEAD .*\| node worker\/judge-burn-in\.mjs/,
   );
-  assert.match(burnIn, /name: burn-in-flaky-/);
 });
 
 // Burn-in's machines start only for a pull request with a browser spec to repeat, and check
