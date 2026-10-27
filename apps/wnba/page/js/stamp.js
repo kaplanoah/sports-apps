@@ -188,22 +188,50 @@ export function renderStampLines(season, now) {
   return lines;
 }
 
+/** @typedef {{ error?: string, detail?: string, standIn?: string }} UpdateStatus */
+
 /**
- * @param {{ error?: string, detail?: string, standIn?: string } | null} status
- * @returns {string}
+ * @param {Game[]} games
+ * @param {number} now
  */
-function describeFeedProblem(status) {
-  if (!status?.error) return "";
-  if (status.error !== "wnba_feeds_missing") return "The WNBA isn't answering right now";
-  const feeds = String(status.detail ?? "")
-    .split(", ")
-    .map((feed) => FEED_NAMES[feed] ?? feed);
-  const stopped = `The WNBA stopped sending ${joinNames(feeds, "and")}`;
-  return status.standIn === "espn" ? `${stopped}. Scores are from ESPN for now.` : stopped;
+const hasScoresToMiss = (games, now) =>
+  games.some((game) => game.state === "live" || isGameToday(game, now));
+
+// Today's scores are missed only on a day with a game to score, since the league may not send
+// them at all on a day without one.
+/**
+ * @param {UpdateStatus} status
+ * @param {Game[]} games
+ * @param {number} now
+ */
+function listMissedFeeds(status, games, now) {
+  const feeds = String(status.detail ?? "").split(", ");
+  return hasScoresToMiss(games, now) ? feeds : feeds.filter((feed) => feed !== "scoreboard");
 }
 
 /**
- * @param {{ status: { error?: string, detail?: string, standIn?: string } | null, problem: string }} state
+ * @param {UpdateStatus | null} status
+ * @param {Game[]} games
+ * @param {number} now
  * @returns {string}
  */
-export const describeStampProblem = ({ status, problem }) => problem || describeFeedProblem(status);
+function describeFeedProblem(status, games, now) {
+  if (!status?.error) return "";
+  if (status.error !== "wnba_feeds_missing") return "The WNBA isn't answering right now";
+  const feeds = listMissedFeeds(status, games, now);
+  if (!feeds.length) return "";
+  const stopped = `The WNBA stopped sending ${joinNames(
+    feeds.map((feed) => FEED_NAMES[feed] ?? feed),
+    "and",
+  )}`;
+  return feeds.includes("scoreboard") && status.standIn === "espn"
+    ? `${stopped}. Scores are from ESPN for now.`
+    : stopped;
+}
+
+/**
+ * @param {{ status: UpdateStatus | null, problem: string, season: { games?: Game[], nearestGames?: Game[] } | null, now: number }} state
+ * @returns {string}
+ */
+export const describeStampProblem = ({ status, problem, season, now }) =>
+  problem || describeFeedProblem(status, listSeasonGames(season, null), now);

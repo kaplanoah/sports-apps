@@ -8,6 +8,7 @@ import {
 } from "../../../../shared/worker/notifications.js";
 import { nameScheduleKey } from "../../page/js/snapshot.js";
 import { nameMeetingsKey } from "./preview.js";
+import { describeFailures } from "./snapshot.js";
 
 // Keeps the current season's saved data up to date from the league, whether or not a page is
 // open, and says which finished games and series are news. `docs` reads and writes the store's
@@ -219,10 +220,11 @@ export function describeSnapshotStatus(snapshot) {
     error: missing.length ? "wnba_feeds_missing" : "",
     detail: missing.join(", "),
     standIn: snapshot.standIn || "",
+    reasons: describeFailures(snapshot.failures ?? {}),
   };
 }
 
-export const STATUS_FIELDS = { standIn: "" };
+export const STATUS_FIELDS = { standIn: "", reasons: "" };
 
 // A playoff final reads as the Updates box says it, and any other final as its result.
 function describeFinal(game, games) {

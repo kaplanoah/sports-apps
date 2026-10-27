@@ -6,6 +6,7 @@ import {
   describeLoad,
   describeOpenSheets,
   describeTimeAway,
+  describeUpdateStatus,
   joinReport,
   nameReportButton,
   writeHeader,
@@ -115,6 +116,7 @@ const PAGE_FACTS = {
   timeZone: "America/New_York",
   openedAt: Date.parse("2026-10-07T10:01:00Z"),
   returns: 3,
+  update: { at: "2026-10-07T11:00:00Z", detail: "", error: "", write: "" },
   jobs: [
     {
       name: "news",
@@ -156,6 +158,7 @@ test("the report opens with the release, the device, and the page's state", () =
         "Opened Wed, Oct 7 6:01:00 AM, 2 h 16 min ago",
         "Back from the background 3 times since",
         "Now Wed, Oct 7 8:16:30 AM, America/New_York",
+        "Updates ok since Wed, Oct 7 7:00:00 AM",
         "News job last ran Wed, Oct 7 8:00:00 AM, 14 requests",
         "Players job last ran Wed, Oct 7 8:15:00 AM, 1 request, sheets read the league 3 times, last failed Tue, Oct 6 7:40:00 PM: Reading 2026's stats failed: The WNBA didn't answer",
       ].join("\n"),
@@ -190,6 +193,27 @@ test("a job's line says when it has no run saved, or its status couldn't be read
     describeJobStatus({ name: "news", status: null }),
     "News job: status couldn't be read",
   );
+});
+
+test("the updates' line names each field of a failing status, with why each feed failed", () =>
+  checkInTimeZone(EASTERN, () => {
+    const status = {
+      at: "2026-10-27T06:00:00Z",
+      detail: "scoreboard",
+      error: "wnba_feeds_missing",
+      reasons: "scoreboard: The WNBA answered 403 for /static/json/todaysScoreboard_10.json",
+      standIn: "",
+      write: "",
+    };
+    assert.equal(
+      normalizeSpaces(describeUpdateStatus(status)),
+      "Updates since Tue, Oct 27 2:00:00 AM: detail scoreboard, error wnba_feeds_missing, reasons scoreboard: The WNBA answered 403 for /static/json/todaysScoreboard_10.json",
+    );
+  }));
+
+test("the updates' line says when the page has read no status", () => {
+  assert.equal(describeUpdateStatus(null), "Updates: no status read");
+  assert.equal(describeUpdateStatus(undefined), "Updates: no status read");
 });
 
 test("a report holds no address, which holds the page's key, in any of its parts, a job's failure and the service worker's steps among them", () =>

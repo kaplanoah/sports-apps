@@ -13,7 +13,7 @@ import {
 } from "#shared/news.js";
 import { readNewsChoices } from "#shared/news-choices.js";
 import { listShownStories } from "#shared/page-places.js";
-import { showJobStatuses, startDiagnostics } from "#shared/diagnostics.js";
+import { showJobStatuses, showUpdateStatus, startDiagnostics } from "#shared/diagnostics.js";
 import { redrawEased } from "#shared/eased-redraw.js";
 import { fillDayStrip, showStartDay, startDayStrip, startOverDayStrip } from "#shared/day-strip.js";
 import { refreshGameSearch, startGameSearch } from "#shared/game-search-view.js";
@@ -80,11 +80,14 @@ const findElement = (id) => /** @type {HTMLElement} */ (document.getElementById(
 
 // The store's status is about the current season's updates, so a past season's page leaves it out.
 function renderStamp() {
+  const now = Date.now();
   const problem = describeStampProblem({
     status: isPastSeason() ? null : session.status,
     problem: session.problem,
+    season: session.season,
+    now,
   });
-  const lines = renderStampLines(session.season, Date.now());
+  const lines = renderStampLines(session.season, now);
   fillStamp(findElement("stamp"), [...renderCatchUpLines(), ...lines], problem ? [problem] : []);
 }
 
@@ -321,6 +324,7 @@ async function boot() {
   startBracketStandings();
   session.db = createWorkerStore({ isShowing: hasDrawing });
   showJobStatuses(session.db, BACKGROUND_JOBS);
+  showUpdateStatus(() => session.status);
   drawLastSeen();
   reopenLastSheets();
   startCatchUpNote(session.db, renderStamp);

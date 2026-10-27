@@ -5,6 +5,7 @@ import { NETWORKS_REQUEST, REQUESTS } from "../page/js/snapshot.js";
 import { TEAMS } from "../page/js/teams.js";
 import { nameScoreboardRequest, nameSummaryRequest } from "../worker/src/lead.js";
 import { describePreview } from "../worker/src/preview.js";
+import { describeSnapshotStatus } from "../worker/src/season-updater.js";
 import { createSnapshotLoader } from "../worker/src/snapshot.js";
 import { nameFeedKey } from "../../../shared/worker/feed-keeper.js";
 
@@ -264,6 +265,30 @@ test("a schedule that holds a game as under way once the scoreboard has moved on
   now += 5 * 60 * 1000;
   await loader.loadSnapshot(2026);
   assert.deepEqual([league.countReads("schedule"), league.countReads("espn")], [3, espnReads]);
+});
+
+test("the store's status says why each feed that didn't answer failed", async () => {
+  const league = createLeague({ refuse: { scoreboard: "error", standings: "page" } });
+  const loader = createSnapshotLoader({ fetchImpl: league.fetchImpl, now: () => NOW });
+
+  const status = describeSnapshotStatus(await loader.loadSnapshot(2026));
+
+  assert.equal(status.detail, "scoreboard, standings");
+  const scoreboardPath = new URL(REQUESTS.scoreboard).pathname;
+  const standingsPath = new URL(REQUESTS.standings(2026)).pathname;
+  assert.equal(
+    status.reasons,
+    `scoreboard: The WNBA answered 503 for ${scoreboardPath}; standings: The WNBA answered ${standingsPath} with something other than data`,
+  );
+});
+
+test("the store's status gives no reasons while every feed answers", async () => {
+  const league = createLeague();
+  const loader = createSnapshotLoader({ fetchImpl: league.fetchImpl, now: () => NOW });
+
+  const status = describeSnapshotStatus(await loader.loadSnapshot(2026));
+
+  assert.deepEqual([status.error, status.reasons], ["", ""]);
 });
 
 test("a feed that answers JSON without its data counts as missing", async () => {
@@ -571,7 +596,10 @@ test("a snapshot says why it couldn't be read when no feed answers", async () =>
   });
   const loader = createSnapshotLoader({ fetchImpl: league.fetchImpl, now: () => NOW });
 
-  await assert.rejects(loader.loadSnapshot(2026), /None of the WNBA's feeds answered/);
+  await assert.rejects(
+    loader.loadSnapshot(2026),
+    /None of the WNBA's feeds answered with data: scoreboard: The WNBA answered 503 for \/.+; schedule: The WNBA answered 503 for \/.+; bracket: .+; standings: .+/,
+  );
 });
 
 test("the Worker bundles with its page, and exports its store", async () => {

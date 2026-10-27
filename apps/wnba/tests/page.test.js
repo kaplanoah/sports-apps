@@ -1493,23 +1493,62 @@ test("the header never names a game the league put off as the next tip-off", () 
     assert.doesNotMatch(readStampLines(putOff, NOW)[1] ?? "", /Dream @ Mystics/);
   }));
 
+const NO_GAMES = { games: [], nearestGames: [] };
+
+/**
+ * A season whose one game starts at `start`, in `state`.
+ * @param {string} start
+ * @param {string} state
+ */
+const seasonWithGame = (start, state) => ({
+  games: [{ ...SEASON.games[0], id: "only", start, isTimeSet: true, state }],
+  nearestGames: [],
+});
+
 test("the header names a problem with the page's server or the league's feeds", () => {
+  const quiet = { season: NO_GAMES, now: NOW };
   assert.equal(
-    describeStampProblem({ status: null, problem: "Can't reach the page's server right now" }),
+    describeStampProblem({
+      ...quiet,
+      status: null,
+      problem: "Can't reach the page's server right now",
+    }),
     "Can't reach the page's server right now",
   );
-  assert.equal(describeStampProblem({ status: null, problem: "" }), "");
+  assert.equal(describeStampProblem({ ...quiet, status: null, problem: "" }), "");
   const status = { error: "wnba_feeds_missing", detail: "bracket, standings" };
   assert.equal(
-    describeStampProblem({ status, problem: "" }),
+    describeStampProblem({ ...quiet, status, problem: "" }),
     "The WNBA stopped sending the bracket and the standings",
   );
-  const standingIn = { error: "wnba_feeds_missing", detail: "scoreboard", standIn: "espn" };
-  assert.equal(
-    describeStampProblem({ status: standingIn, problem: "" }),
-    "The WNBA stopped sending today's scores. Scores are from ESPN for now.",
-  );
 });
+
+test("the header says the WNBA stopped sending today's scores only on a day with scores to miss", () =>
+  inEastern(() => {
+    const now = Date.parse("2026-10-27T18:40:00Z");
+    const standingIn = { error: "wnba_feeds_missing", detail: "scoreboard", standIn: "espn" };
+    const stopped = "The WNBA stopped sending today's scores. Scores are from ESPN for now.";
+    const tonight = seasonWithGame("2026-10-27T23:30:00Z", "pre");
+    assert.equal(
+      describeStampProblem({ status: standingIn, problem: "", season: tonight, now }),
+      stopped,
+    );
+    const pastMidnight = seasonWithGame("2026-10-27T02:00:00Z", "live");
+    assert.equal(
+      describeStampProblem({ status: standingIn, problem: "", season: pastMidnight, now }),
+      stopped,
+    );
+    const thursday = seasonWithGame("2026-10-29T16:30:00Z", "pre");
+    assert.equal(
+      describeStampProblem({ status: standingIn, problem: "", season: thursday, now }),
+      "",
+    );
+    const withStandings = { error: "wnba_feeds_missing", detail: "scoreboard, standings" };
+    assert.equal(
+      describeStampProblem({ status: withStandings, problem: "", season: thursday, now }),
+      "The WNBA stopped sending the standings",
+    );
+  }));
 
 test("a score shows in scoreboard digits, and still reads as its number", () => {
   const markup = renderScoreboard(89).text;
