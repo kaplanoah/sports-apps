@@ -12,6 +12,7 @@
     "apps/mlb/tests/kept-on-device.test.js",
     "apps/mlb/tests/leaders-view.test.js",
     "apps/mlb/tests/matchup.test.js",
+    "apps/mlb/tests/mlb.test.js",
     "apps/mlb/tests/news-feeds.test.js",
     "apps/mlb/tests/news-updater.test.js",
     "apps/mlb/tests/news-view.test.js",

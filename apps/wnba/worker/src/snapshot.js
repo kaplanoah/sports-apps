@@ -2,11 +2,11 @@ import * as WNBASnapshot from "../../page/js/snapshot.js";
 import { readEasternDay } from "#shared/days.js";
 import { createFeedKeeper } from "../../../../shared/worker/feed-keeper.js";
 import { describeError } from "../../../../shared/worker/responses.js";
-import { createReusedLoader, fetchUpstream } from "../../../../shared/worker/upstream.js";
+import { createReusedLoader } from "../../../../shared/worker/upstream.js";
 import { createGameEnds } from "./game-ends.js";
 import { createEspnGameReader, readEndTime } from "./lead.js";
 import { listUpcomingMeetings } from "./preview.js";
-import { ESPN_HEADERS, fetchWnbaJson } from "./wnba.js";
+import { fetchEspnJson, fetchWnbaJson } from "./wnba.js";
 
 const EDGE_CACHE_SECONDS = 5;
 // No longer than the wait between updates in a game's closing stretch, so each one reads the league.
@@ -102,22 +102,14 @@ export function createSnapshotLoader({
   const readSlowFeed = (name, url, options = {}) =>
     slowFeeds.readFeed(name, url, () => fetchFeed(name, url), options);
 
-  async function fetchEspnJson(url) {
-    const response = await fetchUpstream(fetchImpl, url, {
-      headers: ESPN_HEADERS,
-      cacheSeconds: EDGE_CACHE_SECONDS,
-    });
-    if (!response.ok) throw new Error(`ESPN answered ${response.status}`);
-    return response.json();
-  }
+  /** @param {string} url */
+  const fetchEspn = (url) => fetchEspnJson(fetchImpl, url, EDGE_CACHE_SECONDS);
 
   async function fetchBackupGame(eventId) {
-    const competition = await fetchEspnJson(WNBASnapshot.BACKUP_REQUESTS.competition(eventId));
+    const competition = await fetchEspn(WNBASnapshot.BACKUP_REQUESTS.competition(eventId));
     const [status, ...scores] = await Promise.all([
-      fetchEspnJson(upgradeLink(competition.status.$ref)),
-      ...competition.competitors.map((competitor) =>
-        fetchEspnJson(upgradeLink(competitor.score.$ref)),
-      ),
+      fetchEspn(upgradeLink(competition.status.$ref)),
+      ...competition.competitors.map((competitor) => fetchEspn(upgradeLink(competitor.score.$ref))),
     ]);
     return { competition, status, scores };
   }
@@ -129,7 +121,7 @@ export function createSnapshotLoader({
       formatEspnDay(now() - DAY_MS),
       formatEspnDay(now()),
     );
-    const listing = await fetchEspnJson(request);
+    const listing = await fetchEspn(request);
     const eventIds = (listing.items ?? []).map((item) => readEventId(item.$ref)).filter(Boolean);
     const games = await Promise.all(eventIds.map((id) => fetchBackupGame(id).catch(() => null)));
     return { games: games.filter(Boolean) };
@@ -159,7 +151,7 @@ export function createSnapshotLoader({
     // A reminder needs current listings, but a finalized month cannot change.
     if (!isDueForNetworksRead(month) && (!verify || isFinalAnswer(kept, month))) return kept.data;
     try {
-      const data = await fetchEspnJson(WNBASnapshot.NETWORKS_REQUEST(month));
+      const data = await fetchEspn(WNBASnapshot.NETWORKS_REQUEST(month));
       networkMonths.set(month, { readAt: now(), answeredAt: now(), data });
       return data;
     } catch {

@@ -24,6 +24,101 @@ export const fetchUpstream = (fetchImpl, url, { headers, cacheSeconds }) =>
     return new Response(body, response);
   });
 
+// How deep into an answer, and how long, an error describes one without its data: enough to tell
+// a refusal from a feed that has nothing to send or has changed its shape.
+const SHAPE_DEPTH = 2;
+const DESCRIPTION_LENGTH = 200;
+
+/** @returns {any} the JSON `text` holds, or undefined when it isn't JSON */
+function parseJson(text) {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Each field's name and kind, `depth` levels down, leaving out every value.
+ * @param {any} value
+ * @param {number} depth
+ * @returns {string}
+ */
+function describeShape(value, depth) {
+  if (value === null) return "null";
+  if (Array.isArray(value)) return value.length === 0 ? "empty list" : "list";
+  if (typeof value !== "object") return typeof value;
+  if (depth === 0) return "{...}";
+  const fields = Object.entries(value).map(
+    ([key, field]) => `${key}: ${describeShape(field, depth - 1)}`,
+  );
+  return `{${fields.join(", ")}}`;
+}
+
+const isJson = (/** @type {any} */ answer) => answer !== undefined;
+
+const readPageTitle = (/** @type {string} */ text) =>
+  /<title[^>]*>([^<]*)<\/title>/i.exec(text)?.[1].replace(/\s+/g, " ").trim() ?? "";
+
+/**
+ * What came back in place of a feed's data.
+ * @param {string} text
+ * @param {any} answer the JSON `text` holds, or undefined
+ */
+function describeAnswer(text, answer) {
+  if (isJson(answer)) return `JSON shaped ${describeShape(answer, SHAPE_DEPTH)}`;
+  if (text.trim() === "") return "nothing";
+  const title = readPageTitle(text);
+  if (title) return `a web page titled "${title}"`;
+  return text.trimStart().startsWith("<") ? "a web page" : "text that isn't JSON";
+}
+
+const shorten = (/** @type {string} */ text) =>
+  text.length > DESCRIPTION_LENGTH ? `${text.slice(0, DESCRIPTION_LENGTH)}...` : text;
+
+/**
+ * The JSON a feed answered with, once `hasData`, by default any JSON at all, finds its data in it. A
+ * feed can refuse with a web page, or have nothing to send, and still answer 200, so the error for
+ * any other answer says what came back, never its values.
+ * @param {Response} response
+ * @param {{ feed: string, path: string, hasData?: (answer: any) => boolean }} source
+ */
+async function readFeedJson(response, { feed, path, hasData = isJson }) {
+  const text = await response.text();
+  const answer = parseJson(text);
+  if (!hasData(answer))
+    throw new Error(
+      `${feed} answered ${path} with ${shorten(describeAnswer(text, answer))} rather than data`,
+    );
+  return answer;
+}
+
+/**
+ * Reads a feed's JSON with fetchUpstream. Errors name the feed's `path`, by default the URL's, and
+ * one for a status that isn't ok carries it as `status`.
+ * @param {(input: string, init: object) => Promise<Response>} fetchImpl
+ * @param {string} url
+ * @param {{
+ *   feed: string,
+ *   path?: string,
+ *   headers: Record<string, string>,
+ *   cacheSeconds: number | null,
+ *   hasData?: (answer: any) => boolean,
+ * }} options who answers, for what, and readFeedJson's `hasData`
+ */
+export async function fetchFeedJson(
+  fetchImpl,
+  url,
+  { feed, path = new URL(url).pathname, headers, cacheSeconds, hasData },
+) {
+  const response = await fetchUpstream(fetchImpl, url, { headers, cacheSeconds });
+  if (!response.ok)
+    throw Object.assign(new Error(`${feed} answered ${response.status} for ${path}`), {
+      status: response.status,
+    });
+  return readFeedJson(response, { feed, path, hasData });
+}
+
 /**
  * `load`, except that a call for a key loaded in the last `reuseMs`, or still loading, gets that
  * load's promise. A load that fails is forgotten, so the next call tries again.

@@ -278,7 +278,7 @@ test("the store's status says why each feed that didn't answer failed", async ()
   const standingsPath = new URL(REQUESTS.standings(2026)).pathname;
   assert.equal(
     status.reasons,
-    `scoreboard: The WNBA answered 503 for ${scoreboardPath}; standings: The WNBA answered ${standingsPath} with something other than data`,
+    `scoreboard: The WNBA answered 503 for ${scoreboardPath}; standings: The WNBA answered ${standingsPath} with a web page rather than data`,
   );
 });
 

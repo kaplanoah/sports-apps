@@ -280,12 +280,18 @@ jobs:
             playwright-report/
             test-results/
 
-  # Scope selects edited specs and those importing an edited helper that declares tests
-  # (worker/burn-in-specs.mjs). Earlier passes are reused when their inputs are unchanged.
-  # Each selected spec runs ten times without retries. Tests this pull request wrote or edited
-  # fail its gate; other failures go to the nightly workflow's Flaky browser tests issue
-  # (worker/judge-burn-in.mjs). Shards split large selections, and empty shards pass. Specs matched
-  # by WebKit's projects in tests/browser/projects.mjs install and repeat in that engine too.
+  # Each browser spec scope lists, the ones a pull request adds or changes and those importing a
+  # changed helper that declares tests, but for one that passed burn-in in an earlier run and hasn't
+  # changed since, with what it runs with unchanged too (worker/burn-in-specs.mjs), runs ten times
+  # over, with no retry, so a test that passes only some of the time fails on the pull request that
+  # brings it, rather than on later ones. Only a test the pull request wrote or edited fails it: any
+  # other that failed goes to the issue Flaky browser tests from the next nightly run
+  # (worker/judge-burn-in.mjs). Ten runs of every spec a large pull request changes take longer than
+  # one machine's limit, so ten machines each run every test once. Each then has the same share
+  # however slow some tests are, where Playwright's shards, split by count in project order, would
+  # give the last machines only the last project's tests, WebKit's, the slowest. When a spec WebKit's
+  # projects in tests/browser/projects.mjs match is among them, it installs WebKit too, as the webkit
+  # job does, so they repeat in WebKit, where they've failed most.
   burn-in:
     needs: scope
     if: ${{ !cancelled() && needs.scope.result == 'success' && needs.scope.outputs.specs != '' }}
@@ -294,7 +300,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4, 5, 6, 7, 8]
+        run: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -325,28 +331,27 @@ jobs:
         run: sudo cp ~/webkit-packages/*.deb /var/cache/apt/archives/
       - if: *runs-webkit-specs
         run: node worker/install-browsers.mjs --with-deps webkit
-      # Every test runs all ten times, however many fail, and the next step decides which
-      # failures fail the pull request, so a failed test doesn't fail this one.
-      - name: Repeat each browser spec scope lists
+      # Every test runs, however many fail, and the next step decides which failures fail the pull
+      # request, so a failed test doesn't fail this one.
+      - name: Run each browser spec scope lists
         shell: bash
         env:
           SPECS: ${{ needs.scope.outputs.specs }}
         run: |
           read -ra specs <<< "$SPECS"
-          npm run test:browser -- --repeat-each=10 --retries=0 --max-failures=0 --pass-with-no-tests \
-            --shard=${{ matrix.shard }}/${{ strategy.job-total }} "${specs[@]}" || true
+          npm run test:browser -- --retries=0 --max-failures=0 "${specs[@]}" || true
       - name: Fail only on a test this pull request wrote or edited
         shell: bash
         run: git diff -U0 --no-renames HEAD^1 HEAD | node worker/judge-burn-in.mjs test-results/report.json
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         if: ${{ !cancelled() && hashFiles('test-results/burn-in-flaky.json') != '' }}
         with:
-          name: burn-in-flaky-${{ matrix.shard }}
+          name: burn-in-flaky-${{ matrix.run }}
           path: test-results/burn-in-flaky.json
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         if: failure()
         with:
-          name: playwright-report-burn-in-${{ matrix.shard }}
+          name: playwright-report-burn-in-${{ matrix.run }}
           path: |
             playwright-report/
             test-results/
