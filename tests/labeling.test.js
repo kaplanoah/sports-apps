@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { findLabeling, readPushTime, readTimeline } from "../worker/labeling.mjs";
+import { createTimelineAnswer } from "./timeline.js";
 
 /**
  * An issue event of `type` for `label`, by `login`, at `at`.
@@ -95,55 +96,125 @@ test("a head's push time is its earliest check suite's", async () => {
   assert.ok(Number.isNaN(await readPushTime({ ...options, fetchImpl: createFetch([]) })));
 });
 
-test("a pull request's timeline is read page by page, with the token, until a short page", async () => {
-  const pages = [
-    Array.from({ length: 100 }, (_, index) =>
-      createEvent(
-        "labeled",
-        "bug",
-        "owner",
-        `2026-10-07T10:00:${String(index % 60).padStart(2, "0")}Z`,
-      ),
-    ),
-    [createEvent("labeled", "phone-ok", "owner", "2026-10-07T12:00:00Z")],
+test("the GraphQL timeline is paginated with authentication and mapped for both gates", async () => {
+  const expected = [
+    createEvent("labeled", "beta", "owner", "2026-10-07T10:00:00Z"),
+    {
+      event: "unlabeled",
+      created_at: "2026-10-07T11:00:00Z",
+      label: { name: "beta" },
+      actor: null,
+    },
+    {
+      event: "head_ref_force_pushed",
+      created_at: "2026-10-07T12:00:00Z",
+      actor: { login: "owner" },
+    },
+    {
+      event: "commented",
+      created_at: "2026-10-07T13:00:00Z",
+      body: "beta queue marker",
+      actor: null,
+    },
   ];
-  /** @type {{ url: string, authorization: string }[]} */
+  const pages = [
+    createTimelineAnswer(expected.slice(0, 2)),
+    createTimelineAnswer(expected.slice(2)),
+  ];
+  pages[0].data.repository.pullRequest.timelineItems.pageInfo = {
+    hasNextPage: true,
+    endCursor: "next",
+  };
   const requests = [];
   /** @type {typeof fetch} */
   const fetchImpl = async (url, init) => {
-    const headers = /** @type {Record<string, string>} */ (init?.headers);
-    requests.push({ url: String(url), authorization: headers.authorization });
+    assert.equal(String(url), "https://api.github.com/graphql");
+    assert.equal(init?.method, "POST");
+    assert.equal(new Headers(init?.headers).get("authorization"), "Bearer token");
+    const body = JSON.parse(String(init?.body));
+    requests.push(body);
     return Response.json(pages[requests.length - 1]);
   };
-
   const events = await readTimeline({
     repository: "owner/repo",
     pullNumber: "408",
     fetchImpl,
     env: { GH_TOKEN: "token" },
   });
-
-  assert.equal(events.length, 101);
+  assert.deepEqual(events, expected);
   assert.deepEqual(
-    requests.map(({ url }) => url),
+    requests.map(({ variables }) => variables),
     [
-      "https://api.github.com/repos/owner/repo/issues/408/timeline?per_page=100&page=1",
-      "https://api.github.com/repos/owner/repo/issues/408/timeline?per_page=100&page=2",
+      { owner: "owner", name: "repo", number: 408, after: null },
+      { owner: "owner", name: "repo", number: 408, after: "next" },
     ],
   );
-  assert.ok(requests.every(({ authorization }) => authorization === "Bearer token"));
+  assert.match(requests[0].query, /first: 100, after: \$after/);
+  for (const type of [
+    "LABELED_EVENT",
+    "UNLABELED_EVENT",
+    "HEAD_REF_FORCE_PUSHED_EVENT",
+    "ISSUE_COMMENT",
+  ])
+    assert.ok(requests[0].query.includes(type));
+  assert.match(requests[0].query, /created_at: createdAt/);
+  assert.match(requests[0].query, /actor: author/);
 });
 
-test("a timeline GitHub won't give fails the gate's read", async () => {
-  /** @type {typeof fetch} */
-  const fetchImpl = async () => new Response("", { status: 403 });
+test("unavailable or malformed GraphQL history fails closed", async () => {
+  const absent = { data: { repository: { pullRequest: null } } };
+  const cursor = createTimelineAnswer([]);
+  cursor.data.repository.pullRequest.timelineItems.pageInfo = {
+    hasNextPage: true,
+    endCursor: null,
+  };
+  const unknown = createTimelineAnswer([]);
+  unknown.data.repository.pullRequest.timelineItems.nodes.push({ __typename: "UnexpectedEvent" });
+  for (const [answer, message] of [
+    [absent, /didn't return/],
+    [{ errors: [{ message: "history denied" }] }, /history denied/],
+    [cursor, /didn't advance/],
+    [unknown, /unexpected timeline event/],
+  ]) {
+    await assert.rejects(
+      readTimeline({
+        repository: "owner/repo",
+        pullNumber: "408",
+        fetchImpl: async () => Response.json(answer),
+        env: {},
+      }),
+      message,
+    );
+  }
   await assert.rejects(
     readTimeline({
       repository: "owner/repo",
       pullNumber: "408",
-      fetchImpl,
-      env: { GH_TOKEN: "token" },
+      fetchImpl: async () => new Response("", { status: 403 }),
+      env: {},
     }),
-    /GitHub answered 403 for GET \/issues\/408\/timeline/,
+    /GitHub answered 403/,
   );
+});
+
+test("a repeated GraphQL cursor fails closed rather than looping over the same history", async () => {
+  const answer = createTimelineAnswer([]);
+  answer.data.repository.pullRequest.timelineItems.pageInfo = {
+    hasNextPage: true,
+    endCursor: "same",
+  };
+  let reads = 0;
+  await assert.rejects(
+    readTimeline({
+      repository: "owner/repo",
+      pullNumber: "408",
+      fetchImpl: async () => {
+        assert.ok(++reads <= 2);
+        return Response.json(answer);
+      },
+      env: {},
+    }),
+    /didn't advance/,
+  );
+  assert.equal(reads, 2);
 });
