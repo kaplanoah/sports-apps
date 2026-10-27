@@ -33,7 +33,7 @@ export function createSnapshotLoader({
   now = () => Date.now(),
   storage = undefined,
 } = {}) {
-  const slowFeeds = createFeedKeeper({ feeds: SLOW_FEEDS, leagueName: "MLB", now, storage });
+  const slowFeeds = createFeedKeeper({ feeds: SLOW_FEEDS, now, storage });
 
   /** @param {string} path */
   const fetchFeed = (path) => fetchMlbJson(fetchImpl, path, EDGE_CACHE_SECONDS);

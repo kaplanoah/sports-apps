@@ -48,13 +48,16 @@ const upgradeLink = (link) => String(link).replace(/^http:/, "https:");
 
 const readEventId = (link) => String(link).match(/\/events\/(\d+)/)?.[1] ?? null;
 
+// In the feeds' own order rather than the order they failed in, so the store's status doesn't
+// change while the same feeds fail for the same reasons.
 /**
- * Why each feed that didn't answer failed, as in "scoreboard: The WNBA answered 403 for /x.json".
+ * Why each feed that didn't answer failed.
  * @param {Record<string, string>} failures
  */
 export const describeFailures = (failures) =>
-  Object.entries(failures)
-    .map(([name, reason]) => `${name}: ${reason}`)
+  Object.keys(FEED_DATA)
+    .filter((name) => name in failures)
+    .map((name) => `${name}: ${failures[name]}`)
     .join("; ");
 
 const countFinals = (scoreboard) =>
@@ -72,7 +75,7 @@ export function createSnapshotLoader({
   now = () => Date.now(),
   storage = undefined,
 } = {}) {
-  const slowFeeds = createFeedKeeper({ feeds: SLOW_FEEDS, leagueName: "The WNBA", now, storage });
+  const slowFeeds = createFeedKeeper({ feeds: SLOW_FEEDS, now, storage });
   const networkMonths = new Map();
   const espnGames = createEspnGameReader({ fetchImpl });
   const gameEnds = createGameEnds({

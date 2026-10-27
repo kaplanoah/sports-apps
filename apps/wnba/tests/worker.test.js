@@ -6,7 +6,7 @@ import { TEAMS } from "../page/js/teams.js";
 import { nameScoreboardRequest, nameSummaryRequest } from "../worker/src/lead.js";
 import { describePreview } from "../worker/src/preview.js";
 import { describeSnapshotStatus } from "../worker/src/season-updater.js";
-import { createSnapshotLoader } from "../worker/src/snapshot.js";
+import { createSnapshotLoader, describeFailures } from "../worker/src/snapshot.js";
 import { nameFeedKey } from "../../../shared/worker/feed-keeper.js";
 
 const AFTERNOON = JSON.parse(
@@ -289,6 +289,27 @@ test("the store's status gives no reasons while every feed answers", async () =>
   const status = describeSnapshotStatus(await loader.loadSnapshot(2026));
 
   assert.deepEqual([status.error, status.reasons], ["", ""]);
+});
+
+test("the store's status gives a slow feed's same reason while it waits to be asked again, so it doesn't change with each update", async () => {
+  const league = createLeague({ refuse: { standings: "error" } });
+  let now = NOW;
+  const loader = createSnapshotLoader({ fetchImpl: league.fetchImpl, now: () => now });
+
+  const failed = describeSnapshotStatus(await loader.loadSnapshot(2026));
+  now += 60 * 1000;
+  const waiting = describeSnapshotStatus(await loader.loadSnapshot(2026));
+
+  assert.equal(league.countReads("standings"), 1);
+  assert.match(failed.reasons, /^standings: The WNBA answered 503 for \//);
+  assert.deepEqual(waiting, failed);
+});
+
+test("the reasons name the feeds in one order, whichever failed first", () => {
+  assert.equal(
+    describeFailures({ standings: "The WNBA answered 503", scoreboard: "The WNBA answered 403" }),
+    "scoreboard: The WNBA answered 403; standings: The WNBA answered 503",
+  );
 });
 
 test("a feed that answers JSON without its data counts as missing", async () => {

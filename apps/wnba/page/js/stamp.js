@@ -10,7 +10,7 @@ import {
   renderStampTime,
   renderStampWhen,
 } from "#shared/stamp.js";
-import { isGameToday, readGameDay } from "./days.js";
+import { isGameOnLeagueToday, isGameToday, readGameDay } from "./days.js";
 import { describeLiveMoment, listSeasonGames } from "./games-view.js";
 import { isToBePlayed, mapSeriesById } from "./nearest-games.js";
 import { nameTeam, orderBySeriesWins } from "./series.js";
@@ -19,6 +19,7 @@ import { nameTeam, orderBySeriesWins } from "./series.js";
 
 /** @typedef {import("./games-view.js").Game} Game */
 /** @typedef {import("./series.js").Series} Series */
+/** @typedef {import("#shared/diagnostics.js").UpdateStatus} UpdateStatus */
 
 const FEED_NAMES = {
   scoreboard: "today's scores",
@@ -188,16 +189,14 @@ export function renderStampLines(season, now) {
   return lines;
 }
 
-/** @typedef {{ error?: string, detail?: string, standIn?: string }} UpdateStatus */
-
 /**
  * @param {Game[]} games
  * @param {number} now
  */
 const hasScoresToMiss = (games, now) =>
-  games.some((game) => game.state === "live" || isGameToday(game, now));
+  games.some((game) => game.state === "live" || isGameOnLeagueToday(game, now));
 
-// Today's scores are missed only on a day with a game to score, since the league may not send
+// Today's scores are missed only on a league day with a game to score, since the league may not send
 // them at all on a day without one.
 /**
  * @param {UpdateStatus} status
@@ -230,8 +229,8 @@ function describeFeedProblem(status, games, now) {
 }
 
 /**
- * @param {{ status: UpdateStatus | null, problem: string, season: { games?: Game[], nearestGames?: Game[] } | null, now: number }} state
+ * @param {{ status: UpdateStatus | null, problem: string, season: { games?: Game[], nearestGames?: Game[] } | null, schedule: { games?: Game[] } | null, now: number }} state
  * @returns {string}
  */
-export const describeStampProblem = ({ status, problem, season, now }) =>
-  problem || describeFeedProblem(status, listSeasonGames(season, null), now);
+export const describeStampProblem = ({ status, problem, season, schedule, now }) =>
+  problem || describeFeedProblem(status, listSeasonGames(season, schedule), now);

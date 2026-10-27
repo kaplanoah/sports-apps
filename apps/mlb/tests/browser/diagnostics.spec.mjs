@@ -95,6 +95,31 @@ test.describe("on a phone", () => {
     const [{ text: copied }] = await readShares(page);
     expect(copied).toMatch(/^Pitchers job(: no run saved| last ran .*, \d+ requests?)/m);
   });
+
+  test("a report says how the store's last update went, on a line after the time", async ({
+    page,
+  }) => {
+    await stubShare(page);
+    await openApp(page, {
+      store: {
+        "live/status": {
+          at: "2026-09-25T00:45:00.000Z",
+          detail: "MLB answered 503",
+          error: "upstream_error",
+          write: "",
+        },
+      },
+    });
+    await turnOnDiagnostics(page);
+    await openSettings(page);
+    await findReportButton(page).click();
+
+    await expect(findReportButton(page)).toHaveText("Shared");
+    const [{ text: copied }] = await readShares(page);
+    expect(copied).toMatch(
+      /^Now .*\nUpdates since .*: detail MLB answered 503, error upstream_error$/m,
+    );
+  });
 });
 
 test("Diagnostics, once on, start with the app, the release the page came from, and its commit, set apart by dots, without asking the Worker", async ({

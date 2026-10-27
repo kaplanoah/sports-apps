@@ -573,6 +573,31 @@ test("opening settings reads how the store's jobs last ran, for the report sent 
     .toMatch(/^Players job last ran .*, 7 requests$/m);
 });
 
+test("a report names why the store's last update missed a feed, on a line after the time", async ({
+  page,
+}) => {
+  await stubShare(page);
+  const app = await openApp(page);
+  await turnOnDiagnostics(page);
+  await app.writeDocument("live/status", {
+    at: new Date(NOW).toISOString(),
+    error: "wnba_feeds_missing",
+    detail: "standings",
+    reasons: "standings: The WNBA answered 503",
+  });
+  await openSettings(page);
+
+  await expect
+    .poll(async () => {
+      await findReportButton(page).click();
+      const shares = await readShares(page);
+      return shares.at(-1)?.text;
+    })
+    .toMatch(
+      /^Now .*\nUpdates since .*: detail standings, error wnba_feeds_missing, reasons standings: The WNBA answered 503$/m,
+    );
+});
+
 /** @param {import("@playwright/test").Page} page */
 const findReportButton = (page) => page.locator("#diagnosticsReport");
 

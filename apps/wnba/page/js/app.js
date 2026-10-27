@@ -85,6 +85,7 @@ function renderStamp() {
     status: isPastSeason() ? null : session.status,
     problem: session.problem,
     season: session.season,
+    schedule: session.schedule,
     now,
   });
   const lines = renderStampLines(session.season, now);

@@ -28,6 +28,16 @@ export function isGameToday(game, now) {
 }
 
 /**
+ * Whether a game is played on the league's today, which is Eastern, whatever the viewer's zone.
+ * @param {{ start: string | null }} game
+ * @param {number} now
+ */
+export function isGameOnLeagueToday({ start }, now) {
+  const startMs = Date.parse(start ?? "");
+  return Number.isFinite(startMs) && readEasternDay(startMs).date === readEasternDay(now).date;
+}
+
+/**
  * A game's day for the middle of a sentence, as in "Next game tomorrow".
  * @param {Date} day
  * @param {number} now
