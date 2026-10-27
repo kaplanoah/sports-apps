@@ -313,6 +313,18 @@ jobs:
           path: ~/.cache/ms-playwright
           key: *browsers-key
       - *install-browsers
+      - &read-image
+        id: image
+        run: echo "os=$ImageOS" >> "$GITHUB_OUTPUT"
+      - id: webkit-packages
+        if: contains(needs.scope.outputs.specs, 'at-rest.spec.mjs')
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/webkit-packages
+          key: &webkit-packages-key webkit-packages-${{ steps.image.outputs.os }}-${{ hashFiles('package-lock.json') }}
+      - &stage-webkit-packages
+        if: steps.webkit-packages.outputs.cache-hit == 'true'
+        run: sudo cp ~/webkit-packages/*.deb /var/cache/apt/archives/
       - if: contains(needs.scope.outputs.specs, 'at-rest.spec.mjs')
         run: node worker/install-browsers.mjs --with-deps webkit
       # Every test runs all ten times, however many fail, and the next step decides which
@@ -356,6 +368,13 @@ jobs:
       - *setup-node
       - *restore-modules
       - *install-modules
+      - *read-image
+      - id: webkit-packages
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/webkit-packages
+          key: *webkit-packages-key
+      - *stage-webkit-packages
       - run: node worker/install-browsers.mjs --with-deps webkit
       - shell: bash
         env:
@@ -398,8 +417,15 @@ jobs:
           path: ~/.cache/ms-playwright
           key: *browsers-key
           lookup-only: true
-      # Installing the browser takes the installed Playwright.
-      - if: steps.modules.outputs.cache-hit != 'true' || steps.browsers.outputs.cache-hit != 'true'
+      - *read-image
+      - id: webkit-packages
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/webkit-packages
+          key: *webkit-packages-key
+          lookup-only: true
+      # Installing a browser takes the installed Playwright.
+      - if: steps.modules.outputs.cache-hit != 'true' || steps.browsers.outputs.cache-hit != 'true' || steps.webkit-packages.outputs.cache-hit != 'true'
         run: npm ci
       - if: steps.modules.outputs.cache-hit != 'true'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -412,6 +438,18 @@ jobs:
         with:
           path: ~/.cache/ms-playwright
           key: *browsers-key
+      # WebKit's system libraries come from Ubuntu's mirror, which can stall for minutes, so the
+      # webkit and burn-in jobs put back the packages saved here and download only what's newer.
+      # WebKit goes in after the browsers' cache is saved, which must hold Chromium alone.
+      - if: steps.webkit-packages.outputs.cache-hit != 'true'
+        run: node worker/install-browsers.mjs --with-deps webkit
+      - if: steps.webkit-packages.outputs.cache-hit != 'true'
+        run: mkdir ~/webkit-packages && cp /var/cache/apt/archives/*.deb ~/webkit-packages/
+      - if: steps.webkit-packages.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/webkit-packages
+          key: *webkit-packages-key
 
   # Review credentials and posting live only in the default-branch Trusted review workflow.
   # This PR workflow joins its authenticated result using read-only Actions access.
