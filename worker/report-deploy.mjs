@@ -63,7 +63,7 @@ export async function reportDeploy({
  * @param {string} runId
  */
 async function hasDeployStarted(github, runId) {
-  const { jobs } = await github(`/actions/runs/${runId}/jobs?per_page=100`);
+  const jobs = await readAllPages(github, `/actions/runs/${runId}/jobs`, (answer) => answer.jobs);
   return jobs.some(
     (/** @type {{ name: string, steps?: unknown[] }} */ job) =>
       job.name === "deploy" && Boolean(job.steps?.length),
