@@ -107,7 +107,7 @@ Wait for the Deploy runs for the merge commit to finish, then read their logs an
 
 ## Step 12: one thing a PR, and stacked PRs
 
-- What a session is asked to do in one request is one thing for its PR, however many parts it has. Split off only a part that would wait on something the rest doesn't, as the bullet on red and non-red parts below does.
+- What a session is asked to do in one request is one thing for its PR, however many parts it has. Split off only a part that would wait on something the rest doesn't, as the bullet on red and non-red parts below does, and review findings left for later, as the bullet on them says.
 - A review finding outside the PR's one thing that AGENTS.md's step 12 names becomes an issue, linked from its thread, not a commit on the PR. The same problem in the other app, or in another view, sheet, or theme, is part of the one thing, and is fixed on the PR.
 - A PR built to fix review findings left for later takes findings that make one thing, like one area's or about five sharing a cause, never a whole review's.
 - When a change has red and non-red parts and the non-red ones work without the red, split them, so the non-red work never waits for the owner's phone. A red PR that needs the non-red one's changes stacks on it, and one that stands alone goes into `main` on its own.
