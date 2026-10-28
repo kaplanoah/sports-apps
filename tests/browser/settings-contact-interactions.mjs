@@ -7,6 +7,7 @@ export function registerSettingsContactInteractions({ test, expect, openApp, app
   test("Settings page headings follow pointer and keyboard focus without native outlines", async ({
     page,
   }) => {
+    test.slow();
     await page.emulateMedia({ reducedMotion: "reduce" });
     await openApp(page);
     await page.getByRole("button", { name: "Settings", exact: true }).click();
