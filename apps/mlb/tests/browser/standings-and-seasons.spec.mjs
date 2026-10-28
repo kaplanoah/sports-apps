@@ -18,7 +18,10 @@ import { measureFieldFace } from "../../../../tests/browser/type-roles.mjs";
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
 import { keepInOtherTab } from "../../../../tests/browser/other-tab.mjs";
 import { openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
-import { listLowContrastTextAsShown } from "../../../../tests/browser/contrast.mjs";
+import {
+  listLowContrastTextAsShown,
+  waitForSettledColors,
+} from "../../../../tests/browser/contrast.mjs";
 import { pressOn } from "../../../../tests/browser/press-looks.mjs";
 import { LAPTOP } from "./screen-sizes.mjs";
 
@@ -400,6 +403,7 @@ for (const [theme, colorScheme] of /** @type {const} */ ([
     await openSeasonPart(page, "Standings");
     const row = page.locator("#standingsWrap tr:has(td.next-cell.live)").first();
     const open = row.locator(".row-button-cell button");
+    await waitForSettledColors(page);
 
     await pressOn(page, open);
 

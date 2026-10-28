@@ -4,6 +4,7 @@ import { listChipsOffLook, listShownChipLooks } from "../../../../tests/browser/
 import {
   listLowContrastText,
   listLowContrastTextAsShown,
+  waitForSettledColors,
 } from "../../../../tests/browser/contrast.mjs";
 import { pressOn } from "../../../../tests/browser/press-looks.mjs";
 import { listThemeLayoutChanges, showTheme } from "../../../../tests/browser/theme-layout.mjs";
@@ -76,6 +77,7 @@ for (const [theme, colorScheme] of /** @type {const} */ ([
     const row = page.locator('[data-game="1042600132"]');
     await expect(row.locator(".game-status .clock")).toHaveText("Q2 5:10");
     const open = row.locator(".game-open");
+    await waitForSettledColors(page);
 
     await pressOn(page, open);
 

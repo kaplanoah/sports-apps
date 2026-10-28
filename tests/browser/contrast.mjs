@@ -4,11 +4,11 @@ import { waitForPressesToEnd } from "./tap-states.mjs";
 
 /**
  * Waits until no row is pressed and no color is mid-transition, so a press a test's own tap left
- * behind, or a tint still fading, is never measured as the page's colors. Each test of a pressed
- * or hovered row's colors measures that state on purpose.
+ * behind, or a tint still fading, is never measured as the page's colors. A test of a pressed or
+ * hovered row's colors waits for this before it presses or hovers, then measures that state.
  * @param {import("@playwright/test").Page} page
  */
-async function waitForSettledColors(page) {
+export async function waitForSettledColors(page) {
   await waitForPressesToEnd(page);
   await expect
     .poll(() =>
