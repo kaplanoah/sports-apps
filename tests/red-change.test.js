@@ -1953,6 +1953,21 @@ test("a merge that resolves a conflict, or brings in a branch main lacks, is a c
   assert.deepEqual(branch.listFromTested(joined), [joined]);
 });
 
+test("a merge of main that git can't redo, as one of unrelated histories, is a change the owner tests again", (context) => {
+  const history = createGateHistory(context);
+  history.readGit(["checkout", "-q", "--orphan", "unrelated"]);
+  history.writeFile("shared/page/other.js", "export const other = 1;\n");
+  history.commit("2026-10-07T10:00:00Z");
+  history.readGit(
+    ["merge", "--no-ff", "--allow-unrelated-histories", "-m", "merge main", "main"],
+    "2026-10-07T11:00:00Z",
+  );
+  const merged = history.readGit(["rev-parse", "HEAD"]);
+  assert.deepEqual(listCommitsFromTestedChange({ cwd: history.cwd, head: merged, main: "main" }), [
+    merged,
+  ]);
+});
+
 test("a clean merge of main with code of its own committed in is a change the owner tests again", async (context) => {
   const branch = createTestedBranch(context);
   branch.readGit(["merge", "--no-ff", "--no-commit", "main"]);

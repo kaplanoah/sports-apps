@@ -914,9 +914,22 @@ function changesNothingTested({ readGit, commit, parents, mainSha, cwd }) {
   const [branch, merged] = parents;
   return (
     isAncestor(readGit, merged, mainSha) &&
-    readCleanMergeTree(readGit, branch, merged) === tree &&
+    isCleanMerge(readGit, branch, merged, tree) &&
     !findMissingRedCommits({ main: merged, head: branch, cwd }).length
   );
+}
+
+/**
+ * Whether git merging the two commits makes the tree. A merge git can't redo, like one of unrelated
+ * histories, is a change the owner tests.
+ * @param {ReturnType<typeof createGateGit>} readGit @param {string} first @param {string} second @param {string} tree
+ */
+function isCleanMerge(readGit, first, second, tree) {
+  try {
+    return readCleanMergeTree(readGit, first, second) === tree;
+  } catch {
+    return false;
+  }
 }
 
 /** @param {ReturnType<typeof createGateGit>} readGit @param {string} commit @param {string} descendant */
