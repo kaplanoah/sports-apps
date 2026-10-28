@@ -1090,10 +1090,7 @@ async function verifyHostileReviewIsolation(baseRef) {
       },
     );
     assert.equal(next.status, 0, next.stderr);
-    assert.equal(
-      JSON.parse(readFileSync(join(nextFolder, "plan.json"), "utf8")).stage,
-      reviewedBase === base ? "reviewed" : "none",
-    );
+    assert.equal(JSON.parse(readFileSync(join(nextFolder, "plan.json"), "utf8")).stage, "reviewed");
   }
   assert.equal(existsSync(marker), false);
   assert.equal(readFileSync(join(trusted, ".nvmrc"), "utf8"), readRepoFile(".nvmrc"));
@@ -1180,6 +1177,25 @@ test("stacked target runs plan and summarize with the same owed and result gates
   }
   assert.match(workflow, /id: result\n {8}if: .*steps.prepare.outputs.available == 'true'/);
   assert.doesNotMatch(workflow, /pattern: trusted-review-\*\n/);
+});
+
+test("every review stage and the join read the base the plan took from the test merge", () => {
+  const workflow = readRepoFile(".github/workflows/review.yml");
+  const readJob = (name) => workflow.split(`  ${name}:\n`)[1].split(/^ {2}[a-z][\w-]*:/m)[0];
+  assert.match(readJob("review-plan"), /\n {6}base: \$\{\{ steps.prepare.outputs.base \}\}\n/);
+  for (const name of ["review-area", "review-codex", "review-codex-across"])
+    assert.match(readJob(name), /\n {6}base: \$\{\{ needs.review-plan.outputs.base \}\}\n/);
+  for (const name of ["review-across", "review-post", "review"])
+    assert.match(readJob(name), /REVIEW_BASE: \$\{\{ needs.review-plan.outputs.base \}\}\n/);
+  for (const file of ["trusted-review-area.yml", "trusted-codex-review.yml"]) {
+    const called = readRepoFile(`.github/workflows/${file}`);
+    assert.match(called, /\n {6}base:\n {8}type: string\n {8}required: true\n/);
+    assert.match(called, /\n {2}REVIEW_BASE: \$\{\{ inputs.base \}\}\n/);
+  }
+  assert.match(
+    readRepoFile(".github/workflows/ci.yml"),
+    /REVIEW_EVENT_BASE: \$\{\{ github.event.pull_request.base.sha \}\}\n/,
+  );
 });
 
 test("trusted prompts retain the authoritative reporting guide after bootstrap", () => {

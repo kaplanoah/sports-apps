@@ -1099,7 +1099,7 @@ test("a push that reverts a file to the base's copy leaves it unread", () => {
   assert.deepEqual(pull.listPushed(), { stage: "none" });
 });
 
-test("base movement keeps the incremental range and only disables same-head completion reuse", () => {
+test("base movement keeps the incremental range, and a same head with nothing new keeps its summary", () => {
   const head = "a".repeat(40);
   const reviewedHead = "b".repeat(40);
   let listed = 0;
@@ -1124,6 +1124,10 @@ test("base movement keeps the incremental range and only disables same-head comp
       isOnBranch: true,
       listChanged: () => [],
     }),
+    { stage: "reviewed" },
+  );
+  assert.deepEqual(
+    chooseStage({ reviewedHead, head, isSameBase: false, isOnBranch: true, listChanged: () => [] }),
     { stage: "none" },
   );
 });

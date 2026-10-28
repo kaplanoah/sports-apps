@@ -307,9 +307,10 @@ export function listPushedFiles(pushed, readDiff) {
 
 /**
  * Which review this run makes: the first, of the whole change; reviewed, on the head the last
- * full read ended on, as a label's run is, which leaves that read's summary as it is; one of what
- * the pushes since the last full read changed; or none, when the pushes leave no new changes in
- * files the pull request still changes.
+ * full read ended on, as a label's run is, which leaves that read's summary as it is, though the
+ * base moved, once the move leaves nothing new to read; one of what the pushes since the last full
+ * read changed; or none, when the pushes leave no new changes in files the pull request still
+ * changes.
  * @param {object} review
  * @param {string | null} review.reviewedHead the head the last full read ended on
  * @param {string} review.head the pull request's head
@@ -320,9 +321,11 @@ export function listPushedFiles(pushed, readDiff) {
  */
 export function chooseStage({ reviewedHead, head, isSameBase = true, isOnBranch, listChanged }) {
   if (!reviewedHead || !isOnBranch) return { stage: "first" };
-  if (reviewedHead === head && isSameBase) return { stage: "reviewed" };
+  const isReviewedHead = reviewedHead === head;
+  if (isReviewedHead && isSameBase) return { stage: "reviewed" };
   const files = listChanged();
-  return files.length ? { stage: "push", files } : { stage: "none" };
+  if (files.length) return { stage: "push", files };
+  return { stage: isReviewedHead ? "reviewed" : "none" };
 }
 
 // A stale name lists its first places only, enough for a reviewer to find the rest, and
