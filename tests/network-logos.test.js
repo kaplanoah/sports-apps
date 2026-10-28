@@ -180,12 +180,36 @@ test("a logo whose weight sits low is nudged up, one whose weight sits high is n
   assert.match(renderNetworksLine(["NBC"]), /style="--logo-scale: [\d.]+; --logo-nudge: [\d.]+"/);
 });
 
-test("FOX and FOX One, which share a wordmark, sit at one height in the line", () => {
-  const [fox, foxOne] = listLogos(["FOX", "FOX One"]);
-  assert.deepEqual([fox.nudge, foxOne.nudge], [-0.04, -0.04]);
-  const line = renderNetworksLine(["FOX", "FOX One"]);
-  assert.match(line, /alt="FOX" style="--logo-scale: 0\.84; --logo-nudge: -0\.04"/);
-  assert.match(line, /alt="FOX One" style="--logo-scale: 0\.86; --logo-nudge: -0\.04"/);
+// Where each channel's file draws the wordmark it shares with another's, from its top and its
+// bottom as shares of its height, measured from the files.
+const SHARED_WORDMARKS = [
+  { FOX: [0, 1], "FOX One": [0, 1] },
+  { ESPN: [0, 1], ESPN2: [0, 1] },
+  { NBC: [15.1 / 52.9, 51.92 / 52.9], NBCSN: [27.67 / 263, 201.8 / 263] },
+];
+
+/**
+ * Where a logo draws part of itself in the line, from the line's middle, in logo heights.
+ * @param {import("../shared/page/network-logos.js").NetworkLogo} logo
+ * @param {number[]} span
+ */
+function placeInLine({ scale = 1, nudge = 0 }, span) {
+  const top = -scale * nudge - scale / 2;
+  return span.map((share) => top + share * scale);
+}
+
+test("channels that share a wordmark draw it at one size and one height in the line", () => {
+  for (const spans of SHARED_WORDMARKS) {
+    const names = Object.keys(spans);
+    const [first, ...rest] = listLogos(names).map((logo, index) =>
+      placeInLine(logo, spans[names[index]]),
+    );
+    for (const placed of rest) {
+      placed.forEach((edge, index) =>
+        assert.ok(Math.abs(edge - first[index]) < 0.001, names.join()),
+      );
+    }
+  }
 });
 
 test("a game with no channels listed yet says to check back", () => {
