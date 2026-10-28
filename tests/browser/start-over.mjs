@@ -8,7 +8,7 @@ import { expect } from "@playwright/test";
 import { waitForLoadToSettle } from "./at-rest.mjs";
 import { matchPath } from "./harness.mjs";
 import { holdRequests } from "./hold-requests.mjs";
-import { findSeasonPart, readSeasonRide, scrollSeasonPartToEnd } from "./season-scroll.mjs";
+import { readSeasonPartScroll, readSeasonRide, scrollSeasonPartToEnd } from "./season-scroll.mjs";
 import { findSeasonPill, findSeasonTab } from "./season-tab.mjs";
 import { writeUnreadableLastSeen } from "./unreadable-last-seen.mjs";
 import { passTime, setHidden } from "./visibility.mjs";
@@ -25,14 +25,12 @@ export const MINUTE_MS = 60 * 1000;
  * @param {string} sideways the bracket's sideways scroller
  */
 export async function readSeasonPlace(page, sideways) {
-  const readScroll = (/** @type {"standings" | "bracket"} */ part) =>
-    findSeasonPart(page, part).evaluate((element) => Math.round(element.scrollTop));
   return {
     shownPart: await findSeasonPill(page)
       .locator('[aria-selected="true"]')
       .getAttribute("data-tab"),
-    standingsScroll: await readScroll("standings"),
-    bracketScroll: await readScroll("bracket"),
+    standingsScroll: await readSeasonPartScroll(page, "standings"),
+    bracketScroll: await readSeasonPartScroll(page, "bracket"),
     bracketLeft: await page.locator(sideways).evaluate((element) => Math.round(element.scrollLeft)),
     isPillHeld: await page
       .locator("#bracketStandingsPill")
