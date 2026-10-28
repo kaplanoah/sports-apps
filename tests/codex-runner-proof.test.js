@@ -53,7 +53,13 @@ test("only a first owner dispatch on main can use the hosted proof", () => {
 test("a model's completion claim cannot substitute for successful native tool results", () => {
   const proof = verifyCodexProof(renderEvents(), ANSWER, PROBE);
   assert.equal(proof.nativeToolProof, true);
-  assert.deepEqual(proof.tokens, { input: 10, output: 3, cached: 2, cacheWrite: 0 });
+  assert.deepEqual(proof.tokens, {
+    input: 10,
+    output: 3,
+    cached: 2,
+    cacheWrite: null,
+    reasoningOutput: null,
+  });
   assert.doesNotMatch(JSON.stringify(proof), /aggregated_output|TRUSTED_CODEX_TOOL|CAPTURE_PROOF/);
   for (const events of [
     [EVENTS[1]],
@@ -112,11 +118,13 @@ test("preparation archives only the synthetic project and production configurati
         ...process.env,
         ...OWNER,
         RUNNER_TEMP: folder,
+        GITHUB_OUTPUT: join(folder, "outputs"),
         CODEX_EVIDENCE_CERTIFICATE: createEvidenceCertificate(folder),
       },
     },
   );
   assert.equal(result.status, 0, result.stderr);
+  assert.match(readFileSync(join(folder, "outputs"), "utf8"), /^model-queue=[\w./-]+$/m);
   const listed = spawnSync("tar", ["-tzf", join(folder, "codex-proof-input.tgz")], {
     encoding: "utf8",
   });
@@ -239,6 +247,7 @@ test("the collector records configured pins and observed CLI, rejecting an insta
           ...process.env,
           ...OWNER,
           RUNNER_TEMP: folder,
+          GITHUB_OUTPUT: join(folder, "outputs"),
           CODEX_EVIDENCE_CERTIFICATE: certificate,
         },
       },
@@ -264,6 +273,7 @@ test("the collector records configured pins and observed CLI, rejecting an insta
           ...process.env,
           ...OWNER,
           RUNNER_TEMP: folder,
+          GITHUB_OUTPUT: join(folder, "outputs"),
           PATH: `${join(folder, "bin")}:${process.env.PATH}`,
           GITHUB_SHA: "a".repeat(40),
           GITHUB_RUN_ID: "7",
@@ -302,6 +312,7 @@ test("failed and interrupted native proofs retain encrypted diagnostics and neve
       ...process.env,
       ...OWNER,
       RUNNER_TEMP: root,
+      GITHUB_OUTPUT: join(root, "outputs"),
       GITHUB_SHA: "a".repeat(40),
       GITHUB_RUN_ID: "7",
       CODEX_EVIDENCE_CERTIFICATE: createEvidenceCertificate(root),
@@ -323,7 +334,14 @@ test("failed and interrupted native proofs retain encrypted diagnostics and neve
     assert.equal(proof.failureStage, "provider-action");
     assert.equal(proof.source, env.GITHUB_SHA);
     assert.equal(proof.run, "7");
-    if (hasUsage) assert.deepEqual(proof.tokens, { input: 8, output: 3, cached: 2, cacheWrite: 0 });
+    if (hasUsage)
+      assert.deepEqual(proof.tokens, {
+        input: 8,
+        output: 3,
+        cached: 2,
+        cacheWrite: null,
+        reasoningOutput: null,
+      });
     else {
       assert.equal("tokens" in proof, false);
       assert.equal(proof.telemetryUnavailable, true);
@@ -373,6 +391,7 @@ test("missing or private evidence certificates fail preparation before a model i
           ...process.env,
           ...OWNER,
           RUNNER_TEMP: root,
+          GITHUB_OUTPUT: join(root, "outputs"),
           CODEX_EVIDENCE_CERTIFICATE: certificate,
         },
         encoding: "utf8",

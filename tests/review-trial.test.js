@@ -242,6 +242,7 @@ test("a blind large-range bundle contains only historical ancestors and complete
     encoding: "utf8",
   });
   assert.equal(requested.status, 0, requested.stderr);
+  assert.match(readFileSync(env.GITHUB_OUTPUT, "utf8"), /^model-queue=[\w./-]+$/m);
   const request = buildCodexRequest(join(root, "trial/data"), 1, metadata);
   assert.equal(readFileSync(join(root, "trial/prompt.txt"), "utf8"), request.prompt);
   assert.match(request.prompt, /blind offline historical trial/);
@@ -310,7 +311,13 @@ test("a blind large-range bundle contains only historical ancestors and complete
   assert.equal(result.toolVersion, `codex-cli ${configuration.cli}`);
   assert.equal(result.configuration.configuredModel, configuration.configuredModel);
   assert.equal(JSON.stringify(result).includes("private caller trace"), false);
-  assert.deepEqual(result.tokens, { input: 10, output: 3, cached: 2, cacheWrite: 0 });
+  assert.deepEqual(result.tokens, {
+    input: 10,
+    output: 3,
+    cached: 2,
+    cacheWrite: null,
+    reasoningOutput: null,
+  });
   assert.ok(result.sessionElapsedSeconds > 0);
   assert.ok(existsSync(join(root, "trial-private/evidence.cms")));
   for (const [name, outcome, changedAnswer, events, expectedStage] of [

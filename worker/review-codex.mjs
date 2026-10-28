@@ -12,6 +12,7 @@ import {
   integratesCodexPortion,
 } from "./review-supplied.mjs";
 import { retainCodexUsage } from "./review-evaluation.mjs";
+import { writeReviewModelQueue } from "./review-provider.mjs";
 
 const CANDIDATE_FIELDS = {
   path: { type: "string" },
@@ -224,6 +225,7 @@ function writeCodexRequest(env, portion) {
   writeFileSync(join(destination, "prompt.txt"), request.prompt);
   writeFileSync(join(destination, "schema.json"), JSON.stringify(request.schema));
   appendFileSync(env.GITHUB_OUTPUT, `request=${destination}\n`);
+  writeReviewModelQueue(env, "codex", portion);
 }
 
 /** @param {NodeJS.ProcessEnv} env */

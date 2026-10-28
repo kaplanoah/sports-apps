@@ -127,6 +127,12 @@ Preparation supplies the same exact-code plan, complete required diffs, trusted 
 
 Codex groups code and tests by semantic repository area. One contained area uses one native session to investigate and verify findings. Multiple areas use coherent portions and a separate integration session supplied the whole change and every candidate. Integration runs even when every portion found nothing. There is no line-count or agent-count routing threshold. Cross-app changes get an integration pass regardless of size.
 
+Native Codex model jobs share one queued GitHub concurrency slot per repository across live reviews, historical trials and runner proofs. Waiting jobs do not replace one another or cancel a running model; the queue holds at most 100 waiting jobs. Claude trial portions use separate slots and keep their parallel execution. Queue overflow or a provider failure remains a failure, with no automatic workflow/model retry.
+
+This conservative slot reduces simultaneous pressure on the provider's token-per-minute limit. It cannot reserve capacity against other repositories or external consumers of the same API project, or guarantee that a single native session never reaches that limit. Record the full Actions wall time, including queue time, separately from each session's elapsed time.
+
+Native usage retains only validated numeric input, cached-input, cache-write-input, output and reasoning-output counters. Cache-write is a subset of noncached input, and reasoning is a subset of output; never add either again to total usage. Missing optional counters are unavailable, not zero. A subtotal from completed turns is not the full usage of a run containing failed turns with unavailable telemetry.
+
 Coverage records hash the actual complete content supplied by trusted preparation, not a model assertion that it read everything. The summary says "Supplied in full" for Codex and retains Claude's Read-based accounting. Native tools inspect callers, shared state, related code, both apps, failure paths and tests beyond the diff. Supplied coverage establishes delivery, not the depth of reasoning. Incomplete investigation, unjudged work, context exhaustion, malformed output or interruption fails closed. No automatic retry starts another provider.
 
 Both providers produce the common candidate, disposition and posting contract, with different coverage evidence. Structured answers and sealed artifacts are revalidated before privileged posting or approval.
