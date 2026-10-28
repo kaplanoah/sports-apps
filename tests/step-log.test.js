@@ -63,10 +63,11 @@ const readStoredTexts = (key) =>
 
 /** A stand-in for an element, inside the part when `isInPart`. */
 class FakeElement {
-  /** @param {{ isInPart: boolean, label?: string }} element */
-  constructor({ isInPart, label }) {
+  /** @param {{ isInPart: boolean, label?: string, text?: string }} element */
+  constructor({ isInPart, label, text }) {
     this.isInPart = isInPart;
     this.label = label;
+    this.text = text;
     this.id = "";
     this.localName = "span";
     this.classList = ["cell-name"];
@@ -74,7 +75,9 @@ class FakeElement {
   /** @param {string} selector */
   closest(selector) {
     if (selector === "button, a")
-      return this.label ? { getAttribute: () => this.label, textContent: this.label } : null;
+      return this.label || this.text
+        ? { getAttribute: () => this.label ?? null, textContent: this.text ?? this.label }
+        : null;
     return this.isInPart ? this : null;
   }
 }
@@ -314,6 +317,30 @@ test("a touch or click on the log's part is logged with where it landed and on w
   assert.deepEqual(
     log.readLines().map((line) => line.text),
     ["click at 340,121 on Today", "click at 20,30 on span.cell-name"],
+  );
+});
+
+test("a tap on a button named by its words, set over several lines, logs them as one line", () => {
+  const log = createLog();
+  log.watchSteps(
+    () => true,
+    () => {},
+  );
+  const noteClick = /** @type {(event: any) => void} */ (listeners.get("click"));
+
+  noteClick({
+    type: "click",
+    target: new FakeElement({
+      isInPart: true,
+      text: "\n  Yesterday\n      \n        W\n    85-70\n  , game details\n",
+    }),
+    clientX: 10,
+    clientY: 20,
+  });
+
+  assert.deepEqual(
+    log.readLines().map((line) => line.text),
+    ["click at 10,20 on Yesterday W 85-70 , game details"],
   );
 });
 

@@ -57,7 +57,9 @@ export const writeStepsAsText = (title, lines) =>
  */
 function describeTarget(target) {
   const control = target.closest("button, a");
-  const name = control?.getAttribute("aria-label") || control?.textContent?.trim();
+  // Each step is one line of the report, whatever breaks the markup sets between a name's words.
+  const name =
+    control?.getAttribute("aria-label") || control?.textContent?.replace(/\s+/g, " ").trim();
   if (name) return name;
   if (target.id) return `#${target.id}`;
   return [target.localName, ...target.classList].join(".");
