@@ -2,7 +2,10 @@ import { test, expect, openApp } from "./harness.mjs";
 import { setHidden } from "../../../../tests/browser/visibility.mjs";
 import { turnOnDiagnostics } from "../../../../tests/browser/diagnostics-switch.mjs";
 import { openSettings } from "../../../../tests/browser/settings.mjs";
-import { findRecords } from "../../../../tests/browser/diagnostics-records.mjs";
+import {
+  findRecords,
+  moveVisualViewportOff,
+} from "../../../../tests/browser/diagnostics-records.mjs";
 import { reloadAndRecord } from "./diagnostics-records.mjs";
 
 test.use({
@@ -51,9 +54,12 @@ test("with Diagnostics on, the viewport is logged as the page opens, and again w
   await expect(lines.filter({ hasText: "layout 844, visual 844 from 0" })).not.toHaveCount(0);
 });
 
-for (const [moved, moveViewport] of [
-  ["as the page scrolls", () => scrollTo(0, 1)],
-  ["as the visual viewport moves", () => visualViewport?.dispatchEvent(new Event("scroll"))],
+for (const { moved, moveViewport } of [
+  { moved: "as the page scrolls", moveViewport: () => scrollTo(0, 1) },
+  {
+    moved: "as the visual viewport moves",
+    moveViewport: () => visualViewport?.dispatchEvent(new Event("scroll")),
+  },
 ]) {
   test(`a visual viewport out of line with the layout one is flagged as off ${moved}`, async ({
     page,
@@ -62,11 +68,7 @@ for (const [moved, moveViewport] of [
     await turnOnDiagnostics(page);
     await reloadAndRecord(page);
 
-    await page.evaluate(() =>
-      Object.defineProperty(visualViewport, "offsetTop", { configurable: true, get: () => 110 }),
-    );
-    await page.evaluate(moveViewport);
-    await page.clock.runFor(100);
+    await moveVisualViewportOff(page, moveViewport);
     await openSettings(page);
 
     const log = findViewportLog(page);

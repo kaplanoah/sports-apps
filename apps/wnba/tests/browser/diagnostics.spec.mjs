@@ -8,6 +8,7 @@ import {
 import { SETTINGS, openSettings } from "../../../../tests/browser/settings.mjs";
 import {
   findRecords,
+  makeDip,
   showDipAndOffViewport,
 } from "../../../../tests/browser/diagnostics-records.mjs";
 import { listLowContrastTextWithRowsPressed } from "../../../../tests/browser/contrast.mjs";
@@ -153,19 +154,9 @@ test("a part that empties and fills again while recording is flagged as a dip", 
 }) => {
   await openApp(page);
   await turnOnDiagnostics(page);
-  await page.reload();
-  await expect(page.locator('[data-series="1-0"] .team-line.won')).toContainText("Liberty");
-  const markup = await page.locator("#bracketWrap").evaluate((wrap) => {
-    const shown = wrap.innerHTML;
-    wrap.replaceChildren();
-    return shown;
-  });
-  await page.clock.runFor(300);
+  await reloadToRecord(page);
 
-  await page.locator("#bracketWrap").evaluate((wrap, shown) => {
-    wrap.innerHTML = shown;
-  }, markup);
-  await page.clock.runFor(RECORD_MS);
+  await makeDip(page, "#bracketWrap");
   await openSettings(page);
 
   const record = findRecords(page).locator(".diagnostics-record").first();
