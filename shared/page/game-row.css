@@ -132,7 +132,7 @@
 }
 /* While a press holds it (press.js), the row tints at once, and fades as the press lets go. */
 .game-row:has(> .game-open.is-pressed) {
-  --row-highlight: color-mix(in srgb, var(--ink) 7%, transparent);
+  --row-highlight: var(--pressed-row);
   transition: none;
 }
 /* The sides sit above the action and let taps through to it, so a tap anywhere on the row, a

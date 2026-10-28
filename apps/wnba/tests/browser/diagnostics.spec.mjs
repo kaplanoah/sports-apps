@@ -418,6 +418,11 @@ test("a report on the season tab lists no animation for the header that rides up
   await expect(page.locator("#bracketWrap .bracket")).toBeVisible();
   await turnOnDiagnostics(page);
   await openSettings(page);
+  // The settings button's press fades back as settings open, which is no part of the header's.
+  await expect(page.getByRole("button", { name: "Settings", exact: true })).toHaveCSS(
+    "opacity",
+    "1",
+  );
 
   await findReportButton(page).click();
 

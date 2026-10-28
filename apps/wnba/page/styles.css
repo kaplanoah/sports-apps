@@ -1709,7 +1709,7 @@ th[aria-sort="ascending"] .roster-caret {
   transition: box-shadow 0.15s;
 }
 .team-line:has(.team-open.is-pressed) {
-  box-shadow: inset 0 0 0 100vmax color-mix(in srgb, var(--ink) 7%, transparent);
+  box-shadow: inset 0 0 0 100vmax var(--pressed-row);
   transition: none;
 }
 /* A tap anywhere on a team's row lands on its name's button, stretched over the row, as a game's

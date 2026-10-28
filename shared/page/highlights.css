@@ -9,11 +9,23 @@
   width: 100%;
   padding: 0;
   border: 0;
-  background: none;
   color: inherit;
   font: inherit;
   text-align: left;
   cursor: pointer;
+  --row-highlight: transparent;
+  background: var(--row-highlight);
+  box-shadow:
+    -12px 0 var(--row-highlight),
+    12px 0 var(--row-highlight);
+  transition:
+    background 0.15s,
+    box-shadow 0.15s;
+}
+/* While a press holds it (press.js), the clip's row tints at once, and fades as the press lets go. */
+.clip-open.is-pressed {
+  --row-highlight: var(--pressed-row);
+  transition: none;
 }
 .clip-still {
   position: relative;

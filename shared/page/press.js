@@ -1,20 +1,21 @@
 import { isStandIn } from "./rider-taps.js";
 
-// A row that opens something tints while it's pressed, as an iPhone's lists do: a finger's press
-// shows a moment after it lands, so a finger that starts a scroll never tints a row, a quick tap
-// still shows, and the tint fades as it lets go. A mouse's shows at once. The page marks the
-// pressed row's button with .is-pressed, and each row's stylesheet tints the row it covers. A
-// stand-in under a row's button (rider-taps.js) hands its press to the button, which presses it.
-// As on an iPhone, a touch that's part of a scroll is never a tap, so the page drops the click iOS
-// sometimes still sends for it, and the row under it never tints. A touch is part of a scroll once
-// the browser takes it for one, and from the start when its finger lands on a list still gliding,
-// which it only stops, though iOS hands the page a plain tap for a finger that lifts without
-// moving. A finger that drifts on a control without scrolling anything still taps it.
+// Every control shows its press, as an iPhone's do: a finger's press shows a moment after it lands,
+// so a finger that starts a scroll never presses anything, a quick tap still shows, and the press
+// fades as it lets go. A mouse's shows at once. The page marks the pressed control with
+// .is-pressed, and a row's button with .is-row-press too, since its row's stylesheet tints the row
+// it covers, while controls.css draws every other control's press. A stand-in under a row's button
+// (rider-taps.js) hands its press to the button, which presses it. As on an iPhone, a touch that's
+// part of a scroll is never a tap, so the page drops the click iOS sometimes still sends for it, and
+// nothing under it shows a press. A touch is part of a scroll once the browser takes it for one,
+// and from the start when its finger lands on a list still gliding, which it only stops, though
+// iOS hands the page a plain tap for a finger that lifts without moving. A finger that drifts on a
+// control without scrolling anything still taps it.
 
 // How long a finger rests before its press shows, and how long a quick tap's press stays.
 const TOUCH_SETTLE_MS = 60;
 const QUICK_TAP_MS = 120;
-// How far a finger may drift before its row lets go of its tint.
+// How far a finger may drift before its press lets go.
 const DRIFT_PX = 10;
 // Longer than iOS waits after a lift to tell a tap from a double tap, so its click for the lift
 // still finds the touch, while a click long after, like a screen reader's, never does.
@@ -23,7 +24,8 @@ const LIFT_CLICK_MS = 1000;
 // finger that lands then taps. A fling's first frame comes within as long of its finger's lift.
 const GLIDE_REST_MS = 100;
 
-// The buttons of the rows every app shares: a game's, a card's, a search's, and a table's.
+// The buttons of the rows every app shares: a game's, a card's, a search's, a table's, a clip's,
+// and a Diagnostics record's.
 const SHARED_ROW_BUTTONS = [
   ".game-open",
   ".game-card-button",
@@ -31,11 +33,13 @@ const SHARED_ROW_BUTTONS = [
   ".search-suggestion",
   ".search-games-line",
   ".row-button-cell button",
+  ".clip-open",
+  ".diagnostics-record summary",
 ];
 // What an iPhone hands a tap to, whatever listens for it.
 export const TAPPABLE = "button, a[href], label, summary, select, input, textarea";
 
-/** @type {{ button: Element, x: number, y: number, timer: number | null } | null} */
+/** @type {{ control: Element, isRow: boolean, x: number, y: number, timer: number | null } | null} */
 let press = null;
 // The last finger down, until its click: its pointer, what it landed on, whether it's part of a
 // scroll, and when it lifted.
@@ -46,14 +50,48 @@ let touch = null;
 /** @type {WeakMap<EventTarget, number>} */
 const lastScrolledAt = new WeakMap();
 
-/** @param {Element} button */
-const markPressed = (button) => button.classList.add("is-pressed");
+/** @param {{ control: Element, isRow: boolean }} pressed */
+function markPressed({ control, isRow }) {
+  control.classList.add("is-pressed");
+  control.classList.toggle("is-row-press", isRow);
+}
 
 function letGo() {
   if (!press) return;
   if (press.timer !== null) clearTimeout(press.timer);
-  press.button.classList.remove("is-pressed");
+  press.control.classList.remove("is-pressed", "is-row-press");
   press = null;
+}
+
+/**
+ * Whether a control shows its press: a button, a link, a details' summary, or an Appearance
+ * choice, but never a switch, a select, or a field, which draw their own, nor a disabled button.
+ * @param {Element} control
+ */
+export function isPressable(control) {
+  switch (control.localName) {
+    case "button":
+      return control.getAttribute("role") !== "switch" && !control.hasAttribute("disabled");
+    case "a":
+      return control.hasAttribute("href");
+    case "summary":
+      return true;
+    case "label":
+      return control.classList.contains("appearance-choice");
+    default:
+      return false;
+  }
+}
+
+/**
+ * The control a press on `target` shows on, if any. A field inside a label, like an Appearance
+ * choice's radio, which lies over its label to take the tap, presses its label.
+ * @param {Element} target
+ */
+export function findPressed(target) {
+  const control = target.closest(TAPPABLE);
+  const pressed = control?.localName === "input" ? (control.closest("label") ?? control) : control;
+  return pressed && isPressable(pressed) ? pressed : null;
 }
 
 /**
@@ -122,12 +160,13 @@ function startPress(event, rowButtons) {
   if (isStandIn(event.target)) return;
   letGo();
   if (!event.isPrimary || event.button !== 0 || touch?.isScroll) return;
-  const button = /** @type {Element} */ (event.target).closest(rowButtons);
-  if (!button) return;
-  press = { button, x: event.clientX, y: event.clientY, timer: null };
+  const control = findPressed(/** @type {Element} */ (event.target));
+  if (!control) return;
+  const pressed = { control, isRow: control.matches(rowButtons) };
+  press = { ...pressed, x: event.clientX, y: event.clientY, timer: null };
   if (event.pointerType === "touch")
-    press.timer = window.setTimeout(() => markPressed(button), TOUCH_SETTLE_MS);
-  else markPressed(button);
+    press.timer = window.setTimeout(() => markPressed(pressed), TOUCH_SETTLE_MS);
+  else markPressed(pressed);
 }
 
 // A stand-in passes its finger's press on to its button (rider-taps.js), which is still the touch
@@ -193,26 +232,25 @@ function dropClickAfterScroll(event) {
 // A quick tap's press shows on the lift, and stays long enough to be seen.
 function endPress() {
   if (!press) return;
-  const { button } = press;
   if (press.timer !== null) clearTimeout(press.timer);
-  markPressed(button);
+  markPressed(press);
   press.timer = window.setTimeout(letGo, QUICK_TAP_MS);
 }
 
 /**
- * Runs what a row's tap does once its press has shown, so the row's tint is seen before what it
- * opens or the search it runs replaces it, and at once for a tap that isn't a press, like a key's.
- * @param {Element} row
+ * Runs what a control's tap does once its press has shown, so the press is seen before what it
+ * opens, closes, or runs replaces it, and at once for a tap that isn't a press, like a key's.
+ * @param {Element} control
  * @param {() => void} action
  */
-export function runAfterPress(row, action) {
-  if (row.classList.contains("is-pressed")) window.setTimeout(action, QUICK_TAP_MS);
+export function runAfterPress(control, action) {
+  if (control.classList.contains("is-pressed")) window.setTimeout(action, QUICK_TAP_MS);
   else action();
 }
 
 /**
- * Tints each row the page shares, and any the app adds by its buttons' selectors, while pressed,
- * and drops the click iOS sends for a touch that's part of a scroll.
+ * Shows each control's press, tinting the rows the page shares and any the app adds by its
+ * buttons' selectors, and drops the click iOS sends for a touch that's part of a scroll.
  * @param {string[]} [appRowButtons] the buttons of the app's own rows, like a bracket's team lines
  */
 export function watchPresses(appRowButtons = []) {

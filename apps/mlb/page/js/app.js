@@ -309,7 +309,7 @@ async function boot() {
   watchReturns({ isBusy: () => session.isReordering, catchUp, pause: () => session.db.pause() });
   startDailyCount();
   trackKeyboardFocus();
-  watchPresses();
+  watchPresses([".matchup-row .team-open", ".starters-open"]);
   wireControls();
   session.db = createWorkerStore({ isShowing: hasDrawing });
   showJobStatuses(session.db, BACKGROUND_JOBS);

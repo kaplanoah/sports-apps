@@ -135,7 +135,7 @@ The Worker serves every file here, its `networks/` logos too, under `shared/`, b
 
 - `spring-scroll.js`: a scroll that eases into place on a spring
 - `reduced-motion.js`: whether the device asks for less motion
-- `press.js`: a row's tint while pressed, and telling a tap from a scroll
+- `press.js`: every control's press, and telling a tap from a scroll
 - `kept-place.js`: keeping rows in place as what's above them changes
 - `eased-redraw.js`: easing parts to their new heights on a redraw
 - `slide-panels.js`: side-by-side panels a finger drags
@@ -223,6 +223,7 @@ Pages link these before their own stylesheet, and theme them with the tokens the
 - `channel-tag.css`: the tag beside the app's name on beta
 - `tuning-panel.css`: the tuning panel and its Tune button
 - `gate.css`: the access code's gate
+- `controls.css`: how every control shows its focus and its press
 
 ## `shared/worker/`
 

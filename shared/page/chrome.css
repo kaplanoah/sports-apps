@@ -97,7 +97,6 @@
   background: none;
   color: var(--ink-mid);
   cursor: pointer;
-  transition: color 0.15s;
 }
 @media (hover: hover) {
   .settings-btn:hover {
@@ -181,24 +180,6 @@ nav.tabs .search-tab {
 }
 .round-dots span.on {
   background: var(--ink-dim);
-}
-
-/* :focus-visible counts a bare Shift press, so focus rings key off body.kbd instead. A scroll area
-   takes focus so the keyboard can scroll it, which Safari doesn't give it. A sheet takes focus
-   itself when nothing in it has it, as when a swipe brings it into view on a phone, where a tapped
-   button never takes focus, and a ring around the whole sheet would show nothing. */
-button:focus,
-select:focus,
-[role="region"]:focus,
-dialog:focus,
-.sheet-page:focus {
-  outline: none;
-}
-body.kbd button:focus,
-body.kbd select:focus,
-body.kbd [role="region"]:focus {
-  outline: 2px solid var(--focus-ring);
-  outline-offset: 2px;
 }
 
 section.view {
@@ -533,10 +514,6 @@ section.view.active:not([data-follows]):has(> :is(.day-view, .season-parts)) {
   clip-path: inset(50%);
   white-space: nowrap;
 }
-body.kbd :is(.sheet-close, .sheet-back, .welcome-close):focus {
-  outline: 2px solid var(--focus-ring);
-  outline-offset: 2px;
-}
 .settings-controls {
   border-block: 1px solid var(--divider);
 }
@@ -826,7 +803,6 @@ body.kbd .appearance-choice:has(input:focus) .appearance-icon {
   height: 15px;
 }
 body.kbd .notify-help:focus {
-  outline: 2px solid var(--focus-ring);
   outline-offset: -12px;
 }
 .select-field {
@@ -1103,10 +1079,6 @@ body.kbd .notify-help:focus {
   font-weight: var(--type-setting-weight);
   cursor: pointer;
 }
-body.kbd .welcome-continue:focus {
-  outline: 2px solid var(--focus-ring);
-  outline-offset: 2px;
-}
 
 /* A sheet rises and slides away at the pace and easing of the phone's own sheets, as
    sheet-swipe.js moves it too. */
@@ -1126,9 +1098,6 @@ body.kbd .welcome-continue:focus {
 @media (prefers-reduced-motion: reduce) {
   .switch,
   .switch-knob {
-    transition: none;
-  }
-  .settings-btn {
     transition: none;
   }
 }

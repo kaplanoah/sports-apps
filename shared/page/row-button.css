@@ -23,7 +23,7 @@ tr:has(> .row-button-cell) > td {
   transition: box-shadow 0.15s;
 }
 tr:has(> .row-button-cell .is-pressed) > td {
-  box-shadow: inset 0 0 0 100vmax color-mix(in srgb, var(--ink) 7%, transparent);
+  box-shadow: inset 0 0 0 100vmax var(--pressed-row);
   transition: none;
 }
 .row-button-cell button::after {

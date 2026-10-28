@@ -67,7 +67,6 @@
   margin: 0;
   padding: 0;
   border: 0;
-  outline: none;
   background: none;
   font-family: var(--search-face);
   font-size: var(--type-field-size);
@@ -298,7 +297,7 @@
 .search-example.is-pressed,
 .search-suggestion.is-pressed,
 .search-games-line.is-pressed {
-  box-shadow: inset 0 0 0 100vmax color-mix(in srgb, var(--ink) 7%, transparent);
+  box-shadow: inset 0 0 0 100vmax var(--pressed-row);
   transition: none;
 }
 

@@ -153,7 +153,7 @@
   --accent-ink: #fff;
   /* A shade deeper than its line, so its text keeps AA's 4.5 to 1 on a row tinted under the mouse
      or a press. */
-  --now: #b93422;
+  --now: #ae301f;
   --now-line: #bf3623;
   --now-ink: #fffdf8;
   --al: #2b5f86;
@@ -1129,6 +1129,14 @@ table.st .seed-cell {
 .matchup-row.winner {
   background: color-mix(in srgb, var(--highlight) 8%, transparent);
 }
+.matchup-row:has(.team-open) {
+  transition: box-shadow 0.15s;
+}
+/* While a press holds it (press.js), the club's row tints at once, and fades as the press lets go. */
+.matchup-row:has(.team-open.is-pressed) {
+  box-shadow: inset 0 0 0 100vmax var(--pressed-row);
+  transition: none;
+}
 .matchup-row.eliminated .team-name {
   color: var(--out);
 }
@@ -1589,6 +1597,12 @@ body.kbd .rank-item .grip:focus {
   border: 1px solid var(--card-border);
   border-radius: var(--radius-card);
   cursor: pointer;
+  transition: background 0.15s;
+}
+/* While a press holds it (press.js), the line tints at once, and fades as the press lets go. */
+.starters-open.is-pressed {
+  background: var(--pressed-row);
+  transition: none;
 }
 .starters-side {
   display: flex;

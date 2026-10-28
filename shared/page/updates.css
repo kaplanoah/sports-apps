@@ -114,7 +114,7 @@
     max(0px, calc(var(--radius-card) - 1px));
 }
 .updates-list li:has(> .game-open.is-pressed) {
-  --row-highlight: color-mix(in srgb, var(--ink) 7%, transparent);
+  --row-highlight: var(--pressed-row);
 }
 .updates-list li:has(> .game-open.is-pressed)::before {
   transition: none;

@@ -1,0 +1,55 @@
+/*
+ * How every control shows its focus and its press, on every page an app has, the access code's
+ * too. Apps link it after the other shared stylesheets and before their own styles.css.
+ *
+ * Beside chrome.css's --ink, --accent, and --focus-ring, an app's :root defines --raised, an
+ * outlined button's fill, and this sets --pressed-row, the tint a pressed row takes, which each
+ * row's stylesheet draws over the row its button covers.
+ */
+
+:root {
+  --pressed-row: color-mix(in srgb, var(--ink) 12%, transparent);
+}
+
+/* :focus-visible counts a bare Shift press, so focus rings key off body.kbd instead. A sheet takes
+   focus itself when nothing in it has it, as when a swipe brings it into view on a phone, where a
+   tapped button never takes focus, and a ring around the whole sheet would show nothing. A field
+   shows its focus in its own look. Kept low, so a control's own rule can move its ring. */
+:focus {
+  outline: none;
+}
+body.kbd :where(:focus:not(dialog, .sheet-page, input, textarea)) {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+/* A press (press.js) shows at once and eases back as it lets go, as an iPhone's controls do. A
+   filled button darkens, an outlined one takes some ink, and every other control fades. A row's
+   button leaves its press to its row's tint. */
+:where(button:not([role="switch"]), a[href], summary, .appearance-choice) {
+  transition: opacity 0.15s;
+}
+:where(.accent-button, .diagnostics-button, .open-button, .retry-button, .read-button) {
+  transition: background-color 0.15s;
+}
+.is-pressed:not(
+  .is-row-press,
+  .accent-button,
+  .diagnostics-button,
+  .open-button,
+  .retry-button,
+  .read-button
+) {
+  opacity: 0.3;
+  transition: none;
+}
+:is(.accent-button, .diagnostics-button, .open-button, .retry-button.filled).is-pressed:not(
+    .move-card-button-outlined
+  ) {
+  background: color-mix(in srgb, var(--accent) 80%, #000);
+  transition: none;
+}
+:is(.retry-button:not(.filled), .read-button, .move-card-button-outlined).is-pressed {
+  background: color-mix(in srgb, var(--ink) 10%, var(--raised));
+  transition: none;
+}
