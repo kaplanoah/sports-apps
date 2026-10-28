@@ -155,23 +155,35 @@ export function startContact(dialog, button) {
     readContactAddress();
   }
 
-  function saveFields() {
-    if (view.screen !== "form" || view.sending) return;
-    const draft = readDraft();
-    const wasRetry = isContactRetry(view.category, draft);
-    draft.message = findField("Message").value;
-    draft.email = findField("Email").value;
-    findField("Message").textContent = draft.message;
-    findField("Email").setAttribute("value", draft.email);
-    const include = /** @type {HTMLInputElement | null} */ (findField("Include"));
-    if (include) {
-      draft.includeDiagnostics = include.checked;
-      include.toggleAttribute("checked", include.checked);
-    }
-    if (wasRetry && !isContactRetry(view.category, draft)) {
+  // A change that ends a retry reads the page's report again, so the form shows what the next send
+  // carries.
+  /**
+   * @param {string} category
+   * @param {(draft: import("./contact-drafts.js").ContactDraft) => void} change
+   */
+  function changeDraft(category, change) {
+    const draft = store.read(category);
+    const wasRetry = isContactRetry(category, draft);
+    change(draft);
+    if (wasRetry && !isContactRetry(category, draft) && category === view.category) {
       refreshDiagnostics();
       drawContact();
     }
+  }
+
+  function saveFields() {
+    if (view.screen !== "form" || view.sending) return;
+    changeDraft(view.category, (draft) => {
+      draft.message = findField("Message").value;
+      draft.email = findField("Email").value;
+      findField("Message").textContent = draft.message;
+      findField("Email").setAttribute("value", draft.email);
+      const include = /** @type {HTMLInputElement | null} */ (findField("Include"));
+      if (include) {
+        draft.includeDiagnostics = include.checked;
+        include.toggleAttribute("checked", include.checked);
+      }
+    });
     store.save(view.category);
   }
 
@@ -199,7 +211,9 @@ export function startContact(dialog, button) {
     const category = view.category;
     try {
       const screenshot = await readScreenshot(file);
-      store.read(category).screenshot = screenshot;
+      changeDraft(category, (draft) => {
+        draft.screenshot = screenshot;
+      });
       await store.save(category);
       if (view.category === category) drawContact();
     } catch {
@@ -220,7 +234,9 @@ export function startContact(dialog, button) {
     const action = button.dataset.contact;
     if (action === "category") runAfterPress(button, () => showCategory(button.dataset.category));
     else if (action === "remove") {
-      readDraft().screenshot = null;
+      changeDraft(view.category, (draft) => {
+        draft.screenshot = null;
+      });
       store.save(view.category);
       drawContact();
       findField("Screenshot").focus();
