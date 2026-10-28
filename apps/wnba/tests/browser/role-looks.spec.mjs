@@ -5,7 +5,8 @@ import {
 } from "../../../../tests/browser/push-stub.mjs";
 import { test, expect, openApp, openLockedApp, MOVING_APP } from "./harness.mjs";
 import { ON_A_PHONE } from "./search-page.mjs";
-import { VIEW_GROUPS, checkEachView, openWithNews } from "./views.mjs";
+import { VIEW_GROUPS, openWithNews } from "./views.mjs";
+import { checkEachView } from "../../../../tests/browser/view-walk.mjs";
 import { openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
 import { listRoleLooks } from "../../../../tests/browser/type-roles.mjs";
 import { IPHONE } from "../../../../tests/browser/devices.mjs";

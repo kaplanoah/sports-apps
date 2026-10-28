@@ -1,4 +1,4 @@
-import { expect, openApp, openGameSheet, keepHighlights } from "./harness.mjs";
+import { openApp, openGameSheet, keepHighlights } from "./harness.mjs";
 import { openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
 import { SETTINGS } from "../../../../tests/browser/settings.mjs";
 
@@ -30,14 +30,7 @@ export async function openHighlights(page) {
   await sheet.getByRole("tab", { name: "Highlights" }).click();
 }
 
-/**
- * @typedef {{
- *   name: string,
- *   open: (page: import("@playwright/test").Page) => Promise<unknown>,
- *   shown: (page: import("@playwright/test").Page) => import("@playwright/test").Locator,
- *   close?: (page: import("@playwright/test").Page) => Promise<unknown>,
- * }} View
- */
+/** @typedef {import("../../../../tests/browser/view-walk.mjs").View} View */
 
 /**
  * Each view, opened from the last, and what shows once it's drawn, in groups that each check
@@ -170,24 +163,4 @@ export async function openWithNews(page) {
     ],
   });
   await keepHighlights(page, app, FINAL_WITH_HIGHLIGHTS);
-}
-
-/**
- * Opens each view in turn, checks it once it's drawn, and closes it.
- * @param {import("@playwright/test").Page} page
- * @param {View[]} views
- * @param {(view: View) => Promise<void>} checkView
- */
-export async function checkEachView(page, views, checkView) {
-  for (const view of views) {
-    await view.open(page);
-    await expect(view.shown(page)).toBeVisible();
-    // Past the tab bar's pill sliding to the tab, and any other motion, before the page is read.
-    await page.clock.runFor(2000);
-    await checkView(view);
-    if (view.close) {
-      await view.close(page);
-      await expect(view.shown(page)).toBeHidden();
-    }
-  }
 }

@@ -14,7 +14,8 @@ import {
   ON_A_PHONE,
   MOVING_APP,
 } from "./harness.mjs";
-import { VIEW_GROUPS, checkEachView, openWithEverything } from "./views.mjs";
+import { VIEW_GROUPS, openWithEverything } from "./views.mjs";
+import { checkEachView } from "../../../../tests/browser/view-walk.mjs";
 import { openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
 import { listRoleLooks } from "../../../../tests/browser/type-roles.mjs";
 import { IPHONE } from "../../../../tests/browser/devices.mjs";

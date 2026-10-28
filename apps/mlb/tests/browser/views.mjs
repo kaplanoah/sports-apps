@@ -70,14 +70,7 @@ export async function openHighlights(page) {
   await page.locator("#gameSheet").getByRole("tab", { name: "Highlights" }).click();
 }
 
-/**
- * @typedef {{
- *   name: string,
- *   open: (page: import("@playwright/test").Page) => Promise<unknown>,
- *   shown: (page: import("@playwright/test").Page) => import("@playwright/test").Locator,
- *   close?: (page: import("@playwright/test").Page) => Promise<unknown>,
- * }} View
- */
+/** @typedef {import("../../../../tests/browser/view-walk.mjs").View} View */
 
 /**
  * Each view, opened from the last, and what shows once it's drawn, in groups that each check
@@ -228,22 +221,4 @@ export async function openWithEverything(page) {
     "data-day",
     "2026-03-25",
   );
-}
-
-/**
- * Opens each view in turn, checks it once it's drawn, and closes it.
- * @param {import("@playwright/test").Page} page
- * @param {View[]} views
- * @param {(view: View) => Promise<void>} checkView
- */
-export async function checkEachView(page, views, checkView) {
-  for (const view of views) {
-    await view.open(page);
-    await expect(view.shown(page)).toBeVisible();
-    await checkView(view);
-    if (view.close) {
-      await view.close(page);
-      await expect(view.shown(page)).toBeHidden();
-    }
-  }
 }

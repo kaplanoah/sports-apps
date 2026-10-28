@@ -1,5 +1,6 @@
 import { test, expect, openApp } from "./harness.mjs";
-import { VIEW_GROUPS, checkEachView, openWithNews } from "./views.mjs";
+import { VIEW_GROUPS, openWithNews } from "./views.mjs";
+import { checkEachView } from "../../../../tests/browser/view-walk.mjs";
 import { listChipsOffLook, listShownChipLooks } from "../../../../tests/browser/chip-looks.mjs";
 import {
   listLowContrastText,

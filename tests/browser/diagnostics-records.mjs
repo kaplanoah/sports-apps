@@ -26,6 +26,22 @@ export async function makeDip(page, part) {
   await page.clock.runFor(RECORD_MS);
 }
 
+/**
+ * Sets how far the visual viewport sits below the layout one's top, without telling the page.
+ * @param {import("@playwright/test").Page} page
+ * @param {number} top
+ */
+export async function setVisualViewportTop(page, top) {
+  await page.evaluate(
+    (offsetTop) =>
+      Object.defineProperty(visualViewport, "offsetTop", {
+        configurable: true,
+        get: () => offsetTop,
+      }),
+    top,
+  );
+}
+
 /** Tells the page its visual viewport moved. */
 export const scrollVisualViewport = () => visualViewport?.dispatchEvent(new Event("scroll"));
 
@@ -36,9 +52,7 @@ export const scrollVisualViewport = () => visualViewport?.dispatchEvent(new Even
  * @param {() => void} moveViewport what tells the page the viewport moved
  */
 export async function moveVisualViewportOff(page, moveViewport = scrollVisualViewport) {
-  await page.evaluate(() =>
-    Object.defineProperty(visualViewport, "offsetTop", { configurable: true, get: () => 110 }),
-  );
+  await setVisualViewportTop(page, 110);
   await page.evaluate(moveViewport);
   await page.clock.runFor(100);
 }
