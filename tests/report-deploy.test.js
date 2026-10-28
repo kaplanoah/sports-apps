@@ -50,6 +50,12 @@ test("a failed deploy opens one issue naming its commit and run", async () => {
   assert.ok(writes[0].body.body.includes(`(${RUN_URL})`));
 });
 
+test("a failed deploy's issue sends its reader to the skill that reads the log", async () => {
+  const { writes } = await report({ jobResult: "failure", checkedCommit: "" });
+  assert.match(writes[0].body.body, /as the deploy-log skill says/);
+  assert.match(readRepoFile(".agents/skills/deploy-log/SKILL.md"), /^name: deploy-log$/m);
+});
+
 test("a deploy stopped by its time limit, which GitHub calls cancelled, opens the issue", async () => {
   const { line, writes } = await report(
     { jobResult: "cancelled", checkedCommit: "" },

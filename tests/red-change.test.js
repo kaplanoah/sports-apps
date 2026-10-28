@@ -1706,9 +1706,10 @@ const RED_DIFF =
  * @param {string} message
  */
 function assertSendsToBetaClaim(message) {
-  assert.match(message, /ship skill's "The beta channel" \(\.agents\/skills\/ship\/SKILL\.md\)/);
+  assert.match(message, /beta skill's "The beta channel" \(\.agents\/skills\/beta\/SKILL\.md\)/);
   assert.match(message, /claims beta first/);
   assert.doesNotMatch(message, /git push/);
+  assert.match(readRepoFile(".agents/skills/beta/SKILL.md"), /^## The beta channel$/m);
 }
 
 test("a red change is held until it has the phone-ok label, and says why", () => {

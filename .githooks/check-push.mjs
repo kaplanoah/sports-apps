@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 
-const CHECK_SCRIPTS = ["lint", "format:check", "typecheck", "deadcode"];
+const CHECKS = ["lint", "format:check", "typecheck", "deadcode", "test"];
 const OUTPUT_LINE_LIMIT = 40;
 
 /**
@@ -16,20 +16,20 @@ const OUTPUT_LINE_LIMIT = 40;
 /** @typedef {{ isPassed: boolean, output: string }} CheckResult */
 
 /**
- * A check's output, up to its first lines, without blank ones.
+ * A check's last lines, without blank ones, since each check ends with its errors or their summary.
  * @param {string} output
  */
 function trimOutput(output) {
   const lines = output.split("\n").filter((line) => line.trim());
-  const shown = lines.slice(0, OUTPUT_LINE_LIMIT);
-  if (lines.length > shown.length) shown.push(`... and ${lines.length - shown.length} more lines`);
-  return shown.join("\n");
+  const shown = lines.slice(-OUTPUT_LINE_LIMIT);
+  const hidden = lines.length - shown.length;
+  return [...(hidden ? [`... ${hidden} earlier lines`] : []), ...shown].join("\n");
 }
 
 /**
  * Why a push is blocked, or null when the clean working tree passes every check.
  * @param {PushState} state
- * @param {(script: string) => Promise<CheckResult>} runCheck runs one npm script
+ * @param {(script: string) => Promise<CheckResult>} runCheck
  * @returns {Promise<string | null>}
  */
 export async function decidePush({ isTreeClean, hasPackages }, runCheck) {
@@ -40,11 +40,11 @@ export async function decidePush({ isTreeClean, hasPackages }, runCheck) {
     );
   if (!hasPackages)
     return "node_modules is missing, so the checks can't run: run npm ci, then push again.";
-  const results = await Promise.all(CHECK_SCRIPTS.map(runCheck));
+  const results = await Promise.all(CHECKS.map(runCheck));
   const failedIndex = results.findIndex(({ isPassed }) => !isPassed);
   if (failedIndex === -1) return null;
   return (
-    `npm run ${CHECK_SCRIPTS[failedIndex]} failed, so the push would turn CI red. ` +
+    `npm run ${CHECKS[failedIndex]} failed, so the push would turn CI red. ` +
     `Fix it, commit, and push again.\n${trimOutput(results[failedIndex].output)}`
   );
 }
@@ -52,13 +52,15 @@ export async function decidePush({ isTreeClean, hasPackages }, runCheck) {
 /**
  * Runs an npm script in a folder, with what it wrote.
  * @param {string} folder
+ * @param {NodeJS.ProcessEnv} env
  * @param {string} script
  * @returns {Promise<CheckResult>}
  */
-async function runNpmScript(folder, script) {
+async function runNpmScript(folder, env, script) {
   try {
     const { stdout, stderr } = await promisify(execFile)("npm", ["run", "--silent", script], {
       cwd: folder,
+      env,
       maxBuffer: 64 * 1024 * 1024,
     });
     return { isPassed: true, output: `${stdout}${stderr}` };
@@ -81,6 +83,18 @@ const isTreeCleanIn = (folder) =>
 
 /** @param {string[]} args */
 const readGit = (args) => execFileSync("git", args, { encoding: "utf8" }).trim();
+
+/**
+ * The hook's environment without what Git sets to point at this repository, like a linked
+ * worktree's absolute GIT_DIR, which would turn a test's git calls in its own temporary
+ * repository onto this one.
+ */
+function buildCheckEnv() {
+  const repositoryVariables = new Set(readGit(["rev-parse", "--local-env-vars"]).split("\n"));
+  return Object.fromEntries(
+    Object.entries(process.env).filter(([name]) => !repositoryVariables.has(name)),
+  );
+}
 
 /** @param {string} line */
 function readPushedCommit(line) {
@@ -127,12 +141,13 @@ async function checkPush() {
     return;
   }
   const folder = process.cwd();
+  const env = buildCheckEnv();
   const reason = await decidePush(
     {
       isTreeClean: isTreeCleanIn(folder),
       hasPackages: existsSync(join(folder, "node_modules")),
     },
-    (script) => runNpmScript(folder, script),
+    (script) => runNpmScript(folder, env, script),
   );
   if (!reason) return;
   process.stderr.write(`${reason}\n`);

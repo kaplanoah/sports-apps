@@ -36,6 +36,7 @@ test("every Node test run loads the guard first", () => {
   const { scripts } = JSON.parse(readRepoFile("package.json"));
   assert.equal(scripts.test, "node worker/node-tests.mjs");
   assert.deepEqual(buildNodeTestArgs(["tests/example.test.js"]), [
+    "--test-reporter=dot",
     "--import",
     "./tests/no-network.js",
     "--test",

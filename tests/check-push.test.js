@@ -8,23 +8,23 @@ import { decidePush } from "../.githooks/check-push.mjs";
 import { REPO_ROOT, readRepoFile } from "./repo-files.js";
 
 const HOOK = `${import.meta.dirname}/../.githooks/check-push.mjs`;
-const CHECKS = ["lint", "format:check", "typecheck", "deadcode"];
+const CHECKS = ["lint", "format:check", "typecheck", "deadcode", "test"];
 
 /**
- * A runner that records each npm script it's asked for, failing those in `failures` with their output.
- * @param {Record<string, string>} [failures]
+ * A runner that records each check it's asked for, failing those in `failures` with their output.
+ * @param {Record<string, string>} [failures] each failing check's output, by its npm script
  */
 function fakeRunner(failures = {}) {
   /** @type {string[]} */
-  const scripts = [];
+  const checks = [];
   /** @param {string} script */
   const runCheck = async (script) => {
-    scripts.push(script);
+    checks.push(script);
     return script in failures
       ? { isPassed: false, output: failures[script] }
       : { isPassed: true, output: "" };
   };
-  return { scripts, runCheck };
+  return { checks, runCheck };
 }
 
 /**
@@ -32,25 +32,25 @@ function fakeRunner(failures = {}) {
  * @param {Record<string, string>} [failures]
  */
 async function decide(state = {}, failures = {}) {
-  const { scripts, runCheck } = fakeRunner(failures);
+  const { checks, runCheck } = fakeRunner(failures);
   const reason = await decidePush({ isTreeClean: true, hasPackages: true, ...state }, runCheck);
-  return { reason, scripts };
+  return { reason, checks };
 }
 
-test("a push runs the four checks and goes when they pass", async () => {
-  assert.deepEqual(await decide(), { reason: null, scripts: CHECKS });
+test("a push runs the four checks and every Node test, and goes when they pass", async () => {
+  assert.deepEqual(await decide(), { reason: null, checks: CHECKS });
 });
 
 test("a push with uncommitted changes is refused before any check", async () => {
-  const { reason, scripts } = await decide({ isTreeClean: false });
+  const { reason, checks } = await decide({ isTreeClean: false });
   assert.match(reason ?? "", /uncommitted changes/);
-  assert.deepEqual(scripts, []);
+  assert.deepEqual(checks, []);
 });
 
 test("a push without node_modules asks for npm ci before any check", async () => {
-  const { reason, scripts } = await decide({ hasPackages: false });
+  const { reason, checks } = await decide({ hasPackages: false });
   assert.match(reason ?? "", /run npm ci/);
-  assert.deepEqual(scripts, []);
+  assert.deepEqual(checks, []);
 });
 
 test("a failing check blocks the push with its output", async () => {
@@ -65,11 +65,29 @@ test("with more than one failing check, the first in order is shown", async () =
   assert.doesNotMatch(reason ?? "", /unused export/);
 });
 
-test("a long failure shows its first lines and how many more there are", async () => {
+test("a long failure shows its last lines and how many came before them", async () => {
   const output = Array.from({ length: 50 }, (_, index) => `error ${index + 1}`).join("\n\n");
   const { reason } = await decide({}, { lint: output });
-  assert.match(reason ?? "", /error 40\n\.\.\. and 10 more lines$/);
-  assert.doesNotMatch(reason ?? "", /error 41/);
+  assert.match(reason ?? "", /\n\.\.\. 10 earlier lines\nerror 11\n/);
+  assert.match(reason ?? "", /error 50$/);
+  assert.doesNotMatch(reason ?? "", /error 10\n/);
+});
+
+test("a failing Node test's name and error reach a blocked push past the suite's dots", async () => {
+  const dots = Array.from({ length: 300 }, () => ".".repeat(80));
+  const output = [
+    ...dots,
+    "X",
+    "Failed tests:",
+    "",
+    "\u2716 a game's row shows its inning (4.2ms)",
+    "  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:",
+    "  'Top 3' !== 'Top 4'",
+    "      at TestContext.<anonymous> (file:///repo/apps/mlb/tests/page.test.js:12:10)",
+  ].join("\n");
+  const { reason } = await decide({}, { test: output });
+  assert.match(reason ?? "", /a game's row shows its inning/);
+  assert.match(reason ?? "", /'Top 3' !== 'Top 4'/);
 });
 
 /** @param {string[]} [failingScripts] */
@@ -78,7 +96,7 @@ function makeRepo(failingScripts = []) {
   const scripts = Object.fromEntries(
     CHECKS.map((script) => [
       script,
-      failingScripts.includes(script) ? `echo ${script} broke && exit 1` : "true",
+      failingScripts.includes(script) ? `echo ${script} broke && false` : "true",
     ]),
   );
   scripts.prepare = JSON.parse(readRepoFile("package.json")).scripts.prepare;
@@ -184,6 +202,21 @@ test("Git refuses a dirty tree and missing packages before running checks", (con
   });
   assert.equal(result.status, 1);
   assert.match(result.stderr, /node_modules is missing/);
+});
+
+test("checks run against their own repositories when Git pushes from a linked worktree", (context) => {
+  const repo = makeRepo();
+  context.after(() => rmSync(repo, { recursive: true, force: true }));
+  const manifest = JSON.parse(readFileSync(join(repo, "package.json"), "utf8"));
+  manifest.scripts.test = 'test -z "$GIT_DIR" || (echo "GIT_DIR is $GIT_DIR" && false)';
+  writeFileSync(join(repo, "package.json"), JSON.stringify(manifest));
+  runGit(repo, ["commit", "-am", "test reads GIT_DIR"]);
+  installPackages(repo);
+  const worktree = join(repo, "node_modules/worktree");
+  runGit(repo, ["worktree", "add", worktree]);
+  mkdirSync(join(worktree, "node_modules"));
+  const pushed = pushRepo(worktree);
+  assert.equal(pushed.status, 0, pushed.stderr);
 });
 
 test("Claude settings do not duplicate the Git push check", () => {
