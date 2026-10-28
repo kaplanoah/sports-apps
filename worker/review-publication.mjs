@@ -58,7 +58,6 @@ export function selectPublicationRun(runs, pull, repository) {
           identity.target === "main" &&
           identity.pull === pull.number &&
           identity.head === pull.head.sha &&
-          identity.base === pull.base.sha &&
           run.repository.full_name === repository.name &&
           run.repository.id === repository.id &&
           /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$/.test(run.created_at ?? "")
@@ -178,7 +177,8 @@ export function validatePublicationEvidence(pull, run, evidence, jobs) {
     evidence.repositoryId !== run.repository.id ||
     evidence.pull !== pull.number ||
     evidence.head !== pull.head.sha ||
-    evidence.base !== pull.base.sha ||
+    evidence.head !== identity.head ||
+    evidence.base !== evidence.needs?.["review-plan"]?.outputs?.base ||
     evidence.target !== pull.base.ref ||
     evidence.source !== identity.source ||
     evidence.run !== run.id ||

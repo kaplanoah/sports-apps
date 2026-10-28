@@ -12,6 +12,9 @@ on:
       merge:
         type: string
         required: true
+      base:
+        type: string
+        required: true
     secrets:
       TRUSTED_REVIEW_OPENAI_API_KEY:
         required: true
@@ -24,7 +27,7 @@ env:
   REVIEW_SELECTION: ${{ inputs.selection }}
   REVIEW_MERGE: ${{ inputs.merge }}
   REVIEW_HEAD: ${{ github.event.pull_request.head.sha }}
-  REVIEW_BASE: ${{ github.event.pull_request.base.sha }}
+  REVIEW_BASE: ${{ inputs.base }}
   REVIEW_TRUSTED: ${{ github.sha }}
   PR: ${{ github.event.pull_request.number }}
   PORTION: ${{ inputs.portion }}

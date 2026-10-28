@@ -47,27 +47,24 @@ export function verifyTrustedReviewResult(folder, env) {
 
 /**
  * REST pull_requests can be empty for fork runs and may change as the PR advances. The trusted
- * workflow's fixed run-name binds the event's PR/head/base and default-branch source; its sealed
- * result verifies the code.
- * @param {any} run @param {{ repository: string, head: string, base: string, pull: string }} expected
+ * workflow's fixed run-name binds the request and default-branch source. Its sealed result binds
+ * the reviewed base, head and tree; mutable event base metadata is not a code identity.
+ * @param {any} run @param {{ repository: string, head: string, pull: string }} expected
  */
 export const isTrustedReviewRun = (run, expected) =>
   run.repository?.full_name === expected.repository &&
   Boolean(readTrustedReviewSource(run, expected));
 
-/** @param {any} run @param {{ head: string, base: string, pull: string }} expected */
+/** @param {any} run @param {{ head: string, pull: string }} expected */
 function readTrustedReviewSource(run, expected) {
   const identity = readReviewRun(run);
-  return identity &&
-    String(identity.pull) === expected.pull &&
-    identity.head === expected.head &&
-    identity.base === expected.base
+  return identity && String(identity.pull) === expected.pull && identity.head === expected.head
     ? identity.source
     : null;
 }
 
 /**
- * @param {{ readGitHub: (path: string) => Promise<any>, repository: string, head: string, base: string, pull: string }} options
+ * @param {{ readGitHub: (path: string) => Promise<any>, repository: string, head: string, pull: string }} options
  * @returns {Promise<{ run: number | null, tree: string | null, source: string | null, pending: boolean }>}
  */
 export async function findTrustedReviewRun(options) {
@@ -115,15 +112,15 @@ export async function findTrustedReviewRun(options) {
 /** @param {any} run */
 function readJoinRecoverySubject(run) {
   const review = readReviewRun(run);
-  if (review?.intent) return review;
+  if (review?.intent) return review.target === "main" ? review : null;
   if (!isPullRequestRun(run) || run.pull_requests?.length !== 1) return null;
   const pull = run.pull_requests[0];
   return Number.isSafeInteger(pull.number) &&
     pull.number > 0 &&
     isGitObjectId(pull.head?.sha) &&
-    isGitObjectId(pull.base?.sha) &&
+    pull.base?.ref === "main" &&
     run.head_sha === pull.head.sha
-    ? { pull: pull.number, head: pull.head.sha, base: pull.base.sha }
+    ? { pull: pull.number, head: pull.head.sha, target: "main" }
     : null;
 }
 
@@ -139,7 +136,7 @@ function matchesJoinRecoveryCI(run, subject, repository) {
       (pull) =>
         pull.number === subject.pull &&
         pull.head?.sha === subject.head &&
-        pull.base?.sha === subject.base,
+        pull.base?.ref === subject.target,
     )
   );
 }
@@ -176,13 +173,12 @@ export async function recoverTrustedReviewJoin(event, env, readGitHub) {
     pull.state !== "open" ||
     pull.draft ||
     pull.head?.sha !== subject.head ||
-    pull.base?.sha !== subject.base
+    pull.base?.ref !== subject.target
   )
     return null;
   const expected = {
     repository: env.GITHUB_REPOSITORY,
     head: subject.head,
-    base: subject.base,
     pull: String(subject.pull),
     readGitHub,
   };
@@ -245,7 +241,6 @@ async function waitForTrustedReview(env) {
       readGitHub,
       repository: env.GITHUB_REPOSITORY,
       head: env.REVIEW_HEAD,
-      base: env.REVIEW_BASE,
       pull: env.PR,
     });
     if (!result.pending) return result;
@@ -254,6 +249,22 @@ async function waitForTrustedReview(env) {
     await waitFor(Math.min(interval, remaining));
     interval = Math.min(interval * 2, MAX_POLL_MS);
   }
+}
+
+/**
+ * The base is the first parent of the merge this CI run tested, so the review must cover exactly
+ * the code that merges now, whatever base.sha the pull's event carried.
+ * @param {NodeJS.ProcessEnv} env
+ */
+function readTestedBase(env) {
+  const [base, head, ...others] = runReviewGit(
+    env.GITHUB_WORKSPACE,
+    ["show", "--no-patch", "--format=%P", "HEAD"],
+    { environment: env },
+  ).split(" ");
+  if (head !== env.REVIEW_HEAD || others.length > 0 || !isGitObjectId(base))
+    throw new Error("The tested checkout is not this pull request's merge.");
+  return base;
 }
 
 /** @param {string} folder @param {NodeJS.ProcessEnv} env */
@@ -298,6 +309,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     const { choice } = await readReviewProvider(env, readGitHub);
     const tree = verifyReviewedMerge(process.argv[3], {
       ...env,
+      REVIEW_BASE: readTestedBase(env),
       REVIEW_PROVIDER: choice.provider,
       REVIEW_SELECTION: choice.selection,
     });

@@ -67,6 +67,8 @@ async function downloadRunArtifact(options, artifact, run, names, digest) {
 /** @param {any} options @param {any} run @param {any} needs @param {any} identity */
 async function validateResultArtifact(options, run, needs, identity) {
   const outputs = needs.review?.outputs;
+  const base = needs["review-plan"]?.outputs?.base;
+  if (!isGitObjectId(base)) throw new Error("Missing reviewed base.");
   const artifactId = Number(outputs?.artifact);
   if (!Number.isSafeInteger(artifactId) || !/^[a-f0-9]{64}$/.test(outputs?.digest ?? ""))
     throw new Error("Missing authenticated review upload outputs.");
@@ -89,7 +91,7 @@ async function validateResultArtifact(options, run, needs, identity) {
       GITHUB_REPOSITORY: options.env.GITHUB_REPOSITORY,
       REVIEW_RUN: String(run.id),
       REVIEW_HEAD: identity.head,
-      REVIEW_BASE: identity.base,
+      REVIEW_BASE: base,
       REVIEW_TRUSTED: identity.source,
       REVIEW_TREE: outputs.tree,
       ...(needs["review-plan"]?.outputs?.provider
@@ -106,7 +108,7 @@ async function validateResultArtifact(options, run, needs, identity) {
       commit.sha !== result.merge ||
       commit.tree?.sha !== result.tree ||
       JSON.stringify(commit.parents?.map((parent) => parent.sha)) !==
-        JSON.stringify([identity.base, identity.head])
+        JSON.stringify([base, identity.head])
     )
       throw new Error("Reviewed merge parents or tree changed.");
     return { artifact: artifactId, digest: outputs.digest, merge: result.merge, tree: result.tree };
@@ -167,7 +169,11 @@ async function readPublicationContext(options, head, repository) {
     (answer) => answer.workflow_runs,
   );
   const run = selectPublicationRun(runs, pull, { name: repository.full_name, id: repository.id });
-  return { pull, run };
+  const { choice } = await readReviewProvider(
+    { ...options.env, PR: String(pull.number) },
+    options.readGitHub,
+  );
+  return { pull, run, choice };
 }
 
 /** @param {any} options @param {string} head */
@@ -254,10 +260,11 @@ async function requireFreshContext(options, repository, previous) {
   if (
     !current.pull ||
     current.pull.number !== previous.pull.number ||
-    current.pull.base.sha !== previous.pull.base.sha ||
     current.pull.base.ref !== previous.pull.base.ref ||
     current.run?.id !== previous.run?.id ||
     current.run?.run_attempt !== previous.run?.run_attempt ||
+    current.choice?.provider !== previous.choice?.provider ||
+    current.choice?.selection !== previous.choice?.selection ||
     (current.run?.status === "completed" && current.run.conclusion !== "success") ||
     isPublicationExempt(current.pull) !== isPublicationExempt(previous.pull)
   )
@@ -274,20 +281,30 @@ function holdReviewPublication(request, title, summary) {
   );
 }
 
+/** @param {any} request @param {any} decision */
+async function publishValidatedDecision(request, decision) {
+  await requireFreshContext(request.options, request.repository, request.context);
+  await publishDecision(request.options, request.head, decision, request.repository);
+  try {
+    await requireFreshContext(request.options, request.repository, request.context);
+  } catch (error) {
+    await holdReviewPublication(
+      request,
+      "Review context changed during publication",
+      "The published result was invalidated. Inspect the current review authorization before recovery.",
+    );
+    throw error;
+  }
+}
+
 /** @param {any} request */
 async function publishExemption(request) {
-  await requireFreshContext(request.options, request.repository, request.context);
-  await publishDecision(
-    request.options,
-    request.head,
-    {
-      success: true,
-      title: "Review not required for Dependabot",
-      summary:
-        "The trusted publisher verified the existing Dependabot exemption. This is not reviewed evidence.",
-    },
-    request.repository,
-  );
+  await publishValidatedDecision(request, {
+    success: true,
+    title: "Review not required for Dependabot",
+    summary:
+      "The trusted publisher verified the existing Dependabot exemption. This is not reviewed evidence.",
+  });
   return { success: true, exempt: true };
 }
 
@@ -318,7 +335,7 @@ async function buildPublicationEvidence(request, check) {
     repositoryId: request.repository.id,
     pull: pull.number,
     head: request.head,
-    base: pull.base.sha,
+    base: needs["review-plan"].outputs.base,
     target: pull.base.ref,
     source: identity.source,
     run: run.id,
@@ -345,18 +362,12 @@ async function publishFinish(request) {
     "Earlier success is invalid until this attempt's result is verified.",
   );
   const evidence = await buildPublicationEvidence(request, check);
-  await requireFreshContext(request.options, request.repository, request.context);
-  await publishDecision(
-    request.options,
-    request.head,
-    {
-      success: true,
-      title: "Validated trusted review passed",
-      summary: `Trusted run ${evidence.run}, attempt ${evidence.attempt}, PR #${evidence.pull}. Reviewed head ${evidence.head}, base ${evidence.base}, tree ${evidence.tree}.`,
-      stamp: createPublicationStamp(evidence),
-    },
-    request.repository,
-  );
+  await publishValidatedDecision(request, {
+    success: true,
+    title: "Validated trusted review passed",
+    summary: `Trusted run ${evidence.run}, attempt ${evidence.attempt}, PR #${evidence.pull}. Reviewed head ${evidence.head}, base ${evidence.base}, tree ${evidence.tree}.`,
+    stamp: createPublicationStamp(evidence),
+  });
   writePublicationDecision(request.options.env, evidence);
   return { success: true };
 }
@@ -387,16 +398,11 @@ async function revalidatePublication(request) {
     );
     throw error;
   }
-  await publishDecision(
-    options,
-    request.head,
-    {
-      success: true,
-      title: "Validated trusted review passed",
-      summary: `Revalidated trusted run ${run.id}, attempt ${run.run_attempt}, PR #${pull.number}.`,
-    },
-    request.repository,
-  );
+  await publishValidatedDecision(request, {
+    success: true,
+    title: "Validated trusted review passed",
+    summary: `Revalidated trusted run ${run.id}, attempt ${run.run_attempt}, PR #${pull.number}.`,
+  });
   return { success: true };
 }
 

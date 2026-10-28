@@ -51,7 +51,7 @@ function createRecoveryFixture() {
     state: "open",
     draft: false,
     head: { sha: SHA },
-    base: { sha: EXPECTED.base },
+    base: { sha: EXPECTED.base, ref: "main" },
   };
   const ci = {
     id: 9,
@@ -120,6 +120,18 @@ test("completion of a delayed review or failed CI recovers only its current join
   assert.equal(await recoverTrustedReviewJoin(event, state.env, api), 31);
 });
 
+test("completion recovery tolerates main metadata changes but reruns only the current exact-code join", async () => {
+  for (const trigger of [7, 9]) {
+    const { state, api, event } = createRecoveryFixture();
+    event.workflow_run.id = trigger;
+    state.pull.base.sha = TREE;
+    state.ci.pull_requests[0].base.sha = ID_ENV.REVIEW_TRUSTED;
+    assert.equal(await recoverTrustedReviewJoin(event, state.env, api), 31);
+    assert.equal(state.writes.length, 1);
+    assert.equal(state.writes[0].path, "/actions/jobs/31/rerun");
+  }
+});
+
 test("join recovery waits for both completions and refuses stale, foreign, failed or already-retried evidence", async () => {
   const changes = [
     (s) => {
@@ -141,7 +153,7 @@ test("join recovery waits for both completions and refuses stale, foreign, faile
       s.pull.head.sha = "f".repeat(40);
     },
     (s) => {
-      s.pull.base.sha = "f".repeat(40);
+      s.pull.base.ref = "other";
     },
     (s) => {
       s.pull.state = "closed";
@@ -395,6 +407,33 @@ test("actual producer names and CI download inputs agree with the trusted join",
   }
 });
 
+test("join discovery ignores changing event base metadata while sealed verification keeps the tested base exact", async () => {
+  const run = createRun({
+    display_title: createRun().display_title.replace(`base ${EXPECTED.base}`, `base ${TREE}`),
+  });
+  assert.ok(isTrustedReviewRun(run, EXPECTED));
+  const readGitHub = async (path) =>
+    path.includes("/artifacts?")
+      ? { artifacts: [{ name: `trusted-review-passed-${TREE}`, workflow_run: { id: 7 } }] }
+      : { workflow_runs: [run] };
+  assert.deepEqual(await findTrustedReviewRun({ ...EXPECTED, readGitHub }), {
+    run: 7,
+    tree: TREE,
+    source: ID_ENV.REVIEW_TRUSTED,
+    pending: false,
+  });
+  const folder = createFolder();
+  const identity = readReviewIdentity(ID_ENV);
+  writeJson(folder, "result.json", { identity, tree: TREE, passed: true });
+  sealReviewArtifact(folder, "result", identity, ["result.json"]);
+  const env = { ...ID_ENV, REVIEW_RUN: "7", REVIEW_TREE: TREE };
+  assert.equal(verifyTrustedReviewResult(folder, env).tree, TREE);
+  assert.throws(
+    () => verifyTrustedReviewResult(folder, { ...env, REVIEW_BASE: TREE }),
+    /stale or foreign artifact/,
+  );
+});
+
 test("only the exact trusted producer's immutable event identity can join, including forks", async () => {
   const run = createRun();
   assert.ok(isTrustedReviewRun(run, EXPECTED));
@@ -586,20 +625,37 @@ function createMergeFixture() {
   readGit(origin, ["commit", "-am", "head"]);
   const head = readGit(origin, ["rev-parse", "HEAD"]);
   readGit(origin, ["checkout", "main"]);
+  writeFileSync(join(origin, "b.js"), "main\n");
+  readGit(origin, ["add", "."]);
+  readGit(origin, ["commit", "-m", "main moved past the event's base"]);
+  const tip = readGit(origin, ["rev-parse", "HEAD"]);
   readGit(origin, ["merge", "--no-ff", "change", "-m", "reviewed merge"]);
   const merge = readGit(origin, ["rev-parse", "HEAD"]);
   const tree = readGit(origin, ["rev-parse", "HEAD^{tree}"]);
+  const tested = readGit(origin, ["commit-tree", tree, "-p", tip, "-p", head, "-m", "tested"]);
+  readGit(origin, ["update-ref", "refs/heads/tested", tested]);
+  const stale = readGit(origin, [
+    "commit-tree",
+    `${head}^{tree}`,
+    "-p",
+    base,
+    "-p",
+    head,
+    "-m",
+    "stale",
+  ]);
+  readGit(origin, ["update-ref", "refs/heads/stale", stale]);
   const checkout = join(createFolder(), "checkout");
   readGit(origin, ["init", checkout]);
   readGit(checkout, ["remote", "add", "origin", origin]);
-  readGit(checkout, ["fetch", "--depth=1", "origin", base]);
+  readGit(checkout, ["fetch", "--depth=2", "origin", tested]);
   readGit(checkout, ["checkout", "--detach", "FETCH_HEAD"]);
   assert.equal(readGit(checkout, ["rev-parse", "--is-shallow-repository"]), "true");
   assert.throws(
     () => readGit(checkout, ["cat-file", "-e", merge]),
     "resolved merge must be fetched",
   );
-  return { base, head, merge, tree, checkout };
+  return { base, tip, head, merge, stale, tree, tested, checkout };
 }
 
 /** @param {any} fixture @param {Record<string, string>} [changes] @param {string[]} [args] */
@@ -651,7 +707,7 @@ function invokeJoin(fixture, changes = {}, args = []) {
         GITHUB_OUTPUT: output,
         GITHUB_WORKSPACE: fixture.checkout,
         REVIEW_HEAD: fixture.head,
-        REVIEW_BASE: fixture.base,
+        REVIEW_EVENT_BASE: fixture.base,
         REVIEW_TIMEOUT_MINUTES: "120",
         REVIEW_RUN: "7",
         REVIEW_TREE: fixture.tree,
@@ -733,29 +789,35 @@ test("real CLI deadline derives from job timeout and bounds API use while absent
   assert.match(invalid.stderr, /longer than its finish budget/);
 });
 
-test("real verify CLI accepts the sealed resolved merge and rejects mismatched parents, tree or run", () => {
+test("real verify CLI accepts the merge CI tested, though the event's base lags, and rejects any other", () => {
   const fixture = { ...createMergeFixture(), source: TREE };
   const folder = createFolder();
-  const identity = readReviewIdentity({
-    ...ID_ENV,
-    REVIEW_HEAD: fixture.head,
-    REVIEW_BASE: fixture.base,
-    REVIEW_MERGE: fixture.merge,
-    REVIEW_TRUSTED: fixture.source,
-  });
-  const result = { identity, tree: fixture.tree, passed: true };
-  sealResult(folder, result, identity);
+  /** @param {Record<string, string>} changes */
+  const sealIdentity = (changes = {}) => {
+    const identity = readReviewIdentity({
+      ...ID_ENV,
+      REVIEW_HEAD: fixture.head,
+      REVIEW_BASE: fixture.tip,
+      REVIEW_MERGE: fixture.merge,
+      REVIEW_TRUSTED: fixture.source,
+      ...changes,
+    });
+    const result = { identity, tree: fixture.tree, passed: true };
+    sealResult(folder, result, identity);
+    return result;
+  };
+  const result = sealIdentity();
   const verified = invokeJoin(fixture, { REVIEW_MERGE: "stale-reference" }, ["verify", folder]);
   assert.equal(verified.status, 0, verified.stderr);
   assert.equal(verified.output, `tree=${fixture.tree}\n`);
   assert.equal(
     readGit(fixture.checkout, ["rev-parse", "HEAD"]),
-    fixture.base,
+    fixture.tested,
     "verification never checks out reviewed code",
   );
   for (const changes of [
     { REVIEW_RUN: "8" },
-    { REVIEW_BASE: fixture.head },
+    { REVIEW_HEAD: fixture.base },
     { REVIEW_TREE: SHA },
     { REVIEW_TRUSTED: fixture.base },
   ]) {
@@ -763,8 +825,18 @@ test("real verify CLI accepts the sealed resolved merge and rejects mismatched p
     assert.notEqual(rejected.status, 0);
     assert.equal(rejected.output, "");
   }
+  for (const changes of [
+    { REVIEW_BASE: fixture.base },
+    { REVIEW_BASE: fixture.base, REVIEW_MERGE: fixture.stale },
+  ]) {
+    sealIdentity(changes);
+    const rejected = invokeJoin(fixture, {}, ["verify", folder]);
+    assert.notEqual(rejected.status, 0);
+    assert.match(rejected.stderr, /stale or foreign artifact/);
+    assert.equal(rejected.output, "");
+  }
   for (const changed of [
-    { ...result, identity: { ...identity, merge: fixture.head } },
+    { ...result, identity: { ...result.identity, merge: fixture.head } },
     { ...result, tree: SHA },
   ]) {
     sealResult(folder, changed, changed.identity);
@@ -773,6 +845,26 @@ test("real verify CLI accepts the sealed resolved merge and rejects mismatched p
     assert.match(rejected.stderr, /reviewed merge does not match/);
     assert.equal(rejected.output, "");
   }
+  sealIdentity();
+  const swapped = readGit(fixture.checkout, [
+    "-c",
+    "user.name=Example",
+    "-c",
+    "user.email=example@example.com",
+    "commit-tree",
+    fixture.tree,
+    "-p",
+    fixture.head,
+    "-p",
+    fixture.tip,
+    "-m",
+    "swapped",
+  ]);
+  readGit(fixture.checkout, ["checkout", "--detach", swapped]);
+  const foreign = invokeJoin(fixture, {}, ["verify", folder]);
+  assert.notEqual(foreign.status, 0);
+  assert.match(foreign.stderr, /not this pull request's merge/);
+  assert.equal(foreign.output, "");
 });
 
 test("native title rendering preserves supplied PR and commit identities", () => {

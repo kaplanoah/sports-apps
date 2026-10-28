@@ -467,7 +467,6 @@ jobs:
       tree: ${{ steps.verify.outputs.tree }}
     env:
       REVIEW_HEAD: ${{ github.event.pull_request.head.sha }}
-      REVIEW_BASE: ${{ github.event.pull_request.base.sha }}
       REVIEW_TIMEOUT_MINUTES: *review-join-timeout
       PR: ${{ github.event.pull_request.number }}
     steps:

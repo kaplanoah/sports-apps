@@ -67,21 +67,27 @@ function requireReviewAuthority(env) {
     throw new Error("Trusted review requires default-branch workflow authority.");
 }
 
-/** @param {string | undefined | null} merge @param {NodeJS.ProcessEnv} env */
-function matchesReviewMerge(merge, env) {
-  if (!merge) return false;
+/** @param {string} merge @param {NodeJS.ProcessEnv} env */
+function readReviewMergeParents(merge, env) {
   if (!isGitObjectId(merge)) throw new Error("Review requires an immutable merge revision.");
   runReviewGit(env.GITHUB_WORKSPACE, ["fetch", "--no-tags", "origin", merge]);
-  return (
-    runReviewGit(env.GITHUB_WORKSPACE, ["show", "--no-patch", "--format=%P", merge]) ===
-    `${env.REVIEW_BASE} ${env.REVIEW_HEAD}`
+  return runReviewGit(env.GITHUB_WORKSPACE, ["show", "--no-patch", "--format=%P", merge]).split(
+    " ",
   );
 }
 
 /** @param {string | undefined | null} merge @param {NodeJS.ProcessEnv} env */
-function matchesAvailableReviewMerge(merge, env) {
+function matchesReviewMerge(merge, env) {
+  return Boolean(
+    merge &&
+    readReviewMergeParents(merge, env).join(" ") === `${env.REVIEW_BASE} ${env.REVIEW_HEAD}`,
+  );
+}
+
+/** @param {string | undefined | null} merge @param {NodeJS.ProcessEnv} env */
+function readAvailableReviewParents(merge, env) {
   try {
-    return matchesReviewMerge(merge, env);
+    return merge ? readReviewMergeParents(merge, env) : null;
   } catch (error) {
     const failure = /** @type {{ status?: number, stderr?: string | Buffer }} */ (error);
     const unavailable =
@@ -91,19 +97,58 @@ function matchesAvailableReviewMerge(merge, env) {
         `(?:not our ref|couldn't find remote ref|unadvertised object) ${merge}(?:\\s|$)`,
       ).test(String(failure.stderr ?? ""));
     if (!unavailable) throw error;
-    return false;
+    return null;
   }
 }
 
 /** @param {any} pull @param {NodeJS.ProcessEnv} env */
 const isCurrentReviewPull = (pull, env) =>
-  pull.state === "open" && pull.head.sha === env.REVIEW_HEAD;
+  pull.state === "open" && pull.head.sha === env.REVIEW_HEAD && pull.base.ref === env.REVIEW_TARGET;
+
+/** @param {string} branch @param {NodeJS.ProcessEnv} env */
+function readBranchTip(branch, env) {
+  const ref = `refs/heads/${branch}`;
+  const tips = runReviewGit(env.GITHUB_WORKSPACE, ["ls-remote", "origin", ref])
+    .split("\n")
+    .map((line) => line.split("\t"))
+    .filter(([, name]) => name === ref)
+    .map(([sha]) => sha);
+  if (tips.length !== 1 || !isGitObjectId(tips[0]))
+    throw new Error("Review requires the base branch's current tip.");
+  return tips[0];
+}
+
+/** @param {string} ancestor @param {string} descendant @param {NodeJS.ProcessEnv} env */
+function isReviewAncestor(ancestor, descendant, env) {
+  try {
+    runReviewGit(env.GITHUB_WORKSPACE, ["merge-base", "--is-ancestor", ancestor, descendant]);
+    return true;
+  } catch (error) {
+    if (/** @type {{ status?: number }} */ (error).status === 1) return false;
+    throw error;
+  }
+}
+
+/** @param {NodeJS.ProcessEnv} env */
+function pinReviewTarget(env) {
+  const tip = readBranchTip(env.REVIEW_TARGET, env);
+  const shallow = runReviewGit(env.GITHUB_WORKSPACE, ["rev-parse", "--is-shallow-repository"]);
+  runReviewGit(env.GITHUB_WORKSPACE, [
+    "fetch",
+    "--no-tags",
+    ...(shallow === "true" ? ["--unshallow"] : []),
+    "origin",
+    tip,
+  ]);
+  return tip;
+}
 
 /**
- * GitHub computes mergeability after emitting the event. Refresh only the event's immutable
- * head/base pair; later stages consume the selected SHA without resolving a moving reference.
+ * The cached merge's first parent must belong to the target branch's observed history. Later
+ * jobs verify the exact selected pair and tree without resolving the moving target again.
  * @param {NodeJS.ProcessEnv} env
  * @param {{ readPull?: (path: string) => Promise<any>, wait?: (ms: number) => Promise<unknown> }} [options]
+ * @returns {Promise<{ merge: string, base: string } | null>}
  */
 export async function resolveReviewMerge(
   env,
@@ -113,20 +158,28 @@ export async function resolveReviewMerge(
   } = {},
 ) {
   requireReviewAuthority(env);
-  if (matchesAvailableReviewMerge(env.REVIEW_MERGE, env)) return env.REVIEW_MERGE;
-  const rejected = new Set([env.REVIEW_MERGE]);
+  const rejected = new Set();
+  /** @type {{ merge: string, base: string } | null} */
   let selected = null;
   /** @param {any} pull */
   const isReviewMergeReady = (pull) => {
-    if (
-      !isCurrentReviewPull(pull, env) ||
-      pull.base.sha !== env.REVIEW_BASE ||
-      pull.mergeable === false
-    )
-      return true;
+    if (!isCurrentReviewPull(pull, env) || pull.mergeable === false) return true;
     const merge = pull.merge_commit_sha;
-    if (!rejected.has(merge) && matchesAvailableReviewMerge(merge, env)) {
-      selected = merge;
+    if (!merge || rejected.has(merge)) return false;
+    const parents = readAvailableReviewParents(merge, env);
+    if (!parents) {
+      rejected.add(merge);
+      return false;
+    }
+    const [base, head, ...others] = parents;
+    const target = pinReviewTarget(env);
+    if (
+      head === env.REVIEW_HEAD &&
+      others.length === 0 &&
+      isGitObjectId(base) &&
+      isReviewAncestor(base, target, env)
+    ) {
+      selected = { merge, base };
       return true;
     }
     rejected.add(merge);
@@ -138,8 +191,8 @@ export async function resolveReviewMerge(
 
 /** @param {NodeJS.ProcessEnv} env */
 async function prepareReviewPlanCheckout(env) {
-  const merge = await resolveReviewMerge(env);
-  prepareReviewCheckout({ ...env, REVIEW_MERGE: merge ?? undefined });
+  const selected = await resolveReviewMerge(env);
+  prepareReviewCheckout({ ...env, REVIEW_MERGE: selected?.merge, REVIEW_BASE: selected?.base });
 }
 
 /** @param {NodeJS.ProcessEnv} env */
@@ -161,9 +214,9 @@ export function prepareReviewCheckout(env) {
   const output = mkdtempSync(join(env.RUNNER_TEMP, "review-upload-"));
   appendFileSync(
     env.GITHUB_ENV,
-    `REVIEW_CHECKOUT=${checkout}\nREVIEW_FOLDER=${view}\nREVIEW_DATA=${folder}\nREVIEW_UPLOAD=${output}\nREVIEW_MERGE=${merge}\nREVIEW_RULE_ROOT=${SOURCE}\n`,
+    `REVIEW_CHECKOUT=${checkout}\nREVIEW_FOLDER=${view}\nREVIEW_DATA=${folder}\nREVIEW_UPLOAD=${output}\nREVIEW_MERGE=${merge}\nREVIEW_BASE=${env.REVIEW_BASE}\nREVIEW_RULE_ROOT=${SOURCE}\n`,
   );
-  appendFileSync(env.GITHUB_OUTPUT, `available=true\nmerge=${merge}\n`);
+  appendFileSync(env.GITHUB_OUTPUT, `available=true\nmerge=${merge}\nbase=${env.REVIEW_BASE}\n`);
 }
 
 /** @param {string} script @param {string[]} args @param {NodeJS.ProcessEnv} env @param {boolean} [captureOutput] */
