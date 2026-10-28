@@ -168,12 +168,9 @@ jobs:
       - name: Find dead code
         if: ${{ !cancelled() }}
         run: npm run deadcode
-      # The dot reporter prints each failure in full at the end of the run, where a reader of the
-      # log's last lines finds it, while TAP's five lines a test put it thousands of lines back.
       - name: Test
         if: ${{ !cancelled() }}
         env:
-          NODE_OPTIONS: --test-reporter=dot
           TZ: UTC
         run: npm test
       # The runner is ahead of MLB's Eastern day; Honolulu is behind it.

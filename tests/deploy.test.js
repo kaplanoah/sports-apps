@@ -1303,7 +1303,7 @@ test("a checkout at a commit beta never held isn't a beta release, and sends a s
       (/** @type {Error} */ error) => {
         assert.match(
           error.message,
-          /claude\/some-branch at bbbbbbb\) isn't beta as GitHub has it \(aaaaaaa\)\. Put it on beta by the ship skill's "The beta channel" \(\.agents\/skills\/ship\/SKILL\.md\), which claims beta first, or check out origin\/beta/,
+          /claude\/some-branch at bbbbbbb\) isn't beta as GitHub has it \(aaaaaaa\)\. Put it on beta by the beta skill's "The beta channel" \(\.agents\/skills\/beta\/SKILL\.md\), which claims beta first, or check out origin\/beta/,
         );
         assert.doesNotMatch(error.message, /git push/);
         return true;

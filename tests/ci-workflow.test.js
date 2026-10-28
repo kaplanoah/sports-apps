@@ -11,6 +11,7 @@ import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "n
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { formatJobOutputs, listJobs as listPlanJobs, writeReview } from "../worker/plan-review.mjs";
+import { buildNodeTestArgs } from "../worker/node-tests.mjs";
 import { findRefusal } from "../worker/review-git.mjs";
 import { escapePattern } from "../shared/page/escape-pattern.js";
 import { REPO_ROOT, readRepoFile } from "./repo-files.js";
@@ -368,21 +369,22 @@ test("each job that installs WebKit's system libraries first puts back main's sa
 });
 
 // A Node test's failure is read from the end of the job's log, which a session reaches only so
-// far back into.
+// far back into, and both runners print it there through buildNodeTestArgs.
 test("each Node test step prints its failures at the end of the run", () => {
   const steps = [...readJob("checks").matchAll(/^ {6}- name: Test.*\n(?:(?: {8}.*)?\n)*/gm)].map(
     ([step]) => step,
   );
   assert.equal(steps.length, 2);
   for (const step of steps)
-    assert.match(step, /NODE_OPTIONS: --test-reporter=dot|run: node worker\/test-time-zone\.mjs/);
+    assert.match(step, /run: npm test\n|run: node worker\/test-time-zone\.mjs/);
+  assert.equal(buildNodeTestArgs(["tests/example.test.js"])[0], "--test-reporter=dot");
 });
 
 test("CI always runs the complete ordinary-zone suite and scopes only its alternate-zone repeat", () => {
   const checks = readJob("checks");
   assert.match(
     checks,
-    /- name: Test\n\s+if: \$\{\{ !cancelled\(\) \}\}\n\s+env:\n\s+NODE_OPTIONS: --test-reporter=dot\n\s+TZ: UTC\n\s+run: npm test\n/,
+    /- name: Test\n\s+if: \$\{\{ !cancelled\(\) \}\}\n\s+env:\n\s+TZ: UTC\n\s+run: npm test\n/,
   );
   assert.match(
     checks,

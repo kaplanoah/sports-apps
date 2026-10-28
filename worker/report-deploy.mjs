@@ -11,7 +11,7 @@ export const DEPLOY_ISSUE_TITLE = "The production deploy is failing";
 
 /** @param {string} commit @param {string} runUrl */
 const describeFailure = (commit, runUrl) =>
-  `Deploying main at ${commit.slice(0, 7)} to production failed, so the live apps may not run what main holds. Read [the run's log](${runUrl}), as the ship skill's step 10 says, fix what it names, and re-run the latest Deploy run on main.\n\nThis issue closes itself once a Deploy run checks the live apps.`;
+  `Deploying main at ${commit.slice(0, 7)} to production failed, so the live apps may not run what main holds. Read [the run's log](${runUrl}), as the deploy-log skill says, fix what it names, and re-run the latest Deploy run on main.\n\nThis issue closes itself once a Deploy run checks the live apps.`;
 
 /**
  * @param {object} options

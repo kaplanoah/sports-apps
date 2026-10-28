@@ -143,6 +143,7 @@ test("mutation discovery includes both typing sweeps and the focused module test
 test("Node runner arguments preserve paths and refuse an empty full-suite fallback", () => {
   const tests = ["tests/one.test.js", "apps/future/tests/two words.test.js"];
   assert.deepEqual(buildNodeTestArgs(tests), [
+    "--test-reporter=dot",
     "--import",
     "./tests/no-network.js",
     "--test",

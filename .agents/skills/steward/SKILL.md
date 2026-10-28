@@ -3,7 +3,7 @@ name: steward
 description: How a session answers Trusted review on a pull request in this repo
 ---
 
-Answer every review finding, a Nit or Pre-existing one too, as below. The `ship` skill says what to do when Trusted review's `review` or CI's `review-join` job fails.
+Answer every review finding, a Nit or Pre-existing one too, as below. The `review-failures` skill says what to do when Trusted review's `review` or CI's `review-join` job fails.
 
 - In every round, fix each Important finding and each Unsure finding confirmed as a bug, or reply on its thread explaining why it will not be fixed, linking the issue that holds it when it is left for later. Fix a genuine nonblocking Nit or Pre-existing finding only in a push already needed for the PR, or decline it with a reason. Replies and deferrals of nonblocking Nits or Pre-existing findings require no push or re-review of their own. A finding that demonstrates a broken rule is Important under REVIEW.md; answer it as Important even if it was labeled Nit. After a fix, go back to step 2 of "Shipping a change" in AGENTS.md.
 - Answer a whole round in one push: every fix it needs, with the merge of `main` a conflict then needs, so CI and Trusted review run once for the round.
