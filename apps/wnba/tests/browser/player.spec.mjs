@@ -222,7 +222,6 @@ test.describe("a player who is out", () => {
       expect(await listTextOffRoles(page)).toEqual([]);
       expect(await listChipsOffCenter(page)).toEqual([]);
       expect(await listLowContrastText(page)).toEqual([]);
-      expect(await listStrayPeriods(page)).toEqual([]);
     });
 
   test("the box's border is Maple's or Walnut's own, and its wash the chip's orange", async ({
@@ -265,7 +264,6 @@ test("a player short of the WNBA's rule shows her numbers without a rank, but wh
   await expect(sheet.locator(".player-rank", { hasText: "would be" })).toHaveCount(7);
   expect(await checkRanksAreDim(sheet, ".player-rank")).toEqual(Array(8).fill(true));
   await expect(sheet.locator(".player-rank-note")).toContainText("She's played 21 games.");
-  expect(await listStrayPeriods(page)).toEqual([]);
 });
 
 test("where a player short of the rule would rank is a hairline in her mark color through the curve, 4px above it and 3.5px past its foot, with no dot", async ({

@@ -18,6 +18,7 @@ paths:
   - "tests/hover-color.test.js"
   - "tests/browser/contrast.mjs"
   - "tests/browser/stray-periods.mjs"
+  - "tests/browser/harness.mjs"
   - "tests/browser/never-shown-words.mjs"
 ---
 
@@ -46,7 +47,7 @@ paths:
 - Things shown side by side for comparison share one scale, like two pitchers' speed lines.
 - Desktop hover is a subtle change of text color only, to the app's `--ink-hover`: never an underline, border, or highlight, which the root's `tests/hover-color.test.js` checks.
 - Readable before elegant. Text that's too small, light, or dim is a bug: check it against its type role. Text meets WCAG's AA contrast, 4.5 to 1 and 3 to 1 for large text, at rest in every view and theme. A press, which shows only while a finger is down, is exempt, as iOS's are, so tests never measure contrast pressed. The root's `tests/browser/contrast.mjs` measures it once nothing is pressed or mid-transition, in every view and theme through the shared theme suite.
-- On the pages, text of one sentence or less, like a label, an empty view's note, or a setting's note, ends without a period. Text of two or more sentences, like a release note or a message that says what to do, ends with one, but for text that ends in a link, which ends without one, as the Home Screen app's note does. An outlet's own words keep their punctuation, in an element marked `data-quoted`. The root's `tests/browser/stray-periods.mjs` lists any shown text that breaks this, and each app's browser tests check every view with it, wherever they check the type roles.
+- On the pages, text of one sentence or less, like a label, an empty view's note, or a setting's note, ends without a period. Text of two or more sentences, like a release note or a message that says what to do, ends with one, but for text that ends in a link, which ends without one, as the Home Screen app's note does. An outlet's own words keep their punctuation, in an element marked `data-quoted`. The root's `tests/browser/stray-periods.mjs` lists any shown text that breaks this. The root's `tests/browser/harness.mjs` checks with it the final screen of the `page` of each browser test written with the harness's `test`, and of no other page the test opens. A test checks with it each view it passes on the way, wherever it checks the type roles.
 - Each app's `page/js/league-words.js` holds what its fans call the things that differ by league, which shared code reads instead of typing its own (`shared/page/league-words.js`), and the words its pages never show, like another sport's. The root's `tests/browser/never-shown-words.mjs` lists any shown text that holds one, and each app's `page.spec.mjs` checks every view with it, wherever it checks the type roles.
 - On the pages, write how fans talk, not a league's official or press words: the playoffs in every app, never the postseason or a berth, and a league's own word only where its fans say it too, like the World Series, Opening Day, and extra innings.
 - Before pushing a change to how a page looks, screenshot every view it touches, in each of the app's themes, on a phone and a wide screen, and look at each one: a test checks only what it names. Look at a new view beside its siblings, like a new sheet beside the others, rather than on its own. Fix anything off, and name the views and themes you looked at in the PR's description.

@@ -165,7 +165,6 @@ test("a game the league has no box score for says so, and a preview whose meetin
   expect(await listTextOffRoles(page)).toEqual([]);
   expect(await listChipsOffCenter(page)).toEqual([]);
   expect(await listLowContrastText(page)).toEqual([]);
-  expect(await listStrayPeriods(page)).toEqual([]);
 });
 
 test("a preview's meetings that didn't load read again on a tap on Try again, holding their shape meanwhile", async ({
@@ -228,7 +227,6 @@ test("a preview takes the season stats and leading scorers from the store as it 
     "Couldn't load the standings",
     "Couldn't load the players' averages",
   ]);
-  expect(await listStrayPeriods(page)).toEqual([]);
 });
 
 test("a box score the Worker can't load says so over Try again, which holds the box score's shape as it reads it again", async ({
