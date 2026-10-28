@@ -1,14 +1,14 @@
 // The settings panel's appearance choice: the app's light look, its dark one, or System to follow
 // the phone. Each device keeps its own, since the page saves nothing to the store. pick-theme.js
-// sets the theme before the first paint; this keeps it, and the icons and bar color that go with
-// it, current. Each app hands it its looks' icons and bar colors. It also draws settings' note on
+// sets the theme and the bar color before the first paint; this keeps them, and the icons that go
+// with them, current. Each app hands it its looks' icons. It also draws settings' note on
 // updating the icon, with both icons and an X, whose link it keeps signed in with a fresh handoff
 // while settings shows it, and eases the note as the look changes, but for a change the phone
 // reports as the page comes back, which takes the note to its new state at once.
 
 // Every page that loads this runs pick-theme.js first.
 /* global buildSafariAddress, checkPickedChoice, isAppearanceChoice, openThemeAddress,
-   readHomeScreenIcon, resolveTheme -- from pick-theme.js */
+   readHomeScreenIcon, resolveTheme, showBarColor -- from pick-theme.js */
 /* global readPageMoveIcon -- from page-move.js */
 
 import { isIos, isOnHomeScreen } from "./device.js";
@@ -27,7 +27,7 @@ import {
 import { watchTimeAway } from "./resume.js";
 
 /**
- * @typedef {{ barColor: string, tabIcon: string, homeScreenIcon: string }} Look
+ * @typedef {{ tabIcon: string, homeScreenIcon: string }} Look
  * @typedef {{ light: Look, dark: Look }} Looks
  */
 
@@ -46,10 +46,9 @@ const appearance = createViewerChoice("appearance", (stored) =>
  * @param {"light" | "dark"} theme
  */
 function showTheme(looks, theme) {
-  const { barColor, tabIcon } = looks[theme];
   document.documentElement.dataset.theme = theme;
-  findElement("themeColor").setAttribute("content", barColor);
-  findElement("tabIcon").setAttribute("href", tabIcon);
+  showBarColor();
+  findElement("tabIcon").setAttribute("href", looks[theme].tabIcon);
   findElement("homeScreenIcon").setAttribute(
     "href",
     looks[readPageMoveIcon() ?? theme].homeScreenIcon,

@@ -7,7 +7,7 @@ import { expect } from "@playwright/test";
 import { listLowContrastText } from "./contrast.mjs";
 import { buildTuningServer, servePageFiles } from "./release-worker.mjs";
 import { SETTINGS, openSettings } from "./settings.mjs";
-import { showTheme } from "./theme-layout.mjs";
+import { THEMES, showTheme } from "./theme-layout.mjs";
 import { listTextOffRoles, measureFieldFace, readRole } from "./type-roles.mjs";
 import { SENT_MS } from "../../shared/page/sent-label.js";
 
@@ -304,7 +304,7 @@ export async function checkPanelInThemes(app) {
   expect(await copyText.evaluate((field) => Number(getComputedStyle(field).fontWeight))).toBe(
     (await readRole(page, "body")).weight,
   );
-  for (const theme of /** @type {const} */ (["light", "dark"])) {
+  for (const theme of THEMES) {
     await showTheme(page, theme);
     expect(await listTextOffRoles(page), theme).toEqual([]);
     expect(await listLowContrastText(page), theme).toEqual([]);

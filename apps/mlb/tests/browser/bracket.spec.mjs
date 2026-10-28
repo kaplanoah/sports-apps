@@ -9,6 +9,7 @@ import {
   EVENING_FIXTURE,
   readColor,
   SEASON_2025,
+  THEME_NAMES,
 } from "./harness.mjs";
 import { listLowContrastText } from "../../../../tests/browser/contrast.mjs";
 import { WIDE_SCREEN } from "./screen-sizes.mjs";
@@ -80,21 +81,19 @@ test("once a series' first game starts, both clubs' scores show 0, at the height
   expect(empty.height).toBe(filled.height);
 });
 
-for (const { colorScheme, theme, winner, loser } of /** @type {const} */ ([
+for (const { colorScheme, winner, loser } of /** @type {const} */ ([
   {
     colorScheme: "light",
-    theme: "Ball",
     winner: { lift: 0, digit: 0.5 },
     loser: { lift: 0.25, digit: 1 },
   },
   {
     colorScheme: "dark",
-    theme: "Night Game",
     winner: { lift: 0.5, digit: 0.5 },
     loser: { lift: 1.25, digit: 1.5 },
   },
 ])) {
-  test(`in ${theme}, each series' chips and their digits sit where its colors look centered, in boxes of one height`, async ({
+  test(`in ${THEME_NAMES[colorScheme]}, each series' chips and their digits sit where its colors look centered, in boxes of one height`, async ({
     page,
   }) => {
     await page.emulateMedia({ colorScheme });
@@ -124,11 +123,11 @@ for (const { colorScheme, theme, winner, loser } of /** @type {const} */ ([
   });
 }
 
-for (const { colorScheme, theme, plain } of /** @type {const} */ ([
-  { colorScheme: "light", theme: "Ball", plain: { fill: [253, 250, 244], shade: 0.18 } },
-  { colorScheme: "dark", theme: "Night Game", plain: { fill: [30, 58, 43], shade: 0.44 } },
+for (const { colorScheme, plain } of /** @type {const} */ ([
+  { colorScheme: "light", plain: { fill: [253, 250, 244], shade: 0.18 } },
+  { colorScheme: "dark", plain: { fill: [30, 58, 43], shade: 0.44 } },
 ])) {
-  test(`in ${theme}, a score chip that isn't the series winner's is filled and shaded as chosen, and the winner's keeps its deep shade`, async ({
+  test(`in ${THEME_NAMES[colorScheme]}, a score chip that isn't the series winner's is filled and shaded as chosen, and the winner's keeps its deep shade`, async ({
     page,
   }) => {
     await page.emulateMedia({ colorScheme });
