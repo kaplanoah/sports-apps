@@ -92,12 +92,14 @@
   color: var(--ink-dim);
   opacity: 1;
 }
-/* Clear reaches over the label's end to the field's edge, so a tap there clears. */
+/* Clear reaches over the label's end to the field's edges, so a tap there clears. */
 .search-clear {
   flex: none;
+  align-self: stretch;
   display: flex;
-  margin: -6px -6px -6px -15px;
-  padding: 6px 15px 6px 6px;
+  align-items: center;
+  margin: 0 0 0 -15px;
+  padding: 0 9px 0 6px;
   border: 0;
   background: none;
   color: var(--ink-dim);
@@ -129,8 +131,9 @@
   font-weight: var(--type-detail-weight);
   color: var(--ink-dim);
 }
+/* Collapsed rather than hidden, so VoiceOver keeps the live region and reads its first line. */
 .search-read:empty {
-  display: none;
+  margin-top: 0;
 }
 .search-read b {
   font-weight: calc(var(--type-detail-weight) + 200);

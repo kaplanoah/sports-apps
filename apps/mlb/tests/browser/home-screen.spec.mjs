@@ -8,7 +8,11 @@ import { listLowContrastText } from "../../../../tests/browser/contrast.mjs";
 import { listNeverShownWords } from "../../../../tests/browser/never-shown-words.mjs";
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
 import { listTapsOffButtons } from "../../../../tests/browser/tap-states.mjs";
-import { listThemeLayoutChanges, showTheme } from "../../../../tests/browser/theme-layout.mjs";
+import {
+  THEMES,
+  listThemeLayoutChanges,
+  showTheme,
+} from "../../../../tests/browser/theme-layout.mjs";
 import { listTextOffRoles, readRole } from "../../../../tests/browser/type-roles.mjs";
 import { listChipsOffCenter } from "../../../../tests/browser/chip-centering.mjs";
 import { LEAGUE_WORDS } from "../../page/js/league-words.js";
@@ -143,7 +147,7 @@ test.describe("on an iPhone, in the browser", () => {
     await openSettings(page);
     const steps = page.locator('#homeScreenTip .home-screen-steps[data-ask="browser"]');
     const looks = [];
-    for (const theme of /** @type {const} */ (["light", "dark"])) {
+    for (const theme of THEMES) {
       await showTheme(page, theme);
       expect(await listLowContrastText(page), theme).toEqual([]);
       looks.push({

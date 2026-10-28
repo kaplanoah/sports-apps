@@ -1,4 +1,4 @@
-import { openApp, openGameSheet, keepHighlights } from "./harness.mjs";
+import { expect, openApp, openGameSheet, keepHighlights } from "./harness.mjs";
 import { openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
 import { SETTINGS } from "../../../../tests/browser/settings.mjs";
 
@@ -152,6 +152,12 @@ export const VIEW_GROUPS = {
   ],
   "a game's sheets": [
     {
+      name: "a final's box score",
+      open: (page) => openGameSheet(page, FINAL_WITH_HIGHLIGHTS),
+      shown: (page) => page.locator("#gameSheet .line-score"),
+      close: (page) => page.keyboard.press("Escape"),
+    },
+    {
       name: "a final's Highlights",
       open: openHighlights,
       shown: (page) => page.locator("#highlightsBody .clip-row").first(),
@@ -160,13 +166,26 @@ export const VIEW_GROUPS = {
   ],
 };
 
+// Tonight's game, in its second quarter.
+const LIVE_GAME = "1042600132";
+
 /**
- * Opens the page in Maple with a week of news and a final's highlights.
+ * Opens the page in Maple with a live game, a week of news, and a final's highlights.
  * @param {import("@playwright/test").Page} page
  */
-export async function openWithNews(page) {
+export async function openWithEverything(page) {
   await page.emulateMedia({ colorScheme: "light" });
   const app = await openApp(page);
+  await app.changeSeason((season) => {
+    const game = season.games.find((each) => each.id === LIVE_GAME);
+    Object.assign(game, { state: "live", status: "Q2 5:10", period: 2, clock: "5:10" });
+    Object.assign(game.away, { score: 30 });
+    Object.assign(game.home, { score: 27 });
+    return season;
+  });
+  await expect(page.locator(`[data-game="${LIVE_GAME}"] .game-status .clock`).first()).toHaveText(
+    "Q2 5:10",
+  );
   const [withPhoto, withoutPhoto] = createStories(new URL("icon-180.png", page.url()).href);
   await app.writeDocument("news/cards", {
     cards: [

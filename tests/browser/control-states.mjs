@@ -1,6 +1,7 @@
 import { holdClock } from "./harness.mjs";
 import { SETTINGS } from "./settings.mjs";
 import { turnOnDiagnostics } from "./diagnostics-switch.mjs";
+import { checkFieldRing } from "./field-ring.mjs";
 import {
   PRESSED_FILLED_BACKGROUND,
   PRESSED_OUTLINED_BACKGROUND,
@@ -202,5 +203,17 @@ export function testControlStates(test, expect, app) {
     await page.locator(SETTINGS).evaluate((dialog) => dialog.focus());
 
     expect(await readFocusedOutline(page)).toMatch(/^none /);
+  });
+
+  test("under the keyboard, search's field shows the ring around its box, and a tap shows none", async ({
+    page,
+  }) => {
+    await app.openApp(page);
+    await page.getByRole("tab", { name: "Search", exact: true }).click();
+
+    await checkFieldRing(page, expect, {
+      field: page.locator(".search-input"),
+      box: page.locator(".search-field"),
+    });
   });
 }

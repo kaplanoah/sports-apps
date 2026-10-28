@@ -108,24 +108,31 @@ test("the field's clear button empties it and brings the examples back, ready to
   await expect(page.locator("#gameSearch .search-example").first()).toBeVisible();
 });
 
-test("a finger at the field's right edge lands on its words while it's empty, and on Clear once it holds a search", async ({
+test("a finger anywhere up the field's right edge lands on its words while it's empty, and on Clear once it holds a search", async ({
   page,
 }) => {
   await openSeasonGames(page);
   await tapSearch(page);
-  const findTapTarget = () =>
+  const findTapTargets = () =>
     page.evaluate(() => {
       const field = /** @type {Element} */ (document.querySelector("#gameSearch .search-field"));
-      const { right, top, height } = field.getBoundingClientRect();
-      return document.elementFromPoint(right - 3, top + height / 2)?.closest("label, button")
-        ?.className;
+      const { right, top, bottom } = field.getBoundingClientRect();
+      return [top + 1, (top + bottom) / 2, bottom - 1].map(
+        (y) => document.elementFromPoint(right - 3, y)?.closest("label, button")?.className,
+      );
     });
 
-  expect(await findTapTarget()).toBe("search-label");
+  expect(await findTapTargets()).toEqual(Array(3).fill("search-label"));
 
   await sendSearch(page, "Liberty");
 
-  expect(await findTapTarget()).toBe("search-clear");
+  expect(await findTapTargets()).toEqual(Array(3).fill("search-clear"));
+  const [clear, field] = await Promise.all(
+    [".search-clear", ".search-field"].map((selector) =>
+      page.locator(`#gameSearch ${selector}`).boundingBox(),
+    ),
+  );
+  expect(clear.x + clear.width).toBe(field.x + field.width);
 });
 
 test("two minutes away closes the search and goes back to the tab before it, and less leaves it as it was", async ({

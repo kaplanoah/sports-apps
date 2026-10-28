@@ -1,21 +1,9 @@
-import { test, expect } from "./harness.mjs";
-import { VIEW_GROUPS, openWithNews } from "./views.mjs";
-import { listAccessibilityProblems } from "../../../../tests/browser/accessibility.mjs";
-import { checkEachView } from "../../../../tests/browser/view-walk.mjs";
-import { showTheme } from "../../../../tests/browser/theme-layout.mjs";
+import { test, expect, THEME_NAMES } from "./harness.mjs";
+import { VIEW_GROUPS, openWithEverything } from "./views.mjs";
+import { testAccessibility } from "../../../../tests/browser/accessibility.mjs";
 
-test.use({ contextOptions: { reducedMotion: "reduce" } });
-test.slow();
-
-for (const [group, views] of Object.entries(VIEW_GROUPS)) {
-  test(`${group} pass axe's checks for assistive tech, in Maple and Walnut`, async ({ page }) => {
-    await openWithNews(page);
-    await checkEachView(page, views, async (view) => {
-      for (const theme of /** @type {const} */ (["light", "dark"])) {
-        await showTheme(page, theme);
-        expect(await listAccessibilityProblems(page), `${view.name} in ${theme}`).toEqual([]);
-      }
-      await showTheme(page, "light");
-    });
-  });
-}
+testAccessibility(test, expect, {
+  openWithEverything,
+  viewGroups: VIEW_GROUPS,
+  themeNames: THEME_NAMES,
+});

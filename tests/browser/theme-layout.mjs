@@ -51,11 +51,14 @@ export const listLayoutChanges = (first, second) =>
     .filter((name) => first[name] !== second[name])
     .map((name) => `${name}: ${first[name] ?? "hidden"} -> ${second[name] ?? "hidden"}`);
 
+/** Every app's themes, as the phone's setting picks them. */
+export const THEMES = /** @type {const} */ (["light", "dark"]);
+
 /**
  * Shows the app's light or dark theme, as the phone's setting picks it, once any color it eases
  * into has arrived.
  * @param {import("@playwright/test").Page} page
- * @param {"light" | "dark"} theme
+ * @param {(typeof THEMES)[number]} theme
  */
 export async function showTheme(page, theme) {
   await page.emulateMedia({ colorScheme: theme });

@@ -9,6 +9,7 @@ import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
 import { checkRanksAreDim } from "../../../../tests/browser/rank-ink.mjs";
 import { readDotRings } from "../../../../tests/browser/dot-ring.mjs";
 import { openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
+import { THEMES } from "../../../../tests/browser/theme-layout.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
@@ -122,7 +123,7 @@ test("her dot on each curve is ringed in the sheet's color, as MLB's are, in Map
   await openApp(page);
   const sheet = await openFromRoster(page, "Breanna Stewart");
   const dots = sheet.locator(".player-curve b");
-  for (const theme of /** @type {const} */ (["light", "dark"])) {
+  for (const theme of THEMES) {
     await page.emulateMedia({ colorScheme: theme });
     await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
     const rings = await readDotRings(dots);
@@ -236,13 +237,13 @@ test.describe("a player who is out", () => {
     await expect(box).toHaveCSS("border-top-color", "rgb(235, 217, 189)");
     await expect(box).toHaveCSS(
       "background-color",
-      /^color\(srgb 0\.6117\d* 0\.1843\d* 0 \/ 0\.065\)$/,
+      /^color\(srgb 0\.7254\d* 0\.2196\d* 0 \/ 0\.065\)$/,
     );
     await page.emulateMedia({ colorScheme: "dark" });
     await expect(box).toHaveCSS("border-top-color", "rgb(88, 54, 30)");
     await expect(box).toHaveCSS(
       "background-color",
-      /^color\(srgb 0\.9843\d* 0\.5019\d* 0\.3333\d* \/ 0\.065\)$/,
+      /^color\(srgb 0\.9725\d* 0\.4431\d* 0\.2705\d* \/ 0\.065\)$/,
     );
   });
 

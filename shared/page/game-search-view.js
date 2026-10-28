@@ -133,9 +133,15 @@ export const renderSearchShell = () =>
         </div>
         <button type="button" class="search-cancel">Cancel</button>
       </form>
-      <p class="search-read"></p>
+      <p class="search-read" role="status"></p>
     </div>
     <div class="day-list search-list"></div>`;
+
+/**
+ * Whether the view holds this release's shell, rather than none or one put back from an earlier
+ * release, whose label held Clear.
+ */
+const hasCurrentShell = () => !!view?.querySelector(".search-label .search-input");
 
 /** The words in the field, as typed. */
 const readQuery = () => findInput()?.value ?? "";
@@ -671,13 +677,23 @@ function sendSearch(event) {
 }
 
 /**
- * Names the field by what it finds, as a field put back from an earlier release may not.
+ * Names the field by what it finds, which the shell leaves to the league.
  * @param {string} placeholder
  */
 function nameField(placeholder) {
   const input = findInput();
   input?.setAttribute("placeholder", placeholder);
   input?.setAttribute("aria-label", placeholder);
+}
+
+/**
+ * Draws the shell again over one put back from an earlier release, keeping the words it held.
+ * @param {HTMLElement} element
+ */
+function redrawOldShell(element) {
+  const query = readQuery();
+  setHtml(element, renderSearchShell());
+  writeQuery(query);
 }
 
 /**
@@ -689,7 +705,7 @@ function nameField(placeholder) {
 export function startGameSearch(element, searchLeague) {
   view = element;
   league = searchLeague;
-  if (!findInput()) setHtml(element, renderSearchShell());
+  if (!hasCurrentShell()) redrawOldShell(element);
   nameField(searchLeague.placeholder);
   placedFor = element.hidden
     ? null

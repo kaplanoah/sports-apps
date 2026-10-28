@@ -11,7 +11,7 @@ import {
   turnOnDiagnostics,
 } from "../../../../tests/browser/diagnostics-switch.mjs";
 import { showDipAndOffViewport } from "../../../../tests/browser/diagnostics-records.mjs";
-import { listLowContrastTextWithRowsPressed } from "../../../../tests/browser/contrast.mjs";
+import { listLowContrastTextInEachTheme } from "../../../../tests/browser/contrast.mjs";
 import { SETTINGS } from "../../../../tests/browser/settings.mjs";
 import { serveReleases } from "../../../../tests/browser/serve-releases.mjs";
 
@@ -145,9 +145,7 @@ test("Diagnostics, once on, start with the app, the release the page came from, 
   );
 });
 
-test("each record's flag stays as readable as AA asks with its line pressed, in Ball and Night Game", async ({
-  page,
-}) => {
+test("each record's flag stands out as AA asks, in Ball and Night Game", async ({ page }) => {
   await page.setViewportSize(PHONE);
   await openApp(page);
   await turnOnDiagnostics(page);
@@ -156,7 +154,7 @@ test("each record's flag stays as readable as AA asks with its line pressed, in 
 
   await showDipAndOffViewport(page, "#standingsWrap");
 
-  expect(await listLowContrastTextWithRowsPressed(page)).toEqual([]);
+  expect(await listLowContrastTextInEachTheme(page)).toEqual([]);
 });
 
 /**

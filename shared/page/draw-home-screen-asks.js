@@ -196,18 +196,20 @@ function wireWelcome(welcome, isOnIos) {
   welcome.addEventListener("change", (event) =>
     keepWelcomeChoice(/** @type {HTMLInputElement} */ (event.target)),
   );
-  // Its buttons ask to close it as Escape does: home-screen.js takes the ask and slides it down, and
-  // until it loads, nothing does, so it closes at once.
-  const askToClose = () => {
-    if (welcome.dispatchEvent(new Event("cancel", { cancelable: true }))) welcome.close();
-  };
+  // Its buttons close it at once until home-screen.js loads and takes their clicks to close it as
+  // Escape does.
   welcome.addEventListener("click", (event) => {
     if (/** @type {Element} */ (event.target).closest(".welcome-continue, .welcome-close"))
-      askToClose();
+      welcome.close();
   });
   // Continue in browser, the caret, Escape, and Android's back all close it, and it stays closed.
-  welcome.addEventListener("close", keepWelcomeClosed);
-  welcome.addEventListener("close", () => finishMove(isOnIos));
+  // It keeps that as its open attribute goes, since Chromium fires close only at the next frame,
+  // after a reload begun at once has already started.
+  new MutationObserver(() => {
+    if (welcome.open) return;
+    keepWelcomeClosed();
+    finishMove(isOnIos);
+  }).observe(welcome, { attributeFilter: ["open"] });
   // Opened again from settings, it rises, even when it closed before the modules arrived.
   welcome.addEventListener("close", () => welcome.removeAttribute("data-reopened"));
 }

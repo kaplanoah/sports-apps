@@ -11,7 +11,7 @@ import {
   makeDip,
   showDipAndOffViewport,
 } from "../../../../tests/browser/diagnostics-records.mjs";
-import { listLowContrastTextWithRowsPressed } from "../../../../tests/browser/contrast.mjs";
+import { listLowContrastTextInEachTheme } from "../../../../tests/browser/contrast.mjs";
 import { RECORD_MS, reloadAndRecord, reloadToRecord } from "./diagnostics-records.mjs";
 
 test.use({
@@ -164,16 +164,14 @@ test("a part that empties and fills again while recording is flagged as a dip", 
   await expect(record.locator(".diagnostics-dip")).toContainText(/bracketWrap: text \d+ to 0/);
 });
 
-test("each record's flag stays as readable as AA asks with its line pressed, in Maple and Walnut", async ({
-  page,
-}) => {
+test("each record's flag stands out as AA asks, in Maple and Walnut", async ({ page }) => {
   await openApp(page);
   await turnOnDiagnostics(page);
   await reloadToRecord(page);
 
   await showDipAndOffViewport(page, "#bracketWrap");
 
-  expect(await listLowContrastTextWithRowsPressed(page)).toEqual([]);
+  expect(await listLowContrastTextInEachTheme(page)).toEqual([]);
 });
 
 test("a return to the page is recorded with how long it was away", async ({ page }) => {

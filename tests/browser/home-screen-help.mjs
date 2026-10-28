@@ -25,6 +25,36 @@ const HOME_SCREEN_NOTE = /add this site to your home screen/;
  * }} App
  */
 
+/**
+ * Starts reading a value the page keeps on the device as the welcome closes, before a reload begun
+ * then could leave, and returns that read. Observers run in the order they were made, so the page's
+ * own runs first.
+ * @param {import("@playwright/test").Page} page
+ * @param {string} key
+ */
+export async function watchStoredAsWelcomeCloses(page, key) {
+  await page.evaluate(
+    ({ selector, storageKey }) => {
+      const welcome = /** @type {HTMLDialogElement} */ (document.querySelector(selector));
+      Object.assign(window, {
+        storedAsWelcomeCloses: new Promise((resolve) =>
+          new MutationObserver(() => {
+            if (!welcome.open) resolve(localStorage.getItem(storageKey));
+          }).observe(welcome, { attributeFilter: ["open"] }),
+        ),
+      });
+    },
+    { selector: WELCOME, storageKey: key },
+  );
+  return () =>
+    page.evaluate(
+      () =>
+        /** @type {{ storedAsWelcomeCloses: Promise<string | null> }} */ (
+          /** @type {unknown} */ (window)
+        ).storedAsWelcomeCloses,
+    );
+}
+
 /** @param {import("@playwright/test").Page} page */
 const findHelp = (page) => page.getByRole("button", { name: "How to get notifications" });
 
@@ -284,7 +314,9 @@ export async function checkPickKeepsWelcome(app) {
   await expect(welcome).toBeVisible();
   await expect(welcome.getByRole("radio", { name: darkLook })).toBeChecked();
 
+  const readStored = await watchStoredAsWelcomeCloses(page, "homeScreenWelcomeClosed");
   await welcome.getByRole("button", { name: "Close" }).click();
+  expect(await readStored()).toBe("closed");
   await expect(welcome).toBeHidden();
   await page.reload({ waitUntil: "domcontentloaded" });
   await expect(welcome).toBeHidden();
@@ -321,7 +353,9 @@ export async function checkCaretBeforeCode({ page, openApp }) {
   );
   await openApp(page, { isShowingWelcome: true });
   const welcome = page.locator(WELCOME);
+  const readStored = await watchStoredAsWelcomeCloses(page, "homeScreenWelcomeClosed");
   await welcome.getByRole("button", { name: "Close" }).click();
+  expect(await readStored()).toBe("closed");
   await expect(welcome).toBeHidden();
   // The welcome is drawn before the first paint, so it would show by the time the page's code runs.
   await page.reload({ waitUntil: "domcontentloaded" });
