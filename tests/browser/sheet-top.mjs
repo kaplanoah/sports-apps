@@ -30,7 +30,7 @@ export const readTopSpacing = (top) =>
  * title.
  * @param {import("@playwright/test").Locator} dialog a `.settings-panel`
  */
-export async function readSettingsTop(dialog) {
+async function readSettingsTop(dialog) {
   const top = dialog.locator(".sheet-top");
   const looks = await top.evaluate((element) => {
     const panel = /** @type {Element} */ (element.closest("dialog"));
