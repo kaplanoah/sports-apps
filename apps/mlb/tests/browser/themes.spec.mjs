@@ -1,7 +1,11 @@
 import { test, expect } from "./harness.mjs";
-import { VIEW_GROUPS, checkEachView, openWithEverything } from "./views.mjs";
+import { VIEW_GROUPS, openWithEverything } from "./views.mjs";
+import { checkEachView } from "../../../../tests/browser/view-walk.mjs";
 import { listChipsOffLook, listShownChipLooks } from "../../../../tests/browser/chip-looks.mjs";
-import { listLowContrastText } from "../../../../tests/browser/contrast.mjs";
+import {
+  listLowContrastText,
+  listLowContrastTextWithRowsPressed,
+} from "../../../../tests/browser/contrast.mjs";
 import { listThemeLayoutChanges, showTheme } from "../../../../tests/browser/theme-layout.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
@@ -37,6 +41,18 @@ for (const [screen, viewport] of Object.entries(SCREENS)) {
       });
     });
   }
+}
+
+for (const [group, views] of Object.entries(VIEW_GROUPS)) {
+  test(`in ${group}, each row's text stays as readable as AA asks with the row pressed, in Ball and Night Game`, async ({
+    page,
+  }) => {
+    await page.setViewportSize(SCREENS["a phone"]);
+    await openWithEverything(page);
+    await checkEachView(page, views, async (view) => {
+      expect(await listLowContrastTextWithRowsPressed(page), view.name).toEqual([]);
+    });
+  });
 }
 
 const CHIP_LOOKS = {

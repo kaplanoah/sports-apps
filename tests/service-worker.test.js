@@ -77,8 +77,16 @@ function startServiceWorker({ publicKey = "AQID_w", app = "mlb", answer = null }
   };
   const caches = createCacheStorage(fetch);
   const shown = [];
+  const windows = [];
+  const opened = [];
   const self = {
-    clients: { claim: async () => {} },
+    clients: {
+      claim: async () => {},
+      matchAll: async () => windows,
+      openWindow: async (url) => {
+        opened.push(url);
+      },
+    },
     skipWaiting: async () => {},
     addEventListener: (type, listener) => (listeners[type] ??= []).push(listener),
     registration: {
@@ -150,6 +158,8 @@ function startServiceWorker({ publicKey = "AQID_w", app = "mlb", answer = null }
     requests,
     subscribed,
     shown,
+    windows,
+    opened,
     createSubscription,
   };
 }
@@ -159,16 +169,13 @@ const listSubscriptionRequests = (requests) =>
     .filter(({ url }) => url === `${SCOPE}push/subscription`)
     .map(({ method, body }) => [method, JSON.parse(body).endpoint]);
 
-test("a subscription the browser replaced is saved, and the old one removed", async () => {
+test("a subscription the browser replaced transfers its proof with one save", async () => {
   const worker = startServiceWorker();
   await worker.dispatch("pushsubscriptionchange", {
     oldSubscription: worker.createSubscription(OLD_ENDPOINT),
     newSubscription: worker.createSubscription(NEW_ENDPOINT),
   });
-  assert.deepEqual(listSubscriptionRequests(worker.requests), [
-    ["PUT", NEW_ENDPOINT],
-    ["DELETE", OLD_ENDPOINT],
-  ]);
+  assert.deepEqual(listSubscriptionRequests(worker.requests), [["PUT", NEW_ENDPOINT]]);
 });
 
 test("a replaced subscription the Worker won't save keeps the old one, and fails the change", async () => {
@@ -628,4 +635,103 @@ test("a service worker that failed to register is registered again the next time
 
   assert.equal(await registerServiceWorker(), "registered");
   assert.equal(await registerServiceWorker(), "registered");
+});
+
+test("a reminder retains its game intent, opens a safe launch URL and navigates an existing client", async () => {
+  for (const app of ["mlb", "wnba"]) {
+    const worker = startServiceWorker({ app });
+    const message = {
+      title: "Away @ Home starting now on FOX",
+      game: "123",
+      season: 2026,
+      tag: "game-reminder:123",
+    };
+    await worker.dispatch("push", { data: { json: () => message } });
+    assert.deepEqual(JSON.parse(JSON.stringify(worker.shown[0].data)), {
+      game: "123",
+      season: 2026,
+    });
+    const notification = { data: worker.shown[0].data, close() {} };
+    await worker.dispatch("notificationclick", { notification });
+    assert.deepEqual(worker.opened, [`${SCOPE}?game=123&season=2026`]);
+    const steps = [];
+    const client = {
+      url: `${SCOPE}?theme=dark`,
+      navigate: async (url) => {
+        steps.push(url);
+        return { url };
+      },
+      focus: async () => {
+        steps.push("focus");
+        return client;
+      },
+    };
+    worker.windows.push(client);
+    await worker.dispatch("notificationclick", { notification });
+    assert.deepEqual(steps, ["focus", `${SCOPE}?game=123&season=2026`]);
+    assert.equal(worker.opened.length, 1);
+  }
+});
+
+test("notification navigation rejects foreign URLs and malformed game intents", async () => {
+  for (const game of ["https://elsewhere.example/", "../other", "123?next=elsewhere", "", null]) {
+    const worker = startServiceWorker();
+    await worker.dispatch("notificationclick", {
+      notification: { data: { game, season: 2026 }, close() {} },
+    });
+    assert.deepEqual(worker.opened, [SCOPE]);
+  }
+});
+
+test("endpoint renewal sends the old subscription proof so the server can preserve preferences and receipts", async () => {
+  const worker = startServiceWorker();
+  const previous = worker.createSubscription(OLD_ENDPOINT);
+  await worker.dispatch("pushsubscriptionchange", {
+    oldSubscription: previous,
+    newSubscription: worker.createSubscription(NEW_ENDPOINT),
+  });
+  assert.deepEqual(JSON.parse(worker.requests[0].body).previousSubscription, previous.toJSON());
+});
+
+for (const failure of ["focus", "navigate", "no-client"]) {
+  test(`a notification opens a new window when an existing client fails at ${failure}`, async () => {
+    const worker = startServiceWorker();
+    const client = {
+      url: SCOPE,
+      focus: async () => {
+        if (failure === "focus") throw new Error("Closed");
+        return client;
+      },
+      navigate: async () => {
+        if (failure === "navigate") throw new Error("Uncontrolled");
+        return null;
+      },
+    };
+    worker.windows.push(client);
+    await worker.dispatch("notificationclick", {
+      notification: { data: { game: "123", season: 2026 }, close() {} },
+    });
+    assert.deepEqual(worker.opened, [`${SCOPE}?game=123&season=2026`]);
+  });
+}
+
+test("page and service worker share game intent validation, including invalid requested launches", () => {
+  const context = createContext({ URL });
+  runInContext(readRepoFile("shared/page/notification-intent.js"), context);
+  const read = (href) => JSON.parse(JSON.stringify(context.readNotificationIntent(href)));
+  assert.deepEqual(read(`${SCOPE}?game=123&season=2026`), {
+    isRequested: true,
+    target: { game: "123", season: 2026 },
+  });
+  for (const query of [
+    "game=abc&season=2026",
+    "game=123&season=1899",
+    "game=123&season=2201",
+    "game=123&season=2026.5",
+    "game=1234567890123&season=2026",
+    "game=123",
+  ]) {
+    assert.deepEqual(read(`${SCOPE}?${query}`), { isRequested: true, target: null });
+  }
+  assert.deepEqual(read(SCOPE), { isRequested: false, target: null });
 });

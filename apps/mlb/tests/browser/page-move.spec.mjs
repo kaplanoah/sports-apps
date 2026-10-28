@@ -73,6 +73,33 @@ test.describe("on an iPhone", () => {
   }) => {
     await checkTurnOn({ page, browser, ...MOVING_APP });
   });
+
+  test("Turn on before settings starts subscribes without disabling the later controls", async ({
+    page,
+    browser,
+  }) => {
+    await checkTurnOn({ page, browser, ...MOVING_APP }, { beforeSettings: true });
+  });
+
+  test("a Turn on rejected before settings starts keeps its device-limit guidance", async ({
+    page,
+    browser,
+  }) => {
+    await checkTurnOn(
+      { page, browser, ...MOVING_APP },
+      { beforeSettings: true, subscriptionFailure: "full" },
+    );
+  });
+
+  test("a temporary Turn on failure before settings starts clears its guidance after sync recovers", async ({
+    page,
+    browser,
+  }) => {
+    await checkTurnOn(
+      { page, browser, ...MOVING_APP },
+      { beforeSettings: true, subscriptionFailure: "temporary" },
+    );
+  });
 });
 
 // An iPhone's Home Screen app hands Safari the new site under a scheme no test browser follows,

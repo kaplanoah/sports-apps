@@ -1,12 +1,14 @@
+import { openNotificationGame } from "#shared/notification-navigation.js";
 import { BACKGROUND_JOBS } from "./background-jobs.js";
 import { renderBracket, watchBracketSpace } from "./bracket-view.js";
 import { listRankedOrder, renderTeamDot } from "./clubs.js";
 import { startCatchUpNote } from "#shared/catch-up-note.js";
 import { startCaughtUpSweep } from "#shared/caught-up-sweep.js";
 import { startChannelTag } from "#shared/channel-tag.js";
+import { startDailyCount } from "#shared/daily-count.js";
 import { startPullToRefresh } from "#shared/pull-to-refresh.js";
 import { startHomeScreen } from "#shared/home-screen.js";
-import { showJobStatuses, startDiagnostics } from "#shared/diagnostics.js";
+import { showJobStatuses, showUpdateStatus, startDiagnostics } from "#shared/diagnostics.js";
 import { redrawEased } from "#shared/eased-redraw.js";
 import { trackKeyboardFocus } from "#shared/keyboard-focus.js";
 import { showStartDay, startDayStrip, startOverDayStrip } from "#shared/day-strip.js";
@@ -31,7 +33,7 @@ import { readNewsChoices } from "#shared/news-choices.js";
 import { listShownStories } from "#shared/page-places.js";
 import { openPageTab, setTabStart, startPageTabs } from "#shared/page-tabs.js";
 import { isSettingShown, openSettings } from "#shared/settings-sheet.js";
-import { openGameSection, startGameSheet } from "./game-sheet.js";
+import { openNotifiedGame, openGameSection, startGameSheet } from "./game-sheet.js";
 import { listFoundGameDays } from "./games-view.js";
 import { listSeasonGames } from "./season-games.js";
 import { REORDER_EVENT } from "./ranking.js";
@@ -305,11 +307,13 @@ function drawLoadedSeason() {
 async function boot() {
   startDiagnostics();
   watchReturns({ isBusy: () => session.isReordering, catchUp, pause: () => session.db.pause() });
+  startDailyCount();
   trackKeyboardFocus();
-  watchPresses();
+  watchPresses([".matchup-row .team-open", ".starters-open"]);
   wireControls();
   session.db = createWorkerStore({ isShowing: hasDrawing });
   showJobStatuses(session.db, BACKGROUND_JOBS);
+  showUpdateStatus(() => session.status);
   drawLastSeen();
   reopenLastSheets();
   startCatchUpNote(session.db, renderStamp);
@@ -338,7 +342,8 @@ async function boot() {
   watchBracketSpace();
   refreshClockEveryMinute();
   startServiceWorker();
-  startNotifications();
+  startNotifications(LEAGUE_WORDS);
+  openNotificationGame({ showYear, openGame: openNotifiedGame });
 }
 
 boot();

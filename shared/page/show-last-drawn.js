@@ -7,7 +7,8 @@
 // was scrolled. After two minutes away, what a viewer moved starts over (long-away.js).
 
 /* global findPlaceToShow -- from long-away.js */
-/* global LAST_DRAWN_KEY -- from open-last-tab.js */
+/* global readSavedParts -- from open-last-tab.js */
+/* global readNotificationIntent -- from notification-intent.js */
 /* global checkPickedChoice, readPickedAppearance -- from pick-theme.js */
 
 // What last-seen.js saves the page's open sheets and settings' switches under.
@@ -22,11 +23,6 @@ function readSaved(key) {
   } catch {
     return null;
   }
-}
-
-function readLastDrawn() {
-  const saved = readSaved(LAST_DRAWN_KEY);
-  return saved && typeof saved === "object" ? saved : {};
 }
 
 // Only a part the page draws whole goes back, since a release may have changed the markup around
@@ -251,7 +247,8 @@ function showPickedAppearance() {
 // What the page last showed is a drawing of its own, so the note that its views are still empty
 // goes with it.
 function showLastDrawn() {
-  const parts = Object.entries(readLastDrawn()).filter(([id, part]) => isDrawnPart(id, part));
+  if (readNotificationIntent(location.href).isRequested) return;
+  const parts = Object.entries(readSavedParts()).filter(([id, part]) => isDrawnPart(id, part));
   const now = Date.now();
   const pageTops = parts.map(([id, part]) => showPart(id, part, now));
   if (parts.length) document.getElementById("loadNote")?.remove();

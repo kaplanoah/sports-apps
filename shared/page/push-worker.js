@@ -1,3 +1,4 @@
+/* global readGameIntent -- from notification-intent.js */
 // The service worker every app's sw.js loads: it shows the Worker's push messages, and opens the
 // page when one is tapped. Every push shows a notification, because iOS stops delivering to a page
 // whose pushes show nothing, so a message that can't be read shows the app's sw.js `pageName`.
@@ -19,21 +20,37 @@ self.addEventListener("push", (event) => {
     self.registration.showNotification(message.title || self.pageName, {
       body: message.body || "",
       tag: message.tag,
+      data: readGameIntent(message),
       icon: "icon-180.png",
     }),
   );
 });
 
-async function openPage() {
+async function openPageFromNotification(data) {
   const scope = self.registration.scope;
+  const url = new URL(scope);
+  const intent = readGameIntent(data);
+  if (intent) {
+    url.searchParams.set("game", intent.game);
+    url.searchParams.set("season", String(intent.season));
+  }
   const windows = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
   const open = windows.find((client) => client.url.startsWith(scope));
-  return open ? open.focus() : self.clients.openWindow(scope);
+  if (!open) return self.clients.openWindow(url.href);
+  try {
+    const focused = await open.focus();
+    if (!intent) return focused;
+    const navigated = await focused.navigate(url.href);
+    if (navigated) return navigated;
+  } catch {
+    /* A closing or uncontrolled window may no longer be navigable. */
+  }
+  return self.clients.openWindow(url.href);
 }
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  event.waitUntil(openPage());
+  event.waitUntil(openPageFromNotification(event.notification.data));
 });
 
 async function requestPush(path, method, body) {
@@ -64,9 +81,10 @@ async function subscribeAgain(oldSubscription) {
 
 async function replaceSubscription(oldSubscription, newSubscription) {
   const replacement = newSubscription ?? (await subscribeAgain(oldSubscription));
-  await requestPush("push/subscription", "PUT", replacement.toJSON());
-  if (oldSubscription && oldSubscription.endpoint !== replacement.endpoint)
-    await requestPush("push/subscription", "DELETE", { endpoint: oldSubscription.endpoint });
+  await requestPush("push/subscription", "PUT", {
+    ...replacement.toJSON(),
+    previousSubscription: oldSubscription?.toJSON(),
+  });
 }
 
 // A browser can replace a subscription on its own, and the Worker would otherwise keep sending

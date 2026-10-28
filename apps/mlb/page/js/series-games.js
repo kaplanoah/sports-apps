@@ -5,20 +5,13 @@ import { describeSeriesAfterWin, describeSeriesLead } from "#shared/series-text.
 import { nameSeries } from "./bracket.js";
 import { nameTeam } from "./teams.js";
 import { listCountedGames } from "./season-games.js";
-import { countWinsNeeded } from "./snapshot.js";
-
-/** @param {string} seriesId */
-const readRound = (seriesId) =>
-  seriesId === "WS" ? "WS" : seriesId.split("_")[1].replace(/\d$/, "");
-
-/** @param {string} seriesId */
-const countSeriesWinsNeeded = (seriesId) => countWinsNeeded(readRound(seriesId));
+import { countSeriesWinsNeeded, readSeriesRound } from "./feed-postseason.js";
 
 // Short names, since the label shares the row's middle with the time or score.
 /** @param {string} seriesId */
 export function nameRound(seriesId) {
   const [league] = seriesId.split("_");
-  const round = readRound(seriesId);
+  const round = readSeriesRound(seriesId);
   if (round === "WC") return `${league} WC`;
   if (round === "WS") return "WS";
   return `${league}${round}`;

@@ -354,7 +354,8 @@ const COVERAGE = {
   "section:roster": { search: "Liberty roster", opens: "roster" },
   "sheet:playerSheet": { search: "Stewart", opens: "player" },
   "settings:season": { search: "season", opens: "settings:season" },
-  "settings:notifications": { search: "notifications", opens: "settings:notifications" },
+  "settings:notifications": { search: "final scores", opens: "settings:notifications" },
+  "settings:reminders": { search: "before game", opens: "settings:reminders" },
   "settings:team-outlets": { search: "dedicated sources", opens: "settings:team-outlets" },
   "settings:paywalled": { search: "the athletic", opens: "settings:paywalled" },
   "settings:appearance": { search: "dark mode", opens: "settings:appearance" },
@@ -381,6 +382,10 @@ function listPagePlaces() {
     ),
     ...listMatches(sheets, /data-tab="([^"]+)"/g).map((key) => `section:${key}`),
     ...listMatches(page, /data-setting="([^"]+)"/g),
+    ...listMatches(
+      readFileSync(`${import.meta.dirname}/../../../shared/page/notifications-view.js`, "utf8"),
+      /data-setting="([^"]+)"/g,
+    ),
   ];
 }
 
@@ -414,6 +419,17 @@ test("every setting's row names the place a search opens", () => {
 
 test("each place search opens is listed by its search, and each game by a search of games", () => {
   const pages = listSearchPages({ index: INDEX, isSettingShown: () => true });
+  for (const query of [
+    "remind",
+    "before game",
+    "game notifications",
+    "game starts",
+    "game sta",
+    "time before tipoff",
+  ]) {
+    const found = findPages(query, { dictionary: CONTEXT.dictionary, pages, isTyping: false });
+    assert.ok(found.rows.map(nameOpened).includes("settings:reminders"), query);
+  }
   for (const [place, coverage] of Object.entries(COVERAGE)) {
     if ("search" in coverage) {
       const { rows } = findPages(coverage.search, {

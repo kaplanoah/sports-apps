@@ -1,13 +1,15 @@
 import { expect } from "@playwright/test";
+import { INSET_SHADOW_PATTERN, markEveryRowPressed } from "./press-looks.mjs";
 import { waitForPressesToEnd } from "./tap-states.mjs";
+import { showTheme } from "./theme-layout.mjs";
 
 /**
  * Waits until no row is pressed and no color is mid-transition, so a press a test's own tap left
- * behind, or a tint still fading, is never measured as the page's colors. Each test of a pressed
- * or hovered row's colors measures that state on purpose.
+ * behind, or a tint still fading, is never measured as the page's colors. A test of a pressed or
+ * hovered row's colors waits for this before it presses or hovers, then measures that state.
  * @param {import("@playwright/test").Page} page
  */
-async function waitForSettledColors(page) {
+export async function waitForSettledColors(page) {
   await waitForPressesToEnd(page);
   await expect
     .poll(() =>
@@ -28,15 +30,15 @@ async function waitForSettledColors(page) {
  * Every piece of shown text that stands out from what's behind it by less than WCAG's AA level
  * asks: 4.5 to 1, or 3 to 1 for large text, 24px and up or 18.66px and up at 700. The text's color
  * fades by its own alpha and by each opacity around it, and the background is the first one behind
- * it that fills, with any see-through ones over it laid on top. Text over a picture, a gradient, or
- * a layer drawn behind it can't be measured this way and is left out, as are disabled controls and
- * marks with no letter or digit, like a separator or a dash, which WCAG leaves out, and text hidden
- * for screen readers. It measures the page as it shows at once, a pressed row's tint and all, so a
- * test of a pressed or hovered row's colors measures that state.
+ * it that fills, with any see-through ones and inset tints over it laid on top. Text over a
+ * picture, a gradient, or a layer drawn behind it can't be measured this way and is left out, as
+ * are disabled controls and marks with no letter or digit, like a separator or a dash, which WCAG
+ * leaves out, and text hidden for screen readers. It measures the page as it shows at once, a
+ * pressed row's tint and all, so a test of a pressed or hovered row's colors measures that state.
  * @param {import("@playwright/test").Page} page
  */
 export const listLowContrastTextAsShown = (page) =>
-  page.evaluate(async () => {
+  page.evaluate(async (insetShadowPattern) => {
     await document.fonts.ready;
     const SMALL_TEXT_CONTRAST = 4.5;
     const LARGE_TEXT_CONTRAST = 3;
@@ -97,7 +99,54 @@ export const listLowContrastTextAsShown = (page) =>
         return style.content !== "none" && style.zIndex === "-1" && isPainted(style);
       });
 
+    /**
+     * The tint an inset shadow lays over an element's whole fill, as a press does a row's, or null
+     * where none does, as where one only rings its edge.
+     * @param {Element} element
+     * @param {CSSStyleDeclaration} style
+     */
+    const readInsetTint = (element, style) => {
+      const [, color, spread] = style.boxShadow.match(new RegExp(insetShadowPattern)) ?? [];
+      const { width, height } = element.getBoundingClientRect();
+      return color && Number(spread) * 2 >= Math.min(width, height) ? readRgba(color) : null;
+    };
+
+    /**
+     * The tint over an element's text from its own inset shadow, or from its ::before's, which
+     * lies across it, as a pressed Updates line's does.
+     * @param {Element} element
+     * @param {CSSStyleDeclaration} style
+     */
+    const readTint = (element, style) => {
+      const before = getComputedStyle(element, "::before");
+      return (
+        readInsetTint(element, style) ??
+        (before.content === "none" ? null : readInsetTint(element, before))
+      );
+    };
+
     const pageBackground = readRgba(getComputedStyle(document.body).backgroundColor).rgb;
+
+    /**
+     * What an element is drawn over: its parent, or for one placed beside it, like a bracket's
+     * seed hung left of its team's row, the nearest element around it whose box holds its middle,
+     * since a fill or a tint paints only inside its own box. One that nothing in the page holds,
+     * like a sheet's section slid off the screen, is drawn over its parent where it shows.
+     * @param {Element} element
+     */
+    const findBackdrop = (element) => {
+      const parent = element.parentElement;
+      if (getComputedStyle(element).position !== "absolute") return parent;
+      const box = element.getBoundingClientRect();
+      const [x, y] = [box.left + box.width / 2, box.top + box.height / 2];
+      const holdsMiddle = (/** @type {Element} */ around) => {
+        const { left, right, top, bottom } = around.getBoundingClientRect();
+        return x >= left && x <= right && y >= top && y <= bottom;
+      };
+      for (let around = parent; around; around = around.parentElement)
+        if (holdsMiddle(around)) return around;
+      return parent;
+    };
 
     /** @type {Map<Element, number[] | null>} */
     const backgrounds = new Map();
@@ -117,9 +166,11 @@ export const listLowContrastTextAsShown = (page) =>
       if (style.backgroundImage !== "none" || hasLayerBehind(element)) background = null;
       else if (fill.alpha === 1) background = fill.rgb;
       else {
-        const below = readBackground(element.parentElement);
+        const below = readBackground(findBackdrop(element));
         background = below && layOver(fill.rgb, below, fill.alpha);
       }
+      const tint = readTint(element, style);
+      if (background && tint) background = layOver(tint.rgb, background, tint.alpha);
       backgrounds.set(element, background);
       return background;
     };
@@ -190,7 +241,7 @@ export const listLowContrastTextAsShown = (page) =>
         );
     }
     return [...lowContrast];
-  });
+  }, INSET_SHADOW_PATTERN);
 
 /**
  * The text listLowContrastTextAsShown names once the page's colors have settled.
@@ -199,4 +250,23 @@ export const listLowContrastTextAsShown = (page) =>
 export async function listLowContrastText(page) {
   await waitForSettledColors(page);
   return listLowContrastTextAsShown(page);
+}
+
+/**
+ * Every piece of shown text under AA's level with every row pressed, in the app's light theme and
+ * then its dark one, each named with its theme, leaving the page unpressed in the light theme.
+ * @param {import("@playwright/test").Page} page
+ */
+export async function listLowContrastTextWithRowsPressed(page) {
+  const lowContrastText = [];
+  for (const theme of /** @type {const} */ (["light", "dark"])) {
+    await showTheme(page, theme);
+    await waitForSettledColors(page);
+    await markEveryRowPressed(page, true);
+    const shown = await listLowContrastTextAsShown(page);
+    lowContrastText.push(...shown.map((text) => `in ${theme}, ${text}`));
+    await markEveryRowPressed(page, false);
+  }
+  await showTheme(page, "light");
+  return lowContrastText;
 }

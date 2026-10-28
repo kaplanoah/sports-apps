@@ -7,7 +7,7 @@
  * Apps link it after sheet.css, before their own styles.css, which sets the title's font and may
  * refine these rules.
  *
- * Beside chrome.css's --card-border, --accent, --focus-ring, and --radius-card, an app's :root
+ * Beside chrome.css's --card-border, --accent, and --radius-card, an app's :root
  * defines these tokens:
  *   --ink-mid              text between --ink and --ink-dim, for the note and the labels
  *   --ink-hover            a team's or player's name under the pointer, --ink with enough of
@@ -35,10 +35,6 @@
 }
 [data-team] {
   cursor: pointer;
-}
-body.kbd :is(.team-open, .player-open):focus {
-  outline: 2px solid var(--focus-ring);
-  outline-offset: 2px;
 }
 /* Under the pointer, a team's or a player's name takes some of the accent, over whatever color it
    had. */
@@ -130,8 +126,4 @@ body.kbd :is(.team-open, .player-open):focus {
   letter-spacing: inherit;
   color: var(--accent);
   cursor: pointer;
-}
-body.kbd .team-titles-more:focus {
-  outline: 2px solid var(--focus-ring);
-  outline-offset: 2px;
 }

@@ -17,7 +17,7 @@ import {
   renderArm,
   renderGameFaceOff,
 } from "./games-view.js";
-import { listSeasonGames, nameGameKey } from "./season-games.js";
+import { findGameToOpen, listSeasonGames, nameGameKey } from "./season-games.js";
 import { describeDay, readCalendarDate } from "#shared/days.js";
 import { watchGameOpens } from "#shared/game-row.js";
 import { createHighlightsSection } from "#shared/highlights-section.js";
@@ -72,10 +72,11 @@ const findElement = (id) => /** @type {HTMLElement} */ (document.getElementById(
  * @returns {MatchupGame | null}
  */
 function findGame(key) {
-  const slate = session.state?.slate;
-  const games = listSeasonGames(slate, session.schedule);
-  const game = games.find((each) => !each.allStar && nameGameKey(each) === key);
-  return game ? { ...game, today: game.date === slate?.today.date } : null;
+  return findGameToOpen(
+    session.state?.slate,
+    session.schedule,
+    (game) => nameGameKey(game) === key,
+  );
 }
 
 // Once the slate has moved past a game's day, the sheet shows it as it was when it opened.
@@ -110,7 +111,7 @@ function renderStarter(side) {
 function renderStarters(sides) {
   if (!sides.some((side) => side.starter?.name)) return html``;
   const label = `Pitching matchup: ${sides.map(nameStarter).join(" vs ")}`;
-  return html`<button type="button" class="starters-open" aria-label="${label}">
+  return html`<button type="button" class="starters-open press-tint" aria-label="${label}">
     ${renderStarter(sides[0])}<span class="starters-versus">vs</span>${renderStarter(sides[1])}${STARTERS_CARET}
   </button>`;
 }
@@ -351,6 +352,16 @@ function openGameSheet(game, section) {
 export function openGameSection(key, section) {
   const game = findGame(key);
   if (game) openGameSheet(game, section);
+}
+
+/** @param {string} id */
+export function openNotifiedGame(id) {
+  const game = findGameToOpen(
+    session.state?.slate,
+    session.schedule,
+    (each) => each.id === id && each.state !== "off",
+  );
+  if (game) openGameSheet(game);
 }
 
 const readShownGame = () =>

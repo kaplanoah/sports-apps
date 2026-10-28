@@ -26,6 +26,7 @@
 // - Nothing filters what is behind it: no backdrop-filter anywhere.
 
 import { followPath, readPath } from "./element-path.js";
+import { runAfterPress } from "./press.js";
 import { noteSheetStep } from "./sheet-log.js";
 import { closeOnCancel, closeOnSwipeDown, closeSheet } from "./sheet-swipe.js";
 import { createSlidePanels } from "./slide-panels.js";
@@ -431,9 +432,11 @@ function forgetDialog(dialog) {
 function followClicks(dialog) {
   dialog.addEventListener("click", (event) => {
     const target = /** @type {Element} */ (event.target);
+    const closeButton = target.closest(".sheet-close");
     const backButton = target.closest(".sheet-back");
-    if (target === dialog || target.closest(".sheet-close")) closeSheet(dialog);
-    else if (backButton) stepBack(dialog, backButton);
+    if (target === dialog) closeSheet(dialog);
+    else if (closeButton) runAfterPress(closeButton, () => closeSheet(dialog));
+    else if (backButton) runAfterPress(backButton, () => stepBack(dialog, backButton));
   });
 }
 

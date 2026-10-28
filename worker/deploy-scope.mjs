@@ -17,6 +17,8 @@ export const CONFIG_ONLY_FILES = new Set([
   "LICENSE",
   ".git-blame-ignore-revs",
   ".gitignore",
+  ".githooks/pre-push",
+  ".githooks/check-push.mjs",
   ".prettierignore",
   "eslint.config.mjs",
   "knip.json",
@@ -48,11 +50,13 @@ const SKIPPED_FILES = new Set([
   "types/globals.d.ts",
   "worker/beta-claim.mjs",
   "worker/browser-scope.mjs",
+  "worker/browser-test-calls.mjs",
   "worker/burn-in-specs.mjs",
   "worker/check-pr-title.mjs",
   "worker/codex-runner-probe.mjs",
   "worker/find-trusted-review.mjs",
   "worker/flag-conflicts.mjs",
+  "worker/issues.mjs",
   "worker/judge-burn-in.mjs",
   "worker/judge-review.mjs",
   "worker/labeling.mjs",
@@ -68,6 +72,7 @@ const SKIPPED_FILES = new Set([
   "worker/red-approval.mjs",
   "worker/red-change-styles.mjs",
   "worker/red-change.mjs",
+  "worker/report-deploy.mjs",
   "worker/report-flaky-tests.mjs",
   "worker/review-artifact.mjs",
   "worker/review-context.mjs",
@@ -104,7 +109,7 @@ const SKIPPED_FILES = new Set([
 const TEST_FOLDERS = [/^tests\//, /^(?:apps|services)\/[^/]+\/tests\//];
 
 /**
- * Whether a path holds settings, hooks, rules, or skills that only sessions run.
+ * Whether a path is in the root's Claude configuration folder.
  * @param {string} path
  */
 export const isSessionPath = (path) => path.startsWith(".claude/");

@@ -1,8 +1,11 @@
-// What the settings panel's notifications switch says under it, for its status and the device,
-// and what it shows once saving this device's subscription to the Worker fails.
+// Permission guidance and category controls for this device's notification settings.
+
+export const PENDING_SPINNER_MS = 700;
+
+export const CATEGORIES = /** @type {const} */ (["updates", "reminders"]);
 
 export const TOO_MANY_DEVICES = "Too many devices get notifications already";
-export const CHANGE_FAILED = "Couldn't change notifications. Try again in a moment.";
+export const CHANGE_FAILED = "Couldn't update notifications. Try again in a moment.";
 
 const NOTES = {
   blockedOnIos:
@@ -36,14 +39,14 @@ function describeStatus(status, device) {
 }
 
 /**
- * The note under the switch: a message the switch was given, else what its status says, else what
- * the app's notifications tell. Where they come only from the Home Screen, it ends with a ? that
- * opens the welcome's steps, wherever the welcome can open.
- * @param {{ status: string, message: string, about: string, device: NoteDevice }} state
+ * The note under the control a save answers, else under the updates label: a message it was
+ * given, else what its status says. Where notifications come only from the Home Screen, its ?
+ * opens the welcome's steps.
+ * @param {{ status: string, message: string, device: NoteDevice }} state
  * @returns {{ text: string, hasHelp: boolean }}
  */
-export const chooseNotifyNote = ({ status, message, about, device }) => ({
-  text: message || describeStatus(status, device) || about,
+export const chooseNotifyNote = ({ status, message, device }) => ({
+  text: message || describeStatus(status, device) || "",
   hasHelp: status === "homeScreen" && device.canOpenWelcome,
 });
 
@@ -76,4 +79,39 @@ export const isTurnedAway = (error) =>
 export function chooseFailedSyncStatus(error, isSubscribed) {
   if (isTurnedAway(error)) return { status: "off", note: TOO_MANY_DEVICES };
   return isSubscribed ? null : { status: "off", note: "" };
+}
+
+/** @param {{ previousStatus: string, permission: string, device: NoteDevice }} state */
+export function chooseDeniedStatus({ previousStatus, permission, device }) {
+  const deniedStatus = permission === "denied" ? "blocked" : "off";
+  return {
+    status: previousStatus === "on" ? previousStatus : deniedStatus,
+    note: chooseNotifyNote({ status: deniedStatus, message: "", device }).text,
+  };
+}
+
+/**
+ * The choices a viewer made that aren't saved yet, which the controls show at once.
+ * @typedef {{ updates?: boolean, reminders?: boolean, minutes?: number }} WantedChoices
+ */
+
+/**
+ * The controls show each choice not yet saved over the saved one, and stay live while saves run,
+ * so a viewer can change their mind at once. A category waiting on its save is busy, and shows a
+ * spinner once saving runs slow.
+ * @param {{ status: string, preferences: { updates: boolean, reminders: boolean, minutes?: number }, wanted?: WantedChoices, isSlow?: boolean }} state
+ */
+export function chooseNotificationControls({ status, preferences, wanted = {}, isSlow = false }) {
+  const isOn = status === "on";
+  const busyCategories = CATEGORIES.filter((category) => wanted[category] !== undefined);
+  return {
+    areSwitchesHidden: !["off", "on", "failed", "blocked"].includes(status),
+    areSwitchesDisabled: status === "blocked",
+    areUpdatesOn: wanted.updates ?? (isOn && preferences.updates),
+    areRemindersOn: wanted.reminders ?? (isOn && preferences.reminders),
+    busyCategories,
+    spinnerCategories: isSlow ? busyCategories : [],
+    isTimingDisabled: !["off", "on", "failed"].includes(status),
+    timingMinutes: wanted.minutes ?? preferences.minutes,
+  };
 }

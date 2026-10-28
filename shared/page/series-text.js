@@ -62,3 +62,10 @@ export function describeSeriesAfterWin({ winner, wins, losses, winsNeeded }) {
  */
 export const describeSeriesWin = ({ result, series, own, theirs }) =>
   html`${result} to win the ${series} ${renderSeriesWins(own, theirs)}`;
+
+/**
+ * An if-needed game is confirmed once the series guarantees it will be played.
+ * @param {{ ifNecessary: boolean, number: number, winsNeeded: number, wins: number[] }} game
+ */
+export const isNecessaryPlayoffGame = ({ ifNecessary, number, winsNeeded, wins }) =>
+  !ifNecessary || number <= Math.max(winsNeeded, wins.reduce((total, won) => total + won, 0) + 1);

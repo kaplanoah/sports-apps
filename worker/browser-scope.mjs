@@ -1,5 +1,5 @@
 // Decides which apps' browser tests a change needs. A file the browser tests can't reach needs
-// none: the docs, the root's .claude/ settings, hooks, rules, and skills, the other workflows,
+// none: the docs, the root's agent settings, hooks, rules, and skills, the other workflows,
 // the files that only configure the checks, and the tooling and Node tests that no browser
 // spec, helper, or the Playwright config imports. Browser setup files run every app's tests. A file in an
 // app's own folder needs that app's, if it has any. Anything else needs every app's, a service's
@@ -101,7 +101,7 @@ export const readRepoText = (path, folder = root) => {
 };
 
 /** Every script in the root's browser test helpers and each app's browser tests. */
-const listBrowserTestFiles = () =>
+export const listBrowserTestFiles = () =>
   [
     "tests/browser",
     ...listAppsWithBrowserTests().map((app) => `apps/${app}/tests/browser`),

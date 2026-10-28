@@ -14,23 +14,53 @@ const PAGE = "apps/mlb/tests/browser/page.spec.mjs";
 const REACHED = listBrowserTestReach();
 
 /**
- * @param {string[]} changedSpecs
+ * @param {string[]} selectedSpecs
  * @param {string[] | null} sinceBurnedIn
  */
-const listSpecs = (changedSpecs, sinceBurnedIn) =>
-  listSpecsToBurnIn(changedSpecs, sinceBurnedIn, REACHED);
+const listSpecs = (selectedSpecs, sinceBurnedIn) =>
+  listSpecsToBurnIn(selectedSpecs, sinceBurnedIn, REACHED);
 
 test("the specs a change touches are an app's browser specs at any depth, as Playwright runs them", () => {
   const nested = "apps/wnba/tests/browser/sheets/drag.spec.mjs";
   assert.deepEqual(
-    listBrowserSpecs([
-      SHEETS,
-      nested,
-      "apps/wnba/tests/browser/harness.mjs",
-      "apps/wnba/tests/page.test.js",
-      PAGE,
-    ]),
+    listBrowserSpecs(
+      [SHEETS, nested, "apps/wnba/tests/browser/harness.mjs", "apps/wnba/tests/page.test.js", PAGE],
+      { browserFiles: [], readText: () => null },
+    ),
     [SHEETS, nested, PAGE],
+  );
+});
+
+test("a helper-only change burns in each importing spec through shared adapters", () => {
+  for (const extension of ["mjs", "js"]) {
+    const helper = `tests/browser/game-reminders.${extension}`;
+    const adapter = "tests/browser/reminder-adapter.mjs";
+    const sources = {
+      [SHEETS]: `import '../../../../${adapter}';`,
+      [PAGE]: `import '../../../../${helper}';`,
+      [adapter]: `export * from './game-reminders.${extension}';`,
+      [helper]: 'export function defineTests(test) { test("reminders", () => {}); }',
+      "apps/mlb/tests/browser/other.spec.mjs": 'test("other", () => {});',
+    };
+    const browserFiles = Object.keys(sources);
+    const readText = (path) => sources[path] ?? null;
+    assert.deepEqual(listBrowserSpecs([helper], { browserFiles, readText }), [SHEETS, PAGE]);
+    assert.deepEqual(listBrowserSpecs([PAGE, helper], { browserFiles, readText }), [PAGE, SHEETS]);
+  }
+});
+
+test("a general helper does not select specs that declare no changed tests", () => {
+  const helper = "tests/browser/harness.mjs";
+  const sources = {
+    [PAGE]: `import '../../../../${helper}';`,
+    [helper]: "export function openApp() {}",
+  };
+  assert.deepEqual(
+    listBrowserSpecs([helper], {
+      browserFiles: Object.keys(sources),
+      readText: (path) => sources[path] ?? null,
+    }),
+    [],
   );
 });
 
@@ -47,7 +77,7 @@ test("a spec that passed burn-in and hasn't changed since isn't burned in again,
     assert.deepEqual(listSpecs([SHEETS, PAGE], [tested]), [], tested);
 });
 
-test("every changed spec burns in with no earlier burn-in, or once what every spec runs with changed", () => {
+test("every selected spec burns in with no earlier burn-in, or once what every spec runs with changed", () => {
   assert.deepEqual(listSpecs([SHEETS, PAGE], null), [SHEETS, PAGE]);
   for (const shared of [
     "tests/browser/touch.mjs",
@@ -196,7 +226,7 @@ test("a run's jobs are read past their first page", async () => {
   assert.equal(await findBurnedInHead({ readJson, branch: "x" }), "earlier");
 });
 
-test("a branch's burn-ins GitHub won't give burn every changed spec in, and say why", async () => {
+test("a branch's burn-ins GitHub won't give burn every selected spec in, and say why", async () => {
   /** @type {string[]} */
   const logged = [];
   const readJson = async () => {

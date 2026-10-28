@@ -7,7 +7,7 @@
  * until then each card is as wide as what it holds. Apps link it after sheet.css, before their own
  * styles.css, which places the row among the sheet's parts and sizes the other team's dot.
  *
- * Beside chrome.css's --ink, --ink-dim, --ink-hover, --focus-ring, and --radius-card, and sheet.css's
+ * Beside chrome.css's --ink, --ink-dim, --ink-hover, and --radius-card, and sheet.css's
  * --sheet-part-head, an app's :root defines these tokens:
  *   --game-card-edge         a card's border
  *   --game-card-now          the clock of a game being played, and the day of one later today
@@ -55,22 +55,12 @@
   color: inherit;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
-  transition: background 0.15s;
 }
 /* Under a mouse, the other team's name takes some of the accent, as a team's name does on its own. */
 @media (hover: hover) {
   .game-card-button:hover .game-card-name {
     color: var(--ink-hover);
   }
-}
-/* While a press holds it (press.js), the card tints at once, and fades as the press lets go. */
-.game-card-button.is-pressed {
-  background: color-mix(in srgb, var(--ink) 7%, transparent);
-  transition: none;
-}
-.game-card-button:focus-visible {
-  outline: 2px solid var(--focus-ring);
-  outline-offset: 2px;
 }
 .game-card-when {
   font-size: var(--type-label-size);

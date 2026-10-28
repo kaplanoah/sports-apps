@@ -2,8 +2,8 @@
  * The page a phone sees until it sends the access code (an app's gate.html): the app's icon, the
  * code, and Open, together in the middle of the screen, however short. Pages theme it with
  * --card-border, --ink, --ink-dim, --raised and --edge (a field's fill and the line inside it, as
- * an outlined button's), --accent, --accent-ink, --pager-chosen-edge, --focus-ring,
- * --radius-control, --control-height, --control-room, --gate-problem (what was typed is wrong), and
+ * an outlined button's), --accent, --accent-ink, --pager-chosen-edge, --radius-control,
+ * --control-height, --control-room, --gate-problem (what was typed is wrong), and
  * --gate-code-font. Its title is set as a sheet's title, and Open as the app's other buttons, which
  * an app's styles.css sets for both. The Home Screen welcome (chrome.css) takes its title and its
  * Open button for Install.
@@ -71,9 +71,6 @@ body.gate-page {
   opacity: 1;
   letter-spacing: 0.06em;
 }
-.code-field:focus {
-  outline: none;
-}
 .code-field.is-wrong {
   box-shadow: inset 0 0 0 1px var(--gate-problem);
 }
@@ -90,10 +87,6 @@ body.gate-page {
   align-content: center;
   text-box: trim-both cap alphabetic;
   cursor: pointer;
-}
-body.kbd .open-button:focus {
-  outline: 2px solid var(--focus-ring);
-  outline-offset: 2px;
 }
 /* Below the form and out of the layout, so a message never moves the rest off center. */
 .gate-message {

@@ -9,6 +9,7 @@ import { checkAppPage } from "./check-page.mjs";
 import { checkService } from "./check-service.mjs";
 import { listAppWorkers, readWorkersSubdomain } from "./deploy.mjs";
 import { createGitHub, readAllPages } from "./github-api.mjs";
+import { closeIssue, findOpenIssue, openIssue } from "./issues.mjs";
 
 const RECHECK_DELAY_MS = 60 * 1000;
 
@@ -38,37 +39,6 @@ export const nameServiceIssue = (service) => `The ${service} service isn't answe
  */
 const describeServiceOutage = (check, runUrl) =>
   `Asked through each app's health twice a minute apart, ${check.reason}.\n\nSee [the check's run](${runUrl}). This issue closes itself once the service answers again.`;
-
-/**
- * @param {any[]} openIssues
- * @param {string} title
- */
-const findOpenIssue = (openIssues, title) =>
-  openIssues.find((issue) => issue.title === title && !issue.pull_request);
-
-/**
- * @param {ReturnType<typeof createGitHub>} github
- * @param {string} title
- * @param {string} body
- * @returns {Promise<number>} the new issue's number
- */
-async function openIssue(github, title, body) {
-  const created = await github("/issues", { method: "POST", body: { title, body } });
-  return created.number;
-}
-
-/**
- * @param {ReturnType<typeof createGitHub>} github
- * @param {number} number
- * @param {string} comment
- */
-async function closeIssue(github, number, comment) {
-  await github(`/issues/${number}/comments`, { method: "POST", body: { body: comment } });
-  await github(`/issues/${number}`, {
-    method: "PATCH",
-    body: { state: "closed", state_reason: "completed" },
-  });
-}
 
 /**
  * Keeps the app's one outage issue open while it isn't opening.

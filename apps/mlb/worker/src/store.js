@@ -1,5 +1,5 @@
 import { OFF_DAY_CHECK_MS } from "#shared/poll-schedule.js";
-import { choosePollDelay } from "../../page/js/snapshot.js";
+import { choosePollDelay, listReminderGames } from "../../page/js/snapshot.js";
 import PAGE_FILES from "#page-files/mlb";
 import { readReleaseCommit } from "../../../../shared/worker/app-worker.js";
 import { createSeasonStore } from "../../../../shared/worker/season-store.js";
@@ -36,6 +36,7 @@ export const SeasonStore = createSeasonStore({
     const context = { teams: snapshot.teams, standings: snapshot.standings };
     return updates.length ? listNotifications(updates, context) : [];
   },
+  listReminderGames,
   detailsCollection: GAME_DETAILS_COLLECTION,
   createLoadDetails: () => createWatchedGameLoader(),
   backgroundJobs: {

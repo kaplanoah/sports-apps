@@ -44,10 +44,12 @@
   <link rel="stylesheet" href="shared/no-field-note.css" />
   <link rel="stylesheet" href="shared/channel-tag.css" />
   <link rel="stylesheet" href="shared/gate.css" />
+  <link rel="stylesheet" href="shared/controls.css" />
   <link rel="stylesheet" href="home-screen-icons.css" />
   <link rel="stylesheet" href="styles.css" />
   <script src="shared/page-move.js"></script>
   <script src="shared/pick-theme.js"></script>
+  <script src="shared/notification-intent.js"></script>
   <script src="shared/long-away.js"></script>
   <script src="shared/open-last-tab.js"></script>
   <script src="shared/draw-home-screen-asks.js"></script>
@@ -171,6 +173,7 @@
       id="tab-search"
       class="search-tab"
       data-tab="search"
+      data-start-hidden-part="gameSearch"
       aria-controls="view-search"
       aria-selected="false"
       aria-label="Search"
@@ -295,8 +298,10 @@
             data-last-drawn
           ></label>
           <div
-            class="control-row"
-            id="notifyRow"
+            class="settings-group"
+            role="group"
+            aria-labelledby="notificationsSettingsTitle"
+            id="notificationsGroup"
             data-setting="settings:notifications"
             hidden
             data-last-drawn

@@ -5,7 +5,8 @@ import { NETWORKS_REQUEST, REQUESTS } from "../page/js/snapshot.js";
 import { TEAMS } from "../page/js/teams.js";
 import { nameScoreboardRequest, nameSummaryRequest } from "../worker/src/lead.js";
 import { describePreview } from "../worker/src/preview.js";
-import { createSnapshotLoader } from "../worker/src/snapshot.js";
+import { describeSnapshotStatus } from "../worker/src/season-updater.js";
+import { createSnapshotLoader, describeFailures } from "../worker/src/snapshot.js";
 import { nameFeedKey } from "../../../shared/worker/feed-keeper.js";
 
 const AFTERNOON = JSON.parse(
@@ -187,7 +188,7 @@ test("a game ESPN doesn't answer for doesn't keep its others from standing in", 
   assert.deepEqual([readState("1042600132"), readState("1042600112")], ["final", "pre"]);
 });
 
-test("ESPN doesn't stand in until one of its games has started", async () => {
+test("while the scoreboard doesn't answer, ESPN covers it before any of its games has started, and its scores stand in for none", async () => {
   const espn = structuredClone(ESPN.answers);
   const listing = Object.keys(espn).find((url) => url.includes("/events?dates="));
   espn[listing].items = espn[listing].items.filter((item) => item.$ref.includes("401918022"));
@@ -199,7 +200,48 @@ test("ESPN doesn't stand in until one of its games has started", async () => {
 
   const snapshot = await loader.loadSnapshot(2026);
 
-  assert.deepEqual([snapshot.missing, snapshot.standIn], [["scoreboard"], null]);
+  assert.deepEqual(
+    [snapshot.missing, snapshot.standIn, snapshot.scoreboardCover],
+    [["scoreboard"], null, "espn"],
+  );
+  assert.equal(describeSnapshotStatus(snapshot).standIn, "espn");
+  assert.equal(snapshot.games.find((game) => game.id === "1042600132").state, "pre");
+});
+
+test("while neither the scoreboard nor ESPN answers, nothing covers it", async () => {
+  const league = createLeague({ refuse: { scoreboard: "page" } });
+  const loader = createSnapshotLoader({
+    fetchImpl: league.fetchImpl,
+    now: () => Date.parse(ESPN.now),
+  });
+
+  const snapshot = await loader.loadSnapshot(2026);
+
+  assert.deepEqual(
+    [snapshot.missing, snapshot.standIn, snapshot.scoreboardCover],
+    [["scoreboard"], null, null],
+  );
+  assert.equal(describeSnapshotStatus(snapshot).standIn, "");
+});
+
+test("while the scoreboard doesn't answer, ESPN lists its games but answers for none of them, nothing covers it", async () => {
+  const espn = structuredClone(ESPN.answers);
+  for (const url of Object.keys(espn).filter((each) => each.includes("/status?"))) {
+    delete espn[url];
+  }
+  const league = createLeague({ refuse: { scoreboard: "page" }, espn });
+  const loader = createSnapshotLoader({
+    fetchImpl: league.fetchImpl,
+    now: () => Date.parse(ESPN.now),
+  });
+
+  const snapshot = await loader.loadSnapshot(2026);
+
+  assert.deepEqual(
+    [snapshot.missing, snapshot.standIn, snapshot.scoreboardCover],
+    [["scoreboard"], null, null],
+  );
+  assert.equal(describeSnapshotStatus(snapshot).standIn, "");
 });
 
 test("while the scoreboard answers, ESPN's game-by-game feeds aren't read", async () => {
@@ -264,6 +306,51 @@ test("a schedule that holds a game as under way once the scoreboard has moved on
   now += 5 * 60 * 1000;
   await loader.loadSnapshot(2026);
   assert.deepEqual([league.countReads("schedule"), league.countReads("espn")], [3, espnReads]);
+});
+
+test("the store's status says why each feed that didn't answer failed", async () => {
+  const league = createLeague({ refuse: { scoreboard: "error", standings: "page" } });
+  const loader = createSnapshotLoader({ fetchImpl: league.fetchImpl, now: () => NOW });
+
+  const status = describeSnapshotStatus(await loader.loadSnapshot(2026));
+
+  assert.equal(status.detail, "scoreboard, standings");
+  const scoreboardPath = new URL(REQUESTS.scoreboard).pathname;
+  const standingsPath = new URL(REQUESTS.standings(2026)).pathname;
+  assert.equal(
+    status.reasons,
+    `scoreboard: The WNBA answered 503 for ${scoreboardPath}; standings: The WNBA answered ${standingsPath} with a web page rather than data`,
+  );
+});
+
+test("the store's status gives no reasons while every feed answers", async () => {
+  const league = createLeague();
+  const loader = createSnapshotLoader({ fetchImpl: league.fetchImpl, now: () => NOW });
+
+  const status = describeSnapshotStatus(await loader.loadSnapshot(2026));
+
+  assert.deepEqual([status.error, status.reasons], ["", ""]);
+});
+
+test("the store's status gives a slow feed's same reason while it waits to be asked again, so it doesn't change with each update", async () => {
+  const league = createLeague({ refuse: { standings: "error" } });
+  let now = NOW;
+  const loader = createSnapshotLoader({ fetchImpl: league.fetchImpl, now: () => now });
+
+  const failed = describeSnapshotStatus(await loader.loadSnapshot(2026));
+  now += 60 * 1000;
+  const waiting = describeSnapshotStatus(await loader.loadSnapshot(2026));
+
+  assert.equal(league.countReads("standings"), 1);
+  assert.match(failed.reasons, /^standings: The WNBA answered 503 for \//);
+  assert.deepEqual(waiting, failed);
+});
+
+test("the reasons name the feeds in one order, whichever failed first", () => {
+  assert.equal(
+    describeFailures({ standings: "The WNBA answered 503", scoreboard: "The WNBA answered 403" }),
+    "scoreboard: The WNBA answered 403; standings: The WNBA answered 503",
+  );
 });
 
 test("a feed that answers JSON without its data counts as missing", async () => {
@@ -571,7 +658,10 @@ test("a snapshot says why it couldn't be read when no feed answers", async () =>
   });
   const loader = createSnapshotLoader({ fetchImpl: league.fetchImpl, now: () => NOW });
 
-  await assert.rejects(loader.loadSnapshot(2026), /None of the WNBA's feeds answered/);
+  await assert.rejects(
+    loader.loadSnapshot(2026),
+    /None of the WNBA's feeds answered with data: scoreboard: The WNBA answered 503 for \/.+; schedule: The WNBA answered 503 for \/.+; bracket: .+; standings: .+/,
+  );
 });
 
 test("the Worker bundles with its page, and exports its store", async () => {
@@ -616,4 +706,44 @@ test("each theme's icon draws its ball and its panels in that theme's colors", (
     assert.ok(svg.includes(`<circle cx="90" cy="90" r="58" fill="${ball}"/>`), file);
     assert.ok(svg.includes(`fill="${panels}" fill-rule="evenodd"`), file);
   }
+});
+
+test("reminder verification refreshes schedule, scoreboard and bracket without rereading standings", async () => {
+  const league = createLeague();
+  const loader = createSnapshotLoader({ fetchImpl: league.fetchImpl, now: () => NOW });
+  await loader.loadSnapshot(2026);
+  const before = league.countReads("networks");
+  await loader.loadSnapshot(2026, { verify: true });
+  assert.equal(league.countReads("networks"), before + 2);
+  assert.equal(league.countReads("schedule"), 2);
+  assert.equal(league.countReads("scoreboard"), 2);
+  assert.equal(league.countReads("bracket"), 2);
+  assert.equal(league.countReads("standings"), 1);
+});
+
+test("failed reminder verification keeps source failure reasons and rejects cached schedule and bracket", async () => {
+  /** @type {Record<string, "page" | "error">} */
+  const refuse = {};
+  const league = createLeague({ refuse });
+  const loader = createSnapshotLoader({ fetchImpl: league.fetchImpl, now: () => NOW });
+  await loader.loadSnapshot(2026);
+  refuse.schedule = "error";
+  refuse.bracket = "error";
+  const verified = await loader.loadSnapshot(2026, { verify: true });
+  for (const feed of ["schedule", "bracket"]) {
+    assert.ok(verified.missing.includes(feed));
+    assert.match(verified.failures[feed], /The WNBA answered 503/);
+  }
+});
+
+test("reminder verification refreshes open network months while reusing finalized months", async () => {
+  const league = createLeague();
+  let now = NOW;
+  const loader = createSnapshotLoader({ fetchImpl: league.fetchImpl, now: () => now });
+  await loader.loadSnapshot(2026);
+  now = Date.parse("2026-10-05T16:00:00Z");
+  await loader.loadSnapshot(2026);
+  const before = listNetworksReads(league).length;
+  await loader.loadSnapshot(2026, { verify: true });
+  assert.deepEqual(listNetworksReads(league).slice(before), [NETWORKS_REQUEST("202610")]);
 });

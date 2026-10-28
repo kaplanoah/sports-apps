@@ -294,6 +294,7 @@ export async function serveLockedPage(page, { worker, testStore, accessCode, now
   await page.clock.install({ time: new Date(now) });
 
   return {
+    ...createWorkerControls(testStore),
     /** @param {string} code */
     changeAccessCode: (code) => {
       env.ACCESS_CODE = code;

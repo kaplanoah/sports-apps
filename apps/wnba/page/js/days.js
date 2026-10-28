@@ -7,14 +7,21 @@ import {
 } from "#shared/days.js";
 
 /**
+ * The league's "YYYY-MM-DD" day of a game's start, or null without one.
+ * @param {string | null} start
+ */
+export function readLeagueDate(start) {
+  const startMs = Date.parse(start ?? "");
+  return Number.isFinite(startMs) ? readEasternDay(startMs).date : null;
+}
+
+/**
  * Midnight on the viewer's calendar of the day a game is played, or null without a start. A game
  * whose time isn't set yet has a placeholder start at midnight Eastern, so its day is the league's.
  * @param {{ start: string | null, isTimeSet: boolean }} game
  */
 export function readGameDay({ start, isTimeSet }) {
-  const startMs = Date.parse(start ?? "");
-  const leagueDate = Number.isFinite(startMs) ? readEasternDay(startMs).date : null;
-  return readPlayingDay({ start, isTimeSet, leagueDate });
+  return readPlayingDay({ start, isTimeSet, leagueDate: readLeagueDate(start) });
 }
 
 /**

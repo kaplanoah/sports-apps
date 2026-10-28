@@ -6,10 +6,19 @@
 // ESPN's scoreboard does, and it says when a game starts while the league's schedule still has its
 // time to be decided.
 
-import { readEasternDay } from "#shared/days.js";
+import { listTimedReminderGames } from "#shared/reminder-games.js";
+import { isNecessaryPlayoffGame } from "#shared/series-text.js";
+import { addDays, readEasternDay } from "#shared/days.js";
 import * as PollSchedule from "#shared/poll-schedule.js";
+import { readLeagueDate } from "./days.js";
 import { findTeamCode, findTeamCodeByEspnId, TEAMS } from "./teams.js";
-import { findTeamNearestGames, isPutOff, isToBePlayed, mapSeriesById } from "./nearest-games.js";
+import {
+  findTeamNearestGames,
+  isPlayable,
+  isPutOff,
+  isToBePlayed,
+  mapSeriesById,
+} from "./nearest-games.js";
 import { REGULATION_PERIODS } from "./periods.js";
 
 // The shape of a snapshot, and of the season record saved from it, which a page reads only when it
@@ -461,6 +470,16 @@ function matchBackupGames(games, backupGames) {
   );
 }
 
+// While the scoreboard is down, ESPN covers it once it answers for one of the league's games, started
+// or not, so the page doesn't warn of the scoreboard only until a game tips off.
+/**
+ * @param {any[]} games
+ * @param {{ scoreboard?: any }} responses
+ * @param {any[]} backupGames
+ */
+const isEspnCovering = (games, responses, backupGames) =>
+  !responses.scoreboard && games.some((game) => !!findEspnGame(game, backupGames));
+
 function applyBackupGame(game, backup) {
   const { state, status, period, clock } = backup;
   return {
@@ -500,8 +519,33 @@ function readNetworkGame(event) {
 // Until ESPN names both teams, its game could be any of a round's games at that time.
 const hasBothTeams = (networkGame) => !!(networkGame.home?.team && networkGame.away?.team);
 
-const readStartDay = (game) => readEasternDay(Date.parse(game.start)).date;
-const isOnSameDay = (game, espnGame) => readStartDay(game) === readStartDay(espnGame);
+const isOnSameDay = (game, espnGame) =>
+  readLeagueDate(game.start) === readLeagueDate(espnGame.start);
+
+// A game from the league's yesterday that isn't over is one the scoreboard still holds past
+// midnight, or one the schedule hasn't caught up on. An older one left unplayed or unfinished is the
+// schedule's to settle, not the scoreboard's to score.
+/**
+ * @param {{ start: string | null }} game
+ * @param {number} now
+ */
+function isOnScoreboardDay({ start }, now) {
+  const date = readLeagueDate(start);
+  const today = readEasternDay(now).date;
+  return !!date && date >= addDays(today, -1) && date <= today;
+}
+
+/**
+ * Whether a game's score is the league scoreboard's to send: one on the league's today or yesterday
+ * that's under way, or to be played between known teams.
+ * @param {import("./nearest-games.js").SeasonGame & { start: string | null }} game
+ * @param {Map<string, import("./nearest-games.js").DecidedSeries>} seriesById
+ * @param {number} now
+ */
+export function isScoreboardGame(game, seriesById, now) {
+  if (!isOnScoreboardDay(game, now)) return false;
+  return game.state === "live" || (game.state === "pre" && isPlayable(game, seriesById));
+}
 
 // Matched by day rather than by the nearest start, since the league's placeholder start, at midnight
 // Eastern, can be nearer the same teams' game the night before.
@@ -599,6 +643,7 @@ export function buildSnapshot(responses, { season, now = Date.now() }) {
   const series = bracket
     ? combineSeries(bracket.map(readBracketSeries), countedSeries, games)
     : countedSeries;
+  const seriesById = mapSeriesById(series);
   return {
     version: SNAPSHOT_VERSION,
     season,
@@ -611,6 +656,9 @@ export function buildSnapshot(responses, { season, now = Date.now() }) {
     standings: readStandingsRows(responses.standings),
     missing: LEAGUE_FEEDS.filter((name) => !responses[name]),
     standIn: standIns.size ? "espn" : null,
+    scoreboardCover: isEspnCovering(leagueGames, responses, backupGames) ? "espn" : null,
+    isScoreboardIdle:
+      !!responses.schedule && !seasonGames.some((game) => isScoreboardGame(game, seriesById, now)),
     openingDay: readOpeningDay(responses.schedule, season),
   };
 }
@@ -650,4 +698,31 @@ export function choosePollDelay(snapshot, now = Date.now()) {
     liveMs: games.some(isClosingStretch) ? POLL_CLOSING_MS : POLL_LIVE_MS,
     now,
   });
+}
+
+/** @param {any} snapshot */
+export function listReminderGames(snapshot) {
+  if (snapshot.missing.some((name) => ["schedule", "scoreboard", "bracket"].includes(name)))
+    return null;
+  const series = mapSeriesById(snapshot.series);
+  return listTimedReminderGames(
+    snapshot.games.filter((game) => isConfirmedReminderGame(game, series)),
+    snapshot.season,
+    (game) => ({ away: TEAMS[game.away.team]?.name, home: TEAMS[game.home.team]?.name }),
+  );
+}
+
+function isConfirmedReminderGame(game, seriesById) {
+  const series = seriesById.get(game.series);
+  return (
+    game.state === "pre" &&
+    game.isTimeSet &&
+    isToBePlayed(game, seriesById) &&
+    isNecessaryPlayoffGame({
+      ifNecessary: game.isIfNeeded,
+      number: game.number,
+      winsNeeded: countWinsNeeded(game.round),
+      wins: [series?.top?.wins ?? 0, series?.bottom?.wins ?? 0],
+    })
+  );
 }

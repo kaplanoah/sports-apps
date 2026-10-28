@@ -1782,3 +1782,120 @@ test("a decided series's games it didn't need are called off, and every other pl
   );
   assert.deepEqual([...calledOffIds], ["3"]);
 });
+
+test("reminders join current playoff state and channels, excluding unconfirmed and ineligible games", () => {
+  const original = buildSnapshot(DIVISION_SERIES);
+  const candidate = MLBSnapshot.listReminderGames(original).find((game) =>
+    DIVISION_SERIES.responses.schedule.dates.some((day) =>
+      day.games.some((listing) => String(listing.gamePk) === game.id),
+    ),
+  );
+  assert.ok(candidate);
+  const buildChanged = (change) => {
+    const fixture = structuredClone(DIVISION_SERIES);
+    for (const feed of ["postseason", "schedule", "seasonGames"])
+      for (const day of fixture.responses[feed]?.dates ?? [])
+        for (const game of day.games ?? []) if (String(game.gamePk) === candidate.id) change(game);
+    if (fixture.responses.liveGames) delete fixture.responses.liveGames[candidate.id];
+    return buildSnapshot(fixture);
+  };
+  const listed = buildChanged((game) => {
+    game.broadcasts = [{ name: "FOX", type: "TV", language: "en", isNational: true }];
+  });
+  assert.deepEqual(
+    MLBSnapshot.listReminderGames(listed).find((game) => game.id === candidate.id).networks,
+    ["FOX"],
+  );
+  assert.deepEqual(
+    listed.slate.today.games.find((game) => game.id === candidate.id)?.networks ??
+      listed.slate.nextDay.games.find((game) => game.id === candidate.id).networks,
+    ["FOX"],
+  );
+  for (const change of [
+    (game) => {
+      game.status = { abstractGameState: "Live", codedGameState: "I" };
+    },
+    (game) => {
+      game.status = { abstractGameState: "Final", codedGameState: "F" };
+    },
+    (game) => {
+      game.status = { abstractGameState: "Final", codedGameState: "D", detailedState: "Postponed" };
+    },
+    (game) => {
+      game.status.startTimeTBD = true;
+    },
+    (game) => {
+      game.teams.away.team = { id: 0, name: "TBD" };
+    },
+    (game) => {
+      game.ifNecessary = "Y";
+      game.seriesGameNumber = 99;
+    },
+    (game) => {
+      game.gameType = "A";
+    },
+  ])
+    assert.ok(
+      !MLBSnapshot.listReminderGames(buildChanged(change)).some((game) => game.id === candidate.id),
+    );
+});
+
+test("an if-needed division series Game 5 becomes eligible only after a 2-2 tie", () => {
+  const fixture = structuredClone(DIVISION_SERIES);
+  const targetIds = new Set(
+    fixture.responses.postseason.dates
+      .flatMap((day) => day.games)
+      .filter(
+        (game) =>
+          game.gameType === "D" && [game.teams.away.team.id, game.teams.home.team.id].includes(114),
+      )
+      .map((game) => game.gamePk),
+  );
+  let fifthId;
+  for (const feed of ["postseason", "schedule", "seasonGames"])
+    for (const day of fixture.responses[feed]?.dates ?? [])
+      for (const game of day.games ?? []) {
+        if (!targetIds.has(game.gamePk)) continue;
+        const number = game.seriesGameNumber;
+        game.status = {
+          abstractGameState: number <= 4 ? "Final" : "Preview",
+          codedGameState: number <= 4 ? "F" : "S",
+          startTimeTBD: false,
+        };
+        if (number <= 4) {
+          const winner = number % 2 ? 114 : 145;
+          for (const side of ["away", "home"])
+            game.teams[side].score = game.teams[side].team.id === winner ? 8 : 1;
+        } else {
+          fifthId = String(game.gamePk);
+          game.ifNecessary = "Y";
+        }
+        delete fixture.responses.liveGames?.[game.gamePk];
+      }
+  const tied = buildSnapshot(fixture);
+  assert.equal(
+    Object.values(tied.series).some((series) => series.winsA === 2 && series.winsB === 2),
+    true,
+  );
+  assert.equal(
+    MLBSnapshot.listReminderGames(tied).some((game) => game.id === fifthId),
+    true,
+  );
+  for (const feed of ["postseason", "schedule", "seasonGames"])
+    for (const day of fixture.responses[feed]?.dates ?? [])
+      for (const game of day.games ?? [])
+        if (targetIds.has(game.gamePk) && game.seriesGameNumber === 4)
+          game.status = { abstractGameState: "Preview", codedGameState: "S", startTimeTBD: false };
+  assert.equal(
+    MLBSnapshot.listReminderGames(buildSnapshot(fixture)).some((game) => game.id === fifthId),
+    false,
+  );
+});
+
+test("a failed required MLB reminder read retains pending facts rather than confirming cancellation", () => {
+  for (const feed of ["postseason", "schedule"]) {
+    const fixture = structuredClone(DIVISION_SERIES);
+    fixture.responses[feed] = null;
+    assert.equal(MLBSnapshot.listReminderGames(buildSnapshot(fixture)), null, feed);
+  }
+});

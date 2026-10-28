@@ -25,9 +25,22 @@ export function isInstallNeeded(folder) {
   return installedTime === null || installedTime < lockfileTime;
 }
 
-/** Runs `npm ci` in the project's folder when its packages need installing, and says so. */
-function installPackages() {
-  const folder = process.env.CLAUDE_PROJECT_DIR ?? process.cwd();
+/** @param {string} folder */
+function installPushHook(folder) {
+  try {
+    execFileSync("git", ["config", "--local", "core.hooksPath", ".githooks"], {
+      cwd: folder,
+      stdio: "ignore",
+    });
+  } catch {
+    process.stdout.write(
+      "Git hook setup failed; run git config --local core.hooksPath .githooks before pushing.\n",
+    );
+  }
+}
+
+/** @param {string} folder */
+function installPackages(folder) {
   try {
     if (!isInstallNeeded(folder)) return;
     execFileSync("npm", ["ci"], { cwd: folder, stdio: "ignore" });
@@ -38,4 +51,10 @@ function installPackages() {
   }
 }
 
-if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) installPackages();
+function prepareSession() {
+  const folder = process.env.CLAUDE_PROJECT_DIR ?? process.cwd();
+  installPushHook(folder);
+  installPackages(folder);
+}
+
+if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) prepareSession();

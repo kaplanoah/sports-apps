@@ -43,8 +43,8 @@
 }
 /* Fields set 16px, which an iPhone doesn't zoom into when they're tapped, so these draw smaller to
    look as they do at their role: the search in Libre Franklin at the body's 13.75px (13.75 / 16),
-   and the Season picker, which shows only years, in Chivo Mono at the detail's 12.75px
-   (97.48% x 12.75 / 16). */
+   and the text and year pickers at the detail's 12.75px (12.75 / 16),
+   with Chivo Mono's 97.48% adjustment for years. */
 @font-face {
   font-family: "Libre Franklin Search";
   font-weight: 100 900;
@@ -72,6 +72,14 @@
   font-display: swap;
   size-adjust: 77.679%;
   src: url(fonts/chivo-mono-latin.woff2) format("woff2");
+}
+
+@font-face {
+  font-family: "Libre Franklin Select";
+  font-weight: 100 900;
+  font-display: swap;
+  size-adjust: 79.6875%;
+  src: url(fonts/libre-franklin-latin.woff2) format("woff2");
 }
 
 :root {
@@ -107,6 +115,8 @@
   --type-setting-weight: 425;
   --type-setting-note-size: calc(13.25rem / 16);
   --type-setting-note-weight: 400;
+  --type-subsetting-size: calc(13rem / 16);
+  --type-subsetting-weight: 400;
   --type-notice-title-size: calc(14.75rem / 16);
   --type-confirmation-size: calc(20.5rem / 16);
   --type-confirmation-weight: 525;
@@ -145,9 +155,12 @@
   --accent-ink: #fff;
   /* A shade deeper than its line, so its text keeps AA's 4.5 to 1 on a row tinted under the mouse
      or a press. */
-  --now: #b93422;
+  --now: #ae301f;
   --now-line: #bf3623;
   --now-ink: #fffdf8;
+  /* A Diagnostics record's dip, in --now's deeper red, so it keeps AA's 4.5 to 1 on a pressed
+     record. */
+  --dip-ink: var(--now);
   --al: #2b5f86;
   --nl: #bf3623;
   /* A league's letters on its own tint, deeper so they still read on it. */
@@ -189,7 +202,6 @@
   --re-add-note-above: 8px;
   --control-height: 36px;
   --control-room: 14px;
-  --select-arrow: url("data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23625a52' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   --tab-bar-tint: var(--card);
   --tab-bar-edge: var(--card-border);
   --tab-bar-ink: var(--ink);
@@ -233,6 +245,13 @@
   --search-face: "Libre Franklin Search", system-ui, sans-serif;
   --search-words-lift: 0px;
   --select-face: "Chivo Mono Select", "JetBrains Mono", monospace;
+  --reminder-width: 173px;
+  --reminder-text-rendering: geometricPrecision;
+  --reminder-caret-right: 6.5px;
+  --reminder-padding-right: 25.5px;
+  --reminder-padding-top: 6.5px;
+  --reminder-padding-bottom: 7.5px;
+  --select-text-face: "Libre Franklin Select", system-ui, sans-serif;
   --strip-edge-inset: 0.5px;
   --day-gap: 18px;
   /* Chivo Mono draws its 1 centered on its stem. */
@@ -264,18 +283,19 @@
   --card: #132a1f;
   --card-border: #2a4536;
   --ink: #f1ead4;
-  --ink-dim: #7fa88f;
+  --ink-dim: #8db097;
   --divider: #1e3a2b;
   --gold: #f4c15c;
   --gold-ink: #12200f;
   --copper: #c17a4f;
-  --copper-ink: #cd9566;
+  --copper-ink: #d19e71;
   --highlight: var(--gold);
   --accent: var(--gold);
   --accent-ink: var(--gold-ink);
   --now: var(--copper-ink);
   --now-line: var(--copper);
   --now-ink: var(--gold-ink);
+  --dip-ink: var(--accent);
   --al: #7fb0c8;
   --nl: #e0a2a2;
   --al-tag: var(--al);
@@ -287,7 +307,6 @@
   --lost-score-weight: var(--type-stat-large-weight);
   --score-chip: var(--divider);
   --score-chip-shade: var(--won-chip-shade);
-  --select-arrow: url("data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%237fa88f' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   --tab-bar-ink: #fff;
   --tab-bar-pill: color-mix(in srgb, var(--tab-bar-ink) 10%, transparent);
   --switch-knob: var(--ink);

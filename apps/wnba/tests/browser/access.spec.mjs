@@ -5,6 +5,7 @@ import { listChipsOffCenter } from "../../../../tests/browser/chip-centering.mjs
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
 import { findSeasonTab } from "../../../../tests/browser/season-tab.mjs";
 import { readCapitals } from "../../../../tests/browser/capitals.mjs";
+import { checkGateOpenPress } from "../../../../tests/browser/press-looks.mjs";
 import { listFontsNotPreloaded } from "../../../../tests/browser/font-loads.mjs";
 import { readTokenColor } from "./theme.mjs";
 
@@ -228,4 +229,11 @@ test("the gate's tab icon and bar follow the theme picked in settings", async ({
   await page.addInitScript(() => localStorage.setItem("appearance", "light"));
   await openLockedApp(page, { accessCode: "FASTBREAK" });
   await expectGateIcons(page, "light");
+});
+
+test("a press darkens the gate's Open with black", async ({ page }) => {
+  await openLockedApp(page, { accessCode: "FASTBREAK" });
+  await expect(findGate(page)).toBeVisible();
+
+  await checkGateOpenPress(page);
 });

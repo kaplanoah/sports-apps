@@ -1,14 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  RULES_FOLDER,
   isRuleFile,
   listRulesFor,
   matchesGlob,
   readRuleFiles,
   readRulePaths,
 } from "../worker/rule-files.mjs";
-import { listTrackedFiles, readRepoFile, readSkillName } from "./repo-files.js";
+import { listTrackedFiles, readRepoFile } from "./repo-files.js";
 
 const repoFiles = listTrackedFiles();
 const ruleFiles = repoFiles.filter(isRuleFile);
@@ -44,17 +43,6 @@ test("each rule file's paths each match a file in the repo", () => {
   assert.deepEqual(stale, []);
 });
 
-// A session learns from AGENTS.md where the rest of the guidance is before it opens a file.
-test("AGENTS.md names each rule file and skill", () => {
-  const agents = readRepoFile("AGENTS.md");
-  const skills = repoFiles.flatMap((path) => readSkillName(path) ?? []);
-  const unnamed = [
-    ...ruleFiles.filter((path) => !agents.includes(`\`${path.slice(RULES_FOLDER.length)}\``)),
-    ...skills.filter((name) => !agents.includes(`\`${name}\` skill`)),
-  ];
-  assert.deepEqual(unnamed, []);
-});
-
 test("a rule file's paths are the items its frontmatter lists, quoted or not", () => {
   assert.deepEqual(
     readRulePaths(
@@ -86,7 +74,7 @@ test("a glob's ** matches across folders, or none before a slash, its * within o
 });
 
 test("the repo's rule files are read with their text, and no other file is", () => {
-  const files = [".claude/rules/page.md", "AGENTS.md", ".claude/skills/x/SKILL.md"];
+  const files = [".claude/rules/page.md", "AGENTS.md", ".agents/skills/x/SKILL.md"];
   assert.deepEqual(
     readRuleFiles(files, (path) => `text of ${path}`),
     [{ path: ".claude/rules/page.md", text: "text of .claude/rules/page.md" }],

@@ -11,6 +11,7 @@ import {
   sendScroll,
   sendSecondFinger,
 } from "../../../../tests/browser/stray-click.mjs";
+import { readBackground, readPressTint } from "../../../../tests/browser/press-looks.mjs";
 
 // A row that opens something tints while it's pressed, and a touch that's part of a scroll, as one
 // that stops a list still gliding is, never taps what it landed on, as on an iPhone (press.js).
@@ -54,11 +55,12 @@ test("a finger held on a game's row tints the row, and the tint lets go once the
   await page.getByRole("tab", { name: "Games" }).click();
   const row = page.locator("#seasonGames .game-day.is-today .game-row").first();
   await expect(row).toBeVisible();
+  const pressed = await readBackground(row, "var(--pressed-row)");
 
   const lift = await drag(page, await findMiddle(row), {});
 
   await expect(row.locator(".game-open")).toHaveClass(/is-pressed/);
-  await expect(row).not.toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+  expect(await readPressTint(row)).toBe(pressed);
 
   await lift();
 
@@ -538,12 +540,14 @@ test.describe("under a mouse", () => {
     await openApp(page);
     const line = page.locator('[data-series="1-0"] .team-line.won');
     await expect(line).toBeVisible();
+    const pressed = await readBackground(line, "var(--pressed-row)");
     const middle = await findMiddle(line);
     await page.mouse.move(middle.x, middle.y);
 
     await page.mouse.down();
 
-    await expect(line).not.toHaveCSS("box-shadow", "none");
+    await expect(line.locator(".team-open")).toHaveClass(/is-pressed/);
+    expect(await readPressTint(line)).toBe(pressed);
 
     await page.mouse.up();
 
@@ -555,11 +559,13 @@ test.describe("under a mouse", () => {
     await openSeasonPart(page, "Standings");
     const row = page.locator("#standings-league tr:has(.team-open)").nth(2);
     await expect(row).toBeVisible();
+    const pressed = await readBackground(row, "var(--pressed-row)");
     const middle = await findMiddle(row);
     await page.mouse.move(middle.x, middle.y);
 
     await page.mouse.down();
 
-    await expect(row.locator("td").first()).not.toHaveCSS("box-shadow", "none");
+    await expect(row.locator(".team-open")).toHaveClass(/is-pressed/);
+    expect(await readPressTint(row.locator("td").first())).toBe(pressed);
   });
 });

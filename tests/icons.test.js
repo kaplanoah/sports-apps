@@ -17,7 +17,7 @@ function readPhosphorIcon(name, style) {
 
 /** @param {string} markup */
 const readPaths = (markup) =>
-  [...markup.matchAll(/\sd="([^"]*)"/g)].map((match) => match[1].replace(/\s+/g, " ").trim());
+  [...markup.matchAll(/\sd=(["'])(.*?)\1/gs)].map((match) => match[2].replace(/\s+/g, " ").trim());
 
 /** @type {Map<string, { name: string, style: string }[]>} */
 const PHOSPHOR_ICONS_BY_PATH = new Map();
@@ -33,7 +33,8 @@ for (const icon of icons) {
 // An SVG without a viewBox of its own, like the bracket's lines that a script draws in, or with
 // one that comes from data, like the scoreboard's digits, is a drawing, not an icon.
 /** @param {string} svg */
-const isDrawing = (svg) => !/viewBox="/.test(svg) || /viewBox="[^"]*\$\{/.test(svg);
+const isDrawing = (svg) =>
+  !/viewBox=["']/.test(svg) || /viewBox=(?:"[^"]*\$\{|'[^']*\$\{)/.test(svg);
 
 /** @param {string} svg */
 function describeIconProblem(svg) {
@@ -54,11 +55,20 @@ const HAND_DRAWN_ICONS = {
 };
 
 /** @param {string} source */
-const listSvgs = (source) =>
-  [...source.matchAll(/<svg\b[\s\S]*?<\/svg>/g)].map((match) => ({
+const listSvgs = (source) => [
+  ...[...source.matchAll(/<svg\b[\s\S]*?<\/svg>/g)].map((match) => ({
     svg: match[0],
     index: match.index,
-  }));
+  })),
+  ...[...source.matchAll(/url\((["'])(data:image\/svg\+xml[^,]*),([\s\S]*?)\1\)/g)].map(
+    (match) => ({
+      svg: match[2].endsWith(";base64")
+        ? Buffer.from(match[3], "base64").toString("utf8")
+        : decodeURIComponent(match[3]),
+      index: match.index,
+    }),
+  ),
+];
 
 /** @param {string} file */
 const countHandDrawnIcons = (file) =>
@@ -67,7 +77,7 @@ const countHandDrawnIcons = (file) =>
 
 test("every icon on the pages is a Phosphor icon, copied path for path, but the named few drawn by hand", () => {
   const counts = Object.fromEntries(
-    listPageSources([".js", ".html"])
+    listPageSources([".js", ".html", ".css"])
       .map((file) => /** @type {[string, number]} */ ([file, countHandDrawnIcons(file)]))
       .filter(([, count]) => count > 0),
   );
@@ -120,7 +130,7 @@ function listUnnamedIcons(file) {
 }
 
 test("every Phosphor icon on the pages follows a comment naming the icon and its weight", () => {
-  assert.deepEqual(listPageSources([".js", ".html"]).flatMap(listUnnamedIcons), []);
+  assert.deepEqual(listPageSources([".js", ".html", ".css"]).flatMap(listUnnamedIcons), []);
 });
 
 test("pull to refresh's spinner has every one of its eight spokes", () => {

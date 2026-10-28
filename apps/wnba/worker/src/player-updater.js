@@ -57,7 +57,6 @@ import { fetchWnbaJson, hasTable, trimColumns } from "./wnba.js";
 const MINUTE_MS = 60 * 1000;
 const HOUR_MS = 60 * MINUTE_MS;
 const RUN_DELAY_MS = 5 * MINUTE_MS;
-const LEAGUE_NAME = "The WNBA";
 const STATUS_KEY = "players/status";
 export const PLAYER_JOB = "players";
 export const LEAGUE_READS_COUNT = "leagueReads";
@@ -412,7 +411,6 @@ function createStoreUpdate() {
   async function keepPlayers(context) {
     keeper ??= createFeedKeeper({
       feeds: FEEDS,
-      leagueName: LEAGUE_NAME,
       now: context.now,
       storage: context.storage,
     });

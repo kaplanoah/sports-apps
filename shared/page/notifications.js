@@ -1,74 +1,93 @@
-// The settings panel's notifications switch: subscribes this device to the Worker's pushes. The
-// note under it says what the app's notifications tell, or why the switch can't do its job, and,
-// where they come only from the Home Screen, ends, wherever the page asks to be added there, with a
-// ? that opens the welcome's steps.
+// Device push categories and reminder timing in Settings, with inline permission guidance.
+import {
+  DEFAULT_NOTIFICATION_PREFERENCES,
+  normalizeNotificationPreferences,
+} from "./notification-preferences.js";
+import { readStoredJson, storeJson, forgetStored } from "./local-storage.js";
+import { readDeviceTimeZone } from "./days.js";
 import { reloadWhenSignedOut } from "./access.js";
 
 import { isIos, isOnHomeScreen } from "./device.js";
 import { isAskingToAdd, openWelcome } from "./home-screen.js";
 import { html, setHtml } from "./html.js";
+import { NOTE_PLACES, renderNotificationRows } from "./notifications-view.js";
 import {
+  CATEGORIES,
   CHANGE_FAILED,
+  PENDING_SPINNER_MS,
+  chooseDeniedStatus,
   chooseFailedSyncStatus,
   chooseNotifyNote,
+  chooseNotificationControls,
   isTurnedAway,
   splitAtLastWord,
   TOO_MANY_DEVICES,
 } from "./notification-status.js";
+import { createSaveQueue } from "./save-queue.js";
 import { registerServiceWorker } from "./service-worker.js";
 import { readWorkerError } from "./worker-error.js";
 
 // Phosphor's question, at its Regular weight.
 const HELP_BUTTON = html`<button type="button" class="notify-help" aria-label="How to get notifications"><svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M140,180a12,12,0,1,1-12-12A12,12,0,0,1,140,180ZM128,72c-22.06,0-40,16.15-40,36v4a8,8,0,0,0,16,0v-4c0-11,10.77-20,24-20s24,9,24,20-10.77,20-24,20a8,8,0,0,0-8,8v8a8,8,0,0,0,16,0v-.72c18.24-3.35,32-17.9,32-35.28C168,88.15,150.06,72,128,72Zm104,56A104,104,0,1,1,128,24,104.11,104.11,0,0,1,232,128Zm-16,0a88,88,0,1,0-88,88A88.1,88.1,0,0,0,216,128Z"/></svg></button>`;
 
-const SWITCHABLE = new Set(["off", "on", "failed"]);
-
 let registration = null;
 let subscription = null;
 let status = "loading";
 let note = "";
-let about = "";
-let isBusy = false;
+/** @type {import("./notifications-view.js").NotePlace} */
+let notePlace = "notify";
+/** @type {Pick<import("./league-words.js").LeagueWords, "notificationUpdates" | "reminderTiming" | "reminderAtStart">} */
+let notificationWords;
+let preferences = { ...DEFAULT_NOTIFICATION_PREFERENCES };
+let revision = 0;
+const PREFERENCES_KEY = "device-notifications";
+const PREVIOUS_KEY = "previous-push-subscription";
+const PENDING_KEY = "pending-push-preferences";
 let reading = null;
+/** @type {import("./notification-status.js").WantedChoices} */
+let wanted = {};
+/** @type {import("./notifications-view.js").NotePlace} */
+let wantedPlace = "notify";
+/** @type {Promise<NotificationPermission> | null} */
+let askedPermission = null;
+let isSlow = false;
+const saves = createSaveQueue(saveWanted);
 
 const findElement = (id) => /** @type {HTMLElement} */ (document.getElementById(id));
 
 export const canPush = () =>
   "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
 
+const readNoteDevice = () => ({
+  isIos: isIos(),
+  isOnHomeScreen: isOnHomeScreen(),
+  canOpenWelcome: isAskingToAdd(),
+});
+
 function renderNote() {
-  const device = {
-    isIos: isIos(),
-    isOnHomeScreen: isOnHomeScreen(),
-    canOpenWelcome: isAskingToAdd(),
-  };
-  const { text, hasHelp } = chooseNotifyNote({ status, message: note, about, device });
+  const { text, hasHelp } = chooseNotifyNote({ status, message: note, device: readNoteDevice() });
   if (!hasHelp) return text;
   const [lead, lastWord] = splitAtLastWord(text);
   return html`${lead}<span class="notify-help-end">${lastWord}${HELP_BUTTON}</span>`;
 }
 
-// The row is drawn whole, so a reload puts it back as it was before the status is known again.
+// The group is drawn whole, so a reload puts it back as it was before the status is known again.
 function renderNotifications() {
-  const isSwitchHidden = !SWITCHABLE.has(status) && status !== "blocked";
-  const isDisabled = isBusy || status === "blocked";
-  const row = findElement("notifyRow");
+  if (!notificationWords) return;
+  const controls = chooseNotificationControls({ status, preferences, wanted, isSlow });
+  const group = findElement("notificationsGroup");
   setHtml(
-    row,
-    html`<span class="control-label">
-        <span id="notifyTitle">Notifications</span>
-        <span class="control-note" id="notifyNote" role="status">${renderNote()}</span>
-      </span>
-      <button type="button" role="switch" class="switch" id="notifySwitch" aria-checked="${String(status === "on")}" aria-labelledby="notifyTitle" ${isSwitchHidden ? "hidden" : ""} ${isDisabled ? "disabled" : ""}>
-        <span class="switch-knob" aria-hidden="true"></span>
-      </button>`,
+    group,
+    renderNotificationRows({ controls, words: notificationWords, note: renderNote(), notePlace }),
   );
-  row.hidden = status === "loading";
+  group.hidden = status === "loading";
 }
 
-function setStatus(next, message = "") {
+/** @param {string} next @param {string} [message] @param {import("./notifications-view.js").NotePlace} [place] */
+function setStatus(next, message = "", place = "notify") {
   status = next;
   note = message;
+  notePlace = place;
   renderNotifications();
 }
 
@@ -112,51 +131,78 @@ async function fetchPublicKey() {
   return publicKey;
 }
 
-async function saveSubscription(current) {
+async function saveSubscription(
+  current,
+  initialPreferences = undefined,
+  previousSubscription = undefined,
+) {
   await requestPush("push/subscription", {
     method: "PUT",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify(current.toJSON()),
+    body: JSON.stringify({
+      ...current.toJSON(),
+      preferences: initialPreferences,
+      previousSubscription,
+    }),
   });
 }
 
 // A device the Worker turns away never gets a message, so the browser doesn't keep it either, and
 // the switch shows it off, now and on the next visit. A save that fails any other way keeps the
 // subscription, which the next visit saves again.
-async function saveOrForget(current) {
+async function saveOrForget(
+  current,
+  initialPreferences = undefined,
+  previousSubscription = undefined,
+) {
   try {
-    await saveSubscription(current);
+    await saveSubscription(current, initialPreferences, previousSubscription);
   } catch (error) {
     if (isTurnedAway(error)) {
       await current.unsubscribe().catch(() => {});
       subscription = null;
+      forgetCategories(initialPreferences ?? preferences);
     }
     throw error;
   }
 }
 
-async function subscribe(publicKey) {
+async function subscribe(
+  publicKey,
+  initialPreferences = undefined,
+  previousSubscription = undefined,
+) {
   subscription = await registration.pushManager.subscribe({
     userVisibleOnly: true,
     applicationServerKey: decodeBase64Url(publicKey),
   });
-  await saveOrForget(subscription);
+  await saveOrForget(subscription, initialPreferences, previousSubscription);
+  await readPreferences();
 }
 
 // Saving again on every visit restores a subscription the Worker lost, and keeps a full Worker
-// from making room by forgetting this device. A new signing key needs a new subscription, in place
+// from making room by retiring this device. A new signing key needs a new subscription, in place
 // of the old one, which the Worker would otherwise keep sending to.
 async function syncSubscription() {
   const publicKey = await fetchPublicKey();
   const subscribedKey = subscription.options.applicationServerKey;
   if (subscribedKey && encodeBase64Url(subscribedKey) !== publicKey) {
-    await requestPush("push/subscription", sendEndpoint("DELETE", subscription.endpoint));
+    const previousSubscription = subscription.toJSON();
     await subscription.unsubscribe();
     subscription = null;
-    await subscribe(publicKey);
+    storeJson(PREVIOUS_KEY, previousSubscription);
+    await subscribe(publicKey, undefined, previousSubscription);
+    forgetStored(PREVIOUS_KEY);
     return;
   }
-  await saveOrForget(subscription);
+  const pendingPreferences = readStoredJson(PENDING_KEY);
+  await saveOrForget(
+    subscription,
+    pendingPreferences ? normalizeNotificationPreferences(pendingPreferences) : undefined,
+    readStoredJson(PREVIOUS_KEY) ?? undefined,
+  );
+  forgetStored(PREVIOUS_KEY);
+  await readPreferences();
 }
 
 /** @param {unknown} error */
@@ -165,51 +211,183 @@ function showFailedSync(error) {
   if (shown) setStatus(shown.status, shown.note);
 }
 
-async function showBusyDuring(task) {
-  isBusy = true;
+async function readPreferences() {
+  const result = await requestPush("push/preferences", {
+    ...sendEndpoint("POST", subscription.endpoint),
+    body: JSON.stringify(subscription.toJSON()),
+  });
+  rememberPreferences(result.preferences);
+  revision = result.revision;
+  forgetStored(PENDING_KEY);
+  const timeZone = readDeviceTimeZone();
+  if (preferences.timeZone !== timeZone) await savePreferences({ ...preferences, timeZone });
   renderNotifications();
+}
+
+async function savePreferences(next) {
+  const result = await requestPush("push/preferences", {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ ...subscription.toJSON(), preferences: next, revision }),
+  });
+  rememberPreferences(result.preferences);
+  revision = result.revision;
+}
+
+function rememberPreferences(next) {
+  preferences = normalizeNotificationPreferences(next);
+  storeJson(PREFERENCES_KEY, preferences);
+}
+
+function forgetCategories(next) {
+  rememberPreferences({ ...next, updates: false, reminders: false });
+  forgetStored(PENDING_KEY);
+}
+
+async function saveOrRestorePreferences(next) {
   try {
-    await task();
+    await savePreferences(next);
+  } catch (error) {
+    if (!isSubscriptionMissing(error)) throw error;
+    storeJson(PENDING_KEY, next);
+    await saveOrForget(subscription, next, readStoredJson(PREVIOUS_KEY) ?? undefined);
+    forgetStored(PREVIOUS_KEY);
+    await readPreferences();
+    if (Object.keys(next).some((key) => next[key] !== preferences[key]))
+      throw Object.assign(new Error("Notifications changed. Try again."), { code: "conflict" });
+  }
+}
+
+/** @param {unknown} error */
+const isSubscriptionMissing = (error) =>
+  /** @type {{ code?: string }} */ (error)?.code === "not_found";
+
+async function removeSubscription(next) {
+  try {
+    await savePreferences(next);
+    await requestPush("push/subscription", sendEndpoint("DELETE", subscription.endpoint));
+  } catch (error) {
+    if (!isSubscriptionMissing(error)) throw error;
+  }
+  storeJson(PREVIOUS_KEY, subscription.toJSON());
+  await subscription.unsubscribe();
+  subscription = null;
+  forgetCategories(next);
+}
+
+/**
+ * @param {import("./notification-status.js").WantedChoices} asked
+ * @param {import("./notifications-view.js").NotePlace} place the control whose change it saves
+ * @param {Promise<NotificationPermission> | null} permission asked in the tap that turned a category on
+ */
+async function saveChoices(asked, place, permission) {
+  const before = preferences;
+  const previousStatus = status;
+  const next = { ...before, ...asked, timeZone: readDeviceTimeZone() };
+  try {
+    if (permission && (await permission) !== "granted") {
+      const denied = chooseDeniedStatus({
+        previousStatus,
+        permission: Notification.permission,
+        device: readNoteDevice(),
+      });
+      setStatus(denied.status, denied.note);
+      return;
+    }
+    await readSubscriptionOnce();
+    if (!registration) return;
+    if (next.updates || next.reminders) {
+      if (!subscription) {
+        storeJson(PENDING_KEY, next);
+        await subscribe(await fetchPublicKey(), next, readStoredJson(PREVIOUS_KEY) ?? undefined);
+        forgetStored(PREVIOUS_KEY);
+      }
+      await saveOrRestorePreferences(next);
+      setStatus("on");
+    } else if (subscription) {
+      await removeSubscription(next);
+      setStatus("off");
+    } else forgetCategories(next);
+  } catch (error) {
+    if (isTurnedAway(error)) setStatus("off", TOO_MANY_DEVICES, place);
+    else {
+      preferences = before;
+      if (subscription) await readPreferences().catch(() => {});
+      setStatus(subscription ? "on" : "failed", CHANGE_FAILED, place);
+    }
+  }
+}
+
+// A choice the save carried shows its saved value after it, unless the viewer changed it again.
+// A choice changed back to what the run before carried leaves nothing to save.
+async function saveWanted() {
+  const asked = { ...wanted };
+  const permission = askedPermission;
+  askedPermission = null;
+  if (Object.keys(asked).length === 0) return;
+  try {
+    await saveChoices(asked, wantedPlace, permission);
   } finally {
-    isBusy = false;
+    for (const key of /** @type {(keyof typeof asked)[]} */ (Object.keys(asked)))
+      if (wanted[key] === asked[key]) delete wanted[key];
     renderNotifications();
   }
 }
 
-// iOS asks for permission only from a tap, so the request comes before anything is awaited, even
-// the service worker a tap elsewhere on the page may come before.
-async function turnOn() {
-  const permission = await Notification.requestPermission();
-  await readSubscriptionOnce();
-  if (!registration) return;
-  if (permission !== "granted") {
-    setStatus(permission === "denied" ? "blocked" : "off");
-    return;
-  }
+/** @param {Promise<void>} saved */
+async function showSpinnerOnceSlow(saved) {
+  const timer = setTimeout(() => {
+    isSlow = true;
+    renderNotifications();
+  }, PENDING_SPINNER_MS);
   try {
-    await subscribe(await fetchPublicKey());
-    setStatus("on");
-  } catch (error) {
-    if (isTurnedAway(error)) setStatus("off", TOO_MANY_DEVICES);
-    else setStatus("failed");
+    await saved;
+  } finally {
+    clearTimeout(timer);
+    isSlow = false;
+    renderNotifications();
   }
 }
 
-async function turnOff() {
-  try {
-    await requestPush("push/subscription", sendEndpoint("DELETE", subscription.endpoint));
-    await subscription.unsubscribe();
-    subscription = null;
-    setStatus("off");
-  } catch {
-    setStatus("on", CHANGE_FAILED);
-  }
+/**
+ * Shows a choice at once and saves it after any save already on its way.
+ * @param {import("./notification-status.js").WantedChoices} choice
+ * @param {import("./notifications-view.js").NotePlace} place
+ */
+function saveChoice(choice, place) {
+  wanted = { ...wanted, ...choice };
+  wantedPlace = place;
+  renderNotifications();
+  // Keep permission in the tap stack, before registration or network work.
+  if (choice.updates || choice.reminders) askedPermission = Notification.requestPermission();
+  const isStarting = !saves.isSaving();
+  const saved = saves.requestSave();
+  if (isStarting) showSpinnerOnceSlow(saved);
+}
+
+/** @param {"updates" | "reminders"} category */
+function toggleCategory(category) {
+  const controls = chooseNotificationControls({ status, preferences, wanted });
+  const isOn = category === "updates" ? controls.areUpdatesOn : controls.areRemindersOn;
+  saveChoice({ [category]: !isOn }, NOTE_PLACES[category]);
 }
 
 /** @param {Event} event */
 function toggleNotifications(event) {
-  if (isBusy || !(/** @type {Element} */ (event.target).closest("#notifySwitch"))) return;
-  showBusyDuring(status === "on" ? turnOff : turnOn);
+  const target = /** @type {Element} */ (event.target);
+  for (const category of CATEGORIES) {
+    if (target.closest(`#${NOTE_PLACES[category]}Switch`)) toggleCategory(category);
+  }
+}
+
+// A time chosen while reminders are off turns them on with it.
+function changeTiming() {
+  const minutes = Number(/** @type {HTMLSelectElement} */ (findElement("reminderTiming")).value);
+  const controls = chooseNotificationControls({ status, preferences, wanted });
+  saveChoice(
+    controls.areRemindersOn ? { minutes } : { minutes, reminders: true },
+    "reminderTiming",
+  );
 }
 
 /** @param {Event} event */
@@ -237,7 +415,8 @@ const readSubscriptionOnce = () => (reading ??= readSubscription());
 
 /** Turns notifications on from a tap elsewhere on the page, as the switch does. */
 export function turnOnNotifications() {
-  if (!isBusy && status !== "on") showBusyDuring(turnOn);
+  const controls = chooseNotificationControls({ status, preferences, wanted });
+  if (!controls.areUpdatesOn) saveChoice({ updates: true }, NOTE_PLACES.updates);
 }
 
 /** Whether this device is subscribed to the Worker's pushes, once that's known. */
@@ -248,13 +427,18 @@ export async function hasNotificationsSubscription() {
 }
 
 /**
- * @param {{ about?: string }} [options] what the app's notifications tell, under the switch while
- *   it works
+ * @param {Pick<import("./league-words.js").LeagueWords, "notificationUpdates" | "reminderTiming" | "reminderAtStart">} words
  */
-export async function startNotifications(options = {}) {
-  about = options.about ?? "";
-  findElement("notifyRow").addEventListener("click", toggleNotifications);
-  findElement("notifyRow").addEventListener("click", openHomeScreenSteps);
+export async function startNotifications(words) {
+  notificationWords = words;
+  preferences = normalizeNotificationPreferences({
+    ...readStoredJson(PREFERENCES_KEY),
+    updates: false,
+    reminders: false,
+  });
+  findElement("notificationsGroup").addEventListener("click", toggleNotifications);
+  findElement("notificationsGroup").addEventListener("click", openHomeScreenSteps);
+  findElement("notificationsGroup").addEventListener("change", changeTiming);
   if (!canPush()) {
     setStatus(isIos() && !isOnHomeScreen() ? "homeScreen" : "unsupported");
     return;
@@ -264,6 +448,22 @@ export async function startNotifications(options = {}) {
     setStatus("unsupported");
     return;
   }
-  setStatus(describeStartStatus());
-  if (status === "on") syncSubscription().catch(showFailedSync);
+  if (subscription) {
+    preferences = normalizeNotificationPreferences(
+      readStoredJson(PREFERENCES_KEY) ?? {
+        ...preferences,
+        updates: true,
+        reminders: false,
+      },
+    );
+    try {
+      await syncSubscription();
+      note = "";
+    } catch (error) {
+      showFailedSync(error);
+      if (note) return;
+    }
+  }
+  if (note) renderNotifications();
+  else setStatus(describeStartStatus());
 }

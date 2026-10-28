@@ -11,7 +11,7 @@
 // closes once a complete sweep leaves no row; later failures or an incomplete sweep reopen it.
 // Usage: node worker/report-flaky-tests.mjs <the nightly run's report.json files>
 // with GH_TOKEN, GH_REPO, RUN_URL, and GITHUB_REPOSITORY set, as Actions sets the last.
-import { execFileSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import { closeSync, mkdtempSync, openSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -38,6 +38,8 @@ const UNZIP_TIMEOUT_MS = 10 * 1000;
 
 /** @typedef {{ complete: boolean, unavailable: number[], deferred?: number[], problem?: string }} CollectionStatus */
 /** @typedef {CollectionStatus & { checkedAt: string, lastSuccess: string | null }} Sweep */
+/** @typedef {{ stdio: import("node:child_process").StdioOptions, timeout: number }} CommandOptions */
+/** @typedef {(command: string, args: string[], options: CommandOptions) => Promise<void>} RunCommand */
 
 class DeadlineError extends Error {
   /** @param {string} operation */
@@ -578,28 +580,62 @@ export const readRunFailures = (directory, foundIn) =>
   ]).map((test) => ({ ...test, foundIn }));
 
 /**
+ * Runs a command, killing it once its timeout passes, without holding up the event loop: a
+ * collection that blocks for minutes leaves fetch a pooled connection the server has since closed.
+ * A failure's error carries what the command wrote to stderr.
+ * @type {RunCommand}
+ */
+export function runCommand(command, args, { stdio, timeout }) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, { stdio });
+    /** @type {Buffer[]} */
+    const stderr = [];
+    let isTimedOut = false;
+    const timer = setTimeout(() => {
+      isTimedOut = true;
+      child.kill("SIGKILL");
+    }, timeout);
+    child.stderr?.on("data", (chunk) => stderr.push(chunk));
+    child.once("error", (error) => {
+      clearTimeout(timer);
+      reject(error);
+    });
+    child.once("close", (code, signal) => {
+      clearTimeout(timer);
+      if (code === 0) return resolve();
+      const outcome = isTimedOut ? "ETIMEDOUT" : (signal ?? `exit ${code}`);
+      reject(
+        Object.assign(new Error(`Command failed: ${command} ${outcome}`), {
+          code: isTimedOut ? "ETIMEDOUT" : code,
+          stderr: Buffer.concat(stderr),
+        }),
+      );
+    });
+  });
+}
+
+/**
  * A try's artifacts, each in a folder of its own, downloaded by GitHub's CLI from the repository
  * GH_REPO names. Each is fetched by its id, since a run's tries name their artifacts alike.
  * @param {FlakyRun} run
- * @param {{ deadline?: number, readTime?: () => number, executeFile?: typeof execFileSync }} [options]
- * @returns {string} the folder that holds them
+ * @param {{ deadline?: number, readTime?: () => number, executeCommand?: RunCommand }} [options]
+ * @returns {Promise<string>} the folder that holds them
  */
-export function downloadRun(
+export async function downloadRun(
   { id, artifacts },
   {
     deadline = Date.now() + COLLECTION_TIMEOUT_MS,
     readTime = Date.now,
-    executeFile = execFileSync,
+    executeCommand = runCommand,
   } = {},
 ) {
   const directory = mkdtempSync(join(tmpdir(), `ci-run-${id}-`));
   try {
     for (const artifact of artifacts) {
       const zipPath = join(directory, `${artifact.id}.zip`);
-      downloadArtifact(artifact.id, zipPath, { deadline, readTime, executeFile });
-      executeFile("unzip", ["-q", zipPath, "-d", join(directory, String(artifact.id))], {
+      await downloadArtifact(artifact.id, zipPath, { deadline, readTime, executeCommand });
+      await executeCommand("unzip", ["-q", zipPath, "-d", join(directory, String(artifact.id))], {
         timeout: Math.min(UNZIP_TIMEOUT_MS, readRemainingTime(deadline, readTime)),
-        killSignal: "SIGKILL",
         stdio: ["ignore", "ignore", "pipe"],
       });
     }
@@ -613,16 +649,15 @@ export function downloadRun(
 /**
  * @param {number} id
  * @param {string} zipPath
- * @param {{ deadline: number, readTime: () => number, executeFile: typeof execFileSync }} options
+ * @param {{ deadline: number, readTime: () => number, executeCommand: RunCommand }} options
  */
-function downloadArtifact(id, zipPath, { deadline, readTime, executeFile }) {
+async function downloadArtifact(id, zipPath, { deadline, readTime, executeCommand }) {
   for (let attempt = 0; ; attempt += 1) {
     const zip = openSync(zipPath, "w");
     try {
-      executeFile("gh", ["api", `repos/{owner}/{repo}/actions/artifacts/${id}/zip`], {
+      await executeCommand("gh", ["api", `repos/{owner}/{repo}/actions/artifacts/${id}/zip`], {
         stdio: ["ignore", zip, "pipe"],
         timeout: Math.min(ARTIFACT_TIMEOUT_MS, readRemainingTime(deadline, readTime)),
-        killSignal: "SIGKILL",
       });
       return;
     } catch (error) {
@@ -685,7 +720,7 @@ function boundGitHubRequests(github, deadline, readTime, operation = "collection
  * @param {GitHub} options.github
  * @param {{ url: string, now: Date }} options.night
  * @param {Ledger} options.ledger what the table counted before
- * @param {(run: FlakyRun, options: { deadline: number, readTime: () => number }) => string} [options.download]
+ * @param {(run: FlakyRun, options: { deadline: number, readTime: () => number }) => Promise<string>} [options.download]
  * @param {number} [options.deadline]
  * @param {() => number} [options.readTime]
  * @returns {Promise<CollectionResult>}
@@ -737,7 +772,7 @@ export async function collectFailedTests({
     let directory;
     try {
       readRemainingTime(deadline, readTime);
-      directory = download(run, { deadline, readTime });
+      directory = await download(run, { deadline, readTime });
       failed.push(readRunFailures(directory, run.foundIn));
     } catch (error) {
       if (error instanceof DeadlineError) {

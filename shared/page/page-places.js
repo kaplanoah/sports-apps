@@ -55,11 +55,27 @@ export const SEASON_SETTING = {
   words: ["season", "year", "past seasons"],
 };
 /** @type {SettingRow} */
-export const NOTIFICATIONS_SETTING = {
+const NOTIFICATIONS_SETTING = {
   key: "settings:notifications",
   name: ["Notifications"],
-  words: ["notifications", "notify", "alerts", "push"],
+  words: ["notifications", "notify", "alerts", "push", "game notifications"],
 };
+/** @param {Pick<import("./league-words.js").LeagueWords, "notificationUpdates">} words */
+export const describeNotificationsSetting = (words) => ({
+  ...NOTIFICATIONS_SETTING,
+  words: [...NOTIFICATIONS_SETTING.words, words.notificationUpdates],
+});
+
+const REMINDERS_SETTING = {
+  key: "settings:reminders",
+  words: ["remind", "reminders", "before game", "before the game", "game notifications", "timing"],
+};
+/** @param {Pick<import("./league-words.js").LeagueWords, "reminderTiming">} words */
+export const describeRemindersSetting = (words) => ({
+  ...REMINDERS_SETTING,
+  name: ["Game starts", words.reminderTiming],
+  words: [...REMINDERS_SETTING.words, "game starts", words.reminderTiming],
+});
 /** @type {SettingRow} */
 export const ATHLETIC_SETTING = {
   key: "settings:paywalled",

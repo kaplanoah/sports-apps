@@ -1,11 +1,12 @@
 import * as WNBASnapshot from "../../page/js/snapshot.js";
 import { readEasternDay } from "#shared/days.js";
 import { createFeedKeeper } from "../../../../shared/worker/feed-keeper.js";
-import { createReusedLoader, fetchUpstream } from "../../../../shared/worker/upstream.js";
+import { describeError } from "../../../../shared/worker/responses.js";
+import { createReusedLoader } from "../../../../shared/worker/upstream.js";
 import { createGameEnds } from "./game-ends.js";
 import { createEspnGameReader, readEndTime } from "./lead.js";
 import { listUpcomingMeetings } from "./preview.js";
-import { ESPN_HEADERS, fetchWnbaJson } from "./wnba.js";
+import { fetchEspnJson, fetchWnbaJson } from "./wnba.js";
 
 const EDGE_CACHE_SECONDS = 5;
 // No longer than the wait between updates in a game's closing stretch, so each one reads the league.
@@ -36,7 +37,7 @@ const hasFeedData = (name, answer) => Array.isArray(FEED_DATA[name](answer));
 const nameAveragesRequest = (season) =>
   `https://stats.wnba.com/stats/leaguedashplayerstats?College=&Conference=&Country=&DateFrom=&DateTo=&Division=&DraftPick=&DraftYear=&GameScope=&GameSegment=&Height=&LastNGames=0&LeagueID=10&Location=&MeasureType=Base&Month=0&OpponentTeamID=0&Outcome=&PORound=0&PaceAdjust=N&PerMode=PerGame&Period=0&PlayerExperience=&PlayerPosition=&PlusMinus=N&Rank=N&Season=${season}&SeasonSegment=&SeasonType=Regular+Season&ShotClockRange=&StarterBench=&TeamID=0&VsConference=&VsDivision=&Weight=`;
 
-// Where a game is on rarely changes, so ESPN's scoreboard is read at most this often.
+// Broadcast listings rarely change between ordinary season polls.
 const NETWORKS_MS = 6 * 60 * 60 * 1000;
 
 const formatEspnDay = (ms) => readEasternDay(ms).date.replaceAll("-", "");
@@ -46,6 +47,18 @@ const formatEspnMonth = (ms) => formatEspnDay(ms).slice(0, 6);
 const upgradeLink = (link) => String(link).replace(/^http:/, "https:");
 
 const readEventId = (link) => String(link).match(/\/events\/(\d+)/)?.[1] ?? null;
+
+// In the feeds' own order rather than the order they failed in, so the store's status doesn't
+// change while the same feeds fail for the same reasons.
+/**
+ * Why each feed that didn't answer failed.
+ * @param {Record<string, string>} failures
+ */
+export const describeFailures = (failures) =>
+  Object.keys(FEED_DATA)
+    .filter((name) => name in failures)
+    .map((name) => `${name}: ${failures[name]}`)
+    .join("; ");
 
 const countFinals = (scoreboard) =>
   (scoreboard?.scoreboard?.games ?? []).filter((game) => game.gameStatus === 3).length;
@@ -62,7 +75,7 @@ export function createSnapshotLoader({
   now = () => Date.now(),
   storage = undefined,
 } = {}) {
-  const slowFeeds = createFeedKeeper({ feeds: SLOW_FEEDS, leagueName: "The WNBA", now, storage });
+  const slowFeeds = createFeedKeeper({ feeds: SLOW_FEEDS, now, storage });
   const networkMonths = new Map();
   const espnGames = createEspnGameReader({ fetchImpl });
   const gameEnds = createGameEnds({
@@ -84,27 +97,19 @@ export function createSnapshotLoader({
   /**
    * @param {keyof typeof SLOW_FEEDS} name
    * @param {string} url
-   * @param {(answer: any) => boolean} [isBehind]
+   * @param {{ isBehind?: (answer: any) => boolean, requireFresh?: boolean }} [options]
    */
-  const readSlowFeed = (name, url, isBehind) =>
-    slowFeeds.readFeed(name, url, () => fetchFeed(name, url), { isBehind });
+  const readSlowFeed = (name, url, options = {}) =>
+    slowFeeds.readFeed(name, url, () => fetchFeed(name, url), options);
 
-  async function fetchEspnJson(url) {
-    const response = await fetchUpstream(fetchImpl, url, {
-      headers: ESPN_HEADERS,
-      cacheSeconds: EDGE_CACHE_SECONDS,
-    });
-    if (!response.ok) throw new Error(`ESPN answered ${response.status}`);
-    return response.json();
-  }
+  /** @param {string} url */
+  const fetchEspn = (url) => fetchEspnJson(fetchImpl, url, EDGE_CACHE_SECONDS);
 
   async function fetchBackupGame(eventId) {
-    const competition = await fetchEspnJson(WNBASnapshot.BACKUP_REQUESTS.competition(eventId));
+    const competition = await fetchEspn(WNBASnapshot.BACKUP_REQUESTS.competition(eventId));
     const [status, ...scores] = await Promise.all([
-      fetchEspnJson(upgradeLink(competition.status.$ref)),
-      ...competition.competitors.map((competitor) =>
-        fetchEspnJson(upgradeLink(competitor.score.$ref)),
-      ),
+      fetchEspn(upgradeLink(competition.status.$ref)),
+      ...competition.competitors.map((competitor) => fetchEspn(upgradeLink(competitor.score.$ref))),
     ]);
     return { competition, status, scores };
   }
@@ -116,7 +121,7 @@ export function createSnapshotLoader({
       formatEspnDay(now() - DAY_MS),
       formatEspnDay(now()),
     );
-    const listing = await fetchEspnJson(request);
+    const listing = await fetchEspn(request);
     const eventIds = (listing.items ?? []).map((item) => readEventId(item.$ref)).filter(Boolean);
     const games = await Promise.all(eventIds.map((id) => fetchBackupGame(id).catch(() => null)));
     return { games: games.filter(Boolean) };
@@ -140,12 +145,13 @@ export function createSnapshotLoader({
     return now() - kept.readAt >= NETWORKS_MS;
   }
 
-  /** @param {string} month */
-  async function readNetworkMonth(month) {
+  /** @param {string} month @param {boolean} [verify] */
+  async function readNetworkMonth(month, verify = false) {
     const kept = networkMonths.get(month);
-    if (!isDueForNetworksRead(month)) return kept.data;
+    // A reminder needs current listings, but a finalized month cannot change.
+    if (!isDueForNetworksRead(month) && (!verify || isFinalAnswer(kept, month))) return kept.data;
     try {
-      const data = await fetchEspnJson(WNBASnapshot.NETWORKS_REQUEST(month));
+      const data = await fetchEspn(WNBASnapshot.NETWORKS_REQUEST(month));
       networkMonths.set(month, { readAt: now(), answeredAt: now(), data });
       return data;
     } catch {
@@ -164,45 +170,61 @@ export function createSnapshotLoader({
     return [...new Set(times.map(formatEspnMonth))].sort();
   }
 
-  async function readNetworks(schedule, season) {
+  async function readNetworks(schedule, season, verify = false) {
     const months = listNetworkMonths(schedule, season);
-    const answers = await Promise.all(months.map(readNetworkMonth));
+    const answers = await Promise.all(months.map((month) => readNetworkMonth(month, verify)));
     return answers.filter(Boolean);
   }
 
-  async function fetchResponses(season) {
+  async function fetchResponses(season, verify = false) {
     await slowFeeds.forgetFeed("players", nameAveragesRequest(season));
+    /** @type {Record<string, string>} */
+    const failures = {};
+    /** @param {keyof typeof FEED_DATA} name */
+    const noteFailure = (name) => (/** @type {unknown} */ error) => {
+      failures[name] = describeError(error);
+      return null;
+    };
     const scoreboard = await fetchFeed("scoreboard", WNBASnapshot.REQUESTS.scoreboard).catch(
-      () => null,
+      noteFailure("scoreboard"),
     );
     await slowFeeds.noteFinalCount(scoreboard ? countFinals(scoreboard) : null);
     const hasGamesLeftLive = (schedule) =>
       WNBASnapshot.listGamesLeftLive(schedule, scoreboard, season).size > 0;
     const [schedule, bracket, standings] = await Promise.all([
-      readSlowFeed("schedule", WNBASnapshot.REQUESTS.schedule, hasGamesLeftLive).catch(() => null),
-      readSlowFeed("bracket", WNBASnapshot.REQUESTS.bracket(season)).catch(() => null),
-      readSlowFeed("standings", WNBASnapshot.REQUESTS.standings(season)).catch(() => null),
+      readSlowFeed("schedule", WNBASnapshot.REQUESTS.schedule, {
+        isBehind: hasGamesLeftLive,
+        requireFresh: verify,
+      }).catch(noteFailure("schedule")),
+      readSlowFeed("bracket", WNBASnapshot.REQUESTS.bracket(season), {
+        requireFresh: verify,
+      }).catch(noteFailure("bracket")),
+      readSlowFeed("standings", WNBASnapshot.REQUESTS.standings(season)).catch(
+        noteFailure("standings"),
+      ),
     ]);
     if (!scoreboard && !schedule && !bracket)
-      throw new Error("None of the WNBA's feeds answered with data");
+      throw new Error(`None of the WNBA's feeds answered with data: ${describeFailures(failures)}`);
     const needsBackup = !scoreboard || hasGamesLeftLive(schedule);
     const [backup, networks] = await Promise.all([
       needsBackup ? fetchBackup().catch(() => null) : null,
-      readNetworks(schedule, season),
+      readNetworks(schedule, season, verify),
     ]);
-    return { scoreboard, schedule, bracket, standings, backup, networks };
+    return { responses: { scoreboard, schedule, bracket, standings, backup, networks }, failures };
   }
 
   /**
    * @param {number} season
    * @param {number} requestedAt
+   * @param {boolean} [verify]
    */
-  async function fetchSnapshot(season, requestedAt) {
-    const responses = await fetchResponses(season);
+  async function fetchSnapshot(season, requestedAt, verify = false) {
+    const { responses, failures } = await fetchResponses(season, verify);
     const snapshot = WNBASnapshot.buildSnapshot(responses, { season, now: requestedAt });
     const ended = await addGameEnds(snapshot);
     return {
       ...ended,
+      failures,
       meetings: listUpcomingMeetings(responses.schedule, ended),
     };
   }
@@ -224,7 +246,9 @@ export function createSnapshotLoader({
     };
   }
 
-  const loadSnapshot = createReusedLoader(fetchSnapshot, SNAPSHOT_REUSE_MS, now);
+  const loadReusedSnapshot = createReusedLoader(fetchSnapshot, SNAPSHOT_REUSE_MS, now);
+  const loadSnapshot = (season, { verify = false } = {}) =>
+    verify ? fetchSnapshot(season, now(), true) : loadReusedSnapshot(season);
 
   return { loadSnapshot };
 }

@@ -48,6 +48,7 @@ The Worker serves every file here, its `networks/` logos too, under `shared/`, b
 - `caught-up-sweep.js`: the sweep through the header once caught up
 - `pull-to-refresh.js`: pulling down on the Home Screen to catch up
 - `resume.js`: the release check and catching up on return
+- `daily-count.js`: counting each browser or Home Screen app once a day, with nothing about who
 - `last-seen.js`: what the page last showed, drawn first on its next load
 - `element-path.js`: where a part sits, so a later load finds it
 - `stamp.js`: the header's lines on the latest score and the next game
@@ -69,8 +70,13 @@ The Worker serves every file here, its `networks/` logos too, under `shared/`, b
 - `contact-drafts.js`: separate category drafts and stable submission identifiers
 - `contact-rules.js`: Contact categories and shared input limits
 - `season-picker.js`: settings' Season picker
-- `notifications.js`: settings' notifications switch
-- `notification-status.js`: what that switch says under it
+- `notifications.js`: the Notifications group's permission, saving and timing changes
+- `notifications-view.js`: the Notifications group's rows, from its state and the league's words
+- `notification-preferences.js`: device push categories, timing presets, and validation
+- `notification-intent.js`: the game a notification asks to open, from its message or the page's address
+- `notification-navigation.js`: opening a game from a notification through reloads and the access gate
+- `notification-status.js`: notification guidance and category control states
+- `save-queue.js`: saves that run one at a time, the newest choice last
 - `diagnostics.js`: the Diagnostics and their shared report
 - `sent-label.js`: how long a button that copies or shares says it did
 - `step-log.js`: a Diagnostics log of what one part of the page does
@@ -136,7 +142,7 @@ The Worker serves every file here, its `networks/` logos too, under `shared/`, b
 
 - `spring-scroll.js`: a scroll that eases into place on a spring
 - `reduced-motion.js`: whether the device asks for less motion
-- `press.js`: a row's tint while pressed, and telling a tap from a scroll
+- `press.js`: every control's press, and telling a tap from a scroll
 - `kept-place.js`: keeping rows in place as what's above them changes
 - `eased-redraw.js`: easing parts to their new heights on a redraw
 - `slide-panels.js`: side-by-side panels a finger drags
@@ -171,10 +177,12 @@ The Worker serves every file here, its `networks/` logos too, under `shared/`, b
 
 ### The store and reading
 
+- `reminder-games.js`: the playoff games a league's snapshot hands the store for reminders
 - `worker-fetch.js`: reading from the app's own Worker, sharing a recent read
 - `worker-error.js`: reading the Worker's error answers
 - `worker-store.js`: the store client
 - `store-path.js`: names and document paths shared by the store client and Worker
+- `count-path.js`: the route the daily count is sent to, shared by the page and Worker
 - `season-reader.js`: reading the current season, its record, and the store's status
 - `season-doc-follower.js`: following a document the store keeps for the season shown
 - `poll-schedule.js`: how long a league's next update waits
@@ -223,12 +231,14 @@ Pages link these before their own stylesheet, and theme them with the tokens the
 - `channel-tag.css`: the tag beside the app's name on beta
 - `tuning-panel.css`: the tuning panel and its Tune button
 - `gate.css`: the access code's gate
+- `controls.css`: how every control shows its focus and its press
 
 ## `shared/worker/`
 
 - `app-worker.js`: the Worker's routing, under the key or at its own address, and moving the page there
 - `contact-request.js`: bounded Contact requests behind the app's access gate
 - `access-gate.js`: asking for the access code before the page opens
+- `daily-count.js`: writing each browser's or Home Screen app's daily count to Analytics Engine, with the address it came from
 - `health.js`: the Worker's health, for an uptime monitor, and what each service it binds answers
 - `services.js`: the services an app may bind, and each one's binding name
 - `season-store.js`: the store's Durable Object, which each app's store hands its league
@@ -254,6 +264,7 @@ Pages link these before their own stylesheet, and theme them with the tokens the
 - `hash-text.js`: a short fixed-length name for any text
 - `seasons.js`: the season a request names
 - `notifications.js`: capping a night's notifications
-- `push.js`: push subscriptions and their signing key
+- `game-reminders.js`: persisted game reminder deadlines, verification, delivery, and retries
+- `push.js`: active and retired push devices, private preferences and receipts, signing and delivery
 - `web-push.js`: sending Web Push messages
 - `responses.js`: what the JSON endpoints answer with

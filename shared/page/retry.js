@@ -4,6 +4,7 @@
 // coming back reads again, so the part shows its placeholders until the read answers.
 
 import { html } from "./html.js";
+import { runAfterPress } from "./press.js";
 import { watchTimeAway } from "./resume.js";
 
 // Phosphor's arrow-clockwise, at its Regular weight.
@@ -113,7 +114,8 @@ export const renderRetryNote = (message, className) =>
  */
 export function watchRetries(holder, retry) {
   holder.addEventListener("click", (event) => {
-    if (/** @type {Element} */ (event.target).closest("[data-retry]")) retry();
+    const button = /** @type {Element} */ (event.target).closest("[data-retry]");
+    if (button) runAfterPress(button, retry);
   });
   const retryIfShown = () => {
     if (holder.querySelector("[data-retry]")) retry();

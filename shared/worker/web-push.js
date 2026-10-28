@@ -164,6 +164,7 @@ export async function encryptPayload({
  * @param {string} options.subject
  * @param {number} options.now
  * @param {typeof fetch} [options.fetchImpl]
+ * @param {number} [options.ttlSeconds]
  */
 export async function sendPush({
   subscription,
@@ -171,6 +172,7 @@ export async function sendPush({
   signingKey,
   subject,
   now,
+  ttlSeconds = MESSAGE_TTL_S,
   fetchImpl = (input, init) => fetch(input, init),
 }) {
   const body = await encryptPayload({
@@ -188,7 +190,7 @@ export async function sendPush({
     authorization,
     "content-encoding": "aes128gcm",
     "content-type": "application/octet-stream",
-    ttl: String(MESSAGE_TTL_S),
+    ttl: String(Math.max(0, Math.floor(ttlSeconds))),
     urgency: "normal",
   };
   return abortAfter(SEND_TIMEOUT_MS, async (signal) => {

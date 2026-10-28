@@ -283,7 +283,8 @@ function patchChildren(parent, nextParent, keyed) {
 function patchContent(current, next, keyed) {
   const selectedIndex = next instanceof HTMLSelectElement ? next.selectedIndex : -1;
   patchChildren(current, next, keyed);
-  if (current instanceof HTMLSelectElement) current.selectedIndex = selectedIndex;
+  if (current instanceof HTMLSelectElement && current.selectedIndex !== selectedIndex)
+    current.selectedIndex = selectedIndex;
 }
 
 /**

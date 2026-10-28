@@ -6,8 +6,8 @@ import { describeError } from "./responses.js";
 // and once more a few minutes later, and again every few minutes while another feed shows its
 // answer is still behind. Each keeps its last good answer to stand in when a read fails, and one
 // that didn't answer isn't asked again for a while, since a hung read holds up each update until
-// it times out. What it keeps goes in `storage`, since a Durable Object leaves memory between
-// updates.
+// it times out, and meanwhile fails for the same reason its last read did. What it keeps goes in
+// `storage`, since a Durable Object leaves memory between updates.
 
 const SETTLE_MS = 10 * 60 * 1000;
 const FAILED_FEED_WAIT_MS = 5 * 60 * 1000;
@@ -74,11 +74,10 @@ export const nameFeedKey = (name, key) => digestKey(`${name} ${key}`);
  * @param {object} options
  * @param {Record<string, { maxAgeMs: number, changesWithGames: boolean }>} options.feeds how old
  *   each feed's answer may get, and whether a game's end changes it
- * @param {string} options.leagueName the league as an error names it, as in "MLB didn't answer"
  * @param {() => number} options.now
  * @param {FeedStorage} [options.storage]
  */
-export function createFeedKeeper({ feeds, leagueName, now, storage = createMemoryStorage() }) {
+export function createFeedKeeper({ feeds, now, storage = createMemoryStorage() }) {
   /** @type {Map<string, any>} */
   const records = new Map();
   /** @type {Set<string>} */
@@ -170,25 +169,30 @@ export function createFeedKeeper({ feeds, leagueName, now, storage = createMemor
      * @param {string} key the request, so that each season's answers are kept apart
      * @param {() => Promise<any>} load
      * @param {object} [options]
+     * @param {boolean} [options.requireFresh] read again and reject failed verification
      * @param {(data: any) => boolean} [options.isBehind] whether a kept answer is behind what
      *   another feed already says
      */
-    async readFeed(name, key, load, { isBehind = () => false } = {}) {
+    async readFeed(name, key, load, { isBehind = () => false, requireFresh = false } = {}) {
       const storageKey = await nameFeedKey(name, key);
       const what = `${name} ${key}`;
       const record = await readRecord(storageKey);
       const answer = record?.answer;
-      if (!(await isDue(name, record, isBehind))) {
+      if (!requireFresh && !(await isDue(name, record, isBehind))) {
         if (answer) return answer.data;
-        throw new Error(`${leagueName} didn't answer ${name} a moment ago`);
+        throw new Error(record.reason);
       }
       try {
         const data = await load();
         await saveRecord(storageKey, { answer: { at: now(), data } }, what);
         return data;
       } catch (error) {
-        await saveRecord(storageKey, { answer, failedAt: now() }, what);
-        if (answer) return answer.data;
+        await saveRecord(
+          storageKey,
+          { answer, failedAt: now(), reason: describeError(error) },
+          what,
+        );
+        if (answer && !requireFresh) return answer.data;
         throw error;
       }
     },

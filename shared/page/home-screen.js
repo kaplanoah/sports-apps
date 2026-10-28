@@ -9,6 +9,7 @@
 /* global forgetWelcomeClosed -- from pick-theme.js */
 
 import { isOnHomeScreen, isTouchDevice } from "./device.js";
+import { runAfterPress } from "./press.js";
 import { closeOnCancel, closeOnSwipeDown } from "./sheet-swipe.js";
 
 /**
@@ -83,8 +84,22 @@ export function openWelcome() {
   findWelcome().showModal();
 }
 
+// Its buttons close it as Escape does, as draw-home-screen-asks.js has them do until this loads,
+// once their press has shown.
+/** @param {Event} event */
+function closeAfterPress(event) {
+  const button = /** @type {Element} */ (event.target).closest(".welcome-continue, .welcome-close");
+  if (!button) return;
+  event.stopPropagation();
+  const welcome = findWelcome();
+  runAfterPress(button, () => {
+    if (welcome.dispatchEvent(new Event("cancel", { cancelable: true }))) welcome.close();
+  });
+}
+
 function wireWelcomeClosing() {
   const welcome = findWelcome();
+  welcome.addEventListener("click", closeAfterPress, { capture: true });
   closeOnCancel(welcome);
   closeOnSwipeDown(welcome, { isOwnGesture: () => false, findScroller: () => welcome });
 }

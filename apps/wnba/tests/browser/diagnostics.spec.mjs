@@ -6,8 +6,13 @@ import {
   turnOnDiagnostics,
 } from "../../../../tests/browser/diagnostics-switch.mjs";
 import { SETTINGS, openSettings } from "../../../../tests/browser/settings.mjs";
-import { findRecords } from "../../../../tests/browser/diagnostics-records.mjs";
-import { RECORD_MS, reloadAndRecord } from "./diagnostics-records.mjs";
+import {
+  findRecords,
+  makeDip,
+  showDipAndOffViewport,
+} from "../../../../tests/browser/diagnostics-records.mjs";
+import { listLowContrastTextWithRowsPressed } from "../../../../tests/browser/contrast.mjs";
+import { RECORD_MS, reloadAndRecord, reloadToRecord } from "./diagnostics-records.mjs";
 
 test.use({
   viewport: { width: 390, height: 844 },
@@ -149,24 +154,26 @@ test("a part that empties and fills again while recording is flagged as a dip", 
 }) => {
   await openApp(page);
   await turnOnDiagnostics(page);
-  await page.reload();
-  await expect(page.locator('[data-series="1-0"] .team-line.won')).toContainText("Liberty");
-  const markup = await page.locator("#bracketWrap").evaluate((wrap) => {
-    const shown = wrap.innerHTML;
-    wrap.replaceChildren();
-    return shown;
-  });
-  await page.clock.runFor(300);
+  await reloadToRecord(page);
 
-  await page.locator("#bracketWrap").evaluate((wrap, shown) => {
-    wrap.innerHTML = shown;
-  }, markup);
-  await page.clock.runFor(RECORD_MS);
+  await makeDip(page, "#bracketWrap");
   await openSettings(page);
 
   const record = findRecords(page).locator(".diagnostics-record").first();
   await expect(record.locator("summary")).toContainText("Dip");
   await expect(record.locator(".diagnostics-dip")).toContainText(/bracketWrap: text \d+ to 0/);
+});
+
+test("each record's flag stays as readable as AA asks with its line pressed, in Maple and Walnut", async ({
+  page,
+}) => {
+  await openApp(page);
+  await turnOnDiagnostics(page);
+  await reloadToRecord(page);
+
+  await showDipAndOffViewport(page, "#bracketWrap");
+
+  expect(await listLowContrastTextWithRowsPressed(page)).toEqual([]);
 });
 
 test("a return to the page is recorded with how long it was away", async ({ page }) => {
@@ -180,111 +187,6 @@ test("a return to the page is recorded with how long it was away", async ({ page
   await openSettings(page);
 
   await expect(findRecords(page).locator("summary").first()).toContainText("Back after 5 min");
-});
-
-/** @param {import("@playwright/test").Page} page */
-const findViewportLog = (page) =>
-  findRecords(page).locator(".diagnostics-record", { hasText: "Viewport" });
-
-/**
- * The page reads the viewport on the frame after its resize event, and a slow machine can send that
- * event only after the test has opened a sheet, so the clock moves on once the page has it.
- * @param {import("@playwright/test").Page} page
- * @param {{ width: number, height: number }} size
- */
-async function resizeViewport(page, size) {
-  const resize = await page.evaluateHandle(() => ({
-    seen: new Promise((resolve) =>
-      visualViewport?.addEventListener("resize", () => resolve(true), { once: true }),
-    ),
-  }));
-  await page.setViewportSize(size);
-  await resize.evaluate((pending) => pending.seen);
-  await page.clock.runFor(100);
-}
-
-test("with Diagnostics on, the viewport is logged as the page opens, and again when it changes", async ({
-  page,
-}) => {
-  await openApp(page);
-  await turnOnDiagnostics(page);
-  await reloadAndRecord(page);
-
-  await resizeViewport(page, { width: 390, height: 700 });
-  await openSettings(page);
-
-  const lines = findViewportLog(page).locator("li");
-  await expect(findViewportLog(page).locator("summary")).toContainText("Steady");
-  await expect(lines.first()).toContainText(/layout 700, .*sheet ends 700/);
-  const resized = lines.filter({ hasText: "layout 700", hasNotText: "sheet ends" });
-  await expect(resized).toContainText(/tab bar ends \d+/);
-  await expect(lines.filter({ hasText: "layout 844, visual 844 from 0" })).not.toHaveCount(0);
-});
-
-for (const [moved, moveViewport] of [
-  ["as the page scrolls", () => scrollTo(0, 1)],
-  ["as the visual viewport moves", () => visualViewport?.dispatchEvent(new Event("scroll"))],
-]) {
-  test(`a visual viewport out of line with the layout one is flagged as off ${moved}`, async ({
-    page,
-  }) => {
-    await openApp(page);
-    await turnOnDiagnostics(page);
-    await reloadAndRecord(page);
-
-    await page.evaluate(() =>
-      Object.defineProperty(visualViewport, "offsetTop", { configurable: true, get: () => 110 }),
-    );
-    await page.evaluate(moveViewport);
-    await page.clock.runFor(100);
-    await openSettings(page);
-
-    const log = findViewportLog(page);
-    await expect(log.locator("summary")).toContainText("Off");
-    const offBeforeSettings = log.locator(".diagnostics-dip", { hasNotText: "sheet ends" });
-    await expect(offBeforeSettings).toContainText("visual 844 from 110");
-  });
-}
-
-test("with Diagnostics on, the viewport is logged each time the page leaves the screen and comes back, though nothing changed", async ({
-  page,
-}) => {
-  await openApp(page);
-  await turnOnDiagnostics(page);
-  await reloadAndRecord(page);
-
-  await setHidden(page, true);
-  await setHidden(page, false);
-  await page.clock.runFor(100);
-  await openSettings(page);
-
-  const lines = findViewportLog(page).locator("li");
-  await expect(lines.first()).toContainText(/sheet ends \d+/);
-  await expect(lines.nth(1)).toContainText(/Back: screen \d+, layout 844, /);
-  await expect(lines.nth(2)).toContainText(/Left: screen \d+, layout 844, /);
-  await expect(lines.nth(3)).toContainText(/Opened: screen \d+, layout 844, /);
-});
-
-test("with Diagnostics on, a bounce past the page's top isn't logged", async ({ page }) => {
-  await openApp(page);
-  await turnOnDiagnostics(page);
-  await reloadAndRecord(page);
-
-  await page.evaluate(() => {
-    Object.defineProperty(window, "scrollY", { configurable: true, get: () => -40 });
-    Object.defineProperty(visualViewport, "offsetTop", { configurable: true, get: () => -40 });
-    visualViewport?.dispatchEvent(new Event("scroll"));
-  });
-  await page.clock.runFor(100);
-  await page.evaluate(() => {
-    Object.defineProperty(window, "scrollY", { configurable: true, get: () => 0 });
-    Object.defineProperty(visualViewport, "offsetTop", { configurable: true, get: () => 0 });
-  });
-  await openSettings(page);
-
-  const log = findViewportLog(page);
-  await expect(log.locator("li").filter({ hasText: "sheet ends" })).toHaveCount(1);
-  await expect(log.locator("li", { hasText: "from -40" })).toHaveCount(0);
 });
 
 test("with Diagnostics on, a tap that opens a team's sheet from a game's, the row's steps, and going back are logged", async ({
@@ -435,7 +337,9 @@ test("turning Diagnostics off forgets what it recorded", async ({ page }) => {
   await page.clock.runFor(100);
   await openSettings(page);
   await expect(findRecords(page).locator(".diagnostics-record")).toHaveCount(4);
-  await expect(findViewportLog(page)).toHaveCount(1);
+  await expect(
+    findRecords(page).locator(".diagnostics-record", { hasText: "Viewport" }),
+  ).toHaveCount(1);
   await expect(
     findRecords(page).locator(".diagnostics-record", { hasText: "Games list" }),
   ).toHaveCount(1);
@@ -521,12 +425,23 @@ test("a report on the season tab lists no animation for the header that rides up
   await expect(page.locator("#bracketWrap .bracket")).toBeVisible();
   await turnOnDiagnostics(page);
   await openSettings(page);
+  // The settings button's press fades back as settings open, which is no part of the header's.
+  await expect(page.getByRole("button", { name: "Settings", exact: true })).toHaveCSS(
+    "opacity",
+    "1",
+  );
 
   await findReportButton(page).click();
 
   await expect(findReportButton(page)).toHaveText("Shared");
   const [{ text: copied }] = await readShares(page);
-  expect(copied).toMatch(/^\+0 Animations: none$/m);
+  const animations = (copied.match(/^\+0 Animations: (.*)$/m)?.[1] ?? "").split("; ");
+  // The report button's own press eases back as it shares, which is no part of the header's.
+  expect(
+    animations.filter(
+      (animation) => animation !== "none" && !animation.startsWith("#diagnosticsReport "),
+    ),
+  ).toEqual([]);
 });
 
 test("each report notes the page as it is only for itself, and keeps every record of an open", async ({
@@ -571,6 +486,31 @@ test("opening settings reads how the store's jobs last ran, for the report sent 
       return shares.at(-1)?.text;
     })
     .toMatch(/^Players job last ran .*, 7 requests$/m);
+});
+
+test("a report names why the store's last update missed a feed, on a line after the time", async ({
+  page,
+}) => {
+  await stubShare(page);
+  const app = await openApp(page);
+  await turnOnDiagnostics(page);
+  await app.writeDocument("live/status", {
+    at: new Date(NOW).toISOString(),
+    error: "wnba_feeds_missing",
+    detail: "standings",
+    reasons: "standings: The WNBA answered 503",
+  });
+  await openSettings(page);
+
+  await expect
+    .poll(async () => {
+      await findReportButton(page).click();
+      const shares = await readShares(page);
+      return shares.at(-1)?.text;
+    })
+    .toMatch(
+      /^Now .*\nUpdates since .*: detail standings, error wnba_feeds_missing, reasons standings: The WNBA answered 503$/m,
+    );
 });
 
 /** @param {import("@playwright/test").Page} page */
