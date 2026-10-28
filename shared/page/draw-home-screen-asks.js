@@ -203,8 +203,13 @@ function wireWelcome(welcome, isOnIos) {
       welcome.close();
   });
   // Continue in browser, the caret, Escape, and Android's back all close it, and it stays closed.
-  welcome.addEventListener("close", keepWelcomeClosed);
-  welcome.addEventListener("close", () => finishMove(isOnIos));
+  // It keeps that as its open attribute goes, since Chromium fires close only at the next frame,
+  // after a reload begun at once has already started.
+  new MutationObserver(() => {
+    if (welcome.open) return;
+    keepWelcomeClosed();
+    finishMove(isOnIos);
+  }).observe(welcome, { attributeFilter: ["open"] });
   // Opened again from settings, it rises, even when it closed before the modules arrived.
   welcome.addEventListener("close", () => welcome.removeAttribute("data-reopened"));
 }
