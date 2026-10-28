@@ -213,6 +213,8 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - *setup-node
+      - *restore-modules
+      - *install-modules
       # Naming the shell adds pipefail, so a failed diff fails the job rather than reading as no
       # change.
       - id: apps
@@ -278,17 +280,18 @@ jobs:
             playwright-report/
             test-results/
 
-  # Each browser spec scope lists, the ones a pull request adds or changes but for one that passed
-  # burn-in in an earlier run and hasn't changed since, with what it runs with unchanged too
-  # (worker/burn-in-specs.mjs), runs ten times over, with no retry, so a test that passes only some
-  # of the time fails on the pull request that brings it, rather than on later ones. Only a test
-  # the pull request wrote or edited fails it: any other that failed goes to the issue Flaky
-  # browser tests from the next nightly run (worker/judge-burn-in.mjs). Ten runs of every spec a
-  # large pull request changes take longer than one machine's limit, so ten machines each run every
-  # test once. Each then has the same share however slow some tests are, where Playwright's shards,
-  # split by count in project order, would give the last machines only the last project's tests,
-  # WebKit's, the slowest. When an at-rest spec is among them, it installs WebKit too, as the
-  # webkit job does, so they repeat in WebKit, where they've failed most.
+  # Each browser spec scope lists, the ones a pull request adds or changes and those importing a
+  # changed helper that declares tests, but for one that passed burn-in in an earlier run and hasn't
+  # changed since, with what it runs with unchanged too (worker/burn-in-specs.mjs), runs ten times
+  # over, with no retry, so a test that passes only some of the time fails on the pull request that
+  # brings it, rather than on later ones. Only a test the pull request wrote or edited fails it: any
+  # other that failed goes to the issue Flaky browser tests from the next nightly run
+  # (worker/judge-burn-in.mjs). Ten runs of every spec a large pull request selects take longer than
+  # one machine's limit, so ten machines each run every test once. Each then has the same share
+  # however slow some tests are, where Playwright's shards, split by count in project order, would
+  # give the last machines only the last project's tests, WebKit's, the slowest. When a spec WebKit's
+  # projects in tests/browser/projects.mjs match is among them, it installs WebKit too, as the webkit
+  # job does, so they repeat in WebKit, where they've failed most.
   burn-in:
     needs: scope
     if: ${{ !cancelled() && needs.scope.result == 'success' && needs.scope.outputs.specs != '' }}
@@ -318,7 +321,7 @@ jobs:
         id: image
         run: echo "os=$ImageOS" >> "$GITHUB_OUTPUT"
       - id: webkit-packages
-        if: &runs-webkit-specs contains(needs.scope.outputs.specs, 'at-rest.spec.mjs')
+        if: &runs-webkit-specs contains(needs.scope.outputs.specs, 'at-rest.spec.mjs') || contains(needs.scope.outputs.specs, 'notification-layout.spec.mjs') || contains(needs.scope.outputs.specs, 'notification-permission.spec.mjs')
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/webkit-packages
@@ -339,7 +342,7 @@ jobs:
           npm run test:browser -- --retries=0 --max-failures=0 "${specs[@]}" || true
       - name: Fail only on a test this pull request wrote or edited
         shell: bash
-        run: git diff -U0 --no-renames HEAD^1 HEAD -- 'apps/*/tests/browser/*.spec.mjs' | node worker/judge-burn-in.mjs test-results/report.json
+        run: git diff -U0 --no-renames HEAD^1 HEAD | node worker/judge-burn-in.mjs test-results/report.json
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         if: ${{ !cancelled() && hashFiles('test-results/burn-in-flaky.json') != '' }}
         with:
@@ -353,9 +356,8 @@ jobs:
             playwright-report/
             test-results/
 
-  # iPhones run the pages in WebKit, which runs only the at-rest specs, so one machine runs it. The
-  # installed Playwright installs the WebKit it runs, with the system libraries GitHub's runners
-  # lack, so the browser always matches the lockfile (tests/ci-workflow.test.js).
+  # iPhones run WebKit, so one machine runs its projects' matching specs. Playwright installs the
+  # engine and system libraries that match the lockfile (tests/ci-workflow.test.js).
   webkit:
     needs: [passed, scope]
     if: ${{ !cancelled() && !needs.passed.outputs.run && needs.scope.outputs.apps != '' }}

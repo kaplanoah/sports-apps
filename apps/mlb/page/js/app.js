@@ -1,3 +1,4 @@
+import { openNotificationGame } from "#shared/notification-navigation.js";
 import { BACKGROUND_JOBS } from "./background-jobs.js";
 import { renderBracket, watchBracketSpace } from "./bracket-view.js";
 import { listRankedOrder, renderTeamDot } from "./clubs.js";
@@ -32,7 +33,7 @@ import { readNewsChoices } from "#shared/news-choices.js";
 import { listShownStories } from "#shared/page-places.js";
 import { openPageTab, setTabStart, startPageTabs } from "#shared/page-tabs.js";
 import { isSettingShown, openSettings } from "#shared/settings-sheet.js";
-import { openGameSection, startGameSheet } from "./game-sheet.js";
+import { openNotifiedGame, openGameSection, startGameSheet } from "./game-sheet.js";
 import { listFoundGameDays } from "./games-view.js";
 import { listSeasonGames } from "./season-games.js";
 import { REORDER_EVENT } from "./ranking.js";
@@ -341,7 +342,8 @@ async function boot() {
   watchBracketSpace();
   refreshClockEveryMinute();
   startServiceWorker();
-  startNotifications();
+  startNotifications(LEAGUE_WORDS);
+  openNotificationGame({ showYear, openGame: openNotifiedGame });
 }
 
 boot();

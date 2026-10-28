@@ -6,6 +6,7 @@ import {
   groupGamesByDay,
   listCountedGames,
   listSeasonGames,
+  findGameToOpen,
   nameGameKey,
 } from "../page/js/season-games.js";
 import { countSeriesWins, groupSeriesFinals } from "../page/js/series-games.js";
@@ -138,4 +139,27 @@ test("a playoff game MLB suspended counts once toward its series", () => {
   ];
   const second = { ...suspended, id: "900002", date: "2026-10-05", state: "pre", number: 2 };
   assert.deepEqual(countSeriesWins(second, groupSeriesFinals(games)), [0, 1]);
+});
+
+test("notification and row lookups share today's game context and exclude All-Star games", () => {
+  const today = { id: "123", date: "2026-10-25", state: "pre", away: "LAD", home: "NYY" };
+  const slate = {
+    today: { date: today.date, games: [today] },
+    previous: [],
+    next: [],
+    allStar: { ...today, id: "456", allStar: true },
+  };
+  const schedule = [
+    { ...today, state: "off" },
+    { ...today, id: "789", date: "2026-10-24" },
+  ];
+  const byId = findGameToOpen(slate, schedule, (game) => game.id === today.id);
+  const byKey = findGameToOpen(slate, schedule, (game) => nameGameKey(game) === nameGameKey(today));
+  assert.deepEqual(byId, { ...today, today: true });
+  assert.deepEqual(byId, byKey);
+  assert.equal(findGameToOpen(slate, schedule, (game) => game.id === "789").today, false);
+  assert.equal(
+    findGameToOpen(slate, schedule, (game) => game.id === "456"),
+    null,
+  );
 });

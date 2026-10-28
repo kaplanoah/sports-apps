@@ -1,3 +1,8 @@
+import {
+  PUSH_STUB,
+  stubPushManager,
+  stubPushRegistration,
+} from "../../../../tests/browser/push-stub.mjs";
 import { test, expect, openApp, openLockedApp, MOVING_APP } from "./harness.mjs";
 import { ON_A_PHONE } from "./search-page.mjs";
 import { checkEachView, openWithNews } from "./views.mjs";
@@ -6,7 +11,10 @@ import { listRoleLooks } from "../../../../tests/browser/type-roles.mjs";
 import { IPHONE } from "../../../../tests/browser/devices.mjs";
 import { openOldHomeScreenApp } from "../../../../tests/browser/page-move.mjs";
 
-test.use({ contextOptions: { reducedMotion: "reduce" }, viewport: { width: 390, height: 844 } });
+test.use({
+  contextOptions: { reducedMotion: "reduce" },
+  viewport: { width: 390, height: 844 },
+});
 
 // The one font and case each type role draws in.
 const ROLE_LOOKS = {
@@ -24,6 +32,7 @@ const ROLE_LOOKS = {
   label: "Barlow, capitals",
   caption: "Barlow",
   setting: "Barlow",
+  subsetting: "Barlow",
   "setting-note": "Barlow",
   "notice-title": "Barlow",
   "notice-text": "Barlow",
@@ -48,6 +57,16 @@ const SECOND_LOOKS = {
  * }[]}
  */
 const OTHER_PLACES = [
+  {
+    name: "settings with notifications",
+    open: async (page) => {
+      await page.addInitScript(stubPushManager, PUSH_STUB);
+      await page.addInitScript(stubPushRegistration);
+      await openApp(page);
+      await page.getByRole("button", { name: "Settings", exact: true }).click();
+    },
+    shown: (page) => page.locator("#reminderTiming"),
+  },
   {
     name: "the gate",
     open: (page) => openLockedApp(page, { accessCode: "FASTBREAK" }),
@@ -94,6 +113,8 @@ test("each type role draws in one font and one case in every view, but for the s
   page,
   browser,
 }) => {
+  // This traverses every view, then opens each remaining place in a separate context.
+  test.slow();
   const looks = new Set();
   /** @param {import("@playwright/test").Page} shown */
   const addLooks = async (shown) => {

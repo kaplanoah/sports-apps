@@ -22,6 +22,7 @@
  *   caption       the smallest text: seeds, stat details, credits
  *   setting       a setting's name, a step up, as the phone's own Settings set it
  *   setting-note  a setting's note
+ *   subsetting    a nested setting's name
  *   notice-title  the title of a card that takes the Updates box's place, like the app's move
  *   notice-text   that card's sentences
  *

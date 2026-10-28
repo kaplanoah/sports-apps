@@ -31,8 +31,13 @@
  *   --tabs-chosen-ink                          the open tab's words
  *   --switch-knob                              a switch's knob, one light color in every theme, as the
  *                                              phone keeps its own
- *   --select-arrow                             a url() of a select field's down arrow, in --ink-dim, if
- *                                              the app has one
+ *   --reminder-width                           the timing field's width, 145px if unset
+ *   --reminder-caret-right                     the timing caret's right offset, 3px if unset
+ *   --reminder-text-rendering                  the timing text's rendering, auto if unset
+ *   --reminder-padding-top                     the timing field's top inset, 7px if unset
+ *   --reminder-padding-right                   the timing field's right inset, 20px if unset
+ *   --reminder-padding-bottom                  the timing field's bottom inset, 7px if unset
+ *   --select-text-face                         a select with words rather than years, if different
  *   --select-face                              a select field's face, drawn at --type-field-size as big
  *                                              as the page's text at --type-detail-size
  *   --tab-bar-tint                             the tab bar's fill
@@ -356,9 +361,34 @@ section.view.active:not([data-follows]):has(> :is(.day-view, .season-parts)) {
     mask-position: 0 0;
   }
 }
+
+/* Reserve space before loading so guidance stays clear of the ring without moving the row. */
+#remindersNote,
+#notifyNote {
+  padding-inline-end: 14px;
+}
+
+.notification-switch {
+  position: relative;
+  display: flex;
+  flex: none;
+}
+.notification-spinner {
+  position: absolute;
+  left: -22px;
+  top: 7px;
+  width: 14px;
+  height: 14px;
+  box-sizing: border-box;
+  border: 2px solid var(--divider);
+  border-top-color: var(--ink-dim);
+  border-radius: 50%;
+  animation: catch-up-turn 0.8s linear infinite;
+}
 @media (prefers-reduced-motion: reduce) {
   .catch-up-ring,
-  .pull-refresh.turning {
+  .pull-refresh.turning,
+  .notification-spinner {
     animation-duration: 2.4s;
   }
 }
@@ -542,6 +572,46 @@ body.kbd :is(.sheet-close, .sheet-back, .welcome-close):focus {
 }
 .settings-group .control-row:not([hidden]) ~ .control-row {
   border-top: 0;
+}
+.control-row:has(> .select-field) {
+  position: relative;
+}
+.control-row:has(> .select-field)::after {
+  content: "";
+  position: absolute;
+  pointer-events: none;
+  right: 7px;
+  top: calc(50% - 8px);
+  width: 16px;
+  height: 16px;
+  background-color: var(--ink-dim);
+  /* Phosphor's caret-down, at its Light weight. */
+  --select-caret-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 256 256'%3E%3Cpath d='M212.24,100.24l-80,80a6,6,0,0,1-8.48,0l-80-80a6,6,0,0,1,8.48-8.48L128,167.51l75.76-75.75a6,6,0,0,1,8.48,8.48Z'/%3E%3C/svg%3E");
+  -webkit-mask: var(--select-caret-mask) center / contain no-repeat;
+  mask: var(--select-caret-mask) center / contain no-repeat;
+}
+.reminder-timing:has(> .select-field)::after {
+  right: var(--reminder-caret-right, 3px);
+}
+.reminder-timing {
+  min-height: 48px;
+  margin-top: -8px;
+  padding-block: 4px;
+  padding-left: 16px;
+}
+.reminder-timing .control-label {
+  font-size: var(--type-subsetting-size);
+  font-weight: var(--type-subsetting-weight);
+  color: var(--ink-dim);
+}
+.reminder-timing .select-field {
+  text-rendering: var(--reminder-text-rendering, auto);
+  font-family: var(--select-text-face, var(--select-face));
+  padding: var(--reminder-padding-top, 7px) var(--reminder-padding-right, 20px)
+    var(--reminder-padding-bottom, 7px) 8px;
+  width: var(--reminder-width, 145px);
+  min-height: 40px;
+  flex-shrink: 0;
 }
 .settings-group-label {
   margin: 0;
@@ -764,7 +834,7 @@ body.kbd .notify-help:focus {
   font-family: var(--select-face);
   font-size: var(--type-field-size);
   color: var(--ink);
-  background: var(--bg) var(--select-arrow) no-repeat right 10px center / 10px 6px;
+  background: var(--bg);
   border: 1px solid var(--card-border);
   border-radius: var(--radius-control);
   padding: 7px 32px 7px 12px;
@@ -808,7 +878,15 @@ body.kbd .notify-help:focus {
 .switch[aria-checked="true"] .switch-knob {
   transform: translateX(18px);
 }
-.switch:disabled {
+/* Browsers fade a disabled control on their own, so only the rule below fades one. */
+.select-field,
+.switch {
+  opacity: 1;
+}
+/* A notification control a save holds keeps its look (notification-status.js). */
+.control-row:has(> .select-field:disabled:not(.is-saving))::after,
+.select-field:disabled:not(.is-saving),
+.switch:disabled:not(.is-saving) {
   cursor: default;
   opacity: 0.5;
 }

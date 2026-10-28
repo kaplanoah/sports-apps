@@ -24,11 +24,19 @@ test("literal Chromium-only specs and optional line suffixes avoid WebKit depend
   }
 });
 
+test("notification alignment specs selected alone install Chromium and WebKit", () => {
+  for (const app of ["mlb", "wnba"])
+    assert.deepEqual(
+      listRequiredBrowsers({ tests: `apps/${app}/tests/browser/notification-layout.spec.mjs` }),
+      ["chromium", "webkit"],
+    );
+});
+
 test("nightly, all-test, WebKit and ambiguous selections keep both engines", () => {
   for (const selection of [
     {},
     { tests: " " },
-    { tests: `apps/mlb/tests/browser/${WEBKIT_TEST_MATCH}:12` },
+    ...WEBKIT_TEST_MATCH.map((spec) => ({ tests: `apps/mlb/tests/browser/${spec}:12` })),
     {
       tests:
         "apps/mlb/tests/browser/notifications.spec.mjs apps/wnba/tests/browser/at-rest.spec.mjs",
@@ -50,7 +58,11 @@ test("nightly, all-test, WebKit and ambiguous selections keep both engines", () 
 test("Playwright and browser installation share WebKit's test match", () => {
   assert.match(readRepoFile("playwright.config.mjs"), /testMatch: WEBKIT_TEST_MATCH/);
   assert.match(readRepoFile("playwright.config.mjs"), /name: nameWebKitProject\(app\)/);
-  assert.equal(WEBKIT_TEST_MATCH, "at-rest.spec.mjs");
+  assert.deepEqual(WEBKIT_TEST_MATCH, [
+    "at-rest.spec.mjs",
+    "notification-layout.spec.mjs",
+    "notification-permission.spec.mjs",
+  ]);
 });
 
 test("the selection command publishes only browser names as workflow arguments", () => {

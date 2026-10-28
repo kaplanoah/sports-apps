@@ -707,3 +707,43 @@ test("each theme's icon draws its ball and its panels in that theme's colors", (
     assert.ok(svg.includes(`fill="${panels}" fill-rule="evenodd"`), file);
   }
 });
+
+test("reminder verification refreshes schedule, scoreboard and bracket without rereading standings", async () => {
+  const league = createLeague();
+  const loader = createSnapshotLoader({ fetchImpl: league.fetchImpl, now: () => NOW });
+  await loader.loadSnapshot(2026);
+  const before = league.countReads("networks");
+  await loader.loadSnapshot(2026, { verify: true });
+  assert.equal(league.countReads("networks"), before + 2);
+  assert.equal(league.countReads("schedule"), 2);
+  assert.equal(league.countReads("scoreboard"), 2);
+  assert.equal(league.countReads("bracket"), 2);
+  assert.equal(league.countReads("standings"), 1);
+});
+
+test("failed reminder verification keeps source failure reasons and rejects cached schedule and bracket", async () => {
+  /** @type {Record<string, "page" | "error">} */
+  const refuse = {};
+  const league = createLeague({ refuse });
+  const loader = createSnapshotLoader({ fetchImpl: league.fetchImpl, now: () => NOW });
+  await loader.loadSnapshot(2026);
+  refuse.schedule = "error";
+  refuse.bracket = "error";
+  const verified = await loader.loadSnapshot(2026, { verify: true });
+  for (const feed of ["schedule", "bracket"]) {
+    assert.ok(verified.missing.includes(feed));
+    assert.match(verified.failures[feed], /The WNBA answered 503/);
+  }
+});
+
+test("reminder verification refreshes open network months while reusing finalized months", async () => {
+  const league = createLeague();
+  let now = NOW;
+  const loader = createSnapshotLoader({ fetchImpl: league.fetchImpl, now: () => now });
+  await loader.loadSnapshot(2026);
+  now = Date.parse("2026-10-05T16:00:00Z");
+  await loader.loadSnapshot(2026);
+  const before = listNetworksReads(league).length;
+  await loader.loadSnapshot(2026, { verify: true });
+  assert.deepEqual(listNetworksReads(league).slice(before), [NETWORKS_REQUEST("202610")]);
+});

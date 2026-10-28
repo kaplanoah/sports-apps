@@ -1,16 +1,18 @@
 // Sorts burn-in's failures into the pull request's and everyone else's. A test the pull request
 // wrote or edited that failed in any of its runs fails the pull request, since a test that passes
-// only some of the time should never merge. Any other test that failed in a spec it changed goes
+// only some of the time should never merge. Any other test that failed in a spec it burned in goes
 // to the issue Flaky browser tests (worker/report-flaky-tests.mjs) instead, as a test that passed
 // on its retry does, and the pull request goes on. A change in a spec outside every test, like an
-// import, a helper, or a test.use, can change how any of its tests runs, so it counts as editing
-// them all. A run that broke before its tests could, like on a config error, fails too.
-// Usage: git diff -U0 --no-renames <base> <head> -- <specs> | node worker/judge-burn-in.mjs <report>
+// import, a helper, or a test.use, counts every test it owns, including delegated declarations.
+// Changed helpers also count their own declarations. A run broken outside its tests fails too.
+// The shared browser-file inventory filters the full diff.
+// Usage: git diff -U0 --no-renames <base> <head> | node worker/judge-burn-in.mjs <report>
 // It writes the flaky tests beside the report, in burn-in-flaky.json.
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { Linter } from "eslint";
+import { findTestLines } from "./browser-test-calls.mjs";
+import { listBrowserTestFiles, readRepoText } from "./browser-scope.mjs";
 import { listFailedTests, readFirstLine } from "./report-flaky-tests.mjs";
 
 /**
@@ -41,51 +43,26 @@ export function readChangedLines(diff) {
   return byPath;
 }
 
-/** @param {any} node */
-const isTestCall = (node) =>
-  node.type === "CallExpression" &&
-  node.callee.type === "Identifier" &&
-  node.callee.name === "test";
-
 /**
- * The first and last line of each test(...) call in a spec, a test in a loop once.
- * @param {string} source
- * @returns {{ line: number, endLine: number }[]}
- */
-export function findTestLines(source) {
-  const linter = new Linter({ configType: "flat" });
-  linter.verify(source, [{ languageOptions: { ecmaVersion: "latest", sourceType: "module" } }]);
-  const { ast, visitorKeys } = linter.getSourceCode();
-  /** @type {{ line: number, endLine: number }[]} */
-  const tests = [];
-  /** @param {any} node */
-  const visit = (node) => {
-    if (isTestCall(node)) tests.push({ line: node.loc.start.line, endLine: node.loc.end.line });
-    for (const key of visitorKeys[node.type] ?? []) {
-      for (const child of [node[key]].flat()) if (child?.type) visit(child);
-    }
-  };
-  visit(ast);
-  return tests;
-}
-
-/**
- * Each test the diff wrote or edited, as its spec's path and the line its test(...) starts on.
+ * Each edited test by declaration path and line, or a whole spec that delegates its declarations.
  * @param {Map<string, number[]>} changedLines
- * @param {(path: string) => string | null} readSource the spec as the pull request leaves it, or
+ * @param {(path: string) => string | null} readSource the browser file as the pull request leaves it, or
  *   null once it's deleted
+ * @param {Set<string>} browserFiles the shared browser-file inventory
  * @returns {Set<string>}
  */
-export function listEditedTests(changedLines, readSource) {
+export function listEditedTests(changedLines, readSource, browserFiles) {
   /** @type {Set<string>} */
   const edited = new Set();
   for (const [path, lines] of changedLines) {
+    if (!browserFiles.has(path)) continue;
     const source = readSource(path);
     if (source === null) continue;
     const tests = findTestLines(source);
     const findTest = (/** @type {number} */ line) =>
       tests.find((test) => test.line <= line && line <= test.endLine);
     const editsEveryTest = lines.some((line) => !findTest(line));
+    if (editsEveryTest) edited.add(`${path}:*`);
     for (const test of tests) {
       if (editsEveryTest || lines.some((line) => findTest(line) === test)) {
         edited.add(`${path}:${test.line}`);
@@ -95,16 +72,21 @@ export function listEditedTests(changedLines, readSource) {
   return edited;
 }
 
+/** @param {string} diff */
+export const listEditedBrowserTests = (diff) =>
+  listEditedTests(readChangedLines(diff), readRepoText, new Set(listBrowserTestFiles()));
+
 /**
  * A Playwright JSON report with only the specs `isKept` keeps.
  * @param {any} suite
- * @param {(spec: any) => boolean} isKept
+ * @param {(spec: any, owner: string) => boolean} isKept
+ * @param {string} owner the outer spec, even when a nested suite names a shared helper
  * @returns {any}
  */
-const keepSpecs = (suite, isKept) => ({
+const keepSpecs = (suite, isKept, owner) => ({
   ...suite,
-  specs: (suite.specs ?? []).filter(isKept),
-  suites: (suite.suites ?? []).map((/** @type {any} */ inner) => keepSpecs(inner, isKept)),
+  specs: (suite.specs ?? []).filter((spec) => isKept(spec, owner)),
+  suites: (suite.suites ?? []).map((/** @type {any} */ inner) => keepSpecs(inner, isKept, owner)),
 });
 
 /**
@@ -114,14 +96,17 @@ const keepSpecs = (suite, isKept) => ({
  * @param {Set<string>} editedTests
  */
 export function sortBurnInFailures(report, editedTests) {
-  const isEdited = (/** @type {any} */ spec) => editedTests.has(`${spec.file}:${spec.line}`);
-  const keep = (/** @type {(spec: any) => boolean} */ isKept) => ({
+  const isEdited = (/** @type {any} */ spec, /** @type {string} */ owner) =>
+    editedTests.has(`${spec.file}:${spec.line}`) || editedTests.has(`${owner}:*`);
+  const keep = (/** @type {(spec: any, owner: string) => boolean} */ isKept) => ({
     ...report,
-    suites: (report.suites ?? []).map((/** @type {any} */ suite) => keepSpecs(suite, isKept)),
+    suites: (report.suites ?? []).map((/** @type {any} */ suite) =>
+      keepSpecs(suite, isKept, suite.file),
+    ),
   });
   return {
     edited: listFailedTests([keep(isEdited)]),
-    flaky: listFailedTests([keep((spec) => !isEdited(spec))]),
+    flaky: listFailedTests([keep((spec, owner) => !isEdited(spec, owner))]),
     runErrors: (report.errors ?? []).map((/** @type {any} */ error) =>
       readFirstLine(error.message),
     ),
@@ -134,9 +119,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     console.log(`::error::Burn-in's run broke before writing its report, ${reportPath}.`);
     process.exit(1);
   }
-  const editedTests = listEditedTests(readChangedLines(readFileSync(0, "utf8")), (path) =>
-    existsSync(path) ? readFileSync(path, "utf8") : null,
-  );
+  const editedTests = listEditedBrowserTests(readFileSync(0, "utf8"));
   const { edited, flaky, runErrors } = sortBurnInFailures(
     JSON.parse(readFileSync(reportPath, "utf8")),
     editedTests,

@@ -74,9 +74,19 @@ export function createSnapshotLoader({
     return snapshot;
   }
 
-  /** @param {number} season */
-  const loadSnapshot = (season) =>
-    season < guessSeasonYear(now()) ? loadPastSnapshot(season) : loadCurrentSnapshot(season);
+  /** @param {number} season @param {{ verify?: boolean }} [options] */
+  const loadSnapshot = (season, { verify = false } = {}) => {
+    if (verify)
+      return MLBSnapshot.fetchSnapshot(
+        (path, name) =>
+          name === "postseason"
+            ? slowFeeds.readFeed(name, path, () => fetchFeed(path), { requireFresh: true })
+            : fetchSnapshotJson(path, name),
+        season,
+        now(),
+      );
+    return season < guessSeasonYear(now()) ? loadPastSnapshot(season) : loadCurrentSnapshot(season);
+  };
 
   return { loadSnapshot };
 }

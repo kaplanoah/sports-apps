@@ -6,11 +6,31 @@ export const PUSH_STUB = {
   nextEndpointKey: "test-next-endpoint",
 };
 
+// A real service worker's requests skip the test's routes for its fake hosts. Holding the
+// stand-in also lets a tap land before the page knows whether the phone is subscribed.
+/** @param {{ isHeld?: boolean }} [options] */
+export function stubPushRegistration({ isHeld = false } = {}) {
+  const registration = /** @type {ServiceWorkerRegistration} */ (
+    /** @type {unknown} */ ({ pushManager: Object.create(PushManager.prototype) })
+  );
+  const registered = isHeld
+    ? new Promise((resolve) => {
+        Object.assign(window, { releaseServiceWorker: () => resolve(registration) });
+      })
+    : Promise.resolve(registration);
+  navigator.serviceWorker.register = () => registered;
+}
+
 // Headless Chromium has no push service, and its headless shell denies notifications outright,
 // so the permission prompt and the subscription are stand-ins. The subscription has real keys,
 // which is all the Worker needs. Both last through a reload, as the browser's do. A test can name
 // the endpoint the next subscription gets, as a push service hands out a new one.
 export function stubPushManager({ endpoint, keptKey, nextEndpointKey }) {
+  // WebKit's test host has no push service; layout checks still need the supported-device UI.
+  if (!("PushManager" in window))
+    Object.defineProperty(window, "PushManager", { value: class {}, configurable: true });
+  if (!("Notification" in window))
+    Object.defineProperty(window, "Notification", { value: class {}, configurable: true });
   const PERMISSION_KEY = "test-notification-permission";
   Object.defineProperty(Notification, "permission", {
     get: () => sessionStorage.getItem(PERMISSION_KEY) ?? "default",

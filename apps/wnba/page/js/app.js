@@ -1,3 +1,4 @@
+import { openNotificationGame } from "#shared/notification-navigation.js";
 import { renderCatchUpLines, startCatchUpNote } from "#shared/catch-up-note.js";
 import { startCaughtUpSweep } from "#shared/caught-up-sweep.js";
 import { startChannelTag } from "#shared/channel-tag.js";
@@ -350,7 +351,8 @@ async function boot() {
   watchUpdatesSeen(() => redrawEased(drawUpdates));
   refreshClockEveryMinute();
   startServiceWorker();
-  startNotifications({ about: "Final scores" });
+  startNotifications(LEAGUE_WORDS);
+  openNotificationGame({ showYear, openGame: openGameSection });
 }
 
 boot();

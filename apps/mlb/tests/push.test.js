@@ -120,7 +120,7 @@ test("the store's own paths can't reach the keys or subscriptions", async () => 
   assert.deepEqual((await (await requestApp(env, "/store/push")).json()).docs, []);
 });
 
-test("a test goes to that device, and a gone device is forgotten", async () => {
+test("a test goes to that device, and a gone device is retired", async () => {
   const { env, context, harness } = createPushStore();
   const { keys } = await subscribe(env);
   const sent = await requestApp(env, "/push/test", {
@@ -162,7 +162,7 @@ test("a test message to a push service that doesn't answer fails, and keeps the 
   assert.equal(listSubscriptions(context).length, 1);
 });
 
-test("a device whose push service doesn't answer for a week is forgotten", async () => {
+test("a device whose push service doesn't answer for a week is retired", async () => {
   const { env, context, harness, clock } = createPushStore();
   await subscribe(env);
   harness.isPushServiceAnswering = false;
@@ -215,7 +215,7 @@ test("a full store of devices in use turns a new one away, but a device already 
   assert.equal(listSubscriptions(context).length, 100);
 });
 
-test("a full store makes room for a new device by forgetting the one saved longest ago, once that's a month ago", async () => {
+test("a full store makes room for a new device by retiring the one saved longest ago, once that's a month ago", async () => {
   const { env, context } = createPushStore();
   storeDevices(context, 100, NOW);
   changeDevice(context, 50, { savedAt: NOW - 29 * DAY_MS, failingSince: NOW - 2 * DAY_MS });
@@ -257,7 +257,7 @@ test("a device saved again on a later visit keeps its slot in a full store", asy
   );
 });
 
-test("a device whose push service turns every message away for a week is forgotten, and one that gets a message through starts over", async () => {
+test("a device whose push service turns every message away for a week is retired, and one that gets a message through starts over", async () => {
   const { env, context, harness, clock } = createPushStore({ pushStatus: 403 });
   await subscribe(env);
 

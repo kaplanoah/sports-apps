@@ -101,7 +101,7 @@ export const readRepoText = (path, folder = root) => {
 };
 
 /** Every script in the root's browser test helpers and each app's browser tests. */
-const listBrowserTestFiles = () =>
+export const listBrowserTestFiles = () =>
   [
     "tests/browser",
     ...listAppsWithBrowserTests().map((app) => `apps/${app}/tests/browser`),

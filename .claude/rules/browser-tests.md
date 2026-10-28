@@ -4,6 +4,7 @@ paths:
   - "apps/*/tests/browser/**"
   - "playwright.config.mjs"
   - "worker/browser-scope.mjs"
+  - "worker/browser-test-calls.mjs"
   - "worker/burn-in-specs.mjs"
   - "worker/judge-burn-in.mjs"
   - "worker/report-flaky-tests.mjs"
@@ -14,7 +15,7 @@ paths:
 
 - In a browser test, wait for what the page shows with `expect(locator)`, for what it keeps inside the page with `page.waitForFunction`, as the root's `tests/browser/at-rest.mjs` does for catching up, and for what the test counts, or what no locator reads, with `expect.poll`, never for a fixed time or for the network to go quiet; lint rejects `waitForTimeout`, `setTimeout`, and `networkidle`. An `expect.poll` over `page.evaluate` takes a trace snapshot each time it asks, which can take CI's WebKit seconds on a whole season's page, so it may ask only a few times before its timeout. Get past the page's timers and animation frames by moving its fake clock with `page.clock.runFor`, and past a scroll by waiting for its `scroll` or `scrollend` event.
 - A browser test that passes only some of the time has a bug to find and fix, in the page or the test, in its own PR. CI retries a failed browser test once and runs only the apps a change reaches (the root's `playwright.config.mjs` and `worker/browser-scope.mjs`).
-- CI's `burn-in` runs each spec a pull request adds or changes 10 times, so a spec holds at most 30 tests, which the root's `tests/browser-spec-size.test.js` checks (`worker/burn-in-specs.mjs` and `worker/judge-burn-in.mjs`).
+- CI's `burn-in` runs each added or edited spec, and each spec importing a changed browser helper that declares tests, 10 times. A spec holds at most 30 tests, which the root's `tests/browser-spec-size.test.js` checks (`worker/burn-in-specs.mjs` and `worker/judge-burn-in.mjs`).
 - Each night, main's browser tests run three times over, and each test that failed goes in the issue Flaky browser tests (`.github/workflows/flaky.yml`). The nightly workflow also repeats the date/time-sensitive Node list in Honolulu. Its Node job fails the workflow separately from browser-flake reporting. Manual runs reproduce browser tests without repeating Node tests. `burn-in` already shows a test a pull request adds or edits holding over 10 runs, so a fix needs more only when the pull request leaves the test, and its spec's lines outside every test, untouched, or the test failed less often than 10 runs would catch. To reproduce a flaky test, or to show such a fix holds, run that workflow by hand with the tests, the project, the branch, and how many times to run each: it runs on the machine CI uses, WebKit included, which a cloud session doesn't have. Select the branch in GitHub's "Run workflow" picker, or with `gh workflow run flaky.yml --ref <branch>`. The workflow checks out that run's own ref, so branch code never runs in main's cache context.
 - After a reload whose page code a test holds, the copy the page puts back has already taken the load note away, so the test waits for `domcontentloaded` to know the code has run.
 - Route a browser test's requests by a pattern, like the root's `matchPath` in `tests/browser/harness.mjs`, never a function, which makes Playwright ask the test about every request the page makes and slows each load; lint rejects one. To unroute one of two routes with the same pattern, name its handler too.

@@ -1,6 +1,7 @@
+import { testGameReminderSettings } from "../../../../tests/browser/game-reminders.mjs";
 import { IPHONE_AGENT, takeAwayPush } from "../../../../tests/browser/devices.mjs";
 import { PUSH_STUB, stubPushManager } from "../../../../tests/browser/push-stub.mjs";
-import { test, expect, matchPath, openApp, openSettings } from "./harness.mjs";
+import { test, expect, matchPath, openApp, openLockedApp, openSettings } from "./harness.mjs";
 
 // The switch subscribes through the page's service worker.
 test.use({ serviceWorkers: "allow" });
@@ -14,19 +15,21 @@ test("notifications can be turned on and off, with no note while the switch work
   const app = await openApp(page);
   await openSettings(page);
 
-  const toggle = page.getByRole("switch", { name: "Notifications" });
+  const toggle = page.getByRole("switch", { name: "Game updates" });
   const note = page.locator("#notifyNote");
   await expect(toggle).toHaveAttribute("aria-checked", "false");
   await expect(note).toBeHidden();
 
   await toggle.click();
   await expect(toggle).toHaveAttribute("aria-checked", "true");
+  await expect(toggle).toBeEnabled();
   expect(app.countSubscriptions()).toBe(1);
   await expect(note).toBeHidden();
   await expect(page.getByRole("button", { name: /test/i })).toHaveCount(0);
 
   await toggle.click();
   await expect(toggle).toHaveAttribute("aria-checked", "false");
+  await expect(toggle).toBeEnabled();
   expect(app.countSubscriptions()).toBe(0);
 });
 
@@ -36,9 +39,10 @@ test("a device subscribed under the Worker's old signing key subscribes again, a
   await page.addInitScript(stubPushManager, PUSH_STUB);
   const app = await openApp(page);
   await openSettings(page);
-  const toggle = page.getByRole("switch", { name: "Notifications" });
+  const toggle = page.getByRole("switch", { name: "Game updates" });
   await toggle.click();
   await expect(toggle).toHaveAttribute("aria-checked", "true");
+  await expect(toggle).toBeEnabled();
   await page.evaluate(([{ keptKey, nextEndpointKey }, nextEndpoint]) => {
     const kept = JSON.parse(/** @type {string} */ (sessionStorage.getItem(keptKey)));
     sessionStorage.setItem(keptKey, JSON.stringify({ ...kept, serverKey: [1, 2, 3] }));
@@ -68,7 +72,7 @@ test("a device the Worker has no room for is left off, and is still off after a 
       : route.fallback(),
   );
   await openSettings(page);
-  const toggle = page.getByRole("switch", { name: "Notifications" });
+  const toggle = page.getByRole("switch", { name: "Game updates" });
 
   await toggle.click();
   await expect(page.locator("#notifyNote")).toHaveText(
@@ -94,9 +98,10 @@ test("a device the Worker no longer has room for on a later visit is turned off"
   await page.addInitScript(stubPushManager, PUSH_STUB);
   await openApp(page);
   await openSettings(page);
-  const toggle = page.getByRole("switch", { name: "Notifications" });
+  const toggle = page.getByRole("switch", { name: "Game updates" });
   await toggle.click();
   await expect(toggle).toHaveAttribute("aria-checked", "true");
+  await expect(toggle).toBeEnabled();
   await page.route(matchPath("/push/subscription"), (route) =>
     route.request().method() === "PUT"
       ? route.fulfill({
@@ -128,9 +133,10 @@ test("a new signing key whose save fails for a moment keeps the subscription, wh
   await page.addInitScript(stubPushManager, PUSH_STUB);
   await openApp(page);
   await openSettings(page);
-  const toggle = page.getByRole("switch", { name: "Notifications" });
+  const toggle = page.getByRole("switch", { name: "Game updates" });
   await toggle.click();
   await expect(toggle).toHaveAttribute("aria-checked", "true");
+  await expect(toggle).toBeEnabled();
   const newKey = Buffer.from(new Uint8Array(65).fill(4)).toString("base64url");
   await page.route(matchPath("/push/key"), (route) =>
     route.fulfill({ json: { publicKey: newKey } }),
@@ -168,7 +174,7 @@ test("blocked notifications point to the browser's site settings", async ({ page
   await openSettings(page);
 
   await expect(page.locator("#notifyNote")).toHaveText(/browser's site settings/);
-  await expect(page.getByRole("switch", { name: "Notifications" })).toBeDisabled();
+  await expect(page.getByRole("switch", { name: "Game updates" })).toBeDisabled();
 });
 
 test("on an iPhone, blocked notifications point to Settings", async ({ page }) => {
@@ -180,7 +186,7 @@ test("on an iPhone, blocked notifications point to Settings", async ({ page }) =
   await openSettings(page);
 
   await expect(page.locator("#notifyNote")).toHaveText(/Turn them on in Settings > Notifications/);
-  await expect(page.getByRole("switch", { name: "Notifications" })).toBeDisabled();
+  await expect(page.getByRole("switch", { name: "Game updates" })).toBeDisabled();
 });
 
 test("on an iPhone outside the Home Screen, the page says to add it there", async ({ page }) => {
@@ -192,5 +198,15 @@ test("on an iPhone outside the Home Screen, the page says to add it there", asyn
   await openSettings(page);
 
   await expect(page.locator("#notifyNote")).toHaveText(/add this site to your home screen/);
-  await expect(page.getByRole("switch", { name: "Notifications" })).toBeHidden();
+  await expect(page.getByRole("switch", { name: "Game updates" })).toBeHidden();
+});
+
+testGameReminderSettings(test, expect, {
+  openApp,
+  openLockedApp,
+  openSettings,
+  timing: "Time before game",
+  timingSize: 13,
+  game: "824623",
+  updates: "Game updates",
 });

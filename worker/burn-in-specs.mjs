@@ -1,9 +1,7 @@
-// Lists the browser specs burn-in repeats: each one a pull request adds or changes, but for one
-// that has passed burn-in in an earlier run, on this push or one before it, and hasn't changed
-// since. A file the specs reach by import, or the dependencies, the Node version, or CI's own
-// workflow or browser installer they run with, that changed since then, on either side, burns
-// them all in again. A change to the page or the Worker alone doesn't, since the spec already ran
-// ten times as it is, and the browser job and the nightly run catch a test the page made flaky.
+// Burn-in selects edited specs and those importing an edited helper that declares tests. Earlier
+// successful runs are reused only while their specs and setup remain unchanged. Changes to
+// imported helpers, dependencies, Node or browser setup invalidate that reuse. Page or Worker
+// changes use ordinary browser and nightly checks because the test source already burned in.
 // Usage: node worker/burn-in-specs.mjs, in a full checkout of the pull request's merge commit,
 // with GH_TOKEN, GITHUB_REPOSITORY, and BRANCH (the pull request's head branch) set. It
 // writes the specs to $GITHUB_OUTPUT as specs=<spec> <spec>.
@@ -11,10 +9,17 @@ import { appendFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { posix } from "node:path";
 import { fileURLToPath } from "node:url";
-import { BROWSER_SETUP_FILES, listBrowserTestReach } from "./browser-scope.mjs";
+import {
+  BROWSER_SETUP_FILES,
+  listBrowserTestFiles,
+  listBrowserTestReach,
+  listReachedFiles,
+  readRepoText,
+} from "./browser-scope.mjs";
 import { CI_WORKFLOW, isPullRequestRun } from "./find-passed-ci.mjs";
 import { createGitHub, readAllPages } from "./github-api.mjs";
 import { isBrowserSpec } from "../tests/browser/projects.mjs";
+import { findTestLines } from "./browser-test-calls.mjs";
 
 // What every spec runs with beyond what it imports: the dependencies, the Node version every job
 // runs them on, and browser setup, which says how burn-in installs and runs each spec.
@@ -22,7 +27,7 @@ const RUN_SETUP = new Set(["package.json", "package-lock.json", ".nvmrc", ...BRO
 // What a spec tests rather than runs with.
 const TESTED_CODE = /^(?:apps\/[^/]+\/(?:page|worker)|shared\/(?:page|worker))\//;
 // A branch's last thirty completed runs reach past the label changes, cancelled runs, and pushes
-// that burned nothing in since its last burn-in. Past those, every changed spec burns in again,
+// that burned nothing in since its last burn-in. Past those, every selected spec burns in again,
 // which costs only time.
 const RUNS_READ = 30;
 
@@ -35,23 +40,37 @@ const RUNS_READ = 30;
 const isSharedBySpecs = (path, reached) =>
   !isBrowserSpec(path) && (RUN_SETUP.has(path) || (reached.has(path) && !TESTED_CODE.test(path)));
 
-/**
- * The browser specs among the files a pull request adds or changes, at any depth under an app's
- * tests/browser/, as Playwright runs them and as judge-burn-in's diff names them.
- * @param {string[]} paths
- */
-export const listBrowserSpecs = (paths) => paths.filter(isBrowserSpec);
+/** @param {string} path @param {(path: string) => string | null} readText @param {Set<string>} browserFiles */
+const declaresBrowserTests = (path, readText, browserFiles) =>
+  !isBrowserSpec(path) && browserFiles.has(path) && findTestLines(readText(path) ?? "").length > 0;
 
 /**
- * @param {string[]} changedSpecs the specs the pull request adds or changes
+ * Changed specs and those importing a changed helper that declares tests, at any depth.
+ * @param {string[]} paths
+ * @param {{browserFiles: string[], readText: (path: string) => string | null}} options
+ */
+export function listBrowserSpecs(paths, { browserFiles, readText }) {
+  const selected = new Set(paths.filter(isBrowserSpec));
+  const inventory = new Set(browserFiles);
+  const helpers = new Set(paths.filter((path) => declaresBrowserTests(path, readText, inventory)));
+  if (helpers.size)
+    for (const spec of browserFiles.filter(isBrowserSpec)) {
+      const reached = listReachedFiles([spec], readText);
+      if ([...helpers].some((helper) => reached.has(helper))) selected.add(spec);
+    }
+  return [...selected];
+}
+
+/**
+ * @param {string[]} selectedSpecs candidates selected from spec and test-declaring helper edits
  * @param {string[] | null} sinceBurnedIn the files changed since the last head that passed burn-in,
  *   or null with no such head
  * @param {Set<string>} reached every file the browser specs, their helpers, and the config reach
  */
-export function listSpecsToBurnIn(changedSpecs, sinceBurnedIn, reached) {
+export function listSpecsToBurnIn(selectedSpecs, sinceBurnedIn, reached) {
   if (sinceBurnedIn === null || sinceBurnedIn.some((path) => isSharedBySpecs(path, reached)))
-    return changedSpecs;
-  return changedSpecs.filter((spec) => sinceBurnedIn.includes(spec));
+    return selectedSpecs;
+  return selectedSpecs.filter((spec) => sinceBurnedIn.includes(spec));
 }
 
 /**
@@ -65,7 +84,7 @@ export const isBurnedIn = (jobs) => {
 
 /**
  * The newest head of the branch, this one too, on which burn-in passed, or null when there's none
- * or GitHub couldn't say, which burns every changed spec in.
+ * or GitHub couldn't say, which burns every selected spec in.
  * @param {object} options
  * @param {(path: string) => Promise<any>} options.readJson
  * @param {string} options.branch
@@ -88,7 +107,7 @@ export async function findBurnedInHead({ readJson, branch, log = console.log }) 
     return null;
   } catch (error) {
     log(
-      `::warning::Couldn't read the branch's earlier burn-ins, so every changed spec burns in: ${error instanceof Error ? error.message : String(error)}`,
+      `::warning::Couldn't read the branch's earlier burn-ins, so every selected spec burns in: ${error instanceof Error ? error.message : String(error)}`,
     );
     return null;
   }
@@ -122,29 +141,30 @@ export function listChangedSince(since, git = runGit) {
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const changedSpecs = listBrowserSpecs(
+  const selectedSpecs = listBrowserSpecs(
     listLines(
       runGit(["diff", "--name-only", "--no-renames", "--diff-filter=AM", "HEAD^1", "HEAD"]),
     ),
+    { browserFiles: listBrowserTestFiles(), readText: readRepoText },
   );
   const readJson = createGitHub({
     repository: String(process.env.GITHUB_REPOSITORY),
     fetchImpl: fetch,
     env: process.env,
   });
-  const burnedIn = changedSpecs.length
+  const burnedIn = selectedSpecs.length
     ? await findBurnedInHead({ readJson, branch: String(process.env.BRANCH) })
     : null;
   const specs = listSpecsToBurnIn(
-    changedSpecs,
+    selectedSpecs,
     burnedIn && listChangedSince(burnedIn),
     listBrowserTestReach(),
   );
-  const passed = changedSpecs.filter((spec) => !specs.includes(spec));
+  const passed = selectedSpecs.filter((spec) => !specs.includes(spec));
   console.log(
     passed.length
       ? `Passed burn-in on ${burnedIn} and unchanged since: ${passed.join(", ")}.`
-      : "No spec this pull request changes has passed burn-in as it is now.",
+      : "No selected spec has passed burn-in with its current inputs.",
   );
   if (process.env.GITHUB_OUTPUT)
     appendFileSync(process.env.GITHUB_OUTPUT, `specs=${specs.join(" ")}\n`);

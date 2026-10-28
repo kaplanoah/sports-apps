@@ -64,8 +64,12 @@ The Worker serves every file here, its `networks/` logos too, under `shared/`, b
 
 - `settings-sheet.js`: the settings sheet
 - `season-picker.js`: settings' Season picker
-- `notifications.js`: settings' notifications switch
-- `notification-status.js`: what that switch says under it
+- `notifications.js`: the Notifications group's permission, saving and timing changes
+- `notifications-view.js`: the Notifications group's rows, from its state and the league's words
+- `notification-preferences.js`: device push categories, timing presets, and validation
+- `notification-intent.js`: the game a notification asks to open, from its message or the page's address
+- `notification-navigation.js`: opening a game from a notification through reloads and the access gate
+- `notification-status.js`: notification guidance and category control states
 - `diagnostics.js`: the Diagnostics and their shared report
 - `sent-label.js`: how long a button that copies or shares says it did
 - `step-log.js`: a Diagnostics log of what one part of the page does
@@ -165,6 +169,7 @@ The Worker serves every file here, its `networks/` logos too, under `shared/`, b
 
 ### The store and reading
 
+- `reminder-games.js`: the playoff games a league's snapshot hands the store for reminders
 - `worker-fetch.js`: reading from the app's own Worker, sharing a recent read
 - `worker-error.js`: reading the Worker's error answers
 - `worker-store.js`: the store client
@@ -248,6 +253,7 @@ Pages link these before their own stylesheet, and theme them with the tokens the
 - `hash-text.js`: a short fixed-length name for any text
 - `seasons.js`: the season a request names
 - `notifications.js`: capping a night's notifications
-- `push.js`: push subscriptions and their signing key
+- `game-reminders.js`: persisted game reminder deadlines, verification, delivery, and retries
+- `push.js`: active and retired push devices, private preferences and receipts, signing and delivery
 - `web-push.js`: sending Web Push messages
 - `responses.js`: what the JSON endpoints answer with

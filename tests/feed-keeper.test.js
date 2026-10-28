@@ -175,3 +175,26 @@ test("a player's read is due when his games change, and once more ten minutes af
   assert.equal(isPlayerReadDue(asHePlayed, 3, 9 * MINUTE_MS), false);
   assert.equal(isPlayerReadDue(asHePlayed, 3, 10 * MINUTE_MS), true);
 });
+
+test("required fresh reads replace the shared cached answer and reject failed verification", async () => {
+  const { keeper, read } = createKeeper();
+  await read("standings");
+  const fresh = { name: "standings", read: 2 };
+  assert.deepEqual(
+    await keeper.readFeed("standings", "/standings", async () => fresh, { requireFresh: true }),
+    fresh,
+  );
+  assert.deepEqual(await read("standings"), fresh);
+  await assert.rejects(
+    keeper.readFeed(
+      "standings",
+      "/standings",
+      async () => {
+        throw new Error("Source down");
+      },
+      { requireFresh: true },
+    ),
+    /Source down/,
+  );
+  assert.deepEqual(await read("standings"), fresh);
+});

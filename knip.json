@@ -21,6 +21,7 @@
     "shared/page/tuning-panel.js",
     "shared/page/long-away.js",
     "shared/page/open-last-tab.js",
+    "shared/page/notification-intent.js",
     "shared/page/season-header.js",
     "shared/page/show-last-drawn.js",
     "shared/page/slow-load.js",

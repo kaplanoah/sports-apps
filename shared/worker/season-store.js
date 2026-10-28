@@ -1,3 +1,4 @@
+import { createGameReminders } from "./game-reminders.js";
 import { isSameJson } from "../page/compare.js";
 import { isStoreDocumentPath, isStoreName } from "../page/store-path.js";
 import { createPushService } from "./push.js";
@@ -8,7 +9,8 @@ import { describeError, respondError, respondJson, respondMethodNotAllowed } fro
 // document but writes none, since what a viewer chooses stays on their own device.
 //
 // An alarm keeps the current season up to date from the league while no page is open, and tells
-// subscribed devices about new updates. With no page open, only notifications need the updates,
+// subscribed devices about new updates. It also wakes for reminder verification, delivery and
+// retries. With no page open, only notifications need the updates,
 // and those can wait a little, so updates come less often until a page opens, which hears whether
 // the update it brings forward is coming and when each update is done. Each page says
 // which documents it watches, and hears only of changes to those. A league can keep
@@ -23,7 +25,7 @@ import { describeError, respondError, respondJson, respondMethodNotAllowed } fro
  * store's paths can't name, the store's reading of the league, the Worker's secrets, and the clock.
  * @typedef {object} JobContext
  * @property {any} docs
- * @property {(fetchImpl: typeof fetch) => (season: number) => Promise<any>} createLoadSnapshot
+ * @property {(fetchImpl: typeof fetch) => (season: number, options?: { verify?: boolean }) => Promise<any>} createLoadSnapshot
  *   the store's reading of the league, made on the fetch it's handed, so a run that counts its
  *   requests counts these too
  * @property {{ get: (key: string) => Promise<any>, put: (key: string, value: any) => Promise<void>, delete: (key: string) => Promise<boolean>, list: (prefix: string) => Promise<Map<string, any>> }} storage
@@ -44,9 +46,9 @@ import { describeError, respondError, respondJson, respondMethodNotAllowed } fro
 /**
  * What a league hands the store.
  * @typedef {object} League
- * @property {(storage: import("./feed-keeper.js").FeedStorage, fetchImpl: typeof fetch) => (season: number) => Promise<any>} createLoadSnapshot
+ * @property {(storage: import("./feed-keeper.js").FeedStorage, fetchImpl: typeof fetch) => (season: number, options?: { verify?: boolean }) => Promise<any>} createLoadSnapshot
  *   reads the league through `fetchImpl`, keeping what it may read again in `storage`
- * @property {(loadSnapshot: (season: number) => Promise<any>, now: number) => Promise<any>} loadCurrentSnapshot
+ * @property {(loadSnapshot: (season: number, options?: { verify?: boolean }) => Promise<any>, now: number) => Promise<any>} loadCurrentSnapshot
  * @property {(docs: any, season: number) => Promise<any>} readUpdates
  * @property {(docs: any, snapshot: any) => Promise<void>} saveSnapshot
  * @property {(snapshot: any) => Record<string, string>} describeSnapshotStatus
@@ -55,6 +57,7 @@ import { describeError, respondError, respondJson, respondMethodNotAllowed } fro
  * @property {(snapshot: any, now: number) => number} choosePollDelay the wait until the next
  *   update
  * @property {(change: { before: any, after: any, snapshot: any, now: number }) => object[]} listNotifications
+ * @property {(snapshot: any) => any[] | null} [listReminderGames]
  * @property {string} [detailsCollection] where the details of the games pages have open are kept
  * @property {() => (id: string, snapshot: any, stored: any) => Promise<any>} [createLoadDetails]
  *   reads a game's details, or answers null while it needs none
@@ -205,6 +208,12 @@ export function createSeasonStore(league) {
       this.hasAlarm = false;
       this.failures = 0;
       this.push = createPushService({ storage: ctx.storage, now, fetchImpl });
+      this.reminders = createGameReminders({
+        storage: ctx.storage,
+        push: this.push,
+        now,
+        verify: () => this.verifyReminderGames(),
+      });
       /** @type {Map<string, Promise<void>>} */
       this.docUpdates = new Map();
       this.docs = {
@@ -222,7 +231,14 @@ export function createSeasonStore(league) {
       await this.startUpdating();
       const { pathname, searchParams } = new URL(request.url);
       if (pathname === "/watch") return this.acceptWatcher(request);
-      if (pathname.startsWith("/push/")) return this.push.serveRequest(request, pathname);
+      if (pathname.startsWith("/push/")) {
+        const response = await this.push.serveRequest(request, pathname);
+        if (response.ok && ["PUT", "DELETE"].includes(request.method)) {
+          await this.reminders.refreshDevices();
+          await this.armReminderAlarm();
+        }
+        return response;
+      }
       if (pathname.startsWith("/count/")) return this.addToCount(request, pathname);
       const path = readPath(pathname);
       if (!path) return respondError(404, "not_found", "No such path.");
@@ -346,12 +362,30 @@ export function createSeasonStore(league) {
       try {
         const seasonDueAt = await this.updateSeasonWhenDue(now);
         const jobDueTimes = await this.startDueJobs(now);
-        nextAt = Math.min(seasonDueAt, ...jobDueTimes);
+        await this.reminders.checkDue();
+        const reminderAt = await this.reminders.findNextDeadline();
+        nextAt = Math.min(
+          seasonDueAt,
+          ...jobDueTimes,
+          reminderAt <= this.now() ? this.now() + RETRY_MS[0] : reminderAt,
+        );
       } catch (error) {
         console.error(`The store's alarm failed: ${describeError(error)}`);
       } finally {
         await this.ctx.storage.setAlarm(nextAt);
       }
+    }
+
+    async armReminderAlarm() {
+      const dueAt = await this.reminders.findNextDeadline();
+      const alarmAt = await this.ctx.storage.getAlarm();
+      if (Number.isFinite(dueAt) && (alarmAt === null || dueAt < alarmAt))
+        await this.ctx.storage.setAlarm(Math.max(this.now(), dueAt));
+    }
+
+    async verifyReminderGames() {
+      if (!league.listReminderGames) return;
+      await this.loadAndSaveSeason({ verify: true });
     }
 
     // A schedule saved before it had a due time reads as due, as does one an earlier release saved,
@@ -459,13 +493,20 @@ export function createSeasonStore(league) {
       return isWatched ? delay : Math.max(delay, UNWATCHED_DELAY_MS);
     }
 
-    // Returns how long to wait before the next update.
-    async updateSeason() {
+    async loadAndSaveSeason({ verify = false } = {}) {
       let snapshot;
       try {
-        snapshot = await league.loadCurrentSnapshot(this.loadSnapshot, this.now());
+        snapshot = await league.loadCurrentSnapshot(
+          (season) => this.loadSnapshot(season, { verify }),
+          this.now(),
+        );
       } catch (error) {
-        return this.recordFailure({ error: "upstream_error", detail: describeError(error) });
+        await this.reminders.saveGames(null);
+        const delay = await this.recordFailure({
+          error: "upstream_error",
+          detail: describeError(error),
+        });
+        return { snapshot: null, delay };
       }
       let before;
       try {
@@ -473,14 +514,24 @@ export function createSeasonStore(league) {
         await league.saveSnapshot(this.docs, snapshot);
         await this.saveCurrentSeason(snapshot.season);
       } catch (error) {
-        return this.recordFailure({ write: describeError(error) });
+        await this.reminders.saveGames(null);
+        const delay = await this.recordFailure({ write: describeError(error) });
+        return { snapshot: null, delay };
       }
       this.failures = 0;
       // The next update's `before` holds what this one saved, so notifying can't wait on the status.
       await this.notifyUpdates(before, snapshot);
+      if (league.listReminderGames)
+        await this.reminders.saveGames(league.listReminderGames(snapshot), verify);
       await this.saveStatus(league.describeSnapshotStatus(snapshot));
-      await this.refreshWatchedDetails(snapshot);
-      return league.choosePollDelay(snapshot, this.now());
+      return { snapshot, delay: league.choosePollDelay(snapshot, this.now()) };
+    }
+
+    // Returns how long to wait before the next update.
+    async updateSeason() {
+      const { snapshot, delay } = await this.loadAndSaveSeason();
+      if (snapshot) await this.refreshWatchedDetails(snapshot);
+      return delay;
     }
 
     async refreshWatchedDetails(snapshot) {

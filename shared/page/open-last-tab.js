@@ -1,6 +1,5 @@
-// Modules run only once all of them have loaded, so a page left to them would first paint the tab
-// its markup selects and then jump. This plain script loads in the head, and the page calls
-// openLastTab() right after its tabs and views, before anything is painted.
+// The saved tab or a notification's Games tab is chosen as markup arrives, before modules load.
+// The inline call applies it again once the page's views and dialogs are complete.
 
 // Storage can be empty or refuse access, as in a private window, so the page never depends on it.
 /** @param {string} key */
@@ -12,50 +11,31 @@ function readStored(key) {
   }
 }
 
-/* global isLongAwayFrom -- from long-away.js */
-
-// After two minutes away, a part that starts hidden, like a search, is hidden again
-// (show-last-drawn.js), and a tab that shows nothing else goes back to the tab before it.
-
-/**
- * The part a tab's view shows alone, when it starts hidden, as a search's own view does.
- * @param {string} tab
- */
-function findOnlyStartHiddenPart(tab) {
-  const parts = document.querySelectorAll(`#view-${tab} [data-last-drawn]`);
-  return parts.length === 1 && parts[0].hasAttribute("data-start-hidden") ? parts[0] : null;
-}
-
-/**
- * Whether a tab shows only a part that starts hidden, which the page will put back hidden.
- * @param {string} tab
- */
-function isStartedOver(tab) {
-  const part = findOnlyStartHiddenPart(tab);
-  if (!part) return false;
-  const saved = readSavedPart(part.id);
-  return !saved || saved.hidden === true || isLongAwayFrom(saved.savedAt);
-}
+/* global isLongAwayFrom, readNotificationIntent -- from long-away.js and notification-intent.js */
 
 // What last-seen.js saves the parts the page draws whole under, which show-last-drawn.js puts back.
 const LAST_DRAWN_KEY = "lastDrawn";
 
-/**
- * What the page saved of a part it draws whole as it last left the screen, or null.
- * @param {string} id
- */
-function readSavedPart(id) {
+function readSavedParts() {
   try {
-    return JSON.parse(readStored(LAST_DRAWN_KEY) ?? "null")?.[id] ?? null;
+    const saved = JSON.parse(readStored(LAST_DRAWN_KEY) ?? "null");
+    return saved && typeof saved === "object" ? saved : {};
   } catch {
-    return null;
+    return {};
   }
 }
 
-function readLastTab() {
-  const tab = readStored("lastTab");
-  return tab && isStartedOver(tab) ? readStored("tabBeforeLast") : tab;
+function readOpeningState() {
+  const intent = readNotificationIntent(location.href);
+  return {
+    requested: intent.isRequested ? "games" : readStored("lastTab"),
+    previous: readStored("tabBeforeLast"),
+    parts: intent.isRequested ? {} : readSavedParts(),
+  };
 }
+
+const openingState = readOpeningState();
+let openingTab = null;
 
 /** @param {string} tab */
 function markTabSelected(tab) {
@@ -78,6 +58,7 @@ function showView(tab) {
 // or hides while a tab beside the bar shows.
 function placeTabPill() {
   const bar = /** @type {HTMLElement} */ (document.getElementById("tabBar"));
+  if (!bar) return;
   const buttons = [...bar.querySelectorAll("[role=tab]")];
   const selected = buttons.findIndex((button) => button.classList.contains("active"));
   bar.style.setProperty("--tab-count", String(buttons.length));
@@ -85,12 +66,44 @@ function placeTabPill() {
   bar.classList.toggle("is-unselected", selected < 0);
 }
 
-// A tab saved before the page dropped it is left alone, so the page opens on its first tab.
-function openLastTab() {
-  const tab = readLastTab();
-  if (tab && document.getElementById(`view-${tab}`)) {
+/** @type {MutationObserver | null} */
+let tabObserver = null;
+
+function readOpeningTab() {
+  if (openingTab) return openingTab;
+  const { requested, previous, parts } = openingState;
+  const button = document.getElementById(`tab-${requested}`);
+  const bar = document.querySelector("nav.tabs");
+  // A sibling arrives only after the tab bar closes, when a missing saved tab is known to be gone.
+  if (!button && !bar?.nextSibling) return requested;
+  const partId = button?.getAttribute("data-start-hidden-part");
+  const saved = partId ? parts[partId] : null;
+  const isStartedOver =
+    partId && (!saved || saved.hidden === true || isLongAwayFrom(saved.savedAt));
+  const tab = isStartedOver ? previous : requested;
+  openingTab = document.getElementById(`tab-${tab}`)
+    ? tab
+    : bar?.querySelector("[data-tab]")?.getAttribute("data-tab");
+  return openingTab;
+}
+
+function applyOpeningTab() {
+  const tab = readOpeningTab();
+  if (tab) {
     markTabSelected(tab);
     showView(tab);
   }
   placeTabPill();
 }
+
+function openLastTab() {
+  tabObserver?.disconnect();
+  applyOpeningTab();
+}
+
+function openLastTabBeforePaint() {
+  tabObserver = new MutationObserver(applyOpeningTab);
+  tabObserver.observe(document, { childList: true, subtree: true });
+}
+
+openLastTabBeforePaint();

@@ -41,7 +41,7 @@
 }
 /* Fields set 16px, which an iPhone doesn't zoom into when they're tapped, so these draw Barlow
    smaller to look as it does at their role: the search at the body's 14.75px (14.75 / 16) and the
-   Season picker at the detail's 13.5px (13.5 / 16). */
+   Season and reminder timing pickers at the detail's 13.5px (13.5 / 16). */
 @font-face {
   font-family: "Barlow Search";
   font-weight: 300;
@@ -246,6 +246,8 @@
   --type-setting-weight: 400;
   --type-setting-note-size: calc(13.75rem / 16);
   --type-setting-note-weight: 400;
+  --type-subsetting-size: calc(13.75rem / 16);
+  --type-subsetting-weight: 400;
   --type-notice-title-size: calc(15.25rem / 16);
   --type-notice-title-weight: 600;
   --type-notice-text-size: calc(14.5rem / 16);

@@ -1,7 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { findTestLines } from "../worker/browser-test-calls.mjs";
 import {
-  findTestLines,
+  listEditedBrowserTests,
   listEditedTests,
   readChangedLines,
   sortBurnInFailures,
@@ -69,19 +70,22 @@ test("each test call spans its first line to its last, a test in a loop once", (
 });
 
 test("a change inside a test edits only that test", () => {
-  const edited = listEditedTests(new Map([[SPEC, [6]]]), readSpec);
+  const edited = listEditedTests(new Map([[SPEC, [6]]]), readSpec, new Set([SPEC]));
   assert.deepEqual([...edited], [`${SPEC}:5`]);
 });
 
 test("a change outside every test, like a helper or a test.use, edits every test in its spec", () => {
   for (const line of [3, 9, 12]) {
-    const edited = listEditedTests(new Map([[SPEC, [line]]]), readSpec);
-    assert.deepEqual([...edited], [`${SPEC}:5`, `${SPEC}:13`], `line ${line}`);
+    const edited = listEditedTests(new Map([[SPEC, [line]]]), readSpec, new Set([SPEC]));
+    assert.deepEqual([...edited], [`${SPEC}:*`, `${SPEC}:5`, `${SPEC}:13`], `line ${line}`);
   }
 });
 
 test("a deleted spec edits no test", () => {
-  assert.deepEqual([...listEditedTests(new Map([["gone.spec.mjs", [1]]]), readSpec)], []);
+  assert.deepEqual(
+    [...listEditedTests(new Map([["gone.spec.mjs", [1]]]), readSpec, new Set(["gone.spec.mjs"]))],
+    [],
+  );
 });
 
 /**
@@ -139,4 +143,80 @@ test("burn-in fails the pull request only on a test it wrote or edited, and call
 test("a run that broke outside its tests, like on a config error, names what broke it", () => {
   const broken = { suites: [], errors: [{ message: "Error: No tests found\nmore" }] };
   assert.deepEqual(sortBurnInFailures(broken, new Set()).runErrors, ["Error: No tests found"]);
+});
+
+const HELPER = "tests/browser/notification-layout.mjs";
+const ADAPTER =
+  'import { defineTests } from "../../../../tests/browser/notification-layout.mjs";\ndefineTests(test);';
+
+test("an edited adapter owns failures whose declarations are in a shared helper", () => {
+  const editedTests = listEditedTests(new Map([[SPEC, [2]]]), () => ADAPTER, new Set([SPEC]));
+  const helperSpec = { ...reportSpec(5, "controls align", ["passed", "failed"]), file: HELPER };
+  const report = {
+    suites: [
+      { file: SPEC, suites: [{ file: HELPER, specs: [helperSpec] }] },
+      { file: "apps/mlb/tests/browser/layout.spec.mjs", specs: [helperSpec] },
+    ],
+  };
+  const { edited, flaky } = sortBurnInFailures(report, editedTests);
+  assert.equal(edited.length, 1);
+  assert.equal(edited[0].failures, 1);
+  assert.equal(flaky.length, 1);
+});
+
+test("an edited helper declaration fails every app that runs that test", () => {
+  const editedTests = listEditedTests(new Map([[HELPER, [6]]]), () => SOURCE, new Set([HELPER]));
+  const helperSpec = { ...reportSpec(5, "controls align", ["passed", "failed"]), file: HELPER };
+  const report = {
+    suites: [SPEC, "apps/mlb/tests/browser/layout.spec.mjs"].map((file) => ({
+      file,
+      specs: [helperSpec],
+    })),
+  };
+  const { edited, flaky } = sortBurnInFailures(report, editedTests);
+  assert.equal(edited.length, 1);
+  assert.equal(edited[0].runs, 4);
+  assert.equal(edited[0].failures, 2);
+  assert.deepEqual(flaky, []);
+});
+
+test("an allowed js helper is gated while production files stay unread", () => {
+  const helper = "tests/browser/shared.js";
+  const page = "apps/mlb/page/index.html";
+  const editedTests = listEditedTests(
+    new Map([
+      [helper, [6]],
+      [page, [1]],
+    ]),
+    (path) => {
+      if (path !== helper) throw new Error("Read a non-browser file");
+      return SOURCE;
+    },
+    new Set([helper]),
+  );
+  const report = {
+    suites: [{ file: SPEC, specs: [{ ...reportSpec(5, "align", ["failed"]), file: helper }] }],
+  };
+  assert.equal(sortBurnInFailures(report, editedTests).edited.length, 1);
+});
+
+test("the judge uses the repository inventory for root helpers and app specs", () => {
+  const helper = "tests/browser/notification-layout.mjs";
+  const page = "apps/mlb/page/index.html";
+  const diff = [helper, SPEC, page]
+    .map((path) =>
+      [
+        `diff --git a/${path} b/${path}`,
+        `--- a/${path}`,
+        `+++ b/${path}`,
+        "@@ -1 +1 @@",
+        "-old",
+        "+new",
+      ].join("\n"),
+    )
+    .join("\n");
+  const edited = listEditedBrowserTests(diff);
+  assert.ok(edited.has(`${helper}:*`));
+  assert.ok(edited.has(`${SPEC}:*`));
+  assert.ok(![...edited].some((key) => key.startsWith(`${page}:`)));
 });
