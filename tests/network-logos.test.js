@@ -190,7 +190,7 @@ const SHARED_WORDMARKS = [
 ];
 
 /**
- * Where a logo draws part of itself in the line, from the line's middle, in logo heights.
+ * Where a logo draws part of itself in the line, from the line's middle, in `--network-logo-height`s.
  * @param {import("../shared/page/network-logos.js").NetworkLogo} logo
  * @param {number[]} edges
  */
