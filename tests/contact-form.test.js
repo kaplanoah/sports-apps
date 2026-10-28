@@ -89,6 +89,18 @@ test("a report too long to send keeps its header and each log's title and newest
   assert.equal(fitContactDiagnostics("short\nreport"), "short\nreport");
 });
 
+test("a record too long to send keeps its title and newest steps, losing its oldest", () => {
+  const stepCount = CONTACT_LIMITS.diagnostics / 100 + 50;
+  const steps = Array.from({ length: stepCount }, (_, index) => `+${index} step ${"x".repeat(90)}`);
+  const report = ["Release 1.2.3", ["Opened 3:04 PM", ...steps].join("\n")].join("\n\n");
+  const [header, record] = fitContactDiagnostics(report).split("\n\n");
+  const lines = record.split("\n");
+  assert.equal(header, "Release 1.2.3");
+  assert.equal(lines[0], "Opened 3:04 PM");
+  assert.equal(lines.at(-1), steps.at(-1));
+  assert.ok(!record.includes(`${steps[0]}\n`));
+});
+
 test("the form draws a screenshot's preview, never what's sent, and its report only while shown, so the page's saved copy stays small", () => {
   const draft = createContactDraft();
   draft.screenshot = {

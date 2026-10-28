@@ -216,7 +216,7 @@ export function testContact(test, expect, { openApp, league }) {
     await expect(dialog.locator("pre")).not.toHaveText(report);
   });
 
-  test("a bug report keeps a failed send's diagnostics until its message changes, then sends the page's as they are", async ({
+  test("a bug report keeps a failed send's diagnostics until its message changes, then shows and sends the page's as they are", async ({
     page,
   }) => {
     const { requests, delivery } = await serveContact(page);
@@ -233,11 +233,13 @@ export function testContact(test, expect, { openApp, league }) {
     await dialog.getByRole("button", { name: "View diagnostics" }).click();
     await expect(dialog.locator("pre")).toHaveText(requests[0].diagnostics);
     await dialog.locator("textarea").fill("The score stopped changing in the ninth");
+    await expect(dialog.locator("pre")).not.toHaveText(requests[0].diagnostics);
+    const shown = await dialog.locator("pre").textContent();
     delivery.mode = "success";
     await dialog.getByRole("button", { name: "Try again", exact: true }).click();
     await expect(dialog.getByRole("heading", { name: "Message sent" })).toBeVisible();
     expect(requests[1].id).not.toBe(requests[0].id);
-    expect(requests[1].diagnostics).not.toBe(requests[0].diagnostics);
+    expect(requests[1].diagnostics).toBe(shown);
   });
 
   test("trying again takes away the failed send's note while it sends", async ({ page }) => {

@@ -44,9 +44,14 @@ export function validateContactFields({ message, email }) {
 /** @param {number[]} sizes */
 const findLargest = (sizes) => sizes.indexOf(Math.max(...sizes));
 
-// A report is its header, then blocks apart by a blank line, each a record or a log listing its
-// newest lines first. One too long to send loses the oldest lines of whichever block is largest,
-// so each log keeps its newest lines, and a block left with only its title goes.
+// A record's steps start with their signed time from its start, while a log's lines start with
+// a clock time.
+/** @param {string[]} lines */
+const isRecordBlock = (lines) => /^[+-]\d/.test(lines[1] ?? "");
+
+// A report is its header, then blocks apart by a blank line: records, each listing its steps oldest
+// first, and logs, each listing its lines newest first. One too long to send loses the oldest lines
+// of whichever block is largest, so each keeps its newest, and a block left with only its title goes.
 /** @param {string} report */
 export function fitContactDiagnostics(report) {
   if (report.length <= CONTACT_LIMITS.diagnostics) return report;
@@ -58,7 +63,8 @@ export function fitContactDiagnostics(report) {
     const largest = findLargest(sizes);
     const lines = blockLines[largest];
     if (lines.length > 2) {
-      const cut = /** @type {string} */ (lines.pop()).length + 1;
+      const oldest = isRecordBlock(lines) ? lines.splice(1, 1)[0] : lines.pop();
+      const cut = /** @type {string} */ (oldest).length + 1;
       sizes[largest] -= cut;
       excess -= cut;
     } else {

@@ -158,6 +158,7 @@ export function startContact(dialog, button) {
   function saveFields() {
     if (view.screen !== "form" || view.sending) return;
     const draft = readDraft();
+    const wasRetry = isContactRetry(view.category, draft);
     draft.message = findField("Message").value;
     draft.email = findField("Email").value;
     findField("Message").textContent = draft.message;
@@ -166,6 +167,10 @@ export function startContact(dialog, button) {
     if (include) {
       draft.includeDiagnostics = include.checked;
       include.toggleAttribute("checked", include.checked);
+    }
+    if (wasRetry && !isContactRetry(view.category, draft)) {
+      refreshDiagnostics();
+      drawContact();
     }
     store.save(view.category);
   }
@@ -247,7 +252,6 @@ export function startContact(dialog, button) {
     view.validation = null;
     await screenshotRead;
     draft.failed = false;
-    if (draft.attempt) refreshDiagnostics();
     const request = prepareContactSubmission(category, draft);
     await store.save(category);
     drawContact();
