@@ -11,6 +11,7 @@ permissions:
 env:
   REVIEW_LABEL: review
   REVIEW_HEAD: ${{ github.event.pull_request.head.sha }}
+  REVIEW_TARGET: ${{ github.event.pull_request.base.ref }}
   REVIEW_TRUSTED: ${{ github.sha }}
   PR: ${{ github.event.pull_request.number }}
 

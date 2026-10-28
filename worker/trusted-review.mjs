@@ -97,7 +97,7 @@ function matchesAvailableReviewMerge(merge, env) {
 
 /** @param {any} pull @param {NodeJS.ProcessEnv} env */
 const isCurrentReviewPull = (pull, env) =>
-  pull.state === "open" && pull.head.sha === env.REVIEW_HEAD;
+  pull.state === "open" && pull.head.sha === env.REVIEW_HEAD && pull.base.ref === env.REVIEW_TARGET;
 
 /** @param {string} branch @param {NodeJS.ProcessEnv} env */
 function readBranchTip(branch, env) {
@@ -135,8 +135,8 @@ export async function resolveReviewMerge(
   const isReviewMergeReady = (pull) => {
     if (!isCurrentReviewPull(pull, env) || pull.mergeable === false) return true;
     const merge = pull.merge_commit_sha;
-    if (rejected.has(merge)) return false;
-    const base = readBranchTip(pull.base.ref, env);
+    if (!merge || rejected.has(merge)) return false;
+    const base = readBranchTip(env.REVIEW_TARGET, env);
     if (matchesAvailableReviewMerge(merge, { ...env, REVIEW_BASE: base })) {
       selected = { merge, base };
       return true;

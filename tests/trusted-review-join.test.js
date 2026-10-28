@@ -516,6 +516,26 @@ test("real verify CLI accepts the merge CI tested, though the event's base lags,
     assert.match(rejected.stderr, /reviewed merge does not match/);
     assert.equal(rejected.output, "");
   }
+  sealIdentity();
+  const swapped = readGit(fixture.checkout, [
+    "-c",
+    "user.name=Example",
+    "-c",
+    "user.email=example@example.com",
+    "commit-tree",
+    fixture.tree,
+    "-p",
+    fixture.head,
+    "-p",
+    fixture.tip,
+    "-m",
+    "swapped",
+  ]);
+  readGit(fixture.checkout, ["checkout", "--detach", swapped]);
+  const foreign = invokeJoin(fixture, {}, ["verify", folder]);
+  assert.notEqual(foreign.status, 0);
+  assert.match(foreign.stderr, /not this pull request's merge/);
+  assert.equal(foreign.output, "");
 });
 
 test("native title rendering preserves supplied PR and commit identities", () => {

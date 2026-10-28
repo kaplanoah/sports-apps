@@ -711,6 +711,7 @@ async function verifyHostileReviewIsolation(baseRef) {
     PR: "1",
     REVIEW_HEAD: head,
     REVIEW_BASE: base,
+    REVIEW_TARGET: baseRef,
     REVIEW_TRUSTED: source,
     GITHUB_WORKFLOW_REF: ID_ENV.GITHUB_WORKFLOW_REF,
     GITHUB_REPOSITORY: "example/repository",
@@ -771,6 +772,7 @@ async function verifyHostileReviewIsolation(baseRef) {
   for (const changed of [
     { ...pull, state: "closed" },
     { ...pull, head: { sha: base } },
+    { ...pull, base: { ...pull.base, ref: "retargeted" } },
     { ...pull, mergeable: false },
   ]) {
     let reads = 0;
@@ -825,10 +827,13 @@ async function verifyHostileReviewIsolation(baseRef) {
   }
   await assert.rejects(
     () =>
-      resolveReviewMerge(event, {
-        readPull: async () => ({ ...pull, base: { ...pull.base, ref: "absent" } }),
-        wait: async () => {},
-      }),
+      resolveReviewMerge(
+        { ...event, REVIEW_TARGET: "absent" },
+        {
+          readPull: async () => ({ ...pull, base: { ...pull.base, ref: "absent" } }),
+          wait: async () => {},
+        },
+      ),
     /base branch's current tip/,
   );
   let exhausted = 0;
@@ -1119,21 +1124,21 @@ test("missing merge metadata leaves review owed without following a moving ref",
   assert.equal(readFileSync(output, "utf8"), "available=false\n");
 });
 
-test("posting rechecks the open pull and head while retaining its immutable reviewed base", async () => {
+test("posting rechecks the open pull, head and base branch while retaining its immutable reviewed base", async () => {
   const pull = {
     state: "open",
     head: { sha: SHA },
     base: { sha: ID_ENV.REVIEW_BASE, ref: "main" },
   };
-  const env = { ...ID_ENV, PR: "1" };
-  for (const ref of ["main", "stack"])
-    await verifyReviewEvent(env, async (path) => {
-      assert.equal(path, "/pulls/1");
-      return { ...pull, base: { sha: "f".repeat(40), ref } };
-    });
+  const env = { ...ID_ENV, PR: "1", REVIEW_TARGET: "main" };
+  await verifyReviewEvent(env, async (path) => {
+    assert.equal(path, "/pulls/1");
+    return { ...pull, base: { sha: "f".repeat(40), ref: "main" } };
+  });
   for (const changed of [
     { ...pull, state: "closed" },
     { ...pull, head: { sha: "e".repeat(40) } },
+    { ...pull, base: { ...pull.base, ref: "stack" } },
   ])
     await assert.rejects(() => verifyReviewEvent(env, async () => changed), /moved/);
 });
