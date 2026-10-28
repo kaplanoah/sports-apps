@@ -3,8 +3,8 @@ import { isStandIn } from "./rider-taps.js";
 // Every control shows its press, as an iPhone's do: a finger's press shows a moment after it lands,
 // so a finger that starts a scroll never presses anything, a quick tap still shows, and the press
 // fades as it lets go. A mouse's shows at once. The page marks the pressed control with
-// .is-pressed, and a row's button with .is-row-press too, since its row's stylesheet tints the row
-// it covers, while controls.css draws every other control's press. A stand-in under a row's button
+// .is-pressed, and a row's button with .is-row-press too, since controls.css tints the row it
+// covers rather than the button, as it draws every other control's press. A stand-in under a row's button
 // (rider-taps.js) hands its press to the button, which presses it. As on an iPhone, a touch that's
 // part of a scroll is never a tap, so the page drops the click iOS sometimes still sends for it, and
 // nothing under it shows a press. A touch is part of a scroll once the browser takes it for one,

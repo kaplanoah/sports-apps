@@ -21,6 +21,15 @@ const createStories = (photoUrl) =>
 
 const FINAL_WITH_HIGHLIGHTS = "Game details: Aces at Fever, First Round Game 2";
 
+/**
+ * Opens a final's Highlights, on a page opened with them.
+ * @param {import("@playwright/test").Page} page
+ */
+export async function openHighlights(page) {
+  const sheet = await openGameSheet(page, FINAL_WITH_HIGHLIGHTS);
+  await sheet.getByRole("tab", { name: "Highlights" }).click();
+}
+
 /** Each view, opened from the last, and what shows once it's drawn. */
 const VIEWS = [
   {
@@ -105,10 +114,7 @@ const VIEWS = [
   },
   {
     name: "a final's Highlights",
-    open: async (page) => {
-      const sheet = await openGameSheet(page, FINAL_WITH_HIGHLIGHTS);
-      await sheet.getByRole("tab", { name: "Highlights" }).click();
-    },
+    open: openHighlights,
     shown: (page) => page.locator("#highlightsBody .clip-row").first(),
     close: (page) => page.keyboard.press("Escape"),
   },

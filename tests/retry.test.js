@@ -1,6 +1,11 @@
 import { afterEach, test } from "node:test";
 import assert from "node:assert/strict";
-import { classifyReadFailure, renderRetryBlock, renderRetryNote } from "../shared/page/retry.js";
+import {
+  classifyReadFailure,
+  renderRetryBlock,
+  renderRetryNote,
+  watchRetries,
+} from "../shared/page/retry.js";
 import { stripTags } from "./text.js";
 
 const readText = (markup) => stripTags(markup).replace(/&#39;/g, "'").replace(/\s+/g, " ").trim();
@@ -81,4 +86,28 @@ test("one part that didn't load is why, after a warning icon, over an outlined T
     /<p class="retry-message scout-note"><svg class="retry-warning"[\s\S]*<\/svg><span>/,
   );
   assert.match(note.text, /<button type="button" class="retry-button" data-retry>/);
+});
+
+test("a Try again a press holds reads again only once the press has shown", (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  globalThis.window = /** @type {any} */ (globalThis);
+  globalThis.addEventListener = () => {};
+  t.after(() => Reflect.deleteProperty(globalThis, "addEventListener"));
+  const pressed = new Set(["is-pressed"]);
+  const button = { classList: { contains: (/** @type {string} */ name) => pressed.has(name) } };
+  /** @type {(event: { target: { closest: () => unknown } }) => void} */
+  let hearClick = () => {};
+  const holder = {
+    addEventListener: (/** @type {string} */ _type, /** @type {typeof hearClick} */ listener) => {
+      hearClick = listener;
+    },
+  };
+  let reads = 0;
+  watchRetries(/** @type {any} */ (holder), () => (reads += 1));
+
+  hearClick({ target: { closest: () => button } });
+
+  assert.equal(reads, 0);
+  t.mock.timers.tick(120);
+  assert.equal(reads, 1);
 });

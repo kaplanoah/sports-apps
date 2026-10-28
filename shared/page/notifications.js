@@ -303,10 +303,10 @@ async function saveChoices(asked, place, permission) {
       }
       await saveOrRestorePreferences(next);
       setStatus("on");
-    } else {
+    } else if (subscription) {
       await removeSubscription(next);
       setStatus("off");
-    }
+    } else forgetCategories(next);
   } catch (error) {
     if (isTurnedAway(error)) setStatus("off", TOO_MANY_DEVICES, place);
     else {

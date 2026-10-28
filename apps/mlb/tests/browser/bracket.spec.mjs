@@ -12,6 +12,7 @@ import {
 } from "./harness.mjs";
 import { listLowContrastText } from "../../../../tests/browser/contrast.mjs";
 import { WIDE_SCREEN } from "./screen-sizes.mjs";
+import { pressOn, readBackground, readPressTint } from "../../../../tests/browser/press-looks.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
@@ -379,4 +380,21 @@ test("on a wide screen, a centered league bar spans each league's three columns 
   expect(nlBar.x + nlBar.width).toBe(stage.x + stage.width);
   expect(nlBar.x + nlBar.width).toBeGreaterThanOrEqual(nlLabel.x + nlLabel.width);
   expect(alWildCard.y - (alBar.y + alBar.height)).toBe(18);
+});
+
+test("a press on a club in the bracket tints its row with the pressed row's ink", async ({
+  page,
+}) => {
+  await openApp(page, {
+    store: { "seasons/2025": SEASON_2025 },
+  });
+  await chooseSeason(page, "2025");
+  const row = page.locator(".matchup-row").filter({ hasText: "Mariners" }).first();
+  const pressed = await readBackground(row, "var(--pressed-row)");
+
+  await pressOn(page, row.locator(".team-open"));
+
+  await expect(row.locator(".team-open")).toHaveClass(/is-pressed/);
+  expect(await readPressTint(row)).toBe(pressed);
+  await page.mouse.up();
 });

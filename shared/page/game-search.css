@@ -288,19 +288,6 @@
   color: var(--ink);
 }
 
-/* While a press holds a row (press.js), it tints at once, and fades as the press lets go. */
-.search-example,
-.search-suggestion,
-.search-games-line {
-  transition: box-shadow 0.15s;
-}
-.search-example.is-pressed,
-.search-suggestion.is-pressed,
-.search-games-line.is-pressed {
-  box-shadow: inset 0 0 0 100vmax var(--pressed-row);
-  transition: none;
-}
-
 @media (hover: hover) {
   .search-example:hover,
   .search-suggestion:hover .search-words,

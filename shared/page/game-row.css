@@ -104,8 +104,7 @@
 .game-status {
   translate: 0 var(--status-offset);
 }
-/* An action that covers the whole row, so a tap anywhere on the game opens it. Its highlight reaches
-   past the row's sides, so the row's text never sits against the highlight's edge. */
+/* An action that covers the whole row, so a tap anywhere on the game opens it. */
 .game-open {
   position: absolute;
   inset: 0;
@@ -114,26 +113,11 @@
   background: none;
   cursor: pointer;
 }
-.game-row:has(> .game-open) {
-  --row-highlight: transparent;
-  background: var(--row-highlight);
-  box-shadow:
-    -12px 0 var(--row-highlight),
-    12px 0 var(--row-highlight);
-  transition:
-    background 0.15s,
-    box-shadow 0.15s;
-}
 /* Under a mouse, the row's team names take some of the accent, as a team's name does on its own. */
 @media (hover: hover) {
   .game-row:has(> .game-open:hover) :is(.team-open, .team-name) {
     color: var(--ink-hover);
   }
-}
-/* While a press holds it (press.js), the row tints at once, and fades as the press lets go. */
-.game-row:has(> .game-open.is-pressed) {
-  --row-highlight: var(--pressed-row);
-  transition: none;
 }
 /* The sides sit above the action and let taps through to it, so a tap anywhere on the row, a
    team's name too, opens the game. */

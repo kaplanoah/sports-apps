@@ -3,12 +3,13 @@
  * too. Apps link it after the other shared stylesheets and before their own styles.css.
  *
  * Beside chrome.css's --ink, --accent, and --focus-ring, an app's :root defines --raised, an
- * outlined button's fill, and this sets --pressed-row, the tint a pressed row takes, which each
- * row's stylesheet draws over the row its button covers.
+ * outlined button's fill. This sets --pressed-row, the tint a pressed row takes, and
+ * --press-ease-back, how long a press takes to ease back as it lets go.
  */
 
 :root {
   --pressed-row: color-mix(in srgb, var(--ink) 12%, transparent);
+  --press-ease-back: 0.15s;
 }
 
 /* :focus-visible counts a bare Shift press, so focus rings key off body.kbd instead. A sheet takes
@@ -25,12 +26,12 @@ body.kbd :where(:focus:not(dialog, .sheet-page, input, textarea)) {
 
 /* A press (press.js) shows at once and eases back as it lets go, as an iPhone's controls do. A
    filled button darkens, an outlined one takes some ink, and every other control fades. A row's
-   button leaves its press to its row's tint. */
+   button leaves its press to its row's tint, below. */
 :where(button:not([role="switch"]), a[href], summary, .appearance-choice) {
-  transition: opacity 0.15s;
+  transition: opacity var(--press-ease-back);
 }
 :where(.accent-button, .diagnostics-button, .open-button, .retry-button, .read-button) {
-  transition: background-color 0.15s;
+  transition: background-color var(--press-ease-back);
 }
 .is-pressed:not(
   .is-row-press,
@@ -51,5 +52,29 @@ body.kbd :where(:focus:not(dialog, .sheet-page, input, textarea)) {
 }
 :is(.retry-button:not(.filled), .read-button, .move-card-button-outlined).is-pressed {
   background: color-mix(in srgb, var(--ink) 10%, var(--raised));
+  transition: none;
+}
+
+/* A row a press tints: one marked .press-tint that is a row's button or holds one, and each cell of
+   a table's row, since Safari never lets a table's row draw over its cells (row-button.css). The
+   tint lies over any color of the row's own. A row marked .press-reach too tints 12px past its
+   sides, so its text never sits against the tint's edge. */
+:is(.press-tint, tr:has(> .row-button-cell) > td) {
+  --press-tint: transparent;
+  box-shadow: inset 0 0 0 100vmax var(--press-tint);
+  transition: box-shadow var(--press-ease-back);
+}
+.press-tint.press-reach {
+  box-shadow:
+    -12px 0 var(--press-tint),
+    12px 0 var(--press-tint),
+    inset 0 0 0 100vmax var(--press-tint);
+}
+:is(
+  .press-tint.is-row-press,
+  .press-tint:has(.is-row-press),
+  tr:has(> .row-button-cell .is-row-press) > td
+) {
+  --press-tint: var(--pressed-row);
   transition: none;
 }

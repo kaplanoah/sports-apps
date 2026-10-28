@@ -1703,15 +1703,6 @@ th[aria-sort="ascending"] .roster-caret {
 .team-line + .team-line {
   border-top: 1px solid var(--divider);
 }
-/* While a press holds a team's line (press.js), it tints at once, over a winner's wash, and fades
-   as the press lets go. */
-.team-line[data-team] {
-  transition: box-shadow 0.15s;
-}
-.team-line:has(.team-open.is-pressed) {
-  box-shadow: inset 0 0 0 100vmax var(--pressed-row);
-  transition: none;
-}
 /* A tap anywhere on a team's row lands on its name's button, stretched over the row, as a game's
    row has a button over it, so the phone treats the whole row as one tap target. */
 .team-line .team-open::after {

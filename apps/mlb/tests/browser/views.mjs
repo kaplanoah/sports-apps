@@ -62,6 +62,15 @@ async function openGame(page, day, game) {
 }
 
 /**
+ * Opens the Highlights of a final on the evening's slate, on a page opened with them.
+ * @param {import("@playwright/test").Page} page
+ */
+export async function openHighlights(page) {
+  await openGame(page, "2026-09-23", /^Game details: Brewers at Phillies, Wed, Sep 23/);
+  await page.locator("#gameSheet").getByRole("tab", { name: "Highlights" }).click();
+}
+
+/**
  * @typedef {{
  *   name: string,
  *   open: (page: import("@playwright/test").Page) => Promise<unknown>,
@@ -145,10 +154,7 @@ export const VIEW_GROUPS = {
     },
     {
       name: "a final's Highlights",
-      open: async (page) => {
-        await openGame(page, "2026-09-23", /^Game details: Brewers at Phillies, Wed, Sep 23/);
-        await page.locator("#gameSheet").getByRole("tab", { name: "Highlights" }).click();
-      },
+      open: openHighlights,
       shown: (page) => page.locator("#highlightsBody .clip-row").first(),
       close: (page) => page.keyboard.press("Escape"),
     },

@@ -89,17 +89,10 @@
   border-start-end-radius: max(0px, calc(var(--radius-card) - 1px));
   cursor: pointer;
   list-style: none;
-  transition: background 0.15s;
 }
 .diagnostics-record:not([open]) summary {
   border-end-start-radius: max(0px, calc(var(--radius-card) - 1px));
   border-end-end-radius: max(0px, calc(var(--radius-card) - 1px));
-}
-/* While a press holds it (press.js), the record's line tints at once, and fades as the press lets
-   go. */
-.diagnostics-record summary.is-pressed {
-  background: var(--pressed-row);
-  transition: none;
 }
 .diagnostics-record summary::-webkit-details-marker {
   display: none;

@@ -73,7 +73,7 @@ const describeClipLabel = (clip) =>
 const renderRecap = (recap) =>
   html`<button
     type="button"
-    class="clip-open clip-feature"
+    class="clip-open press-tint press-reach clip-feature"
     data-video="${recap.video}"
     aria-label="${describeClipLabel(recap)}"
   >
@@ -104,7 +104,7 @@ function renderPlay(clip, describePlay) {
   const facts = describePlay(clip).filter(Boolean);
   return html`<button
     type="button"
-    class="clip-open clip-row"
+    class="clip-open press-tint press-reach clip-row"
     data-video="${clip.video}"
     aria-label="${describeClipLabel(clip)}"
   >

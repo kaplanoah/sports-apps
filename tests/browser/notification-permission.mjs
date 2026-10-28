@@ -372,6 +372,31 @@ export function testNotificationPermission(test, expect, app) {
     );
   });
 
+  test("a switch tapped on and off again during a save the store turns away keeps its turned-away note", async ({
+    page,
+  }) => {
+    await app.openApp(page);
+    await app.openSettings(page);
+    const updates = page.locator("#notifySwitch");
+    const release = await holdRequests(page, matchPath("/push/subscription"), {
+      answer: (route) =>
+        route.fulfill({
+          status: 429,
+          json: { error: { code: "too_many_devices", message: "Full" } },
+        }),
+    });
+    await updates.click();
+    await expect(updates).toHaveAttribute("aria-checked", "true");
+    await updates.click();
+    await expect(updates).toHaveAttribute("aria-checked", "false");
+    release();
+    await expect(updates).toHaveAttribute("aria-busy", "false");
+    await expect(updates).toHaveAttribute("aria-checked", "false");
+    await expect(page.locator("#notifyNote")).toHaveText(
+      "Too many devices get notifications already",
+    );
+  });
+
   test("fast completion never shows a spinner and timing saves have no category feedback", async ({
     page,
   }) => {

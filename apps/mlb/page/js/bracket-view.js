@@ -29,7 +29,7 @@ export function renderMatchupRow(series, side) {
   const isPreferred = findPreferredSide(session.state, series, listRankedOrder()) === side;
   // A score stays empty until the series' first game starts, and counts from 0 after.
   const shownWins = series.started ? wins : null;
-  return html`<div class="matchup-row ${isWinner ? "winner" : ""} ${isLoser ? "eliminated" : ""}">
+  return html`<div class="matchup-row press-tint ${isWinner ? "winner" : ""} ${isLoser ? "eliminated" : ""}">
     <div class="team-id">${renderRankTag(id, isPreferred)}${renderClub(id)}</div>
     ${renderSeriesWins(shownWins, isWinner)}
   </div>`;

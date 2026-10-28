@@ -5,6 +5,7 @@ import { listChipsOffCenter } from "../../../../tests/browser/chip-centering.mjs
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
 import { findSeasonTab } from "../../../../tests/browser/season-tab.mjs";
 import { readCapitals } from "../../../../tests/browser/capitals.mjs";
+import { checkGateOpenPress } from "../../../../tests/browser/press-looks.mjs";
 
 /** @param {import("@playwright/test").Page} page */
 const findCodeField = (page) => page.getByRole("textbox", { name: "Access code" });
@@ -132,4 +133,11 @@ test("the gate's text stands out from what's behind it as WCAG's AA level asks, 
     await expect(page.getByRole("alert")).toBeVisible();
     expect(await listLowContrastText(page), theme).toEqual([]);
   }
+});
+
+test("a press darkens the gate's Open with black", async ({ page }) => {
+  await openLockedApp(page, { accessCode: "FASTBREAK" });
+  await expect(findGate(page)).toBeVisible();
+
+  await checkGateOpenPress(page);
 });

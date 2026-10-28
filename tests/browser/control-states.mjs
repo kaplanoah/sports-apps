@@ -1,6 +1,7 @@
 import { holdClock } from "./harness.mjs";
 import { SETTINGS } from "./settings.mjs";
 import { turnOnDiagnostics } from "./diagnostics-switch.mjs";
+import { pressOn, readBackground, readPressTint } from "./press-looks.mjs";
 
 // How every control shows its press and its focus (press.js and controls.css), and how far a
 // switch takes a tap, which every app's pages share.
@@ -9,42 +10,10 @@ import { turnOnDiagnostics } from "./diagnostics-switch.mjs";
  * @typedef {{
  *   openApp: (page: import("@playwright/test").Page) => Promise<unknown>,
  *   openSettings: (page: import("@playwright/test").Page) => Promise<unknown>,
+ *   openWithNewsAndHighlights: (page: import("@playwright/test").Page) => Promise<unknown>,
+ *   openHighlights: (page: import("@playwright/test").Page) => Promise<unknown>,
  * }} App
  */
-
-/** @param {import("@playwright/test").Locator} locator */
-async function findMiddle(locator) {
-  await locator.scrollIntoViewIfNeeded();
-  const box = await locator.boundingBox();
-  if (!box) throw new Error("Nothing shows to press");
-  return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
-}
-
-/**
- * Holds the mouse down on the middle of what a locator shows.
- * @param {import("@playwright/test").Page} page
- * @param {import("@playwright/test").Locator} locator
- */
-async function pressOn(page, locator) {
-  const middle = await findMiddle(locator);
-  await page.mouse.move(middle.x, middle.y);
-  await page.mouse.down();
-}
-
-/**
- * The color a background of `value` takes beside `locator`, under the same tokens.
- * @param {import("@playwright/test").Locator} locator
- * @param {string} value
- */
-const readBackground = (locator, value) =>
-  locator.evaluate((element, value) => {
-    const probe = document.createElement("span");
-    probe.style.background = value;
-    element.parentElement?.append(probe);
-    const color = getComputedStyle(probe).backgroundColor;
-    probe.remove();
-    return color;
-  }, value);
 
 /** @param {import("@playwright/test").Page} page */
 const readFocusedOutline = (page) =>
@@ -114,12 +83,56 @@ export function testControlStates(test, expect, app) {
     await pressOn(page, row);
 
     await expect(row.locator(".game-open")).toHaveClass(/is-pressed/);
-    await expect(row).toHaveCSS("background-color", pressed);
-    await expect(row).toHaveCSS(
-      "box-shadow",
-      `${pressed} -12px 0px 0px 0px, ${pressed} 12px 0px 0px 0px`,
-    );
+    expect(await readPressTint(row)).toBe(pressed);
+    const reach = `${pressed} -12px 0px 0px 0px, ${pressed} 12px 0px 0px 0px, `;
+    const shadow = await row.evaluate((element) => getComputedStyle(element).boxShadow);
+    expect(shadow.slice(0, reach.length)).toBe(reach);
     await expect(row.locator(".game-open")).toHaveCSS("opacity", "1");
+  });
+
+  test("a press tints a final's clip row with the pressed row's ink", async ({ page }) => {
+    await app.openWithNewsAndHighlights(page);
+    await app.openHighlights(page);
+    const row = page.locator("#highlightsBody .clip-row").first();
+    const pressed = await readBackground(row, "var(--pressed-row)");
+
+    await pressOn(page, row);
+
+    await expect(row).toHaveClass(/is-pressed/);
+    expect(await readPressTint(row)).toBe(pressed);
+    await expect(row).toHaveCSS("opacity", "1");
+  });
+
+  test("a press tints a Diagnostics record's heading with the pressed row's ink", async ({
+    page,
+  }) => {
+    await app.openApp(page);
+    await turnOnDiagnostics(page);
+    await app.openSettings(page);
+    const heading = page.locator("#diagnostics .diagnostics-record summary").first();
+    const pressed = await readBackground(heading, "var(--pressed-row)");
+
+    await pressOn(page, heading);
+
+    await expect(heading).toHaveClass(/is-pressed/);
+    expect(await readPressTint(heading)).toBe(pressed);
+    await expect(heading).toHaveCSS("opacity", "1");
+  });
+
+  test("a press fills an outlined button with some ink", async ({ page }) => {
+    await app.openWithNewsAndHighlights(page);
+    await page.getByRole("tab", { name: "News" }).click();
+    const button = page.locator(".read-button").first();
+    const pressed = await readBackground(
+      button,
+      "color-mix(in srgb, var(--ink) 10%, var(--raised))",
+    );
+
+    await pressOn(page, button);
+
+    await expect(button).toHaveClass(/is-pressed/);
+    await expect(button).toHaveCSS("background-color", pressed);
+    await expect(button).toHaveCSS("opacity", "1");
   });
 
   test("a tap a little above or below a switch lands on it, though the switch looks the same", async ({

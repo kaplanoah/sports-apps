@@ -55,18 +55,12 @@
   color: inherit;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
-  transition: background 0.15s;
 }
 /* Under a mouse, the other team's name takes some of the accent, as a team's name does on its own. */
 @media (hover: hover) {
   .game-card-button:hover .game-card-name {
     color: var(--ink-hover);
   }
-}
-/* While a press holds it (press.js), the card tints at once, and fades as the press lets go. */
-.game-card-button.is-pressed {
-  background: var(--pressed-row);
-  transition: none;
 }
 .game-card-when {
   font-size: var(--type-label-size);

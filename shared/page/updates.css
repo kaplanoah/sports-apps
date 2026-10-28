@@ -103,7 +103,7 @@
   inset: 0 calc(-1 * var(--box-pad-end)) 0 calc(-1 * var(--box-pad-start));
   background: var(--row-highlight, transparent);
   pointer-events: none;
-  transition: background 0.15s;
+  transition: background var(--press-ease-back);
 }
 .updates-list li:has(> .game-open):first-child::before {
   top: calc(var(--updates-list-gap) / -2);
