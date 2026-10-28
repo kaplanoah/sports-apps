@@ -29,7 +29,10 @@ This skill holds what "Shipping a change" in AGENTS.md leaves out, most of it un
   - Type: the PR title's type, and whether the change is red, by `.claude/rules/red-change.md`.
 - An issue that waits on another PR names it in its first line, as in "Waits on #671."
 - Open it with `gh issue create --title '<title>' --body-file <file>`, or with GitHub's issue tool where a session has no `gh`, which `.claude/settings.json` allows without asking. When a session still can't, it gives the owner that command to paste, with the brief in a heredoc.
-- Before building from an issue, check it still holds on `main`; if it doesn't, close it as not planned, or as a duplicate of the one that covers it, saying why.
+- Before building any change, check nothing already does it: that an issue still holds on `main`, and whether an open PR, or one merged since the work was planned, touches the same files or does the same thing.
+  - When an issue no longer holds on `main`, close it as not planned, or as a duplicate of the one that covers it, saying why.
+  - When a PR already covers the work, don't build it: comment on that PR, or close the issue as a duplicate, saying which PR covers it.
+  - When a PR covers only part of it, build on that PR or stack on it, as step 12 says.
 - The PR that does the work says "Fixes #N" in its description, which closes the issue as the PR merges into `main`. A PR that does only part of it says "Part of #N" and comments on the issue with what's left.
 - A PR's description names work outside it only by its issue.
 - Flaky browser tests, each app's outage and no-code issues, each service's outage issue, and the production deploy's failure issue belong to their workflows, which find each by its title and read the flaky table back from its body: never edit or close one by hand.
