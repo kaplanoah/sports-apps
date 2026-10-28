@@ -425,6 +425,7 @@ test("a ranking's grip is a slider whose keys move its club, VoiceOver's swipe t
 }) => {
   await openApp(page);
   await openSettings(page);
+  await openRanking(page);
   const rows = page.locator("#rankList .rank-item");
   const second = await rows.nth(1).getAttribute("data-id");
   const grip = rows.nth(1).getByRole("slider");
