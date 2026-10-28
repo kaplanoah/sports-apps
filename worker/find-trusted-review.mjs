@@ -284,7 +284,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
       console.log(
         job
           ? "Requested the current CI join recovery; no model was rerun."
-          : "No completed CI join needs recovery.",
+          : "Recovery did not request a rerun. Inspect the current CI join/check state before manual recovery.",
       );
     } catch (error) {
       console.error(

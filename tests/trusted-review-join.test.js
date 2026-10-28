@@ -244,13 +244,16 @@ test("join recovery never replaces newer pending CI or a newer pending or failed
   }
 });
 
-test("real recovery CLI accepts an empty rerun response and keeps request failures private", () => {
-  for (const failWrite of [false, true]) {
+test("real recovery CLI distinguishes a declined rerun from success and keeps request failures private", () => {
+  for (const outcome of ["requested", "failed", "declined"]) {
+    const failWrite = outcome === "failed";
     const { state, event } = createRecoveryFixture();
+    if (outcome === "declined") state.ci.run_attempt = 2;
     const folder = createFolder();
     const preload = join(folder, "api.mjs");
     const eventPath = join(folder, "event.json");
     const calls = join(folder, "calls.jsonl");
+    writeFileSync(calls, "");
     writeJson(folder, "event.json", event);
     writeFileSync(
       preload,
@@ -288,10 +291,17 @@ test("real recovery CLI accepts an empty rerun response and keeps request failur
       },
     );
     assert.equal(result.status, failWrite ? 1 : 0, result.stderr);
-    assert.equal(readFileSync(calls, "utf8"), "/repos/example/repository/actions/jobs/31/rerun\n");
+    assert.equal(
+      readFileSync(calls, "utf8"),
+      outcome === "declined" ? "" : "/repos/example/repository/actions/jobs/31/rerun\n",
+    );
     assert.match(
       failWrite ? result.stderr : result.stdout,
-      failWrite ? /GitHub answered 503/ : /no model was rerun/,
+      failWrite
+        ? /GitHub answered 503/
+        : outcome === "declined"
+          ? /did not request a rerun.*Inspect the current CI join/
+          : /no model was rerun/,
     );
     assert.doesNotMatch(result.stdout + result.stderr, /private provider diagnostic/);
   }
@@ -300,8 +310,17 @@ test("real recovery CLI accepts an empty rerun response and keeps request failur
 test("completion recovery runs trusted main code with only Actions write and no model or publisher secrets", () => {
   const workflow = readRepoFile(".github/workflows/trusted-review-publisher.yml");
   assert.match(workflow, /workflows: \[Trusted review, CI\]/);
+  const discover = workflow.split(/\n {2}discover:\n/)[1].split(/\n {2}[\w-]+:\n/)[0];
+  assert.match(
+    discover,
+    /github\.event_name != 'workflow_run' \|\| github\.event\.workflow_run\.name == 'Trusted review'/,
+  );
   const job = workflow.split(/\n {2}recover-join:\n/)[1].split(/\n {2}[\w-]+:\n/)[0];
   assert.match(job, /github\.event\.action == 'completed'.*github\.run_attempt == 1/);
+  assert.match(
+    job,
+    /github\.event\.workflow_run\.name == 'CI' && github\.event\.workflow_run\.event == 'pull_request' && github\.event\.workflow_run\.conclusion == 'failure'/,
+  );
   assert.match(job, /actions: write/);
   assert.match(job, /ref: \$\{\{ github\.sha \}\}/);
   assert.match(job, /cancel-in-progress: false\n {6}queue: max/);

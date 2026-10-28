@@ -20,7 +20,7 @@ export function requireTrustedReviewAuthority(env) {
         `${env.GITHUB_REPOSITORY}/.github/workflows/${name}@refs/heads/main`,
     )
   )
-    throw new Error("Publisher requires trusted main workflow authority.");
+    throw new Error("Trusted review lifecycle requires trusted main workflow authority.");
 }
 
 /** @param {any} run */
