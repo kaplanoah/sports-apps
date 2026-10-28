@@ -201,6 +201,7 @@
   --all-star-shift: -1px;
   --accent: var(--action);
   --accent-ink: var(--action-ink);
+  --dip-ink: var(--accent);
   --focus-ring: var(--teal);
   --tab-bar-tint: var(--raised);
   --tab-bar-edge: var(--edge);

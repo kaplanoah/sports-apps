@@ -156,6 +156,9 @@
   --now: #ae301f;
   --now-line: #bf3623;
   --now-ink: #fffdf8;
+  /* A Diagnostics record's dip, in --now's deeper red, so it keeps AA's 4.5 to 1 on a pressed
+     record. */
+  --dip-ink: var(--now);
   --al: #2b5f86;
   --nl: #bf3623;
   /* A league's letters on its own tint, deeper so they still read on it. */
@@ -288,6 +291,7 @@
   --now: var(--copper-ink);
   --now-line: var(--copper);
   --now-ink: var(--gold-ink);
+  --dip-ink: var(--accent);
   --al: #7fb0c8;
   --nl: #e0a2a2;
   --al-tag: var(--al);

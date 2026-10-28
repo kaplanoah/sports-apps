@@ -110,7 +110,7 @@
 }
 .diagnostics-flag.dip,
 .diagnostics-lines .diagnostics-dip {
-  color: var(--accent);
+  color: var(--dip-ink);
 }
 .diagnostics-lines {
   display: grid;
