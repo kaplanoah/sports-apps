@@ -157,19 +157,19 @@ export function registerSettingsContactInteractions({ test, expect, openApp, app
     await page.getByRole("button", { name: "Settings", exact: true }).click();
     const opener = page.locator("#contactBtn");
     const dialog = page.locator("#contactDialog");
+    await holdClock(page);
     for (const close of [
       () => dialog.getByRole("button", { name: "Back to Settings" }).click(),
       () => page.keyboard.press("Escape"),
     ]) {
       await page.locator("#settingsDialog .sheet-close").focus();
       await opener.dispatchEvent("click");
+      await page.clock.runFor(1000);
       await expect(dialog.locator("h2")).toBeFocused();
-      await holdClock(page);
       await close();
       await page.clock.runFor(1000);
       await expect(dialog).toBeHidden();
       await expect(opener).toBeFocused();
-      await page.clock.resume();
     }
   });
 
