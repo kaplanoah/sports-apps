@@ -618,7 +618,7 @@ export function runCommand(command, args, { stdio, timeout }) {
  * A try's artifacts, each in a folder of its own, downloaded by GitHub's CLI from the repository
  * GH_REPO names. Each is fetched by its id, since a run's tries name their artifacts alike.
  * @param {FlakyRun} run
- * @param {{ deadline?: number, readTime?: () => number, executeFile?: RunCommand }} [options]
+ * @param {{ deadline?: number, readTime?: () => number, executeCommand?: RunCommand }} [options]
  * @returns {Promise<string>} the folder that holds them
  */
 export async function downloadRun(
@@ -626,15 +626,15 @@ export async function downloadRun(
   {
     deadline = Date.now() + COLLECTION_TIMEOUT_MS,
     readTime = Date.now,
-    executeFile = runCommand,
+    executeCommand = runCommand,
   } = {},
 ) {
   const directory = mkdtempSync(join(tmpdir(), `ci-run-${id}-`));
   try {
     for (const artifact of artifacts) {
       const zipPath = join(directory, `${artifact.id}.zip`);
-      await downloadArtifact(artifact.id, zipPath, { deadline, readTime, executeFile });
-      await executeFile("unzip", ["-q", zipPath, "-d", join(directory, String(artifact.id))], {
+      await downloadArtifact(artifact.id, zipPath, { deadline, readTime, executeCommand });
+      await executeCommand("unzip", ["-q", zipPath, "-d", join(directory, String(artifact.id))], {
         timeout: Math.min(UNZIP_TIMEOUT_MS, readRemainingTime(deadline, readTime)),
         stdio: ["ignore", "ignore", "pipe"],
       });
@@ -649,13 +649,13 @@ export async function downloadRun(
 /**
  * @param {number} id
  * @param {string} zipPath
- * @param {{ deadline: number, readTime: () => number, executeFile: RunCommand }} options
+ * @param {{ deadline: number, readTime: () => number, executeCommand: RunCommand }} options
  */
-async function downloadArtifact(id, zipPath, { deadline, readTime, executeFile }) {
+async function downloadArtifact(id, zipPath, { deadline, readTime, executeCommand }) {
   for (let attempt = 0; ; attempt += 1) {
     const zip = openSync(zipPath, "w");
     try {
-      await executeFile("gh", ["api", `repos/{owner}/{repo}/actions/artifacts/${id}/zip`], {
+      await executeCommand("gh", ["api", `repos/{owner}/{repo}/actions/artifacts/${id}/zip`], {
         stdio: ["ignore", zip, "pipe"],
         timeout: Math.min(ARTIFACT_TIMEOUT_MS, readRemainingTime(deadline, readTime)),
       });

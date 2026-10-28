@@ -1174,8 +1174,8 @@ const DOWNLOAD_RUN = {
   artifacts: [{ id: 11, name: "browser-report-1", at: TONIGHT.toISOString() }],
 };
 
-/** @param {import("../worker/report-flaky-tests.mjs").RunCommand} executeFile */
-const downloadWith = (executeFile) => downloadRun(DOWNLOAD_RUN, { executeFile });
+/** @param {import("../worker/report-flaky-tests.mjs").RunCommand} executeCommand */
+const downloadWith = (executeCommand) => downloadRun(DOWNLOAD_RUN, { executeCommand });
 
 test("a stalled artifact download is killed within the collection's remaining budget", async () => {
   let timeout;
@@ -1183,10 +1183,14 @@ test("a stalled artifact download is killed within the collection's remaining bu
     downloadRun(DOWNLOAD_RUN, {
       deadline: 100,
       readTime: () => 0,
-      executeFile: (command, args, options) => {
+      executeCommand: (command, args, options) => {
         assert.equal(command, "gh");
         timeout = options.timeout;
-        return runCommand(process.execPath, ["-e", "setTimeout(() => {}, 5000)"], options);
+        return runCommand(
+          process.execPath,
+          ["-e", "process.on('SIGTERM', () => {}); setTimeout(() => {}, 5000)"],
+          options,
+        );
       },
     }),
     /ETIMEDOUT/,
@@ -1207,6 +1211,18 @@ test("a failed command's error carries its exit and what it wrote to stderr", as
       return true;
     },
   );
+});
+
+test("a finished command leaves no kill timer holding the process open", async () => {
+  const countTimers = () =>
+    process.getActiveResourcesInfo().filter((resource) => resource === "Timeout").length;
+  /** @type {import("../worker/report-flaky-tests.mjs").CommandOptions} */
+  const options = { stdio: ["ignore", "ignore", "pipe"], timeout: 60_000 };
+  const before = countTimers();
+  await runCommand(process.execPath, ["-e", ""], options);
+  await assert.rejects(runCommand(process.execPath, ["-e", "process.exit(1)"], options));
+  await assert.rejects(runCommand("no-such-command", [], options), { code: "ENOENT" });
+  assert.equal(countTimers(), before);
 });
 
 test("unzip has its own bound and a stalled unzip leaves the try unavailable", async () => {
