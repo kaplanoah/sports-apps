@@ -222,7 +222,7 @@ test.describe("on a phone that has used the app before", () => {
     await expect(updates).toBeHidden();
     await app.updateFromWorker();
     await expect(updates).toContainText(
-      /Yankees(, team details)? passed the .*Red Sox(, team details)? for the AL 4 seed/,
+      /Yankees, team details passed the .*Red Sox, team details for the AL 4 seed/,
     );
 
     app.changeSnapshots((snapshot) => {
