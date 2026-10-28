@@ -37,16 +37,21 @@ export const readBackground = (locator, value) =>
   }, value);
 
 /**
+ * An inset shadow in a computed `box-shadow`, its color first and its spread second, as text,
+ * since a test hands the page text rather than a regular expression.
+ */
+export const INSET_SHADOW_PATTERN = String.raw`(\w+\([^)]*\)|transparent) 0px 0px 0px ([\d.]+)px inset`;
+
+/**
  * The tint a press lays over a row, the color of the inset shadow that fills it, or null where
  * nothing fills it.
  * @param {import("@playwright/test").Locator} locator
  */
 export const readPressTint = (locator) =>
   locator.evaluate(
-    (element) =>
-      getComputedStyle(element).boxShadow.match(
-        /(\w+\([^)]*\)|transparent) 0px 0px 0px [\d.]+px inset/,
-      )?.[1] ?? null,
+    (element, pattern) =>
+      getComputedStyle(element).boxShadow.match(new RegExp(pattern))?.[1] ?? null,
+    INSET_SHADOW_PATTERN,
   );
 
 /**

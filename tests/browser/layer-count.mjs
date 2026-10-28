@@ -33,8 +33,8 @@ async function countLayers(page) {
 
 /**
  * Shows each view in turn, once nothing in it is still loading, pressed, or moving, as a tapped
- * control's press, held a moment after a tap and then easing back, draws in a layer of its own, and expects its layers within its budget, naming
- * every view over.
+ * control's press, held a moment after a tap and then easing back, draws in a layer of its own,
+ * and expects its layers within its budget, naming every view over.
  * @param {import("@playwright/test").Page} page
  * @param {{ view: string, show: () => Promise<void> }[]} views
  * @param {Record<string, number>} budgets

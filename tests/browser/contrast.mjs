@@ -1,4 +1,5 @@
 import { expect } from "@playwright/test";
+import { INSET_SHADOW_PATTERN } from "./press-looks.mjs";
 import { waitForPressesToEnd } from "./tap-states.mjs";
 
 /**
@@ -31,12 +32,12 @@ async function waitForSettledColors(page) {
  * it that fills, with any see-through ones and inset tints over it laid on top. Text over a
  * picture, a gradient, or a layer drawn behind it can't be measured this way and is left out, as
  * are disabled controls and marks with no letter or digit, like a separator or a dash, which WCAG
- * leaves out, and text hidden for screen readers. It measures the page as it shows at once, a pressed row's tint and all, so a
- * test of a pressed or hovered row's colors measures that state.
+ * leaves out, and text hidden for screen readers. It measures the page as it shows at once, a
+ * pressed row's tint and all, so a test of a pressed or hovered row's colors measures that state.
  * @param {import("@playwright/test").Page} page
  */
 export const listLowContrastTextAsShown = (page) =>
-  page.evaluate(async () => {
+  page.evaluate(async (insetShadowPattern) => {
     await document.fonts.ready;
     const SMALL_TEXT_CONTRAST = 4.5;
     const LARGE_TEXT_CONTRAST = 3;
@@ -104,8 +105,7 @@ export const listLowContrastTextAsShown = (page) =>
      * @param {CSSStyleDeclaration} style
      */
     const readInsetTint = (element, style) => {
-      const [, color, spread] =
-        style.boxShadow.match(/(\w+\([^)]*\)|transparent) 0px 0px 0px ([\d.]+)px inset/) ?? [];
+      const [, color, spread] = style.boxShadow.match(new RegExp(insetShadowPattern)) ?? [];
       const { width, height } = element.getBoundingClientRect();
       return color && Number(spread) * 2 >= Math.min(width, height) ? readRgba(color) : null;
     };
@@ -205,7 +205,7 @@ export const listLowContrastTextAsShown = (page) =>
         );
     }
     return [...lowContrast];
-  });
+  }, INSET_SHADOW_PATTERN);
 
 /**
  * The text listLowContrastTextAsShown names once the page's colors have settled.
