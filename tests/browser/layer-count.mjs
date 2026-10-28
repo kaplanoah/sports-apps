@@ -2,6 +2,7 @@
 // and each view's count against its budget.
 
 import { expect } from "@playwright/test";
+import { waitForTimedAnimations } from "./animations.mjs";
 
 /**
  * Counts the layers in the page's next layer tree, once a frame has drawn it. A change to the page
@@ -30,8 +31,9 @@ async function countLayers(page) {
 }
 
 /**
- * Shows each view in turn, once nothing in it is still loading, and expects its layers within its
- * budget, naming every view over.
+ * Shows each view in turn, once nothing in it is still loading or moving, as a tapped control's
+ * press easing back draws in a layer of its own, and expects its layers within its budget, naming
+ * every view over.
  * @param {import("@playwright/test").Page} page
  * @param {{ view: string, show: () => Promise<void> }[]} views
  * @param {Record<string, number>} budgets
@@ -41,6 +43,7 @@ export async function expectWithinBudgets(page, views, budgets) {
   for (const { view, show } of views) {
     await show();
     await expect(page.locator(".placeholder:visible")).toHaveCount(0);
+    await waitForTimedAnimations(page);
     counts[view] = await countLayers(page);
   }
   const over = Object.entries(counts)
