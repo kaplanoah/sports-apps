@@ -16,7 +16,7 @@ const LIVE_DEPLOYMENTS = [
 const skipPause = async () => {};
 
 /**
- * @param {{ ok: boolean, release: string | null, problem?: string } | null} report what each app says of accounts
+ * @param {import("../shared/worker/health.js").ServiceHealth | null} report what each app says of accounts
  * @param {{ appStatus?: number }} [options]
  */
 const answerHealth =
@@ -117,6 +117,21 @@ test("a service an app reports as down, or at another release, is put back, nami
     );
     assert.equal(putBack.length, 1);
   }
+});
+
+test("a service that answers but needs attention stays live, with a notice naming what it needs", async () => {
+  const { result, lines, calls } = await deployWorker(
+    answerHealth({ ...RELEASED, attention: "Contact delivery needs attention" }),
+  );
+  assert.equal(result, "accounts");
+  assert.deepEqual(lines.slice(-2), [
+    "::notice::health check: ok, but Contact delivery needs attention",
+    "worker check: ok",
+  ]);
+  const putBack = calls.filter(
+    ({ url, init }) => url.endsWith("/deployments") && init.method === "POST",
+  );
+  assert.equal(putBack.length, 0);
 });
 
 test("a service no app reports yet, as on its first deploy, deploys with a notice", async () => {

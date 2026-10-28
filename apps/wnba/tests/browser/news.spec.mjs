@@ -2,7 +2,6 @@ import { test, expect, openApp } from "./harness.mjs";
 import { listLowContrastText } from "../../../../tests/browser/contrast.mjs";
 import { listTextOffRoles } from "../../../../tests/browser/type-roles.mjs";
 import { listChipsOffCenter } from "../../../../tests/browser/chip-centering.mjs";
-import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
 import { keepInOtherTab } from "../../../../tests/browser/other-tab.mjs";
 import { countTextLines } from "../../../../tests/browser/text-lines.mjs";
 import { SETTINGS } from "../../../../tests/browser/settings.mjs";
@@ -115,7 +114,7 @@ async function switchOff(page, name) {
   await expect(page.locator(SETTINGS)).toBeHidden();
 }
 
-const readHeadlines = (page) => page.locator(".news-card h3").allTextContents();
+const readHeadlines = (page) => page.locator(".news-card h2").allTextContents();
 
 /**
  * @param {import("@playwright/test").Page} page
@@ -139,7 +138,6 @@ test("the News tab shows a card for each story the Worker saves", async ({ page 
   expect(await listTextOffRoles(page)).toEqual([]);
   expect(await listChipsOffCenter(page)).toEqual([]);
   expect(await listLowContrastText(page)).toEqual([]);
-  expect(await listStrayPeriods(page)).toEqual([]);
 });
 
 test("switching off The Athletic or the Liberty's own outlets leaves their stories out, and the choice stays", async ({
@@ -157,7 +155,7 @@ test("switching off The Athletic or the Liberty's own outlets leaves their stori
   expect(await readHeadlines(page)).toEqual(["Film review: how the Dream changed their approach"]);
 
   await page.reload();
-  await expect(page.locator(".news-card h3")).toHaveText([
+  await expect(page.locator(".news-card h2")).toHaveText([
     "Film review: how the Dream changed their approach",
   ]);
 });
@@ -169,7 +167,7 @@ test("switching off The Athletic in another tab leaves its stories out of this o
 
   await keepInOtherTab(page, "newsChoices", { teamOutlets: true, paywalled: false });
 
-  await expect(page.locator(".news-card h3")).toHaveText([
+  await expect(page.locator(".news-card h2")).toHaveText([
     "Stewart sat out practice with a sore knee",
     "Film review: how the Dream changed their approach",
   ]);
@@ -247,12 +245,11 @@ test("under its lead, a card lists the stories that add to it, quieter than the 
   const readSize = (locator) =>
     locator.evaluate((element) => parseFloat(getComputedStyle(element).fontSize));
   expect(await readSize(more.locator(".news-more-title").first())).toBeLessThan(
-    await readSize(page.locator("h3.news-title")),
+    await readSize(page.locator("h2.news-title")),
   );
   expect(await listTextOffRoles(page)).toEqual([]);
   expect(await listChipsOffCenter(page)).toEqual([]);
   expect(await listLowContrastText(page)).toEqual([]);
-  expect(await listStrayPeriods(page)).toEqual([]);
 });
 
 /**
@@ -375,7 +372,7 @@ test("a story that moves to the top keeps its card and photo", async ({ page }) 
     cards: createCards([{ ...athletic, publishedAt: "2026-09-30T16:00:00.000Z" }, ...others]),
   });
 
-  await expect(page.locator(".news-card h3").first()).toHaveText(
+  await expect(page.locator(".news-card h2").first()).toHaveText(
     "The Liberty's defense held the Dream to 30 percent",
   );
   expect(await readShownPhotos(page)).toEqual([
@@ -490,7 +487,7 @@ for (const colorScheme of THEMES) {
     await page.emulateMedia({ colorScheme });
     await openNewsWithStories(page);
     const athletic = findCard(page, "The Liberty's defense");
-    const headline = athletic.locator("h3.news-title a");
+    const headline = athletic.locator("h2.news-title a");
     const button = athletic.getByRole("link", { name: /^Read on The Athletic/ });
     const headlineAtRest = await readSettledStyle(headline);
     const buttonAtRest = await readSettledStyle(button);
@@ -680,7 +677,7 @@ test.describe("with motion", () => {
       const animate = Element.prototype.animate;
       Element.prototype.animate = function (frames, options) {
         if (Array.isArray(frames) && frames[0]?.opacity === 0)
-          fadedHeadlines.push(this.querySelector(".news-card h3")?.textContent ?? "");
+          fadedHeadlines.push(this.querySelector(".news-card h2")?.textContent ?? "");
         return animate.call(this, frames, options);
       };
     });

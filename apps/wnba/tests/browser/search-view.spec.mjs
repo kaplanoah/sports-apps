@@ -108,6 +108,33 @@ test("the field's clear button empties it and brings the examples back, ready to
   await expect(page.locator("#gameSearch .search-example").first()).toBeVisible();
 });
 
+test("a finger anywhere up the field's right edge lands on its words while it's empty, and on Clear once it holds a search", async ({
+  page,
+}) => {
+  await openSeasonGames(page);
+  await tapSearch(page);
+  const findTapTargets = () =>
+    page.evaluate(() => {
+      const field = /** @type {Element} */ (document.querySelector("#gameSearch .search-field"));
+      const { right, top, bottom } = field.getBoundingClientRect();
+      return [top + 1, (top + bottom) / 2, bottom - 1].map(
+        (y) => document.elementFromPoint(right - 3, y)?.closest("label, button")?.className,
+      );
+    });
+
+  expect(await findTapTargets()).toEqual(Array(3).fill("search-label"));
+
+  await sendSearch(page, "Liberty");
+
+  expect(await findTapTargets()).toEqual(Array(3).fill("search-clear"));
+  const [clear, field] = await Promise.all(
+    [".search-clear", ".search-field"].map((selector) =>
+      page.locator(`#gameSearch ${selector}`).boundingBox(),
+    ),
+  );
+  expect(clear.x + clear.width).toBe(field.x + field.width);
+});
+
 test("two minutes away closes the search and goes back to the tab before it, and less leaves it as it was", async ({
   page,
 }) => {
@@ -126,6 +153,35 @@ test("two minutes away closes the search and goes back to the tab before it, and
   await page.clock.runFor(100);
   await expect(page.locator("#view-games")).toBeVisible();
   await expect(findSearch(page)).toBeHidden();
+});
+
+test("a search put back from an earlier release, with Clear in the field's label, keeps its list where it was once it's drawn again", async ({
+  page,
+}) => {
+  await openSeasonGames(page);
+  await tapSearch(page);
+  await sendSearch(page, "May");
+  const lastDay = page.locator('#gameSearch .listed-day[data-day="2026-05-31"]');
+  await expect(lastDay).toBeInViewport();
+  await page.addInitScript(() => {
+    const saved = JSON.parse(localStorage.getItem("lastDrawn") ?? "{}");
+    saved.gameSearch.markup = saved.gameSearch.markup
+      .replace(
+        /<div class="search-field">\s*<label class="search-label"\s*>/,
+        '<label class="search-field">',
+      )
+      .replace(
+        /<\/label>\s*(<button[^>]*class="search-clear"[\s\S]*?<\/button>)\s*<\/div>/,
+        "$1</label>",
+      );
+    localStorage.setItem("lastDrawn", JSON.stringify(saved));
+  });
+
+  await page.reload();
+
+  await expect(findInput(page)).toHaveValue("May");
+  await expect(page.locator("#gameSearch .search-label")).toHaveCount(1);
+  await expect(lastDay).toBeInViewport();
 });
 
 test("a reload shows the search as it was before the page's code arrives, and the tab before it after two minutes away", async ({

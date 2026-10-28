@@ -132,7 +132,7 @@ test("an app whose service is down still reports itself healthy", async (context
   ]);
 });
 
-test("a service's problem is reported only while it isn't ok, and only as text", async () => {
+test("a service's problem is reported only while it isn't ok, its attention only while it is, each only as text", async () => {
   const cases = [
     [
       { ok: true, release: "def5678", problem: "no RP_ID secret" },
@@ -141,6 +141,18 @@ test("a service's problem is reported only while it isn't ok, and only as text",
     [
       { ok: false, release: "def5678", problem: 42 },
       { ok: false, release: "def5678" },
+    ],
+    [
+      { ok: true, release: "def5678", attention: "Contact delivery needs attention" },
+      { ok: true, release: "def5678", attention: "Contact delivery needs attention" },
+    ],
+    [
+      { ok: false, release: "def5678", problem: "no RP_ID secret", attention: "unread" },
+      { ok: false, release: "def5678", problem: "no RP_ID secret" },
+    ],
+    [
+      { ok: true, release: "def5678", attention: 42 },
+      { ok: true, release: "def5678" },
     ],
   ];
   for (const [answer, report] of cases) {

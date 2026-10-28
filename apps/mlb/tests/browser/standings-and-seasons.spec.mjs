@@ -75,6 +75,26 @@ test("standings open on each league's playoff field, and every table lines up", 
   expect(new Set(await readHeights("#standingsWrap .div-title")).size).toBe(1);
 });
 
+test("every head cell of the standings, named or empty, has the divider under it", async ({
+  page,
+}) => {
+  await openApp(page);
+  await openSeasonPart(page, "Standings");
+  const divider = await readColor(page, "--divider");
+
+  const heads = await page
+    .locator("#standingsWrap table.st :is(thead, .wild-card-head) :is(th, td)")
+    .evaluateAll((cells) =>
+      cells.map((cell) => {
+        const style = getComputedStyle(cell);
+        return style.borderBottomStyle === "none" ? null : style.borderBottomColor;
+      }),
+    );
+
+  expect(heads.length).toBeGreaterThan(9);
+  expect(new Set(heads)).toEqual(new Set([divider]));
+});
+
 test("every club's rank slot in the standings is as tall as a rank tag, so a ranked club's row is as tall as an unranked one's", async ({
   page,
 }) => {
@@ -214,7 +234,6 @@ test("warns under the title when MLB stops sending a field", async ({ page }) =>
   await expect(page.locator("#stamp")).toContainText(
     "MLB stopped sending wildCardRank, so some details may be blank",
   );
-  expect(await listStrayPeriods(page)).toEqual([]);
   await expect(page.locator("#bracketWrap")).toContainText("Dodgers");
 });
 

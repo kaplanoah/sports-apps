@@ -95,7 +95,7 @@ const OTHER_PLACES = [
       await page.route("**/js/release-notes.js", (route) =>
         route.fulfill({
           contentType: "text/javascript",
-          body: 'import { html } from "#shared/html.js";\nexport const RELEASE_NOTES = [{ at: "2026-09-30T20:55:00Z", text: html`Tap a game, then <b>Channels</b>.` }];',
+          body: 'import { html } from "#shared/html.js";\nexport const RELEASE_NOTES = [{ at: "2026-09-30T20:55:00Z", text: html`Tap a game, then <b>Channels</b>` }];',
         }),
       );
       return openApp(page, { updatesBox: "shown" });

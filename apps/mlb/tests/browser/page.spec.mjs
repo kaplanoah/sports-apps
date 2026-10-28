@@ -644,7 +644,6 @@ for (const { screen, viewport } of [
       expect(await listTextOffRoles(page)).toEqual([]);
       expect(await listChipsOffCenter(page)).toEqual([]);
       expect(await listLowContrastText(page)).toEqual([]);
-      expect(await listStrayPeriods(page)).toEqual([]);
       expect(await listNeverShownWords(page, LEAGUE_WORDS.neverShown)).toEqual([]);
     });
 

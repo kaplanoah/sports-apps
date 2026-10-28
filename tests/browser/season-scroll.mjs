@@ -60,6 +60,16 @@ export const findTouchTargets = (page, points) =>
 export const findCenter = (box) => ({ x: box.x + box.width / 2, y: box.y + box.height / 2 });
 
 /**
+ * The middle of what a locator shows.
+ * @param {import("@playwright/test").Locator} locator
+ */
+export async function findMiddle(locator) {
+  const box = await locator.boundingBox();
+  if (!box) throw new Error("Nothing shows to find the middle of");
+  return findCenter(box);
+}
+
+/**
  * Notes where the page, the header, the pill, and the parts are on each frame, and which part the
  * pill names, until the returned function stops and reads the notes. It returns once it has noted
  * a frame, so the frames start before whatever the test does next.
@@ -180,14 +190,13 @@ export async function wheelPastSeasonPartEnd(page, part) {
 }
 
 /**
- * Scrolls a part of the season tab to `top` at once, and waits for the frame after its scroll
- * event, so what the page draws from the scroll has landed.
- * @param {import("@playwright/test").Page} page
- * @param {SeasonPart} part
+ * Scrolls what a locator finds to `top` at once, and waits for the frame after its scroll event, so
+ * what the page draws from the scroll has landed.
+ * @param {import("@playwright/test").Locator} scroller
  * @param {number} top
  */
-export const scrollSeasonPart = (page, part, top) =>
-  findSeasonPart(page, part).evaluate(
+export const scrollElementTo = (scroller, top) =>
+  scroller.evaluate(
     (element, to) =>
       new Promise((resolve) => {
         const from = element.scrollTop;
@@ -197,6 +206,15 @@ export const scrollSeasonPart = (page, part, top) =>
       }),
     top,
   );
+
+/**
+ * Scrolls a part of the season tab to `top` at once, as `scrollElementTo` does.
+ * @param {import("@playwright/test").Page} page
+ * @param {SeasonPart} part
+ * @param {number} top
+ */
+export const scrollSeasonPart = (page, part, top) =>
+  scrollElementTo(findSeasonPart(page, part), top);
 
 /**
  * Where the header and the pill start down the page, and how far the page is scrolled, which a
@@ -251,12 +269,18 @@ export const readHeaderReach = (page) =>
   );
 
 /**
+ * How far what a locator finds is scrolled.
+ * @param {import("@playwright/test").Locator} scroller
+ */
+export const readScroll = (scroller) =>
+  scroller.evaluate((element) => Math.round(element.scrollTop));
+
+/**
  * How far a part of the season tab is scrolled.
  * @param {import("@playwright/test").Page} page
  * @param {SeasonPart} part
  */
-export const readSeasonPartScroll = (page, part) =>
-  findSeasonPart(page, part).evaluate((element) => Math.round(element.scrollTop));
+export const readSeasonPartScroll = (page, part) => readScroll(findSeasonPart(page, part));
 
 /**
  * Has the page open as in a browser without scroll-driven animations, where the header stays put.

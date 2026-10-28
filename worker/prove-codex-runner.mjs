@@ -11,6 +11,7 @@ import {
 } from "./review-trial-evidence.mjs";
 
 import { requireOwnerTrialAuthority, TrialAuthorityError } from "./review-trial-authority.mjs";
+import { writeReviewModelQueue } from "./review-provider.mjs";
 
 class CodexProofError extends Error {}
 
@@ -77,6 +78,7 @@ function prepareCodexProof(env) {
     "codex-home",
     "codex-log-capture.sh",
   ]);
+  writeReviewModelQueue(env, "codex", "proof");
 }
 
 /** @param {string} transcript @param {string} output @param {string} probePath */

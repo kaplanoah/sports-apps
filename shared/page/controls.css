@@ -21,7 +21,7 @@
   outline: none;
 }
 body.kbd
-  :where(:focus:not(dialog, .sheet-page, .search-input), .search-field:has(> .search-input:focus)) {
+  :where(:focus:not(dialog, .sheet-page, .search-input), .search-field:has(.search-input:focus)) {
   outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }

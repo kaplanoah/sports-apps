@@ -82,6 +82,13 @@ export const renderPlayerCell = (
     : html`<td class="team">${lead}<span class="box-name">${player.name}</span>${note}</td>`;
 
 /**
+ * A column with no heading heads it with a plain cell, since a header cell names its column to
+ * assistive tech.
+ * @param {StatColumn} column
+ */
+const renderColumnHead = ([heading]) => (heading ? html`<th>${heading}</th>` : html`<td></td>`);
+
+/**
  * A table whose rows each open wherever they're tapped clips the button that reaches over each
  * row to the table's sides (row-button.css).
  * @param {string} label
@@ -96,7 +103,7 @@ export const renderStatTable = (label, columns, rows, { opensRows = false } = {}
         <thead>
           <tr>
             <th class="left">${label}</th>
-            ${columns.map(([heading]) => html`<th>${heading}</th>`)}
+            ${columns.map(renderColumnHead)}
           </tr>
         </thead>
         <tbody>

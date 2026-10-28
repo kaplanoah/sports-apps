@@ -357,7 +357,7 @@ test("each game's label counts its series as it stood at tip-off, or after the g
  * @param {object} season
  * @param {RegExp} pattern
  */
-const readDayLabels = (season, pattern = /<h3 class="day-label"[^>]*>([\s\S]*?)<\/h3>/g) =>
+const readDayLabels = (season, pattern = /<h2 class="day-label"[^>]*>([\s\S]*?)<\/h2>/g) =>
   [...readGameMarkup(season).matchAll(pattern)].map(([, label]) => readText({ text: label }));
 
 test("each day's games share a box beside its date, named for yesterday, tomorrow, or its weekday, today's marked", () =>
@@ -382,7 +382,7 @@ test("each day's games share a box beside its date, named for yesterday, tomorro
 test("a day's date reads in full to a screen reader, and every day's name looks alike", () =>
   inEastern(() => {
     assert.deepEqual(
-      readDayLabels(SEASON, /<h3 class="day-label" aria-label="([^"]*)"/g).slice(0, 5),
+      readDayLabels(SEASON, /<h2 class="day-label" aria-label="([^"]*)"/g).slice(0, 5),
       [
         "Sunday, Sep 27",
         "Yesterday, Sep 29",

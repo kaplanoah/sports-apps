@@ -35,6 +35,7 @@ import {
 } from "./review-supplied.mjs";
 import { readCodexProofConfiguration } from "./prove-codex-runner.mjs";
 import { requireOwnerTrialAuthority } from "./review-trial-authority.mjs";
+import { writeReviewModelQueue } from "./review-provider.mjs";
 import {
   prepareTrialEvidenceCertificate,
   retainPrivateTrialEvidence,
@@ -442,6 +443,7 @@ export function prepareTrialSession(env, portion, snapshot) {
     "codex-home",
     "codex-log-capture.sh",
   ]);
+  writeReviewModelQueue(env, identity.provider, portion);
 }
 
 /** @param {string} transcript */

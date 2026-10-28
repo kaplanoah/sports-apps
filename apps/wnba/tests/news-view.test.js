@@ -249,7 +249,7 @@ test("in two columns, each card goes to the shorter one, so a short card sits un
         /<ul class="news-column">[\s\S]*?<\/ul>/g,
       ) ?? []
     ).map((column) =>
-      [...column.matchAll(/<h3[^>]*>\s*<a[^>]*>([^<]*)</g)].map((match) => match[1]),
+      [...column.matchAll(/<h2[^>]*>\s*<a[^>]*>([^<]*)</g)].map((match) => match[1]),
     );
 
   assert.deepEqual(readColumns(1), [["Tall", "Short", "Older"]]);
@@ -310,7 +310,7 @@ test("in two columns, a card whose photo's frame is taller counts as taller", ()
       .text.split('<ul class="news-column">')
       .slice(1)
       .map((column) =>
-        [...column.matchAll(/<h3[^>]*>\s*<a[^>]*>([^<]*)</g)].map((match) => match[1]),
+        [...column.matchAll(/<h2[^>]*>\s*<a[^>]*>([^<]*)</g)].map((match) => match[1]),
       );
   };
 

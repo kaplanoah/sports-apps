@@ -63,6 +63,7 @@ The Worker serves every file here, its `networks/` logos too, under `shared/`, b
 ### Settings and Diagnostics
 
 - `settings-sheet.js`: the settings sheet
+- `contact-rules.js`: Contact categories and shared input limits
 - `season-picker.js`: settings' Season picker
 - `notifications.js`: the Notifications group's permission, saving and timing changes
 - `notifications-view.js`: the Notifications group's rows, from its state and the league's words
@@ -74,6 +75,7 @@ The Worker serves every file here, its `networks/` logos too, under `shared/`, b
 - `diagnostics.js`: the Diagnostics and their shared report
 - `sent-label.js`: how long a button that copies or shares says it did
 - `step-log.js`: a Diagnostics log of what one part of the page does
+- `report-addresses.js`: hiding private addresses in Diagnostics and submitted reports
 - `viewport-log.js`: each change to the screen's viewports
 - `sheet-log.js`: what each dialog's sheets do
 - `day-strip-log.js`: what a season's list of days does
@@ -139,6 +141,7 @@ The Worker serves every file here, its `networks/` logos too, under `shared/`, b
 - `kept-place.js`: keeping rows in place as what's above them changes
 - `eased-redraw.js`: easing parts to their new heights on a redraw
 - `slide-panels.js`: side-by-side panels a finger drags
+- `shown-view.js`: hearing that the view shown changed without a scroll
 - `side-swipe.js`: each sideways swipe the page's code follows
 
 ### Sheets
@@ -228,6 +231,7 @@ Pages link these before their own stylesheet, and theme them with the tokens the
 ## `shared/worker/`
 
 - `app-worker.js`: the Worker's routing, under the key or at its own address, and moving the page there
+- `contact-request.js`: bounded Contact requests behind the app's access gate
 - `access-gate.js`: asking for the access code before the page opens
 - `daily-count.js`: writing each browser's or Home Screen app's daily count to Analytics Engine, with the address it came from
 - `health.js`: the Worker's health, for an uptime monitor, and what each service it binds answers
@@ -252,7 +256,7 @@ Pages link these before their own stylesheet, and theme them with the tokens the
 - `news-photos.js`: framing the photos the news cards show
 - `image-size.js`: a photo's size from the start of its file
 - `claude.js`: asking Claude for an answer shaped by a JSON schema
-- `hash-text.js`: a short fixed-length name for any text
+- `hash-text.js`: the SHA-256 of any text, in full or as a short fixed-length name
 - `seasons.js`: the season a request names
 - `notifications.js`: capping a night's notifications
 - `game-reminders.js`: persisted game reminder deadlines, verification, delivery, and retries

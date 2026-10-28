@@ -8,6 +8,7 @@ import { holdRoundDots } from "./round-dots.js";
 import { prefersReducedMotion } from "./reduced-motion.js";
 import { watchTimeAway } from "./resume.js";
 import { findPartHolding } from "./season-part.js";
+import { noteShownViewChange } from "./shown-view.js";
 import { createSlidePanels } from "./slide-panels.js";
 import { isAsFarAs, isAwayFrom, scrollWithSpring } from "./spring-scroll.js";
 import { readSelectedTab, wireTabList } from "./tabs.js";
@@ -274,6 +275,7 @@ export function startBracketStandings() {
     place: (index, position) => index - position,
     canGo: (direction) => Boolean(readOrder()[slidePanels.readShown() + direction]),
     onSetOff: placePartsBeside,
+    onSettle: noteShownViewChange,
     onShow: showOn,
   });
   panels = slidePanels;

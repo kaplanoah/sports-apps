@@ -67,21 +67,27 @@ function requireReviewAuthority(env) {
     throw new Error("Trusted review requires default-branch workflow authority.");
 }
 
-/** @param {string | undefined | null} merge @param {NodeJS.ProcessEnv} env */
-function matchesReviewMerge(merge, env) {
-  if (!merge) return false;
+/** @param {string} merge @param {NodeJS.ProcessEnv} env */
+function readReviewMergeParents(merge, env) {
   if (!isGitObjectId(merge)) throw new Error("Review requires an immutable merge revision.");
   runReviewGit(env.GITHUB_WORKSPACE, ["fetch", "--no-tags", "origin", merge]);
-  return (
-    runReviewGit(env.GITHUB_WORKSPACE, ["show", "--no-patch", "--format=%P", merge]) ===
-    `${env.REVIEW_BASE} ${env.REVIEW_HEAD}`
+  return runReviewGit(env.GITHUB_WORKSPACE, ["show", "--no-patch", "--format=%P", merge]).split(
+    " ",
   );
 }
 
 /** @param {string | undefined | null} merge @param {NodeJS.ProcessEnv} env */
-function matchesAvailableReviewMerge(merge, env) {
+function matchesReviewMerge(merge, env) {
+  return Boolean(
+    merge &&
+    readReviewMergeParents(merge, env).join(" ") === `${env.REVIEW_BASE} ${env.REVIEW_HEAD}`,
+  );
+}
+
+/** @param {string | undefined | null} merge @param {NodeJS.ProcessEnv} env */
+function readAvailableReviewParents(merge, env) {
   try {
-    return matchesReviewMerge(merge, env);
+    return merge ? readReviewMergeParents(merge, env) : null;
   } catch (error) {
     const failure = /** @type {{ status?: number, stderr?: string | Buffer }} */ (error);
     const unavailable =
@@ -91,7 +97,7 @@ function matchesAvailableReviewMerge(merge, env) {
         `(?:not our ref|couldn't find remote ref|unadvertised object) ${merge}(?:\\s|$)`,
       ).test(String(failure.stderr ?? ""));
     if (!unavailable) throw error;
-    return false;
+    return null;
   }
 }
 
@@ -112,10 +118,34 @@ function readBranchTip(branch, env) {
   return tips[0];
 }
 
+/** @param {string} ancestor @param {string} descendant @param {NodeJS.ProcessEnv} env */
+function isReviewAncestor(ancestor, descendant, env) {
+  try {
+    runReviewGit(env.GITHUB_WORKSPACE, ["merge-base", "--is-ancestor", ancestor, descendant]);
+    return true;
+  } catch (error) {
+    if (/** @type {{ status?: number }} */ (error).status === 1) return false;
+    throw error;
+  }
+}
+
+/** @param {NodeJS.ProcessEnv} env */
+function pinReviewTarget(env) {
+  const tip = readBranchTip(env.REVIEW_TARGET, env);
+  const shallow = runReviewGit(env.GITHUB_WORKSPACE, ["rev-parse", "--is-shallow-repository"]);
+  runReviewGit(env.GITHUB_WORKSPACE, [
+    "fetch",
+    "--no-tags",
+    ...(shallow === "true" ? ["--unshallow"] : []),
+    "origin",
+    tip,
+  ]);
+  return tip;
+}
+
 /**
- * GitHub computes mergeability after emitting the event, and refreshes the pull's base.sha only
- * on a push or a base edit, so the base is the base branch's live tip, which the merge must be
- * built on. Later stages consume the selected SHAs without resolving a moving reference.
+ * The cached merge's first parent must belong to the target branch's observed history. Later
+ * jobs verify the exact selected pair and tree without resolving the moving target again.
  * @param {NodeJS.ProcessEnv} env
  * @param {{ readPull?: (path: string) => Promise<any>, wait?: (ms: number) => Promise<unknown> }} [options]
  * @returns {Promise<{ merge: string, base: string } | null>}
@@ -136,8 +166,19 @@ export async function resolveReviewMerge(
     if (!isCurrentReviewPull(pull, env) || pull.mergeable === false) return true;
     const merge = pull.merge_commit_sha;
     if (!merge || rejected.has(merge)) return false;
-    const base = readBranchTip(env.REVIEW_TARGET, env);
-    if (matchesAvailableReviewMerge(merge, { ...env, REVIEW_BASE: base })) {
+    const parents = readAvailableReviewParents(merge, env);
+    if (!parents) {
+      rejected.add(merge);
+      return false;
+    }
+    const [base, head, ...others] = parents;
+    const target = pinReviewTarget(env);
+    if (
+      head === env.REVIEW_HEAD &&
+      others.length === 0 &&
+      isGitObjectId(base) &&
+      isReviewAncestor(base, target, env)
+    ) {
       selected = { merge, base };
       return true;
     }
