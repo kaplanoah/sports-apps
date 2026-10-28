@@ -13,8 +13,8 @@
  *   --game-unlabeled-lift    how far the time or score and its status rise together without a
  *                            label, as the pair's middle centers it where teams take two lines
  * A time alone, without a label or status, centers in the row.
- * Its lines, and the tint on a row that opens under a press, take chrome.css's --divider and --ink,
- * and its team names under a mouse take --ink-hover.
+ * Its lines take chrome.css's --divider, its team names under a mouse take --ink-hover, and a row
+ * that opens takes controls.css's --pressed-row under a press.
  *
  * An All-Star team's star (all-star.js) takes these, each a color but the last:
  *   --all-star-shadow        its shadow inside

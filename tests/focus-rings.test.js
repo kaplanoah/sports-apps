@@ -1,19 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
-import {
-  listAppStylesheets,
-  listSharedStylesheets,
-  readDeclarations,
-  readRule,
-} from "./css-rules.js";
+import { listStylesheets, readDeclarations, readRule } from "./css-rules.js";
 import { REPO_ROOT } from "./repo-files.js";
 
 const CONTROLS = fileURLToPath(new URL("shared/page/controls.css", REPO_ROOT));
 // The Appearance choice's radio takes its focus, while its icon shows the ring.
 const APPEARANCE_RING = "body.kbd .appearance-choice:has(input:focus) .appearance-icon";
-
-const listStylesheets = () => [...listSharedStylesheets(), ...listAppStylesheets()];
 
 /**
  * @param {string} path

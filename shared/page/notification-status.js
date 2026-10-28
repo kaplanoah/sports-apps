@@ -2,7 +2,7 @@
 
 export const PENDING_SPINNER_MS = 700;
 
-const CATEGORIES = /** @type {const} */ (["updates", "reminders"]);
+export const CATEGORIES = /** @type {const} */ (["updates", "reminders"]);
 
 export const TOO_MANY_DEVICES = "Too many devices get notifications already";
 export const CHANGE_FAILED = "Couldn't update notifications. Try again in a moment.";

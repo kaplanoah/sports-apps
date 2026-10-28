@@ -28,10 +28,10 @@ async function waitForSettledColors(page) {
  * Every piece of shown text that stands out from what's behind it by less than WCAG's AA level
  * asks: 4.5 to 1, or 3 to 1 for large text, 24px and up or 18.66px and up at 700. The text's color
  * fades by its own alpha and by each opacity around it, and the background is the first one behind
- * it that fills, with any see-through ones over it laid on top. Text over a picture, a gradient, or
- * a layer drawn behind it can't be measured this way and is left out, as are disabled controls and
- * marks with no letter or digit, like a separator or a dash, which WCAG leaves out, and text hidden
- * for screen readers. It measures the page as it shows at once, a pressed row's tint and all, so a
+ * it that fills, with any see-through ones and inset tints over it laid on top. Text over a
+ * picture, a gradient, or a layer drawn behind it can't be measured this way and is left out, as
+ * are disabled controls and marks with no letter or digit, like a separator or a dash, which WCAG
+ * leaves out, and text hidden for screen readers. It measures the page as it shows at once, a pressed row's tint and all, so a
  * test of a pressed or hovered row's colors measures that state.
  * @param {import("@playwright/test").Page} page
  */
@@ -97,6 +97,19 @@ export const listLowContrastTextAsShown = (page) =>
         return style.content !== "none" && style.zIndex === "-1" && isPainted(style);
       });
 
+    /**
+     * The tint an inset shadow lays over an element's whole fill, as a press does a row's, or null
+     * where none does, as where one only rings its edge.
+     * @param {Element} element
+     * @param {CSSStyleDeclaration} style
+     */
+    const readInsetTint = (element, style) => {
+      const [, color, spread] =
+        style.boxShadow.match(/(\w+\([^)]*\)|transparent) 0px 0px 0px ([\d.]+)px inset/) ?? [];
+      const { width, height } = element.getBoundingClientRect();
+      return color && Number(spread) * 2 >= Math.min(width, height) ? readRgba(color) : null;
+    };
+
     const pageBackground = readRgba(getComputedStyle(document.body).backgroundColor).rgb;
 
     /** @type {Map<Element, number[] | null>} */
@@ -120,6 +133,8 @@ export const listLowContrastTextAsShown = (page) =>
         const below = readBackground(element.parentElement);
         background = below && layOver(fill.rgb, below, fill.alpha);
       }
+      const tint = readInsetTint(element, style);
+      if (background && tint) background = layOver(tint.rgb, background, tint.alpha);
       backgrounds.set(element, background);
       return background;
     };

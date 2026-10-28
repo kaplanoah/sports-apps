@@ -8,7 +8,7 @@
  *   --edge         the line inside the field's edge
  *   --action       Cancel and the field's caret, where to tap
  *   --ink-hover    an example, a row, or the line over the games under the mouse
- * and a pressed row tints in chrome.css's --ink.
+ * and a pressed row takes controls.css's --pressed-row.
  *   --text         the rows' face
  *   --search-face  the field's face, drawn at --type-field-size as big as --text at
  *                  --type-body-size

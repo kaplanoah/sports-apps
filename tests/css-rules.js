@@ -16,6 +16,9 @@ export const listSharedStylesheets = () =>
 export const listAppStylesheets = () =>
   listApps().map((app) => fileURLToPath(new URL(`${app}/page/styles.css`, APPS)));
 
+/** The path of every stylesheet the pages link, shared and each app's own. */
+export const listStylesheets = () => [...listSharedStylesheets(), ...listAppStylesheets()];
+
 /** @typedef {{ selectors: string[], property: string, value: string }} Declaration */
 
 const stripComments = (css) => css.replace(/\/\*[\s\S]*?\*\//g, "");

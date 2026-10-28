@@ -134,7 +134,7 @@
   /* Barlow's digits sit low in their line, which would leave each step's number under its
      circle's middle. */
   --step-number-lift: 0.5px;
-  --orange: #b93800;
+  --orange: #9c2f00;
   --orange-ink: #ffffff;
   --teal: #0b6860;
   --teal-ink: #ffffff;
@@ -310,7 +310,7 @@
   --ink-dim: #b39988;
   --quiet-stat-ink: var(--ink-mid);
   --catch-up-fade: 0.75;
-  --orange: #f87145;
+  --orange: #fb8055;
   --orange-ink: #1d0d03;
   --teal: #3cb4a4;
   --teal-ink: #06201c;

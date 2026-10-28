@@ -12,6 +12,7 @@ import { isAskingToAdd, openWelcome } from "./home-screen.js";
 import { html, setHtml } from "./html.js";
 import { NOTE_PLACES, renderNotificationRows } from "./notifications-view.js";
 import {
+  CATEGORIES,
   CHANGE_FAILED,
   PENDING_SPINNER_MS,
   chooseDeniedStatus,
@@ -374,7 +375,7 @@ function toggleCategory(category) {
 /** @param {Event} event */
 function toggleNotifications(event) {
   const target = /** @type {Element} */ (event.target);
-  for (const category of /** @type {const} */ (["updates", "reminders"])) {
+  for (const category of CATEGORIES) {
     if (target.closest(`#${NOTE_PLACES[category]}Switch`)) toggleCategory(category);
   }
 }

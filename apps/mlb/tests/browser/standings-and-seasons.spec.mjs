@@ -18,6 +18,8 @@ import { measureFieldFace } from "../../../../tests/browser/type-roles.mjs";
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
 import { keepInOtherTab } from "../../../../tests/browser/other-tab.mjs";
 import { openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
+import { listLowContrastTextAsShown } from "../../../../tests/browser/contrast.mjs";
+import { pressOn } from "../../../../tests/browser/press-looks.mjs";
 import { LAPTOP } from "./screen-sizes.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
@@ -384,3 +386,25 @@ test("while the store says last year's season is current, the page shows it and 
   await expect(page.locator("#seasonPicker")).toHaveValue("2026");
   expect(app.listStoreReads().filter((path) => path.includes("2027"))).toEqual([]);
 });
+
+for (const [theme, colorScheme] of /** @type {const} */ ([
+  ["Ball", "light"],
+  ["Night Game", "dark"],
+])) {
+  test(`in ${theme}, a club's game under way stays readable on its standings row pressed`, async ({
+    page,
+  }) => {
+    await page.emulateMedia({ colorScheme });
+    await page.setViewportSize(LAPTOP);
+    await openApp(page);
+    await openSeasonPart(page, "Standings");
+    const row = page.locator("#standingsWrap tr:has(td.next-cell.live)").first();
+    const open = row.locator(".row-button-cell button");
+
+    await pressOn(page, open);
+
+    await expect(open).toHaveClass(/is-row-press/);
+    expect(await listLowContrastTextAsShown(page)).toEqual([]);
+    await page.mouse.up();
+  });
+}
