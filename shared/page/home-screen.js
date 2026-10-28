@@ -84,8 +84,8 @@ export function openWelcome() {
   findWelcome().showModal();
 }
 
-// Its buttons slide it down as Escape does, once their press has shown, in place of the
-// draw-home-screen-asks.js closing at once that serves until this loads.
+// Its buttons slide it down as Escape does, once their press has shown. Until this loads,
+// draw-home-screen-asks.js closes it at once.
 /** @param {Event} event */
 function closeAfterPress(event) {
   const button = /** @type {Element} */ (event.target).closest(".welcome-continue, .welcome-close");
