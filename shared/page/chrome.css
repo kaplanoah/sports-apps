@@ -207,6 +207,21 @@ section.view.active {
   height: 100%;
   padding-bottom: 0;
 }
+/* The main landmark holds the views, so it takes the room the header leaves and lays them out as
+   the body would, what's taller than it overflowing it as it would the body. */
+:root:has(.view.active > :is(.day-view, .season-parts)) main {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  min-height: 0;
+}
+/* A view that keeps its own place (kept-place.js) opts out of the browser's scroll anchoring, and so
+   does the main landmark while it shows, since Chrome anchors on the landmark when nothing in it
+   is left to anchor on. */
+.view[data-kept-place],
+main:has(> .view.active[data-kept-place]) {
+  overflow-anchor: none;
+}
 @media (max-width: 779px) {
   :root {
     height: calc(100% + env(safe-area-inset-top) + 1px);
