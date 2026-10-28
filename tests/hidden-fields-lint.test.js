@@ -20,8 +20,6 @@ const HIDDEN_FIELDS = {
   "an input with hidden": 'const markup = `<input type="file" accept="image/*" hidden>`;',
   "a select with hidden, in plain text": "const markup = '<select hidden></select>';",
   "a textarea ending in hidden": 'const markup = `<textarea class="note" hidden/>`;',
-  "a file input opened by click": "fileInput.click();",
-  "a field opened by click off an object": "this.photoPicker.click();",
   "a field hidden by assignment": "searchInput.hidden = true;",
   "a field hidden off an object": "parts.uploadField.hidden = true;",
   "a field hidden by its attribute": 'fileInput.setAttribute("hidden", "");',
@@ -35,7 +33,6 @@ const SHOWN_FIELDS = {
   "a hidden form value": 'const markup = `<input type="hidden" name="season" value="2026">`;',
   "an input whose words name hidden":
     'const markup = `<input placeholder="Show hidden-ball plays">`;',
-  "a button's click": "findTapped(event)?.click();",
   "a sheet hidden by assignment": "sheet.hidden = true;",
   "a field's own value": "searchInput.value = '';",
 };

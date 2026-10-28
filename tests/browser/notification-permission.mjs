@@ -2,6 +2,7 @@ import { checkSelectArrow } from "./settings.mjs";
 import { holdClock, matchPath } from "./harness.mjs";
 import { holdRequests } from "./hold-requests.mjs";
 import { PUSH_STUB, stubPushManager, stubPushRegistration } from "./push-stub.mjs";
+import { THEMES } from "./theme-layout.mjs";
 
 function holdPermission() {
   Notification.requestPermission = () => {
@@ -112,7 +113,7 @@ export function testNotificationPermission(test, expect, app) {
     await page.addInitScript(stubPushRegistration);
   });
   for (const category of ["reminders", "notify"]) {
-    for (const theme of /** @type {const} */ (["light", "dark"]))
+    for (const theme of THEMES)
       test(`${category} switches on in the tap stack, delays its spinner, and keeps geometry in ${theme}`, async ({
         page,
       }) => {

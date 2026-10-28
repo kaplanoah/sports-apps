@@ -96,6 +96,23 @@ test("a reload puts back the colors a part's code gave it, but nothing else in i
   release();
 });
 
+test("search put back from a release whose line under the field wasn't a status has it as one once the page's code runs", async ({
+  page,
+}) => {
+  await openApp(page);
+  const markup = await page
+    .locator("#gameSearch")
+    .evaluate((search) => search.innerHTML.replace(' role="status"', ""));
+  expect(markup).toContain("search-input");
+  await storeBeforeLoad(page, {
+    lastDrawn: JSON.stringify({ gameSearch: { markup, hidden: true } }),
+  });
+
+  await page.reload();
+
+  await expect(page.locator('#gameSearch .search-read[role="status"]')).toHaveCount(1);
+});
+
 test("saved markup that can't be read leaves the page to open as it would", async ({ page }) => {
   await storeBeforeLoad(page, { lastDrawn: "{not json", lastTab: "games" });
 

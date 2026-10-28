@@ -2,6 +2,7 @@ import { PUSH_STUB, stubPushManager, stubPushRegistration } from "./push-stub.mj
 import { IPHONE } from "./devices.mjs";
 import { openFromHomeScreen } from "./touch.mjs";
 import { waitForLoadToSettle } from "./at-rest.mjs";
+import { THEMES } from "./theme-layout.mjs";
 
 /** @param {any} test @param {any} expect @param {{openApp: Function, openSettings: Function, field: any}} app */
 export function testNotificationAlignment(test, expect, app) {
@@ -12,7 +13,7 @@ export function testNotificationAlignment(test, expect, app) {
   })) {
     test.describe(screen, () => {
       test.use({ ...(screen === "phone" ? IPHONE : {}), viewport });
-      for (const theme of /** @type {const} */ (["light", "dark"]))
+      for (const theme of THEMES)
         for (const saved of ["fresh", "previous-release"]) {
           test(`${saved} notification controls share the News right edge in ${theme}`, async ({
             page,

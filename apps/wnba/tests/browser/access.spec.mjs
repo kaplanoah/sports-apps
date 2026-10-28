@@ -6,6 +6,7 @@ import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
 import { findSeasonTab } from "../../../../tests/browser/season-tab.mjs";
 import { readCapitals } from "../../../../tests/browser/capitals.mjs";
 import { checkGateOpenPress } from "../../../../tests/browser/press-looks.mjs";
+import { checkFieldRing } from "../../../../tests/browser/field-ring.mjs";
 import { listFontsNotPreloaded } from "../../../../tests/browser/font-loads.mjs";
 import { readTokenColor } from "./theme.mjs";
 
@@ -144,10 +145,11 @@ test("the gate sits in the middle of a short screen, and a message doesn't move 
   expect(await measureGateMargins(page)).toEqual(margins);
 });
 
-test("the code field shows it's ready with its cursor, not an outline", async ({ page }) => {
+test("the code field shows the focus ring under the keyboard, and only its cursor after a tap", async ({
+  page,
+}) => {
   await openLockedApp(page, { accessCode: "FASTBREAK" });
-  await findCodeField(page).focus();
-  await expect(findCodeField(page)).toHaveCSS("outline-style", "none");
+  await checkFieldRing(page, expect, { field: findCodeField(page), box: findCodeField(page) });
 });
 
 test("the gate's heading is set as a sheet's title, Open as the app's other buttons, and the code field raised inside an outlined button's edge", async ({

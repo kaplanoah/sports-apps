@@ -74,24 +74,37 @@ const GENERIC_FUNCTION_NAMES = [
   message: "Name the function with a verb for what it does, not call, run, execute, or handle.",
 }));
 
-// A field hidden with `hidden`, or opened by a script's click, is gone to VoiceOver and the
-// keyboard; a field the page shows its own face for stays in the page, visually hidden, under a
-// label that opens it. Scripts name an element only by its variable, so the click and toggle
-// checks read the names fields go by.
+// A field hidden with `hidden` is gone to VoiceOver and the keyboard; a field the page shows its
+// own face for stays in the page, visually hidden, under a label that opens it. Scripts name an
+// element only by its variable, so the checks on scripts read the names fields go by.
 const HIDDEN_FIELD_MESSAGE =
-  "Hide a field visually, under a label that opens it, never with hidden or a script's click.";
+  "Hide a field visually, under a label that opens it, never with hidden.";
 const HIDDEN_FIELD_MARKUP = String.raw`/<(input|select|textarea)\b[^>]*\shidden(?=[\s\/>=]|$)/i`;
 const FIELD_NAME = "/(input|field|file|picker|upload)$/i";
 const HIDDEN_FIELDS = [
   `Literal[value=${HIDDEN_FIELD_MARKUP}]`,
   `TemplateElement[value.cooked=${HIDDEN_FIELD_MARKUP}]`,
-  `CallExpression[callee.property.name='click'][callee.object.name=${FIELD_NAME}]`,
-  `CallExpression[callee.property.name='click'][callee.object.property.name=${FIELD_NAME}]`,
   `AssignmentExpression[left.property.name='hidden'][left.object.name=${FIELD_NAME}]`,
   `AssignmentExpression[left.property.name='hidden'][left.object.property.name=${FIELD_NAME}]`,
   `CallExpression[callee.property.name=/^(setAttribute|toggleAttribute)$/][arguments.0.value='hidden'][callee.object.name=${FIELD_NAME}]`,
   `CallExpression[callee.property.name=/^(setAttribute|toggleAttribute)$/][arguments.0.value='hidden'][callee.object.property.name=${FIELD_NAME}]`,
 ].map((selector) => ({ selector, message: HIDDEN_FIELD_MESSAGE }));
+
+// A tap, press, key, or Escape the page's code fakes runs the control's listeners without the
+// browser's own handling of the input, so it drifts from what a person's does. The page calls the
+// function the control's listener would. Lint sees an event built in dispatchEvent's own call.
+const USER_INPUT_EVENT_CLASSES =
+  "/^(Pointer|Mouse|Keyboard|Touch|Wheel|Input|Focus|Drag|Composition)Event$/";
+const USER_INPUT_EVENT_TYPES =
+  "/^(cancel|close|submit|reset|input|beforeinput|change|focus|focusin|focusout|blur|wheel|contextmenu|click|dblclick|auxclick|drop|drag[a-z]*|composition[a-z]+|pointer[a-z]+|mouse[a-z]+|key[a-z]+|touch[a-z]+)$/";
+const SYNTHETIC_INPUT = [
+  "CallExpression[callee.property.name='click'][arguments.length=0]",
+  `CallExpression[callee.property.name='dispatchEvent'] > NewExpression.arguments[callee.name=${USER_INPUT_EVENT_CLASSES}]`,
+  `CallExpression[callee.property.name='dispatchEvent'] > NewExpression.arguments[callee.name='Event'][arguments.0.value=${USER_INPUT_EVENT_TYPES}]`,
+].map((selector) => ({
+  selector,
+  message: "Call what the control's listener calls instead of faking a person's input.",
+}));
 
 export default [
   {
@@ -125,6 +138,7 @@ export default [
         "error",
         ...GENERIC_FUNCTION_NAMES,
         ...HIDDEN_FIELDS,
+        ...SYNTHETIC_INPUT,
         {
           selector:
             "AssignmentExpression > MemberExpression.left[property.name=/^(innerHTML|outerHTML)$/]",
@@ -138,6 +152,17 @@ export default [
           selector: `Literal[value=${HAND_SEPARATOR}], TemplateElement[value.cooked=${HAND_SEPARATOR}]`,
           message: "Separate items with joinWithSeparator from html.js.",
         },
+      ],
+    },
+  },
+  {
+    files: ["shared/page/html.js", "shared/page/show-last-drawn.js"],
+    rules: {
+      "no-restricted-syntax": [
+        "error",
+        ...GENERIC_FUNCTION_NAMES,
+        ...HIDDEN_FIELDS,
+        ...SYNTHETIC_INPUT,
       ],
     },
   },

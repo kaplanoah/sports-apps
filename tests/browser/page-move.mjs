@@ -12,7 +12,7 @@ import { listLowContrastText } from "./contrast.mjs";
 import { ANDROID_PHONE, IPHONE, takeAwayPush } from "./devices.mjs";
 import { LOCKED_PAGE_PATH, matchPath } from "./harness.mjs";
 import { holdRequests } from "./hold-requests.mjs";
-import { WELCOME } from "./home-screen-help.mjs";
+import { WELCOME, watchStoredAsWelcomeCloses } from "./home-screen-help.mjs";
 import { PUSH_STUB, stubPushManager, stubPushRegistration } from "./push-stub.mjs";
 import { waitForLoadToSettle } from "./at-rest.mjs";
 import { findCenter } from "./season-scroll.mjs";
@@ -22,6 +22,7 @@ import { listTapsOffButtons } from "./tap-states.mjs";
 import { openSettings } from "./settings.mjs";
 import { listTextOffRoles, readRole } from "./type-roles.mjs";
 import { tapUpdatesButton } from "./updates-box.mjs";
+import { THEMES } from "./theme-layout.mjs";
 
 const ACCESS_CODE = "FASTBREAK";
 
@@ -158,7 +159,7 @@ async function checkCardRoles(page) {
  * @param {import("@playwright/test").Page} page
  */
 async function checkCardInEachLook(page) {
-  for (const look of /** @type {const} */ (["light", "dark"])) {
+  for (const look of THEMES) {
     await page.emulateMedia({ colorScheme: look });
     await expect(page.locator("html")).toHaveAttribute("data-theme", look);
     await checkCardReads(page);
@@ -396,7 +397,7 @@ export async function checkMovingWelcome(app) {
   await expect(welcome.getByRole("radio", { name: looks.dark, exact: true })).toBeChecked();
   await expect(welcome.getByRole("button", { name: "Continue in browser" })).toBeVisible();
   await expect(welcome.getByRole("button", { name: "Install" })).toHaveCount(0);
-  for (const look of /** @type {const} */ (["light", "dark"])) {
+  for (const look of THEMES) {
     await Promise.all([
       safariPage.waitForURL((url) => url.searchParams.get("theme") === look),
       welcome.getByRole("radio", { name: looks[look], exact: true }).check(),
@@ -519,10 +520,11 @@ export async function checkMovingWelcomeCloses(app) {
   const welcome = safariPage.locator(WELCOME);
   await expect(welcome).toBeVisible();
   await offerInstall(safariPage);
+  const readStored = await watchStoredAsWelcomeCloses(safariPage, "pageMove");
   await welcome.getByRole("button", { name: "Close" }).click();
+  expect(await readStored()).toBeNull();
   await expect(welcome).toBeHidden();
   await expectAtAddressCarryingNothing(safariPage, findNewAddress(app.pageHost));
-  expect(await safariPage.evaluate(() => localStorage.getItem("pageMove"))).toBeNull();
   await openSettings(safariPage);
   await safariPage.getByRole("button", { name: "How to get notifications" }).click();
   await expect(welcome).toBeVisible();

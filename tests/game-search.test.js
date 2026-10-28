@@ -21,6 +21,7 @@ import {
   listShownExamples,
   readTypedSearch,
 } from "../shared/page/search-reading.js";
+import { renderSearchShell } from "../shared/page/game-search-view.js";
 import { isOneEditApart, normalizeText, readTokens } from "../shared/page/search-words.js";
 import { addDays } from "../shared/page/days.js";
 import { EASTERN, checkInTimeZone, useTimeZone } from "./time-zone.js";
@@ -751,4 +752,8 @@ test("a search works out what it asks once, and reads each game of a whole seaso
     assert.equal(whole.searchReads, short.searchReads, text);
     assert.ok(whole.gameReads < LONG_SEASON.length * 30, `${text}: ${whole.gameReads}`);
   }
+});
+
+test("the line saying how a search read its words is a status, so VoiceOver reads it as it changes", () => {
+  assert.match(String(renderSearchShell()), /<p class="search-read" role="status"><\/p>/);
 });
