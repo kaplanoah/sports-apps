@@ -2,6 +2,7 @@ import {
   test,
   expect,
   openApp,
+  openSettings,
   buildFixtureSnapshot,
   matchPath,
   BOX_SCORES,
@@ -11,6 +12,8 @@ import {
   ROSTER_DOCS,
 } from "./harness.mjs";
 import { openMatchup } from "./open-game-sheet.mjs";
+import { openRanking } from "./settings-sheet.mjs";
+import { openContact, serveContact } from "../../../../tests/browser/contact-views.mjs";
 import { holdRequests } from "../../../../tests/browser/hold-requests.mjs";
 import { openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
 
@@ -24,6 +27,7 @@ const SHEET_READS = [
   "/rotation",
   "/store/rosters/",
   "/store/players/",
+  "/contact",
 ];
 
 /**
@@ -61,8 +65,8 @@ async function openGuardiansRoster(page) {
   return sheet;
 }
 
-// Each sheet, opened on what it reads from the Worker, and the read a reload starts again. A sheet
-// the page holds joins this list, or the test that checks the list fails.
+// Each sheet, opened on what it reads from the Worker, and the read a reload starts again, if it
+// reads any. A sheet the page holds joins this list, or the test that checks the list fails.
 const SHEETS = [
   {
     id: "gameSheet",
@@ -109,6 +113,25 @@ const SHEETS = [
       await expect(page.locator("#playerSheet .player-curve svg")).toHaveCount(10);
     },
   },
+  {
+    id: "rankingDialog",
+    name: "Ranking",
+    open: async (/** @type {import("@playwright/test").Page} */ page) => {
+      await openApp(page);
+      await openSettings(page);
+      await openRanking(page);
+    },
+  },
+  {
+    id: "contactDialog",
+    name: "Contact's menu",
+    open: async (/** @type {import("@playwright/test").Page} */ page) => {
+      await serveContact(page);
+      await openApp(page);
+      const dialog = await openContact(page);
+      await expect(dialog.locator(".contact-domain")).toBeVisible();
+    },
+  },
 ];
 
 /**
@@ -122,13 +145,13 @@ const readSheetText = (page, id) =>
 test("every sheet is on the list of sheets a reload draws again", async ({ page }) => {
   await openApp(page);
   const ids = await page
-    .locator(".sheet-page")
+    .locator(".sheet-page, .settings-panel:not(#settingsDialog)")
     .evaluateAll((sheets) => sheets.map((sheet) => sheet.id));
   expect(ids.toSorted()).toEqual([...new Set(SHEETS.map(({ id }) => id))].toSorted());
 });
 
 for (const { id, name, read, open } of SHEETS)
-  test(`a reload draws ${name} as it was while it reads it again, never placeholders`, async ({
+  test(`a reload draws ${name} as it was while its reads wait, never placeholders`, async ({
     page,
   }) => {
     await open(page);
@@ -136,12 +159,12 @@ for (const { id, name, read, open } of SHEETS)
     const releases = await Promise.all(
       SHEET_READS.map((path) => holdRequests(page, matchPath(path))),
     );
-    const reread = page.waitForRequest(matchPath(read));
+    const reread = read && page.waitForRequest(matchPath(read));
 
     await page.reload();
     await reread;
 
     await expect(page.locator(`#${id} .placeholder`)).toHaveCount(0);
-    expect(await readSheetText(page, id)).toBe(before);
+    await expect.poll(() => readSheetText(page, id)).toBe(before);
     for (const release of releases) release();
   });

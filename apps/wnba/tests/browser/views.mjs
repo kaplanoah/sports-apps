@@ -39,7 +39,15 @@ export async function openHighlights(page) {
  * @type {Record<string, View[]>}
  */
 export const VIEW_GROUPS = {
-  "the settings pages": CONTACT_VIEWS,
+  "the settings pages": [
+    ...CONTACT_VIEWS,
+    {
+      name: "settings",
+      open: (page) => page.getByRole("button", { name: "Settings", exact: true }).click(),
+      shown: (page) => page.locator(`${SETTINGS} .appearance-row`),
+      close: (page) => page.keyboard.press("Escape"),
+    },
+  ],
   "the page's tabs": [
     {
       name: "Bracket",
@@ -86,12 +94,6 @@ export const VIEW_GROUPS = {
       name: "News",
       open: (page) => page.getByRole("tab", { name: "News" }).click(),
       shown: (page) => page.locator(".news-more").first(),
-    },
-    {
-      name: "settings",
-      open: (page) => page.getByRole("button", { name: "Settings", exact: true }).click(),
-      shown: (page) => page.locator(`${SETTINGS} .appearance-row`),
-      close: (page) => page.keyboard.press("Escape"),
     },
   ],
   "a team's and a player's sheets": [

@@ -7,24 +7,49 @@ import { runAfterPress } from "./press.js";
 
 /* global START_AFTER_AWAY_MS -- from long-away.js */
 
+/** @param {HTMLDialogElement} dialog */
+export function focusSettingsTitle(dialog) {
+  const title = /** @type {HTMLElement} */ (dialog.querySelector("h2"));
+  title.tabIndex = -1;
+  title.focus({ preventScroll: true });
+  dialog.scrollTop = 0;
+}
+
+/** @param {HTMLDialogElement} dialog */
+export function showSettingsPage(dialog) {
+  openSheet(dialog);
+  focusSettingsTitle(dialog);
+}
+
 /**
- * Wires a page of settings and the row that opens it, and returns what opens it.
+ * Wires the row that opens a page of settings, with its caret, and the page's sheet, which hands
+ * focus back to the row as it closes.
+ * @param {HTMLDialogElement} dialog
+ * @param {{ button: HTMLElement, open: () => void } & import("./sheet.js").SheetParts} options
+ */
+export function wireSettingsPage(dialog, { button, open, ...sheet }) {
+  setHtml(button, html`${button.textContent.trim()}${SETTINGS_CARET}`);
+  button.addEventListener("click", () => runAfterPress(button, open));
+  dialog.addEventListener("close", () => button.focus());
+  wireSheet(dialog, sheet);
+  keepDialogFor(dialog, START_AFTER_AWAY_MS);
+}
+
+/**
+ * Wires a page of settings that draws nothing of its own, its row, and its back arrow, and
+ * returns what opens it.
  * @param {HTMLDialogElement} dialog
  * @param {{ button: HTMLElement, isOwnGesture?: (target: EventTarget) => boolean }} options
  */
 export function startSettingsPage(dialog, { button, isOwnGesture }) {
-  const title = /** @type {HTMLElement} */ (dialog.querySelector("h2"));
   const back = /** @type {HTMLButtonElement} */ (dialog.querySelector(".settings-back"));
-  setHtml(button, html`${button.textContent.trim()}${SETTINGS_CARET}`);
-  const openPage = () => {
-    openSheet(dialog);
-    title.tabIndex = -1;
-    title.focus({ preventScroll: true });
-  };
-  button.addEventListener("click", () => runAfterPress(button, openPage));
+  const open = () => showSettingsPage(dialog);
   back.addEventListener("click", () => runAfterPress(back, () => closeSheet(dialog)));
-  dialog.addEventListener("close", () => button.focus());
-  wireSheet(dialog, { name: title.textContent, isOwnGesture });
-  keepDialogFor(dialog, START_AFTER_AWAY_MS);
-  return openPage;
+  wireSettingsPage(dialog, {
+    button,
+    open,
+    name: /** @type {HTMLElement} */ (dialog.querySelector("h2")).textContent,
+    isOwnGesture,
+  });
+  return open;
 }

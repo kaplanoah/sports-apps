@@ -63,10 +63,10 @@ The Worker serves every file here, its `networks/` logos too, under `shared/`, b
 ### Settings and Diagnostics
 
 - `settings-sheet.js`: the settings sheet
-- `settings-page.js`: shared Settings page navigation
+- `settings-page.js`: a page of settings and the row that opens it
 - `settings-icons.js`: Settings caret and Back icons
 - `contact.js`: Contact navigation, validation, screenshots, and sending
-- `contact-view.js`: the selected Contact menu, forms, and confirmations
+- `contact-view.js`: Contact's menu, forms, and what a send shows
 - `contact-drafts.js`: separate category drafts and stable submission identifiers
 - `contact-rules.js`: Contact categories and shared input limits
 - `season-picker.js`: settings' Season picker

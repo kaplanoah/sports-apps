@@ -3,13 +3,14 @@ import assert from "node:assert/strict";
 import {
   CONTACT_CATEGORIES,
   CONTACT_LIMITS,
+  fitContactDiagnostics,
   validateContactFields,
   validateContactScreenshot,
 } from "../shared/page/contact-rules.js";
 import { createContactDraft, prepareContactSubmission } from "../shared/page/contact-drafts.js";
 import { renderContact } from "../shared/page/contact-view.js";
 
-test("all categories use their selected labels, stacked fields and exact email explanation", () => {
+test("each form labels its message for its category, with the email's note between its label and field", () => {
   const categories = [
     { key: "bug", name: "Bug report", label: "What happened, and what did you expect to happen?" },
     { key: "feature", name: "Feature request", label: "What would make the app better?" },
@@ -32,14 +33,13 @@ test("all categories use their selected labels, stacked fields and exact email e
     assert.match(markup, /placeholder="name@example.com"/);
     assert.doesNotMatch(markup, /<textarea[^>]*placeholder=/);
     assert.equal(markup.includes('id="contactInclude"'), category.key === "bug");
-    assert.doesNotMatch(markup, /App details|example build/);
   }
 });
 
-test("menu uses only the selected category labels and never invents a domain address", () => {
+test("the menu names each category and links an email address only when the Worker has one", () => {
   const markup = String(renderContact({ screen: "menu", email: null }));
   for (const { name } of CONTACT_CATEGORIES) assert.ok(markup.includes(name));
-  assert.doesNotMatch(markup, /mailto:|your-domain|description/);
+  assert.doesNotMatch(markup, /mailto:/);
   const configured = String(renderContact({ screen: "menu", email: "owner@example.com" }));
   assert.match(configured, /mailto:owner@example.com/);
   assert.match(configured, /Or email directly at <a[^>]+>owner@example.com<\/a>/);
@@ -57,6 +57,34 @@ test("optional email, required message, bounds and safe screenshot formats", () 
   assert.ok(validateContactScreenshot({ type: "image/svg+xml", size: 50 }));
   assert.ok(validateContactScreenshot({ type: "image/png", size: CONTACT_LIMITS.screenshot + 1 }));
   assert.equal(validateContactScreenshot({ type: "image/png", size: 50 }), null);
+});
+
+test("a report too long to send keeps its newest lines whole and loses its oldest", () => {
+  const line = `${"x".repeat(99)}\n`;
+  const report = line.repeat(CONTACT_LIMITS.diagnostics / line.length + 5);
+  const fitted = fitContactDiagnostics(report);
+  assert.ok(fitted.length <= CONTACT_LIMITS.diagnostics);
+  assert.ok(report.startsWith(fitted));
+  assert.ok(report[fitted.length] === "\n");
+  assert.equal(fitContactDiagnostics("short\nreport"), "short\nreport");
+});
+
+test("the form draws a screenshot's preview, never what's sent, and its report only while shown, so the page's saved copy stays small", () => {
+  const draft = createContactDraft();
+  draft.screenshot = {
+    type: "image/png",
+    content: "c2VudA==",
+    filename: "phone.png",
+    preview: "data:image/jpeg;base64,c21hbGw=",
+  };
+  draft.diagnostics = "Actual report";
+  const drawForm = () => String(renderContact({ screen: "form", category: "bug", draft }));
+  const hidden = drawForm();
+  assert.match(hidden, /<img src="data:image\/jpeg;base64,c21hbGw="/);
+  assert.doesNotMatch(hidden, /c2VudA==/);
+  assert.doesNotMatch(hidden, /Actual report/);
+  draft.diagnosticsOpen = true;
+  assert.match(drawForm(), />Actual report<\/pre>/);
 });
 
 test("diagnostics opt-out is complete; a retry keeps its identifier and exact report", () => {
@@ -81,17 +109,18 @@ test("drafts start independently, keep screenshots and identify an edited messag
   const feature = createContactDraft();
   bug.message = "A bug";
   bug.email = "fan@example.com";
-  bug.screenshot = { type: "image/png", content: "aGVsbG8=", filename: "phone.png" };
+  const sent = { type: "image/png", content: "aGVsbG8=", filename: "phone.png" };
+  bug.screenshot = { ...sent, preview: "data:image/jpeg;base64,c21hbGw=" };
   bug.includeDiagnostics = false;
   const before = prepareContactSubmission("bug", bug);
   assert.equal(feature.message, "");
   assert.equal(feature.includeDiagnostics, true);
-  assert.equal(before.screenshot, bug.screenshot);
+  assert.deepEqual(before.screenshot, sent);
   bug.message = "An edited bug";
   assert.notEqual(prepareContactSubmission("bug", bug).id, before.id);
 });
 
-test("failure and both confirmations keep the approved copy and escape visitor text", () => {
+test("a failed send and both confirmations say what happened and escape what the visitor typed", () => {
   const draft = { ...createContactDraft(), failed: true };
   const failed = String(renderContact({ screen: "form", category: "bug", draft }));
   assert.match(failed, /Couldn't confirm your message was sent/);

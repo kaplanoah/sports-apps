@@ -174,8 +174,8 @@
     0 2px 6px color-mix(in srgb, var(--shadow-ink) 10%, transparent),
     0 16px 40px -10px color-mix(in srgb, var(--shadow-ink) 32%, transparent);
   --edge: color-mix(in srgb, var(--line), var(--tile));
-  --radius-contact: 2px;
   --contact-menu-surface: var(--raised);
+  --contact-menu-edge: var(--edge);
   --radius-card: 2px;
   --radius-chip: 2px;
   --radius-control: 3px;
@@ -251,11 +251,11 @@
   --type-subsetting-size: calc(13.75rem / 16);
   --type-subsetting-weight: 400;
   --type-notice-title-size: calc(15.25rem / 16);
-  --type-confirmation-size: calc(21rem / 16);
-  --type-confirmation-weight: 500;
   --type-notice-title-weight: 600;
   --type-notice-text-size: calc(14.5rem / 16);
   --type-notice-text-weight: 400;
+  --type-confirmation-size: calc(21rem / 16);
+  --type-confirmation-weight: 500;
   --gate-code-font: var(--numbers);
   --gate-problem: var(--now);
   --text: "Barlow", system-ui, sans-serif;

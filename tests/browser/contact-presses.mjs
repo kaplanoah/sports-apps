@@ -1,4 +1,5 @@
-import { holdClock, matchPath } from "./harness.mjs";
+import { holdClock } from "./harness.mjs";
+import { openContact, serveContact } from "./contact-views.mjs";
 import {
   PRESSED_FILLED_BACKGROUND,
   PRESSED_OUTLINED_BACKGROUND,
@@ -10,30 +11,9 @@ import {
 // How the settings pages' controls show their press (press.js and controls.css), and which wait
 // for it before they act, in every app.
 
-// Contact's address to show, and a message that always arrives.
-/** @param {import("@playwright/test").Page} page */
-async function serveContact(page) {
-  await page.route(matchPath("/contact"), (route) =>
-    route.request().method() === "GET"
-      ? route.fulfill({ json: { email: "owner@example.com" } })
-      : route.fulfill({
-          status: 202,
-          json: { accepted: true, id: route.request().postDataJSON().id },
-        }),
-  );
-}
-
-/** @param {import("@playwright/test").Page} page */
-async function openContactMenu(page) {
-  await page.getByRole("button", { name: "Settings", exact: true }).click();
-  await page.locator("#contactBtn").click();
-  return page.locator("#contactDialog");
-}
-
 /** @param {import("@playwright/test").Page} page */
 async function openBugReport(page) {
-  const dialog = await openContactMenu(page);
-  await dialog.getByRole("button", { name: "Bug report", exact: true }).click();
+  const dialog = await openContact(page, "Bug report");
   await dialog.locator("textarea").fill("The score stopped changing");
   return dialog;
 }
@@ -77,8 +57,12 @@ async function expectFade(page, control, expect) {
   await liftOnTitle(page, control);
 }
 
-/** @param {any} options */
-export function registerContactPressTests({ test, expect, openApp, app }) {
+/**
+ * @param {any} test
+ * @param {any} expect
+ * @param {{ openApp: (page: import("@playwright/test").Page) => Promise<unknown>, settingsPages: string[] }} options
+ */
+export function testContactPresses(test, expect, { openApp, settingsPages }) {
   test.use({ contextOptions: { reducedMotion: "reduce" } });
 
   test("a press tints each settings page's row in settings, and Contact's category rows", async ({
@@ -87,8 +71,8 @@ export function registerContactPressTests({ test, expect, openApp, app }) {
     await serveContact(page);
     await openApp(page);
     await page.getByRole("button", { name: "Settings", exact: true }).click();
-    const settingsRows = app === "mlb" ? ["#rankingBtn", "#contactBtn"] : ["#contactBtn"];
-    for (const row of settingsRows) await expectRowTint(page, page.locator(row), expect);
+    for (const name of settingsPages)
+      await expectRowTint(page, page.locator(`#${name.toLowerCase()}Btn`), expect);
     await page.locator("#contactBtn").click();
     const dialog = page.locator("#contactDialog");
 
@@ -135,7 +119,7 @@ export function registerContactPressTests({ test, expect, openApp, app }) {
   }) => {
     await serveContact(page);
     await openApp(page);
-    const dialog = await openContactMenu(page);
+    const dialog = await openContact(page);
     await expectFade(page, dialog.getByRole("link", { name: "owner@example.com" }), expect);
     await dialog.getByRole("button", { name: "Bug report", exact: true }).click();
 
@@ -161,25 +145,31 @@ export function registerContactPressTests({ test, expect, openApp, app }) {
       await isDone();
     };
 
-    if (app === "mlb") {
-      const ranking = page.locator("#rankingDialog");
+    for (const name of settingsPages) {
+      const sheet = page.locator(`#${name.toLowerCase()}Dialog`);
       await expectPressFirst(
-        page.locator("#rankingBtn"),
-        () => expect(ranking).toBeHidden(),
-        () => expect(ranking).toBeVisible(),
+        page.locator(`#${name.toLowerCase()}Btn`),
+        () => expect(sheet).toBeHidden(),
+        () => expect(sheet.locator("h2")).toHaveText(name),
       );
       await expectPressFirst(
-        ranking.getByRole("button", { name: "Back to Settings" }),
-        () => expect(ranking).toBeVisible(),
-        () => expect(ranking).toBeHidden(),
+        sheet.getByRole("button", { name: "Back to Settings" }),
+        () => expect(sheet).toBeVisible(),
+        () => expect(sheet).toBeHidden(),
       );
     }
     const dialog = page.locator("#contactDialog");
-    await expectPressFirst(
-      page.locator("#contactBtn"),
-      () => expect(dialog).toBeHidden(),
-      () => expect(title).toHaveText("Contact"),
-    );
+    const sendBugReport = async () => {
+      await page.locator("#contactBtn").click();
+      await page.clock.runFor(1000);
+      await dialog.getByRole("button", { name: "Bug report", exact: true }).click();
+      await page.clock.runFor(1000);
+      await dialog.locator("textarea").fill("The score stopped changing");
+      await dialog.getByRole("button", { name: "Send", exact: true }).click();
+      await expect(dialog.getByRole("heading", { name: "Message sent" })).toBeVisible();
+    };
+    await page.locator("#contactBtn").click();
+    await page.clock.runFor(1000);
     await expectPressFirst(
       dialog.getByRole("button", { name: "Bug report", exact: true }),
       () => expect(title).toHaveText("Contact"),
@@ -190,18 +180,15 @@ export function registerContactPressTests({ test, expect, openApp, app }) {
       () => expect(title).toHaveText("Bug report"),
       () => expect(title).toHaveText("Contact"),
     );
-    await dialog.getByRole("button", { name: "Bug report", exact: true }).click();
+    await page.keyboard.press("Escape");
     await page.clock.runFor(1000);
-    await dialog.locator("textarea").fill("The score stopped changing");
-    await dialog.getByRole("button", { name: "Send", exact: true }).click();
-    await expect(dialog.getByRole("heading", { name: "Message sent" })).toBeVisible();
+    await sendBugReport();
     await expectPressFirst(
       dialog.getByRole("button", { name: "Done", exact: true }),
       () => expect(dialog).toBeVisible(),
       () => expect(dialog).toBeHidden(),
     );
-    await page.locator("#contactBtn").click();
-    await page.clock.runFor(1000);
+    await sendBugReport();
     await expectPressFirst(
       dialog.getByRole("button", { name: "Back to Settings" }),
       () => expect(dialog).toBeVisible(),

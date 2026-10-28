@@ -1,3 +1,20 @@
+/*
+ * Contact's menu, its forms, and what a send shows, inside a settings page.
+ *
+ * Each app's :root sets the tokens it reads:
+ *   --contact-menu-surface, --contact-menu-edge   the fill and edge of the menu's rows
+ *   --raised, --edge                             Add screenshot's fill and edge
+ *   --card, --card-border                        the fields, the report, and a failed send's box
+ *   --ink, --ink-dim, --ink-hover                text, notes, and a hovered link
+ *   --accent, --accent-ink                       links, icons, and Send with its text
+ *   --search-face                                the fields' font, drawn at its role's size
+ *   --radius-control, --radius-card              buttons and fields, and the boxes
+ *   --leading                                    the fields' line height
+ *   --type-setting-*, --type-setting-note-*,     the type roles it sets
+ *   --type-body-*, --type-detail-*,
+ *   --type-field-size, --type-confirmation-*
+ * chrome.css sets --label-note-gap and --label-field-gap.
+ */
 .contact-menu {
   display: flex;
   flex-direction: column;
@@ -5,8 +22,8 @@
 }
 .contact-menu .settings-page-row {
   padding: 12px 14px;
-  border: 1px solid transparent;
-  border-radius: var(--radius-contact);
+  border: 1px solid var(--contact-menu-edge);
+  border-radius: var(--radius-control);
   background: var(--contact-menu-surface);
 }
 .contact-domain {
@@ -51,7 +68,7 @@
   border-radius: var(--radius-control);
   background: var(--card);
   color: var(--ink);
-  font-family: var(--text);
+  font-family: var(--search-face);
   font-size: var(--type-field-size);
   font-weight: var(--type-body-weight);
   line-height: calc(1.5 * var(--leading));
@@ -92,13 +109,14 @@
   border: 1px solid var(--edge);
   border-radius: var(--radius-control);
   background: var(--raised);
-  color: var(--accent);
+  color: var(--ink);
   font-size: var(--type-body-size);
   font-weight: var(--type-body-weight);
 }
 .contact-secondary svg {
   width: 18px;
   height: 18px;
+  color: var(--accent);
 }
 /* Hidden from sight but not from VoiceOver or Tab, so its label opens the picker natively. */
 .contact-file {
@@ -125,7 +143,7 @@
   width: 44px;
   height: 44px;
   object-fit: cover;
-  border-radius: var(--radius-contact);
+  border-radius: var(--radius-card);
 }
 .contact-attachment span {
   flex: 1;
@@ -167,7 +185,7 @@
   overflow-wrap: anywhere;
   background: var(--card);
   border: 1px solid var(--card-border);
-  border-radius: var(--radius-contact);
+  border-radius: var(--radius-card);
   font-family: inherit;
   font-size: var(--type-detail-size);
   font-weight: var(--type-detail-weight);
@@ -202,14 +220,14 @@
   animation: catch-up-turn 1s linear infinite;
 }
 .contact-validation {
-  color: var(--accent);
+  color: var(--ink);
 }
 .contact-failure {
   padding: 12px;
   margin-bottom: 14px;
   background: var(--card);
   border: 1px solid var(--card-border);
-  border-radius: var(--radius-contact);
+  border-radius: var(--radius-card);
   font-size: var(--type-body-size);
   font-weight: var(--type-body-weight);
 }

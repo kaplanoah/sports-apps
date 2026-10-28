@@ -2,15 +2,15 @@
 // Phones show it over the whole screen, which a swipe down closes, wider screens as a modal. It
 // stays open off the screen only as long as a view keeps its place.
 // The page supplies the button (#settingsBtn) and the dialog (#settingsDialog), with its
-// .sheet-top, its close button (.sheet-close), and a place for the release (#versionNote).
+// .sheet-top, its close button (.sheet-close), a place for the release (#versionNote), and
+// Contact's row (#contactBtn), which opens Contact's own dialog (#contactDialog).
 
 import { formatDateAndTime } from "./days.js";
-import { html, joinWithSeparator, setHtml } from "./html.js";
+import { joinWithSeparator, setHtml } from "./html.js";
 import { readPageRelease } from "./release.js";
 import { openSheet, wireSheet } from "./sheet.js";
 import { keepDialogFor } from "./sheet-memory.js";
 import { startContact } from "./contact.js";
-import { SETTINGS_CARET } from "./settings-icons.js";
 
 /* global START_AFTER_AWAY_MS -- from long-away.js */
 
@@ -83,8 +83,10 @@ export function startSettingsSheet({ pages = {} } = {}) {
   wireSheet(dialog, { isOwnGesture: isSettingsControlGesture });
   keepDialogFor(dialog, START_AFTER_AWAY_MS);
   showRelease();
-  setHtml(findElement("contactBtn"), html`Contact${SETTINGS_CARET}`);
-  const openContact = startContact(/** @type {HTMLDialogElement} */ (findElement("contactDialog")));
+  const openContact = startContact(
+    /** @type {HTMLDialogElement} */ (findElement("contactDialog")),
+    findElement("contactBtn"),
+  );
   for (const [key, openPage] of Object.entries({ ...pages, "settings:contact": openContact }))
     pageOpeners.set(key, openPage);
 }

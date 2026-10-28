@@ -1,4 +1,4 @@
 import { test, expect, openApp } from "./harness.mjs";
-import { registerContactTests } from "../../../../tests/browser/contact.mjs";
+import { testContact } from "../../../../tests/browser/contact.mjs";
 
-registerContactTests({ test, expect, openApp, app: "wnba" });
+testContact(test, expect, { openApp, league: "WNBA" });

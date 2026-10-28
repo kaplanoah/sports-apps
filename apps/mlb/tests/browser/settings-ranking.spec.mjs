@@ -1,4 +1,3 @@
-import { mkdir } from "node:fs/promises";
 import { holdRequests } from "../../../../tests/browser/hold-requests.mjs";
 import { showTheme } from "../../../../tests/browser/theme-layout.mjs";
 import { listTextOffRoles } from "../../../../tests/browser/type-roles.mjs";
@@ -216,18 +215,11 @@ test("Ranking closes after two minutes away, like Settings", async ({ page }) =>
 
 for (const width of [390, 1280])
   for (const theme of /** @type {const} */ (["light", "dark"]))
-    test(`Ranking and its Settings row fit ${width}px in ${theme}`, async ({ page }) => {
+    test(`Ranking fits ${width}px in ${theme}`, async ({ page }) => {
       await page.setViewportSize({ width, height: 900 });
       await openApp(page);
       await showTheme(page, theme);
       await openSettings(page);
-      const folder = process.env.RANKING_PREVIEW_DIR;
-      if (folder) {
-        await mkdir(folder, { recursive: true });
-        await page
-          .locator(SETTINGS)
-          .screenshot({ path: `${folder}/mlb-${width}-${theme}-settings.png` });
-      }
       await openRanking(page);
       await expectWholeRankingInView(page);
       expect(await listTextOffRoles(page)).toEqual([]);
@@ -237,8 +229,4 @@ for (const width of [390, 1280])
           .locator("#rankingDialog")
           .evaluate((dialog) => dialog.scrollWidth <= dialog.clientWidth),
       ).toBe(true);
-      if (folder)
-        await page
-          .locator("#rankingDialog")
-          .screenshot({ path: `${folder}/mlb-${width}-${theme}-ranking.png` });
     });

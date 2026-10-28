@@ -1,6 +1,7 @@
 import { CONTACT_CATEGORIES } from "./contact-rules.js";
 
-/** @typedef {{ type: string, filename: string, content: string }} ContactScreenshot */
+// A screenshot carries a small copy for the form to show, which the page's saved markup can hold.
+/** @typedef {{ type: string, filename: string, content: string, preview: string }} ContactScreenshot */
 /** @typedef {{ message: string, email: string, includeDiagnostics: boolean, diagnostics: string | null, diagnosticsOpen: boolean, screenshot: ContactScreenshot | null, attempt: any, failed: boolean }} ContactDraft */
 
 /** @returns {ContactDraft} */
@@ -21,7 +22,11 @@ export function prepareContactSubmission(category, draft) {
     category,
     message: draft.message,
     email: draft.email.trim(),
-    screenshot: draft.screenshot,
+    screenshot: draft.screenshot && {
+      type: draft.screenshot.type,
+      filename: draft.screenshot.filename,
+      content: draft.screenshot.content,
+    },
     ...(category === "bug" && draft.includeDiagnostics && { diagnostics: draft.diagnostics }),
   };
   const previous = draft.attempt;

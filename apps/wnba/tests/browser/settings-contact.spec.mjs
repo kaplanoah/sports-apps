@@ -1,4 +1,4 @@
 import { test, expect, openApp } from "./harness.mjs";
-import { registerSettingsContactInteractions } from "../../../../tests/browser/settings-contact-interactions.mjs";
+import { testSettingsContactInteractions } from "../../../../tests/browser/settings-contact-interactions.mjs";
 
-registerSettingsContactInteractions({ test, expect, openApp, app: "wnba" });
+testSettingsContactInteractions(test, expect, { openApp, settingsPages: ["Contact"] });

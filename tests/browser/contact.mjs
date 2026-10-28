@@ -1,6 +1,4 @@
-import { mkdir } from "node:fs/promises";
-import { matchPath } from "./harness.mjs";
-import { readContactRequest } from "../../shared/worker/contact-request.js";
+import { openContact, serveContact } from "./contact-views.mjs";
 import { listTextOffRoles } from "./type-roles.mjs";
 import { listLowContrastText } from "./contrast.mjs";
 import { showTheme } from "./theme-layout.mjs";
@@ -12,53 +10,28 @@ const SCREENSHOT = {
   name: "phone.png",
   mimeType: "image/png",
   buffer: Buffer.from(
-    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jWZkAAAAASUVORK5CYII=",
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAAAAAA6fptVAAAACklEQVR4nGNoAAAAggCBd81ytgAAAABJRU5ErkJggg==",
     "base64",
   ),
 };
 
 /** @param {import("@playwright/test").Page} page */
-async function serveContact(page) {
-  const requests = [];
-  const delivery = { mode: "success", finish: () => {} };
-  await page.route(matchPath("/contact"), async (route) => {
-    if (route.request().method() === "GET")
-      return route.fulfill({ json: { email: "owner@example.com" } });
-    const body = route.request().postDataJSON();
-    await readContactRequest(
-      new Request("https://example.com/contact", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(body),
-      }),
-    );
-    requests.push(body);
-    if (delivery.mode === "hold")
-      await new Promise((resolve) => {
-        delivery.finish = () => resolve(null);
-      });
-    if (delivery.mode === "failure") return route.abort("failed");
-    return route.fulfill({ status: 202, json: { accepted: true, id: body.id } });
-  });
-  return { requests, delivery };
-}
-
-/** @param {import("@playwright/test").Page} page */
-async function openContact(page) {
-  await page.getByRole("button", { name: "Settings", exact: true }).click();
-  await page.locator("#contactBtn").click();
-}
-
-/** @param {import("@playwright/test").Page} page @param {string} app */
-async function readContactMenuLayout(page, app) {
-  return page.locator("#contactDialog .contact-menu").evaluate((menu, league) => {
+async function readContactMenuLayout(page) {
+  return page.locator("#contactDialog .contact-menu").evaluate((menu) => {
     const menuStyle = getComputedStyle(menu);
     const menuBox = menu.getBoundingClientRect();
     const settingsStyle = getComputedStyle(document.getElementById("contactBtn"));
     const probe = document.createElement("span");
-    probe.style.color = league === "mlb" ? "var(--bg)" : "var(--raised)";
+    probe.style.color = "var(--contact-menu-surface)";
+    probe.style.borderColor = "var(--contact-menu-edge)";
+    probe.style.borderRadius = "var(--radius-control)";
     document.body.append(probe);
-    const surface = getComputedStyle(probe).color;
+    const tokens = getComputedStyle(probe);
+    const surface = {
+      background: tokens.color,
+      edge: tokens.borderColor,
+      radius: tokens.borderRadius,
+    };
     probe.remove();
     const buttons = [...menu.querySelectorAll("button")];
     return {
@@ -88,11 +61,15 @@ async function readContactMenuLayout(page, app) {
         };
       }),
     };
-  }, app);
+  });
 }
 
-/** @param {any} options */
-export function registerContactTests({ test, expect, openApp, app }) {
+/**
+ * @param {any} test
+ * @param {any} expect
+ * @param {{ openApp: (page: import("@playwright/test").Page) => Promise<unknown>, league: string }} options
+ */
+export function testContact(test, expect, { openApp, league }) {
   test.use({ contextOptions: { reducedMotion: "reduce" } });
 
   test("Contact keeps a separate draft and optional screenshot for each category through Back", async ({
@@ -100,8 +77,7 @@ export function registerContactTests({ test, expect, openApp, app }) {
   }) => {
     await serveContact(page);
     await openApp(page);
-    await openContact(page);
-    const dialog = page.locator("#contactDialog");
+    const dialog = await openContact(page);
     await expect(dialog.getByRole("link")).toHaveAttribute("href", "mailto:owner@example.com");
     await expect(dialog.locator(".settings-page-row")).toHaveText([
       "Bug report",
@@ -138,13 +114,12 @@ export function registerContactTests({ test, expect, openApp, app }) {
   }) => {
     const { requests } = await serveContact(page);
     await openApp(page);
-    await openContact(page);
-    const dialog = page.locator("#contactDialog");
+    const dialog = await openContact(page);
     await dialog.getByRole("button", { name: "Bug report", exact: true }).click();
     await expect(dialog.getByRole("checkbox")).toBeChecked();
     await dialog.getByRole("button", { name: "View diagnostics" }).click();
     const report = await dialog.locator("pre").textContent();
-    expect(report).toContain(app.toUpperCase());
+    expect(report).toContain(league);
     expect(report).not.toContain("example build");
     expect(report).not.toContain("127.0.0.1");
     expect(await page.evaluate(() => localStorage.getItem("diagnostics"))).toBeNull();
@@ -173,8 +148,7 @@ export function registerContactTests({ test, expect, openApp, app }) {
     const { requests, delivery } = await serveContact(page);
     delivery.mode = "failure";
     await openApp(page);
-    await openContact(page);
-    const dialog = page.locator("#contactDialog");
+    const dialog = await openContact(page);
     await dialog.getByRole("button", { name: "Bug report", exact: true }).click();
     await dialog.locator("textarea").fill("The score stopped changing");
     await dialog.getByLabel("Email (optional)").fill("fan@example.com");
@@ -207,8 +181,7 @@ export function registerContactTests({ test, expect, openApp, app }) {
     const { requests, delivery } = await serveContact(page);
     delivery.mode = "hold";
     await openApp(page);
-    await openContact(page);
-    const dialog = page.locator("#contactDialog");
+    const dialog = await openContact(page);
     await dialog.getByRole("button", { name: "Feature request", exact: true }).click();
     await dialog.locator("textarea").fill("A request");
     await dialog.getByRole("button", { name: "Send", exact: true }).click();
@@ -229,13 +202,44 @@ export function registerContactTests({ test, expect, openApp, app }) {
     expect(requests[0]).not.toHaveProperty("diagnostics");
   });
 
+  test("a bug report reads the page's diagnostics again each time it opens", async ({ page }) => {
+    await serveContact(page);
+    await openApp(page);
+    const dialog = await openContact(page, "Bug report");
+    await dialog.getByRole("button", { name: "View diagnostics" }).click();
+    const report = await dialog.locator("pre").textContent();
+    await dialog.getByRole("button", { name: "Back to Contact", exact: true }).click();
+    const viewport = page.viewportSize();
+    await page.setViewportSize({ width: viewport.width - 40, height: viewport.height - 40 });
+    await dialog.getByRole("button", { name: "Bug report", exact: true }).click();
+
+    await expect(dialog.locator("pre")).not.toHaveText(report);
+  });
+
+  test("trying again takes away the failed send's note while it sends", async ({ page }) => {
+    const { requests, delivery } = await serveContact(page);
+    delivery.mode = "failure";
+    await openApp(page);
+    const dialog = await openContact(page, "Something else");
+    await dialog.locator("textarea").fill("A message");
+    await dialog.getByRole("button", { name: "Send", exact: true }).click();
+    await expect(dialog.getByRole("alert")).toBeVisible();
+    delivery.mode = "hold";
+    await dialog.getByRole("button", { name: "Try again", exact: true }).click();
+    await expect.poll(() => requests.length).toBe(2);
+
+    await expect(dialog.getByRole("alert")).toHaveCount(0);
+    delivery.mode = "success";
+    delivery.finish();
+    await expect(dialog.getByRole("heading", { name: "Message sent" })).toBeVisible();
+  });
+
   test("keyboard validation focuses the message and optional email; invalid attachments are rejected", async ({
     page,
   }) => {
     await serveContact(page);
     await openApp(page);
-    await openContact(page);
-    const dialog = page.locator("#contactDialog");
+    const dialog = await openContact(page);
     await dialog.getByRole("button", { name: "Something else", exact: true }).click();
     await dialog.getByRole("button", { name: "Send", exact: true }).click();
     await expect(dialog.locator("textarea")).toBeFocused();
@@ -262,8 +266,7 @@ export function registerContactTests({ test, expect, openApp, app }) {
   }) => {
     await serveContact(page);
     await openApp(page);
-    await openContact(page);
-    const dialog = page.locator("#contactDialog");
+    const dialog = await openContact(page);
     await dialog.getByRole("button", { name: "Bug report", exact: true }).click();
     await dialog.locator("textarea").fill("Kept after reload");
     await dialog.getByRole("checkbox").uncheck();
@@ -274,26 +277,26 @@ export function registerContactTests({ test, expect, openApp, app }) {
     await expect(dialog).toBeVisible();
     await expect(dialog.locator("textarea")).toHaveValue("Kept after reload");
     await expect(dialog.getByRole("checkbox")).not.toBeChecked();
-    await expect(dialog.getByAltText("Attached screenshot")).toBeVisible();
+    const screenshot = dialog.getByAltText("Attached screenshot");
+    await expect(screenshot).toBeVisible();
+    await expect
+      .poll(() =>
+        screenshot.evaluate((image) => /** @type {HTMLImageElement} */ (image).naturalWidth),
+      )
+      .toBe(132);
     release();
   });
 
   for (const width of [390, 1280])
     for (const theme of /** @type {const} */ (["light", "dark"]))
-      test(`Contact fits ${width}px in ${theme}, with accessible controls and selected typography`, async ({
+      test(`Contact fits ${width}px in ${theme}, with accessible controls and its type roles`, async ({
         page,
       }) => {
         await page.setViewportSize({ width, height: 900 });
         const { delivery, requests } = await serveContact(page);
         await openApp(page);
         await showTheme(page, theme);
-        const folder = process.env.CONTACT_PREVIEW_DIR;
-        if (folder) await mkdir(folder, { recursive: true });
         await page.getByRole("button", { name: "Settings", exact: true }).click();
-        if (folder)
-          await page
-            .locator("#settingsDialog")
-            .screenshot({ path: `${folder}/${app}-${width}-${theme}-settings.png` });
         expect(
           await page.locator("#contactBtn").evaluate((button) => {
             const lined = button.previousElementSibling ? button : button.parentElement;
@@ -314,11 +317,9 @@ export function registerContactTests({ test, expect, openApp, app }) {
           expect(await dialog.evaluate((element) => element.clientWidth), name).toBeLessThanOrEqual(
             440,
           );
-          if (folder)
-            await dialog.screenshot({ path: `${folder}/${app}-${width}-${theme}-${name}.png` });
         };
         await checkView("menu");
-        const menu = await readContactMenuLayout(page, app);
+        const menu = await readContactMenuLayout(page);
         expect(menu.background).toBe("rgba(0, 0, 0, 0)");
         expect(menu.border).toBe("0px");
         expect(menu.rows).toHaveLength(3);
@@ -328,9 +329,9 @@ export function registerContactTests({ test, expect, openApp, app }) {
           expect(row.gap).toBe(index ? 12 : null);
           expect(row.padding).toBe("12px 14px");
           expect(row.border).toBe("1px");
-          expect(row.borderColor).toBe("rgba(0, 0, 0, 0)");
-          expect(row.radius).toBe("2px");
-          expect(row.background).toBe(row.surface);
+          expect(row.borderColor).toBe(row.surface.edge);
+          expect(row.radius).toBe(row.surface.radius);
+          expect(row.background).toBe(row.surface.background);
           expect(row.matchesSettingsType).toBe(true);
           expect(row.caret).toEqual([18, 18]);
         }

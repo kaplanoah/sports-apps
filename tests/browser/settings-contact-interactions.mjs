@@ -1,7 +1,12 @@
-import { holdClock, matchPath } from "./harness.mjs";
+import { holdClock } from "./harness.mjs";
+import { openContact, serveContact } from "./contact-views.mjs";
 
-/** @param {any} options */
-export function registerSettingsContactInteractions({ test, expect, openApp, app }) {
+/**
+ * @param {any} test
+ * @param {any} expect
+ * @param {{ openApp: (page: import("@playwright/test").Page) => Promise<unknown>, settingsPages: string[] }} options
+ */
+export function testSettingsContactInteractions(test, expect, { openApp, settingsPages }) {
   test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
 
   test("Settings page headings follow pointer and keyboard focus without native outlines", async ({
@@ -11,7 +16,7 @@ export function registerSettingsContactInteractions({ test, expect, openApp, app
     await page.emulateMedia({ reducedMotion: "reduce" });
     await openApp(page);
     await page.getByRole("button", { name: "Settings", exact: true }).click();
-    for (const name of app === "mlb" ? ["Ranking", "Contact"] : ["Contact"]) {
+    for (const name of settingsPages) {
       const opener = page.locator(`#${name.toLowerCase()}Btn`);
       const dialog = page.locator(`#${name.toLowerCase()}Dialog`);
       const title = dialog.locator("h2");
@@ -63,7 +68,7 @@ export function registerSettingsContactInteractions({ test, expect, openApp, app
         };
       }),
     );
-    expect(rows).toHaveLength(app === "mlb" ? 2 : 1);
+    expect(rows).toHaveLength(settingsPages.length);
     for (const row of rows) expect(row.bottom - row.top).toBe(rows[0].bottom - rows[0].top);
     for (const [above, below] of rows.slice(1).map((row, index) => [rows[index], row])) {
       expect(below.line).toBe(1);
@@ -89,7 +94,7 @@ export function registerSettingsContactInteractions({ test, expect, openApp, app
       );
     });
     const search = page.locator("#gameSearch .search-input");
-    for (const name of app === "mlb" ? ["Ranking", "Contact"] : ["Contact"]) {
+    for (const name of settingsPages) {
       await page.locator("#tab-search").tap();
       await search.fill(name.toLowerCase());
       await search.press("Enter");
@@ -112,10 +117,7 @@ export function registerSettingsContactInteractions({ test, expect, openApp, app
   }) => {
     await page.emulateMedia({ reducedMotion: "reduce" });
     await openApp(page);
-    await page.getByRole("button", { name: "Settings", exact: true }).click();
-    await page.locator("#contactBtn").click();
-    const dialog = page.locator("#contactDialog");
-    await dialog.getByRole("button", { name: "Bug report", exact: true }).click();
+    const dialog = await openContact(page, "Bug report");
     await expect(dialog.locator("#contactEmail")).toBeVisible();
     const measureGaps = () =>
       page.evaluate(() => {
@@ -178,13 +180,9 @@ export function registerSettingsContactInteractions({ test, expect, openApp, app
     page,
   }) => {
     await page.emulateMedia({ reducedMotion: "reduce" });
-    await page.route(matchPath("/contact"), (route) =>
-      route.fulfill({ json: { email: "owner@example.com" } }),
-    );
+    await serveContact(page);
     await openApp(page);
-    await page.getByRole("button", { name: "Settings", exact: true }).click();
-    await page.locator("#contactBtn").click();
-    const dialog = page.locator("#contactDialog");
+    const dialog = await openContact(page);
     await dialog.getByRole("button", { name: "Bug report", exact: true }).tap();
     await dialog.locator("textarea").fill("Keep this draft");
     const attach = dialog.locator('label[for="contactScreenshot"]');
@@ -212,13 +210,9 @@ export function registerSettingsContactInteractions({ test, expect, openApp, app
     page,
   }) => {
     await page.emulateMedia({ reducedMotion: "reduce" });
-    await page.route(matchPath("/contact"), (route) =>
-      route.fulfill({ json: { email: "owner@example.com" } }),
-    );
+    await serveContact(page);
     await openApp(page);
-    await page.getByRole("button", { name: "Settings", exact: true }).click();
-    await page.locator("#contactBtn").click();
-    const dialog = page.locator("#contactDialog");
+    const dialog = await openContact(page);
     await dialog.getByRole("button", { name: "Bug report", exact: true }).click();
     await page.evaluate(() => document.body.classList.add("kbd"));
     const field = dialog.getByLabel("Add screenshot", { exact: true });

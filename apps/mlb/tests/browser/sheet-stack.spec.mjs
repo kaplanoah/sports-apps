@@ -9,7 +9,8 @@ import {
   ROSTER_DOCS,
 } from "./harness.mjs";
 import { expectShown } from "../../../../tests/browser/sheet-row.mjs";
-import { readTopSpacing } from "../../../../tests/browser/sheet-top.mjs";
+import { openSettings, SETTINGS } from "../../../../tests/browser/settings.mjs";
+import { readSettingsTop, readTopSpacing } from "../../../../tests/browser/sheet-top.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
@@ -105,6 +106,24 @@ test("every sheet's top is a band in the band's color, ending in its line and ed
       titleTop: sheets[0].titleTop,
       buttonTop: BUTTON_TOP_PX,
     });
+});
+
+test("every page of settings has settings' own top, its colors, its title, and its back arrow where settings' close button is", async ({
+  page,
+}) => {
+  await openApp(page);
+  await openSettings(page);
+  const settings = page.locator(SETTINGS);
+  const settingsTop = await readSettingsTop(settings);
+
+  for (const name of ["ranking", "contact"]) {
+    await settings.locator(`#${name}Btn`).click();
+    const dialog = page.locator(`#${name}Dialog`);
+    await expect(dialog.locator(".settings-back")).toBeVisible();
+    expect(await readSettingsTop(dialog), name).toEqual(settingsTop);
+    await dialog.locator(".settings-back").click();
+    await expect(dialog).toBeHidden();
+  }
 });
 
 test("a title that runs to more lines leaves its close or back button where it was", async ({

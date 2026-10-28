@@ -41,6 +41,15 @@ export function validateContactFields({ message, email }) {
   return null;
 }
 
+// A report's logs list their newest lines first, so a report too long to send loses its last
+// lines, the oldest.
+/** @param {string} report */
+export function fitContactDiagnostics(report) {
+  if (report.length <= CONTACT_LIMITS.diagnostics) return report;
+  const lastBreak = report.lastIndexOf("\n", CONTACT_LIMITS.diagnostics);
+  return report.slice(0, lastBreak > 0 ? lastBreak : CONTACT_LIMITS.diagnostics);
+}
+
 /** @param {{ type: string, size: number }} file */
 export function validateContactScreenshot(file) {
   if (!["image/png", "image/jpeg", "image/webp"].includes(file.type))

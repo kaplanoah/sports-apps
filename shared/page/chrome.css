@@ -432,24 +432,6 @@ section.view.active:not([data-follows]):has(> :is(.day-view, .season-parts)) {
   flex: none;
   color: var(--ink-dim);
 }
-.settings-back {
-  position: absolute;
-  left: -10px;
-  top: 0;
-  display: grid;
-  place-items: center;
-  width: 44px;
-  height: 44px;
-  padding: 9px;
-  border: 0;
-  background: none;
-  color: var(--accent);
-  cursor: pointer;
-}
-.settings-back svg {
-  width: 26px;
-  height: 26px;
-}
 @media (hover: hover) {
   :is(.settings-page-row, .settings-back):hover {
     color: var(--ink-hover);
@@ -528,10 +510,11 @@ section.view.active:not([data-follows]):has(> :is(.day-view, .season-parts)) {
   white-space: normal;
 }
 /* A sheet's close button, a caret down, or its back button, an arrow, in place of it on a sheet
-   opened from another, and the welcome's caret: just the icon, in --accent, its words only for
-   screen readers. */
+   opened from another or a settings page, and the welcome's caret: just the icon, in --accent,
+   its words only for screen readers. */
 .sheet-close,
 .sheet-back,
+.settings-back,
 .welcome-close {
   display: grid;
   place-items: center;
@@ -545,13 +528,15 @@ section.view.active:not([data-follows]):has(> :is(.day-view, .season-parts)) {
 }
 /* A sheet's holds the head's top 44px, whatever the title under it holds. */
 .sheet-close,
-.sheet-back {
+.sheet-back,
+.settings-back {
   position: absolute;
   left: calc(-1 * var(--caret-reach));
   top: 0;
 }
 .sheet-close svg,
 .sheet-back svg,
+.settings-back svg,
 .welcome-close svg {
   width: 26px;
   height: 26px;

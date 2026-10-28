@@ -3,38 +3,66 @@ import { createContactDraftStore, prepareContactSubmission } from "./contact-dra
 import {
   CONTACT_CATEGORIES,
   CONTACT_ROUTE,
+  fitContactDiagnostics,
   validateContactFields,
   validateContactScreenshot,
 } from "./contact-rules.js";
 import { renderContact } from "./contact-view.js";
 import { setHtml } from "./html.js";
 import { runAfterPress } from "./press.js";
-import { openSheet, wireSheet } from "./sheet.js";
 import { closeSheet } from "./sheet-swipe.js";
-import { keepDialogFor } from "./sheet-memory.js";
+import { focusSettingsTitle, showSettingsPage, wireSettingsPage } from "./settings-page.js";
 
-/* global START_AFTER_AWAY_MS -- from long-away.js */
+// Three times the form's 44px thumbnail, for a phone's screen.
+const SCREENSHOT_PREVIEW_PX = 132;
 
 /** @param {File} file */
-function readScreenshot(file) {
+function readScreenshotContent(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
-    reader.onload = () =>
-      resolve({
-        type: file.type,
-        filename: file.name,
-        content: String(reader.result).split(",")[1],
-      });
+    reader.onload = () => resolve(String(reader.result).split(",")[1]);
     reader.onerror = () => reject(reader.error);
     reader.readAsDataURL(file);
   });
 }
 
+/** @param {File} file */
+async function drawScreenshotPreview(file) {
+  const image = await createImageBitmap(file);
+  const canvas = document.createElement("canvas");
+  canvas.width = canvas.height = SCREENSHOT_PREVIEW_PX;
+  const scale = SCREENSHOT_PREVIEW_PX / Math.min(image.width, image.height);
+  const width = image.width * scale;
+  const height = image.height * scale;
+  /** @type {CanvasRenderingContext2D} */ (canvas.getContext("2d")).drawImage(
+    image,
+    (SCREENSHOT_PREVIEW_PX - width) / 2,
+    (SCREENSHOT_PREVIEW_PX - height) / 2,
+    width,
+    height,
+  );
+  image.close();
+  return canvas.toDataURL("image/jpeg", 0.8);
+}
+
 /**
- * Wires Contact's sheet and its row in settings, and returns what opens it.
- * @param {HTMLDialogElement} dialog
+ * @param {File} file
+ * @returns {Promise<import("./contact-drafts.js").ContactScreenshot>}
  */
-export function startContact(dialog) {
+async function readScreenshot(file) {
+  const [content, preview] = await Promise.all([
+    readScreenshotContent(file),
+    drawScreenshotPreview(file),
+  ]);
+  return { type: file.type, filename: file.name, content, preview };
+}
+
+/**
+ * Wires Contact's sheet and the row in settings that opens it, and returns what opens it.
+ * @param {HTMLDialogElement} dialog
+ * @param {HTMLElement} button
+ */
+export function startContact(dialog, button) {
   const store = createContactDraftStore();
   const ready = store.restore().catch(() => {});
   let screenshotRead = Promise.resolve();
@@ -79,11 +107,14 @@ export function startContact(dialog) {
     if (back) back.disabled = view.sending;
   }
 
-  function focusTitle() {
-    const title = /** @type {HTMLElement} */ (dialog.querySelector("h2"));
-    title.tabIndex = -1;
-    title.focus({ preventScroll: true });
-    dialog.scrollTop = 0;
+  const focusTitle = () => focusSettingsTitle(dialog);
+
+  // A draft waiting on a send it couldn't confirm keeps its report, so trying again sends the same
+  // request.
+  function refreshDiagnostics() {
+    const draft = readDraft();
+    if (view.screen === "form" && view.category === "bug" && !draft.attempt)
+      draft.diagnostics = fitContactDiagnostics(buildDiagnosticsReport());
   }
 
   /** @param {string} category */
@@ -92,9 +123,7 @@ export function startContact(dialog) {
     view.category = category;
     view.screen = "form";
     view.validation = null;
-    const draft = readDraft();
-    if (category === "bug" && draft.diagnostics === null)
-      draft.diagnostics = buildDiagnosticsReport();
+    refreshDiagnostics();
     drawContact();
     focusTitle();
   }
@@ -118,8 +147,7 @@ export function startContact(dialog) {
     await ready;
     if (!view.sending) view.screen = "menu";
     drawContact();
-    openSheet(dialog);
-    focusTitle();
+    showSettingsPage(dialog);
     readContactAddress();
   }
 
@@ -191,7 +219,7 @@ export function startContact(dialog) {
       readDraft().diagnosticsOpen = !readDraft().diagnosticsOpen;
       store.save(view.category);
       drawContact();
-    } else if (action === "done" || (action === "back" && view.screen === "menu"))
+    } else if (action === "done" || (action === "back" && view.screen !== "form"))
       runAfterPress(button, () => closeSheet(dialog));
     else if (action === "back") runAfterPress(button, showMenu);
   }
@@ -214,6 +242,7 @@ export function startContact(dialog) {
     view.sending = true;
     view.validation = null;
     await screenshotRead;
+    draft.failed = false;
     const request = prepareContactSubmission(category, draft);
     await store.save(category);
     drawContact();
@@ -264,21 +293,22 @@ export function startContact(dialog) {
     },
     { capture: true },
   );
-  const contactButton = /** @type {HTMLElement} */ (document.getElementById("contactBtn"));
-  contactButton.addEventListener("click", () => runAfterPress(contactButton, openContact));
-  dialog.addEventListener("close", () => contactButton.focus());
-  wireSheet(dialog, {
+  wireSettingsPage(dialog, {
+    button,
+    open: openContact,
     name: "Contact",
     isOwnGesture: () => view.sending,
     keeper: {
       read: () => ({ ...view, sending: false }),
       reopen: (saved) => {
         Object.assign(view, saved, { sending: false });
-        ready.then(drawContact);
+        ready.then(() => {
+          refreshDiagnostics();
+          drawContact();
+        });
         return true;
       },
     },
   });
-  keepDialogFor(dialog, START_AFTER_AWAY_MS);
   return openContact;
 }

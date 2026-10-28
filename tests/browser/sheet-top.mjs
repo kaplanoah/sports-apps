@@ -10,7 +10,7 @@ export const readTopSpacing = (top) =>
     const band = element.getBoundingClientRect();
     const readTop = (/** @type {Element} */ part) => part.getBoundingClientRect().top - band.top;
     const button = /** @type {Element} */ (
-      [...element.querySelectorAll(".sheet-close, .sheet-back")].find(
+      [...element.querySelectorAll(".sheet-close, .sheet-back, .settings-back")].find(
         (candidate) => getComputedStyle(candidate).display !== "none",
       )
     );
@@ -21,3 +21,19 @@ export const readTopSpacing = (top) =>
       roomBelow: band.bottom - last.getBoundingClientRect().bottom,
     };
   });
+
+/**
+ * A settings panel's colors and where its top holds its title and its close or back button, to
+ * check a page of settings against settings, whose band may hold more under its title.
+ * @param {import("@playwright/test").Locator} dialog a `.settings-panel`
+ */
+export async function readSettingsTop(dialog) {
+  const top = dialog.locator(".sheet-top");
+  const colors = await top.evaluate((element) => ({
+    panel: getComputedStyle(/** @type {Element} */ (element.closest("dialog"))).backgroundColor,
+    band: getComputedStyle(element).backgroundColor,
+    shadow: getComputedStyle(element).boxShadow,
+  }));
+  const { titleTop, buttonTop } = await readTopSpacing(top);
+  return { ...colors, titleTop, buttonTop };
+}

@@ -92,7 +92,7 @@ test("settings open on a reload show again, with the season, notifications, and 
 
   await expect(settings).toBeVisible();
   await expect(notifications.locator("#notifyNote")).toHaveText(note);
-  await expect(settings.locator("#rankingBtn")).toBeVisible();
+  await expect(settings.locator("#rankingBtn svg")).toBeVisible();
   await expect(settings.getByRole("combobox", { name: "Season" })).toHaveValue("2026");
   release();
   await page.waitForLoadState("domcontentloaded");
