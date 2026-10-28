@@ -10,6 +10,8 @@ import {
   findDiagnosticsSwitch,
   turnOnDiagnostics,
 } from "../../../../tests/browser/diagnostics-switch.mjs";
+import { showDipAndOffViewport } from "../../../../tests/browser/diagnostics-records.mjs";
+import { listLowContrastTextWithRowsPressed } from "../../../../tests/browser/contrast.mjs";
 import { SETTINGS } from "../../../../tests/browser/settings.mjs";
 import { serveReleases } from "../../../../tests/browser/serve-releases.mjs";
 
@@ -141,6 +143,20 @@ test("Diagnostics, once on, start with the app, the release the page came from, 
   await expect(page.locator("#diagnostics .diagnostics-release")).toHaveText(
     "MLB\u2022v2.33.0-beta\u2022abc1234",
   );
+});
+
+test("each record's flag stays as readable as AA asks with its line pressed, in Ball and Night Game", async ({
+  page,
+}) => {
+  await page.setViewportSize(PHONE);
+  await openApp(page);
+  await turnOnDiagnostics(page);
+  await page.reload();
+  await expect(page.locator("#standingsWrap tbody tr").first()).toBeVisible();
+
+  await showDipAndOffViewport(page, "#standingsWrap");
+
+  expect(await listLowContrastTextWithRowsPressed(page)).toEqual([]);
 });
 
 /**

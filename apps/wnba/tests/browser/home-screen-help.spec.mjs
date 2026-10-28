@@ -15,6 +15,7 @@ import {
   checkPickKeepsWelcome,
   checkRiseAfterEarlyClose,
   checkWelcomeRises,
+  checkWelcomeWaitsForPress,
   checkWelcomeSwipesDown,
 } from "../../../../tests/browser/home-screen-help.mjs";
 import { test, openApp } from "./harness.mjs";
@@ -35,6 +36,12 @@ test.describe("on an iPhone, in the browser", () => {
     page,
   }) => {
     await checkWelcomeRises({ page, openApp, openSettings });
+  });
+
+  test("the welcome's Continue in browser and caret show their press before it closes", async ({
+    page,
+  }) => {
+    await checkWelcomeWaitsForPress({ page, openApp, openSettings });
   });
 
   test("a swipe down too short springs the welcome back, and a flick down closes it to settings", async ({

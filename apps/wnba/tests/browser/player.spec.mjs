@@ -233,13 +233,13 @@ test.describe("a player who is out", () => {
     await expect(box).toHaveCSS("border-top-color", "rgb(235, 217, 189)");
     await expect(box).toHaveCSS(
       "background-color",
-      /^color\(srgb 0\.7254\d* 0\.2196\d* 0 \/ 0\.065\)$/,
+      /^color\(srgb 0\.6117\d* 0\.1843\d* 0 \/ 0\.065\)$/,
     );
     await page.emulateMedia({ colorScheme: "dark" });
     await expect(box).toHaveCSS("border-top-color", "rgb(88, 54, 30)");
     await expect(box).toHaveCSS(
       "background-color",
-      /^color\(srgb 0\.9725\d* 0\.4431\d* 0\.2705\d* \/ 0\.065\)$/,
+      /^color\(srgb 0\.9843\d* 0\.5019\d* 0\.3333\d* \/ 0\.065\)$/,
     );
   });
 

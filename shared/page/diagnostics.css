@@ -8,7 +8,8 @@
  *   --card, --card-border      the records' color and edge
  *   --divider                  the line over a record's lines
  *   --ink, --ink-mid, --ink-dim  the text, a record's lines, and its quieter parts
- *   --accent, --accent-ink     the button, its text, and a dip
+ *   --accent, --accent-ink     the button and its text
+ *   --dip-ink                  a record's dip, and a Viewport that went off
  *   --radius-card, --radius-control  a record's corners and the button's
  * and chrome.css sets --sheet-side, the sides under 780px, and its .settings-panel sets
  * --bottom-padding, the room under them.
@@ -85,8 +86,14 @@
   padding: 10px 12px;
   font-size: var(--type-detail-size);
   font-weight: var(--type-detail-weight);
+  border-start-start-radius: max(0px, calc(var(--radius-card) - 1px));
+  border-start-end-radius: max(0px, calc(var(--radius-card) - 1px));
   cursor: pointer;
   list-style: none;
+}
+.diagnostics-record:not([open]) summary {
+  border-end-start-radius: max(0px, calc(var(--radius-card) - 1px));
+  border-end-end-radius: max(0px, calc(var(--radius-card) - 1px));
 }
 .diagnostics-record summary::-webkit-details-marker {
   display: none;
@@ -104,7 +111,7 @@
 }
 .diagnostics-flag.dip,
 .diagnostics-lines .diagnostics-dip {
-  color: var(--accent);
+  color: var(--dip-ink);
 }
 .diagnostics-lines {
   display: grid;

@@ -22,31 +22,33 @@ export function testGameReminderSettings(test, expect, app) {
     await expect(timing).toBeEnabled();
     await reminders.click();
     await expect(reminders).toHaveAttribute("aria-checked", "true");
-    await expect(reminders).toBeEnabled();
+    await expect(reminders).toHaveAttribute("aria-busy", "false");
     await expect(updates).toHaveAttribute("aria-checked", "false");
-    await expect(page.locator("#remindersSwitch")).toBeEnabled();
+    await expect(page.locator("#remindersSwitch")).toHaveAttribute("aria-busy", "false");
     await expect(timing).toBeEnabled();
     await page.keyboard.press("Tab");
     await timing.focus();
     await timing.selectOption("60");
-    await expect(page.locator("#remindersSwitch")).toBeEnabled();
+    await page.waitForFunction(
+      () => JSON.parse(localStorage.getItem("device-notifications")).minutes === 60,
+    );
     await expect(timing).toBeEnabled();
     await expect(timing).toBeFocused();
     await updates.click();
     await expect(updates).toHaveAttribute("aria-checked", "true");
-    await expect(updates).toBeEnabled();
+    await expect(updates).toHaveAttribute("aria-busy", "false");
     await reminders.click();
     await expect(reminders).toHaveAttribute("aria-checked", "false");
     await expect(updates).toHaveAttribute("aria-checked", "true");
-    await expect(updates).toBeEnabled();
-    await expect(page.locator("#remindersSwitch")).toBeEnabled();
+    await expect(updates).toHaveAttribute("aria-busy", "false");
+    await expect(page.locator("#remindersSwitch")).toHaveAttribute("aria-busy", "false");
     await expect(timing).toBeEnabled();
     await expect(timing).toHaveValue("60");
     const synced = page.waitForResponse(matchPath("/push/preferences"));
     await page.reload({ waitUntil: "domcontentloaded" });
     await (await synced).finished();
     await expect(updates).toHaveAttribute("aria-checked", "true");
-    await expect(updates).toBeEnabled();
+    await expect(updates).toHaveAttribute("aria-busy", "false");
     await expect(reminders).toHaveAttribute("aria-checked", "false");
     await expect(timing).toHaveValue("60");
     expect(
@@ -56,7 +58,7 @@ export function testGameReminderSettings(test, expect, app) {
     await expect(updates).toHaveAttribute("aria-checked", "false");
     await reminders.click();
     await expect(reminders).toHaveAttribute("aria-checked", "true");
-    await expect(reminders).toBeEnabled();
+    await expect(reminders).toHaveAttribute("aria-busy", "false");
     await expect(timing).toHaveValue("60");
   });
 
@@ -110,11 +112,11 @@ export function testGameReminderSettings(test, expect, app) {
     await expect(reminders).toHaveAttribute("aria-checked", "false");
     await reminders.click();
     await expect(reminders).toHaveAttribute("aria-checked", "true");
-    await expect(reminders).toBeEnabled();
+    await expect(reminders).toHaveAttribute("aria-busy", "false");
     await expect(page.getByLabel(app.timing, { exact: true })).toBeEnabled();
     await page.reload({ waitUntil: "domcontentloaded" });
     await expect(reminders).toHaveAttribute("aria-checked", "true");
-    await expect(reminders).toBeEnabled();
+    await expect(reminders).toHaveAttribute("aria-busy", "false");
   });
 
   test("a permission reset turns the displayed category on with a fresh user gesture", async ({
@@ -126,13 +128,13 @@ export function testGameReminderSettings(test, expect, app) {
     const reminders = page.getByRole("switch", { name: "Game starts", exact: true });
     await reminders.click();
     await expect(reminders).toHaveAttribute("aria-checked", "true");
-    await expect(reminders).toBeEnabled();
+    await expect(reminders).toHaveAttribute("aria-busy", "false");
     await page.evaluate(() => sessionStorage.setItem("test-notification-permission", "default"));
     await page.reload({ waitUntil: "domcontentloaded" });
     await expect(reminders).toHaveAttribute("aria-checked", "false");
     await reminders.click();
     await expect(reminders).toHaveAttribute("aria-checked", "true");
-    await expect(reminders).toBeEnabled();
+    await expect(reminders).toHaveAttribute("aria-busy", "false");
     expect(await page.evaluate(() => Notification.permission)).toBe("granted");
   });
 
@@ -179,7 +181,7 @@ export function testGameReminderSettings(test, expect, app) {
     const reminders = page.getByRole("switch", { name: "Game starts", exact: true });
     await reminders.click();
     await expect(reminders).toHaveAttribute("aria-checked", "true");
-    await expect(reminders).toBeEnabled();
+    await expect(reminders).toHaveAttribute("aria-busy", "false");
     await page.route("**/push/preferences", (route) =>
       route.request().method() === "PUT"
         ? route.fulfill({
@@ -195,7 +197,7 @@ export function testGameReminderSettings(test, expect, app) {
     });
     await reminders.click();
     await expect(reminders).toHaveAttribute("aria-checked", "false");
-    await expect(reminders).toBeEnabled();
+    await expect(reminders).toHaveAttribute("aria-busy", "false");
     await expect(page.locator("#notifyNote")).toBeEmpty();
     await expect(page.locator("#remindersNote")).toBeEmpty();
     expect(subscriptionWrites).toBe(0);
@@ -205,7 +207,7 @@ export function testGameReminderSettings(test, expect, app) {
     const updates = page.getByRole("switch", { name: app.updates, exact: true });
     await updates.click();
     await expect(updates).toHaveAttribute("aria-checked", "true");
-    await expect(updates).toBeEnabled();
+    await expect(updates).toHaveAttribute("aria-busy", "false");
     await expect(reminders).toHaveAttribute("aria-checked", "false");
     const stored = await page.evaluate(() =>
       JSON.parse(localStorage.getItem("device-notifications")),
@@ -223,7 +225,7 @@ export function testGameReminderSettings(test, expect, app) {
     const reminders = page.getByRole("switch", { name: "Game starts", exact: true });
     await reminders.click();
     await expect(reminders).toHaveAttribute("aria-checked", "true");
-    await expect(reminders).toBeEnabled();
+    await expect(reminders).toHaveAttribute("aria-busy", "false");
     await page.route("**/push/preferences", (route) =>
       route.request().method() === "PUT"
         ? route.fulfill({
@@ -241,7 +243,7 @@ export function testGameReminderSettings(test, expect, app) {
     const timing = page.getByLabel(app.timing, { exact: true });
     await timing.selectOption("60");
     await expect(reminders).toHaveAttribute("aria-checked", "false");
-    await expect(page.locator("#remindersSwitch")).toBeEnabled();
+    await expect(page.locator("#remindersSwitch")).toHaveAttribute("aria-busy", "false");
     await expect(timing).toBeEnabled();
     await expect(timing).toHaveValue("60");
     await expect(page.locator("#reminderTimingNote")).toContainText("Too many devices");
@@ -252,7 +254,7 @@ export function testGameReminderSettings(test, expect, app) {
     const updates = page.getByRole("switch", { name: app.updates, exact: true });
     await updates.click();
     await expect(updates).toHaveAttribute("aria-checked", "true");
-    await expect(updates).toBeEnabled();
+    await expect(updates).toHaveAttribute("aria-busy", "false");
     await expect(reminders).toHaveAttribute("aria-checked", "false");
     const stored = await page.evaluate(() =>
       JSON.parse(localStorage.getItem("device-notifications")),
@@ -274,7 +276,7 @@ export function testGameReminderSettings(test, expect, app) {
       const updates = page.getByRole("switch", { name: app.updates, exact: true });
       await reminders.click();
       await expect(reminders).toHaveAttribute("aria-checked", "true");
-      await expect(reminders).toBeEnabled();
+      await expect(reminders).toHaveAttribute("aria-busy", "false");
       await page.route("**/push/subscription", (route) =>
         route.fulfill({
           status: 429,
@@ -303,7 +305,7 @@ export function testGameReminderSettings(test, expect, app) {
       await page.unroute("**/push/subscription");
       await updates.click();
       await expect(updates).toHaveAttribute("aria-checked", "true");
-      await expect(updates).toBeEnabled();
+      await expect(updates).toHaveAttribute("aria-busy", "false");
       await expect(reminders).toHaveAttribute("aria-checked", "false");
     });
 
@@ -399,7 +401,7 @@ export function testGameReminderSettings(test, expect, app) {
       await page.goto(url.href, { waitUntil: "domcontentloaded" });
       await requested;
       await expect(page.locator("#notificationsGroup")).not.toHaveAttribute("hidden");
-      await expect(page.locator("#notifySwitch")).toBeEnabled();
+      await expect(page.locator("#notifySwitch")).toHaveAttribute("aria-busy", "false");
     } finally {
       release();
     }
@@ -433,7 +435,7 @@ export function testGameReminderSettings(test, expect, app) {
       const reminders = page.getByRole("switch", { name: "Game starts", exact: true });
       await reminders.click();
       await expect(reminders).toHaveAttribute("aria-checked", "true");
-      await expect(reminders).toBeEnabled();
+      await expect(reminders).toHaveAttribute("aria-busy", "false");
       expect(await listThemeLayoutChanges(page)).toEqual([]);
       for (const theme of /** @type {const} */ (["light", "dark"])) {
         await showTheme(page, theme);
@@ -516,7 +518,7 @@ export function testGameReminderSettings(test, expect, app) {
       );
       await reminders.click();
       expect((await initialSave).postDataJSON().preferences.minutes).toBe(10);
-      await expect(reminders).toBeEnabled();
+      await expect(reminders).toHaveAttribute("aria-busy", "false");
       await expect(reminders).toHaveAttribute("aria-checked", "true");
       const readSaved = () =>
         page.evaluate(() => JSON.parse(localStorage.getItem("device-notifications")));
@@ -543,7 +545,7 @@ export function testGameReminderSettings(test, expect, app) {
       await page.waitForFunction(
         () => JSON.parse(localStorage.getItem("device-notifications")).minutes === 10,
       );
-      await expect(reminders).toBeEnabled();
+      await expect(reminders).toHaveAttribute("aria-busy", "false");
       await expect(timing).toHaveValue("10");
       await expect(page.locator("#notifyNote")).toBeEmpty();
       expect(await readSaved()).toMatchObject({ minutes: 10, updates: false, reminders: true });
@@ -556,7 +558,7 @@ export function testGameReminderSettings(test, expect, app) {
     await app.openApp(page);
     await app.openSettings(page);
     await page.locator("#remindersSwitch").click();
-    await expect(page.locator("#remindersSwitch")).toBeEnabled();
+    await expect(page.locator("#remindersSwitch")).toHaveAttribute("aria-busy", "false");
     const preferences = await page.evaluate(() =>
       JSON.parse(localStorage.getItem("device-notifications")),
     );
@@ -575,7 +577,7 @@ export function testGameReminderSettings(test, expect, app) {
     await page.waitForFunction(
       () => JSON.parse(localStorage.getItem("device-notifications")).minutes === 10,
     );
-    await expect(page.locator("#remindersSwitch")).toBeEnabled();
+    await expect(page.locator("#remindersSwitch")).toHaveAttribute("aria-busy", "false");
     await expect(page.locator("#reminderTiming")).toHaveValue("10");
     expect(
       await page.evaluate(() => JSON.parse(localStorage.getItem("device-notifications")).minutes),
@@ -587,10 +589,12 @@ export function testGameReminderSettings(test, expect, app) {
     await app.openSettings(page);
     const reminders = page.locator("#remindersSwitch");
     await reminders.click();
-    await expect(reminders).toBeEnabled();
+    await expect(reminders).toHaveAttribute("aria-busy", "false");
     const timing = page.locator("#reminderTiming");
     await timing.selectOption("60");
-    await expect(page.locator("#remindersSwitch")).toBeEnabled();
+    await page.waitForFunction(
+      () => JSON.parse(localStorage.getItem("device-notifications")).minutes === 60,
+    );
     await expect(timing).toBeEnabled();
     await page.evaluate(() => {
       const preferences = JSON.parse(localStorage.getItem("device-notifications"));
@@ -619,7 +623,7 @@ export function testGameReminderSettings(test, expect, app) {
     await app.openSettings(page);
     for (const id of ["remindersSwitch", "notifySwitch"]) {
       await page.locator(`#${id}`).click();
-      await expect(page.locator(`#${id}`)).toBeEnabled();
+      await expect(page.locator(`#${id}`)).toHaveAttribute("aria-busy", "false");
     }
     const changeZone = (timeZone) => {
       Intl.DateTimeFormat = new Proxy(Intl.DateTimeFormat, {
@@ -645,7 +649,9 @@ export function testGameReminderSettings(test, expect, app) {
       reminders: true,
       updates: true,
     });
-    await expect(page.locator("#remindersSwitch")).toBeEnabled();
+    await page.waitForFunction(
+      () => JSON.parse(localStorage.getItem("device-notifications")).minutes === 60,
+    );
     const release = await holdRequests(page, matchPath("/push/preferences"));
     const reading = page.waitForRequest(matchPath("/push/preferences"));
     const refreshed = page.waitForResponse(

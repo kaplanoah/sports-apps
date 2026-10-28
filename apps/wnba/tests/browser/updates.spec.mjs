@@ -1,4 +1,6 @@
 import { holdClock } from "../../../../tests/browser/harness.mjs";
+import { readBackground } from "../../../../tests/browser/press-looks.mjs";
+import { listLowContrastTextWithRowsPressed } from "../../../../tests/browser/contrast.mjs";
 import { test, expect, openApp } from "./harness.mjs";
 import {
   EASE_HALFWAY_MS,
@@ -193,11 +195,12 @@ test.describe("on a phone", () => {
     await openApp(page, { updatesBox: "shown" });
     const finals = page.locator("#updates .updates-list li");
     await expect(finals).toHaveCount(2);
+    const pressed = await readBackground(finals.first(), "var(--pressed-row)");
 
     /** @param {number} index */
     const pressAndMeasure = (index) =>
       finals.nth(index).evaluate((final) => {
-        final.querySelector(".game-open")?.classList.add("is-pressed");
+        final.querySelector(".game-open")?.classList.add("is-pressed", "is-row-press");
         const box = /** @type {HTMLElement} */ (final.closest(".updates"));
         const boxStyle = getComputedStyle(box);
         const fill = getComputedStyle(final, "::before");
@@ -209,7 +212,7 @@ test.describe("on a phone", () => {
             bottom: line.bottom - parseFloat(fill.bottom),
             left: line.left + parseFloat(fill.left),
             right: line.right - parseFloat(fill.right),
-            color: fill.backgroundColor,
+            shadow: fill.boxShadow,
           },
           lineTop: line.top,
           inside: {
@@ -228,7 +231,7 @@ test.describe("on a phone", () => {
       });
 
     const first = await pressAndMeasure(0);
-    expect(first.fill.color).not.toBe("rgba(0, 0, 0, 0)");
+    expect(first.fill.shadow).toContain(`${pressed} 0px 0px 0px `);
     expect(first.fill.left).toBeCloseTo(first.inside.left, 1);
     expect(first.fill.right).toBeCloseTo(first.inside.right, 1);
     expect(first.fill.top - first.head).toBeCloseTo(first.lineTop - first.fill.top, 0);
@@ -240,10 +243,19 @@ test.describe("on a phone", () => {
     await finals
       .nth(0)
       .locator(".game-open")
-      .evaluate((open) => open.classList.remove("is-pressed"));
+      .evaluate((open) => open.classList.remove("is-pressed", "is-row-press"));
     const last = await pressAndMeasure(1);
     expect(last.fill.bottom).toBeCloseTo(last.inside.bottom, 1);
     expect(last.fill.top).toBeCloseTo(first.fill.bottom, 1);
+  });
+
+  test("each final's text stays as readable as AA asks with its line pressed, in Maple and Walnut", async ({
+    page,
+  }) => {
+    await openApp(page, { updatesBox: "shown" });
+    await expect(page.locator("#updates .updates-list li > .game-open")).toHaveCount(2);
+
+    expect(await listLowContrastTextWithRowsPressed(page)).toEqual([]);
   });
 
   test("dismissing the Updates box in another tab hides it in this one", async ({ page }) => {

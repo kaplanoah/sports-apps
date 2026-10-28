@@ -128,10 +128,12 @@ test("an open sheet redraws from the season as it is now, and a closed one is le
 
 test("the close button closes the sheet", () => {
   tapTeam(page.document, "NYY");
+  const closeButton = { classList: { contains: () => false } };
   const event = new Event("click");
   Object.defineProperty(event, "target", {
     value: {
-      closest: (/** @type {string} */ selector) => (selector === ".sheet-close" ? {} : null),
+      closest: (/** @type {string} */ selector) =>
+        selector === ".sheet-close" ? closeButton : null,
     },
   });
   page.dialog.dispatchEvent(event);

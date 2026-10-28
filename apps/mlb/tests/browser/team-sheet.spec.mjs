@@ -5,9 +5,9 @@ import {
   openBracket,
   openSettings,
   buildFixtureSnapshot,
+  buildSnapshotWithClinch,
   buildSnapshotWithStarters,
   BROADCASTS_FIXTURE,
-  EVENING_FIXTURE,
   ON_A_PHONE,
   PITCHER_SIDES,
   PLAYER_DOCS,
@@ -77,21 +77,6 @@ test("a club's sheet open over a game's on a reload shows again over it, with a 
   await expect(teamSheet).toBeHidden();
   await expect(gameSheet).toBeHidden();
 });
-
-// The White Sox clinching with their 9-1 win at Kansas City, one of the evening's finals.
-function buildSnapshotWithClinch() {
-  const snapshot = buildFixtureSnapshot(EVENING_FIXTURE);
-  snapshot.log = [
-    {
-      at: "2026-09-24T20:50:00Z",
-      kind: "berth",
-      team: "CWS",
-      what: "playoff",
-      via: [{ team: "CWS", won: true, opp: "KC", score: [9, 1] }],
-    },
-  ];
-  return snapshot;
-}
 
 /** @param {import("@playwright/test").Page} page */
 async function showClinch(page) {

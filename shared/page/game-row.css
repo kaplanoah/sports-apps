@@ -13,8 +13,8 @@
  *   --game-unlabeled-lift    how far the time or score and its status rise together without a
  *                            label, as the pair's middle centers it where teams take two lines
  * A time alone, without a label or status, centers in the row.
- * Its lines, and the tint on a row that opens under a press, take chrome.css's --divider and --ink,
- * and its team names under a mouse take --ink-hover.
+ * Its lines take chrome.css's --divider, its team names under a mouse take --ink-hover, and a row
+ * that opens takes controls.css's --pressed-row under a press.
  *
  * An All-Star team's star (all-star.js) takes these, each a color but the last:
  *   --all-star-shadow        its shadow inside
@@ -104,8 +104,7 @@
 .game-status {
   translate: 0 var(--status-offset);
 }
-/* An action that covers the whole row, so a tap anywhere on the game opens it. Its highlight reaches
-   past the row's sides, so the row's text never sits against the highlight's edge. */
+/* An action that covers the whole row, so a tap anywhere on the game opens it. */
 .game-open {
   position: absolute;
   inset: 0;
@@ -114,26 +113,11 @@
   background: none;
   cursor: pointer;
 }
-.game-row:has(> .game-open) {
-  --row-highlight: transparent;
-  background: var(--row-highlight);
-  box-shadow:
-    -12px 0 var(--row-highlight),
-    12px 0 var(--row-highlight);
-  transition:
-    background 0.15s,
-    box-shadow 0.15s;
-}
 /* Under a mouse, the row's team names take some of the accent, as a team's name does on its own. */
 @media (hover: hover) {
   .game-row:has(> .game-open:hover) :is(.team-open, .team-name) {
     color: var(--ink-hover);
   }
-}
-/* While a press holds it (press.js), the row tints at once, and fades as the press lets go. */
-.game-row:has(> .game-open.is-pressed) {
-  --row-highlight: color-mix(in srgb, var(--ink) 7%, transparent);
-  transition: none;
 }
 /* The sides sit above the action and let taps through to it, so a tap anywhere on the row, a
    team's name too, opens the game. */

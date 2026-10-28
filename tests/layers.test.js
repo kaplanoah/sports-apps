@@ -1,19 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import {
-  listAppStylesheets,
-  listSharedStylesheets,
-  readDeclarations,
-  readRule,
-} from "./css-rules.js";
+import { listStylesheets, readDeclarations, readRule } from "./css-rules.js";
 
 // Each layer a phone keeps for a backdrop filter or a promised motion takes its memory, so nothing
 // filters what's behind it, and only what a finger is dragging asks for a layer ahead.
 /** @param {string} rule */
 const isDragged = (rule) =>
   rule.split(",").every((selector) => selector.includes("[data-dragged]"));
-
-const listStylesheets = () => [...listSharedStylesheets(), ...listAppStylesheets()];
 
 /**
  * @param {string} path

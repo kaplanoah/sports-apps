@@ -5,7 +5,7 @@
 
 import { expect } from "@playwright/test";
 import { takeAwayPush } from "./devices.mjs";
-import { matchPath } from "./harness.mjs";
+import { holdClock, matchPath } from "./harness.mjs";
 import { holdRequests } from "./hold-requests.mjs";
 import { SETTINGS } from "./settings.mjs";
 import { listTapsOffButtons } from "./tap-states.mjs";
@@ -128,6 +128,42 @@ export async function checkWelcomeRises({ page, openApp, openSettings }) {
     await expect(welcome).toBeHidden();
     await expect(page.locator(SETTINGS)).toBeVisible();
   }
+}
+
+/**
+ * The welcome's Continue in browser and its caret each show their press before the welcome closes.
+ * @param {App} app
+ */
+export async function checkWelcomeWaitsForPress({ page, openApp, openSettings }) {
+  await takeAwayPush(page);
+  await openApp(page, { isShowingWelcome: true });
+  const welcome = page.locator(WELCOME);
+
+  await checkPressShowsBeforeClose(
+    page,
+    welcome.getByRole("button", { name: "Continue in browser" }),
+  );
+  await openSettings(page);
+  await findHelp(page).click();
+  await checkPressShowsBeforeClose(page, welcome.getByRole("button", { name: "Close" }));
+}
+
+/**
+ * @param {import("@playwright/test").Page} page
+ * @param {import("@playwright/test").Locator} button
+ */
+async function checkPressShowsBeforeClose(page, button) {
+  const welcome = page.locator(WELCOME);
+  await expect(welcome).toBeVisible();
+  await holdClock(page);
+
+  await button.click();
+
+  await expect(button).toHaveCSS("opacity", "0.3");
+  await expect(welcome).toHaveAttribute("open");
+  await page.clock.runFor(1000);
+  await expect(welcome).toBeHidden();
+  await page.clock.resume();
 }
 
 /**

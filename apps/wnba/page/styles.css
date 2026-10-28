@@ -127,14 +127,14 @@
   --card-border: #d1c0a6;
   --divider: #ddccb3;
   --ink: #2a0e02;
-  --ink-dim: #735344;
+  --ink-dim: #6f4f40;
   /* Dark ink fading toward the light floor shows less than light ink fading toward the walnut, so
      Maple's lines fade further as the page catches up. */
   --catch-up-fade: 0.5;
   /* Barlow's digits sit low in their line, which would leave each step's number under its
      circle's middle. */
   --step-number-lift: 0.5px;
-  --orange: #b93800;
+  --orange: #9c2f00;
   --orange-ink: #ffffff;
   --teal: #0b6860;
   --teal-ink: #ffffff;
@@ -201,6 +201,7 @@
   --all-star-shift: -1px;
   --accent: var(--action);
   --accent-ink: var(--action-ink);
+  --dip-ink: var(--accent);
   --focus-ring: var(--teal);
   --tab-bar-tint: var(--raised);
   --tab-bar-edge: var(--edge);
@@ -307,10 +308,10 @@
   --card-border: #4a301e;
   --divider: #392619;
   --ink: #f4e8e1;
-  --ink-dim: #b39988;
+  --ink-dim: #b9a091;
   --quiet-stat-ink: var(--ink-mid);
   --catch-up-fade: 0.75;
-  --orange: #f87145;
+  --orange: #fb8055;
   --orange-ink: #1d0d03;
   --teal: #3cb4a4;
   --teal-ink: #06201c;
@@ -1702,15 +1703,6 @@ th[aria-sort="ascending"] .roster-caret {
 }
 .team-line + .team-line {
   border-top: 1px solid var(--divider);
-}
-/* While a press holds a team's line (press.js), it tints at once, over a winner's wash, and fades
-   as the press lets go. */
-.team-line[data-team] {
-  transition: box-shadow 0.15s;
-}
-.team-line:has(.team-open.is-pressed) {
-  box-shadow: inset 0 0 0 100vmax color-mix(in srgb, var(--ink) 7%, transparent);
-  transition: none;
 }
 /* A tap anywhere on a team's row lands on its name's button, stretched over the row, as a game's
    row has a button over it, so the phone treats the whole row as one tap target. */

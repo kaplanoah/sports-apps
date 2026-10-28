@@ -129,7 +129,10 @@ const pick = (page, name) =>
   page.locator(SETTINGS).getByRole("radio", { name, exact: true }).check();
 
 /** @param {import("@playwright/test").Page} page */
-const closeSettings = (page) => page.locator(`${SETTINGS} .settings-body .sheet-close`).click();
+async function closeSettings(page) {
+  await page.locator(`${SETTINGS} .settings-body .sheet-close`).click();
+  await expect(page.locator(SETTINGS)).toBeHidden();
+}
 
 /**
  * In an iPhone's Home Screen app added on the dark look, picking the light one in settings shows

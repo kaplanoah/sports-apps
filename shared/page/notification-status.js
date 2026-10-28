@@ -2,6 +2,8 @@
 
 export const PENDING_SPINNER_MS = 700;
 
+export const CATEGORIES = /** @type {const} */ (["updates", "reminders"]);
+
 export const TOO_MANY_DEVICES = "Too many devices get notifications already";
 export const CHANGE_FAILED = "Couldn't update notifications. Try again in a moment.";
 
@@ -89,30 +91,27 @@ export function chooseDeniedStatus({ previousStatus, permission, device }) {
 }
 
 /**
- * @typedef {{ category: string, isEnabled: boolean, elapsedMs: number, minutes?: number }} PendingCategory
- * @param {{ status: string, isBusy: boolean, preferences: { updates: boolean, reminders: boolean, minutes?: number }, pending?: PendingCategory | null, timingMinutes?: number | null }} state
+ * The choices a viewer made that aren't saved yet, which the controls show at once.
+ * @typedef {{ updates?: boolean, reminders?: boolean, minutes?: number }} WantedChoices
  */
-export function chooseNotificationControls({
-  status,
-  isBusy,
-  preferences,
-  pending = null,
-  timingMinutes = null,
-}) {
+
+/**
+ * The controls show each choice not yet saved over the saved one, and stay live while saves run,
+ * so a viewer can change their mind at once. A category waiting on its save is busy, and shows a
+ * spinner once saving runs slow.
+ * @param {{ status: string, preferences: { updates: boolean, reminders: boolean, minutes?: number }, wanted?: WantedChoices, isSlow?: boolean }} state
+ */
+export function chooseNotificationControls({ status, preferences, wanted = {}, isSlow = false }) {
   const isOn = status === "on";
-  const areRemindersOn =
-    pending?.category === "reminders" ? pending.isEnabled : isOn && preferences.reminders;
+  const busyCategories = CATEGORIES.filter((category) => wanted[category] !== undefined);
   return {
     areSwitchesHidden: !["off", "on", "failed", "blocked"].includes(status),
-    areSwitchesDisabled: isBusy || status === "blocked",
-    // A save holds the controls only until it finishes, so they keep their look, while blocked
-    // notifications fade them.
-    isSaving: isBusy && status !== "blocked",
-    areUpdatesOn: pending?.category === "updates" ? pending.isEnabled : isOn && preferences.updates,
-    areRemindersOn,
-    pendingCategory: pending?.category ?? "",
-    spinnerCategory: pending && pending.elapsedMs >= PENDING_SPINNER_MS ? pending.category : "",
-    isTimingDisabled: (isBusy && pending !== null) || !["off", "on", "failed"].includes(status),
-    timingMinutes: timingMinutes ?? pending?.minutes ?? preferences.minutes,
+    areSwitchesDisabled: status === "blocked",
+    areUpdatesOn: wanted.updates ?? (isOn && preferences.updates),
+    areRemindersOn: wanted.reminders ?? (isOn && preferences.reminders),
+    busyCategories,
+    spinnerCategories: isSlow ? busyCategories : [],
+    isTimingDisabled: !["off", "on", "failed"].includes(status),
+    timingMinutes: wanted.minutes ?? preferences.minutes,
   };
 }

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { listAppStylesheets, listSharedStylesheets, readDeclarations } from "./css-rules.js";
+import { listStylesheets, readDeclarations } from "./css-rules.js";
 
 const PHONE_QUERY = "@media (max-width: 779px)";
 
@@ -17,6 +17,6 @@ const listTopsClearingStatusBarOffPhone = (path) =>
     .map(({ selectors, property, value }) => `${selectors.at(-1)} { ${property}: ${value} }`);
 
 test("a sheet's or settings' top clears the status bar only on a phone, through --top-inset", () => {
-  for (const path of [...listSharedStylesheets(), ...listAppStylesheets()])
+  for (const path of listStylesheets())
     assert.deepEqual(listTopsClearingStatusBarOffPhone(path), [], path);
 });

@@ -4,13 +4,17 @@ import {
   openApp,
   openBracket,
   buildFixtureSnapshot,
+  buildSnapshotWithClinch,
   EVENING_FIXTURE,
   keepUpdatesFromEarlierVisit,
   ON_A_PHONE,
   readKept,
 } from "./harness.mjs";
 import { createReading } from "../../worker/src/readings.js";
-import { listLowContrastText } from "../../../../tests/browser/contrast.mjs";
+import {
+  listLowContrastText,
+  listLowContrastTextWithRowsPressed,
+} from "../../../../tests/browser/contrast.mjs";
 import { listTextOffRoles, readRole } from "../../../../tests/browser/type-roles.mjs";
 import { listChipsOffCenter } from "../../../../tests/browser/chip-centering.mjs";
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
@@ -264,6 +268,15 @@ test.describe("on a phone that has used the app before", () => {
     await page.reload();
     await expect(page.locator("#standingsWrap")).toBeVisible();
     await expect(updates).toBeHidden();
+  });
+
+  test("each update's text stays as readable as AA asks with its line pressed, in Ball and Night Game", async ({
+    page,
+  }) => {
+    await openApp(page, { snapshots: { 2026: buildSnapshotWithClinch() } });
+    await expect(page.locator("#updates .updates-list li > .game-open")).toHaveCount(1);
+
+    expect(await listLowContrastTextWithRowsPressed(page)).toEqual([]);
   });
 
   test("the update list leaves 18px below it", async ({ page }) => {

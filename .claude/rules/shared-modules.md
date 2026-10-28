@@ -70,6 +70,7 @@ The Worker serves every file here, its `networks/` logos too, under `shared/`, b
 - `notification-intent.js`: the game a notification asks to open, from its message or the page's address
 - `notification-navigation.js`: opening a game from a notification through reloads and the access gate
 - `notification-status.js`: notification guidance and category control states
+- `save-queue.js`: saves that run one at a time, the newest choice last
 - `diagnostics.js`: the Diagnostics and their shared report
 - `sent-label.js`: how long a button that copies or shares says it did
 - `step-log.js`: a Diagnostics log of what one part of the page does
@@ -134,7 +135,7 @@ The Worker serves every file here, its `networks/` logos too, under `shared/`, b
 
 - `spring-scroll.js`: a scroll that eases into place on a spring
 - `reduced-motion.js`: whether the device asks for less motion
-- `press.js`: a row's tint while pressed, and telling a tap from a scroll
+- `press.js`: every control's press, and telling a tap from a scroll
 - `kept-place.js`: keeping rows in place as what's above them changes
 - `eased-redraw.js`: easing parts to their new heights on a redraw
 - `slide-panels.js`: side-by-side panels a finger drags
@@ -222,6 +223,7 @@ Pages link these before their own stylesheet, and theme them with the tokens the
 - `channel-tag.css`: the tag beside the app's name on beta
 - `tuning-panel.css`: the tuning panel and its Tune button
 - `gate.css`: the access code's gate
+- `controls.css`: how every control shows its focus and its press
 
 ## `shared/worker/`
 

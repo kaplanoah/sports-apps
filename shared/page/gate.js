@@ -1,6 +1,7 @@
 // The gate an app's gate.html shows, at the page's own address, until the phone sends the access
 // code. The Worker takes the code and keeps it in a cookie, so reloading opens the app.
 import { trackKeyboardFocus } from "./keyboard-focus.js";
+import { watchPresses } from "./press.js";
 import { readWorkerError } from "./worker-error.js";
 
 const PROBLEMS = {
@@ -88,5 +89,6 @@ function watchForm() {
 }
 
 trackKeyboardFocus();
+watchPresses();
 watchForm();
 showWhetherCodeChanged();

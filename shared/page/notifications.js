@@ -12,6 +12,7 @@ import { isAskingToAdd, openWelcome } from "./home-screen.js";
 import { html, setHtml } from "./html.js";
 import { NOTE_PLACES, renderNotificationRows } from "./notifications-view.js";
 import {
+  CATEGORIES,
   CHANGE_FAILED,
   PENDING_SPINNER_MS,
   chooseDeniedStatus,
@@ -22,6 +23,7 @@ import {
   splitAtLastWord,
   TOO_MANY_DEVICES,
 } from "./notification-status.js";
+import { createSaveQueue } from "./save-queue.js";
 import { registerServiceWorker } from "./service-worker.js";
 import { readWorkerError } from "./worker-error.js";
 
@@ -41,14 +43,15 @@ let revision = 0;
 const PREFERENCES_KEY = "device-notifications";
 const PREVIOUS_KEY = "previous-push-subscription";
 const PENDING_KEY = "pending-push-preferences";
-let isBusy = false;
-/** @type {import("./notification-status.js").PendingCategory | null} */
-let pending = null;
 let reading = null;
-/** @type {number | null} */
-let requestedMinutes = null;
-/** @type {Promise<void> | null} */
-let savingTiming = null;
+/** @type {import("./notification-status.js").WantedChoices} */
+let wanted = {};
+/** @type {import("./notifications-view.js").NotePlace} */
+let wantedPlace = "notify";
+/** @type {Promise<NotificationPermission> | null} */
+let askedPermission = null;
+let isSlow = false;
+const saves = createSaveQueue(saveWanted);
 
 const findElement = (id) => /** @type {HTMLElement} */ (document.getElementById(id));
 
@@ -71,13 +74,7 @@ function renderNote() {
 // The group is drawn whole, so a reload puts it back as it was before the status is known again.
 function renderNotifications() {
   if (!notificationWords) return;
-  const controls = chooseNotificationControls({
-    status,
-    isBusy,
-    preferences,
-    pending,
-    timingMinutes: requestedMinutes,
-  });
+  const controls = chooseNotificationControls({ status, preferences, wanted, isSlow });
   const group = findElement("notificationsGroup");
   setHtml(
     group,
@@ -214,41 +211,6 @@ function showFailedSync(error) {
   if (shown) setStatus(shown.status, shown.note);
 }
 
-function restoreControlFocus(id) {
-  if (!id) return;
-  // Focusing an iPhone select can reopen or dismiss its native picker.
-  if (id === "reminderTiming" && !document.body.classList.contains("kbd")) return;
-  const dialog = findElement("settingsDialog");
-  const hasFocusMoved =
-    document.activeElement !== document.body && document.activeElement !== dialog;
-  if (!hasFocusMoved && dialog.hasAttribute("open"))
-    findElement(id)?.focus({ preventScroll: true });
-}
-
-/** @param {() => Promise<void>} task @param {import("./notification-status.js").PendingCategory | null} [intent] */
-async function showBusyDuring(task, intent = null) {
-  const focused = document.activeElement;
-  const focusedId = findElement("notificationsGroup").contains(focused) ? focused?.id : null;
-  isBusy = true;
-  pending = intent;
-  const indicator =
-    intent &&
-    setTimeout(() => {
-      intent.elapsedMs = PENDING_SPINNER_MS;
-      renderNotifications();
-    }, PENDING_SPINNER_MS);
-  renderNotifications();
-  try {
-    await task();
-  } finally {
-    if (indicator) clearTimeout(indicator);
-    pending = null;
-    isBusy = false;
-    renderNotifications();
-    restoreControlFocus(focusedId);
-  }
-}
-
 async function readPreferences() {
   const result = await requestPush("push/preferences", {
     ...sendEndpoint("POST", subscription.endpoint),
@@ -314,18 +276,16 @@ async function removeSubscription(next) {
 }
 
 /**
- * @param {"updates" | "reminders"} category
- * @param {boolean} isEnabled
- * @param {{ minutes?: number, place?: import("./notifications-view.js").NotePlace }} [request]
+ * @param {import("./notification-status.js").WantedChoices} asked
+ * @param {import("./notifications-view.js").NotePlace} place the control whose change it saves
+ * @param {Promise<NotificationPermission> | null} permission asked in the tap that turned a category on
  */
-async function changeCategory(category, isEnabled, request = {}) {
-  const { minutes = preferences.minutes, place = NOTE_PLACES[category] } = request;
+async function saveChoices(asked, place, permission) {
   const before = preferences;
   const previousStatus = status;
-  const next = { ...before, minutes, [category]: isEnabled, timeZone: readDeviceTimeZone() };
+  const next = { ...before, ...asked, timeZone: readDeviceTimeZone() };
   try {
-    // Keep permission in the tap stack, before registration or network work.
-    if (isEnabled && (await Notification.requestPermission()) !== "granted") {
+    if (permission && (await permission) !== "granted") {
       const denied = chooseDeniedStatus({
         previousStatus,
         permission: Notification.permission,
@@ -344,10 +304,10 @@ async function changeCategory(category, isEnabled, request = {}) {
       }
       await saveOrRestorePreferences(next);
       setStatus("on");
-    } else {
+    } else if (subscription) {
       await removeSubscription(next);
       setStatus("off");
-    }
+    } else forgetCategories(next);
   } catch (error) {
     if (isTurnedAway(error)) setStatus("off", TOO_MANY_DEVICES, place);
     else {
@@ -358,74 +318,76 @@ async function changeCategory(category, isEnabled, request = {}) {
   }
 }
 
+// A choice the save carried shows its saved value after it, unless the viewer changed it again.
+// A choice changed back to what the run before carried leaves nothing to save.
+async function saveWanted() {
+  const asked = { ...wanted };
+  const permission = askedPermission;
+  askedPermission = null;
+  if (Object.keys(asked).length === 0) return;
+  try {
+    await saveChoices(asked, wantedPlace, permission);
+  } finally {
+    for (const key of /** @type {(keyof typeof asked)[]} */ (Object.keys(asked)))
+      if (wanted[key] === asked[key]) delete wanted[key];
+    renderNotifications();
+  }
+}
+
+/** @param {Promise<void>} saved */
+async function showSpinnerOnceSlow(saved) {
+  const timer = setTimeout(() => {
+    isSlow = true;
+    renderNotifications();
+  }, PENDING_SPINNER_MS);
+  try {
+    await saved;
+  } finally {
+    clearTimeout(timer);
+    isSlow = false;
+    renderNotifications();
+  }
+}
+
+/**
+ * Shows a choice at once and saves it after any save already on its way.
+ * @param {import("./notification-status.js").WantedChoices} choice
+ * @param {import("./notifications-view.js").NotePlace} place
+ */
+function saveChoice(choice, place) {
+  wanted = { ...wanted, ...choice };
+  wantedPlace = place;
+  renderNotifications();
+  // Keep permission in the tap stack, before registration or network work.
+  if (choice.updates || choice.reminders) askedPermission = Notification.requestPermission();
+  const isStarting = !saves.isSaving();
+  const saved = saves.requestSave();
+  if (isStarting) showSpinnerOnceSlow(saved);
+}
+
+/** @param {"updates" | "reminders"} category */
 function toggleCategory(category) {
-  const controls = chooseNotificationControls({ status, isBusy, preferences, pending });
-  const isEnabled = !(category === "updates" ? controls.areUpdatesOn : controls.areRemindersOn);
-  showBusyDuring(() => changeCategory(category, isEnabled), {
-    category,
-    isEnabled,
-    elapsedMs: 0,
-  });
+  const controls = chooseNotificationControls({ status, preferences, wanted });
+  const isOn = category === "updates" ? controls.areUpdatesOn : controls.areRemindersOn;
+  saveChoice({ [category]: !isOn }, NOTE_PLACES[category]);
 }
 
 /** @param {Event} event */
 function toggleNotifications(event) {
-  if (isBusy) return;
   const target = /** @type {Element} */ (event.target);
-  for (const category of /** @type {const} */ (["updates", "reminders"])) {
+  for (const category of CATEGORIES) {
     if (target.closest(`#${NOTE_PLACES[category]}Switch`)) toggleCategory(category);
   }
 }
 
-async function saveRequestedTiming() {
-  while (requestedMinutes !== null) {
-    const minutes = requestedMinutes;
-    const next = { ...preferences, minutes, timeZone: readDeviceTimeZone() };
-    try {
-      await saveOrRestorePreferences(next);
-      note = "";
-    } catch (error) {
-      if (isTurnedAway(error)) {
-        requestedMinutes = null;
-        setStatus("off", TOO_MANY_DEVICES, "reminderTiming");
-        return;
-      }
-      await readPreferences().catch(() => {});
-      note = CHANGE_FAILED;
-      notePlace = "reminderTiming";
-    }
-    if (requestedMinutes === minutes) requestedMinutes = null;
-  }
-}
-
-async function changeTiming() {
-  if (isBusy && !savingTiming) return;
-  const timing = /** @type {HTMLSelectElement} */ (findElement("reminderTiming"));
-  const minutes = Number(timing.value);
-  const controls = chooseNotificationControls({ status, isBusy, preferences, pending });
-  if (!controls.areRemindersOn) {
-    await showBusyDuring(
-      () => changeCategory("reminders", true, { minutes, place: "reminderTiming" }),
-      {
-        category: "reminders",
-        isEnabled: true,
-        elapsedMs: 0,
-        minutes,
-      },
-    );
-    return;
-  }
-  requestedMinutes = minutes;
-  if (savingTiming) {
-    renderNotifications();
-    return;
-  }
-  savingTiming = showBusyDuring(saveRequestedTiming);
-  try {
-    await savingTiming;
-  } finally {
-    savingTiming = null;
-  }
+// A time chosen while reminders are off turns them on with it.
+function changeTiming() {
+  const minutes = Number(/** @type {HTMLSelectElement} */ (findElement("reminderTiming")).value);
+  const controls = chooseNotificationControls({ status, preferences, wanted });
+  saveChoice(
+    controls.areRemindersOn ? { minutes } : { minutes, reminders: true },
+    "reminderTiming",
+  );
 }
 
 /** @param {Event} event */
@@ -453,8 +415,8 @@ const readSubscriptionOnce = () => (reading ??= readSubscription());
 
 /** Turns notifications on from a tap elsewhere on the page, as the switch does. */
 export function turnOnNotifications() {
-  const controls = chooseNotificationControls({ status, isBusy, preferences, pending });
-  if (!isBusy && !controls.areUpdatesOn) toggleCategory("updates");
+  const controls = chooseNotificationControls({ status, preferences, wanted });
+  if (!controls.areUpdatesOn) saveChoice({ updates: true }, NOTE_PLACES.updates);
 }
 
 /** Whether this device is subscribed to the Worker's pushes, once that's known. */

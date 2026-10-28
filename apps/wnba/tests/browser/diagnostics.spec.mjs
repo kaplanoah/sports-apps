@@ -6,8 +6,13 @@ import {
   turnOnDiagnostics,
 } from "../../../../tests/browser/diagnostics-switch.mjs";
 import { SETTINGS, openSettings } from "../../../../tests/browser/settings.mjs";
-import { findRecords } from "../../../../tests/browser/diagnostics-records.mjs";
-import { RECORD_MS, reloadAndRecord } from "./diagnostics-records.mjs";
+import {
+  findRecords,
+  makeDip,
+  showDipAndOffViewport,
+} from "../../../../tests/browser/diagnostics-records.mjs";
+import { listLowContrastTextWithRowsPressed } from "../../../../tests/browser/contrast.mjs";
+import { RECORD_MS, reloadAndRecord, reloadToRecord } from "./diagnostics-records.mjs";
 
 test.use({
   viewport: { width: 390, height: 844 },
@@ -149,24 +154,26 @@ test("a part that empties and fills again while recording is flagged as a dip", 
 }) => {
   await openApp(page);
   await turnOnDiagnostics(page);
-  await page.reload();
-  await expect(page.locator('[data-series="1-0"] .team-line.won')).toContainText("Liberty");
-  const markup = await page.locator("#bracketWrap").evaluate((wrap) => {
-    const shown = wrap.innerHTML;
-    wrap.replaceChildren();
-    return shown;
-  });
-  await page.clock.runFor(300);
+  await reloadToRecord(page);
 
-  await page.locator("#bracketWrap").evaluate((wrap, shown) => {
-    wrap.innerHTML = shown;
-  }, markup);
-  await page.clock.runFor(RECORD_MS);
+  await makeDip(page, "#bracketWrap");
   await openSettings(page);
 
   const record = findRecords(page).locator(".diagnostics-record").first();
   await expect(record.locator("summary")).toContainText("Dip");
   await expect(record.locator(".diagnostics-dip")).toContainText(/bracketWrap: text \d+ to 0/);
+});
+
+test("each record's flag stays as readable as AA asks with its line pressed, in Maple and Walnut", async ({
+  page,
+}) => {
+  await openApp(page);
+  await turnOnDiagnostics(page);
+  await reloadToRecord(page);
+
+  await showDipAndOffViewport(page, "#bracketWrap");
+
+  expect(await listLowContrastTextWithRowsPressed(page)).toEqual([]);
 });
 
 test("a return to the page is recorded with how long it was away", async ({ page }) => {
@@ -418,12 +425,23 @@ test("a report on the season tab lists no animation for the header that rides up
   await expect(page.locator("#bracketWrap .bracket")).toBeVisible();
   await turnOnDiagnostics(page);
   await openSettings(page);
+  // The settings button's press fades back as settings open, which is no part of the header's.
+  await expect(page.getByRole("button", { name: "Settings", exact: true })).toHaveCSS(
+    "opacity",
+    "1",
+  );
 
   await findReportButton(page).click();
 
   await expect(findReportButton(page)).toHaveText("Shared");
   const [{ text: copied }] = await readShares(page);
-  expect(copied).toMatch(/^\+0 Animations: none$/m);
+  const animations = (copied.match(/^\+0 Animations: (.*)$/m)?.[1] ?? "").split("; ");
+  // The report button's own press eases back as it shares, which is no part of the header's.
+  expect(
+    animations.filter(
+      (animation) => animation !== "none" && !animation.startsWith("#diagnosticsReport "),
+    ),
+  ).toEqual([]);
 });
 
 test("each report notes the page as it is only for itself, and keeps every record of an open", async ({

@@ -330,7 +330,11 @@ test("a final's plays sit 13px apart with no line between them, each still 128px
       return {
         top: box.top,
         bottom: box.bottom,
-        line: style.boxShadow === "none" && style.borderBottomStyle === "none",
+        // A row's tint reaches past its sides in shadows that are clear until it's pressed.
+        line:
+          [...style.boxShadow.matchAll(/rgba?\([^)]*\)/g)].every(
+            ([color]) => color === "rgba(0, 0, 0, 0)",
+          ) && style.borderBottomStyle === "none",
         stillWidth: still.getBoundingClientRect().width,
         lengthSize: getComputedStyle(length).fontSize,
         glyphOffset: glyphBox.left + glyphBox.width / 2 - (playBox.left + playBox.width / 2),

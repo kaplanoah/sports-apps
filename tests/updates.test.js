@@ -105,7 +105,7 @@ test("one update today reads in the singular, since earlier today", () =>
     assert.deepEqual(readCells(markup, "updates-count"), ["1 update since earlier today"]);
   }));
 
-test("an update about one game carries the button that opens it, and one about none has no button", () => {
+test("an update about one game carries the button that opens it and takes its press's tint, and one about none has neither", () => {
   const markup = renderUpdates(
     [
       {
@@ -118,10 +118,17 @@ test("an update about one game carries the button that opens it, and one about n
     [],
     NOW,
   );
-  const items = [...markup.text.matchAll(/<li>([\s\S]*?)<\/li>/g)].map(([, item]) => item);
+  const items = [...markup.text.matchAll(/<li( class="[^"]*")?>([\s\S]*?)<\/li>/g)].map(
+    ([, classes, item]) => ({ classes, item }),
+  );
 
-  assert.match(items[0], /<button type="button" class="game-open" data-game="401"><\/button>$/);
-  assert.doesNotMatch(items[1], /<button/);
+  assert.equal(items[0].classes, ' class="press-tint press-behind"');
+  assert.match(
+    items[0].item,
+    /<button type="button" class="game-open" data-game="401"><\/button>$/,
+  );
+  assert.equal(items[1].classes, undefined);
+  assert.doesNotMatch(items[1].item, /<button/);
 });
 
 test("the box lists the newest dozen and counts the rest", () => {

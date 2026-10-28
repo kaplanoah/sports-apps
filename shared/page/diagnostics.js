@@ -580,7 +580,7 @@ const renderLine = (line) =>
  */
 const renderRecord = (openRecord, index) =>
   html`<details class="diagnostics-record" ${index === 0 ? "open" : ""}>
-    <summary>
+    <summary class="press-tint">
       <span class="diagnostics-when"
         >${joinWithSeparator(describeRecord(openRecord, new Date()))}</span
       >
@@ -614,7 +614,7 @@ const renderStepLine = (line) =>
 const renderSteps = (title, lines) =>
   lines.length > 0 &&
   html`<details class="diagnostics-record">
-    <summary><span class="diagnostics-when">${title}</span></summary>
+    <summary class="press-tint"><span class="diagnostics-when">${title}</span></summary>
     <ol class="diagnostics-lines diagnostics-viewport">
       ${lines.map(renderStepLine)}
     </ol>
@@ -629,7 +629,7 @@ const listServiceWorkerSteps = () => serviceWorkerSteps.toReversed();
 const renderViewport = (lines) => {
   const isOff = lines.some((line) => line.isOff);
   return html`<details class="diagnostics-record">
-    <summary>
+    <summary class="press-tint">
       <span class="diagnostics-when">Viewport</span>
       <span class="diagnostics-flag ${isOff ? "dip" : ""}">${isOff ? "Off" : "Steady"}</span>
     </summary>

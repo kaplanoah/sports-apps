@@ -26,6 +26,7 @@ import { listTextOffRoles, readRole } from "../../../../tests/browser/type-roles
 import { listChipsOffCenter } from "../../../../tests/browser/chip-centering.mjs";
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
 import { listTapsOffButtons } from "../../../../tests/browser/tap-states.mjs";
+import { pressOn, readBackground, readPressTint } from "../../../../tests/browser/press-looks.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
@@ -574,4 +575,16 @@ test("a live game's field outlines its empty bases and home plate in the field's
     expect(strokes.empty, theme).toEqual([strokes.line, strokes.line, strokes.line]);
     expect(strokes.taken, theme).toBe(strokes.now);
   }
+});
+
+test("a press tints the starters line with the pressed row's ink", async ({ page }) => {
+  const sheet = await openGame(page);
+  const starters = sheet.locator(".starters-open");
+  const pressed = await readBackground(starters, "var(--pressed-row)");
+
+  await pressOn(page, starters);
+
+  await expect(starters).toHaveClass(/is-pressed/);
+  expect(await readPressTint(starters)).toBe(pressed);
+  await page.mouse.up();
 });
