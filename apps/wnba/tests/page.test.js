@@ -1208,7 +1208,7 @@ test("each standings row and each team in the bracket opens its team's sheet", (
     bracket,
     /<div class="team-line[^"]*" data-team="LVA">[\s\S]*?aria-label="Team details: Las Vegas Aces"/,
   );
-  assert.doesNotMatch(bracket, /class="team-line press-tint tbd" data-team/);
+  assert.doesNotMatch(bracket, /class="team-line[^"]*\btbd\b[^"]*" data-team/);
 });
 
 /**

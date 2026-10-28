@@ -93,17 +93,14 @@
 .updates-list li:has(> .game-open) {
   position: relative;
 }
-/* While a press holds it (press.js), the line tints across the box's whole width, halfway to what
-   is above and below it: the next update, whose padding meets its own halfway, the count, or the
-   box's bottom, whose corners it keeps inside the border. It tints at once and fades as the press
-   lets go. */
+/* A press's tint (controls.css) lies across the box's whole width, halfway to what is above and
+   below the line: the next update, whose padding meets its own halfway, the count, or the box's
+   bottom, whose corners it keeps inside the border. */
 .updates-list li:has(> .game-open)::before {
   content: "";
   position: absolute;
   inset: 0 calc(-1 * var(--box-pad-end)) 0 calc(-1 * var(--box-pad-start));
-  background: var(--row-highlight, transparent);
   pointer-events: none;
-  transition: background var(--press-ease-back);
 }
 .updates-list li:has(> .game-open):first-child::before {
   top: calc(var(--updates-list-gap) / -2);
@@ -112,12 +109,6 @@
   bottom: calc(-1 * var(--box-pad-block));
   border-radius: 0 0 max(0px, calc(var(--radius-card) - 1px))
     max(0px, calc(var(--radius-card) - 1px));
-}
-.updates-list li:has(> .game-open.is-pressed) {
-  --row-highlight: var(--pressed-row);
-}
-.updates-list li:has(> .game-open.is-pressed)::before {
-  transition: none;
 }
 @media (hover: hover) {
   .updates-list li:has(> .game-open:hover) :is(.what, .team-open, .team-name) {

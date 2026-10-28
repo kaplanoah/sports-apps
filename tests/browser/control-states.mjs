@@ -1,7 +1,13 @@
 import { holdClock } from "./harness.mjs";
 import { SETTINGS } from "./settings.mjs";
 import { turnOnDiagnostics } from "./diagnostics-switch.mjs";
-import { pressOn, readBackground, readPressTint } from "./press-looks.mjs";
+import {
+  PRESSED_FILLED_BACKGROUND,
+  PRESSED_OUTLINED_BACKGROUND,
+  pressOn,
+  readBackground,
+  readPressTint,
+} from "./press-looks.mjs";
 
 // How every control shows its press and its focus (press.js and controls.css), and how far a
 // switch takes a tap, which every app's pages share.
@@ -63,7 +69,7 @@ export function testControlStates(test, expect, app) {
     await turnOnDiagnostics(page);
     await app.openSettings(page);
     const report = page.locator("#diagnosticsReport");
-    const pressed = await readBackground(report, "color-mix(in srgb, var(--accent) 80%, #000)");
+    const pressed = await readBackground(report, PRESSED_FILLED_BACKGROUND);
 
     await pressOn(page, report);
 
@@ -93,7 +99,8 @@ export function testControlStates(test, expect, app) {
   test("a press tints a final's clip row with the pressed row's ink", async ({ page }) => {
     await app.openWithNewsAndHighlights(page);
     await app.openHighlights(page);
-    const row = page.locator("#highlightsBody .clip-row").first();
+    const row = page.locator("#highlightsBody .clip-open.clip-row").first();
+    await expect(row).toBeVisible();
     const pressed = await readBackground(row, "var(--pressed-row)");
 
     await pressOn(page, row);
@@ -123,10 +130,7 @@ export function testControlStates(test, expect, app) {
     await app.openWithNewsAndHighlights(page);
     await page.getByRole("tab", { name: "News" }).click();
     const button = page.locator(".read-button").first();
-    const pressed = await readBackground(
-      button,
-      "color-mix(in srgb, var(--ink) 10%, var(--raised))",
-    );
+    const pressed = await readBackground(button, PRESSED_OUTLINED_BACKGROUND);
 
     await pressOn(page, button);
 

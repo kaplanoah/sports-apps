@@ -238,7 +238,7 @@ function renderUpdateList(updates, today) {
     <ul class="updates-list">
       ${shown.map(
         (update, index) =>
-          html`<li><span class="when">${times[index]}</span><span class="what">${update.text}</span>${update.action}</li>`,
+          html`<li${update.action && html` class="press-tint press-behind"`}><span class="when">${times[index]}</span><span class="what">${update.text}</span>${update.action}</li>`,
       )}
       ${renderMore(extra)}
     </ul>`;

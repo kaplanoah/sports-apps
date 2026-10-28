@@ -58,7 +58,8 @@ body.kbd :where(:focus:not(dialog, .sheet-page, input, textarea)) {
 /* A row a press tints: one marked .press-tint that is a row's button or holds one, and each cell of
    a table's row, since Safari never lets a table's row draw over its cells (row-button.css). The
    tint lies over any color of the row's own. A row marked .press-reach too tints 12px past its
-   sides, so its text never sits against the tint's edge. */
+   sides, so its text never sits against the tint's edge, and one marked .press-behind tints its
+   ::before instead, which its own stylesheet places, as the Updates box does to tint past a line. */
 :is(.press-tint, tr:has(> .row-button-cell) > td) {
   --press-tint: transparent;
   box-shadow: inset 0 0 0 100vmax var(--press-tint);
@@ -69,6 +70,13 @@ body.kbd :where(:focus:not(dialog, .sheet-page, input, textarea)) {
     -12px 0 var(--press-tint),
     12px 0 var(--press-tint),
     inset 0 0 0 100vmax var(--press-tint);
+}
+.press-tint.press-behind {
+  box-shadow: none;
+}
+.press-tint.press-behind::before {
+  box-shadow: inset 0 0 0 100vmax var(--press-tint);
+  transition: inherit;
 }
 :is(
   .press-tint.is-row-press,

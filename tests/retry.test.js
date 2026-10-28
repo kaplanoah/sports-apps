@@ -91,6 +91,7 @@ test("one part that didn't load is why, after a warning icon, over an outlined T
 test("a Try again a press holds reads again only once the press has shown", (t) => {
   t.mock.timers.enable({ apis: ["setTimeout"] });
   globalThis.window = /** @type {any} */ (globalThis);
+  t.after(() => Reflect.deleteProperty(globalThis, "window"));
   globalThis.addEventListener = () => {};
   t.after(() => Reflect.deleteProperty(globalThis, "addEventListener"));
   const pressed = new Set(["is-pressed"]);

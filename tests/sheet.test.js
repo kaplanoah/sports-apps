@@ -533,6 +533,7 @@ test("back goes to the sheet before and takes the one it left out of the row, wh
 test("a back button a press holds goes back only once the press has shown", (t) => {
   t.mock.timers.enable({ apis: ["setTimeout"] });
   globalThis.window = /** @type {any} */ (globalThis);
+  t.after(() => Reflect.deleteProperty(globalThis, "window"));
   const { dialog, row, sheets } = createRowDialog(["gameSheet", "teamSheet"]);
   open(sheets.gameSheet.sheet);
   open(sheets.teamSheet.sheet);

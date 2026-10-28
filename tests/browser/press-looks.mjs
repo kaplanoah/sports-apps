@@ -40,11 +40,17 @@ export const readBackground = (locator, value) =>
  * An inset shadow in a computed `box-shadow`, its color first and its spread second, as text,
  * since a test hands the page text rather than a regular expression.
  */
+/** The background a press gives a filled button, darkened with black (controls.css). */
+export const PRESSED_FILLED_BACKGROUND = "color-mix(in srgb, var(--accent) 80%, #000)";
+
+/** The background a press gives an outlined button, with some ink (controls.css). */
+export const PRESSED_OUTLINED_BACKGROUND = "color-mix(in srgb, var(--ink) 10%, var(--raised))";
+
 export const INSET_SHADOW_PATTERN = String.raw`(\w+\([^)]*\)|transparent) 0px 0px 0px ([\d.]+)px inset`;
 
 /**
- * The tint a press lays over a row, the color of the inset shadow that fills it, or null where
- * nothing fills it.
+ * The color of the first inset shadow with no offset or blur in an element's `box-shadow`, the tint
+ * a press lays over a row, which is transparent at rest, or null where there is none.
  * @param {import("@playwright/test").Locator} locator
  */
 export const readPressTint = (locator) =>
@@ -60,7 +66,7 @@ export const readPressTint = (locator) =>
  */
 export async function checkGateOpenPress(page) {
   const open = page.getByRole("button", { name: "Open" });
-  const pressed = await readBackground(open, "color-mix(in srgb, var(--accent) 80%, #000)");
+  const pressed = await readBackground(open, PRESSED_FILLED_BACKGROUND);
 
   await pressOn(page, open);
 
