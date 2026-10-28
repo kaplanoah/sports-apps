@@ -10,19 +10,16 @@ import { REPO_ROOT, readRepoFile } from "./repo-files.js";
 const HOOK = `${import.meta.dirname}/../.githooks/check-push.mjs`;
 const CHECKS = ["lint", "format:check", "typecheck", "deadcode", "test"];
 
-/** @typedef {{ script: string, args: string[] }} Check */
-
 /**
  * A runner that records each check it's asked for, failing those in `failures` with their output.
  * @param {Record<string, string>} [failures] each failing check's output, by its npm script
  */
 function fakeRunner(failures = {}) {
-  /** @type {Check[]} */
+  /** @type {string[]} */
   const checks = [];
-  /** @param {Check} check */
-  const runCheck = async (check) => {
-    checks.push(check);
-    const { script } = check;
+  /** @param {string} script */
+  const runCheck = async (script) => {
+    checks.push(script);
     return script in failures
       ? { isPassed: false, output: failures[script] }
       : { isPassed: true, output: "" };
@@ -41,16 +38,7 @@ async function decide(state = {}, failures = {}) {
 }
 
 test("a push runs the four checks and every Node test, and goes when they pass", async () => {
-  assert.deepEqual(await decide(), {
-    reason: null,
-    checks: [
-      { script: "lint", args: [] },
-      { script: "format:check", args: [] },
-      { script: "typecheck", args: [] },
-      { script: "deadcode", args: [] },
-      { script: "test", args: ["--test-reporter=dot"] },
-    ],
-  });
+  assert.deepEqual(await decide(), { reason: null, checks: CHECKS });
 });
 
 test("a push with uncommitted changes is refused before any check", async () => {
@@ -77,11 +65,29 @@ test("with more than one failing check, the first in order is shown", async () =
   assert.doesNotMatch(reason ?? "", /unused export/);
 });
 
-test("a long failure shows its first lines and how many more there are", async () => {
+test("a long failure shows its last lines and how many came before them", async () => {
   const output = Array.from({ length: 50 }, (_, index) => `error ${index + 1}`).join("\n\n");
   const { reason } = await decide({}, { lint: output });
-  assert.match(reason ?? "", /error 40\n\.\.\. and 10 more lines$/);
-  assert.doesNotMatch(reason ?? "", /error 41/);
+  assert.match(reason ?? "", /\n\.\.\. 10 earlier lines\nerror 11\n/);
+  assert.match(reason ?? "", /error 50$/);
+  assert.doesNotMatch(reason ?? "", /error 10\n/);
+});
+
+test("a failing Node test's name and error reach a blocked push past the suite's dots", async () => {
+  const dots = Array.from({ length: 300 }, () => ".".repeat(80));
+  const output = [
+    ...dots,
+    "X",
+    "Failed tests:",
+    "",
+    "\u2716 a game's row shows its inning (4.2ms)",
+    "  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:",
+    "  'Top 3' !== 'Top 4'",
+    "      at TestContext.<anonymous> (file:///repo/apps/mlb/tests/page.test.js:12:10)",
+  ].join("\n");
+  const { reason } = await decide({}, { test: output });
+  assert.match(reason ?? "", /a game's row shows its inning/);
+  assert.match(reason ?? "", /'Top 3' !== 'Top 4'/);
 });
 
 /** @param {string[]} [failingScripts] */
@@ -196,6 +202,21 @@ test("Git refuses a dirty tree and missing packages before running checks", (con
   });
   assert.equal(result.status, 1);
   assert.match(result.stderr, /node_modules is missing/);
+});
+
+test("checks run against their own repositories when Git pushes from a linked worktree", (context) => {
+  const repo = makeRepo();
+  context.after(() => rmSync(repo, { recursive: true, force: true }));
+  const manifest = JSON.parse(readFileSync(join(repo, "package.json"), "utf8"));
+  manifest.scripts.test = 'test -z "$GIT_DIR" || (echo "GIT_DIR is $GIT_DIR" && false)';
+  writeFileSync(join(repo, "package.json"), JSON.stringify(manifest));
+  runGit(repo, ["commit", "-am", "test reads GIT_DIR"]);
+  installPackages(repo);
+  const worktree = join(repo, "node_modules/worktree");
+  runGit(repo, ["worktree", "add", worktree]);
+  mkdirSync(join(worktree, "node_modules"));
+  const pushed = pushRepo(worktree);
+  assert.equal(pushed.status, 0, pushed.stderr);
 });
 
 test("Claude settings do not duplicate the Git push check", () => {

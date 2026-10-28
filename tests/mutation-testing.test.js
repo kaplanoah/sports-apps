@@ -143,6 +143,7 @@ test("mutation discovery includes both typing sweeps and the focused module test
 test("Node runner arguments preserve paths and refuse an empty full-suite fallback", () => {
   const tests = ["tests/one.test.js", "apps/future/tests/two words.test.js"];
   assert.deepEqual(buildNodeTestArgs(tests), [
+    "--test-reporter=dot",
     "--import",
     "./tests/no-network.js",
     "--test",
@@ -280,28 +281,6 @@ test("both Node CLIs pass the exact selected arguments and working directory to 
       cwd: folder,
     });
   }
-});
-
-test("the ordinary Node runner hands its arguments to Node ahead of the tests", (t) => {
-  const folder = makeRunnerFixture(t);
-  const executable = join(folder, "record-node.mjs");
-  const record = join(folder, "command.json");
-  writeFileSync(
-    executable,
-    `#!/usr/bin/env node
-    import { writeFileSync } from "node:fs";
-    writeFileSync(${JSON.stringify(record)}, JSON.stringify(process.argv.slice(2)));
-  `,
-    { mode: 0o755 },
-  );
-  const result = invokeLauncher(folder, copyOrdinaryRunner(folder), executable, [
-    "--test-reporter=dot",
-  ]);
-  assert.equal(result.status, 0, result.stderr + result.stdout);
-  assert.deepEqual(JSON.parse(readFileSync(record, "utf8")), [
-    "--test-reporter=dot",
-    ...buildNodeTestArgs(["tests/selected.test.js", "tests/unrelated.test.js"]),
-  ]);
 });
 
 test("the ordinary Node runner uses the same discovery and propagates fixture failures", (t) => {

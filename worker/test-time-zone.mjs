@@ -64,7 +64,7 @@ export function testInTimeZone({
   if (!files.length)
     throw new Error("No sensitive tests were found; refusing an empty Honolulu run.");
   log(`Honolulu: ${files.length} date/time-sensitive or changed Node test files.`);
-  const result = spawnImpl(process.execPath, ["--test-reporter=dot", ...buildNodeTestArgs(files)], {
+  const result = spawnImpl(process.execPath, buildNodeTestArgs(files), {
     cwd: ROOT,
     encoding: "utf8",
     env: { ...process.env, TZ: "Pacific/Honolulu" },
