@@ -59,7 +59,8 @@ export async function moveVisualViewportOff(page, moveViewport = scrollVisualVie
 
 /**
  * Makes a dip while the page's record is under way and moves the visual viewport off, then opens
- * settings on a record flagged as a dip and a Viewport record flagged as off.
+ * settings on a record flagged as a dip and a Viewport record flagged as off, each flag in the
+ * theme's accent.
  * @param {import("@playwright/test").Page} page
  * @param {string} part the selector of a part the record watches
  */
@@ -69,6 +70,26 @@ export async function showDipAndOffViewport(page, part) {
   await openSettings(page);
 
   const records = findRecords(page).locator(".diagnostics-record");
-  await expect(records.first().locator("summary")).toContainText("Dip");
-  await expect(records.filter({ hasText: "Viewport" }).locator("summary")).toContainText("Off");
+  const dipRecord = records.first();
+  const viewportRecord = records.filter({ hasText: "Viewport" });
+  await expect(dipRecord.locator("summary")).toContainText("Dip");
+  await expect(viewportRecord.locator("summary")).toContainText("Off");
+
+  const accent = await readAccent(page);
+  await expect(dipRecord.locator(".diagnostics-flag.dip")).toHaveCSS("color", accent);
+  await expect(viewportRecord.locator(".diagnostics-flag.dip")).toHaveCSS("color", accent);
 }
+
+/**
+ * Reads the theme's `--accent` as the page draws it.
+ * @param {import("@playwright/test").Page} page
+ */
+const readAccent = (page) =>
+  page.evaluate(() => {
+    const probe = document.createElement("span");
+    probe.style.color = "var(--accent)";
+    document.body.append(probe);
+    const color = getComputedStyle(probe).color;
+    probe.remove();
+    return color;
+  });
