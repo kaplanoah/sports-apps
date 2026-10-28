@@ -453,14 +453,6 @@ test("the reviewed head is on the branch only where git finds it an ancestor of 
   );
 });
 
-test("a run on the head the last full read ended on reads nothing and lists no pushed files", () => {
-  const head = "a".repeat(40);
-  const listChanged = () => assert.fail("a head already read in full has no pushes to list");
-  assert.deepEqual(chooseStage({ reviewedHead: head, head, isOnBranch: true, listChanged }), {
-    stage: "reviewed",
-  });
-});
-
 test("the stale names are what the change removed that the repo still names, and nothing it kept", () => {
   const diff = [
     "-export function serveSnapshot(request) {",
@@ -1099,31 +1091,14 @@ test("a push that reverts a file to the base's copy leaves it unread", () => {
   assert.deepEqual(pull.listPushed(), { stage: "none" });
 });
 
-test("base movement keeps the incremental range and only disables same-head completion reuse", () => {
+test("a run on the head the last full read ended on keeps its summary unless the base's move leaves something new", () => {
   const head = "a".repeat(40);
-  const reviewedHead = "b".repeat(40);
-  let listed = 0;
-  const listChanged = () => {
-    listed++;
-    return ["a.js"];
-  };
   assert.deepEqual(
-    chooseStage({ reviewedHead, head, isSameBase: false, isOnBranch: true, listChanged }),
+    chooseStage({ reviewedHead: head, head, isOnBranch: true, listChanged: () => ["a.js"] }),
     { stage: "push", files: ["a.js"] },
   );
   assert.deepEqual(
-    chooseStage({ reviewedHead: head, head, isSameBase: false, isOnBranch: true, listChanged }),
-    { stage: "push", files: ["a.js"] },
-  );
-  assert.equal(listed, 2);
-  assert.deepEqual(
-    chooseStage({
-      reviewedHead: head,
-      head,
-      isSameBase: false,
-      isOnBranch: true,
-      listChanged: () => [],
-    }),
-    { stage: "none" },
+    chooseStage({ reviewedHead: head, head, isOnBranch: true, listChanged: () => [] }),
+    { stage: "reviewed" },
   );
 });

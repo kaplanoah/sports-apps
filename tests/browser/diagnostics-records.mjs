@@ -1,6 +1,7 @@
 import { expect } from "@playwright/test";
 import { RECORD_MS } from "../../shared/page/diagnostics.js";
 import { openSettings } from "./settings.mjs";
+import { readTokenColor } from "./token-color.mjs";
 
 // The Diagnostics records in every app's settings.
 
@@ -59,7 +60,8 @@ export async function moveVisualViewportOff(page, moveViewport = scrollVisualVie
 
 /**
  * Makes a dip while the page's record is under way and moves the visual viewport off, then opens
- * settings on a record flagged as a dip and a Viewport record flagged as off.
+ * settings on a record flagged as a dip and a Viewport record flagged as off, each flag and its
+ * line in the theme's accent.
  * @param {import("@playwright/test").Page} page
  * @param {string} part the selector of a part the record watches
  */
@@ -69,6 +71,14 @@ export async function showDipAndOffViewport(page, part) {
   await openSettings(page);
 
   const records = findRecords(page).locator(".diagnostics-record");
-  await expect(records.first().locator("summary")).toContainText("Dip");
-  await expect(records.filter({ hasText: "Viewport" }).locator("summary")).toContainText("Off");
+  const dipRecord = records.first();
+  const viewportRecord = records.filter({ hasText: "Viewport" });
+  await expect(dipRecord.locator("summary")).toContainText("Dip");
+  await expect(viewportRecord.locator("summary")).toContainText("Off");
+
+  const accent = await readTokenColor(page, "--accent");
+  for (const record of [dipRecord, viewportRecord]) {
+    await expect(record.locator(".diagnostics-flag.dip")).toHaveCSS("color", accent);
+    await expect(record.locator(".diagnostics-dip").first()).toHaveCSS("color", accent);
+  }
 }
