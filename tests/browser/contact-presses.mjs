@@ -120,14 +120,14 @@ export function registerContactPressTests({ test, expect, openApp, app }) {
     await serveContact(page);
     await openApp(page);
     const dialog = await openBugReport(page);
-    const button = dialog.getByRole("button", { name: "Add screenshot", exact: true });
-    const pressed = await readBackground(button, PRESSED_OUTLINED_BACKGROUND);
+    const label = dialog.locator('label[for="contactScreenshot"]');
+    const pressed = await readBackground(label, PRESSED_OUTLINED_BACKGROUND);
 
-    await pressOn(page, button);
+    await pressOn(page, label);
 
-    await expect(button).toHaveClass(/is-pressed/);
-    await expect(button).toHaveCSS("background-color", pressed);
-    await expect(button).toHaveCSS("opacity", "1");
+    await expect(label).toHaveClass(/is-pressed/);
+    await expect(label).toHaveCSS("background-color", pressed);
+    await expect(label).toHaveCSS("opacity", "1");
   });
 
   test("a press fades Contact's Back, its diagnostics toggle, and its email link", async ({

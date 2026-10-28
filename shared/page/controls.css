@@ -23,6 +23,11 @@ body.kbd :where(:focus:not(dialog, .sheet-page, input, textarea)) {
   outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
+/* Contact's file field is hidden from sight, so its label shows the ring. */
+body.kbd .contact-file:focus + .contact-secondary {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
 
 /* A press (press.js) shows at once and eases back as it lets go, as an iPhone's controls do. A
    filled button darkens, an outlined one takes some ink, and every other control fades. A row's

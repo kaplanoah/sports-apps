@@ -100,7 +100,19 @@
   width: 18px;
   height: 18px;
 }
+/* Hidden from sight but not from VoiceOver or Tab, so its label opens the picker natively. */
+.contact-file {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  font-size: var(--type-field-size);
+  font-weight: var(--type-body-weight);
+}
 .contact-attachment-area {
+  position: relative;
   margin: -8px 0 22px;
 }
 .contact-attachment {

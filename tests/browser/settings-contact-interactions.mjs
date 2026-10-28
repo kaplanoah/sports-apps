@@ -57,7 +57,7 @@ export function registerSettingsContactInteractions({ test, expect, openApp, app
     }
   });
 
-  test("the whole screenshot button opens the picker and cancel keeps the Contact draft open", async ({
+  test("the whole Add screenshot label opens the picker and cancel keeps the Contact draft open", async ({
     page,
   }) => {
     await page.emulateMedia({ reducedMotion: "reduce" });
@@ -70,8 +70,7 @@ export function registerSettingsContactInteractions({ test, expect, openApp, app
     const dialog = page.locator("#contactDialog");
     await dialog.getByRole("button", { name: "Bug report", exact: true }).tap();
     await dialog.locator("textarea").fill("Keep this draft");
-    const attach = dialog.getByRole("button", { name: "Add screenshot", exact: true });
-    await expect(dialog.locator('input[type="file"]')).toBeHidden();
+    const attach = dialog.locator('label[for="contactScreenshot"]');
     const box = await attach.boundingBox();
     for (const position of [
       { x: 3, y: 3 },
@@ -90,5 +89,33 @@ export function registerSettingsContactInteractions({ test, expect, openApp, app
     await page.keyboard.press("Escape");
     await page.clock.runFor(1000);
     await expect(dialog).toBeHidden();
+  });
+
+  test("Add screenshot's field stays reachable by Tab and VoiceOver, ringing its label", async ({
+    page,
+  }) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await page.route(matchPath("/contact"), (route) =>
+      route.fulfill({ json: { email: "owner@example.com" } }),
+    );
+    await openApp(page);
+    await page.getByRole("button", { name: "Settings", exact: true }).click();
+    await page.locator("#contactBtn").click();
+    const dialog = page.locator("#contactDialog");
+    await dialog.getByRole("button", { name: "Bug report", exact: true }).click();
+    await page.evaluate(() => document.body.classList.add("kbd"));
+    const field = dialog.getByLabel("Add screenshot", { exact: true });
+    const label = dialog.locator('label[for="contactScreenshot"]');
+
+    await expect(field).toHaveAttribute("type", "file");
+    await expect(field).toHaveAttribute("accept", "image/png,image/jpeg,image/webp");
+    await expect(field).not.toHaveCSS("display", "none");
+    await expect(label).toHaveCSS("outline-style", "none");
+    await dialog.locator("textarea").focus();
+    await page.keyboard.press("Tab");
+
+    await expect(field).toBeFocused();
+    await expect(label).toHaveCSS("outline-style", "solid");
+    await expect(label).toHaveCSS("outline-width", "2px");
   });
 }

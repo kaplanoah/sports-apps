@@ -15,8 +15,8 @@ const renderHeader = (title, back) => html`<div class="sheet-top"><div class="sh
 /** @param {import("./contact-drafts.js").ContactDraft} draft */
 function renderScreenshot(draft) {
   return html`<div class="contact-attachment-area">
-    <button type="button" class="contact-secondary" data-contact="attach">${PAPERCLIP}${draft.screenshot ? "Change screenshot" : "Add screenshot"}</button>
-    <input id="contactScreenshot" type="file" accept="image/png,image/jpeg,image/webp" hidden aria-label="Choose screenshot" />
+    <input id="contactScreenshot" class="contact-file" type="file" accept="image/png,image/jpeg,image/webp" />
+    <label for="contactScreenshot" class="contact-secondary">${PAPERCLIP}${draft.screenshot ? "Change screenshot" : "Add screenshot"}</label>
     ${draft.screenshot && html`<div class="contact-attachment"><img src="data:${draft.screenshot.type};base64,${draft.screenshot.content}" alt="Attached screenshot" /><span>${draft.screenshot.filename}</span><button type="button" class="contact-quiet" data-contact="remove">Remove</button></div>`}
   </div>`;
 }

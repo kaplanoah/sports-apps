@@ -138,10 +138,6 @@ export function startContact(dialog) {
   function showValidation(validation) {
     view.validation = validation;
     drawContact();
-    if (validation.field === "screenshot") {
-      /** @type {HTMLElement} */ (dialog.querySelector('[data-contact="attach"]')).focus();
-      return;
-    }
     findField(
       validation.field === "message"
         ? "Message"
@@ -182,12 +178,11 @@ export function startContact(dialog) {
     saveFields();
     const action = button.dataset.contact;
     if (action === "category") runAfterPress(button, () => showCategory(button.dataset.category));
-    else if (action === "attach") findField("Screenshot").click();
     else if (action === "remove") {
       readDraft().screenshot = null;
       store.save(view.category);
       drawContact();
-      /** @type {HTMLElement} */ (dialog.querySelector('[data-contact="attach"]')).focus();
+      findField("Screenshot").focus();
     } else if (action === "diagnostics") {
       readDraft().diagnosticsOpen = !readDraft().diagnosticsOpen;
       store.save(view.category);
