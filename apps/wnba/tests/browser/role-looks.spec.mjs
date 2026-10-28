@@ -5,7 +5,7 @@ import {
 } from "../../../../tests/browser/push-stub.mjs";
 import { test, expect, openApp, openLockedApp, MOVING_APP } from "./harness.mjs";
 import { ON_A_PHONE } from "./search-page.mjs";
-import { checkEachView, openWithNews } from "./views.mjs";
+import { VIEW_GROUPS, checkEachView, openWithNews } from "./views.mjs";
 import { openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
 import { listRoleLooks } from "../../../../tests/browser/type-roles.mjs";
 import { IPHONE } from "../../../../tests/browser/devices.mjs";
@@ -121,7 +121,7 @@ test("each type role draws in one font and one case in every view, but for the s
     for (const look of await listRoleLooks(shown)) looks.add(look);
   };
   await openWithNews(page);
-  await checkEachView(page, () => addLooks(page));
+  await checkEachView(page, Object.values(VIEW_GROUPS).flat(), () => addLooks(page));
   for (const place of OTHER_PLACES) {
     const context = await browser.newContext({ reducedMotion: "reduce", ...place.device });
     const placePage = await context.newPage();
