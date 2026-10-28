@@ -1,4 +1,6 @@
 import { expect } from "@playwright/test";
+import { THEMES, showTheme } from "./theme-layout.mjs";
+import { SCREENS } from "./themes.mjs";
 
 /** @param {import("@playwright/test").Page} page */
 async function readTagLayout(page) {
@@ -44,7 +46,8 @@ async function readDots(page) {
       const dotCenter =
         separator.getBoundingClientRect().bottom -
         parseFloat(dot.bottom) -
-        parseFloat(dot.height) / 2;
+        parseFloat(dot.height) / 2 +
+        new DOMMatrix(dot.transform).m42;
       baselineProbe.remove();
       xHeightProbe.remove();
       return {
@@ -68,7 +71,7 @@ async function readDots(page) {
  * @param {import("@playwright/test").Page} page
  * @param {"mlb" | "wnba"} app
  */
-export async function checkChannelTagDots(page, app) {
+async function checkShownChannelTagDots(page, app) {
   const layout = await readTagLayout(page);
   const dots = await readDots(page);
   expect(dots).toHaveLength(2);
@@ -92,11 +95,26 @@ export async function checkChannelTagDots(page, app) {
     ["4px", "4px"],
   ]);
   const tag = page.locator("#channelTag");
-  const painted = await tag.screenshot();
+  const painted = app === "wnba" ? await tag.screenshot() : null;
   const native = await page.addStyleTag({
-    content: `.channel-tag .sep { display:inline; position:static; text-box:normal; visibility:visible; opacity:${app === "mlb" ? 1 : 0.7} } .channel-tag .sep::after { content:none }`,
+    content:
+      ".channel-tag .sep { display:inline; position:static; text-box:normal; visibility:visible } .channel-tag .sep::after { content:none }",
   });
   expect(await readTagLayout(page)).toEqual(layout);
   if (app === "wnba") expect(await tag.screenshot()).toEqual(painted);
   await native.evaluate((style) => style.parentNode.removeChild(style));
+}
+
+/**
+ * @param {import("@playwright/test").Page} page
+ * @param {"mlb" | "wnba"} app
+ */
+export async function checkChannelTagDots(page, app) {
+  for (const viewport of Object.values(SCREENS)) {
+    await page.setViewportSize(viewport);
+    for (const theme of THEMES) {
+      await showTheme(page, theme);
+      await checkShownChannelTagDots(page, app);
+    }
+  }
 }

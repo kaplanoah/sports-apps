@@ -33,12 +33,13 @@
 }
 /* The hidden glyph keeps its advance; alphabetic trimming anchors the circle to the baseline. */
 .channel-tag .sep::after {
+  --channel-tag-dot-diameter: 3px;
   content: var(--channel-tag-dot, none);
   position: absolute;
   left: 50%;
-  bottom: calc(0.5ex - 1.5px);
-  width: 3px;
-  height: 3px;
+  bottom: calc(0.5ex - var(--channel-tag-dot-diameter) / 2);
+  width: var(--channel-tag-dot-diameter);
+  height: var(--channel-tag-dot-diameter);
   border-radius: 50%;
   background: currentColor;
   visibility: visible;
