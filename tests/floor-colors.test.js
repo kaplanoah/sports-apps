@@ -54,3 +54,14 @@ test("every app's page and gate color the phone's bar its dark floor before thei
     assert.equal(readMetaThemeColor(app, "gate.html"), readFloor(app, "dark"), app);
   }
 });
+
+test("every app's page and gate link the stylesheet pick-theme.js reads the floor from before it", () => {
+  for (const app of listApps()) {
+    for (const name of ["index.html", "gate.html"]) {
+      const page = readRepoFile(`apps/${app}/page/${name}`);
+      const stylesheetAt = page.indexOf('<link rel="stylesheet" href="styles.css"');
+      const pickThemeAt = page.indexOf('<script src="shared/pick-theme.js"');
+      assert.ok(stylesheetAt !== -1 && stylesheetAt < pickThemeAt, `${app} ${name}`);
+    }
+  }
+});
