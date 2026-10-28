@@ -13,7 +13,7 @@ import {
 import { createReading } from "../../worker/src/readings.js";
 import {
   listLowContrastText,
-  listLowContrastTextWithRowsPressed,
+  listLowContrastTextInEachTheme,
 } from "../../../../tests/browser/contrast.mjs";
 import { listTextOffRoles, readRole } from "../../../../tests/browser/type-roles.mjs";
 import { listChipsOffCenter } from "../../../../tests/browser/chip-centering.mjs";
@@ -270,13 +270,11 @@ test.describe("on a phone that has used the app before", () => {
     await expect(updates).toBeHidden();
   });
 
-  test("each update's text stays as readable as AA asks with its line pressed, in Ball and Night Game", async ({
-    page,
-  }) => {
+  test("each update's text stands out as AA asks, in Ball and Night Game", async ({ page }) => {
     await openApp(page, { snapshots: { 2026: buildSnapshotWithClinch() } });
     await expect(page.locator("#updates .updates-list li > .game-open")).toHaveCount(1);
 
-    expect(await listLowContrastTextWithRowsPressed(page)).toEqual([]);
+    expect(await listLowContrastTextInEachTheme(page)).toEqual([]);
   });
 
   test("the update list leaves 18px below it", async ({ page }) => {

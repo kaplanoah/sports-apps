@@ -23,6 +23,7 @@ import {
   scrollSeasonPartToEnd,
 } from "../../../../tests/browser/season-scroll.mjs";
 import { SETTINGS } from "../../../../tests/browser/settings.mjs";
+import { THEMES } from "../../../../tests/browser/theme-layout.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
@@ -618,7 +619,7 @@ test("on a wide screen, the tabs are one segmented control, each as tall as a pi
   expect(/** @type {{ height: number }} */ (await track.boundingBox()).height).toBe(pillHeight + 4);
 
   const games = page.getByRole("tab", { name: "Games" });
-  for (const colorScheme of /** @type {const} */ (["light", "dark"])) {
+  for (const colorScheme of THEMES) {
     await page.emulateMedia({ colorScheme });
     await expect(page.locator("html")).toHaveAttribute("data-theme", colorScheme);
     await expect(track).toHaveCSS(

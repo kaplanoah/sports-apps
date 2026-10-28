@@ -16,6 +16,7 @@ import { openFromHomeScreen } from "../../../../tests/browser/touch.mjs";
 import { readTopSpacing } from "../../../../tests/browser/sheet-top.mjs";
 import { ONE_PAST_SEASON } from "./past-season.mjs";
 import { chooseAppearance } from "./theme.mjs";
+import { THEMES } from "../../../../tests/browser/theme-layout.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
@@ -66,7 +67,7 @@ test("the Season picker sets 16px, which an iPhone doesn't zoom into on a tap, a
   await openApp(page, ONE_PAST_SEASON);
   await openSettings(page);
   const picker = page.locator("#seasonPicker");
-  for (const colorScheme of /** @type {const} */ (["light", "dark"])) {
+  for (const colorScheme of THEMES) {
     await page.emulateMedia({ colorScheme });
     await expect(page.locator("html")).toHaveAttribute("data-theme", colorScheme);
     await checkSelectArrow(picker);

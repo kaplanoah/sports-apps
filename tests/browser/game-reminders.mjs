@@ -1,7 +1,7 @@
 import { checkSelectArrow } from "./settings.mjs";
 import { matchPath } from "./harness.mjs";
 import { holdRequests } from "./hold-requests.mjs";
-import { showTheme, listThemeLayoutChanges } from "./theme-layout.mjs";
+import { THEMES, showTheme, listThemeLayoutChanges } from "./theme-layout.mjs";
 import { listLowContrastText } from "./contrast.mjs";
 import { listTextOffRoles, measureFieldFace } from "./type-roles.mjs";
 import { PUSH_STUB, stubPushManager } from "./push-stub.mjs";
@@ -437,7 +437,7 @@ export function testGameReminderSettings(test, expect, app) {
       await expect(reminders).toHaveAttribute("aria-checked", "true");
       await expect(reminders).toHaveAttribute("aria-busy", "false");
       expect(await listThemeLayoutChanges(page)).toEqual([]);
-      for (const theme of /** @type {const} */ (["light", "dark"])) {
+      for (const theme of THEMES) {
         await showTheme(page, theme);
         expect(await listLowContrastText(page)).toEqual([]);
         expect(await listTextOffRoles(page)).toEqual([]);

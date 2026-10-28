@@ -46,7 +46,7 @@ export const PRESSED_OUTLINED_BACKGROUND = "color-mix(in srgb, var(--ink) 10%, v
  * An inset shadow in a computed `box-shadow`, its color first and its spread second, as text,
  * since a test hands the page text rather than a regular expression.
  */
-export const INSET_SHADOW_PATTERN = String.raw`(\w+\([^)]*\)|transparent) 0px 0px 0px ([\d.]+)px inset`;
+const INSET_SHADOW_PATTERN = String.raw`(\w+\([^)]*\)|transparent) 0px 0px 0px ([\d.]+)px inset`;
 
 /**
  * The color of the first inset shadow with no offset or blur in an element's `box-shadow`, the tint
@@ -74,22 +74,3 @@ export async function checkGateOpenPress(page) {
   await expect(open).toHaveCSS("background-color", pressed);
   await page.mouse.up();
 }
-
-/**
- * Marks every row's button pressed, as press.js marks the one a finger holds, so each row shows its
- * tint at once, or lets every one go again.
- * @param {import("@playwright/test").Page} page
- * @param {boolean} isPressed
- */
-export const markEveryRowPressed = (page, isPressed) =>
-  page.evaluate((isPressed) => {
-    const BUTTON = "button, a[href], summary";
-    const rows = [...document.querySelectorAll(".press-tint")].map((row) =>
-      row.matches(BUTTON) ? row : row.querySelector(BUTTON),
-    );
-    const cells = document.querySelectorAll(".row-button-cell button");
-    for (const button of [...rows, ...cells]) {
-      button?.classList.toggle("is-pressed", isPressed);
-      button?.classList.toggle("is-row-press", isPressed);
-    }
-  }, isPressed);

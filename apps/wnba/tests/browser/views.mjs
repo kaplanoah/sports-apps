@@ -140,6 +140,12 @@ export const VIEW_GROUPS = {
   ],
   "a game's sheets": [
     {
+      name: "a final's box score",
+      open: (page) => openGameSheet(page, FINAL_WITH_HIGHLIGHTS),
+      shown: (page) => page.locator("#gameSheet .line-score"),
+      close: (page) => page.keyboard.press("Escape"),
+    },
+    {
       name: "a final's Highlights",
       open: openHighlights,
       shown: (page) => page.locator("#highlightsBody .clip-row").first(),

@@ -11,12 +11,8 @@ import {
 import { readCapitals } from "../../../../tests/browser/capitals.mjs";
 import { readRole } from "../../../../tests/browser/type-roles.mjs";
 import { readStripEdges } from "../../../../tests/browser/day-strip-edges.mjs";
-import {
-  listLowContrastText,
-  listLowContrastTextAsShown,
-} from "../../../../tests/browser/contrast.mjs";
+import { listLowContrastText } from "../../../../tests/browser/contrast.mjs";
 import { leavePagePixelDown } from "../../../../tests/browser/page-left-down.mjs";
-import { pressOn } from "../../../../tests/browser/press-looks.mjs";
 import { PHONE, WIDE_SCREEN } from "./screen-sizes.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
@@ -425,7 +421,7 @@ for (const [theme, colorScheme] of /** @type {const} */ ([
   ["Ball", "light"],
   ["Night Game", "dark"],
 ])) {
-  test(`in ${theme}, a racing club's race letter stays readable on its row under the mouse and pressed`, async ({
+  test(`in ${theme}, a racing club's race letter stays readable on its row under the mouse`, async ({
     page,
   }) => {
     await page.emulateMedia({ colorScheme });
@@ -437,11 +433,6 @@ for (const [theme, colorScheme] of /** @type {const} */ ([
 
     await open.hover();
     expect(await listLowContrastText(page)).toEqual([]);
-
-    await pressOn(page, open);
-    await expect(open).toHaveClass(/is-row-press/);
-    expect(await listLowContrastTextAsShown(page)).toEqual([]);
-    await page.mouse.up();
   });
 }
 

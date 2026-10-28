@@ -9,6 +9,7 @@ import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
 import { checkRanksAreDim } from "../../../../tests/browser/rank-ink.mjs";
 import { readDotRings } from "../../../../tests/browser/dot-ring.mjs";
 import { openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
+import { THEMES } from "../../../../tests/browser/theme-layout.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
@@ -119,7 +120,7 @@ test("her dot on each curve is ringed in the sheet's color, as MLB's are, in Map
   await openApp(page);
   const sheet = await openFromRoster(page, "Breanna Stewart");
   const dots = sheet.locator(".player-curve b");
-  for (const theme of /** @type {const} */ (["light", "dark"])) {
+  for (const theme of THEMES) {
     await page.emulateMedia({ colorScheme: theme });
     await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
     const rings = await readDotRings(dots);
