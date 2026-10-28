@@ -14,6 +14,7 @@ import {
   findStyleObjectLines,
   listPageStylesheets,
   readDiff,
+  readMergedChange,
   readRedApproval,
 } from "../worker/red-change.mjs";
 import { PHONE_CONTEXT } from "../worker/labeling.mjs";
@@ -2207,6 +2208,23 @@ test("a conflicting current merge leaves approval pending and reports refresh fa
     api.statuses.map(({ state }) => state),
     ["pending"],
   );
+});
+
+test("a current merge that conflicts says so, and any other git failure keeps git's own error", (context) => {
+  const history = createGateHistory(context);
+  history.readGit(["checkout", "-qb", "feature"]);
+  history.writeFile("shared/page/sheet.js", "export const draw = 2;\n");
+  const conflicting = history.commit("2026-10-07T09:30:00Z");
+  history.readGit(["checkout", "-q", "--orphan", "unrelated"]);
+  history.writeFile("shared/page/other.js", "export const other = 1;\n");
+  const unrelated = history.commit("2026-10-07T10:00:00Z");
+  history.readGit(["checkout", "-q", "main"]);
+  history.writeFile("shared/page/sheet.js", "export const draw = 3;\n");
+  history.commit("2026-10-07T11:00:00Z");
+  assert.throws(() => readMergedChange("main", conflicting, history.cwd), {
+    message: `${conflicting} conflicts with main.`,
+  });
+  assert.throws(() => readMergedChange("main", unrelated, history.cwd), /unrelated histories/);
 });
 
 test("approval refresh runs trusted main code after main and deploy changes, with no pull request execution", () => {

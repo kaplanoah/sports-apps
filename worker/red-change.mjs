@@ -844,6 +844,9 @@ function findLabelProblem({ labeler, isAfterLastPush }, owner) {
   return null;
 }
 
+// git merge-tree's exit status when the merge conflicts; any other failure is git's own error.
+const MERGE_TREE_CONFLICT = 1;
+
 /** @param {string} cwd */
 function createGateGit(cwd) {
   /** @param {string[]} arguments_ */
@@ -940,8 +943,9 @@ function readCleanMergeTree(readGit, first, second) {
       first,
       second,
     ]).trim();
-  } catch {
-    return "";
+  } catch (error) {
+    if (/** @type {{ status?: number }} */ (error).status === MERGE_TREE_CONFLICT) return "";
+    throw error;
   }
 }
 
@@ -976,6 +980,7 @@ export function readMergedChange(main, head, cwd = process.cwd()) {
   const mainSha = readGit(["rev-parse", "--verify", "--end-of-options", `${main}^{commit}`]).trim();
   const headSha = readGit(["rev-parse", "--verify", "--end-of-options", `${head}^{commit}`]).trim();
   const tree = readCleanMergeTree(readGit, mainSha, headSha);
+  if (!tree) throw new Error(`${head} conflicts with ${main}.`);
   if (!isGitObjectId(tree)) throw new Error("The current merge tree could not be read.");
   return readCommitChange(mainSha, tree, cwd);
 }
