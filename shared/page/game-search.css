@@ -119,8 +119,9 @@
   font-weight: var(--type-detail-weight);
   color: var(--ink-dim);
 }
+/* Collapsed rather than hidden, so VoiceOver keeps the live region and reads its first line. */
 .search-read:empty {
-  display: none;
+  margin-top: 0;
 }
 .search-read b {
   font-weight: calc(var(--type-detail-weight) + 200);
