@@ -25,7 +25,7 @@ const LIFT_CLICK_MS = 1000;
 const GLIDE_REST_MS = 100;
 
 // The buttons of the rows every app shares: a game's, a card's, a search's, a table's, a clip's,
-// and a Diagnostics record's.
+// a Diagnostics record's, and a settings page's.
 const SHARED_ROW_BUTTONS = [
   ".game-open",
   ".game-card-button",
@@ -35,6 +35,7 @@ const SHARED_ROW_BUTTONS = [
   ".row-button-cell button",
   ".clip-open",
   ".diagnostics-record summary",
+  ".settings-page-row",
 ];
 // What an iPhone hands a tap to, whatever listens for it.
 export const TAPPABLE = "button, a[href], label, summary, select, input, textarea";

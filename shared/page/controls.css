@@ -30,7 +30,15 @@ body.kbd :where(:focus:not(dialog, .sheet-page, input, textarea)) {
 :where(button:not([role="switch"]), a[href], summary, .appearance-choice) {
   transition: opacity var(--press-ease-back);
 }
-:where(.accent-button, .diagnostics-button, .open-button, .retry-button, .read-button) {
+:where(
+  .accent-button,
+  .diagnostics-button,
+  .open-button,
+  .retry-button,
+  .read-button,
+  .contact-primary,
+  .contact-secondary
+) {
   transition: background-color var(--press-ease-back);
 }
 .is-pressed:not(
@@ -39,18 +47,29 @@ body.kbd :where(:focus:not(dialog, .sheet-page, input, textarea)) {
   .diagnostics-button,
   .open-button,
   .retry-button,
-  .read-button
+  .read-button,
+  .contact-primary,
+  .contact-secondary
 ) {
   opacity: 0.3;
   transition: none;
 }
-:is(.accent-button, .diagnostics-button, .open-button, .retry-button.filled).is-pressed:not(
-    .move-card-button-outlined
-  ) {
+:is(
+    .accent-button,
+    .diagnostics-button,
+    .open-button,
+    .retry-button.filled,
+    .contact-primary
+  ).is-pressed:not(.move-card-button-outlined) {
   background: color-mix(in srgb, var(--accent) 80%, #000);
   transition: none;
 }
-:is(.retry-button:not(.filled), .read-button, .move-card-button-outlined).is-pressed {
+:is(
+  .retry-button:not(.filled),
+  .read-button,
+  .move-card-button-outlined,
+  .contact-secondary
+).is-pressed {
   background: color-mix(in srgb, var(--ink) 10%, var(--raised));
   transition: none;
 }

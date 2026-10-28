@@ -7,6 +7,7 @@ import {
 } from "./contact-rules.js";
 import { renderContact } from "./contact-view.js";
 import { setHtml } from "./html.js";
+import { runAfterPress } from "./press.js";
 import { openSheet, wireSheet } from "./sheet.js";
 import { closeSheet } from "./sheet-swipe.js";
 import { keepDialogFor } from "./sheet-memory.js";
@@ -180,7 +181,7 @@ export function startContact(dialog) {
     if (!button || view.sending) return;
     saveFields();
     const action = button.dataset.contact;
-    if (action === "category") showCategory(button.dataset.category);
+    if (action === "category") runAfterPress(button, () => showCategory(button.dataset.category));
     else if (action === "attach") findField("Screenshot").click();
     else if (action === "remove") {
       readDraft().screenshot = null;
@@ -191,14 +192,20 @@ export function startContact(dialog) {
       readDraft().diagnosticsOpen = !readDraft().diagnosticsOpen;
       store.save(view.category);
       drawContact();
-    } else if (action === "done" || (action === "back" && view.screen === "menu")) {
-      closeSheet(dialog);
-      document.getElementById("contactBtn").focus();
-    } else if (action === "back") {
-      view.screen = "menu";
-      drawContact();
-      focusTitle();
-    }
+    } else if (action === "done" || (action === "back" && view.screen === "menu"))
+      runAfterPress(button, closeContact);
+    else if (action === "back") runAfterPress(button, showMenu);
+  }
+
+  function closeContact() {
+    closeSheet(dialog);
+    document.getElementById("contactBtn").focus();
+  }
+
+  function showMenu() {
+    view.screen = "menu";
+    drawContact();
+    focusTitle();
   }
 
   /** @param {Event} event */
@@ -263,7 +270,8 @@ export function startContact(dialog) {
     },
     { capture: true },
   );
-  document.getElementById("contactBtn").addEventListener("click", openContact);
+  const contactButton = /** @type {HTMLElement} */ (document.getElementById("contactBtn"));
+  contactButton.addEventListener("click", () => runAfterPress(contactButton, openContact));
   wireSheet(dialog, {
     name: "Contact",
     isOwnGesture: () => view.sending,
