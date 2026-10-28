@@ -587,5 +587,9 @@ test("with reduced motion, a tap moves the pill's fill at once, fading nothing",
   await expect(page.locator("#standings-league")).toBeVisible();
   expect(await readFilledNames(tabList)).toEqual(["Standings"]);
   // The tapped name's press easing back is no fade of the pill's fill or letters.
-  expect((await readFades()).filter(({ property }) => property !== "opacity")).toEqual([]);
+  expect(
+    (await readFades()).filter(
+      ({ name, property }) => !(name === "Standings" && property === "opacity"),
+    ),
+  ).toEqual([]);
 });
