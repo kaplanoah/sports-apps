@@ -1,4 +1,3 @@
-import { registerSettingsContactInteractions } from "../../../../tests/browser/settings-contact-interactions.mjs";
 import { test, expect, openApp, openGameSheet } from "./harness.mjs";
 import {
   countFramesAcross,
@@ -126,5 +125,3 @@ test("a shown list that grows loops no ResizeObserver", async ({ page }) => {
     .toBeGreaterThan(3000);
   expect(await readResizeLoops()).toEqual([]);
 });
-
-registerSettingsContactInteractions({ test, expect, openApp, app: "wnba" });

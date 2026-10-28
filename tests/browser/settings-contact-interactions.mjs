@@ -2,6 +2,8 @@ import { matchPath } from "./harness.mjs";
 
 /** @param {any} options */
 export function registerSettingsContactInteractions({ test, expect, openApp, app }) {
+  test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+
   test("Settings page headings follow pointer and keyboard focus without native outlines", async ({
     page,
   }) => {

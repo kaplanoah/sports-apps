@@ -7,6 +7,7 @@ export const WEBKIT_TEST_MATCH = [
   "at-rest.spec.mjs",
   "notification-layout.spec.mjs",
   "notification-permission.spec.mjs",
+  "settings-contact.spec.mjs",
 ];
 
 /** @param {string} app */
