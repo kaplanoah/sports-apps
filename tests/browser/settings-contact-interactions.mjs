@@ -106,6 +106,51 @@ export function registerSettingsContactInteractions({ test, expect, openApp, app
     await expect(page.locator("body")).toHaveAttribute("data-row-clicks", "0");
   });
 
+  test("a label, its note, and its field keep the shared gaps, in Contact and in Settings", async ({
+    page,
+  }) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await openApp(page);
+    await page.getByRole("button", { name: "Settings", exact: true }).click();
+    await page.locator("#contactBtn").click();
+    const dialog = page.locator("#contactDialog");
+    await dialog.getByRole("button", { name: "Bug report", exact: true }).click();
+    await expect(dialog.locator("#contactEmail")).toBeVisible();
+    const measureGaps = () =>
+      page.evaluate(() => {
+        const findGap = (/** @type {Element} */ above, /** @type {Element} */ below) =>
+          below.getBoundingClientRect().top - above.getBoundingClientRect().bottom;
+        const find = (/** @type {string} */ selector) =>
+          /** @type {Element} */ (document.querySelector(selector));
+        const settingNote = find("#settingsDialog .control-label .control-note");
+        return {
+          labelToNote: findGap(find("label[for=contactEmail]"), find("#contactEmailHint")),
+          noteToField: findGap(find("#contactEmailHint"), find("#contactEmail")),
+          labelToField: findGap(find("label[for=contactMessage]"), find("#contactMessage")),
+          settingLabelToNote: findGap(
+            /** @type {Element} */ (settingNote.previousElementSibling),
+            settingNote,
+          ),
+        };
+      });
+    expect(await measureGaps()).toEqual({
+      labelToNote: 3,
+      noteToField: 7,
+      labelToField: 7,
+      settingLabelToNote: 3,
+    });
+    await page.evaluate(() => {
+      document.documentElement.style.setProperty("--label-note-gap", "5px");
+      document.documentElement.style.setProperty("--label-field-gap", "11px");
+    });
+    expect(await measureGaps()).toEqual({
+      labelToNote: 5,
+      noteToField: 11,
+      labelToField: 11,
+      settingLabelToNote: 5,
+    });
+  });
+
   test("Contact gives focus back to its row once its sheet has closed", async ({ page }) => {
     await page.emulateMedia({ reducedMotion: "reduce" });
     await openApp(page);

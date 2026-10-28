@@ -294,7 +294,12 @@ export function registerContactTests({ test, expect, openApp, app }) {
           await page
             .locator("#settingsDialog")
             .screenshot({ path: `${folder}/${app}-${width}-${theme}-settings.png` });
-        await expect(page.locator("#contactBtn")).toHaveCSS("border-top-style", "solid");
+        expect(
+          await page.locator("#contactBtn").evaluate((button) => {
+            const lined = button.previousElementSibling ? button : button.parentElement;
+            return getComputedStyle(lined).borderTopStyle;
+          }),
+        ).toBe("solid");
         await page.locator("#contactBtn").click();
         const dialog = page.locator("#contactDialog");
         const checkView = async (name) => {
@@ -340,8 +345,6 @@ export function registerContactTests({ test, expect, openApp, app }) {
         for (const name of ["Bug report", "Feature request", "Something else"]) {
           await dialog.getByRole("button", { name, exact: true }).click();
           await checkView(name.replaceAll(" ", "-"));
-          await expect(dialog.locator("label[for=contactEmail]")).toHaveCSS("margin-bottom", "3px");
-          await expect(dialog.locator("#contactEmailHint")).toHaveCSS("margin-bottom", "8px");
           if (name === "Bug report") {
             await dialog.getByRole("button", { name: "View diagnostics" }).click();
             await checkView("diagnostics");

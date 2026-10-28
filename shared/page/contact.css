@@ -35,12 +35,12 @@
 }
 .contact-field label {
   display: block;
-  margin-bottom: 7px;
+  margin-bottom: var(--label-field-gap);
   font-size: var(--type-setting-size);
   font-weight: var(--type-setting-weight);
 }
 .contact-field label:has(+ .contact-note) {
-  margin-bottom: 3px;
+  margin-bottom: var(--label-note-gap);
 }
 .contact-field :is(input, textarea) {
   display: block;
@@ -74,7 +74,7 @@
   font-weight: var(--type-setting-note-weight);
 }
 .contact-note {
-  margin: 0 0 8px;
+  margin: 0 0 var(--label-field-gap);
   color: var(--ink-dim);
 }
 .contact-secondary,

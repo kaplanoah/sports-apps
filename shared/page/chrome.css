@@ -51,6 +51,9 @@
  *   --re-add-note-above                        the room between the Appearance choices' names and
  *                                              the note on updating the icon under them
  * and this sets:
+ *   --label-note-gap                           the room from a label to the note under it
+ *   --label-field-gap                          the room from a label, or the note under it, to its
+ *                                              field
  *   --sheet-side                               a sheet's sides, and settings' on a phone
  *   --caret-reach                              how far a sheet's caret reaches out past its sides
  *   --view-end-room                            the room at the end of the page, or of a view that
@@ -73,6 +76,12 @@
    flicker. It's inherited, so this reaches the whole page. */
 :root {
   -webkit-tap-highlight-color: transparent;
+}
+
+/* A label, the note under it, and its field are spaced alike wherever they show. */
+:root {
+  --label-note-gap: 3px;
+  --label-field-gap: 7px;
 }
 
 /* A sheet's sides, and how far its caret reaches out past them into the side, so a caret's spot
@@ -482,7 +491,7 @@ section.view.active:not([data-follows]):has(> :is(.day-view, .season-parts)) {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 3px;
+  gap: var(--label-note-gap);
   min-width: 0;
   padding-inline: 44px;
   text-align: center;
@@ -741,7 +750,7 @@ body.kbd .appearance-choice:has(input:focus) .appearance-icon {
 .control-label {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: var(--label-note-gap);
   min-width: 0;
 }
 .control-note {
@@ -962,7 +971,7 @@ body.kbd .notify-help:focus {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 3px;
+  gap: var(--label-note-gap);
   min-width: 0;
 }
 .home-screen-title {
