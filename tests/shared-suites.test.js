@@ -59,8 +59,10 @@ test("each app with browser tests runs every shared browser suite it has reached
 });
 
 test("each suite an app hasn't reached is a shared suite its specs don't call yet", () => {
+  const appsWithBrowserTests = listAppsWithBrowserTests();
   const stale = Object.entries(SUITES_NOT_YET_REACHED).flatMap(([app, suites]) => {
-    const called = listAppsWithBrowserTests().includes(app) ? listSuitesCalled(app) : [];
+    if (!appsWithBrowserTests.includes(app)) return suites.map((suite) => `${app}: ${suite}`);
+    const called = listSuitesCalled(app);
     return suites
       .filter((suite) => !sharedSuites.includes(suite) || called.includes(suite))
       .map((suite) => `${app}: ${suite}`);

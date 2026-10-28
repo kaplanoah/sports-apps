@@ -200,7 +200,7 @@ test("a reload with settings open shows its seasons, switches, and look picked b
   await openApp(page, WITH_A_PAST_SEASON);
   await checkSettingsOnReload({
     page,
-    look: "Night Game",
+    look: THEME_NAMES.dark,
     switchName: "Include content from The Athletic",
     pastSeason: "2025",
   });
