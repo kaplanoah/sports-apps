@@ -1,6 +1,8 @@
 // How a text field shows its focus (controls.css): no ring once a tap focuses it, nor as keys move
 // its cursor, and the app's focus ring around the box that looks like the field once the keyboard
-// reaches it, in the phone's light and dark looks.
+// reaches it, in each of the phone's looks.
+
+import { THEMES } from "./theme-layout.mjs";
 
 /** @param {import("@playwright/test").Locator} box */
 const readRing = (box) =>
@@ -23,7 +25,7 @@ const readRing = (box) =>
  * @param {{ field: import("@playwright/test").Locator, box: import("@playwright/test").Locator }} parts
  */
 export async function checkFieldRing(page, expect, { field, box }) {
-  for (const colorScheme of /** @type {const} */ (["light", "dark"])) {
+  for (const colorScheme of THEMES) {
     await page.emulateMedia({ colorScheme });
     await field.click();
     await expect(field).toBeFocused();
