@@ -43,10 +43,10 @@ export const PRESSED_FILLED_BACKGROUND = "color-mix(in srgb, var(--accent) 80%, 
 export const PRESSED_OUTLINED_BACKGROUND = "color-mix(in srgb, var(--ink) 10%, var(--raised))";
 
 /**
- * An inset shadow in a computed `box-shadow`, its color first and its spread second, as text,
- * since a test hands the page text rather than a regular expression.
+ * An inset shadow in a computed `box-shadow`, its color captured, as text, since a test hands the
+ * page text rather than a regular expression.
  */
-const INSET_SHADOW_PATTERN = String.raw`(\w+\([^)]*\)|transparent) 0px 0px 0px ([\d.]+)px inset`;
+const INSET_SHADOW_PATTERN = String.raw`(\w+\([^)]*\)|transparent) 0px 0px 0px [\d.]+px inset`;
 
 /**
  * The color of the first inset shadow with no offset or blur in an element's `box-shadow`, the tint

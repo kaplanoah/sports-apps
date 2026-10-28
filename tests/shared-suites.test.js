@@ -7,17 +7,23 @@ import { REPO_ROOT } from "./repo-files.js";
 const SHARED_BROWSER_TESTS = new URL("tests/browser/", REPO_ROOT);
 
 /**
- * The text of each file in a folder whose name ends as asked.
+ * Code with its comments taken out, so a call left in one doesn't count.
+ * @param {string} code
+ */
+const removeComments = (code) => code.replace(/\/\*[\s\S]*?\*\/|^\s*\/\/.*$/gm, "");
+
+/**
+ * The code of each file in a folder whose name ends as asked, without its comments.
  * @param {URL} folder
  * @param {string} ending
  */
 const readFilesEndingIn = (folder, ending) =>
   readdirSync(folder)
     .filter((name) => name.endsWith(ending))
-    .map((name) => readFileSync(new URL(name, folder), "utf8"));
+    .map((name) => removeComments(readFileSync(new URL(name, folder), "utf8")));
 
 const sharedSuites = readFilesEndingIn(SHARED_BROWSER_TESTS, ".mjs").flatMap((text) =>
-  [...text.matchAll(/^export function (test[A-Z]\w*)\(/gm)].map(([, name]) => name),
+  [...text.matchAll(/^export (?:async )?function (test[A-Z]\w*)\(/gm)].map(([, name]) => name),
 );
 
 test("the shared browser tests hold suites", () => {

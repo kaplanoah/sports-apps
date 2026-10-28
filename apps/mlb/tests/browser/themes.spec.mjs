@@ -1,4 +1,4 @@
-import { test, expect } from "./harness.mjs";
+import { test, expect, THEME_NAMES } from "./harness.mjs";
 import { VIEW_GROUPS, openWithEverything } from "./views.mjs";
 import { testThemes } from "../../../../tests/browser/themes.mjs";
 
@@ -12,5 +12,5 @@ testThemes(test, expect, {
     "a game's sheets": [],
     "a club's and a player's sheets": ["filled", "outlined"],
   },
-  themeNames: { light: "Ball", dark: "Night Game" },
+  themeNames: THEME_NAMES,
 });
