@@ -110,7 +110,42 @@ export const listLowContrastTextAsShown = (page) =>
       return color && Number(spread) * 2 >= Math.min(width, height) ? readRgba(color) : null;
     };
 
+    /**
+     * The tint over an element's text from its own inset shadow, or from its ::before's, which
+     * lies across it, as a pressed Updates line's does.
+     * @param {Element} element
+     * @param {CSSStyleDeclaration} style
+     */
+    const readTint = (element, style) => {
+      const before = getComputedStyle(element, "::before");
+      return (
+        readInsetTint(element, style) ??
+        (before.content === "none" ? null : readInsetTint(element, before))
+      );
+    };
+
     const pageBackground = readRgba(getComputedStyle(document.body).backgroundColor).rgb;
+
+    /**
+     * What an element is drawn over: its parent, or for one placed beside it, like a bracket's
+     * seed hung left of its team's row, the nearest element around it whose box holds its middle,
+     * since a fill or a tint paints only inside its own box. One that nothing in the page holds,
+     * like a sheet's section slid off the screen, is drawn over its parent where it shows.
+     * @param {Element} element
+     */
+    const findBackdrop = (element) => {
+      const parent = element.parentElement;
+      if (getComputedStyle(element).position !== "absolute") return parent;
+      const box = element.getBoundingClientRect();
+      const [x, y] = [box.left + box.width / 2, box.top + box.height / 2];
+      const holdsMiddle = (/** @type {Element} */ around) => {
+        const { left, right, top, bottom } = around.getBoundingClientRect();
+        return x >= left && x <= right && y >= top && y <= bottom;
+      };
+      for (let around = parent; around; around = around.parentElement)
+        if (holdsMiddle(around)) return around;
+      return parent;
+    };
 
     /** @type {Map<Element, number[] | null>} */
     const backgrounds = new Map();
@@ -130,10 +165,10 @@ export const listLowContrastTextAsShown = (page) =>
       if (style.backgroundImage !== "none" || hasLayerBehind(element)) background = null;
       else if (fill.alpha === 1) background = fill.rgb;
       else {
-        const below = readBackground(element.parentElement);
+        const below = readBackground(findBackdrop(element));
         background = below && layOver(fill.rgb, below, fill.alpha);
       }
-      const tint = readInsetTint(element, style);
+      const tint = readTint(element, style);
       if (background && tint) background = layOver(tint.rgb, background, tint.alpha);
       backgrounds.set(element, background);
       return background;

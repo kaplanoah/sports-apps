@@ -6,7 +6,7 @@ import {
   listLowContrastTextAsShown,
   waitForSettledColors,
 } from "../../../../tests/browser/contrast.mjs";
-import { pressOn } from "../../../../tests/browser/press-looks.mjs";
+import { markEveryRowPressed, pressOn } from "../../../../tests/browser/press-looks.mjs";
 import { listThemeLayoutChanges, showTheme } from "../../../../tests/browser/theme-layout.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
@@ -41,6 +41,23 @@ for (const [screen, viewport] of Object.entries(SCREENS)) {
     });
   });
 }
+
+test("in every view, each row's text stays as readable as AA asks with the row pressed, in Maple and Walnut", async ({
+  page,
+}) => {
+  await page.setViewportSize(SCREENS["a phone"]);
+  await openWithNews(page);
+  await checkEachView(page, async (view) => {
+    for (const theme of /** @type {const} */ (["light", "dark"])) {
+      await showTheme(page, theme);
+      await waitForSettledColors(page);
+      await markEveryRowPressed(page, true);
+      expect(await listLowContrastTextAsShown(page), `${view.name} in ${theme}`).toEqual([]);
+      await markEveryRowPressed(page, false);
+    }
+    await showTheme(page, "light");
+  });
+});
 
 test("in every view, each chip has its look's room beside its words and border, in Maple and Walnut", async ({
   page,

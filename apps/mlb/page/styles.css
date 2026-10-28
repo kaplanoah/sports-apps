@@ -276,12 +276,12 @@
   --card: #132a1f;
   --card-border: #2a4536;
   --ink: #f1ead4;
-  --ink-dim: #7fa88f;
+  --ink-dim: #8db097;
   --divider: #1e3a2b;
   --gold: #f4c15c;
   --gold-ink: #12200f;
   --copper: #c17a4f;
-  --copper-ink: #cd9566;
+  --copper-ink: #d19e71;
   --highlight: var(--gold);
   --accent: var(--gold);
   --accent-ink: var(--gold-ink);

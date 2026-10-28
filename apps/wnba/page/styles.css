@@ -127,7 +127,7 @@
   --card-border: #d1c0a6;
   --divider: #ddccb3;
   --ink: #2a0e02;
-  --ink-dim: #735344;
+  --ink-dim: #6f4f40;
   /* Dark ink fading toward the light floor shows less than light ink fading toward the walnut, so
      Maple's lines fade further as the page catches up. */
   --catch-up-fade: 0.5;
@@ -307,7 +307,7 @@
   --card-border: #4a301e;
   --divider: #392619;
   --ink: #f4e8e1;
-  --ink-dim: #b39988;
+  --ink-dim: #b9a091;
   --quiet-stat-ink: var(--ink-mid);
   --catch-up-fade: 0.75;
   --orange: #fb8055;
