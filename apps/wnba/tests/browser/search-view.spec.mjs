@@ -108,6 +108,26 @@ test("the field's clear button empties it and brings the examples back, ready to
   await expect(page.locator("#gameSearch .search-example").first()).toBeVisible();
 });
 
+test("a finger at the field's right edge lands on its words while it's empty, and on Clear once it holds a search", async ({
+  page,
+}) => {
+  await openSeasonGames(page);
+  await tapSearch(page);
+  const findTapTarget = () =>
+    page.evaluate(() => {
+      const field = /** @type {Element} */ (document.querySelector("#gameSearch .search-field"));
+      const { right, top, height } = field.getBoundingClientRect();
+      return document.elementFromPoint(right - 3, top + height / 2)?.closest("label, button")
+        ?.className;
+    });
+
+  expect(await findTapTarget()).toBe("search-label");
+
+  await sendSearch(page, "Liberty");
+
+  expect(await findTapTarget()).toBe("search-clear");
+});
+
 test("two minutes away closes the search and goes back to the tab before it, and less leaves it as it was", async ({
   page,
 }) => {
