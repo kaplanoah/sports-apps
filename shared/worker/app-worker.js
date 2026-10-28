@@ -16,9 +16,12 @@ import {
   serveHandoff,
   serveMoveHandoff,
 } from "./access-gate.js";
+import { CONTACT_ROUTE } from "../page/contact-rules.js";
 import { serveContact } from "./contact-request.js";
 import { COUNT_PATH, serveCount } from "./daily-count.js";
 import { createHealthServer } from "./health.js";
+
+const CONTACT_PATH = `/${CONTACT_ROUTE}`;
 
 const PAGE_HEADERS = {
   "cache-control": "no-cache",
@@ -253,7 +256,7 @@ export function createAppWorker({ name, pageFiles, forwardToStore, isStoreAnswer
   const isIndexPath = (appPath) => findPageFile(appPath, releaseFolder).path === "index.html";
   const serveHealth = createHealthServer({ isStoreAnswering, release: releaseCommit });
   const isDataPath = (appPath) =>
-    appPath === "/contact" ||
+    appPath === CONTACT_PATH ||
     isStorePath(appPath) ||
     appPath === COUNT_PATH ||
     Object.hasOwn(reads, appPath);
@@ -295,7 +298,7 @@ export function createAppWorker({ name, pageFiles, forwardToStore, isStoreAnswer
         return serveMoveHandoff(request, env);
       const access = await readAccess(request, env);
       if (access !== "open") return serveLocked(request, env, { url, appPath, prefix, access });
-      if (appPath === "/contact") return serveContact(request, env, name);
+      if (appPath === CONTACT_PATH) return serveContact(request, env, name);
       if (isStorePath(appPath)) return forwardToStore(request, env, appPath);
       if (appPath === COUNT_PATH) return serveCount(request, env, name);
       if (request.method === "GET" && Object.hasOwn(reads, appPath))

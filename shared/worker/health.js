@@ -37,7 +37,11 @@ const giveUpOnAbort = (signal, ask) =>
  */
 const askInTime = (ask) => abortAfter(ANSWER_TIMEOUT_MS, (signal) => giveUpOnAbort(signal, ask));
 
-/** @typedef {{ ok: boolean, release: string | null, problem?: string }} ServiceHealth */
+// A service that answers can still need its owner, as the email service does for a report waiting
+// over an hour or paused, which is no reason to roll back a deploy or call the service down.
+/**
+ * @typedef {{ ok: boolean, release: string | null, problem?: string, attention?: string }} ServiceHealth
+ */
 
 /**
  * @param {any} health what the service answered
@@ -45,8 +49,9 @@ const askInTime = (ask) => abortAfter(ANSWER_TIMEOUT_MS, (signal) => giveUpOnAbo
  */
 function readServiceAnswer(health) {
   const answer = { ok: health?.ok === true, release: health?.release ?? null };
-  if (answer.ok || typeof health?.problem !== "string") return answer;
-  return { ...answer, problem: health.problem };
+  const note = answer.ok ? "attention" : "problem";
+  if (typeof health?.[note] !== "string") return answer;
+  return { ...answer, [note]: health[note] };
 }
 
 /**

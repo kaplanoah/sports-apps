@@ -14,12 +14,14 @@
 
 /* :focus-visible counts a bare Shift press, so focus rings key off body.kbd instead. A sheet takes
    focus itself when nothing in it has it, as when a swipe brings it into view on a phone, where a
-   tapped button never takes focus, and a ring around the whole sheet would show nothing. A field
-   shows its focus in its own look. Kept low, so a control's own rule can move its ring. */
+   tapped button never takes focus, and a ring around the whole sheet would show nothing. The
+   search's field is a bare input inside the box that looks like its field, so the box takes its
+   ring. Kept low, so a control's own rule can move its ring. */
 :focus {
   outline: none;
 }
-body.kbd :where(:focus:not(dialog, .sheet-page, input, textarea)) {
+body.kbd
+  :where(:focus:not(dialog, .sheet-page, .search-input), .search-field:has(> .search-input:focus)) {
   outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }

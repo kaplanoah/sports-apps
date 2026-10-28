@@ -4,6 +4,7 @@ import { recordSheetMotions } from "../../../../tests/browser/sheet-motions.mjs"
 import { expectShown, readLeft } from "../../../../tests/browser/sheet-row.mjs";
 import { SETTINGS } from "../../../../tests/browser/settings.mjs";
 import { drag } from "../../../../tests/browser/touch.mjs";
+import { THEMES } from "../../../../tests/browser/theme-layout.mjs";
 
 const PHONE = { width: 390, height: 844 };
 // The room between two sheets side by side, which the WNBA's --sheet-gap sets.
@@ -211,7 +212,7 @@ test.describe("with reduced motion", () => {
       });
   });
 
-  for (const theme of ["light", "dark"])
+  for (const theme of THEMES)
     test(`in ${theme}, every sheet and its roster's pinned cells are the card's color, and settings stay the page's own`, async ({
       page,
     }) => {

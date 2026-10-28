@@ -261,7 +261,7 @@ Pages link these before their own stylesheet, and theme them with the tokens the
 - `news-photos.js`: framing the photos the news cards show
 - `image-size.js`: a photo's size from the start of its file
 - `claude.js`: asking Claude for an answer shaped by a JSON schema
-- `hash-text.js`: a short fixed-length name for any text
+- `hash-text.js`: the SHA-256 of any text, in full or as a short fixed-length name
 - `seasons.js`: the season a request names
 - `notifications.js`: capping a night's notifications
 - `game-reminders.js`: persisted game reminder deadlines, verification, delivery, and retries

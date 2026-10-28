@@ -7,6 +7,7 @@ import { describeTeamStatus, findSeries, nameSeries } from "../page/js/bracket.j
 import { renderCardNote, renderMatchupRow } from "../page/js/bracket-view.js";
 import { describeDrought, listRankedOrder, listTitles } from "../page/js/clubs.js";
 import { keepRanking } from "../page/js/kept-on-device.js";
+import { moveClub, renderRankItem } from "../page/js/ranking.js";
 import { describeRace, isSeedFinal } from "../page/js/race.js";
 import { listSeasonDays, renderGameFaceOff } from "../page/js/games-view.js";
 import { listSlateGames } from "../page/js/slate.js";
@@ -908,6 +909,38 @@ test("clubs never dragged into place follow the ranked ones by name", (t) => {
   t.after(() => keepRanking(session.activeYear, []));
   session.state = RANKED_FIELD;
   assert.deepEqual(listRankedOrder(), ["SEA", "ATL", "TB", "NYY"]);
+});
+
+test("a grip's keys move its club a step or to either end, and a key past an end or no slider's moves nothing", () => {
+  const order = ["ATL", "SEA", "TB", "NYY"];
+  for (const key of ["ArrowUp", "ArrowRight"])
+    assert.deepEqual(moveClub(order, "TB", key), ["ATL", "TB", "SEA", "NYY"]);
+  for (const key of ["ArrowDown", "ArrowLeft"])
+    assert.deepEqual(moveClub(order, "TB", key), ["ATL", "SEA", "NYY", "TB"]);
+  assert.deepEqual(moveClub(order, "TB", "Home"), ["TB", "ATL", "SEA", "NYY"]);
+  assert.deepEqual(moveClub(order, "SEA", "End"), ["ATL", "TB", "NYY", "SEA"]);
+  for (const key of ["ArrowUp", "ArrowRight", "Home"])
+    assert.equal(moveClub(order, "ATL", key), null);
+  for (const key of ["ArrowDown", "ArrowLeft", "End"])
+    assert.equal(moveClub(order, "NYY", key), null);
+  assert.equal(moveClub(order, "TB", "Enter"), null);
+  assert.deepEqual(order, ["ATL", "SEA", "TB", "NYY"]);
+});
+
+test("each grip is a slider VoiceOver adjusts, higher up the list, saying the club's rank", () => {
+  session.state = RANKED_FIELD;
+  const grip = String(renderRankItem("SEA", 1, 4)).match(/<button[^>]*class="grip"[^>]*>/)?.[0];
+  assert.ok(grip);
+  for (const attribute of [
+    'role="slider"',
+    'aria-orientation="vertical"',
+    'aria-label="Move Mariners"',
+    'aria-valuemin="1"',
+    'aria-valuemax="4"',
+    'aria-valuenow="3"',
+    'aria-valuetext="Ranked 2 of 4"',
+  ])
+    assert.ok(grip.includes(attribute), `${attribute} in ${grip}`);
 });
 
 // Detroit went out in the Wild Card Series and New York in the Division Series.

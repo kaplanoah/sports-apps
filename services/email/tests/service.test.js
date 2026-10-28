@@ -161,14 +161,14 @@ test("missing configuration and storage failures refuse acceptance and expose no
   assert.equal(box.values.size, 0);
 });
 
-test("service health includes backlog and failed delivery without disclosing a report", async () => {
+test("a backlog asks for attention while the service still answers, and a lost outbox fails health, disclosing no report", async () => {
   const { box, service } = createService();
   await service.submitContact({ app: "mlb", submission: REPORT, sender: SENDER });
   box.clock.now += 60 * 60 * 1000 + 1;
   assert.deepEqual(await service.readHealth(), {
-    ok: false,
+    ok: true,
     release: "abc1234",
-    problem: "Contact delivery needs attention",
+    attention: "Contact delivery needs attention",
   });
   box.outbox.fetch = async () => {
     throw new Error("private-message");

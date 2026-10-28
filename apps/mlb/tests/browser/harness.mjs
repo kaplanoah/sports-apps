@@ -626,11 +626,14 @@ export function serveLockedApp(page, { accessCode, pageHost }) {
   });
 }
 
+/** What the app calls its light and dark themes. */
+export const THEME_NAMES = { light: "Ball", dark: "Night Game" };
+
 /** The app as the root's page-move.mjs checks move it from its old address to its own. */
 export const MOVING_APP = {
   serve: serveLockedApp,
   appName: "MLB",
-  looks: { light: "Ball", dark: "Night Game" },
+  looks: THEME_NAMES,
   pageHost: "mlb.sports.example",
   oldHost: "mlb-app.example-subdomain.workers.dev",
 };

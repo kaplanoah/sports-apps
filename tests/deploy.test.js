@@ -291,10 +291,7 @@ test("upload, route, and the Worker URL", async () => {
     ],
     keep_bindings: ["secret_text"],
     annotations: { "workers/message": NEW_COMMIT, "workers/tag": NEW_COMMIT.slice(0, 7) },
-    migrations: {
-      new_tag: "v1",
-      steps: [{ new_sqlite_classes: ["SeasonStore"] }],
-    },
+    migrations: { new_tag: "v1", steps: [{ new_sqlite_classes: ["SeasonStore"] }] },
   });
   const file = form.get("worker.mjs");
   assert.equal(file.type, "application/javascript+module");

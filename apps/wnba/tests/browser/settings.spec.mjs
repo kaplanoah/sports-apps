@@ -1,4 +1,4 @@
-import { test, expect, matchPath, openApp } from "./harness.mjs";
+import { test, expect, matchPath, openApp, THEME_NAMES } from "./harness.mjs";
 import { waitForTimedAnimations } from "../../../../tests/browser/animations.mjs";
 import { serveReleases } from "../../../../tests/browser/serve-releases.mjs";
 import { measureFieldFace, readRole } from "../../../../tests/browser/type-roles.mjs";
@@ -16,6 +16,7 @@ import { openFromHomeScreen } from "../../../../tests/browser/touch.mjs";
 import { readTopSpacing } from "../../../../tests/browser/sheet-top.mjs";
 import { ONE_PAST_SEASON } from "./past-season.mjs";
 import { chooseAppearance } from "./theme.mjs";
+import { THEMES } from "../../../../tests/browser/theme-layout.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
@@ -66,7 +67,7 @@ test("the Season picker sets 16px, which an iPhone doesn't zoom into on a tap, a
   await openApp(page, ONE_PAST_SEASON);
   await openSettings(page);
   const picker = page.locator("#seasonPicker");
-  for (const colorScheme of /** @type {const} */ (["light", "dark"])) {
+  for (const colorScheme of THEMES) {
     await page.emulateMedia({ colorScheme });
     await expect(page.locator("html")).toHaveAttribute("data-theme", colorScheme);
     await checkSelectArrow(picker);
@@ -82,7 +83,7 @@ test("a reload with settings open shows its seasons, switches, and look picked b
   await openApp(page, ONE_PAST_SEASON);
   await checkSettingsOnReload({
     page,
-    look: "Walnut",
+    look: THEME_NAMES.dark,
     switchName: "Include content from The Athletic",
     pastSeason: "2025",
   });
@@ -399,7 +400,7 @@ test.describe("on a phone", () => {
 
   test("a switch's knob is Walnut's cream in each theme, on or off", async ({ page }) => {
     await openApp(page);
-    for (const appearance of ["Maple", "Walnut"]) {
+    for (const appearance of Object.values(THEME_NAMES)) {
       await chooseAppearance(page, appearance);
       await page.getByRole("button", { name: "Settings", exact: true }).click();
       const knobs = await page

@@ -420,6 +420,30 @@ test("a drag on a ranking grip never moves the Ranking page", async ({ page }) =
   expect(Math.round((await ranking.boundingBox()).y)).toBe(0);
 });
 
+test("a ranking's grip is a slider whose keys move its club, VoiceOver's swipe too, keeping focus on it", async ({
+  page,
+}) => {
+  await openApp(page);
+  await openSettings(page);
+  const rows = page.locator("#rankList .rank-item");
+  const second = await rows.nth(1).getAttribute("data-id");
+  const grip = rows.nth(1).getByRole("slider");
+  await expect(grip).toHaveAttribute("aria-valuetext", `Ranked 2 of ${await rows.count()}`);
+  await grip.focus();
+
+  await page.keyboard.press("ArrowRight");
+  await expect(rows.first()).toHaveAttribute("data-id", second);
+  const moved = rows.first().getByRole("slider");
+  await expect(moved).toBeFocused();
+  await expect(moved).toHaveAttribute("aria-valuetext", `Ranked 1 of ${await rows.count()}`);
+
+  await page.keyboard.press("ArrowUp");
+  await expect(rows.first()).toHaveAttribute("data-id", second);
+  await page.keyboard.press("ArrowLeft");
+  await expect(rows.nth(1)).toHaveAttribute("data-id", second);
+  await expect(rows.nth(1).getByRole("slider")).toBeFocused();
+});
+
 test("on a wide screen, settings open as a modal with a close button", async ({ page }) => {
   await openApp(page);
   await openSettings(page);

@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createTestOutbox } from "../services/email/tests/fake-outbox.js";
-import { EmailOutbox } from "../services/email/worker/src/outbox.js";
+import { createTestOutbox } from "./fake-outbox.js";
+import { EmailOutbox } from "../worker/src/outbox.js";
 
 const ID = "23428fa1-9250-4f13-b567-c094f8bdc448";
 const SUBMISSION = {
@@ -13,7 +13,9 @@ const SUBMISSION = {
   screenshot: null,
 };
 
+const HOUR_MS = 60 * 60 * 1000;
 const createOutbox = () => createTestOutbox(SUBMISSION);
+const readStatus = async (box) => (await box.outbox.readStatus()).json();
 
 test("durable acceptance includes payload and alarm; concurrent retries create one report", async () => {
   const box = createOutbox();
@@ -66,22 +68,33 @@ test("an accepted email is never resent when delivery checks fail or expire", as
   assert.equal(box.values.get(`pending:mlb/${ID}`).state, "attention");
 });
 
+const LARGEST_SUBMISSION = {
+  ...SUBMISSION,
+  diagnostics: "\u{1f3c0}".repeat(40000),
+  screenshot: { filename: "screenshot.png", type: "image/png", content: "x".repeat(2800000) },
+};
+
 test("screenshots and Unicode reports fit storage value limits and reconstruct exactly", async () => {
   const box = createOutbox();
-  const submission = {
-    ...SUBMISSION,
-    diagnostics: "\u{1f3c0}".repeat(40000),
-    screenshot: { filename: "screenshot.png", type: "image/png", content: "x".repeat(2800000) },
-  };
-  await box.submit(submission);
+  await box.submit(LARGEST_SUBMISSION);
   const report = box.values.get(`pending:mlb/${ID}`);
-  assert.ok(report.chunks > 100);
+  assert.ok(report.chunks > 128);
   assert.deepEqual(await box.outbox.readSubmission(report), {
-    ...submission,
+    ...LARGEST_SUBMISSION,
     app: "mlb",
     from: box.env.CONTACT_FROM,
     to: box.env.CONTACT_TO,
   });
+});
+
+test("a delivered report with a largest screenshot leaves none of its payload behind", async () => {
+  const box = createOutbox();
+  await box.submit(LARGEST_SUBMISSION);
+  await box.wake();
+  box.setProvider(async () => Response.json({ last_event: "delivered" }));
+  await box.wake();
+  assert.equal(box.values.has(`pending:mlb/${ID}`), false);
+  assert.equal((await box.ctx.storage.list({ prefix: "payload:" })).size, 0);
 });
 
 test("provider acceptance remains pending until delivery is confirmed, then private payload is removed", async () => {
@@ -134,18 +147,51 @@ test("provider outages keep retrying; uncertainty stops before the provider dedu
   await box.outbox.alarm();
   assert.equal(box.calls.length, 2);
   assert.equal(box.values.get(`pending:mlb/${ID}`).state, "attention");
-  assert.ok(box.values.has(`payload:mlb/${ID}:0`));
-  assert.equal((await (await box.outbox.readStatus()).json()).ok, false);
+  assert.equal((await readStatus(box)).ok, false);
 });
 
-test("a bounce retains the report for recovery and marks health as needing attention", async () => {
+test("a bounce pauses the report, drops its payload, and asks for attention for a week", async () => {
   const box = createOutbox();
   await box.submit();
   await box.wake();
   box.setProvider(async () => Response.json({ last_event: "bounced" }));
   await box.wake();
   assert.equal(box.values.get(`pending:mlb/${ID}`).state, "attention");
-  assert.equal((await (await box.outbox.readStatus()).json()).ok, false);
+  assert.equal((await box.ctx.storage.list({ prefix: "payload:" })).size, 0);
+  assert.equal((await readStatus(box)).ok, false);
+  const pausedAt = box.clock.now;
+  await box.wake();
+  assert.ok(box.values.has(`pending:mlb/${ID}`));
+  await box.wake();
+  assert.equal(box.clock.now - pausedAt, 7 * 24 * HOUR_MS);
+  assert.equal(box.values.has(`pending:mlb/${ID}`), false);
+  assert.ok(box.values.has(`receipt:mlb/${ID}`));
+  assert.equal((await readStatus(box)).ok, true);
+});
+
+test("paused reports leave room in their league's queue", async () => {
+  const box = createOutbox();
+  for (let index = 0; index < 100; index += 1)
+    box.values.set(`pending:${index}`, {
+      app: "mlb",
+      createdAt: box.clock.now,
+      nextAt: box.clock.now + HOUR_MS,
+      state: "attention",
+    });
+  assert.equal((await box.submit()).status, 202);
+});
+
+test("a sender's hourly count is forgotten after its hour with nothing else pending", async () => {
+  const box = createOutbox();
+  await box.submit();
+  await box.wake();
+  box.setProvider(async () => Response.json({ last_event: "delivered" }));
+  await box.wake();
+  assert.equal(box.values.has(`pending:mlb/${ID}`), false);
+  assert.ok(box.values.has("sender:mlb:hashed-sender"));
+  await box.wake();
+  assert.equal(box.values.has("sender:mlb:hashed-sender"), false);
+  assert.equal(await box.ctx.storage.getAlarm(), null);
 });
 
 test("abuse limits new submissions but never prevent a saved report's retry", async () => {
@@ -161,12 +207,12 @@ test("abuse limits new submissions but never prevent a saved report's retry", as
   assert.equal((await box.submit()).status, 202);
 });
 
-test("a full queue rejects new reports and an hour-old report makes health fail", async () => {
+test("a full queue rejects new reports and an hour-old report asks for attention", async () => {
   const box = createOutbox();
   for (let index = 0; index < 100; index += 1)
     box.values.set(`pending:${index}`, { app: "mlb", createdAt: box.clock.now, state: "queued" });
   assert.equal((await box.submit()).status, 429);
-  assert.equal((await (await box.outbox.readStatus()).json()).ok, true);
-  box.clock.now += 60 * 60 * 1000 + 1;
-  assert.equal((await (await box.outbox.readStatus()).json()).ok, false);
+  assert.deepEqual(await readStatus(box), { ok: true });
+  box.clock.now += HOUR_MS + 1;
+  assert.deepEqual(await readStatus(box), { ok: false });
 });

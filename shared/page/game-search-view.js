@@ -110,7 +110,7 @@ const findList = () =>
 const findRead = () =>
   /** @type {HTMLElement | null} */ (view?.querySelector(".search-read") ?? null);
 
-const renderShell = () =>
+export const renderShell = () =>
   html`<div class="day-bar search-bar is-empty">
       <form class="search-row" role="search">
         <label class="search-field"
@@ -128,7 +128,7 @@ const renderShell = () =>
         >
         <button type="button" class="search-cancel">Cancel</button>
       </form>
-      <p class="search-read"></p>
+      <p class="search-read" role="status"></p>
     </div>
     <div class="day-list search-list"></div>`;
 
@@ -674,6 +674,9 @@ function nameField(placeholder) {
   input?.setAttribute("aria-label", placeholder);
 }
 
+/** Makes the line under the field a status, as one put back from an earlier release may not be. */
+const markReadLine = () => findRead()?.setAttribute("role", "status");
+
 /**
  * Wires the search in `element`, which the page may already have put back as it was shown before a
  * reload (show-last-drawn.js), then takes it over, keeping where its list was scrolled.
@@ -685,6 +688,7 @@ export function startGameSearch(element, searchLeague) {
   league = searchLeague;
   if (!findInput()) setHtml(element, renderShell());
   nameField(searchLeague.placeholder);
+  markReadLine();
   placedFor = element.hidden
     ? null
     : {
