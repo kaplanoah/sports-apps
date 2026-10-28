@@ -9,7 +9,7 @@ import { waitForLoadToSettle } from "./at-rest.mjs";
 import { matchPath } from "./harness.mjs";
 import { holdRequests } from "./hold-requests.mjs";
 import { findSeasonPart, readSeasonRide, scrollSeasonPartToEnd } from "./season-scroll.mjs";
-import { findSeasonPill, findSeasonTab } from "./season-tab.mjs";
+import { findSeasonPill, findSeasonTab, openSeasonPart } from "./season-tab.mjs";
 import { writeUnreadableLastSeen } from "./unreadable-last-seen.mjs";
 import { passTime, setHidden } from "./visibility.mjs";
 
@@ -283,4 +283,34 @@ export async function expectNewsAfterReloads(page, writeDocument) {
   expect(await readPageScroll(page)).toBe(0);
   await runPageCode(page, release);
   expect(await readPageScroll(page)).toBe(0);
+}
+
+/**
+ * Checks a later-round bracket left at zero before a short reload, both before modules arrive
+ * and after their first draw.
+ * @param {import("@playwright/test").Page} page
+ * @param {string} sideways
+ */
+export async function expectBracketZeroAfterReload(page, sideways) {
+  await openSeasonPart(page, "Bracket");
+  const bracket = page.locator(sideways);
+  await page.waitForFunction((selector) => {
+    const element = document.querySelector(selector);
+    return element && Number(element.getAttribute("data-start-left")) > 0;
+  }, sideways);
+  await bracket.evaluate(
+    (element) =>
+      new Promise((resolve) => {
+        element.addEventListener("scroll", () => resolve(null), { once: true });
+        element.scrollTo({ left: 0, behavior: "instant" });
+      }),
+  );
+  const readLeft = () => bracket.evaluate((element) => Math.round(element.scrollLeft));
+  expect(await readLeft()).toBe(0);
+
+  const release = await reloadAfter(page, MINUTE_MS);
+  await expect(bracket).toBeVisible();
+  expect(await readLeft()).toBe(0);
+  await runPageCode(page, release);
+  expect(await readLeft()).toBe(0);
 }
