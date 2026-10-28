@@ -72,6 +72,18 @@ const findOldAddress = (oldHost) => `https://${oldHost}${LOCKED_PAGE_PATH}`;
 const findNewAddress = (pageHost) => `https://${pageHost}/`;
 
 /**
+ * Waits for the page to commit Chromium's error document, as it does for a navigation that fails.
+ * @param {import("@playwright/test").Page} page
+ * @param {AbortSignal} [signal]
+ */
+const waitForErrorCommit = (page, signal) =>
+  page.waitForEvent("framenavigated", {
+    predicate: (frame) =>
+      frame === page.mainFrame() && frame.url() === "chrome-error://chromewebdata/",
+    signal,
+  });
+
+/**
  * Has the page leave with `leave` for the handoff at `pageHost`, then opens the page it sends on
  * to, with the cookie it set. Playwright routes only the first request of a redirect, so the page
  * it leads to is opened again through the Worker.
@@ -81,14 +93,8 @@ const findNewAddress = (pageHost) => `https://${pageHost}/`;
  */
 export async function followHandoff(page, pageHost, leave) {
   const cancellation = new AbortController();
-  /** @param {import("@playwright/test").Frame} frame */
-  const isHandoffCommit = (frame) =>
-    frame === page.mainFrame() && frame.url() === "chrome-error://chromewebdata/";
   // The un-routed redirect cannot serve the fixture host, so Chromium commits its error document.
-  const committed = page.waitForEvent("framenavigated", {
-    predicate: isHandoffCommit,
-    signal: cancellation.signal,
-  });
+  const committed = waitForErrorCommit(page, cancellation.signal);
   try {
     const destination = page
       .waitForResponse(`${findNewAddress(pageHost)}access/handoff?**`, {
@@ -277,7 +283,7 @@ export async function checkMoveCardStandIns(app) {
 
 /**
  * Holds the handoff the page opens at `pageHost` rather than opening it, since the browser is where
- * the move goes on, and gives its address once the page asks for it.
+ * the move goes on, and gives its address once the page has asked for it and left.
  * @param {import("@playwright/test").Page} page
  * @param {string} pageHost
  * @returns {Promise<{ handoff: Promise<URL> }>}
@@ -286,7 +292,8 @@ async function holdHandoff(page, pageHost) {
   const handoffAddress = `${findNewAddress(pageHost)}access/handoff?**`;
   await page.route(handoffAddress, (route) => route.abort());
   const asked = page.waitForRequest(handoffAddress);
-  return { handoff: asked.then((request) => new URL(request.url())) };
+  const left = Promise.all([asked, waitForErrorCommit(page)]);
+  return { handoff: left.then(([request]) => new URL(request.url())) };
 }
 
 /**
