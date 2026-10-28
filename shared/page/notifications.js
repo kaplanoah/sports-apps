@@ -318,10 +318,12 @@ async function saveChoices(asked, place, permission) {
 }
 
 // A choice the save carried shows its saved value after it, unless the viewer changed it again.
+// A choice changed back to what the run before carried leaves nothing to save.
 async function saveWanted() {
   const asked = { ...wanted };
   const permission = askedPermission;
   askedPermission = null;
+  if (Object.keys(asked).length === 0) return;
   try {
     await saveChoices(asked, wantedPlace, permission);
   } finally {
