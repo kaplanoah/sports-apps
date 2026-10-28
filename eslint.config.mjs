@@ -76,11 +76,11 @@ const GENERIC_FUNCTION_NAMES = [
 
 // A tap, press, key, or Escape the page's code fakes runs the control's listeners without the
 // browser's own handling of the input, so it drifts from what a person's does. The page calls the
-// function the control's listener would.
+// function the control's listener would. Lint sees an event built in dispatchEvent's own call.
 const USER_INPUT_EVENT_CLASSES =
   "/^(Pointer|Mouse|Keyboard|Touch|Wheel|Input|Focus|Drag|Composition)Event$/";
 const USER_INPUT_EVENT_TYPES =
-  "/^(cancel|close|click|dblclick|submit|input|change|focus|blur|wheel|pointer[a-z]+|mouse[a-z]+|key[a-z]+|touch[a-z]+)$/";
+  "/^(cancel|close|submit|reset|input|beforeinput|change|focus|focusin|focusout|blur|wheel|contextmenu|click|dblclick|auxclick|drop|drag[a-z]*|composition[a-z]+|pointer[a-z]+|mouse[a-z]+|key[a-z]+|touch[a-z]+)$/";
 const SYNTHETIC_INPUT = [
   "CallExpression[callee.property.name='click'][arguments.length=0]",
   `CallExpression[callee.property.name='dispatchEvent'] > NewExpression.arguments[callee.name=${USER_INPUT_EVENT_CLASSES}]`,

@@ -21,11 +21,43 @@ async function listSyntheticInputs(code, filePath) {
 
 const FAKED = [
   'document.querySelector("button").click();',
-  'button.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));',
-  'button.dispatchEvent(new MouseEvent("click"));',
-  'field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter" }));',
-  'dialog.dispatchEvent(new Event("cancel"));',
-  'form.dispatchEvent(new Event("submit"));',
+  ...[
+    'new PointerEvent("pointerdown", { bubbles: true })',
+    'new MouseEvent("click")',
+    'new KeyboardEvent("keydown", { key: "Enter" })',
+    'new TouchEvent("touchstart")',
+    'new WheelEvent("wheel")',
+    'new InputEvent("input")',
+    'new FocusEvent("focus")',
+    'new DragEvent("dragstart")',
+    'new CompositionEvent("compositionstart")',
+    ...[
+      "cancel",
+      "close",
+      "submit",
+      "reset",
+      "input",
+      "beforeinput",
+      "change",
+      "focus",
+      "focusin",
+      "focusout",
+      "blur",
+      "wheel",
+      "contextmenu",
+      "click",
+      "dblclick",
+      "auxclick",
+      "drop",
+      "drag",
+      "dragstart",
+      "compositionend",
+      "pointerup",
+      "mousedown",
+      "keyup",
+      "touchend",
+    ].map((type) => `new Event("${type}")`),
+  ].map((event) => `target.dispatchEvent(${event});`),
 ];
 
 const KEPT = [
@@ -38,6 +70,7 @@ for (const filePath of [
   "shared/page/example.js",
   "apps/mlb/page/js/example.js",
   "shared/page/html.js",
+  "shared/page/show-last-drawn.js",
 ]) {
   for (const code of FAKED)
     test(`lint rejects faked input in ${filePath}: ${code}`, async () => {

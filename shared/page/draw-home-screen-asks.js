@@ -196,7 +196,8 @@ function wireWelcome(welcome, isOnIos) {
   welcome.addEventListener("change", (event) =>
     keepWelcomeChoice(/** @type {HTMLInputElement} */ (event.target)),
   );
-  // Its buttons close it at once until home-screen.js loads and takes their clicks to slide it down.
+  // Its buttons close it at once until home-screen.js loads and takes their clicks to close it as
+  // Escape does.
   welcome.addEventListener("click", (event) => {
     if (/** @type {Element} */ (event.target).closest(".welcome-continue, .welcome-close"))
       welcome.close();
