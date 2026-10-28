@@ -1,11 +1,10 @@
-import { createHash } from "node:crypto";
 import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { acceptCodexAnswer, buildCodexRequest } from "./review-codex.mjs";
 import { readReviewIdentity, sealReviewArtifact } from "./review-data.mjs";
 import { validatePublicationJobs, REVIEW_PUBLICATION_STAGES } from "./review-publication.mjs";
-import { requireOwnerTrialAuthority } from "./review-trial-authority.mjs";
+import { requireOwnerTrialAuthority, TrialAuthorityError } from "./review-trial-authority.mjs";
 import { exportReviewArtifact, importReviewArtifacts } from "./trusted-review.mjs";
 
 const FIXTURE_ENV = {
@@ -20,6 +19,8 @@ const FIXTURE_ENV = {
   REVIEW_SELECTION: "initial",
 };
 const FIXTURE_IDENTITY = readReviewIdentity(FIXTURE_ENV);
+
+class ValidationProofError extends Error {}
 
 /** @param {string} path */
 const readFixture = (path) => JSON.parse(readFileSync(path, "utf8"));
@@ -97,14 +98,16 @@ export function prepareValidationFixture(folder, env) {
 }
 
 /** @param {() => unknown} operation @param {RegExp} expected */
-function requireRejection(operation, expected) {
+export function requireRejection(operation, expected) {
   try {
     operation();
   } catch (error) {
     if (error instanceof Error && expected.test(error.message)) return;
-    throw new Error("Validator proof failed for an unexpected reason.", { cause: error });
+    throw new ValidationProofError("Validator proof failed for an unexpected reason.", {
+      cause: error,
+    });
   }
-  throw new Error("Validator accepted a negative control.");
+  throw new ValidationProofError("Validator accepted a negative control.");
 }
 
 function createPublicationFixture() {
@@ -160,13 +163,20 @@ export function verifyValidationFixture(folder, env) {
     manifest.source !== env.GITHUB_SHA ||
     manifest.run !== env.GITHUB_RUN_ID
   )
-    throw new Error("Foreign validator fixture.");
+    throw new ValidationProofError("Foreign validator fixture.");
   const scratch = mkdtempSync(join(env.RUNNER_TEMP, "validation-proof-"));
   const checks = [];
-  /** @param {string} name @param {() => void} operation */
+  /** @template T @param {string} name @param {() => T} operation @returns {T} */
   const check = (name, operation) => {
-    operation();
-    checks.push(name);
+    try {
+      const result = operation();
+      checks.push(name);
+      return result;
+    } catch (error) {
+      const reason =
+        error instanceof ValidationProofError ? error.message : "Unexpected validator error.";
+      throw new ValidationProofError(`Control ${name}: ${reason}`, { cause: error });
+    }
   };
   /** @param {NodeJS.ProcessEnv} [changes] */
   const importFixture = (changes = {}) => {
@@ -175,11 +185,11 @@ export function verifyValidationFixture(folder, env) {
     return target;
   };
   try {
-    const data = importFixture();
+    const data = check("valid-sealed-artifact-fixture", () => importFixture());
     check("valid-empty-integration-fixture", () => {
       const across = readFixture(join(data, "across.json"));
       if (across.evidence.portion !== "integration" || across.items.length !== 0)
-        throw new Error("The positive control has no empty integration.");
+        throw new ValidationProofError("The positive control has no empty integration.");
     });
     /** @type {[string, NodeJS.ProcessEnv][]} */
     const identities = [
@@ -271,9 +281,6 @@ export function verifyValidationFixture(folder, env) {
       kind: "synthetic-validator-proof",
       source: env.GITHUB_SHA,
       run: env.GITHUB_RUN_ID,
-      fixtureManifestSha256: createHash("sha256")
-        .update(readFileSync(join(folder, "manifest.json")))
-        .digest("hex"),
       checks,
       modelExecuted: false,
       githubCheckPublished: false,
@@ -298,9 +305,13 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
       console.log(
         `Validated ${proof.checks.length} synthetic controls. No model or live publication was exercised.`,
       );
-    } else throw new Error("Unknown validator proof command.");
-  } catch {
-    console.error("Validator proof failed. This is not a passing activation proof.");
+    } else throw new ValidationProofError("Unknown validator proof command.");
+  } catch (error) {
+    console.error(
+      error instanceof ValidationProofError || error instanceof TrialAuthorityError
+        ? error.message
+        : "Validator proof failed. This is not a passing activation proof.",
+    );
     process.exitCode = 1;
   }
 }

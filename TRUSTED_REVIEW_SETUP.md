@@ -97,9 +97,11 @@ Read the completed job log separately: neither `TRUSTED_CODEX_TOOL_PROOF_OK` nor
 
 ### Hosted validator controls
 
-Dispatch `codex-validation-proof.yml` once on main with the gate still off. It uses no model, API key or publisher credential. One runner seals synthetic empty-candidate portions and integration through the production validators; a second downloads those artifacts and revalidates them before testing negative controls. Neither runner posts a review or writes a commit check.
+Only the owner's first dispatch attempt of `codex-validation-proof.yml` on main with the gate off executes its jobs. It uses no model, API key or publisher credential. One runner seals synthetic empty-candidate portions and integration through the production validators; a second downloads those artifacts and revalidates them before testing negative controls. Neither runner posts a review or writes a commit check.
 
 The `codex-validation-proof` artifact binds the source and run and lists each passing control. A valid baseline must pass before rejection can count. Stale head/base/source/run, changed provider/selection, malformed or incomplete answers, unjudged work, missing supplied-content coverage and changed integration evidence must fail. Producer checks separately reject missing integration, cancelled model and missing validation stages.
+
+Record the source SHA, run, artifact ID and digest, and the artifact's `checks` list. A green run with skipped jobs and no proof artifact establishes nothing. A failed control prints its name and a fixed reason; unexpected diagnostic contents stay out of public logs.
 
 | This proof establishes | Evidence still required separately |
 | --- | --- |

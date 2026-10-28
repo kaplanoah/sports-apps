@@ -1,11 +1,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   prepareValidationFixture,
   verifyValidationFixture,
+  requireRejection,
 } from "../worker/prove-review-validation.mjs";
 import { readRepoFile } from "./repo-files.js";
 
@@ -38,8 +41,8 @@ test("transferred controls exercise production rejection without claiming model 
     assert.equal(proof.kind, "synthetic-validator-proof");
     assert.equal(proof.source, OWNER.GITHUB_SHA);
     assert.equal(proof.run, OWNER.GITHUB_RUN_ID);
-    assert.match(proof.fixtureManifestSha256, /^[a-f0-9]{64}$/);
     assert.deepEqual(proof.checks, [
+      "valid-sealed-artifact-fixture",
       "valid-empty-integration-fixture",
       "stale-head",
       "stale-base",
@@ -61,6 +64,81 @@ test("transferred controls exercise production rejection without claiming model 
     assert.equal(proof.githubCheckPublished, false);
     assert.equal(proof.actualInterruptionProved, false);
     assert.doesNotMatch(JSON.stringify(proof), /binding|promptSha256|candidates|tries/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("negative controls must actually reject for the expected reason", () => {
+  assert.throws(
+    () => requireRejection(() => {}, /expected/),
+    /Validator accepted a negative control/,
+  );
+  assert.throws(
+    () =>
+      requireRejection(() => {
+        throw new Error("a different failure");
+      }, /expected/),
+    /Validator proof failed for an unexpected reason/,
+  );
+  assert.doesNotThrow(() =>
+    requireRejection(() => {
+      throw new Error("expected failure");
+    }, /expected/),
+  );
+});
+
+test("CLI reports only known failure messages and keeps unexpected diagnostics out of logs", () => {
+  const { root, folder, env } = createFixture();
+  const command = fileURLToPath(new URL("../worker/prove-review-validation.mjs", import.meta.url));
+  const invokeProof = (argument, changes = {}) =>
+    spawnSync(process.execPath, [command, argument], {
+      encoding: "utf8",
+      env: { ...process.env, ...env, ...changes },
+    });
+  try {
+    const denied = invokeProof("prepare", { GITHUB_ACTOR: "outsider" });
+    assert.notEqual(denied.status, 0);
+    assert.match(denied.stderr, /one owner dispatch on main/);
+    const unknown = invokeProof("unknown");
+    assert.notEqual(unknown.status, 0);
+    assert.match(unknown.stderr, /Unknown validator proof command/);
+    const input = join(root, "codex-validation-fixture");
+    const prepared = invokeProof("prepare");
+    assert.equal(prepared.status, 0, prepared.stderr);
+    const accepted = invokeProof("verify");
+    assert.equal(accepted.status, 0, accepted.stderr);
+    assert.equal(
+      JSON.parse(readFileSync(join(root, "codex-validation-proof.json"), "utf8")).kind,
+      "synthetic-validator-proof",
+    );
+    writeFileSync(join(input, "manifest.json"), "private-invalid-manifest-data");
+    const malformed = invokeProof("verify");
+    assert.notEqual(malformed.status, 0);
+    assert.match(malformed.stderr, /Validator proof failed/);
+    assert.doesNotMatch(malformed.stderr, /private-invalid-manifest-data|SyntaxError|node:fs/);
+    const foreign = {
+      kind: "synthetic-validator-fixture",
+      source: "e".repeat(40),
+      run: env.GITHUB_RUN_ID,
+    };
+    writeFileSync(join(input, "manifest.json"), JSON.stringify(foreign));
+    const rejected = invokeProof("verify");
+    assert.notEqual(rejected.status, 0);
+    assert.match(rejected.stderr, /Foreign validator fixture/);
+    cpSync(join(folder, "manifest.json"), join(input, "manifest.json"));
+    writeFileSync(
+      join(input, "artifacts/trusted-review-plan/plan.json"),
+      "private-invalid-fixture-data",
+    );
+    const unexpected = invokeProof("verify");
+    assert.notEqual(unexpected.status, 0);
+    assert.match(
+      unexpected.stderr,
+      /Control valid-sealed-artifact-fixture: Unexpected validator error/,
+    );
+    assert.doesNotMatch(unexpected.stderr, /private-invalid-fixture-data|SyntaxError|node:fs/);
+    assert.equal(unknown.stdout, "");
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
