@@ -29,7 +29,7 @@ test("native code, dependencies and runner controls request isolation while app-
 
 test("isolation is a read-only secret-free job with pinned setup and explicit cleanup", () => {
   const job = readJob("codex-rate-control-isolation");
-  assert.match(job, /permissions:\n      contents: read\n/);
+  assert.match(job, /permissions:\n {6}contents: read\n/);
   assert.doesNotMatch(
     job,
     /secrets\.|environment:|write|id-token|openai-api-key|codex exec|codex-action@/,
@@ -37,7 +37,7 @@ test("isolation is a read-only secret-free job with pinned setup and explicit cl
   assert.match(job, /persist-credentials: false/);
   for (const command of ["scope", "install", "prove", "cleanup"])
     assert.match(job, new RegExp(`run: node worker/prove-codex-rate-isolation\\.mjs ${command}`));
-  assert.match(job, /name: Remove only proof installation files\n        if: always\(\)/);
+  assert.match(job, /name: Remove only proof installation files\n {8}if: always\(\)/);
   assert.match(job, /path: \$\{\{ runner.temp \}\}\/codex-rate-isolation-proof.json/);
   assert.match(job, /if-no-files-found: error/);
 });
