@@ -1,6 +1,7 @@
 import { appendFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { createGitHub, readAllPages } from "./github-api.mjs";
+import { isRepositoryName, isRunId } from "./review-run.mjs";
 
 export const PROVIDER_MARKER = "<!-- trusted-review-provider ";
 const PROVIDERS = ["claude", "codex"];
@@ -9,9 +10,9 @@ const PROVIDERS = ["claude", "codex"];
 export function writeReviewModelQueue(env, provider, portion) {
   if (
     !PROVIDERS.includes(provider) ||
-    !/^[\w.-]+\/[\w.-]+$/.test(env.GITHUB_REPOSITORY ?? "") ||
+    !isRepositoryName(env.GITHUB_REPOSITORY) ||
     (provider === "claude" &&
-      (!/^\d+$/.test(env.GITHUB_RUN_ID ?? "") || !/^(integration|[1-9]\d*)$/.test(String(portion))))
+      (!isRunId(env.GITHUB_RUN_ID) || !/^(integration|[1-9]\d*)$/.test(String(portion))))
   )
     throw new Error("Invalid review model queue identity.");
   const group =

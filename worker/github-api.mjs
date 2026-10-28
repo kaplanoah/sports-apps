@@ -42,9 +42,9 @@ export function createGitHubRoot(options) {
 function createGitHubRequest({ prefix, fetchImpl, env }) {
   /**
    * @param {string} path
-   * @param {{ method?: string, body?: unknown }} [request]
+   * @param {{ method?: string, body?: unknown, readBody?: boolean }} [request]
    */
-  return async (path, { method = "GET", body } = {}) => {
+  return async (path, { method = "GET", body, readBody = true } = {}) => {
     const response = await fetchImpl(`${API}${prefix}${path}`, {
       method,
       headers: { ...writeHeaders(env), ...(body ? { "content-type": "application/json" } : {}) },
@@ -52,7 +52,7 @@ function createGitHubRequest({ prefix, fetchImpl, env }) {
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
     if (!response.ok) throw new GitHubError(response.status, `${method} ${path}`);
-    return response.json();
+    return readBody ? response.json() : null;
   };
 }
 

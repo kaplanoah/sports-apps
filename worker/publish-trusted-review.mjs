@@ -5,7 +5,12 @@ import { createGitHub, readAllPages } from "./github-api.mjs";
 import { isGitObjectId } from "./git-object.mjs";
 import { readReviewProvider } from "./review-provider.mjs";
 import { matchesReviewProvider } from "./review-state.mjs";
-import { readReviewRun, REVIEW_CHECK_NAME, REVIEW_RESULT_PREFIX } from "./review-run.mjs";
+import {
+  readReviewRun,
+  requireTrustedReviewAuthority,
+  REVIEW_CHECK_NAME,
+  REVIEW_RESULT_PREFIX,
+} from "./review-run.mjs";
 import { readReviewArtifact } from "./review-artifact.mjs";
 import { verifyTrustedReviewResult } from "./find-trusted-review.mjs";
 import {
@@ -18,23 +23,9 @@ import {
   validatePublicationAttestation,
 } from "./review-publication.mjs";
 
-/** @param {NodeJS.ProcessEnv} env */
-export function requirePublisherAuthority(env) {
-  if (
-    env.GITHUB_REF !== "refs/heads/main" ||
-    !["pull_request_target", "workflow_run"].includes(env.GITHUB_EVENT_NAME) ||
-    !["review.yml", "trusted-review-publisher.yml"].some(
-      (name) =>
-        env.GITHUB_WORKFLOW_REF ===
-        `${env.GITHUB_REPOSITORY}/.github/workflows/${name}@refs/heads/main`,
-    )
-  )
-    throw new Error("Publisher requires trusted main workflow authority.");
-}
-
 /** @param {any} event @param {NodeJS.ProcessEnv} env @param {(path:string)=>Promise<any>} readGitHub */
 export async function discoverPublicationHeads(event, env, readGitHub) {
-  requirePublisherAuthority(env);
+  requireTrustedReviewAuthority(env);
   if (env.GITHUB_EVENT_NAME === "workflow_run") {
     if (!Number.isSafeInteger(event.workflow_run?.id)) throw new Error("Missing workflow run.");
     const run = await readGitHub(`/actions/runs/${event.workflow_run.id}`);
@@ -426,7 +417,7 @@ function requireDirectPublisherSource(env, run) {
 /** @param {any} options */
 export async function reconcileReviewPublication(options) {
   const { env } = options;
-  requirePublisherAuthority(env);
+  requireTrustedReviewAuthority(env);
   const head = env.PUBLISH_HEAD;
   const phase = env.PUBLISH_PHASE;
   if (!isGitObjectId(head) || !["begin", "finish", "observe"].includes(phase))

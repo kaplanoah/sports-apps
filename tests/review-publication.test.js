@@ -5,7 +5,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { readReviewRun } from "../worker/review-run.mjs";
+import { readReviewRun, requireTrustedReviewAuthority } from "../worker/review-run.mjs";
 import { readReviewIdentity } from "../worker/review-data.mjs";
 import { readReviewArtifact } from "../worker/review-artifact.mjs";
 import {
@@ -19,7 +19,6 @@ import {
 import {
   discoverPublicationHeads,
   reconcileReviewPublication,
-  requirePublisherAuthority,
 } from "../worker/publish-trusted-review.mjs";
 import { readRepoFile } from "./repo-files.js";
 
@@ -358,7 +357,7 @@ test("holding a non-main check preserves the existing stacked-review pipeline", 
   );
   assert.throws(
     () =>
-      requirePublisherAuthority({
+      requireTrustedReviewAuthority({
         ...state.env,
         GITHUB_REF: "refs/heads/stack",
         GITHUB_WORKFLOW_REF: `${REPOSITORY}/.github/workflows/review.yml@refs/heads/stack`,
@@ -564,7 +563,7 @@ test("discovery reconciles both old and new heads and authenticates lifecycle so
     /Untrusted/,
   );
   assert.throws(
-    () => requirePublisherAuthority({ ...state.env, GITHUB_REF: "refs/pull/1/merge" }),
+    () => requireTrustedReviewAuthority({ ...state.env, GITHUB_REF: "refs/pull/1/merge" }),
     /authority/,
   );
 });

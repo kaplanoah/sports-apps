@@ -2,7 +2,7 @@
 import { appendFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
-import { createGitHub, readAllPages } from "./github-api.mjs";
+import { createGitHub, GitHubError, readAllPages } from "./github-api.mjs";
 import { readReviewIdentity, validateReviewArtifact } from "./review-data.mjs";
 import { readJson } from "./judge-review.mjs";
 import { runReviewGit } from "./review-repository.mjs";
@@ -10,7 +10,12 @@ import { isGitObjectId } from "./git-object.mjs";
 import { waitFor } from "./check-timing.mjs";
 import { readReviewProvider } from "./review-provider.mjs";
 import { matchesReviewProvider } from "./review-state.mjs";
-import { readReviewRun, REVIEW_RESULT_PREFIX } from "./review-run.mjs";
+import {
+  readReviewRun,
+  requireTrustedReviewAuthority,
+  REVIEW_RESULT_PREFIX,
+} from "./review-run.mjs";
+import { isPullRequestRun } from "./find-passed-ci.mjs";
 
 const FINISH_BUDGET_MS = 10 * 60 * 1000;
 const FIRST_POLL_MS = 60 * 1000;
@@ -107,6 +112,126 @@ export async function findTrustedReviewRun(options) {
   };
 }
 
+/** @param {any} run */
+function readJoinRecoverySubject(run) {
+  const review = readReviewRun(run);
+  if (review?.intent) return review;
+  if (!isPullRequestRun(run) || run.pull_requests?.length !== 1) return null;
+  const pull = run.pull_requests[0];
+  return Number.isSafeInteger(pull.number) &&
+    pull.number > 0 &&
+    isGitObjectId(pull.head?.sha) &&
+    isGitObjectId(pull.base?.sha) &&
+    run.head_sha === pull.head.sha
+    ? { pull: pull.number, head: pull.head.sha, base: pull.base.sha }
+    : null;
+}
+
+/** @param {any} run @param {any} subject @param {string} repository */
+function matchesJoinRecoveryCI(run, subject, repository) {
+  return (
+    isPullRequestRun(run) &&
+    run.repository?.full_name === repository &&
+    Number.isSafeInteger(run.id) &&
+    run.id > 0 &&
+    run.head_sha === subject.head &&
+    run.pull_requests?.some(
+      (pull) =>
+        pull.number === subject.pull &&
+        pull.head?.sha === subject.head &&
+        pull.base?.sha === subject.base,
+    )
+  );
+}
+
+/**
+ * Recovery only discovers a CI job. That job still verifies sealed code/provider evidence before
+ * check can pass; discovery metadata never approves a review.
+ * @param {any} event
+ * @param {NodeJS.ProcessEnv} env
+ * @param {(path:string, request?:{method?:string,readBody?:boolean})=>Promise<any>} readGitHub
+ */
+export async function recoverTrustedReviewJoin(event, env, readGitHub) {
+  requireTrustedReviewAuthority(env);
+  if (
+    env.GITHUB_EVENT_NAME !== "workflow_run" ||
+    env.GITHUB_RUN_ATTEMPT !== "1" ||
+    event.action !== "completed" ||
+    !Number.isSafeInteger(event.workflow_run?.id) ||
+    event.workflow_run.id <= 0
+  )
+    throw new Error("Join recovery requires a first trusted completion event.");
+  const trigger = await readGitHub(`/actions/runs/${event.workflow_run.id}`);
+  if (
+    trigger.id !== event.workflow_run.id ||
+    trigger.status !== "completed" ||
+    !Number.isSafeInteger(trigger.repository?.id) ||
+    trigger.repository?.full_name !== env.GITHUB_REPOSITORY
+  )
+    return null;
+  const subject = readJoinRecoverySubject(trigger);
+  if (!subject) return null;
+  const pull = await readGitHub(`/pulls/${subject.pull}`);
+  if (
+    pull.state !== "open" ||
+    pull.draft ||
+    pull.head?.sha !== subject.head ||
+    pull.base?.sha !== subject.base
+  )
+    return null;
+  const expected = {
+    repository: env.GITHUB_REPOSITORY,
+    head: subject.head,
+    base: subject.base,
+    pull: String(subject.pull),
+    readGitHub,
+  };
+  const reviews = await readAllPages(
+    readGitHub,
+    `/actions/workflows/review.yml/runs?event=pull_request_target&head_sha=${subject.head}`,
+    (answer) => answer.workflow_runs,
+  );
+  const latest = reviews
+    .filter((run) => isTrustedReviewRun(run, expected) && readReviewRun(run)?.intent === "review")
+    .sort((first, second) => second.id - first.id)[0];
+  if (!latest || latest.status !== "completed" || latest.conclusion !== "success") return null;
+  const result = await findTrustedReviewRun(expected);
+  if (result.pending || result.run !== latest.id) return null;
+  const ciRuns = await readAllPages(
+    readGitHub,
+    `/actions/workflows/ci.yml/runs?event=pull_request&head_sha=${subject.head}`,
+    (answer) => answer.workflow_runs,
+  );
+  const ci = ciRuns
+    .filter((run) => matchesJoinRecoveryCI(run, subject, env.GITHUB_REPOSITORY))
+    .sort((first, second) => second.id - first.id)[0];
+  if (!ci || ci.status !== "completed" || ci.conclusion !== "failure" || ci.run_attempt !== 1)
+    return null;
+  const jobs = await readAllPages(
+    readGitHub,
+    `/actions/runs/${ci.id}/jobs?filter=latest`,
+    (answer) => answer.jobs,
+  );
+  if (jobs.some((job) => job.run_id !== ci.id)) throw new Error("Foreign CI join job.");
+  const joins = jobs.filter((job) => job.name === "review-join");
+  if (joins.length !== 1 || !Number.isSafeInteger(joins[0].id) || joins[0].id <= 0)
+    throw new Error("Ambiguous CI join job.");
+  const join = joins[0];
+  if (
+    !jobs.some((job) => job.name === "check" && job.conclusion === "failure") ||
+    jobs.some((job) => job.status !== "completed") ||
+    !["success", "failure", "timed_out"].includes(join.conclusion) ||
+    jobs.some(
+      (job) =>
+        !["review-join", "check"].includes(job.name) &&
+        !["success", "skipped"].includes(job.conclusion),
+    )
+  )
+    return null;
+  await readGitHub(`/actions/jobs/${join.id}/rerun`, { method: "POST", readBody: false });
+  return join.id;
+}
+
 /** @param {NodeJS.ProcessEnv} env */
 async function waitForTrustedReview(env) {
   const minutes = Number(env.REVIEW_TIMEOUT_MINUTES);
@@ -149,7 +274,26 @@ function verifyReviewedMerge(folder, env) {
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const { env } = process;
-  if (process.argv[2] === "verify") {
+  if (process.argv[2] === "recover") {
+    try {
+      const job = await recoverTrustedReviewJoin(
+        readJson(env.GITHUB_EVENT_PATH),
+        env,
+        createGitHub({ repository: env.GITHUB_REPOSITORY, fetchImpl: fetch, env }),
+      );
+      console.log(
+        job
+          ? "Requested the current CI join recovery; no model was rerun."
+          : "No completed CI join needs recovery.",
+      );
+    } catch (error) {
+      console.error(
+        "CI join recovery failed. Inspect its current state before a manual join retry." +
+          (error instanceof GitHubError ? ` GitHub answered ${error.status}.` : ""),
+      );
+      process.exitCode = 1;
+    }
+  } else if (process.argv[2] === "verify") {
     const readGitHub = createGitHub({ repository: env.GITHUB_REPOSITORY, fetchImpl: fetch, env });
     const { choice } = await readReviewProvider(env, readGitHub);
     const tree = verifyReviewedMerge(process.argv[3], {

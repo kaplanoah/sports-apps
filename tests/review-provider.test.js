@@ -16,10 +16,18 @@ import { createReviewDecisionEnvironment, readStepScript } from "./workflow-step
 import { readRepoFile } from "./repo-files.js";
 
 test("native model jobs share a non-cancelling queued API slot while trial Claude jobs keep separate slots", () => {
-  for (const [path, dependency] of [
-    [".github/workflows/trusted-codex-review.yml", "request"],
-    [".github/workflows/provider-review-session.yml", "request"],
-    [".github/workflows/codex-runner-proof.yml", "prepare"],
+  for (const [path, dependency, command] of [
+    [
+      ".github/workflows/trusted-codex-review.yml",
+      "request",
+      'review-codex.mjs" request "$PORTION"',
+    ],
+    [
+      ".github/workflows/provider-review-session.yml",
+      "request",
+      'review-trial.mjs request "$PORTION"',
+    ],
+    [".github/workflows/codex-runner-proof.yml", "prepare", "prove-codex-runner.mjs prepare"],
   ]) {
     const workflow = readRepoFile(path);
     const model = workflow.split(/^ {2}model:\n/m)[1].split(/^ {2}[\w-]+:\n/m)[0];
@@ -29,7 +37,11 @@ test("native model jobs share a non-cancelling queued API slot while trial Claud
         `concurrency:\\n {6}group: \\$\\{\\{ needs\\.${dependency}\\.outputs\\.model-queue \\}\\}\\n {6}cancel-in-progress: false\\n {6}queue: max`,
       ),
     );
-    assert.match(workflow, /model-queue: \$\{\{ steps\.request\.outputs\.model-queue \}\}/);
+    const producer = workflow.split(`\n  ${dependency}:\n`)[1].split(/^ {2}[\w-]+:\n/m)[0];
+    assert.match(producer, /model-queue: \$\{\{ steps\.request\.outputs\.model-queue \}\}/);
+    const request = producer.split(/^ {6}- /m).find((step) => /^ {8}id: request$/m.test(step));
+    assert.ok(request);
+    assert.ok(request.includes(command));
   }
 });
 

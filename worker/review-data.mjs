@@ -14,6 +14,7 @@ import { isGitObjectId } from "./git-object.mjs";
 import { findUnreadParts, gatherCandidates, readAnswer } from "./judge-review.mjs";
 import { verifyCodexCoverage } from "./review-supplied.mjs";
 import { isObject } from "./review-json.mjs";
+import { isRepositoryName, isRunId } from "./review-run.mjs";
 
 /** @param {unknown} path */
 export const isReviewPath = (path) =>
@@ -198,10 +199,7 @@ export function readReviewIdentity(env) {
       ? { provider: env.REVIEW_PROVIDER, selection: env.REVIEW_SELECTION }
       : {}),
   };
-  requireData(
-    /^[\w.-]+\/[\w.-]+$/.test(identity.repository ?? "") && /^\d+$/.test(identity.run ?? ""),
-    "run identity",
-  );
+  requireData(isRepositoryName(identity.repository) && isRunId(identity.run), "run identity");
   requireData(
     [identity.head, identity.base, identity.merge, identity.trusted].every((sha) =>
       isGitObjectId(sha),

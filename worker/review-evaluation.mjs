@@ -231,10 +231,8 @@ export function measureReviewTokens(text, provider) {
       cached:
         total.cached +
         (provider === "codex" ? usage.cached_input_tokens : usage.cache_read_input_tokens),
-      cacheWrite:
-        total.cacheWrite + (provider === "claude" ? usage.cache_creation_input_tokens : 0),
     }),
-    { input: 0, output: 0, cached: 0, cacheWrite: 0 },
+    { input: 0, output: 0, cached: 0 },
   );
   return provider === "codex"
     ? {
@@ -242,7 +240,7 @@ export function measureReviewTokens(text, provider) {
         cacheWrite: sumReportedUsage(usages, "cache_write_input_tokens"),
         reasoningOutput: sumReportedUsage(usages, "reasoning_output_tokens"),
       }
-    : total;
+    : { ...total, cacheWrite: sumReportedUsage(usages, "cache_creation_input_tokens") };
 }
 
 /** @param {any} trial @param {string} telemetry */
