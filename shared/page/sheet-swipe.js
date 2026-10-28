@@ -68,7 +68,7 @@ export function closeSheet(dialog) {
 }
 
 /**
- * Has Escape, Android's back, and a close the page requests slide the sheet down too.
+ * Has Escape and Android's back slide the sheet down too.
  * @param {HTMLDialogElement} dialog
  */
 export function closeOnCancel(dialog) {

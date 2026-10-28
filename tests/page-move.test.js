@@ -54,7 +54,9 @@ function loadPageMove({
         isMoving && selector === 'meta[name="moving-to-page-host"]'
           ? { getAttribute: () => "true" }
           : null,
+      getElementById: () => null,
     },
+    getComputedStyle: () => ({ getPropertyValue: () => "" }),
     URL,
     TextEncoder,
     TextDecoder,
