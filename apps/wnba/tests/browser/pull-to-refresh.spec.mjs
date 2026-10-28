@@ -4,11 +4,26 @@ import {
   leaveFractionDown,
   leavePageFractionDown,
 } from "../../../../tests/browser/page-left-down.mjs";
-import { findSeasonPart } from "../../../../tests/browser/season-scroll.mjs";
-import { openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
+import { countScrollHoldersAt } from "../../../../tests/browser/held-scrolls.mjs";
+import {
+  findMiddle,
+  findSeasonPart,
+  readScroll,
+  scrollElementTo,
+  scrollSeasonPart,
+  scrollSeasonPartToEnd,
+} from "../../../../tests/browser/season-scroll.mjs";
+import { findSeasonPill, openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
 import { fillNews, readNewsPlace } from "../../../../tests/browser/start-over.mjs";
-import { drag, dragAlong, openFromHomeScreen, pullDown } from "../../../../tests/browser/touch.mjs";
+import {
+  drag,
+  dragAlong,
+  openFromHomeScreen,
+  pullDown,
+  PULL_START,
+} from "../../../../tests/browser/touch.mjs";
 import { test, expect, openApp } from "./harness.mjs";
+import { findList } from "./season-games.mjs";
 import { SETTINGS } from "../../../../tests/browser/settings.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
@@ -165,6 +180,269 @@ test("a pull on a page left a fraction of a pixel down, as a phone can leave it,
 
   await expect(page.locator(".pull-refresh")).toHaveClass(/turning/);
   await expect(page.locator("header.top")).toHaveCSS("top", "56px");
+});
+
+/**
+ * @param {import("@playwright/test").Page} page
+ * @param {number} top
+ */
+const scrollPageTo = (page, top) =>
+  page.evaluate(
+    (to) =>
+      new Promise((resolve) => {
+        addEventListener("scroll", resolve, { once: true });
+        scrollTo({ top: to, behavior: "instant" });
+      }),
+    top,
+  );
+
+test("the page holds up the browser's scrolls only at its top, where a pull can start", async ({
+  page,
+}) => {
+  await openFromHomeScreen(page);
+  const app = await openApp(page);
+  await fillNews(page, app.writeDocument);
+  await page.getByRole("tab", { name: "News" }).click();
+  expect(await countScrollHoldersAt(page, PULL_START)).toBeGreaterThan(0);
+
+  await scrollPageTo(page, 300);
+  expect(await countScrollHoldersAt(page, PULL_START)).toBe(0);
+  await scrollPageTo(page, 0);
+  expect(await countScrollHoldersAt(page, PULL_START)).toBeGreaterThan(0);
+
+  await app.holdStore();
+  await pullDown(page, 200);
+  await expect(page.locator(".pull-refresh")).toHaveClass(/turning/);
+});
+
+test("a refresh that ends with the page scrolled down stops holding up the browser's scrolls", async ({
+  page,
+}) => {
+  await openFromHomeScreen(page);
+  const app = await openApp(page);
+  await fillNews(page, app.writeDocument);
+  await page.getByRole("tab", { name: "News" }).click();
+  const release = await app.holdStore();
+  await pullDown(page, 200);
+  await expect(page.locator(".pull-refresh")).toHaveClass(/turning/);
+  await scrollPageTo(page, 300);
+  expect(await countScrollHoldersAt(page, PULL_START)).toBeGreaterThan(0);
+
+  release();
+  await page.clock.runFor(SHORTEST_REFRESH_MS);
+
+  await expect(page.locator(".pull-refresh")).toBeHidden();
+  expect(await countScrollHoldersAt(page, PULL_START)).toBe(0);
+});
+
+test("a touch from the top lifted with the page scrolled down stops holding up the browser's scrolls", async ({
+  page,
+}) => {
+  await openFromHomeScreen(page);
+  const app = await openApp(page);
+  await fillNews(page, app.writeDocument);
+  await page.getByRole("tab", { name: "News" }).click();
+  const header = page.locator("header.top");
+  /** @param {string} type */
+  const touch = (type) =>
+    header.evaluate((target, eventType) => {
+      const finger = new Touch({ identifier: 1, target, clientX: 200, clientY: 40 });
+      const touches = eventType === "touchstart" ? [finger] : [];
+      target.dispatchEvent(
+        new TouchEvent(eventType, { bubbles: true, touches, changedTouches: [finger] }),
+      );
+    }, type);
+  await touch("touchstart");
+  await scrollPageTo(page, 300);
+  expect(await countScrollHoldersAt(page, PULL_START)).toBeGreaterThan(0);
+
+  await touch("touchend");
+
+  expect(await countScrollHoldersAt(page, PULL_START)).toBe(0);
+});
+
+/**
+ * Opens the Games tab once its list has landed on today, scrolled down from its top, and the scroll
+ * that took it there has moved the pull's listeners.
+ * @param {import("@playwright/test").Page} page
+ */
+async function openGamesOnToday(page) {
+  await openGames(page);
+  await expect(page.locator("#seasonGames .game-day.is-today")).toBeInViewport();
+  const list = findList(page);
+  await expect.poll(() => readScroll(list)).toBeGreaterThan(0);
+  return list;
+}
+
+test("on Games, a scroll in the list scrolled down doesn't wait on the pull, while a pull from the header above it still refreshes", async ({
+  page,
+}) => {
+  await openFromHomeScreen(page);
+  const app = await openApp(page);
+  const list = await openGamesOnToday(page);
+  const middle = await findMiddle(list);
+
+  await expect.poll(() => countScrollHoldersAt(page, middle)).toBe(0);
+  expect(await countScrollHoldersAt(page, PULL_START)).toBeGreaterThan(0);
+  await app.holdStore();
+  await pullDown(page, 200);
+  await expect(page.locator(".pull-refresh")).toHaveClass(/turning/);
+});
+
+test("on Games, a swipe down inside the list scrolled down scrolls it, while at its top it pulls the page", async ({
+  page,
+}) => {
+  await openFromHomeScreen(page);
+  const app = await openApp(page);
+  const list = await openGamesOnToday(page);
+  const middle = await findMiddle(list);
+  await expect.poll(() => countScrollHoldersAt(page, middle)).toBe(0);
+  const before = await readScroll(list);
+  await app.holdStore();
+
+  await (
+    await drag(page, middle, { y: 120 })
+  )();
+  await expect.poll(() => readScroll(list)).toBeLessThan(before);
+  await expect(page.locator(".pull-refresh")).toBeHidden();
+  await scrollElementTo(list, 0);
+  await (
+    await drag(page, middle, { y: 200 })
+  )();
+
+  await expect(page.locator(".pull-refresh")).toHaveClass(/turning/);
+  await expect(page.locator("header.top")).toHaveCSS("top", "56px");
+});
+
+test("on Games, a part the page adds beside the list scrolled down still starts a pull", async ({
+  page,
+}) => {
+  await openFromHomeScreen(page);
+  const app = await openApp(page);
+  const list = await openGamesOnToday(page);
+  const inList = await findMiddle(list);
+  await expect.poll(() => countScrollHoldersAt(page, inList)).toBe(0);
+  await page.evaluate(() => {
+    const part = document.createElement("div");
+    part.className = "added-part";
+    Object.assign(part.style, { position: "fixed", inset: "0 0 auto", height: "60px" });
+    part.style.zIndex = "10";
+    document.body.append(part);
+  });
+  const middle = await findMiddle(page.locator(".added-part"));
+  await expect.poll(() => countScrollHoldersAt(page, middle)).toBeGreaterThan(0);
+  await app.holdStore();
+
+  await (
+    await drag(page, middle, { y: 200 })
+  )();
+
+  await expect(page.locator(".pull-refresh")).toHaveClass(/turning/);
+});
+
+test("on the season tab, the pull leaves the standings or the bracket scrolled down to the swipe between them, while it still holds the pill", async ({
+  page,
+}) => {
+  await openFromHomeScreen(page);
+  await openApp(page);
+  await openSeasonPart(page, "Standings");
+  await expect(page.locator("#standingsWrap table").first()).toBeVisible();
+  await waitForLoadToSettle(page);
+  // The pill's bar lets a drag through to the part under it, so only its names take a touch.
+  const pillName = findSeasonPill(page).getByRole("tab", { name: "Standings" });
+  const atPill = await countScrollHoldersAt(page, await findMiddle(pillName));
+
+  for (const [name, part] of /** @type {const} */ ([
+    ["Standings", "standings"],
+    ["Bracket", "bracket"],
+  ])) {
+    await openSeasonPart(page, name);
+    const middle = await findMiddle(findSeasonPart(page, part));
+    const atTop = await countScrollHoldersAt(page, middle);
+    await scrollSeasonPart(page, part, 200);
+    expect(await readScroll(findSeasonPart(page, part))).toBeGreaterThan(0);
+    expect(await countScrollHoldersAt(page, middle)).toBe(atTop - 1);
+    expect(await countScrollHoldersAt(page, await findMiddle(pillName))).toBe(atPill);
+  }
+});
+
+test("on Games, the list scrolled down that shows again by its tab is left to scroll without waiting on the pull", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 800 });
+  await openFromHomeScreen(page);
+  const app = await openApp(page);
+  await fillNews(page, app.writeDocument);
+  await openGames(page);
+  const list = findList(page);
+  const middle = await findMiddle(list);
+  await page.getByRole("tab", { name: "News" }).click();
+  await scrollPageTo(page, 300);
+  await scrollPageTo(page, 0);
+
+  await page.getByRole("tab", { name: "Games" }).click();
+
+  expect(await readScroll(list)).toBeGreaterThan(0);
+  expect(await countScrollHoldersAt(page, middle)).toBe(0);
+});
+
+test("a part of the season scrolled down that slides back in is left to scroll without waiting on the pull", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 800 });
+  await openFromHomeScreen(page);
+  await openApp(page);
+  await openSeasonPart(page, "Standings");
+  await expect(page.locator("#standingsWrap table").first()).toBeVisible();
+  await waitForLoadToSettle(page);
+  const standings = findSeasonPart(page, "standings");
+  const middle = await findMiddle(standings);
+  const atTop = await countScrollHoldersAt(page, middle);
+  await scrollSeasonPartToEnd(page, "standings");
+  await findSeasonPill(page).getByRole("tab", { name: "Bracket" }).click();
+  await expect(page.locator("#bracketWrap .bracket")).toBeInViewport();
+
+  await findSeasonPill(page).getByRole("tab", { name: "Standings" }).click();
+
+  expect(await readScroll(standings)).toBeGreaterThan(0);
+  expect(await countScrollHoldersAt(page, middle)).toBe(atTop - 1);
+});
+
+test("a pull whose moves the browser won't let the page stop still follows the finger, without trying to stop them", async ({
+  page,
+}) => {
+  await openFromHomeScreen(page);
+  await openApp(page);
+  await openGames(page);
+  const header = page.locator("header.top");
+
+  const stopsTried = await header.evaluate((target) => {
+    let stops = 0;
+    /**
+     * @param {string} type
+     * @param {number} clientY
+     */
+    const touch = (type, clientY) => {
+      const finger = new Touch({ identifier: 1, target, clientX: 200, clientY });
+      const event = new TouchEvent(type, {
+        bubbles: true,
+        cancelable: false,
+        touches: [finger],
+        changedTouches: [finger],
+      });
+      event.preventDefault = () => {
+        stops += 1;
+      };
+      target.dispatchEvent(event);
+    };
+    touch("touchstart", 40);
+    touch("touchmove", 60);
+    touch("touchmove", 120);
+    return stops;
+  });
+
+  expect(stopsTried).toBe(0);
+  await expect(header).toHaveCSS("top", "36px");
 });
 
 test("a short pull settles back without refreshing", async ({ page }) => {
