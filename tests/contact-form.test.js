@@ -105,5 +105,5 @@ test("failure and both confirmations keep the approved copy and escape visitor t
   );
   const email = String(renderContact({ screen: "received", receiptEmail: "<script>" }));
   assert.match(email, /<p>Replies will go to &lt;script&gt;<\/p>/);
-  assert.doesNotMatch(email, /<script>/);
+  assert.equal(email.includes("<script>"), false);
 });
