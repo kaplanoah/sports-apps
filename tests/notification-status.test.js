@@ -90,117 +90,85 @@ test("the note splits before its last word, which the ? keeps to", () => {
 
 test("category controls stay independent and timing can enable reminders", () => {
   const preferences = { updates: false, reminders: true };
-  const active = chooseNotificationControls({ status: "on", isBusy: false, preferences });
+  const active = chooseNotificationControls({ status: "on", preferences });
   assert.equal(active.areUpdatesOn, false);
   assert.equal(active.areRemindersOn, true);
   assert.equal(active.isTimingDisabled, false);
   for (const status of ["off", "failed"])
-    assert.equal(
-      chooseNotificationControls({ status, isBusy: false, preferences }).isTimingDisabled,
-      false,
-    );
+    assert.equal(chooseNotificationControls({ status, preferences }).isTimingDisabled, false);
   for (const status of ["blocked", "unsupported", "homeScreen", "loading"])
-    assert.equal(
-      chooseNotificationControls({ status, isBusy: false, preferences }).isTimingDisabled,
-      true,
-    );
+    assert.equal(chooseNotificationControls({ status, preferences }).isTimingDisabled, true);
   assert.equal(
-    chooseNotificationControls({ status: "on", isBusy: true, preferences }).isTimingDisabled,
-    false,
-  );
-  assert.equal(
-    chooseNotificationControls({
-      status: "on",
-      isBusy: false,
-      preferences: { updates: true, reminders: false },
-    }).isTimingDisabled,
+    chooseNotificationControls({ status: "on", preferences: { updates: true, reminders: false } })
+      .isTimingDisabled,
     false,
   );
 });
 
-test("pending category intent changes only its switch and exposes only a delayed indicator", () => {
-  for (const category of ["updates", "reminders"]) {
+test("a choice not yet saved shows at once, on its own switch, with a spinner only once slow", () => {
+  for (const category of /** @type {const} */ (["updates", "reminders"])) {
     const preferences = { updates: category !== "updates", reminders: category !== "reminders" };
-    for (const elapsedMs of [0, 699, 700]) {
+    for (const isSlow of [false, true]) {
       const controls = chooseNotificationControls({
         status: "on",
-        isBusy: true,
         preferences,
-        pending: { category, isEnabled: true, elapsedMs },
+        wanted: { [category]: true },
+        isSlow,
       });
       assert.equal(controls.areUpdatesOn, true);
       assert.equal(controls.areRemindersOn, true);
-      assert.equal(controls.areSwitchesDisabled, true);
-      assert.equal(controls.isTimingDisabled, true);
-      assert.equal(controls.pendingCategory, category);
-      assert.equal(controls.spinnerCategory, elapsedMs >= 700 ? category : "");
+      assert.deepEqual(controls.busyCategories, [category]);
+      assert.deepEqual(controls.spinnerCategories, isSlow ? [category] : []);
       assert.equal(preferences[category], false);
     }
-    const restored = chooseNotificationControls({ status: "on", isBusy: false, preferences });
-    assert.equal(restored.areUpdatesOn, preferences.updates);
-    assert.equal(restored.areRemindersOn, preferences.reminders);
-    assert.equal(restored.spinnerCategory, "");
+    const saved = chooseNotificationControls({ status: "on", preferences, isSlow: true });
+    assert.equal(saved.areUpdatesOn, preferences.updates);
+    assert.equal(saved.areRemindersOn, preferences.reminders);
+    assert.deepEqual(saved.busyCategories, []);
+    assert.deepEqual(saved.spinnerCategories, []);
   }
 });
 
-test("a save keeps every control's look while blocked notifications fade them", () => {
+test("controls stay enabled while a save runs, and only blocked notifications disable them", () => {
   const preferences = { updates: true, reminders: false, minutes: 10 };
+  const wanted = { updates: false, reminders: true, minutes: 30 };
   for (const status of ["off", "on", "failed"]) {
-    assert.equal(chooseNotificationControls({ status, isBusy: true, preferences }).isSaving, true);
-    assert.equal(
-      chooseNotificationControls({ status, isBusy: false, preferences }).isSaving,
-      false,
-    );
+    const controls = chooseNotificationControls({ status, preferences, wanted, isSlow: true });
+    assert.equal(controls.areSwitchesDisabled, false);
+    assert.equal(controls.isTimingDisabled, false);
   }
-  for (const isBusy of [false, true]) {
-    const blocked = chooseNotificationControls({ status: "blocked", isBusy, preferences });
-    assert.equal(blocked.isSaving, false);
-    assert.equal(blocked.areSwitchesDisabled, true);
-  }
+  const blocked = chooseNotificationControls({ status: "blocked", preferences, wanted });
+  assert.equal(blocked.areSwitchesDisabled, true);
 });
 
-test("the reminder switch follows both pending intents and the saved choice", () => {
+test("each switch shows its newest choice, either way, over the saved one", () => {
   const preferences = { updates: true, reminders: true, minutes: 10 };
-  for (const isEnabled of [false, true]) {
+  for (const isOn of [false, true]) {
     const controls = chooseNotificationControls({
       status: "on",
-      isBusy: true,
-      preferences: { ...preferences, reminders: !isEnabled },
-      pending: { category: "reminders", isEnabled, elapsedMs: 0 },
+      preferences: { ...preferences, reminders: !isOn, updates: !isOn },
+      wanted: { reminders: isOn, updates: isOn },
     });
-    assert.equal(controls.areRemindersOn, isEnabled);
-    assert.equal(controls.areUpdatesOn, true);
-  }
-  for (const reminders of [false, true]) {
-    const controls = chooseNotificationControls({
-      status: "on",
-      isBusy: false,
-      preferences: { ...preferences, reminders },
-    });
-    assert.equal(controls.areRemindersOn, reminders);
+    assert.equal(controls.areRemindersOn, isOn);
+    assert.equal(controls.areUpdatesOn, isOn);
   }
 });
 
-test("timing minutes use the latest request then pending intent then saved choice", () => {
+test("timing shows the newest minutes chosen, else the saved ones", () => {
   const preferences = { updates: false, reminders: false, minutes: 10 };
-  for (const [requested, pendingMinutes, expected] of [
-    [null, undefined, 10],
-    [null, 30, 30],
-    [0, 30, 0],
-    [60, 0, 60],
-    [null, 0, 0],
+  for (const [wantedMinutes, expected] of [
+    [undefined, 10],
+    [30, 30],
+    [0, 0],
   ]) {
     const controls = chooseNotificationControls({
       status: "off",
-      isBusy: true,
       preferences,
-      timingMinutes: requested,
-      pending: { category: "reminders", isEnabled: true, elapsedMs: 0, minutes: pendingMinutes },
+      wanted: { reminders: true, minutes: wantedMinutes },
     });
     assert.equal(controls.timingMinutes, expected);
     assert.equal(controls.areRemindersOn, true);
     assert.equal(preferences.minutes, 10);
-    assert.equal(preferences.reminders, false);
   }
 });
 

@@ -18,7 +18,7 @@ const renderRows = (
   String(
     renderNotificationRows({
       words,
-      controls: chooseNotificationControls({ status, preferences, isBusy: false }),
+      controls: chooseNotificationControls({ status, preferences }),
       note: "Permission guidance",
       notePlace,
     }),
@@ -92,12 +92,8 @@ test("either category can remain on independently and timing keeps its saved cho
 test("Game starts on, off, or saving either way leaves the timing showing the same time", () => {
   const preferences = { ...DEFAULT_NOTIFICATION_PREFERENCES, updates: true, minutes: 30 };
   const states = [false, true].flatMap((reminders) => [
-    { preferences: { ...preferences, reminders }, isBusy: false, pending: null },
-    {
-      preferences: { ...preferences, reminders },
-      isBusy: true,
-      pending: { category: "reminders", isEnabled: !reminders, elapsedMs: 0 },
-    },
+    { preferences: { ...preferences, reminders } },
+    { preferences: { ...preferences, reminders }, wanted: { reminders: !reminders } },
   ]);
   for (const state of states) {
     const markup = String(
@@ -115,29 +111,30 @@ test("Game starts on, off, or saving either way leaves the timing showing the sa
   }
 });
 
-test("a save marks both switches and the timing as saving, which blocked never is", () => {
-  const preferences = { ...DEFAULT_NOTIFICATION_PREFERENCES, updates: true, reminders: true };
-  for (const [status, isBusy, isSaving] of /** @type {const} */ ([
-    ["on", true, true],
-    ["off", true, true],
-    ["on", false, false],
-    ["blocked", true, false],
-    ["blocked", false, false],
-  ])) {
+test("while a save runs, every control stays enabled and only the switch it saves is busy", () => {
+  const preferences = { ...DEFAULT_NOTIFICATION_PREFERENCES, updates: true, reminders: false };
+  for (const category of /** @type {const} */ (["reminders", "updates"])) {
     const markup = String(
       renderNotificationRows({
         words: MLB_WORDS,
-        controls: chooseNotificationControls({ status, preferences, isBusy }),
+        controls: chooseNotificationControls({
+          status: "on",
+          preferences,
+          wanted: { [category]: !preferences[category], minutes: 60 },
+          isSlow: true,
+        }),
         note: "",
         notePlace: "notify",
       }),
     );
-    const savingIds = [...markup.matchAll(/class="[^"]*\bis-saving\b[^"]*" id="(\w+)"/g)].map(
+    assert.doesNotMatch(markup, / disabled[ >]/);
+    const busyIds = [...markup.matchAll(/id="(\w+)Switch"[^>]+aria-busy="true"/g)].map(
       ([, id]) => id,
     );
-    assert.deepEqual(
-      savingIds,
-      isSaving ? ["remindersSwitch", "reminderTiming", "notifySwitch"] : [],
+    assert.deepEqual(busyIds, [category === "updates" ? "notify" : "reminders"]);
+    assert.equal(
+      (markup.match(/class="notification-spinner" aria-hidden="true" >/g) ?? []).length,
+      1,
     );
   }
 });

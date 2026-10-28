@@ -860,6 +860,16 @@ body.kbd .notify-help:focus {
   cursor: pointer;
   transition: background 0.2s;
 }
+/* A tap a little above or below the switch still lands on it, as Apple's 44px tap height asks. */
+.switch::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  right: 0;
+  left: 0;
+  height: 44px;
+  transform: translateY(-50%);
+}
 .switch-knob {
   position: absolute;
   top: 3px;
@@ -883,10 +893,9 @@ body.kbd .notify-help:focus {
 .switch {
   opacity: 1;
 }
-/* A notification control a save holds keeps its look (notification-status.js). */
-.control-row:has(> .select-field:disabled:not(.is-saving))::after,
-.select-field:disabled:not(.is-saving),
-.switch:disabled:not(.is-saving) {
+.control-row:has(> .select-field:disabled)::after,
+.select-field:disabled,
+.switch:disabled {
   cursor: default;
   opacity: 0.5;
 }

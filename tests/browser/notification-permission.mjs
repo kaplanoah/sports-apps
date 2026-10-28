@@ -67,7 +67,7 @@ function watchControlLooks() {
 /** @param {any} expect @param {Record<string, string>} checked */
 async function expectSteadyLooks(page, expect, checked) {
   const looks = await page.evaluate(() => Reflect.get(window, "controlLooks"));
-  expect(looks.some((look) => look.reminders.disabled && look.updates.disabled)).toBe(true);
+  expect(looks.some((look) => look.reminders.disabled || look.updates.disabled)).toBe(false);
   for (const look of looks) {
     expect([look.reminders.opacity, look.updates.opacity, look.timing, look.caret]).toEqual([
       "1",
@@ -132,7 +132,7 @@ export function testNotificationPermission(test, expect, app) {
         }, category);
         expect(requestedInTap).toBe(true);
         await expect(toggle).toHaveAttribute("aria-checked", "true");
-        await expect(toggle).toBeDisabled();
+        await expect(toggle).toBeEnabled();
         await checkSelectArrow(page.locator("#reminderTiming"));
         await expect(other).toHaveAttribute("aria-checked", "false");
         expect(await page.evaluate(() => Reflect.get(window, "permissionSwitchWasOn"))).toBe(
@@ -192,7 +192,7 @@ export function testNotificationPermission(test, expect, app) {
         await expect(spinner).toHaveCSS("animation-duration", "0.8s");
         await expect(spinner).toHaveCSS("animation-name", "catch-up-turn");
         await page.evaluate(() => Reflect.get(window, "finishPermission")("granted"));
-        await expect(toggle).toBeEnabled();
+        await expect(toggle).toHaveAttribute("aria-busy", "false");
         await expect(toggle).toHaveAttribute("aria-checked", "true");
         await expect(spinner).toBeHidden();
         expect(await readGeometry(page)).toEqual(before);
@@ -209,15 +209,15 @@ export function testNotificationPermission(test, expect, app) {
         const toggle = page.locator(`#${category}Switch`);
         const other = page.locator(category === "notify" ? "#remindersSwitch" : "#notifySwitch");
         await other.click();
-        await expect(other).toBeEnabled();
+        await expect(other).toHaveAttribute("aria-busy", "false");
         await expect(other).toHaveAttribute("aria-checked", "true");
         const saved = await page.evaluate(() => localStorage.getItem("device-notifications"));
         await page.evaluate(holdPermission);
         await toggle.click();
         await expect(toggle).toHaveAttribute("aria-checked", "true");
-        await expect(toggle).toBeDisabled();
-        await page.evaluate((answer) => Reflect.get(window, "finishPermission")(answer), result);
         await expect(toggle).toBeEnabled();
+        await page.evaluate((answer) => Reflect.get(window, "finishPermission")(answer), result);
+        await expect(toggle).toHaveAttribute("aria-busy", "false");
         await expect(toggle).toHaveAttribute("aria-checked", "false");
         await expect(other).toHaveAttribute("aria-checked", "true");
         expect(await page.evaluate(() => localStorage.getItem("device-notifications"))).toBe(saved);
@@ -244,7 +244,7 @@ export function testNotificationPermission(test, expect, app) {
       const updates = page.locator("#notifySwitch");
       if (result !== "granted") {
         await updates.click();
-        await expect(updates).toBeEnabled();
+        await expect(updates).toHaveAttribute("aria-busy", "false");
       }
       await page.evaluate(holdPermission);
       const timing = page.locator("#reminderTiming");
@@ -275,17 +275,21 @@ export function testNotificationPermission(test, expect, app) {
       expect(stored.minutes).toBe(result === "granted" ? 180 : 10);
     });
 
-  test("timing completion restores keyboard focus without activating a touch picker", async ({
+  test("a timing save leaves focus on the timing, by touch or keyboard, and never moves it", async ({
     page,
   }) => {
     await app.openApp(page);
     await app.openSettings(page);
-    await page.locator("#remindersSwitch").click();
-    await expect(page.locator("#remindersSwitch")).toBeEnabled();
-    for (const keyboard of [false, true]) {
+    const reminders = page.locator("#remindersSwitch");
+    await reminders.click();
+    await expect(reminders).toHaveAttribute("aria-busy", "false");
+    const timing = page.locator("#reminderTiming");
+    for (const [keyboard, minutes] of /** @type {const} */ ([
+      [false, 60],
+      [true, 30],
+    ])) {
       await page.evaluate((keyboard) => document.body.classList.toggle("kbd", keyboard), keyboard);
       const release = await holdRequests(page, PREFERENCES);
-      const timing = page.locator("#reminderTiming");
       await timing.focus();
       await timing.evaluate((element) => {
         Reflect.set(window, "timingFocusCalls", 0);
@@ -295,20 +299,50 @@ export function testNotificationPermission(test, expect, app) {
           focus(options);
         };
       });
-      await timing.selectOption(keyboard ? "30" : "60");
+      await timing.selectOption(String(minutes));
       await expect(timing).toBeEnabled();
-      await page.locator("#settingsDialog").focus();
+      await expect(timing).toBeFocused();
       release();
-      await expect(page.locator("#remindersSwitch")).toBeEnabled();
-      await expect(timing).toBeEnabled();
-      expect(await page.evaluate(() => Reflect.get(window, "timingFocusCalls"))).toBe(
-        keyboard ? 1 : 0,
+      await page.waitForFunction(
+        (minutes) => JSON.parse(localStorage.getItem("device-notifications")).minutes === minutes,
+        minutes,
       );
+      await expect(timing).toBeFocused();
+      expect(await page.evaluate(() => Reflect.get(window, "timingFocusCalls"))).toBe(0);
       await page.unroute(PREFERENCES);
       await timing.evaluate((element) => {
         Reflect.deleteProperty(element, "focus");
       });
     }
+  });
+
+  test("a switch tapped again during a slow save shows and saves its newest choice", async ({
+    page,
+  }) => {
+    await app.openApp(page);
+    await app.openSettings(page);
+    const updates = page.locator("#notifySwitch");
+    const reminders = page.locator("#remindersSwitch");
+    await updates.click();
+    await expect(updates).toHaveAttribute("aria-busy", "false");
+    const release = await holdRequests(page, PREFERENCES);
+    await reminders.click();
+    await expect(reminders).toHaveAttribute("aria-checked", "true");
+    await reminders.click();
+    await expect(reminders).toHaveAttribute("aria-checked", "false");
+    await reminders.click();
+    await expect(reminders).toHaveAttribute("aria-checked", "true");
+    await updates.click();
+    await expect(updates).toHaveAttribute("aria-checked", "false");
+    release();
+    await expect(reminders).toHaveAttribute("aria-busy", "false");
+    await expect(updates).toHaveAttribute("aria-busy", "false");
+    await expect(reminders).toHaveAttribute("aria-checked", "true");
+    await expect(updates).toHaveAttribute("aria-checked", "false");
+    const stored = await page.evaluate(() =>
+      JSON.parse(localStorage.getItem("device-notifications")),
+    );
+    expect([stored.reminders, stored.updates]).toEqual([true, false]);
   });
 
   test("fast completion never shows a spinner and timing saves have no category feedback", async ({
@@ -319,7 +353,7 @@ export function testNotificationPermission(test, expect, app) {
     await holdClock(page);
     const toggle = page.locator("#remindersSwitch");
     await toggle.click();
-    await expect(toggle).toBeEnabled();
+    await expect(toggle).toHaveAttribute("aria-busy", "false");
     await expect(toggle).toHaveAttribute("aria-checked", "true");
     await page.clock.runFor(1000);
     await expect(page.locator(".notification-spinner:visible")).toHaveCount(0);
@@ -357,7 +391,7 @@ export function testNotificationPermission(test, expect, app) {
     } finally {
       release();
     }
-    await expect(toggle).toBeEnabled();
+    await expect(toggle).toHaveAttribute("aria-busy", "false");
     await expect(page.locator("#reminderTiming")).toBeEnabled();
     await expect(page.locator("#reminderTiming")).toHaveValue("60");
     await page.waitForFunction(
@@ -379,11 +413,11 @@ export function testNotificationPermission(test, expect, app) {
     const reminders = page.locator("#remindersSwitch");
     const timing = page.locator("#reminderTiming");
     await reminders.click();
-    await expect(reminders).toBeEnabled();
+    await expect(reminders).toHaveAttribute("aria-busy", "false");
     await page.evaluate(watchControlLooks);
     const releaseSlow = await holdRequests(page, PREFERENCES);
     await timing.selectOption("180");
-    await expect(reminders).toBeDisabled();
+    await expect(reminders).toBeEnabled();
     await timing.selectOption("30");
     await timing.selectOption("60");
     releaseSlow();
@@ -399,7 +433,7 @@ export function testNotificationPermission(test, expect, app) {
     await expect(reminders).toBeEnabled();
     const releaseFailure = await holdRequests(page, PREFERENCES, { answer: failSave });
     await timing.selectOption("10");
-    await expect(reminders).toBeDisabled();
+    await expect(reminders).toBeEnabled();
     releaseFailure();
     await expect(page.locator("#reminderTimingNote")).toHaveText(/Couldn't update/);
     await expect(page.locator("#notificationsGroup .control-note:not(:empty)")).toHaveCount(1);
@@ -419,17 +453,17 @@ export function testNotificationPermission(test, expect, app) {
       const other = page.locator(category === "reminders" ? "#notifySwitch" : "#remindersSwitch");
       const spinner = toggle.locator("..").locator(".notification-spinner");
       await other.click();
-      await expect(other).toBeEnabled();
+      await expect(other).toHaveAttribute("aria-busy", "false");
       await page.evaluate(watchControlLooks);
       await holdClock(page);
       const releaseSlow = await holdRequests(page, PREFERENCES);
       await toggle.click();
       await expect(toggle).toHaveAttribute("aria-checked", "true");
-      await expect(toggle).toBeDisabled();
+      await expect(toggle).toBeEnabled();
       await page.clock.runFor(700);
       await expect(spinner).toBeVisible();
       releaseSlow();
-      await expect(toggle).toBeEnabled();
+      await expect(toggle).toHaveAttribute("aria-busy", "false");
       await expect(toggle).toHaveAttribute("aria-checked", "true");
       await page.unroute(PREFERENCES);
       await page.evaluate(() => document.body.classList.add("kbd"));
@@ -440,7 +474,7 @@ export function testNotificationPermission(test, expect, app) {
       await page.clock.runFor(700);
       await expect(spinner).toBeVisible();
       releaseFailure();
-      await expect(toggle).toBeEnabled();
+      await expect(toggle).toHaveAttribute("aria-busy", "false");
       await expect(toggle).toHaveAttribute("aria-checked", "true");
       await expect(toggle).toBeFocused();
       await expect(
@@ -478,12 +512,12 @@ export function testNotificationPermission(test, expect, app) {
       await app.openApp(page);
       await app.openSettings(page);
       await page.locator("#remindersSwitch").click();
-      await expect(page.locator("#remindersSwitch")).toBeEnabled();
+      await expect(page.locator("#remindersSwitch")).toHaveAttribute("aria-busy", "false");
       await page.evaluate(holdPermission);
       const toggle = page.locator("#notifySwitch");
       await toggle.click();
       await page.evaluate((result) => Reflect.get(window, "finishPermission")(result), result);
-      await expect(toggle).toBeEnabled();
+      await expect(toggle).toHaveAttribute("aria-busy", "false");
       await expect(page.locator("#notifyNote")).not.toBeEmpty();
       await holdClock(page);
       const before = await readGeometry(page);
@@ -515,6 +549,6 @@ export function testNotificationPermission(test, expect, app) {
       });
       expect(overlap).toBe(false);
       await page.evaluate(() => Reflect.get(window, "finishPermission")("default"));
-      await expect(toggle).toBeEnabled();
+      await expect(toggle).toHaveAttribute("aria-busy", "false");
     });
 }

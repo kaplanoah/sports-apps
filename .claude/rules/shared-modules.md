@@ -70,6 +70,7 @@ The Worker serves every file here, its `networks/` logos too, under `shared/`, b
 - `notification-intent.js`: the game a notification asks to open, from its message or the page's address
 - `notification-navigation.js`: opening a game from a notification through reloads and the access gate
 - `notification-status.js`: notification guidance and category control states
+- `save-queue.js`: saves that run one at a time, the newest choice last
 - `diagnostics.js`: the Diagnostics and their shared report
 - `sent-label.js`: how long a button that copies or shares says it did
 - `step-log.js`: a Diagnostics log of what one part of the page does
