@@ -1,5 +1,6 @@
 import { holdClock } from "../../../../tests/browser/harness.mjs";
 import { readBackground } from "../../../../tests/browser/press-looks.mjs";
+import { listLowContrastTextWithRowsPressed } from "../../../../tests/browser/contrast.mjs";
 import { test, expect, openApp } from "./harness.mjs";
 import {
   EASE_HALFWAY_MS,
@@ -246,6 +247,15 @@ test.describe("on a phone", () => {
     const last = await pressAndMeasure(1);
     expect(last.fill.bottom).toBeCloseTo(last.inside.bottom, 1);
     expect(last.fill.top).toBeCloseTo(first.fill.bottom, 1);
+  });
+
+  test("each final's text stays as readable as AA asks with its line pressed, in Maple and Walnut", async ({
+    page,
+  }) => {
+    await openApp(page, { updatesBox: "shown" });
+    await expect(page.locator("#updates .updates-list li > .game-open")).toHaveCount(2);
+
+    expect(await listLowContrastTextWithRowsPressed(page)).toEqual([]);
   });
 
   test("dismissing the Updates box in another tab hides it in this one", async ({ page }) => {

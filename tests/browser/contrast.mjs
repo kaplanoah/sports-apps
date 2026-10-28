@@ -1,6 +1,7 @@
 import { expect } from "@playwright/test";
-import { INSET_SHADOW_PATTERN } from "./press-looks.mjs";
+import { INSET_SHADOW_PATTERN, markEveryRowPressed } from "./press-looks.mjs";
 import { waitForPressesToEnd } from "./tap-states.mjs";
+import { showTheme } from "./theme-layout.mjs";
 
 /**
  * Waits until no row is pressed and no color is mid-transition, so a press a test's own tap left
@@ -249,4 +250,23 @@ export const listLowContrastTextAsShown = (page) =>
 export async function listLowContrastText(page) {
   await waitForSettledColors(page);
   return listLowContrastTextAsShown(page);
+}
+
+/**
+ * Every piece of shown text under AA's level with every row pressed, in the app's light theme and
+ * then its dark one, each named with its theme, leaving the page unpressed in the light theme.
+ * @param {import("@playwright/test").Page} page
+ */
+export async function listLowContrastTextWithRowsPressed(page) {
+  const lowContrastText = [];
+  for (const theme of /** @type {const} */ (["light", "dark"])) {
+    await showTheme(page, theme);
+    await waitForSettledColors(page);
+    await markEveryRowPressed(page, true);
+    const shown = await listLowContrastTextAsShown(page);
+    lowContrastText.push(...shown.map((text) => `in ${theme}, ${text}`));
+    await markEveryRowPressed(page, false);
+  }
+  await showTheme(page, "light");
+  return lowContrastText;
 }

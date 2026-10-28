@@ -3,10 +3,8 @@ import { VIEW_GROUPS, checkEachView, openWithEverything } from "./views.mjs";
 import { listChipsOffLook, listShownChipLooks } from "../../../../tests/browser/chip-looks.mjs";
 import {
   listLowContrastText,
-  listLowContrastTextAsShown,
-  waitForSettledColors,
+  listLowContrastTextWithRowsPressed,
 } from "../../../../tests/browser/contrast.mjs";
-import { markEveryRowPressed } from "../../../../tests/browser/press-looks.mjs";
 import { listThemeLayoutChanges, showTheme } from "../../../../tests/browser/theme-layout.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
@@ -51,14 +49,7 @@ for (const [group, views] of Object.entries(VIEW_GROUPS)) {
     await page.setViewportSize(SCREENS["a phone"]);
     await openWithEverything(page);
     await checkEachView(page, views, async (view) => {
-      for (const theme of /** @type {const} */ (["light", "dark"])) {
-        await showTheme(page, theme);
-        await waitForSettledColors(page);
-        await markEveryRowPressed(page, true);
-        expect(await listLowContrastTextAsShown(page), `${view.name} in ${theme}`).toEqual([]);
-        await markEveryRowPressed(page, false);
-      }
-      await showTheme(page, "light");
+      expect(await listLowContrastTextWithRowsPressed(page), view.name).toEqual([]);
     });
   });
 }

@@ -245,6 +245,21 @@ export const SCHEDULE_DOCS = (() => {
   );
 })();
 
+// The White Sox clinching with their 9-1 win at Kansas City, one of the evening's finals.
+export function buildSnapshotWithClinch() {
+  const snapshot = buildFixtureSnapshot(EVENING_FIXTURE);
+  snapshot.log = [
+    {
+      at: "2026-09-24T20:50:00Z",
+      kind: "berth",
+      team: "CWS",
+      what: "playoff",
+      via: [{ team: "CWS", won: true, opp: "KC", score: [9, 1] }],
+    },
+  ];
+  return snapshot;
+}
+
 // The 2025 season's record, filled in whole once it was over.
 export const SEASON_2025 = buildSeasonRecord(buildFixtureSnapshot(FINAL_2025_FIXTURE));
 
