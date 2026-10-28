@@ -75,12 +75,15 @@ export const drag = (page, from, { x = 0, y = 0 }, options) =>
     options,
   );
 
+/** Where a pull down starts, on the header near the page's top. */
+export const PULL_START = { x: 200, y: 40 };
+
 /**
  * Pulls the page down from near its top by `distance`, and lets go.
  * @param {import("@playwright/test").Page} page
  * @param {number} distance
  */
 export async function pullDown(page, distance) {
-  const release = await drag(page, { x: 200, y: 40 }, { y: distance });
+  const release = await drag(page, PULL_START, { y: distance });
   await release();
 }

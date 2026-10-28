@@ -2,6 +2,7 @@ import { isOnHomeScreen } from "./device.js";
 import { html, setHtml } from "./html.js";
 import { prefersReducedMotion } from "./reduced-motion.js";
 import { reloadIfReplaced } from "./resume.js";
+import { watchShownView } from "./shown-view.js";
 import { isPageOffTop, isPast } from "./spring-scroll.js";
 
 // A phone gives a page on the Home Screen no pull to refresh, so the page draws its own, as an
@@ -9,10 +10,12 @@ import { isPageOffTop, isPast } from "./spring-scroll.js";
 // one above it, which start to turn once the pull is far enough to refresh. Let go then, and the
 // page stays held down with the spokes turning until the store has caught up, and long enough to
 // see. The browser has a pull to refresh of its own, which reloads the page, so there the page
-// leaves it to the browser. A listener that may stop a scroll makes the browser wait on the page
-// before every scroll, so the page listens that way only while it's at its top, where a pull can
-// start. The browser decides as a touch starts whether the page may stop its scroll, so the
-// listener goes on as the page reaches its top, not as a pull starts.
+// leaves it to the browser. A pull starts anywhere on the page at its top, but inside a list or
+// part of the season scrolled down from its own top, which the finger scrolls instead. A listener
+// that may stop a scroll makes the browser wait on the page before every scroll under it, so the
+// page listens that way only on the parts where a pull can start. The browser decides as a touch
+// starts whether the page may stop its scroll, so the listeners move as the page scrolls, not as a
+// pull starts.
 
 const START_PX = 8;
 const RESISTANCE = 0.5;
@@ -49,20 +52,60 @@ function releaseParts(parts) {
   }
 }
 
-/** @param {Element} target */
-function isScrolledInside(target) {
-  for (let element = target; element && element !== document.body; element = element.parentElement)
-    if (isPast(element, 0)) return true;
-  return false;
+// What scrolls inside the page and was last left down from its top: only something scrolled can
+// be off its top, so these are all that can keep a pull from starting inside them.
+/** @type {Set<Element>} */
+const scrolledDown = new Set();
+
+/** @param {EventTarget | null} target */
+function noteScrolled(target) {
+  if (!(target instanceof Element)) return;
+  if (isPast(target, 0)) scrolledDown.add(target);
+  else scrolledDown.delete(target);
 }
 
-// A touch in a sheet is the sheet's, which a swipe down closes.
-/** @param {EventTarget | null} target */
-function isPullable(target) {
-  if (!(target instanceof Element)) return false;
-  if (isPageOffTop()) return false;
-  if (target.closest("dialog")) return false;
-  return !isScrolledInside(target);
+// What the page put back as it opened may have scrolled before this module was listening, and a
+// list in a view not shown reads as at its top, taking back its scroll with no scroll event as its
+// view shows again.
+const noteScrollsPutBack = () => document.querySelectorAll("body *").forEach(noteScrolled);
+
+// A part of the season slid away is still laid out, but hidden.
+/** @param {Element} element */
+const isShown = (element) =>
+  element.getClientRects().length > 0 && getComputedStyle(element).visibility !== "hidden";
+
+function listShownScrolledDown() {
+  const shown = [];
+  for (const element of scrolledDown) {
+    if (!element.isConnected || !isPast(element, 0)) scrolledDown.delete(element);
+    else if (isShown(element)) shown.push(element);
+  }
+  return shown;
+}
+
+// Everything on the page but what's inside the lists given: beside each list, and beside each
+// element around it, out to the page's root.
+/** @param {Element[]} lists */
+function listPartsBeside(lists) {
+  /** @type {Set<Element>} */
+  const around = new Set();
+  for (const list of lists)
+    for (let element = list.parentElement; element; element = element.parentElement)
+      around.add(element);
+  const isOnTheWay = (/** @type {Element} */ element) =>
+    around.has(element) || lists.includes(element);
+  return [...around].flatMap((element) =>
+    [...element.children].filter((child) => !isOnTheWay(child)),
+  );
+}
+
+// Where a pull can start: anywhere on a page at its top, but inside a list scrolled down from its
+// top, which the finger scrolls instead.
+/** @returns {(Document | Element)[]} */
+function listPullableParts() {
+  if (isPageOffTop()) return [];
+  const lists = listShownScrolledDown();
+  return lists.length ? listPartsBeside(lists) : [document];
 }
 
 function createSpinner() {
@@ -91,6 +134,15 @@ export function startPullToRefresh({ store, catchUp }) {
   let pulledPx = 0;
   /** @type {HTMLElement[]} */
   let movedParts = [];
+  /** @type {(Document | Element)[]} */
+  let listenedParts = [];
+
+  // What opens over the page, like a sheet, scrolls on its own and never pulls the page.
+  /** @param {EventTarget | null} target */
+  const isPullable = (target) =>
+    target instanceof Element &&
+    !target.closest("dialog") &&
+    listenedParts.some((part) => part.contains(target));
 
   /**
    * @param {number} offsetPx
@@ -183,10 +235,19 @@ export function startPullToRefresh({ store, catchUp }) {
     else settle();
   }
 
-  // A touch under way keeps its listener wherever the page is, until it's over.
+  // A touch under way keeps its listeners where they are, until it's over.
   function listenWherePullable() {
-    if (isPageOffTop() && state === "idle") document.removeEventListener("touchmove", followTouch);
-    else document.addEventListener("touchmove", followTouch, { passive: false });
+    if (state !== "idle") return;
+    for (const part of listenedParts) part.removeEventListener("touchmove", followTouch);
+    listenedParts = listPullableParts();
+    for (const part of listenedParts)
+      part.addEventListener("touchmove", followTouch, { passive: false });
+  }
+
+  /** @param {Event} event */
+  function followScroll(event) {
+    noteScrolled(event.target);
+    listenWherePullable();
   }
 
   function becomeIdle() {
@@ -194,9 +255,15 @@ export function startPullToRefresh({ store, catchUp }) {
     listenWherePullable();
   }
 
+  function followShownView() {
+    noteScrollsPutBack();
+    listenWherePullable();
+  }
+
   document.addEventListener("touchstart", startTouch, { passive: true });
   document.addEventListener("touchend", endTouch, { passive: true });
   document.addEventListener("touchcancel", endTouch, { passive: true });
-  addEventListener("scroll", listenWherePullable, { passive: true });
-  listenWherePullable();
+  document.addEventListener("scroll", followScroll, { capture: true, passive: true });
+  watchShownView(followShownView);
+  followShownView();
 }
