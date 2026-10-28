@@ -35,6 +35,44 @@ export function registerSettingsContactInteractions({ test, expect, openApp, app
     }
   });
 
+  test("Settings page rows are one height, with each line between them as far from the text above as below", async ({
+    page,
+  }) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await openApp(page);
+    await page.getByRole("button", { name: "Settings", exact: true }).click();
+    await expect(page.locator("#contactBtn")).toBeVisible();
+    const rows = await page.locator("#settingsDialog .settings-page-row").evaluateAll((buttons) =>
+      buttons.map((button) => {
+        const words = document.createRange();
+        words.selectNodeContents(
+          [...button.childNodes].find(
+            (node) => node.nodeType === Node.TEXT_NODE && node.textContent.trim(),
+          ),
+        );
+        const text = words.getBoundingClientRect();
+        const box = button.getBoundingClientRect();
+        const line = Number.parseFloat(getComputedStyle(button).borderTopWidth);
+        return {
+          top: box.top,
+          bottom: box.bottom,
+          line,
+          textTop: text.top,
+          textBottom: text.bottom,
+        };
+      }),
+    );
+    expect(rows).toHaveLength(app === "mlb" ? 2 : 1);
+    for (const row of rows) expect(row.bottom - row.top).toBe(rows[0].bottom - rows[0].top);
+    for (const [above, below] of rows.slice(1).map((row, index) => [rows[index], row])) {
+      expect(below.line).toBe(1);
+      expect(below.top).toBe(above.bottom);
+      const spaceAbove = below.top - above.textBottom;
+      const spaceBelow = below.textTop - (below.top + below.line);
+      expect(Math.abs(spaceAbove - spaceBelow)).toBeLessThanOrEqual(1);
+    }
+  });
+
   test("Contact gives focus back to its row once its sheet has closed", async ({ page }) => {
     await page.emulateMedia({ reducedMotion: "reduce" });
     await openApp(page);
