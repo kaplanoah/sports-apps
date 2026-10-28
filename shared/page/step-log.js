@@ -51,15 +51,31 @@ export const writeStepsAsText = (title, lines) =>
     : "";
 
 /**
+ * Every text a node holds, each part apart, since parts that sit side by side on the screen, like
+ * a seed beside a name, are often written with nothing between them.
+ * @param {Node} node
+ * @returns {string}
+ */
+const readTextParts = (node) =>
+  node.nodeType === Node.TEXT_NODE
+    ? (node.nodeValue ?? "")
+    : [...node.childNodes].map(readTextParts).join(" ");
+
+/**
+ * A control's words as one line of the report, a comma kept on the word before it.
+ * @param {Element} control
+ */
+const readControlWords = (control) =>
+  readTextParts(control).replace(/\s+/g, " ").replaceAll(" ,", ",").trim();
+
+/**
  * What a touch or click landed on: the button or link it's in, by name, or else the element.
  * @param {Element} target
  * @returns {string}
  */
 function describeTarget(target) {
   const control = target.closest("button, a");
-  // Each step is one line of the report, whatever breaks the markup sets between a name's words.
-  const name =
-    control?.getAttribute("aria-label") || control?.textContent?.replace(/\s+/g, " ").trim();
+  const name = control && (control.getAttribute("aria-label") || readControlWords(control));
   if (name) return name;
   if (target.id) return `#${target.id}`;
   return [target.localName, ...target.classList].join(".");
