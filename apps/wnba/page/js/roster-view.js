@@ -227,8 +227,8 @@ function renderHeading(column, sort, className = "") {
 const renderPinnedHead = (sort) =>
   html`<thead>
     <tr class="roster-bands">
-      <th class="roster-number"></th>
-      <th class="roster-player"></th>
+      <td class="roster-number"></td>
+      <td class="roster-player"></td>
     </tr>
     <tr class="roster-head">
       ${renderHeading(NUMBER_COLUMN, sort, "roster-number")}${renderHeading(NAME_COLUMN, sort, "roster-player")}
@@ -239,7 +239,7 @@ const renderPinnedHead = (sort) =>
 const renderFactsHead = (sort) =>
   html`<thead>
     <tr class="roster-bands">
-      <th colspan="${BIO_COLUMNS.length}"></th>
+      <td colspan="${BIO_COLUMNS.length}"></td>
       <th colspan="${STAT_COLUMNS.length}" class="roster-band roster-season-start" scope="colgroup">Per game</th>
     </tr>
     <tr class="roster-head">

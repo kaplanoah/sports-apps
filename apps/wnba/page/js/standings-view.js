@@ -176,7 +176,7 @@ export function renderStandings(season, view = "League") {
     <table class="standings" aria-label="${view} standings">
       <thead>
         <tr class="groups">
-          <th colspan="2"></th>
+          <td colspan="2"></td>
           <th colspan="2">Season</th>
           <th colspan="2" class="recent-start">${form.group}</th>
         </tr>

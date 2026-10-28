@@ -33,6 +33,7 @@
     "set-rp-id": "NODE_USE_ENV_PROXY=1 node worker/set-rp-id.mjs"
   },
   "devDependencies": {
+    "@axe-core/playwright": "4.14.0",
     "@eslint/js": "10.0.1",
     "@phosphor-icons/core": "^2.1.1",
     "@playwright/test": "1.64.1",

@@ -54,8 +54,9 @@ In order of what has mattered here.
 7. **Tests.** AGENTS.md: "Every change to behavior comes with tests that fail without it, in the same PR." Flag a change to behavior whose tests would still pass with it reverted. Flag a browser test that would pass only some of the time: one that reads the page right after an action without waiting, with `expect` or `expect.poll`, for what the action shows; one that depends on how fast the machine is; or one that measures while a press, hover, transition, or scroll may still be going.
 8. **Leftovers.** AGENTS.md says the review flags what earlier rounds of a change left behind: values no longer chosen, a setting kept only to compare, a case that can no longer happen, a name for an earlier version, a branch kept for data the store no longer holds, and old code next to what replaced it.
 9. **Search.** Each place a change adds is searchable from the app's `page/js/search-pages.js` and named in `COVERAGE`, or is left out for a reason a fan would agree with, and a place it removes leaves search too.
-10. **Docs and comments the change makes wrong.** AGENTS.md, a rule file, a skill, or README.md describing what the code no longer does, a comment naming a file that's gone, and a comment that tells history or restates the code.
-11. **Any other rule in AGENTS.md or a rule file** the changed lines break.
+10. **Standard controls.** Flag a control built by hand, or behavior faked in code, where a standard HTML element or a documented pattern already does it, as the WHATWG HTML standard and the WAI-ARIA Authoring Practices describe. Examples are a `div` that acts as a button, a tab outside its tablist, or a field hidden from assistive tech and opened by a script.
+11. **Docs and comments the change makes wrong.** AGENTS.md, a rule file, a skill, or README.md describing what the code no longer does, a comment naming a file that's gone, and a comment that tells history or restates the code.
+12. **Any other rule in AGENTS.md or a rule file** the changed lines break.
 
 Skip what lint, Prettier, TypeScript, knip, and the repo's guard tests already catch, and matters of taste. Don't run the tests: CI runs them all.
 

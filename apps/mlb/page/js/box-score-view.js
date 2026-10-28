@@ -159,7 +159,7 @@ function renderInnings(game, boxScore) {
       <table class="st line-score">
         <thead>
           <tr>
-            <th class="left"></th>
+            <td class="left"></td>
             ${numbers.map((number) => html`<th class="mid">${number}</th>`)}
             <th class="mid total">R</th>
             <th class="mid">H</th>

@@ -110,22 +110,27 @@ const findList = () =>
 const findRead = () =>
   /** @type {HTMLElement | null} */ (view?.querySelector(".search-read") ?? null);
 
-const renderShell = () =>
+/**
+ * The field's glass and words share a label, so a tap on the glass reaches the field, beside its
+ * Clear button, which a label can't hold.
+ */
+export const renderSearchShell = () =>
   html`<div class="day-bar search-bar is-empty">
       <form class="search-row" role="search">
-        <label class="search-field"
-          >${FIELD_GLASS}<input
-            type="search"
-            class="search-input"
-            value=""
-            enterkeyhint="search"
-            autocomplete="off"
-            autocorrect="off"
-            autocapitalize="off"
-            spellcheck="false" /><button type="button" class="search-clear" aria-label="Clear" hidden>
-            ${CLEAR}
-          </button></label
-        >
+        <div class="search-field">
+          <label class="search-label"
+            >${FIELD_GLASS}<input
+              type="search"
+              class="search-input"
+              value=""
+              enterkeyhint="search"
+              autocomplete="off"
+              autocorrect="off"
+              autocapitalize="off"
+              spellcheck="false"
+          /></label>
+          <button type="button" class="search-clear" aria-label="Clear" hidden>${CLEAR}</button>
+        </div>
         <button type="button" class="search-cancel">Cancel</button>
       </form>
       <p class="search-read"></p>
@@ -684,7 +689,7 @@ function nameField(placeholder) {
 export function startGameSearch(element, searchLeague) {
   view = element;
   league = searchLeague;
-  if (!findInput()) setHtml(element, renderShell());
+  if (!findInput()) setHtml(element, renderSearchShell());
   nameField(searchLeague.placeholder);
   placedFor = element.hidden
     ? null
