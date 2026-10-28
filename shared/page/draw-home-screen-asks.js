@@ -196,14 +196,10 @@ function wireWelcome(welcome, isOnIos) {
   welcome.addEventListener("change", (event) =>
     keepWelcomeChoice(/** @type {HTMLInputElement} */ (event.target)),
   );
-  // Its buttons ask to close it as Escape does: home-screen.js takes the ask and slides it down, and
-  // until it loads, nothing does, so it closes at once.
-  const askToClose = () => {
-    if (welcome.dispatchEvent(new Event("cancel", { cancelable: true }))) welcome.close();
-  };
+  // Its buttons close it at once until home-screen.js loads and takes their clicks to slide it down.
   welcome.addEventListener("click", (event) => {
     if (/** @type {Element} */ (event.target).closest(".welcome-continue, .welcome-close"))
-      askToClose();
+      welcome.close();
   });
   // Continue in browser, the caret, Escape, and Android's back all close it, and it stays closed.
   welcome.addEventListener("close", keepWelcomeClosed);

@@ -74,6 +74,22 @@ const GENERIC_FUNCTION_NAMES = [
   message: "Name the function with a verb for what it does, not call, run, execute, or handle.",
 }));
 
+// A tap, press, key, or Escape the page's code fakes runs the control's listeners without the
+// browser's own handling of the input, so it drifts from what a person's does. The page calls the
+// function the control's listener would.
+const USER_INPUT_EVENT_CLASSES =
+  "/^(Pointer|Mouse|Keyboard|Touch|Wheel|Input|Focus|Drag|Composition)Event$/";
+const USER_INPUT_EVENT_TYPES =
+  "/^(cancel|close|click|dblclick|submit|input|change|focus|blur|wheel|pointer[a-z]+|mouse[a-z]+|key[a-z]+|touch[a-z]+)$/";
+const SYNTHETIC_INPUT = [
+  "CallExpression[callee.property.name='click'][arguments.length=0]",
+  `CallExpression[callee.property.name='dispatchEvent'] > NewExpression.arguments[callee.name=${USER_INPUT_EVENT_CLASSES}]`,
+  `CallExpression[callee.property.name='dispatchEvent'] > NewExpression.arguments[callee.name='Event'][arguments.0.value=${USER_INPUT_EVENT_TYPES}]`,
+].map((selector) => ({
+  selector,
+  message: "Call what the control's listener calls instead of faking a person's input.",
+}));
+
 export default [
   {
     ignores: [
@@ -105,6 +121,7 @@ export default [
       "no-restricted-syntax": [
         "error",
         ...GENERIC_FUNCTION_NAMES,
+        ...SYNTHETIC_INPUT,
         {
           selector:
             "AssignmentExpression > MemberExpression.left[property.name=/^(innerHTML|outerHTML)$/]",
@@ -120,6 +137,10 @@ export default [
         },
       ],
     },
+  },
+  {
+    files: ["shared/page/html.js", "shared/page/show-last-drawn.js"],
+    rules: { "no-restricted-syntax": ["error", ...GENERIC_FUNCTION_NAMES, ...SYNTHETIC_INPUT] },
   },
   {
     // Only days.js reads the viewer's calendar and clock, so a day or time reads the same in every

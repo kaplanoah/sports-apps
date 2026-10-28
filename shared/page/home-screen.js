@@ -10,7 +10,7 @@
 
 import { isOnHomeScreen, isTouchDevice } from "./device.js";
 import { runAfterPress } from "./press.js";
-import { closeOnCancel, closeOnSwipeDown } from "./sheet-swipe.js";
+import { closeOnCancel, closeOnSwipeDown, closeSheet } from "./sheet-swipe.js";
 
 /**
  * Chrome's own install dialog, which it offers only to a page it can install.
@@ -84,17 +84,15 @@ export function openWelcome() {
   findWelcome().showModal();
 }
 
-// Its buttons close it as Escape does, as draw-home-screen-asks.js has them do until this loads,
-// once their press has shown.
+// Its buttons slide it down as Escape does, once their press has shown, in place of the
+// draw-home-screen-asks.js closing at once that serves until this loads.
 /** @param {Event} event */
 function closeAfterPress(event) {
   const button = /** @type {Element} */ (event.target).closest(".welcome-continue, .welcome-close");
   if (!button) return;
   event.stopPropagation();
   const welcome = findWelcome();
-  runAfterPress(button, () => {
-    if (welcome.dispatchEvent(new Event("cancel", { cancelable: true }))) welcome.close();
-  });
+  runAfterPress(button, () => closeSheet(welcome));
 }
 
 function wireWelcomeClosing() {
