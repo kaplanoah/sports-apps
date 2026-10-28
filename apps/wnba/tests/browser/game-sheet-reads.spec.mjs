@@ -115,7 +115,9 @@ test("a game that hasn't started previews the meetings, the season stats, and th
     /Season series\s*Fever won 2-1/,
   );
   await expect(sheet.locator(".meetings li")).toHaveCount(3);
-  await expect(sheet.locator(".meetings li").first()).toHaveText(/Jul 5\s*Fever, team details84-68\s*at Aces, team details/);
+  await expect(sheet.locator(".meetings li").first()).toHaveText(
+    /Jul 5\s*Fever, team details84-68\s*at Aces, team details/,
+  );
   await expect(sheet.locator(".tape-label")).toHaveText([
     "Record",
     "PPG",
@@ -291,7 +293,10 @@ test("while its box score loads, the sheet holds the box score's shape, then fil
     "Top scorers",
   ]);
   await expect(sheet.locator(".tape-label")).toHaveCount(8);
-  await expect(sheet.locator(".line-score tbody th")).toHaveText(["Aces, team details", "Fever, team details"]);
+  await expect(sheet.locator(".line-score tbody th")).toHaveText([
+    "Aces, team details",
+    "Fever, team details",
+  ]);
   await expect(sheet.locator(".players tbody tr:not(.players-head)")).toHaveCount(10);
   await expect(sheet.locator(".tape-value .placeholder")).toHaveCount(16);
 
