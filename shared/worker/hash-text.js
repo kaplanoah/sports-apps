@@ -1,5 +1,5 @@
-// A short, fixed-length name for any text, like a story's or a photo's address, for keys the store
-// limits in length.
+// The SHA-256 of any text, in full, or as a short, fixed-length name, like a story's or a photo's
+// address, for keys the store limits in length.
 
 /**
  * All 64 hex digits of the text's SHA-256.

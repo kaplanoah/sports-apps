@@ -136,6 +136,7 @@ test("endpoint answers a GET with the owner's address, or none while the service
   assert.deepEqual(await response.json(), { email: "owner@example.com" });
   const fallback = await serveContact(new Request("https://example.com/contact"), {});
   assert.equal(fallback.headers.get("cache-control"), "no-store");
+  assert.equal(fallback.headers.get("x-content-type-options"), "nosniff");
   assert.deepEqual(await fallback.json(), { email: null });
 });
 
