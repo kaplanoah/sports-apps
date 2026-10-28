@@ -1,4 +1,4 @@
-import { matchPath } from "./harness.mjs";
+import { holdClock, matchPath } from "./harness.mjs";
 
 /** @param {any} options */
 export function registerSettingsContactInteractions({ test, expect, openApp, app }) {
@@ -32,6 +32,28 @@ export function registerSettingsContactInteractions({ test, expect, openApp, app
         await dialog.getByRole("button", { name: "Back to Contact" }).click();
       }
       await dialog.getByRole("button", { name: "Back to Settings" }).click();
+    }
+  });
+
+  test("Contact gives focus back to its row once its sheet has closed", async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await openApp(page);
+    await page.getByRole("button", { name: "Settings", exact: true }).click();
+    const opener = page.locator("#contactBtn");
+    const dialog = page.locator("#contactDialog");
+    for (const close of [
+      () => dialog.getByRole("button", { name: "Back to Settings" }).click(),
+      () => page.keyboard.press("Escape"),
+    ]) {
+      await page.locator("#settingsDialog .sheet-close").focus();
+      await opener.dispatchEvent("click");
+      await expect(dialog.locator("h2")).toBeFocused();
+      await holdClock(page);
+      await close();
+      await page.clock.runFor(1000);
+      await expect(dialog).toBeHidden();
+      await expect(opener).toBeFocused();
+      await page.clock.resume();
     }
   });
 

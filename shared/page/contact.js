@@ -193,13 +193,8 @@ export function startContact(dialog) {
       store.save(view.category);
       drawContact();
     } else if (action === "done" || (action === "back" && view.screen === "menu"))
-      runAfterPress(button, closeContact);
+      runAfterPress(button, () => closeSheet(dialog));
     else if (action === "back") runAfterPress(button, showMenu);
-  }
-
-  function closeContact() {
-    closeSheet(dialog);
-    document.getElementById("contactBtn").focus();
   }
 
   function showMenu() {
@@ -272,6 +267,7 @@ export function startContact(dialog) {
   );
   const contactButton = /** @type {HTMLElement} */ (document.getElementById("contactBtn"));
   contactButton.addEventListener("click", () => runAfterPress(contactButton, openContact));
+  dialog.addEventListener("close", () => contactButton.focus());
   wireSheet(dialog, {
     name: "Contact",
     isOwnGesture: () => view.sending,
