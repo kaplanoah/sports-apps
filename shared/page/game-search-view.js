@@ -137,6 +137,12 @@ export const renderSearchShell = () =>
     </div>
     <div class="day-list search-list"></div>`;
 
+/**
+ * Whether the view holds this release's shell, rather than none or one put back from an earlier
+ * release, whose label held Clear.
+ */
+const hasCurrentShell = () => !!view?.querySelector(".search-label .search-input");
+
 /** The words in the field, as typed. */
 const readQuery = () => findInput()?.value ?? "";
 
@@ -689,7 +695,7 @@ function nameField(placeholder) {
 export function startGameSearch(element, searchLeague) {
   view = element;
   league = searchLeague;
-  if (!findInput()) setHtml(element, renderSearchShell());
+  if (!hasCurrentShell()) setHtml(element, renderSearchShell());
   nameField(searchLeague.placeholder);
   placedFor = element.hidden
     ? null

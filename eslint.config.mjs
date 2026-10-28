@@ -90,6 +90,7 @@ const HIDDEN_FIELDS = [
   `AssignmentExpression[left.property.name='hidden'][left.object.name=${FIELD_NAME}]`,
   `AssignmentExpression[left.property.name='hidden'][left.object.property.name=${FIELD_NAME}]`,
   `CallExpression[callee.property.name=/^(setAttribute|toggleAttribute)$/][arguments.0.value='hidden'][callee.object.name=${FIELD_NAME}]`,
+  `CallExpression[callee.property.name=/^(setAttribute|toggleAttribute)$/][arguments.0.value='hidden'][callee.object.property.name=${FIELD_NAME}]`,
 ].map((selector) => ({ selector, message: HIDDEN_FIELD_MESSAGE }));
 
 export default [

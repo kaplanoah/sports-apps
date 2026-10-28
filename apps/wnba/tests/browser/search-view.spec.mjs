@@ -126,6 +126,12 @@ test("a finger at the field's right edge lands on its words while it's empty, an
   await sendSearch(page, "Liberty");
 
   expect(await findTapTarget()).toBe("search-clear");
+  const [clear, field] = await Promise.all(
+    [".search-clear", ".search-field"].map((selector) =>
+      page.locator(`#gameSearch ${selector}`).boundingBox(),
+    ),
+  );
+  expect(clear.x + clear.width).toBe(field.x + field.width);
 });
 
 test("two minutes away closes the search and goes back to the tab before it, and less leaves it as it was", async ({

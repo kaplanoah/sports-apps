@@ -96,8 +96,8 @@
 .search-clear {
   flex: none;
   display: flex;
-  margin: -6px -6px -6px -15px;
-  padding: 6px 15px 6px 6px;
+  margin: -6px 0 -6px -15px;
+  padding: 6px 9px 6px 6px;
   border: 0;
   background: none;
   color: var(--ink-dim);

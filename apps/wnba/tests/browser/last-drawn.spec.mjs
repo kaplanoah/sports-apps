@@ -104,6 +104,26 @@ test("saved markup that can't be read leaves the page to open as it would", asyn
   await expect(page.locator("#view-games")).toBeVisible();
 });
 
+test("a search put back from an earlier release, with Clear in the field's label, is drawn again with Clear beside it", async ({
+  page,
+}) => {
+  await storeBeforeLoad(page, {
+    lastDrawn: JSON.stringify({
+      gameSearch: {
+        markup: `<div class="day-bar search-bar is-empty"><form class="search-row" role="search"><label class="search-field"><input type="search" class="search-input" value=""><button type="button" class="search-clear" aria-label="Clear" hidden></button></label><button type="button" class="search-cancel">Cancel</button></form><p class="search-read"></p></div><div class="day-list search-list"></div>`,
+        hidden: true,
+      },
+    }),
+  });
+
+  await openApp(page);
+
+  const search = page.locator("#gameSearch");
+  await expect(search.locator("label .search-input")).toHaveCount(1);
+  await expect(search.locator("label button")).toHaveCount(0);
+  await expect(search.locator(".search-field > .search-clear")).toHaveCount(1);
+});
+
 test.describe("on a phone", () => {
   test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
 

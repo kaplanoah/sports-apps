@@ -25,6 +25,7 @@ const HIDDEN_FIELDS = {
   "a field hidden by assignment": "searchInput.hidden = true;",
   "a field hidden off an object": "parts.uploadField.hidden = true;",
   "a field hidden by its attribute": 'fileInput.setAttribute("hidden", "");',
+  "a field hidden by its attribute off an object": 'this.photoPicker.setAttribute("hidden", "");',
   "a field hidden by a toggle": 'fileInput.toggleAttribute("hidden", true);',
 };
 
