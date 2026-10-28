@@ -361,7 +361,7 @@ async function openNewsStory(page) {
       },
     ],
   });
-  const headline = page.locator(".news-card h3.news-title a");
+  const headline = page.locator(".news-card h2.news-title a");
   await expect(headline).toBeVisible();
   return headline;
 }

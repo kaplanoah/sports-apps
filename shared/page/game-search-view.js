@@ -110,27 +110,38 @@ const findList = () =>
 const findRead = () =>
   /** @type {HTMLElement | null} */ (view?.querySelector(".search-read") ?? null);
 
-export const renderShell = () =>
+/**
+ * The field's glass and words share a label, so a tap on the glass reaches the field, beside its
+ * Clear button, which a label can't hold.
+ */
+export const renderSearchShell = () =>
   html`<div class="day-bar search-bar is-empty">
       <form class="search-row" role="search">
-        <label class="search-field"
-          >${FIELD_GLASS}<input
-            type="search"
-            class="search-input"
-            value=""
-            enterkeyhint="search"
-            autocomplete="off"
-            autocorrect="off"
-            autocapitalize="off"
-            spellcheck="false" /><button type="button" class="search-clear" aria-label="Clear" hidden>
-            ${CLEAR}
-          </button></label
-        >
+        <div class="search-field">
+          <label class="search-label"
+            >${FIELD_GLASS}<input
+              type="search"
+              class="search-input"
+              value=""
+              enterkeyhint="search"
+              autocomplete="off"
+              autocorrect="off"
+              autocapitalize="off"
+              spellcheck="false"
+          /></label>
+          <button type="button" class="search-clear" aria-label="Clear" hidden>${CLEAR}</button>
+        </div>
         <button type="button" class="search-cancel">Cancel</button>
       </form>
       <p class="search-read" role="status"></p>
     </div>
     <div class="day-list search-list"></div>`;
+
+/**
+ * Whether the view holds this release's shell, rather than none or one put back from an earlier
+ * release, whose label held Clear.
+ */
+const hasCurrentShell = () => !!view?.querySelector(".search-label .search-input");
 
 /** The words in the field, as typed. */
 const readQuery = () => findInput()?.value ?? "";
@@ -666,7 +677,7 @@ function sendSearch(event) {
 }
 
 /**
- * Names the field by what it finds, as a field put back from an earlier release may not.
+ * Names the field by what it finds, which the shell leaves to the league.
  * @param {string} placeholder
  */
 function nameField(placeholder) {
@@ -675,8 +686,15 @@ function nameField(placeholder) {
   input?.setAttribute("aria-label", placeholder);
 }
 
-/** Makes the line under the field a status, as one put back from an earlier release may not be. */
-const markReadLine = () => findRead()?.setAttribute("role", "status");
+/**
+ * Draws the shell again over one put back from an earlier release, keeping the words it held.
+ * @param {HTMLElement} element
+ */
+function redrawOldShell(element) {
+  const query = readQuery();
+  setHtml(element, renderSearchShell());
+  writeQuery(query);
+}
 
 /**
  * Wires the search in `element`, which the page may already have put back as it was shown before a
@@ -687,15 +705,16 @@ const markReadLine = () => findRead()?.setAttribute("role", "status");
 export function startGameSearch(element, searchLeague) {
   view = element;
   league = searchLeague;
-  if (!findInput()) setHtml(element, renderShell());
+  const isOldShell = !hasCurrentShell();
+  if (isOldShell) redrawOldShell(element);
   nameField(searchLeague.placeholder);
-  markReadLine();
-  placedFor = element.hidden
-    ? null
-    : {
-        text: readQuery().trim(),
-        isOverGames: !!element.querySelector(".search-games-line"),
-      };
+  placedFor =
+    element.hidden || isOldShell
+      ? null
+      : {
+          text: readQuery().trim(),
+          isOverGames: !!element.querySelector(".search-games-line"),
+        };
   element.addEventListener("click", followTap);
   element.addEventListener("focusin", followFocus);
   element.addEventListener("input", followTyping);

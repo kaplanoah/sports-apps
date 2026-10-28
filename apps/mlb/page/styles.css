@@ -588,7 +588,7 @@ table.st th:last-child,
 table.st td:last-child {
   padding-right: 10px;
 }
-table.st tr:last-child td {
+table.st tbody tr:last-child td {
   border-bottom: 0;
 }
 table.st tr.alive td {

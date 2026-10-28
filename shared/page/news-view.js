@@ -199,7 +199,7 @@ function renderCard({ lead, more }, now, renderTeam) {
     ${renderPhoto(lead.photo)}
     <div class="news-body">
       ${renderCardTop(lead.teams.slice(0, MAX_CARD_TEAMS), lead.photo, renderTeam)}
-      <h3 class="news-title" data-quoted>${renderStoryLink(lead, lead.title)}</h3>
+      <h2 class="news-title" data-quoted>${renderStoryLink(lead, lead.title)}</h2>
       ${renderMeta(lead, now)} ${renderSummary(lead)} ${renderReadButton(lead)}
       ${renderMore(more, now)}
     </div>

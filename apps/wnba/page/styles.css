@@ -1359,7 +1359,7 @@ table.roster thead {
   z-index: 3;
   background: var(--sheet);
 }
-table.roster thead th {
+table.roster thead :is(th, td) {
   padding: 0 0 5px 14px;
   font-family: var(--display);
   font-size: var(--type-label-size);
@@ -1373,7 +1373,7 @@ table.roster thead th {
 table.roster .roster-head th {
   box-shadow: inset 0 -1px 0 var(--divider);
 }
-table.roster .roster-bands th {
+table.roster .roster-bands :is(th, td) {
   box-sizing: border-box;
   height: var(--roster-band-height);
   padding-bottom: 2px;
@@ -1938,7 +1938,7 @@ table.standings th.list-title {
   text-align: left;
   color: var(--structure);
 }
-table.standings td {
+table.standings tbody td {
   padding: 10px 0 10px var(--column-gap);
   border-top: 1px solid var(--divider);
   background: var(--raised);
@@ -1953,10 +1953,10 @@ table.standings tbody tr:first-child td {
 table.standings tbody tr:last-child td {
   border-bottom: 1px solid var(--edge);
 }
-table.standings td:first-child {
+table.standings tbody td:first-child {
   border-left: 1px solid var(--edge);
 }
-table.standings td:last-child {
+table.standings tbody td:last-child {
   border-right: 1px solid var(--edge);
 }
 table.standings tbody tr:first-child td:first-child {
@@ -1985,7 +1985,7 @@ table.standings .place {
   color: var(--ink-dim);
 }
 /* The rows' content sits in from the card's sides, and the last column's name over it. */
-table.standings td:last-child {
+table.standings tbody td:last-child {
   padding-right: 10px;
 }
 table.standings th:last-child {

@@ -49,11 +49,11 @@ function renderCalendarLabel(day, today) {
   const date = readCalendarDate(day);
   const todayDate = readCalendarDate(today);
   const month = formatShortMonth(date);
-  return html`<h3 class="day-label" aria-label="${nameListDay(date, todayDate)}, ${month} ${readDayOfMonth(day)}">
+  return html`<h2 class="day-label" aria-label="${nameListDay(date, todayDate)}, ${month} ${readDayOfMonth(day)}">
     <span class="day-month">${month}</span
     ><span class="day-number${isLedByOne(day) ? " leads-with-one" : ""}">${readDayOfMonth(day)}</span
     ><span class="day-name">${abbreviateDay(date, todayDate)}</span>
-  </h3>`;
+  </h2>`;
 }
 
 /**
@@ -67,7 +67,7 @@ export function renderHeadingLabel(day, today) {
     isCapitalized: true,
   });
   const names = [nearName, formatWeekdayAndDate(date)].filter(Boolean);
-  return html`<h3 class="day-label day-heading">${joinWithSeparator(names)}</h3>`;
+  return html`<h2 class="day-label day-heading">${joinWithSeparator(names)}</h2>`;
 }
 
 /**
