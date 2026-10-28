@@ -705,14 +705,16 @@ function redrawOldShell(element) {
 export function startGameSearch(element, searchLeague) {
   view = element;
   league = searchLeague;
-  if (!hasCurrentShell()) redrawOldShell(element);
+  const isOldShell = !hasCurrentShell();
+  if (isOldShell) redrawOldShell(element);
   nameField(searchLeague.placeholder);
-  placedFor = element.hidden
-    ? null
-    : {
-        text: readQuery().trim(),
-        isOverGames: !!element.querySelector(".search-games-line"),
-      };
+  placedFor =
+    element.hidden || isOldShell
+      ? null
+      : {
+          text: readQuery().trim(),
+          isOverGames: !!element.querySelector(".search-games-line"),
+        };
   element.addEventListener("click", followTap);
   element.addEventListener("focusin", followFocus);
   element.addEventListener("input", followTyping);

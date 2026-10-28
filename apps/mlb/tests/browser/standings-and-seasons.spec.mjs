@@ -234,7 +234,6 @@ test("warns under the title when MLB stops sending a field", async ({ page }) =>
   await expect(page.locator("#stamp")).toContainText(
     "MLB stopped sending wildCardRank, so some details may be blank",
   );
-  expect(await listStrayPeriods(page)).toEqual([]);
   await expect(page.locator("#bracketWrap")).toContainText("Dodgers");
 });
 

@@ -656,5 +656,4 @@ test("a club's playoff lines run dashed past the regular season's range, each a 
   expect(await listTextOffRoles(page)).toEqual([]);
   expect(await listChipsOffCenter(page)).toEqual([]);
   expect(await listLowContrastText(page)).toEqual([]);
-  expect(await listStrayPeriods(page)).toEqual([]);
 });

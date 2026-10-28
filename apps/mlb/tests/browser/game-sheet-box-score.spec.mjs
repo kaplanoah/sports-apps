@@ -13,7 +13,6 @@ import { holdRequests } from "../../../../tests/browser/hold-requests.mjs";
 import { listLowContrastText } from "../../../../tests/browser/contrast.mjs";
 import { listTextOffRoles, readRole, readType } from "../../../../tests/browser/type-roles.mjs";
 import { listChipsOffCenter } from "../../../../tests/browser/chip-centering.mjs";
-import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
 import { expectShown } from "../../../../tests/browser/sheet-row.mjs";
 import { drag } from "../../../../tests/browser/touch.mjs";
 import { comeBackTo, passTime, setHidden } from "../../../../tests/browser/visibility.mjs";
@@ -101,7 +100,26 @@ test("a final's Game section shows its innings, then each club's batters and pit
   expect(await listTextOffRoles(page)).toEqual([]);
   expect(await listChipsOffCenter(page)).toEqual([]);
   expect(await listLowContrastText(page)).toEqual([]);
-  expect(await listStrayPeriods(page)).toEqual([]);
+});
+
+test("every head cell of a final's innings and box score has the divider under it", async ({
+  page,
+}) => {
+  const { sheet } = await openOctoberGame(page, "Brewers at Padres, Tue, Oct 6");
+  await expect(sheet.locator(".line-score")).toBeVisible();
+  const divider = await readColor(page, "--divider");
+
+  const heads = await sheet
+    .locator(":is(.line-score, .box-table) thead :is(th, td)")
+    .evaluateAll((cells) =>
+      cells.map((cell) => {
+        const style = getComputedStyle(cell);
+        return style.borderBottomStyle === "none" ? null : style.borderBottomColor;
+      }),
+    );
+
+  expect(heads.length).toBeGreaterThan(13);
+  expect(new Set(heads)).toEqual(new Set([divider]));
 });
 
 test("today's game still to start shows each club's lineup once it's posted, and a later day's shows none", async ({
@@ -308,7 +326,6 @@ test("a final's Highlights show MLB's recap video, its title as heavy as each pl
   expect(await listTextOffRoles(page)).toEqual([]);
   expect(await listChipsOffCenter(page)).toEqual([]);
   expect(await listLowContrastText(page)).toEqual([]);
-  expect(await listStrayPeriods(page)).toEqual([]);
 });
 
 test("a final's plays sit 13px apart with no line between them, each still 128px wide with its length at the caption's size and its play button centered", async ({

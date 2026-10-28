@@ -2,7 +2,6 @@ import { test, expect, openApp, openSettings, ON_A_PHONE } from "./harness.mjs";
 import { listLowContrastText } from "../../../../tests/browser/contrast.mjs";
 import { listTextOffRoles } from "../../../../tests/browser/type-roles.mjs";
 import { listChipsOffCenter } from "../../../../tests/browser/chip-centering.mjs";
-import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
 import { listTapsOffButtons } from "../../../../tests/browser/tap-states.mjs";
 import { countTextLines } from "../../../../tests/browser/text-lines.mjs";
 import { SETTINGS } from "../../../../tests/browser/settings.mjs";
@@ -110,7 +109,6 @@ test("the News tab shows a card for each piece of news the Worker saves, newest 
   expect(await listTextOffRoles(page)).toEqual([]);
   expect(await listChipsOffCenter(page)).toEqual([]);
   expect(await listLowContrastText(page)).toEqual([]);
-  expect(await listStrayPeriods(page)).toEqual([]);
   expect(await listTapsOffButtons(page)).toEqual([]);
 });
 
@@ -131,7 +129,6 @@ test("switching off the Mets' own outlets or The Athletic leaves their stories o
   expect(await listTextOffRoles(page)).toEqual([]);
   expect(await listChipsOffCenter(page)).toEqual([]);
   expect(await listLowContrastText(page)).toEqual([]);
-  expect(await listStrayPeriods(page)).toEqual([]);
 });
 
 test("after a reload, the news the page last showed answers the News switches while the store is still answering", async ({

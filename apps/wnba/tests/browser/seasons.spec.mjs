@@ -172,17 +172,17 @@ test.describe("on a phone", () => {
     await page.route(matchPath("/js/release-notes.js"), (route) =>
       route.fulfill({
         contentType: "text/javascript",
-        body: 'export const RELEASE_NOTES = [{ at: "2026-09-30T20:55:00Z", text: "Something new." }];',
+        body: 'export const RELEASE_NOTES = [{ at: "2026-09-30T20:55:00Z", text: "Something new" }];',
       }),
     );
     await openApp(page, { ...ONE_PAST_SEASON, updatesBox: "shown" });
     const updates = page.locator("#updates");
-    await expect(updates).toContainText("Something new.");
+    await expect(updates).toContainText("Something new");
 
     await chooseSeason(page, 2025);
     await expect(updates).toBeHidden();
 
     await chooseSeason(page, 2026);
-    await expect(updates).toContainText("Something new.");
+    await expect(updates).toContainText("Something new");
   });
 });

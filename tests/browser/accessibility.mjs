@@ -12,7 +12,7 @@ import { THEMES, showTheme } from "./theme-layout.mjs";
 
 /** axe's rules the browser tests leave out, each with why. */
 const RULES_LEFT_OUT = [
-  // contrast.mjs already holds every shown text to WCAG's AA contrast, pressed too, from the colors
+  // contrast.mjs already holds every shown text at rest to WCAG's AA contrast, from the colors
   // the page draws, where axe guesses at what sits behind text and gives up on much of it.
   "color-contrast",
 ];

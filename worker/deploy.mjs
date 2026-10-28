@@ -548,7 +548,10 @@ export async function deploy({
       pause,
       fetchImpl,
     });
-    if (check.status === "answering") log("health check: ok");
+    if (check.status === "answering") {
+      const notice = check.attention ? "::notice::" : "";
+      log(`${notice}health check: ok${check.attention ? `, but ${check.attention}` : ""}`);
+    }
     if (check.status === "unchecked") log(`::notice::health check: skipped, ${check.reason}`);
     if (check.status === "unanswered") {
       const versionProblem = isUploaded
