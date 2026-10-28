@@ -216,8 +216,7 @@ test("channels that share a wordmark line up its edges in the line", () => {
 // ESPN's own red, as espn.com draws its logo and header.
 test("ESPN and ESPN2 draw in one red, ESPN's own", () => {
   for (const file of ["espn.svg", "espn2.svg"]) {
-    const fills = [...readRepoFile(`${LOGO_FOLDER}${file}`).matchAll(/fill="([^"]+)"/g)];
-    assert.deepEqual(new Set(fills.map(([, fill]) => fill)), new Set(["#d00"]), file);
+    assert.deepEqual(listDrawingColors(file), new Set(["#d00"]), file);
   }
 });
 
