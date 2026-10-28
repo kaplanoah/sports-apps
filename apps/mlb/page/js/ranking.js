@@ -13,7 +13,8 @@ import { nameTeam, TEAMS } from "./teams.js";
 export const REORDER_EVENT = "rankingreorder";
 
 // Each grip is a vertical slider, which a swipe up or down in VoiceOver adjusts by sending an arrow
-// key: Up or Right moves its club up the list, Down or Left down it, and Home or End to either end.
+// key: Up or Right moves its club up the list, and Down or Left down it. Home and End move it to
+// either end, as on any slider.
 /** @type {Record<string, (from: number, count: number) => number>} */
 const MOVES = {
   ArrowUp: (from) => from - 1,

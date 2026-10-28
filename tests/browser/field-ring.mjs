@@ -1,7 +1,6 @@
 // How a text field shows its focus (controls.css): no ring once a tap focuses it, nor as keys move
-// its cursor, and the app's
-// focus ring around the box that looks like the field once the keyboard reaches it, in the phone's
-// light and dark looks.
+// its cursor, and the app's focus ring around the box that looks like the field once the keyboard
+// reaches it, in the phone's light and dark looks.
 
 /** @param {import("@playwright/test").Locator} box */
 const readRing = (box) =>
