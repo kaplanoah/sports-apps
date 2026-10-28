@@ -98,9 +98,12 @@ test("failure and both confirmations keep the approved copy and escape visitor t
   assert.match(failed, /Your draft is saved\. Try again\./);
   assert.match(failed, />Try again<\/button>/);
   const noEmail = String(renderContact({ screen: "received", receiptEmail: "" }));
-  assert.match(noEmail, /Message received/);
-  assert.match(noEmail, /No email address was provided, so a reply isn/);
+  assert.match(noEmail, /<h3>Message sent<\/h3>/);
+  assert.match(
+    noEmail,
+    /<p>Since you didn&#39;t include your email address, we won&#39;t be able to reply<\/p>/,
+  );
   const email = String(renderContact({ screen: "received", receiptEmail: "<script>" }));
-  assert.match(email, /Replies will go to &lt;script&gt;\./);
+  assert.match(email, /<p>Replies will go to &lt;script&gt;<\/p>/);
   assert.doesNotMatch(email, /<script>/);
 });

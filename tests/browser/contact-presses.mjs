@@ -111,7 +111,7 @@ export function registerContactPressTests({ test, expect, openApp, app }) {
       await expect(button).toHaveCSS("opacity", "1");
       if (name === "Send") {
         await page.mouse.up();
-        await expect(dialog.getByRole("heading", { name: "Message received" })).toBeVisible();
+        await expect(dialog.getByRole("heading", { name: "Message sent" })).toBeVisible();
       }
     }
   });
@@ -194,7 +194,7 @@ export function registerContactPressTests({ test, expect, openApp, app }) {
     await page.clock.runFor(1000);
     await dialog.locator("textarea").fill("The score stopped changing");
     await dialog.getByRole("button", { name: "Send", exact: true }).click();
-    await expect(dialog.getByRole("heading", { name: "Message received" })).toBeVisible();
+    await expect(dialog.getByRole("heading", { name: "Message sent" })).toBeVisible();
     await expectPressFirst(
       dialog.getByRole("button", { name: "Done", exact: true }),
       () => expect(dialog).toBeVisible(),

@@ -33,7 +33,7 @@ function renderDiagnostics(draft) {
 /** @param {any} view */
 export function renderContact(view) {
   if (view.screen === "received")
-    return html`${renderHeader("Contact", null)}<div class="contact-success" role="status"><h3>Message received</h3><p data-quoted>${view.receiptEmail ? `Replies will go to ${view.receiptEmail}.` : "No email address was provided, so a reply isn\u2019t possible."}</p><button type="button" class="contact-primary" data-contact="done">Done</button></div>`;
+    return html`${renderHeader("Contact", null)}<div class="contact-success" role="status"><h3>Message sent</h3><p>${view.receiptEmail ? `Replies will go to ${view.receiptEmail}` : "Since you didn't include your email address, we won't be able to reply"}</p><button type="button" class="contact-primary" data-contact="done">Done</button></div>`;
   if (view.screen === "menu")
     return html`${renderHeader("Contact", "Settings")}<div class="contact-menu">${CONTACT_CATEGORIES.map(({ key, name }) => html`<button type="button" class="settings-page-row press-tint" data-contact="category" data-category="${key}">${name}${SETTINGS_CARET}</button>`)}</div>
       ${view.email && html`<p class="contact-domain">Or email directly at <a href="mailto:${view.email}">${view.email}</a></p>`}`;
@@ -46,7 +46,7 @@ export function renderContact(view) {
       <div class="contact-field"><label for="contactEmail">Email (optional)</label><p class="contact-note" id="contactEmailHint">An email address is needed if you'd like a reply</p><input id="contactEmail" type="email" autocomplete="email" inputmode="email" autocapitalize="none" spellcheck="false" placeholder="name@example.com" value="${draft.email}" aria-describedby="contactEmailHint" /></div>
       ${view.category === "bug" && renderDiagnostics(draft)}
       <p class="contact-validation" id="contactValidation" role="alert" ${view.validation ? "" : "hidden"}>${view.validation?.text}</p>
-      ${draft.failed && html`<div class="contact-failure" role="alert"><strong>Couldn't confirm your message was sent</strong><p data-quoted>Your draft is saved. Try again.</p></div>`}
+      ${draft.failed && html`<div class="contact-failure" role="alert"><strong>Couldn't confirm your message was sent</strong><p>Your draft is saved. Try again.</p></div>`}
       <button type="submit" class="contact-primary">${view.sending && html`<span class="contact-spinner" aria-hidden="true"></span>`}${view.sending ? "Sending\u2026" : draft.failed ? "Try again" : "Send"}</button>
     </fieldset></form>`;
 }

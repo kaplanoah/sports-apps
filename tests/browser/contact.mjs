@@ -6,6 +6,7 @@ import { listLowContrastText } from "./contrast.mjs";
 import { showTheme } from "./theme-layout.mjs";
 import { listTapsOffButtons } from "./tap-states.mjs";
 import { holdRequests } from "./hold-requests.mjs";
+import { listStrayPeriods } from "./stray-periods.mjs";
 
 const SCREENSHOT = {
   name: "phone.png",
@@ -151,12 +152,13 @@ export function registerContactTests({ test, expect, openApp, app }) {
     await expect(dialog.locator("pre")).toBeHidden();
     await dialog.locator("textarea").fill("The score stopped changing");
     await dialog.getByRole("button", { name: "Send", exact: true }).click();
-    await expect(dialog.getByRole("heading", { name: "Message received" })).toBeVisible();
+    await expect(dialog.getByRole("heading", { name: "Message sent" })).toBeVisible();
     expect(requests[0].diagnostics).toBe(report);
     expect(await page.evaluate(() => localStorage.getItem("diagnostics"))).toBeNull();
     await expect(dialog).toContainText(
-      "No email address was provided, so a reply isn\u2019t possible.",
+      "Since you didn't include your email address, we won't be able to reply",
     );
+    expect(await listStrayPeriods(page)).toEqual([]);
     await dialog.getByRole("button", { name: "Done", exact: true }).click();
     await expect(dialog).toBeHidden();
     await page.locator("#contactBtn").click();
@@ -182,6 +184,7 @@ export function registerContactTests({ test, expect, openApp, app }) {
     await dialog.getByRole("button", { name: "View diagnostics" }).click();
     await dialog.getByRole("button", { name: "Send", exact: true }).click();
     await expect(dialog.getByRole("alert")).toContainText("Couldn't confirm your message was sent");
+    expect(await listStrayPeriods(page)).toEqual([]);
     await expect(dialog.locator("textarea")).toHaveValue("The score stopped changing");
     await expect(dialog.getByRole("checkbox")).not.toBeChecked();
     await expect(dialog.getByAltText("Attached screenshot")).toBeVisible();
@@ -190,11 +193,12 @@ export function registerContactTests({ test, expect, openApp, app }) {
     await expect(dialog.getByLabel("Email (optional)")).toHaveValue("fan@example.com");
     delivery.mode = "success";
     await dialog.getByRole("button", { name: "Try again", exact: true }).click();
-    await expect(dialog.getByRole("heading", { name: "Message received" })).toBeVisible();
+    await expect(dialog.getByRole("heading", { name: "Message sent" })).toBeVisible();
     expect(requests).toHaveLength(2);
     expect(requests[1]).toEqual(requests[0]);
     expect(requests[0]).not.toHaveProperty("diagnostics");
-    await expect(dialog).toContainText("Replies will go to fan@example.com.");
+    await expect(dialog).toContainText("Replies will go to fan@example.com");
+    expect(await listStrayPeriods(page)).toEqual([]);
   });
 
   test("sending disables all changes, keeps progress inside Send, and prevents duplicates and Escape", async ({
@@ -221,7 +225,7 @@ export function registerContactTests({ test, expect, openApp, app }) {
     await expect.poll(() => requests.length).toBe(1);
     delivery.mode = "success";
     delivery.finish();
-    await expect(dialog.getByRole("heading", { name: "Message received" })).toBeVisible();
+    await expect(dialog.getByRole("heading", { name: "Message sent" })).toBeVisible();
     expect(requests[0]).not.toHaveProperty("diagnostics");
   });
 
@@ -352,7 +356,7 @@ export function registerContactTests({ test, expect, openApp, app }) {
         await checkView("failure");
         delivery.mode = "success";
         await dialog.getByRole("button", { name: "Try again", exact: true }).click();
-        await expect(dialog.getByRole("heading", { name: "Message received" })).toBeVisible();
+        await expect(dialog.getByRole("heading", { name: "Message sent" })).toBeVisible();
         await checkView("received");
         await dialog.getByRole("button", { name: "Done", exact: true }).click();
         await page.locator("#contactBtn").click();
@@ -368,7 +372,7 @@ export function registerContactTests({ test, expect, openApp, app }) {
         await checkView("sending");
         delivery.mode = "success";
         delivery.finish();
-        await expect(dialog.getByRole("heading", { name: "Message received" })).toBeVisible();
+        await expect(dialog.getByRole("heading", { name: "Message sent" })).toBeVisible();
         await checkView("received-email");
       });
 }
