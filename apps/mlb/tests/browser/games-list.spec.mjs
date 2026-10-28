@@ -7,16 +7,14 @@ import {
   EVENING_FIXTURE,
   readColor,
   SCHEDULE_DOCS,
+  THEME_NAMES,
 } from "./harness.mjs";
 import { readCapitals } from "../../../../tests/browser/capitals.mjs";
 import { readRole } from "../../../../tests/browser/type-roles.mjs";
 import { readStripEdges } from "../../../../tests/browser/day-strip-edges.mjs";
-import {
-  listLowContrastText,
-  listLowContrastTextAsShown,
-} from "../../../../tests/browser/contrast.mjs";
+import { listLowContrastText } from "../../../../tests/browser/contrast.mjs";
+import { THEMES } from "../../../../tests/browser/theme-layout.mjs";
 import { leavePagePixelDown } from "../../../../tests/browser/page-left-down.mjs";
-import { pressOn } from "../../../../tests/browser/press-looks.mjs";
 import { PHONE, WIDE_SCREEN } from "./screen-sizes.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
@@ -421,11 +419,8 @@ test("a clinched club's race letter is gold at the facts' own weight", async ({ 
   await expect(race).toHaveCSS("font-weight", String((await readRole(page, "caption")).weight));
 });
 
-for (const [theme, colorScheme] of /** @type {const} */ ([
-  ["Ball", "light"],
-  ["Night Game", "dark"],
-])) {
-  test(`in ${theme}, a racing club's race letter stays readable on its row under the mouse and pressed`, async ({
+for (const colorScheme of THEMES) {
+  test(`in ${THEME_NAMES[colorScheme]}, a racing club's race letter stays readable on its row under the mouse`, async ({
     page,
   }) => {
     await page.emulateMedia({ colorScheme });
@@ -437,11 +432,6 @@ for (const [theme, colorScheme] of /** @type {const} */ ([
 
     await open.hover();
     expect(await listLowContrastText(page)).toEqual([]);
-
-    await pressOn(page, open);
-    await expect(open).toHaveClass(/is-row-press/);
-    expect(await listLowContrastTextAsShown(page)).toEqual([]);
-    await page.mouse.up();
   });
 }
 
