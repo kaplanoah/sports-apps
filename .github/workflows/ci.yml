@@ -452,6 +452,44 @@ jobs:
           path: ~/webkit-packages
           key: *webkit-packages-key
 
+  codex-rate-control-isolation:
+    needs: passed
+    if: ${{ !cancelled() && !needs.passed.outputs.run }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version-file: .nvmrc
+          package-manager-cache: false
+      - name: Decide whether rate-control isolation needs proving
+        id: rate-scope
+        run: node worker/prove-codex-rate-isolation.mjs scope
+      - if: steps.rate-scope.outputs.needed == 'true'
+        run: npm ci --ignore-scripts --no-audit
+      - name: Install and verify the pinned CLI without model credentials
+        if: steps.rate-scope.outputs.needed == 'true'
+        run: node worker/prove-codex-rate-isolation.mjs install
+      - name: Prove the disposable runner boundary without a model
+        if: steps.rate-scope.outputs.needed == 'true'
+        run: node worker/prove-codex-rate-isolation.mjs prove
+      - name: Remove only proof installation files
+        if: always() && steps.rate-scope.outputs.needed == 'true'
+        run: node worker/prove-codex-rate-isolation.mjs cleanup
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        if: always() && steps.rate-scope.outputs.needed == 'true'
+        with:
+          name: codex-rate-isolation-proof
+          path: ${{ runner.temp }}/codex-rate-isolation-proof.json
+          if-no-files-found: error
+          retention-days: 14
+
   # Review credentials and posting live only in the default-branch Trusted review workflow.
   # This PR workflow joins its authenticated result using read-only Actions access.
   review-join:
@@ -524,7 +562,7 @@ jobs:
   # Records that every test passed on this code, independently of review and the gate, so label
   # changes on drafts or pull requests still owed a review skip the tests.
   tested:
-    needs: [passed, checks, scope, browser, burn-in, webkit]
+    needs: [passed, checks, scope, browser, burn-in, webkit, codex-rate-control-isolation]
     if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -538,7 +576,7 @@ jobs:
         env:
           TESTED: >-
             ${{ needs.passed.outputs.run != '' || (needs.checks.result == 'success' &&
-            needs.scope.result == 'success' &&
+            needs.scope.result == 'success' && needs.codex-rate-control-isolation.result == 'success' &&
             (needs.scope.outputs.apps == '' || (needs.browser.result == 'success' &&
             needs.webkit.result == 'success')) &&
             (needs.scope.outputs.specs == '' || needs.burn-in.result == 'success')) }}
@@ -564,7 +602,20 @@ jobs:
   # skipped required check as passing.
   check:
     if: always()
-    needs: [passed, gate, phone, checks, scope, browser, burn-in, webkit, tested, review-join]
+    needs:
+      [
+        passed,
+        gate,
+        phone,
+        checks,
+        scope,
+        browser,
+        burn-in,
+        webkit,
+        codex-rate-control-isolation,
+        tested,
+        review-join,
+      ]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:

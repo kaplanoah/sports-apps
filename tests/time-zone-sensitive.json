@@ -83,6 +83,10 @@
     "tests/channel-tag.test.js",
     "tests/check-push.test.js",
     "tests/ci-workflow.test.js",
+    "tests/codex-rate-budget.test.js",
+    "tests/codex-rate-controller.test.js",
+    "tests/codex-rate-estimate.test.js",
+    "tests/codex-rate-gateway.test.js",
     "tests/context-limit.test.js",
     "tests/daily-count.test.js",
     "tests/day-strip-rules.test.js",
@@ -159,6 +163,12 @@
     "tests/worker-fetch.test.js",
     "tests/worker-store.test.js"
   ],
-  "fixed": ["apps/mlb/tests/search-typing.test.js", "apps/wnba/tests/search-typing.test.js"],
-  "browserOnly": ["apps/mlb/page/js/stamp-view.js", "shared/page/draw-channel-tag-age.js"]
+  "fixed": [
+    "apps/mlb/tests/search-typing.test.js",
+    "apps/wnba/tests/search-typing.test.js"
+  ],
+  "browserOnly": [
+    "apps/mlb/page/js/stamp-view.js",
+    "shared/page/draw-channel-tag-age.js"
+  ]
 }
