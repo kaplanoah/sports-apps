@@ -61,7 +61,7 @@ function finishValkyriesAtWings(season) {
   return season;
 }
 
-const CHANNELS_NOTE = { at: "2026-09-30T20:55:00Z", text: "Tap a game, then <b>Channels</b>." };
+const CHANNELS_NOTE = { at: "2026-09-30T20:55:00Z", text: "Tap a game, then <b>Channels</b>" };
 
 /**
  * Serves the page release notes in place of the app's own, by default one out an hour before the
@@ -643,7 +643,7 @@ test.describe("on a phone, with a release note out", () => {
       "2 updates since yesterday",
       "New in the app",
     ]);
-    await expect(updates.locator(".updates-notes .what")).toHaveText("Tap a game, then Channels.");
+    await expect(updates.locator(".updates-notes .what")).toHaveText("Tap a game, then Channels");
     const bold = updates.locator(".updates-notes .what b");
     await expect(bold).toHaveCSS(
       "font-weight",
@@ -678,7 +678,7 @@ test.describe("on a phone, with a release note out", () => {
     const notes = page.locator("#updates .updates-notes");
 
     await expect(notes.locator(".what")).toHaveText([
-      "Tap a game, then Channels.",
+      "Tap a game, then Channels",
       "Rosters",
       "News",
     ]);

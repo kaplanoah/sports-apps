@@ -72,7 +72,7 @@ const serveReleaseNote = (page) =>
   page.route("**/js/release-notes.js", (route) =>
     route.fulfill({
       contentType: "text/javascript",
-      body: 'export const RELEASE_NOTES = [{ at: "2026-09-24T23:00:00Z", text: "Something new." }];',
+      body: 'export const RELEASE_NOTES = [{ at: "2026-09-24T23:00:00Z", text: "Something new" }];',
     }),
   );
 
@@ -256,7 +256,7 @@ test.describe("on a phone that has used the app before", () => {
     const updates = page.locator("#updates");
 
     await expect(updates.locator(".updates-count")).toHaveText("New in the app");
-    await expect(updates.locator(".what")).toHaveText("Something new.");
+    await expect(updates.locator(".what")).toHaveText("Something new");
 
     await dismissUpdatesBox(page);
     await expect(updates).toBeHidden();
@@ -319,7 +319,7 @@ test.describe("on a phone that has used the app before", () => {
   test("dismissing the release notes in another tab hides them in this one", async ({ page }) => {
     await serveReleaseNote(page);
     await openApp(page);
-    await expect(page.locator("#updates .what")).toHaveText("Something new.");
+    await expect(page.locator("#updates .what")).toHaveText("Something new");
 
     await keepInOtherTab(page, "releaseNotesShownUntil", {
       "2026-09-24T23:00:00Z": Date.parse("2026-09-25T00:00:00Z"),
