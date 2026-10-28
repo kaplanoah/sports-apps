@@ -29,6 +29,10 @@ period = 60
 binding = "ACCOUNTS"
 service = "accounts"
 
+[[services]]
+binding = "EMAIL"
+service = "email"
+
 # Each browser's or Home Screen app's one count a day, on production alone, so testing on beta adds nothing to them.
 [[analytics_engine_datasets]]
 binding = "DAILY_OPENS"
@@ -58,10 +62,6 @@ period = 60
 [[env.beta.services]]
 binding = "ACCOUNTS"
 service = "accounts-beta"
-
-[[services]]
-binding = "EMAIL"
-service = "email"
 
 [[env.beta.services]]
 binding = "EMAIL"

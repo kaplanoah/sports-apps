@@ -1,7 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { CONTACT_LIMITS } from "../shared/page/contact-rules.js";
-import { buildContactMail, sendContactMail } from "../services/email/worker/src/mail.js";
+import {
+  CONTACT_LIMITS,
+  validateContactFields,
+  validateContactScreenshot,
+} from "../shared/page/contact-rules.js";
 import {
   readContactRequest,
   serveContact as serveAppContact,
@@ -19,12 +22,7 @@ const SUBMISSION = {
   email: "fan@example.com",
   screenshot: null,
 };
-const ENV = {
-  CONTACT_FROM: "reports@example.com",
-  CONTACT_TO: "owner@example.com",
-  CONTACT_MAIL_KEY: "test-mail-key",
-  EMAIL: {},
-};
+const ENV = { EMAIL: {} };
 /** @param {any} [body] @param {Record<string, string>} [headers] */
 const createRequest = (body = SUBMISSION, headers = {}) =>
   new Request("https://example.com/contact", {
@@ -32,6 +30,25 @@ const createRequest = (body = SUBMISSION, headers = {}) =>
     headers: { "content-type": "application/json", origin: "https://example.com", ...headers },
     body: JSON.stringify(body),
   });
+
+test("the form's limits read as the limits they check", () => {
+  const message = "x".repeat(CONTACT_LIMITS.message);
+  assert.equal(validateContactFields({ message, email: "" }), null);
+  assert.equal(
+    validateContactFields({ message: `${message}x`, email: "" }).text,
+    "Keep your message to 10,000 characters or fewer",
+  );
+  const type = "image/png";
+  assert.equal(validateContactScreenshot({ type, size: CONTACT_LIMITS.screenshot }), null);
+  assert.equal(
+    validateContactScreenshot({ type, size: CONTACT_LIMITS.screenshot + 1 }),
+    "Choose a screenshot of 2 MB or less",
+  );
+  assert.equal(
+    validateContactScreenshot({ type, size: 0 }),
+    "Choose a screenshot that isn't empty",
+  );
+});
 
 test("server accepts a valid optional email and redacts actual diagnostics URLs", async () => {
   const result = await readContactRequest(
@@ -85,31 +102,6 @@ test("screenshots require matching image signatures and receive safe filenames",
     await assert.rejects(readContactRequest(createRequest({ ...SUBMISSION, screenshot: invalid })));
 });
 
-test("delivery uses an authenticated sender, visitor Reply-To, plain text and a provider idempotency key", async () => {
-  const submission = {
-    ...SUBMISSION,
-    app: "wnba",
-    diagnostics: "Actual diagnostics",
-    screenshot: { filename: "screenshot.png", type: "image/png", content: "iVBORw0KGgo=" },
-  };
-  const mail = buildContactMail(submission, ENV);
-  assert.equal(mail.from, ENV.CONTACT_FROM);
-  assert.deepEqual(mail.to, [ENV.CONTACT_TO]);
-  assert.equal(mail.reply_to, SUBMISSION.email);
-  assert.match(mail.text, /Actual diagnostics/);
-  assert.equal(mail.attachments[0].content_type, "image/png");
-  assert.ok(!Object.hasOwn(mail, "html"));
-  assert.ok(!Object.hasOwn(buildContactMail({ ...submission, email: "" }, ENV), "reply_to"));
-  const id = await sendContactMail(submission, ENV, async (url, options) => {
-    assert.equal(url, "https://api.resend.com/emails");
-    assert.equal(options.headers["idempotency-key"], `contact/wnba/${ID}`);
-    assert.equal(options.headers.authorization, "Bearer test-mail-key");
-    assert.deepEqual(JSON.parse(options.body), mail);
-    return Response.json({ id: "provider-id" });
-  });
-  assert.equal(id, "provider-id");
-});
-
 test("endpoint requires same-origin access, configured delivery and durable server acceptance", async () => {
   assert.equal(
     (await serveContact(createRequest(SUBMISSION, { origin: "https://elsewhere.example" }), ENV))
@@ -136,15 +128,27 @@ test("endpoint requires same-origin access, configured delivery and durable serv
     throw new Error("outage");
   };
   assert.equal((await serveContact(createRequest(), env)).status, 503);
-  assert.equal(
-    (await serveContact(new Request("https://example.com/contact"), {})).headers.get(
-      "cache-control",
-    ),
-    "no-store",
-  );
 });
 
-test("Contact routes stay behind the existing app path and access gate", async () => {
+test("endpoint answers a GET with the owner's address, or none while the service is down", async () => {
+  const env = { EMAIL: { readContactConfig: async () => ({ email: "owner@example.com" }) } };
+  const response = await serveContact(new Request("https://example.com/contact"), env);
+  assert.deepEqual(await response.json(), { email: "owner@example.com" });
+  const fallback = await serveContact(new Request("https://example.com/contact"), {});
+  assert.equal(fallback.headers.get("cache-control"), "no-store");
+  assert.deepEqual(await fallback.json(), { email: null });
+});
+
+test("endpoint refuses methods other than GET and POST", async () => {
+  const response = await serveContact(
+    new Request("https://example.com/contact", { method: "PUT" }),
+    ENV,
+  );
+  assert.equal(response.status, 405);
+  assert.equal(response.headers.get("allow"), "GET, POST");
+});
+
+test("Contact routes stay behind the app path and access gate", async () => {
   const worker = createAppWorker({
     name: "mlb",
     pageFiles: {},

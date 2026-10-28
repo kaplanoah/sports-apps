@@ -1,4 +1,5 @@
-import { hashContactValue, respondContact } from "../../../../shared/worker/contact-request.js";
+import { respondJson } from "../../../../shared/worker/responses.js";
+import { hashTextInFull } from "../../../../shared/worker/hash-text.js";
 import { readContactDelivery, sendContactMail } from "./mail.js";
 
 const HOUR_MS = 60 * 60 * 1000;
@@ -10,6 +11,10 @@ const PENDING_REPORTS_PER_APP = 100;
 // Resend forgets idempotency keys after 24 hours; an uncertain send must stop before then.
 const SAFE_RETRY_MS = 23 * HOUR_MS;
 const DELIVERY_WAIT_MS = 7 * 24 * HOUR_MS;
+// Long enough for the Watch apps workflow to raise its issue and the owner to read the provider's logs.
+const PAUSED_KEEP_MS = 7 * 24 * HOUR_MS;
+// A Durable Object deletes at most this many keys in one call.
+const DELETE_BATCH_KEYS = 128;
 
 /** @param {string} id @param {number} index */
 const namePayloadChunk = (id, index) => `payload:${id}:${index}`;
@@ -17,6 +22,12 @@ const namePayloadChunk = (id, index) => `payload:${id}:${index}`;
 /** @param {string} id @param {number} count */
 const listChunkKeys = (id, count) =>
   Array.from({ length: count }, (_, index) => namePayloadChunk(id, index));
+
+/** @param {any} storage @param {string[]} keys */
+async function deleteKeys(storage, keys) {
+  for (let start = 0; start < keys.length; start += DELETE_BATCH_KEYS)
+    await storage.delete(keys.slice(start, start + DELETE_BATCH_KEYS));
+}
 
 export class EmailOutbox {
   /** @param {any} ctx @param {any} env @param {{ now?: () => number, fetchImpl?: typeof fetch }} [options] */
@@ -40,13 +51,13 @@ export class EmailOutbox {
 
   /** @param {any} submission @param {string} sender */
   async acceptSubmission(submission, sender) {
-    const fingerprint = await hashContactValue(submission);
+    const fingerprint = await hashTextInFull(JSON.stringify(submission));
     const id = `${submission.app}/${submission.id}`;
     return this.storage.transaction(async (storage) => {
       const receiptKey = `receipt:${id}`;
       const receipt = await storage.get(receiptKey);
       if (receipt)
-        return respondContact(
+        return respondJson(
           { id: submission.id, accepted: receipt.fingerprint === fingerprint },
           receipt.fingerprint === fingerprint ? 200 : 409,
         );
@@ -55,9 +66,11 @@ export class EmailOutbox {
       const previous = await storage.get(rateKey);
       const rate =
         previous?.until > this.now() ? previous : { count: 0, until: this.now() + HOUR_MS };
-      const appPending = [...pending.values()].filter((report) => report.app === submission.app);
+      const appPending = [...pending.values()].filter(
+        (report) => report.app === submission.app && report.state !== "attention",
+      );
       if (rate.count >= SENDER_REPORTS_PER_HOUR || appPending.length >= PENDING_REPORTS_PER_APP)
-        return respondContact({ problem: "busy" }, 429);
+        return respondJson({ problem: "busy" }, 429);
       const text = JSON.stringify({
         ...submission,
         from: this.env.CONTACT_FROM,
@@ -84,7 +97,7 @@ export class EmailOutbox {
       await storage.put(rateKey, { ...rate, count: rate.count + 1 });
       const alarm = await storage.getAlarm();
       if (alarm === null || alarm > this.now() + 1000) await storage.setAlarm(this.now() + 1000);
-      return respondContact({ id: submission.id, accepted: true }, 202);
+      return respondJson({ id: submission.id, accepted: true }, 202);
     });
   }
 
@@ -93,7 +106,7 @@ export class EmailOutbox {
     const needsAttention = [...pending.values()].some(
       (report) => report.state === "attention" || this.now() - report.createdAt > HOUR_MS,
     );
-    return respondContact({ ok: !needsAttention, pending: pending.size });
+    return respondJson({ ok: !needsAttention });
   }
 
   /** @param {any} report */
@@ -106,18 +119,21 @@ export class EmailOutbox {
 
   /** @param {any} report @param {string} state */
   async finishDelivery(report, state) {
-    if (state !== "delivered") {
-      await this.storage.put(`pending:${report.id}`, { ...report, state: "attention" });
-      return;
-    }
     await this.storage.transaction(async (storage) => {
-      await storage.delete(listChunkKeys(report.id, report.chunks));
-      await storage.delete(`pending:${report.id}`);
+      await deleteKeys(storage, listChunkKeys(report.id, report.chunks));
+      if (state === "delivered") await storage.delete(`pending:${report.id}`);
+      else
+        await storage.put(`pending:${report.id}`, {
+          ...report,
+          state: "attention",
+          nextAt: this.now() + PAUSED_KEEP_MS,
+        });
     });
   }
 
   /** @param {any} report */
   async processReport(report) {
+    if (report.state === "attention") return this.storage.delete(`pending:${report.id}`);
     const isExpired = report.providerId
       ? this.now() - report.createdAt >= DELIVERY_WAIT_MS
       : report.firstAttemptAt !== null && this.now() - report.firstAttemptAt >= SAFE_RETRY_MS;
@@ -154,15 +170,28 @@ export class EmailOutbox {
 
   async alarm() {
     const pending = await this.storage.list({ prefix: "pending:" });
-    const due = [...pending.values()].filter((report) => report.state !== "attention");
-    const report = due.sort((first, second) => first.nextAt - second.nextAt)[0];
+    const report = [...pending.values()].sort((first, second) => first.nextAt - second.nextAt)[0];
     if (report && report.nextAt <= this.now()) await this.processReport(report);
-    const current = await this.storage.list({ prefix: "pending:" });
-    const times = [...current.values()]
-      .filter((item) => item.state !== "attention")
-      .map((item) => item.nextAt);
-    if (times.length) await this.storage.setAlarm(Math.max(this.now() + 1000, Math.min(...times)));
+    await this.removeExpiredSenders();
+    await this.scheduleNextWake();
+  }
+
+  async removeExpiredSenders() {
     const senders = await this.storage.list({ prefix: "sender:" });
-    for (const [key, rate] of senders) if (rate.until <= this.now()) await this.storage.delete(key);
+    const expired = [...senders].filter(([, rate]) => rate.until <= this.now());
+    await deleteKeys(
+      this.storage,
+      expired.map(([key]) => key),
+    );
+  }
+
+  async scheduleNextWake() {
+    const pending = await this.storage.list({ prefix: "pending:" });
+    const senders = await this.storage.list({ prefix: "sender:" });
+    const times = [
+      ...[...pending.values()].map((report) => report.nextAt),
+      ...[...senders.values()].map((rate) => rate.until),
+    ];
+    if (times.length) await this.storage.setAlarm(Math.max(this.now() + 1000, Math.min(...times)));
   }
 }

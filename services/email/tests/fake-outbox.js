@@ -18,6 +18,7 @@ export function createTestOutbox(submission) {
       values.set(key, structuredClone(value));
     },
     delete: async (keys) => {
+      if (Array.isArray(keys)) assert.ok(keys.length <= 128, "a delete takes at most 128 keys");
       for (const key of Array.isArray(keys) ? keys : [keys]) values.delete(key);
     },
     list: async ({ prefix }) =>

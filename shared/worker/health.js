@@ -37,8 +37,8 @@ const giveUpOnAbort = (signal, ask) =>
  */
 const askInTime = (ask) => abortAfter(ANSWER_TIMEOUT_MS, (signal) => giveUpOnAbort(signal, ask));
 
-// A service that answers can still need its owner, as the email service does for a report it
-// couldn't deliver, which is no reason to roll back a deploy or call the service down.
+// A service that answers can still need its owner, as the email service does for a report waiting
+// over an hour or paused, which is no reason to roll back a deploy or call the service down.
 /**
  * @typedef {{ ok: boolean, release: string | null, problem?: string, attention?: string }} ServiceHealth
  */

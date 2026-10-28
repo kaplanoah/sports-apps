@@ -1,8 +1,6 @@
 import { isContactEmail } from "../../../../shared/page/contact-rules.js";
-import {
-  parseContactSubmission,
-  respondContact,
-} from "../../../../shared/worker/contact-request.js";
+import { parseContactSubmission } from "../../../../shared/worker/contact-request.js";
+import { respondJson } from "../../../../shared/worker/responses.js";
 
 /** @param {any} env */
 function isConfigured(env) {
@@ -41,7 +39,7 @@ export function createEmailService(env) {
 
   /** @param {{ app: string, submission: unknown, sender: string }} request */
   async function submitContact({ app, submission, sender }) {
-    if (!isConfigured(env)) return respondContact({ problem: "unavailable" }, 503);
+    if (!isConfigured(env)) return respondJson({ problem: "unavailable" }, 503);
     let report;
     try {
       if (
@@ -53,7 +51,7 @@ export function createEmailService(env) {
         throw new Error("source");
       report = { ...parseContactSubmission(submission), app };
     } catch {
-      return respondContact({ problem: "invalid-request" }, 400);
+      return respondJson({ problem: "invalid-request" }, 400);
     }
     try {
       return await findOutbox().fetch(
@@ -63,7 +61,7 @@ export function createEmailService(env) {
         }),
       );
     } catch {
-      return respondContact({ problem: "unavailable" }, 503);
+      return respondJson({ problem: "unavailable" }, 503);
     }
   }
 
