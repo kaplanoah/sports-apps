@@ -6,8 +6,10 @@ import {
 } from "../../../../tests/browser/page-left-down.mjs";
 import { countScrollHoldersAt } from "../../../../tests/browser/held-scrolls.mjs";
 import {
-  findCenter,
+  findMiddle,
   findSeasonPart,
+  readScroll,
+  scrollElementTo,
   scrollSeasonPart,
   scrollSeasonPartToEnd,
 } from "../../../../tests/browser/season-scroll.mjs";
@@ -21,6 +23,7 @@ import {
   PULL_START,
 } from "../../../../tests/browser/touch.mjs";
 import { test, expect, openApp } from "./harness.mjs";
+import { findList } from "./season-games.mjs";
 import { SETTINGS } from "../../../../tests/browser/settings.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
@@ -258,44 +261,28 @@ test("a touch from the top lifted with the page scrolled down stops holding up t
   expect(await countScrollHoldersAt(page, PULL_START)).toBe(0);
 });
 
-/** @param {import("@playwright/test").Page} page */
-const findGamesList = (page) => page.locator("#seasonGames .day-list");
-
-/** @param {import("@playwright/test").Locator} list */
-const readScroll = (list) => list.evaluate((element) => element.scrollTop);
-
 /**
- * @param {import("@playwright/test").Locator} list
- * @param {number} top
+ * Opens the Games tab once its list has landed on today, scrolled down from its top, and the scroll
+ * that took it there has moved the pull's listeners.
+ * @param {import("@playwright/test").Page} page
  */
-const scrollListTo = (list, top) =>
-  list.evaluate(
-    (element, to) =>
-      new Promise((resolve) => {
-        element.addEventListener("scroll", resolve, { once: true });
-        element.scrollTo({ top: to, behavior: "instant" });
-      }),
-    top,
-  );
-
-/** @param {import("@playwright/test").Locator} locator */
-const findMiddle = async (locator) =>
-  findCenter(
-    /** @type {{ x: number, y: number, width: number, height: number }} */ (
-      await locator.boundingBox()
-    ),
-  );
+async function openGamesOnToday(page) {
+  await openGames(page);
+  await expect(page.locator("#seasonGames .game-day.is-today")).toBeInViewport();
+  const list = findList(page);
+  await expect.poll(() => readScroll(list)).toBeGreaterThan(0);
+  return list;
+}
 
 test("on Games, a scroll in the list scrolled down doesn't wait on the pull, while a pull from the header above it still refreshes", async ({
   page,
 }) => {
   await openFromHomeScreen(page);
   const app = await openApp(page);
-  await openGames(page);
-  const list = findGamesList(page);
-  expect(await readScroll(list)).toBeGreaterThan(0);
+  const list = await openGamesOnToday(page);
+  const middle = await findMiddle(list);
 
-  expect(await countScrollHoldersAt(page, await findMiddle(list))).toBe(0);
+  await expect.poll(() => countScrollHoldersAt(page, middle)).toBe(0);
   expect(await countScrollHoldersAt(page, PULL_START)).toBeGreaterThan(0);
   await app.holdStore();
   await pullDown(page, 200);
@@ -307,9 +294,9 @@ test("on Games, a swipe down inside the list scrolled down scrolls it, while at 
 }) => {
   await openFromHomeScreen(page);
   const app = await openApp(page);
-  await openGames(page);
-  const list = findGamesList(page);
+  const list = await openGamesOnToday(page);
   const middle = await findMiddle(list);
+  await expect.poll(() => countScrollHoldersAt(page, middle)).toBe(0);
   const before = await readScroll(list);
   await app.holdStore();
 
@@ -318,13 +305,39 @@ test("on Games, a swipe down inside the list scrolled down scrolls it, while at 
   )();
   await expect.poll(() => readScroll(list)).toBeLessThan(before);
   await expect(page.locator(".pull-refresh")).toBeHidden();
-  await scrollListTo(list, 0);
+  await scrollElementTo(list, 0);
   await (
     await drag(page, middle, { y: 200 })
   )();
 
   await expect(page.locator(".pull-refresh")).toHaveClass(/turning/);
   await expect(page.locator("header.top")).toHaveCSS("top", "56px");
+});
+
+test("on Games, a part the page adds beside the list scrolled down still starts a pull", async ({
+  page,
+}) => {
+  await openFromHomeScreen(page);
+  const app = await openApp(page);
+  const list = await openGamesOnToday(page);
+  const inList = await findMiddle(list);
+  await expect.poll(() => countScrollHoldersAt(page, inList)).toBe(0);
+  await page.evaluate(() => {
+    const part = document.createElement("div");
+    part.className = "added-part";
+    Object.assign(part.style, { position: "fixed", inset: "0 0 auto", height: "60px" });
+    part.style.zIndex = "10";
+    document.body.append(part);
+  });
+  const middle = await findMiddle(page.locator(".added-part"));
+  await expect.poll(() => countScrollHoldersAt(page, middle)).toBeGreaterThan(0);
+  await app.holdStore();
+
+  await (
+    await drag(page, middle, { y: 200 })
+  )();
+
+  await expect(page.locator(".pull-refresh")).toHaveClass(/turning/);
 });
 
 test("on the season tab, the pull leaves the standings or the bracket scrolled down to the swipe between them, while it still holds the pill", async ({
@@ -335,7 +348,9 @@ test("on the season tab, the pull leaves the standings or the bracket scrolled d
   await openSeasonPart(page, "Standings");
   await expect(page.locator("#standingsWrap table").first()).toBeVisible();
   await waitForLoadToSettle(page);
-  const pill = await findMiddle(page.locator("#bracketStandingsPill"));
+  // The pill's bar lets a drag through to the part under it, so only its names take a touch.
+  const pillName = findSeasonPill(page).getByRole("tab", { name: "Standings" });
+  const atPill = await countScrollHoldersAt(page, await findMiddle(pillName));
 
   for (const [name, part] of /** @type {const} */ ([
     ["Standings", "standings"],
@@ -347,7 +362,7 @@ test("on the season tab, the pull leaves the standings or the bracket scrolled d
     await scrollSeasonPart(page, part, 200);
     expect(await readScroll(findSeasonPart(page, part))).toBeGreaterThan(0);
     expect(await countScrollHoldersAt(page, middle)).toBe(atTop - 1);
-    expect(await countScrollHoldersAt(page, pill)).toBeGreaterThan(0);
+    expect(await countScrollHoldersAt(page, await findMiddle(pillName))).toBe(atPill);
   }
 });
 
@@ -359,7 +374,7 @@ test("on Games, the list scrolled down that shows again by its tab is left to sc
   const app = await openApp(page);
   await fillNews(page, app.writeDocument);
   await openGames(page);
-  const list = findGamesList(page);
+  const list = findList(page);
   const middle = await findMiddle(list);
   await page.getByRole("tab", { name: "News" }).click();
   await scrollPageTo(page, 300);

@@ -83,30 +83,47 @@ function listShownScrolledDown() {
   return shown;
 }
 
-// Everything on the page but what's inside the lists given: beside each list, and beside each
-// element around it, out to the page's root.
+// Each element around the lists given, out to the page's root.
 /** @param {Element[]} lists */
-function listPartsBeside(lists) {
+function listAround(lists) {
   /** @type {Set<Element>} */
   const around = new Set();
   for (const list of lists)
     for (let element = list.parentElement; element; element = element.parentElement)
       around.add(element);
+  return [...around];
+}
+
+// Everything on the page but what's inside the lists given: beside each list, and beside each
+// element around it.
+/**
+ * @param {Element[]} lists
+ * @param {Element[]} around
+ */
+function listPartsBeside(lists, around) {
   const isOnTheWay = (/** @type {Element} */ element) =>
-    around.has(element) || lists.includes(element);
-  return [...around].flatMap((element) =>
-    [...element.children].filter((child) => !isOnTheWay(child)),
-  );
+    around.includes(element) || lists.includes(element);
+  return around.flatMap((element) => [...element.children].filter((child) => !isOnTheWay(child)));
 }
 
 // Where a pull can start: anywhere on a page at its top, but inside a list scrolled down from its
-// top, which the finger scrolls instead.
-/** @returns {(Document | Element)[]} */
-function listPullableParts() {
-  if (isPageOffTop()) return [];
+// top, which the finger scrolls instead. What's around such a list is where a part beside it can
+// come or go.
+/** @returns {{ parts: (Document | Element)[], around: Element[] }} */
+function findPullableParts() {
+  if (isPageOffTop()) return { parts: [], around: [] };
   const lists = listShownScrolledDown();
-  return lists.length ? listPartsBeside(lists) : [document];
+  if (!lists.length) return { parts: [document], around: [] };
+  const around = listAround(lists);
+  return { parts: listPartsBeside(lists, around), around };
 }
+
+/**
+ * @param {unknown[]} these
+ * @param {unknown[]} those
+ */
+const isSameList = (these, those) =>
+  these.length === those.length && these.every((each, index) => each === those[index]);
 
 function createSpinner() {
   const spinner = document.createElement("div");
@@ -136,6 +153,8 @@ export function startPullToRefresh({ store, catchUp }) {
   let movedParts = [];
   /** @type {(Document | Element)[]} */
   let listenedParts = [];
+  /** @type {Element[]} */
+  let watchedAround = [];
 
   // What opens over the page, like a sheet, scrolls on its own and never pulls the page.
   /** @param {EventTarget | null} target */
@@ -235,11 +254,26 @@ export function startPullToRefresh({ store, catchUp }) {
     else settle();
   }
 
-  // A touch under way keeps its listeners where they are, until it's over.
+  // A part a redraw adds beside a list scrolled down, or around it, can start a pull too.
+  const partsWatcher = new MutationObserver(listenWherePullable);
+
+  /** @param {Element[]} around */
+  function watchAround(around) {
+    partsWatcher.disconnect();
+    for (const element of around) partsWatcher.observe(element, { childList: true });
+    watchedAround = around;
+  }
+
+  // A touch under way keeps its listeners where they are, until it's over. Each listener put on or
+  // taken off has the browser work out again where it waits on the page, so they move only when
+  // where a pull can start has changed.
   function listenWherePullable() {
     if (state !== "idle") return;
+    const { parts, around } = findPullableParts();
+    if (!isSameList(around, watchedAround)) watchAround(around);
+    if (isSameList(parts, listenedParts)) return;
     for (const part of listenedParts) part.removeEventListener("touchmove", followTouch);
-    listenedParts = listPullableParts();
+    listenedParts = parts;
     for (const part of listenedParts)
       part.addEventListener("touchmove", followTouch, { passive: false });
   }

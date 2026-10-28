@@ -10,7 +10,6 @@
 // with nothing left animating.
 
 import { prefersReducedMotion } from "./reduced-motion.js";
-import { noteShownViewChange } from "./shown-view.js";
 import { followSideSwipes } from "./side-swipe.js";
 
 // The phone's own sheets' pace and easing, as chrome.css's --sheet-motion has them.
@@ -108,7 +107,6 @@ export function createSlidePanels(
     listPanels().forEach((panel, index) => {
       panel.inert = index !== shown;
     });
-    noteShownViewChange();
     onSettle?.(shown);
   }
 

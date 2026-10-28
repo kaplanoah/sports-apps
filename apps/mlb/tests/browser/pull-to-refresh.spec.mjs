@@ -1,5 +1,5 @@
 import { countScrollHoldersAt } from "../../../../tests/browser/held-scrolls.mjs";
-import { findCenter } from "../../../../tests/browser/season-scroll.mjs";
+import { findMiddle, readScroll } from "../../../../tests/browser/season-scroll.mjs";
 import { openFromHomeScreen, pullDown, PULL_START } from "../../../../tests/browser/touch.mjs";
 import { test, expect, openApp } from "./harness.mjs";
 
@@ -41,20 +41,11 @@ test("on Games, a scroll in the list scrolled down doesn't wait on the pull, whi
   await page.getByRole("tab", { name: "Games" }).click();
   await expect(page.locator("#seasonGames .game-day.is-today")).toBeInViewport();
   const list = page.locator("#seasonGames .day-list");
-  expect(await list.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+  expect(await readScroll(list)).toBeGreaterThan(0);
   // The ranking's drag holds every scroll on the page, the list's too.
   const atHeader = await countScrollHoldersAt(page, PULL_START);
 
-  expect(
-    await countScrollHoldersAt(
-      page,
-      findCenter(
-        /** @type {{ x: number, y: number, width: number, height: number }} */ (
-          await list.boundingBox()
-        ),
-      ),
-    ),
-  ).toBe(atHeader - 1);
+  expect(await countScrollHoldersAt(page, await findMiddle(list))).toBe(atHeader - 1);
   await app.holdStore();
   await pullDown(page, 200);
   await expect(page.locator(".pull-refresh")).toHaveClass(/turning/);
