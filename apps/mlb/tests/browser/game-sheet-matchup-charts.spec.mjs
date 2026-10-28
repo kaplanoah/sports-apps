@@ -3,6 +3,7 @@ import { openMatchup } from "./open-game-sheet.mjs";
 import { checkRanksAreDim } from "../../../../tests/browser/rank-ink.mjs";
 import { readDotRings } from "../../../../tests/browser/dot-ring.mjs";
 import { readRole } from "../../../../tests/browser/type-roles.mjs";
+import { THEMES } from "../../../../tests/browser/theme-layout.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
@@ -165,7 +166,7 @@ test("each starter's dot on a curve is ringed in the sheet's color, so two that 
   const sheet = await openMatchup(page);
   const dots = sheet.locator(".tape .player-curve b");
   await expect(dots.first()).toBeVisible();
-  for (const theme of /** @type {const} */ (["light", "dark"])) {
+  for (const theme of THEMES) {
     await page.emulateMedia({ colorScheme: theme });
     await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
     const rings = await readDotRings(dots);

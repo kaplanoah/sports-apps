@@ -4,6 +4,7 @@ import { measurePlacedLegend } from "../../../../tests/browser/placed-legend.mjs
 import { listTextOffRoles, readRole } from "../../../../tests/browser/type-roles.mjs";
 import { listChipsOffCenter } from "../../../../tests/browser/chip-centering.mjs";
 import { openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
+import { THEMES } from "../../../../tests/browser/theme-layout.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
@@ -70,7 +71,7 @@ test.describe("on a phone, a team's sheet", () => {
 });
 
 test.describe("a team's sheet in each theme", () => {
-  for (const colorScheme of /** @type {const} */ (["light", "dark"])) {
+  for (const colorScheme of THEMES) {
     test(`sets the button for the rest of a long list of titles in the orange of a tap, not the teal of its part's title, in ${colorScheme}`, async ({
       page,
     }) => {

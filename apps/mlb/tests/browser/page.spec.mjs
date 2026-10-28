@@ -15,7 +15,7 @@ import { waitForTimedAnimations } from "../../../../tests/browser/animations.mjs
 import { waitForLoadToSettle } from "../../../../tests/browser/at-rest.mjs";
 import { readCapitals } from "../../../../tests/browser/capitals.mjs";
 import { listFontsNotPreloaded } from "../../../../tests/browser/font-loads.mjs";
-import { showTheme } from "../../../../tests/browser/theme-layout.mjs";
+import { THEMES, showTheme } from "../../../../tests/browser/theme-layout.mjs";
 import { listLowContrastText } from "../../../../tests/browser/contrast.mjs";
 import { listTextOffRoles, readRole } from "../../../../tests/browser/type-roles.mjs";
 import { listChipsOffCenter } from "../../../../tests/browser/chip-centering.mjs";
@@ -394,7 +394,7 @@ test("on a wide screen, the tabs are one segmented control, each as tall as a pi
   const pillHeight = /** @type {{ height: number }} */ (await pillName.boundingBox()).height;
   expect(pillHeight).toBe(36);
   expect(/** @type {{ height: number }} */ (await track.boundingBox()).height).toBe(pillHeight + 4);
-  for (const colorScheme of /** @type {const} */ (["light", "dark"])) {
+  for (const colorScheme of THEMES) {
     await page.emulateMedia({ colorScheme });
     await expect(page.locator("html")).toHaveAttribute("data-theme", colorScheme);
     await expect(track).toHaveCSS("background-color", await readColor(page, "--divider"));
@@ -728,7 +728,7 @@ test("the header's words, times, and days are in Libre Franklin at the detail's 
   await expect(times.first()).toBeVisible();
   for (const viewport of [PHONE, WIDE_SCREEN]) {
     await page.setViewportSize(viewport);
-    for (const theme of /** @type {const} */ (["light", "dark"])) {
+    for (const theme of THEMES) {
       await showTheme(page, theme);
       await expect(stamp).toHaveCSS("font-family", /^"Libre Franklin"/);
       await expect(stamp).toHaveCSS("font-size", detail);

@@ -97,14 +97,17 @@ function placeRiderTaps(view, pill) {
 /** @param {Event} event */
 const findTapped = (event) => findButtonStoodFor(event.target);
 
-// The button a stand-in stands in for hears the stand-in's press as its own, so it readies what it
-// opens as a finger lands, as a game's row does.
+// The button a stand-in stands in for hears the stand-in's press and tap as its own, so it readies
+// what it opens as a finger lands and opens it as a tap ends, as a game's row does. A stand-in
+// passes them on as events, since each of the box's buttons answers through listeners of its own,
+// and a finger on the box can scroll the part only from inside it, where the box can't sit.
 /** @param {PointerEvent} event */
 function passPress(event) {
   const button = findTapped(event);
   if (!button) return;
   const { pointerId, pointerType, isPrimary, clientX, clientY } = event;
   button.dispatchEvent(
+    // eslint-disable-next-line no-restricted-syntax -- a stand-in's own press, passed on
     new PointerEvent("pointerdown", {
       bubbles: true,
       button: event.button,
@@ -119,6 +122,7 @@ function passPress(event) {
 
 /** @param {MouseEvent} event */
 function passTap(event) {
+  // eslint-disable-next-line no-restricted-syntax -- a stand-in's own tap, passed on
   findTapped(event)?.click();
 }
 

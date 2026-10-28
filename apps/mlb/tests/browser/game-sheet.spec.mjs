@@ -27,6 +27,7 @@ import { listChipsOffCenter } from "../../../../tests/browser/chip-centering.mjs
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
 import { listTapsOffButtons } from "../../../../tests/browser/tap-states.mjs";
 import { pressOn, readBackground, readPressTint } from "../../../../tests/browser/press-looks.mjs";
+import { THEMES } from "../../../../tests/browser/theme-layout.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
@@ -499,7 +500,7 @@ test("a game's Runs set the runners who got on in a lighter ink than the play th
   await expect(change.locator(".runs-score")).toHaveCSS("font-family", /^"Chivo Mono"/);
 
   const looks = [];
-  for (const theme of ["light", "dark"]) {
+  for (const theme of THEMES) {
     await page.evaluate((name) => (document.documentElement.dataset.theme = name), theme);
     looks.push(
       await change.evaluate((element) => {
@@ -550,7 +551,7 @@ test("a live game's field outlines its empty bases and home plate in the field's
   const field = page.locator("#gameBody .runs-field");
   await expect(field.locator(".runs-base.taken")).toHaveCount(1);
 
-  for (const theme of ["light", "dark"]) {
+  for (const theme of THEMES) {
     await page.evaluate((name) => (document.documentElement.dataset.theme = name), theme);
     const strokes = await field.evaluate((element) => {
       const readStroke = (/** @type {Element} */ shape) => getComputedStyle(shape).stroke;

@@ -5,6 +5,7 @@ import { listChipsOffCenter } from "../../../../tests/browser/chip-centering.mjs
 import { keepInOtherTab } from "../../../../tests/browser/other-tab.mjs";
 import { countTextLines } from "../../../../tests/browser/text-lines.mjs";
 import { SETTINGS } from "../../../../tests/browser/settings.mjs";
+import { THEMES } from "../../../../tests/browser/theme-layout.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
@@ -284,7 +285,7 @@ const readCardInks = (page) =>
       };
     });
 
-for (const colorScheme of /** @type {const} */ (["light", "dark"])) {
+for (const colorScheme of THEMES) {
   test(`a card's author line reads in mid ink, and its summary a step darker, short of the headline's ink, in ${colorScheme}`, async ({
     page,
   }) => {
@@ -479,7 +480,7 @@ async function readSettledStyle(link) {
   });
 }
 
-for (const colorScheme of /** @type {const} */ (["light", "dark"])) {
+for (const colorScheme of THEMES) {
   test(`under the mouse, a headline and a Read button turn plainly toward orange, with no underline or new border, as a team's name does, in ${colorScheme}`, async ({
     page,
   }) => {

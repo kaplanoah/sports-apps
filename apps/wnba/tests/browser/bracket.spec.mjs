@@ -8,6 +8,7 @@ import {
 } from "../../../../tests/browser/season-tab.mjs";
 import { readSeasonPartScroll } from "../../../../tests/browser/season-scroll.mjs";
 import { readRole } from "../../../../tests/browser/type-roles.mjs";
+import { THEMES } from "../../../../tests/browser/theme-layout.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
@@ -396,7 +397,7 @@ test("a team's dot is set into the floor, shadowed inside its top left and lit b
   const readAlpha = (shadow) =>
     Number(/\/ ([\d.]+)\)|, ([\d.]+)\)/.exec(shadow).slice(1).find(Boolean));
   const depths = {};
-  for (const colorScheme of /** @type {const} */ (["light", "dark"])) {
+  for (const colorScheme of THEMES) {
     await page.emulateMedia({ colorScheme });
     await expect(page.locator("html")).toHaveAttribute("data-theme", colorScheme);
     const [inside, below] = await readShadows();
@@ -476,7 +477,7 @@ test("a series' winner has its wins on a teal block, the color of a result, cut 
       probe.remove();
       return colors;
     });
-  for (const colorScheme of /** @type {const} */ (["light", "dark"])) {
+  for (const colorScheme of THEMES) {
     await page.emulateMedia({ colorScheme });
     await expect(page.locator("html")).toHaveAttribute("data-theme", colorScheme);
     const { result, floor } = await readColors();

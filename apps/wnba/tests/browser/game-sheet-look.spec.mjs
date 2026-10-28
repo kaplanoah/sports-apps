@@ -24,6 +24,7 @@ import {
   liveBoxScore,
 } from "./game-sheet-games.mjs";
 import { openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
+import { THEMES } from "../../../../tests/browser/theme-layout.mjs";
 
 // A players table's number column, while the names leave it room.
 const NUMBER_COLUMN_PX = 52;
@@ -382,7 +383,7 @@ test("each team's side of the lead chart and the team stats takes its color, on 
   const fieldGoals = sheet.locator(".tape-row").first();
   await expect(fieldGoals.locator(".home .tape-bar i")).toHaveClass("lead");
 
-  for (const theme of /** @type {const} */ (["light", "dark"])) {
+  for (const theme of THEMES) {
     await page.emulateMedia({ colorScheme: theme });
     const [awayColor, homeColor] = ["GSV", "DAL"].map((code) =>
       formatRgb(TEAMS[code].chartColors[theme][0]),
@@ -432,7 +433,7 @@ test("the side behind on a measure gets a paler bar of its own team's hue, on ea
   const behind = sheet.locator(".tape-row").first().locator(".away .tape-bar i");
   await expect(behind).not.toHaveClass("lead");
 
-  for (const theme of /** @type {const} */ (["light", "dark"])) {
+  for (const theme of THEMES) {
     await page.emulateMedia({ colorScheme: theme });
     const teamColor = TEAMS.GSV.chartColors[theme][0];
     await expect(behind).not.toHaveCSS("background-color", formatRgb(teamColor));
@@ -453,7 +454,7 @@ test("a team's sheet marks the team in its mark color on each theme, on its curv
   const fieldDot = sheet.locator(".placed-line .other").first();
   const curveMark = sheet.locator(".team-ranks .player-curve b").first();
   await expect(curveMark).toBeVisible();
-  for (const theme of /** @type {const} */ (["light", "dark"])) {
+  for (const theme of THEMES) {
     await page.emulateMedia({ colorScheme: theme });
     const markColor = formatRgb(TEAMS.NYL.markColors[theme]);
     await expect(ownDot).toHaveCSS("background-color", markColor);

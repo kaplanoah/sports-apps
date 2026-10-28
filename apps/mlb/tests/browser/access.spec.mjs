@@ -5,6 +5,7 @@ import { listChipsOffCenter } from "../../../../tests/browser/chip-centering.mjs
 import { findSeasonTab } from "../../../../tests/browser/season-tab.mjs";
 import { readCapitals } from "../../../../tests/browser/capitals.mjs";
 import { checkGateOpenPress } from "../../../../tests/browser/press-looks.mjs";
+import { THEMES } from "../../../../tests/browser/theme-layout.mjs";
 
 /** @param {import("@playwright/test").Page} page */
 const findCodeField = (page) => page.getByRole("textbox", { name: "Access code" });
@@ -123,7 +124,7 @@ test("the gate's icons and bar follow the theme picked in settings", async ({ pa
 test("the gate's text stands out from what's behind it as WCAG's AA level asks, in Ball and Night Game", async ({
   page,
 }) => {
-  for (const theme of /** @type {const} */ (["light", "dark"])) {
+  for (const theme of THEMES) {
     await page.emulateMedia({ colorScheme: theme });
     await openLockedApp(page, { accessCode: "FASTBALL" });
     await expect(findGate(page)).toBeVisible();
