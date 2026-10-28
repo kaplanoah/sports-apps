@@ -372,7 +372,7 @@ test.describe("on a phone", () => {
     await page.locator('.div-grid tr[data-team="HOU"] .team-open').click();
     const teamSheet = page.locator("#teamSheet");
     await expect(teamSheet.locator(".game-card h3")).toHaveText(["Last game", "Next game"]);
-    const card = teamSheet.getByRole("button", { name: /Sep 24\b.*game details$/ });
+    const card = teamSheet.getByRole("button", { name: /^Today\b.*@ ATH\b.*game details$/ });
     await expect(card).toContainText("@");
 
     const box = await card.boundingBox();

@@ -45,7 +45,7 @@ test("tapping a game opens its sheet on Game: its row, then its starters on one 
   await expect(row.locator(".game-headline")).toHaveText("9:40 PM");
   await expect(row.locator(".game-extra, .game-open")).toHaveCount(0);
   const starters = sheet.getByRole("button", { name: BLUBAUGH_VS_SPRINGS });
-  await expect(starters).toHaveText(/^\s*Blubaugh\s*R\s*vs\s*Springs\s*L\s*$/);
+  await expect(starters).toHaveText(/^\s*Blubaugh\s*R\s*vs\s*Springs\s*L\s*, pitching matchup\s*$/);
   await expect(starters.locator(".dot")).toHaveCount(2);
 });
 

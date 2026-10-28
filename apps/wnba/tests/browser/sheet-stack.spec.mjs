@@ -51,7 +51,7 @@ async function openFeverFromAcesGame(page) {
     .click();
   const teamSheet = page.locator("#teamSheet");
   await expectShown(teamSheet);
-  await teamSheet.getByRole("button", { name: /Sep 29\b.*game details$/ }).click();
+  await teamSheet.getByRole("button", { name: /^Yesterday\b.*game details$/ }).click();
   const gameSheet = page.locator("#gameSheet");
   await expect(gameSheet.locator(".line-score")).toBeVisible();
   await expectShown(gameSheet);
@@ -357,7 +357,7 @@ test.describe("with reduced motion", () => {
     await teamSection.evaluate((section) => (section.scrollTop = 30));
     await page
       .locator("#teamSheet")
-      .getByRole("button", { name: /Sep 29\b.*game details$/ })
+      .getByRole("button", { name: /^Yesterday\b.*game details$/ })
       .click();
     const gameSheet = page.locator("#gameSheet");
     await expectShown(gameSheet);

@@ -146,7 +146,7 @@ test("a team's sheet open over a game's opened from another team's opens there a
     .first()
     .click();
   const teamSheet = page.locator("#teamSheet");
-  await teamSheet.getByRole("button", { name: /Sep 29\b.*game details$/ }).click();
+  await teamSheet.getByRole("button", { name: /^Yesterday\b.*game details$/ }).click();
   const gameSheet = page.locator("#gameSheet");
   await gameSheet
     .locator(".faceoff")
