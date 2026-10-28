@@ -86,6 +86,23 @@ test("a service still wrong after every attempt is unanswered, with each app's p
   assert.equal(pauses.length, 2);
 });
 
+test("a service that answers but needs attention answers at once, naming each different need once", async () => {
+  const needing = (attention) => reporting({ ok: true, release: "2222222", attention });
+  const fake = createFakeApps({
+    mlb: [needing("Contact delivery needs attention")],
+    wnba: [needing("Contact delivery needs attention")],
+  });
+  const { result, pauses } = check(fake);
+  assert.deepEqual(await result, {
+    status: "answering",
+    attention: "Contact delivery needs attention",
+  });
+  assert.deepEqual(pauses, []);
+
+  const mixed = createFakeApps({ mlb: [needing("one")], wnba: [needing("two")] });
+  assert.deepEqual(await check(mixed).result, { status: "answering", attention: "one; two" });
+});
+
 test("with no commit to match, any release that's ok answers", async () => {
   const fake = createFakeApps({
     mlb: [reporting({ ok: true, release: "1111111" })],

@@ -5,9 +5,9 @@
 // may be what a bad version of the service did to it.
 import { CHECK_INTERVAL_MS, CHECK_TIMEOUT_MS, waitFor } from "./check-timing.mjs";
 
-/** @typedef {{ ok: boolean, release: string | null, problem?: string }} ServiceReport */
+/** @typedef {import("../shared/worker/health.js").ServiceHealth} ServiceReport */
 /**
- * @typedef {{ status: "answering" }
+ * @typedef {{ status: "answering", attention?: string }
  *   | { status: "unanswered", reason: string }
  *   | { status: "unchecked", reason: string }} ServiceCheck
  */
@@ -51,6 +51,15 @@ function findHealthProblem(app, health, service, commit) {
 }
 
 /**
+ * What the apps say the service needs from its owner while it answers, or null when nothing.
+ * @param {AppHealth[]} healths
+ */
+function findAttention(healths) {
+  const notes = healths.map((health) => health.answered && health.report?.attention);
+  return [...new Set(notes.filter(Boolean))].join("; ") || null;
+}
+
+/**
  * Whether every app answered and none binds the service yet.
  * @param {AppHealth[]} healths
  */
@@ -91,7 +100,9 @@ export async function checkService({
     problems = healths
       .map((health, index) => findHealthProblem(apps[index].app, health, service, commit))
       .filter(Boolean);
-    if (!problems.length) return { status: "answering" };
+    if (problems.length) continue;
+    const attention = findAttention(healths);
+    return attention ? { status: "answering", attention } : { status: "answering" };
   }
   return { status: "unanswered", reason: problems.join("; ") };
 }

@@ -3,7 +3,11 @@
 export const respondJson = (body, status = 200) =>
   new Response(JSON.stringify(body), {
     status,
-    headers: { "content-type": "application/json", "cache-control": "no-store" },
+    headers: {
+      "content-type": "application/json",
+      "cache-control": "no-store",
+      "x-content-type-options": "nosniff",
+    },
   });
 
 export const respondError = (status, code, message) =>
