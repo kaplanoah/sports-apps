@@ -8,6 +8,7 @@ import {
   scrollVisualViewport,
   setVisualViewportTop,
 } from "../../../../tests/browser/diagnostics-records.mjs";
+import { setPageScroll } from "../../../../tests/browser/page-left-down.mjs";
 import { reloadAndRecord } from "./diagnostics-records.mjs";
 
 test.use({
@@ -104,15 +105,11 @@ test("with Diagnostics on, a bounce past the page's top isn't logged", async ({ 
   await turnOnDiagnostics(page);
   await reloadAndRecord(page);
 
-  await page.evaluate(() =>
-    Object.defineProperty(window, "scrollY", { configurable: true, get: () => -40 }),
-  );
+  await setPageScroll(page, -40);
   await setVisualViewportTop(page, -40);
   await page.evaluate(scrollVisualViewport);
   await page.clock.runFor(100);
-  await page.evaluate(() =>
-    Object.defineProperty(window, "scrollY", { configurable: true, get: () => 0 }),
-  );
+  await setPageScroll(page, 0);
   await setVisualViewportTop(page, 0);
   await openSettings(page);
 

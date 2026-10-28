@@ -37,8 +37,19 @@ export const leaveFractionDown = (scroller) =>
  */
 export async function leavePageFractionDown(page) {
   await leaveFractionDown(page.locator(":root"));
-  await page.evaluate(() =>
-    Object.defineProperty(window, "scrollY", { configurable: true, get: () => 1 / 3 }),
+  await setPageScroll(page, 1 / 3);
+}
+
+/**
+ * Has the window report itself `top` pixels down, without moving it or telling the page.
+ * @param {import("@playwright/test").Page} page
+ * @param {number} top
+ */
+export async function setPageScroll(page, top) {
+  await page.evaluate(
+    (scrollY) =>
+      Object.defineProperty(window, "scrollY", { configurable: true, get: () => scrollY }),
+    top,
   );
 }
 
