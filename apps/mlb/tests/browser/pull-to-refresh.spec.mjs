@@ -1,6 +1,11 @@
 import { countScrollHoldersAt } from "../../../../tests/browser/held-scrolls.mjs";
 import { findMiddle, readScroll } from "../../../../tests/browser/season-scroll.mjs";
-import { openFromHomeScreen, pullDown, PULL_START } from "../../../../tests/browser/touch.mjs";
+import {
+  drag,
+  openFromHomeScreen,
+  pullDown,
+  PULL_START,
+} from "../../../../tests/browser/touch.mjs";
 import { test, expect, openApp } from "./harness.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
@@ -49,4 +54,32 @@ test("on Games, a scroll in the list scrolled down doesn't wait on the pull, whi
   await app.holdStore();
   await pullDown(page, 200);
   await expect(page.locator(".pull-refresh")).toHaveClass(/turning/);
+});
+
+// The page listens for a pull only on what's beside a list scrolled down, so the bare edge of the
+// view around it, which holds no part of its own, starts none.
+test("on Games, a pull doesn't start from the view's bare edge beside the list scrolled down", async ({
+  page,
+}) => {
+  await openFromHomeScreen(page);
+  const app = await openApp(page);
+  await page.getByRole("tab", { name: "Games" }).click();
+  await expect(page.locator("#seasonGames .game-day.is-today")).toBeInViewport();
+  const list = page.locator("#seasonGames .day-list");
+  expect(await readScroll(list)).toBeGreaterThan(0);
+  const listBox = /** @type {{ x: number, y: number, height: number }} */ (
+    await list.boundingBox()
+  );
+  const edge = { x: listBox.x / 2, y: listBox.y + listBox.height / 2 };
+  expect(await page.evaluate(({ x, y }) => document.elementFromPoint(x, y)?.id, edge)).toBe(
+    "view-games",
+  );
+  const atHeader = await countScrollHoldersAt(page, PULL_START);
+
+  expect(await countScrollHoldersAt(page, edge)).toBe(atHeader - 1);
+  await app.holdStore();
+  await (
+    await drag(page, edge, { y: 200 })
+  )();
+  await expect(page.locator(".pull-refresh")).toBeHidden();
 });
