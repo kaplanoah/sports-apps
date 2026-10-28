@@ -1,8 +1,9 @@
 // Opens each app's live page on a schedule, as a phone does, and keeps one open issue for each app
 // that isn't opening, so its owner hears of an outage before the people who use it do, and one for
 // each that opens without asking for its code. It keeps one for each service the apps reach that
-// isn't answering them, too. An app or service that fails once is checked again a minute later, so
-// a moment's hiccup opens nothing; each issue closes once its app or service is right again.
+// isn't answering them, too, and one for each that answers but needs its owner. An app or service
+// that fails once is checked again a minute later, so a moment's hiccup opens nothing; each issue
+// closes once its app or service is right again.
 import { fileURLToPath } from "node:url";
 import { listApps, listServices } from "./apps.mjs";
 import { checkAppPage } from "./check-page.mjs";
@@ -39,6 +40,13 @@ export const nameServiceIssue = (service) => `The ${service} service isn't answe
  */
 const describeServiceOutage = (check, runUrl) =>
   `Asked through each app's health twice a minute apart, ${check.reason}.\n\nSee [the check's run](${runUrl}). This issue closes itself once the service answers again.`;
+
+/** @param {string} service */
+export const nameServiceAttentionIssue = (service) => `The ${service} service needs attention`;
+
+/** @param {string} attention @param {string} runUrl */
+const describeServiceAttention = (attention, runUrl) =>
+  `The service answers the apps, but says: ${attention}.\n\nSee [the check's run](${runUrl}). This issue closes itself once the service no longer asks for attention.`;
 
 /**
  * Keeps the app's one outage issue open while it isn't opening.
@@ -124,27 +132,91 @@ export async function reportCheck({ app, check, openIssues, github, runUrl }) {
 }
 
 /**
- * Keeps the service's one issue open while it isn't answering the apps, and says what it did.
+ * Keeps the service's one outage issue open while it isn't answering the apps.
+ * @param {object} options
+ * @param {string} options.service
+ * @param {import("./check-service.mjs").ServiceCheck & { status: "unanswered" }} options.check
+ * @param {any} options.outage the service's open outage issue, if any
+ * @param {ReturnType<typeof createGitHub>} options.github
+ * @param {string} options.runUrl
+ */
+async function reportServiceOutage({ service, check, outage, github, runUrl }) {
+  if (outage) return `${service}: still not answering, ${check.reason}; #${outage.number} is open`;
+  const title = nameServiceIssue(service);
+  const number = await openIssue(github, title, describeServiceOutage(check, runUrl));
+  return `${service}: not answering, ${check.reason}; opened #${number}`;
+}
+
+/**
+ * Closes the service's outage issue once it answers again.
+ * @param {object} options
+ * @param {string} options.service
+ * @param {any} options.outage the service's open outage issue, if any
+ * @param {ReturnType<typeof createGitHub>} options.github
+ * @param {string} options.runUrl
+ */
+async function reportServiceAnswering({ service, outage, github, runUrl }) {
+  if (!outage) return `${service}: answers`;
+  await closeIssue(
+    github,
+    outage.number,
+    `The service answers again, as of [this run](${runUrl}).`,
+  );
+  return `${service}: answers again, so #${outage.number} is closed`;
+}
+
+/**
+ * Keeps an issue open while a service that answers asks for its owner's attention.
+ * @param {object} options
+ * @param {string} options.service
+ * @param {string | undefined} options.attention what the service says it needs, if anything
+ * @param {any} options.issue the service's open attention issue, if any
+ * @param {ReturnType<typeof createGitHub>} options.github
+ * @param {string} options.runUrl
+ * @returns {Promise<string[]>}
+ */
+async function reportServiceAttention({ service, attention, issue, github, runUrl }) {
+  if (attention && issue) return [`::warning::${service}: ${attention}; #${issue.number} is open`];
+  if (attention) {
+    const title = nameServiceAttentionIssue(service);
+    const number = await openIssue(github, title, describeServiceAttention(attention, runUrl));
+    return [`::warning::${service}: ${attention}; opened #${number}`];
+  }
+  if (!issue) return [];
+  await closeIssue(
+    github,
+    issue.number,
+    `The service no longer asks for attention, as of [this run](${runUrl}).`,
+  );
+  return [`${service}: no longer needs attention, so #${issue.number} is closed`];
+}
+
+/**
+ * Brings one service's issues up to date with its check, and says what it did, a line for each.
  * @param {object} options
  * @param {string} options.service
  * @param {import("./check-service.mjs").ServiceCheck} options.check
  * @param {any[]} options.openIssues
  * @param {ReturnType<typeof createGitHub>} options.github
  * @param {string} options.runUrl
- * @returns {Promise<string>}
+ * @returns {Promise<string[]>}
  */
 async function reportServiceCheck({ service, check, openIssues, github, runUrl }) {
-  if (check.status === "unchecked") return `::warning::${service}: not checked, ${check.reason}`;
-  const title = nameServiceIssue(service);
-  const issue = findOpenIssue(openIssues, title);
-  if (check.status === "unanswered") {
-    if (issue) return `${service}: still not answering, ${check.reason}; #${issue.number} is open`;
-    const number = await openIssue(github, title, describeServiceOutage(check, runUrl));
-    return `${service}: not answering, ${check.reason}; opened #${number}`;
-  }
-  if (!issue) return `${service}: answers`;
-  await closeIssue(github, issue.number, `The service answers again, as of [this run](${runUrl}).`);
-  return `${service}: answers again, so #${issue.number} is closed`;
+  if (check.status === "unchecked") return [`::warning::${service}: not checked, ${check.reason}`];
+  const outage = findOpenIssue(openIssues, nameServiceIssue(service));
+  if (check.status === "unanswered")
+    return [await reportServiceOutage({ service, check, outage, github, runUrl })];
+  const issue = findOpenIssue(openIssues, nameServiceAttentionIssue(service));
+  return [
+    await reportServiceAnswering({ service, outage, github, runUrl }),
+    ...(await reportServiceAttention({
+      service,
+      attention: check.attention,
+      issue,
+      github,
+      runUrl,
+    })),
+  ];
 }
 
 /**
@@ -187,13 +259,13 @@ export async function watchApps({
     lines.push(...(await reportCheck({ app, check: checks[index], openIssues, github, runUrl })));
   for (const [index, service] of services.entries())
     lines.push(
-      await reportServiceCheck({
+      ...(await reportServiceCheck({
         service,
         check: serviceChecks[index],
         openIssues,
         github,
         runUrl,
-      }),
+      })),
     );
   return lines;
 }

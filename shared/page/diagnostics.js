@@ -40,7 +40,8 @@ import { dayStripLog } from "./day-strip-log.js";
 import { errorLog, watchErrors } from "./error-log.js";
 import { phoneLookLog, watchPhoneLook } from "./phone-look-log.js";
 import { sheetLog } from "./sheet-log.js";
-import { hideAddresses, writeStepsAsText } from "./step-log.js";
+import { writeStepsAsText } from "./step-log.js";
+import { hideAddresses } from "./report-addresses.js";
 import {
   forgetViewportLines,
   readViewportLines,
