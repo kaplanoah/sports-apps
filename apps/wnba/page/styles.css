@@ -127,14 +127,14 @@
   --card-border: #d1c0a6;
   --divider: #ddccb3;
   --ink: #2a0e02;
-  --ink-dim: #6f4f40;
+  --ink-dim: #735344;
   /* Dark ink fading toward the light floor shows less than light ink fading toward the walnut, so
      Maple's lines fade further as the page catches up. */
   --catch-up-fade: 0.5;
   /* Barlow's digits sit low in their line, which would leave each step's number under its
      circle's middle. */
   --step-number-lift: 0.5px;
-  --orange: #9c2f00;
+  --orange: #b93800;
   --orange-ink: #ffffff;
   --teal: #0b6860;
   --teal-ink: #ffffff;
@@ -201,7 +201,6 @@
   --all-star-shift: -1px;
   --accent: var(--action);
   --accent-ink: var(--action-ink);
-  --dip-ink: var(--accent);
   --focus-ring: var(--teal);
   --tab-bar-tint: var(--raised);
   --tab-bar-edge: var(--edge);
@@ -308,10 +307,10 @@
   --card-border: #4a301e;
   --divider: #392619;
   --ink: #f4e8e1;
-  --ink-dim: #b9a091;
+  --ink-dim: #b39988;
   --quiet-stat-ink: var(--ink-mid);
   --catch-up-fade: 0.75;
-  --orange: #fb8055;
+  --orange: #f87145;
   --orange-ink: #1d0d03;
   --teal: #3cb4a4;
   --teal-ink: #06201c;
