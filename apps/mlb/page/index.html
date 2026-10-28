@@ -437,10 +437,17 @@
   </dialog>
 
   <dialog id="rankingDialog" class="settings-panel" aria-labelledby="rankingTitle">
-    <div class="settings-body ranking-body" id="rankingBody" data-last-drawn>
+    <div class="settings-body ranking-body" id="rankingBody">
       <div class="sheet-top">
         <div class="sheet-head">
-          <button type="button" class="settings-back" aria-label="Back to Settings"></button>
+          <button type="button" class="settings-back" aria-label="Back to Settings">
+            <!-- Phosphor's arrow-left, at its Light weight. -->
+            <svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true">
+              <path
+                d="M222,128a6,6,0,0,1-6,6H54.49l61.75,61.76a6,6,0,1,1-8.48,8.48l-72-72a6,6,0,0,1,0-8.48l72-72a6,6,0,0,1,8.48,8.48L54.49,122H216A6,6,0,0,1,222,128Z"
+              />
+            </svg>
+          </button>
           <div class="sheet-title"><h2 id="rankingTitle">Ranking</h2></div>
         </div>
         <p class="ranking-note">Who you want to win the World Series</p>
