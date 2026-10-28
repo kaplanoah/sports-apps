@@ -5,6 +5,7 @@ import { checkAppPage } from "../worker/check-page.mjs";
 import {
   nameNoCodeIssue,
   nameOutageIssue,
+  nameServiceAttentionIssue,
   nameServiceIssue,
   watchApps,
 } from "../worker/watch-apps.mjs";
@@ -229,6 +230,55 @@ test("a service that answers again says so on its issue and closes it, and one n
   assert.deepEqual(unchecked.lines, [
     "::warning::accounts: not checked, no app reaches accounts yet",
   ]);
+});
+
+const ATTENTION_ISSUE = { number: 11, title: nameServiceAttentionIssue("email") };
+/** @type {import("../worker/check-service.mjs").ServiceCheck} */
+const NEEDING = { status: "answering", attention: "Contact delivery needs attention" };
+
+test("a service that answers but needs attention gets an issue of its own, and warns in the run", async () => {
+  const { lines, writes } = await watch({}, [], { email: NEEDING });
+  assert.deepEqual(writes, [
+    {
+      method: "POST",
+      path: "/issues",
+      body: {
+        title: "The email service needs attention",
+        body: `The service answers the apps, but says: Contact delivery needs attention.\n\nSee [the check's run](${RUN_URL}). This issue closes itself once the service no longer asks for attention.`,
+      },
+    },
+  ]);
+  assert.deepEqual(lines, [
+    "email: answers",
+    "::warning::email: Contact delivery needs attention; opened #7",
+  ]);
+
+  const still = await watch({}, [ATTENTION_ISSUE], { email: NEEDING });
+  assert.deepEqual(still.writes, []);
+  assert.deepEqual(still.lines, [
+    "email: answers",
+    "::warning::email: Contact delivery needs attention; #11 is open",
+  ]);
+});
+
+test("a service that no longer needs attention closes its issue, which an outage leaves as it is", async () => {
+  const { lines, writes } = await watch({}, [ATTENTION_ISSUE], {
+    email: { status: "answering" },
+  });
+  assert.deepEqual(
+    writes.map(({ method, path }) => `${method} ${path}`),
+    ["POST /issues/11/comments", "PATCH /issues/11"],
+  );
+  assert.deepEqual(lines, ["email: answers", "email: no longer needs attention, so #11 is closed"]);
+
+  const down = await watch({}, [ATTENTION_ISSUE], {
+    email: { status: "unanswered", reason: "mlb finds email not ok: its outbox doesn't answer" },
+  });
+  assert.deepEqual(
+    down.writes.map(({ method, path }) => `${method} ${path}`),
+    ["POST /issues"],
+  );
+  assert.equal(down.writes[0].body.title, "The email service isn't answering");
 });
 
 test("the watch asks each production app's health of each service", async () => {
