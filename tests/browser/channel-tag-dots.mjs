@@ -98,5 +98,5 @@ export async function checkChannelTagDots(page, app) {
   });
   expect(await readTagLayout(page)).toEqual(layout);
   if (app === "wnba") expect(await tag.screenshot()).toEqual(painted);
-  await native.evaluate((style) => style.remove());
+  await native.evaluate((style) => style.parentNode.removeChild(style));
 }
