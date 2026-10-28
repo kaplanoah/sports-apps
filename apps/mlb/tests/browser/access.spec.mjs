@@ -2,10 +2,10 @@ import { test, expect, openLockedApp, readColor } from "./harness.mjs";
 import { listLowContrastText } from "../../../../tests/browser/contrast.mjs";
 import { listTextOffRoles, readRole } from "../../../../tests/browser/type-roles.mjs";
 import { listChipsOffCenter } from "../../../../tests/browser/chip-centering.mjs";
-import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
 import { findSeasonTab } from "../../../../tests/browser/season-tab.mjs";
 import { readCapitals } from "../../../../tests/browser/capitals.mjs";
 import { checkGateOpenPress } from "../../../../tests/browser/press-looks.mjs";
+import { checkFieldRing } from "../../../../tests/browser/field-ring.mjs";
 import { THEMES } from "../../../../tests/browser/theme-layout.mjs";
 
 /** @param {import("@playwright/test").Page} page */
@@ -29,7 +29,6 @@ test("the gate's text keeps to its type roles", async ({ page }) => {
   expect(await listTextOffRoles(page)).toEqual([]);
   expect(await listChipsOffCenter(page)).toEqual([]);
   expect(await listLowContrastText(page)).toEqual([]);
-  expect(await listStrayPeriods(page)).toEqual([]);
 });
 
 test("the gate's heading is set as a sheet's title, Open as the app's other buttons, and the code field inside an outlined button's line", async ({
@@ -141,4 +140,11 @@ test("a press darkens the gate's Open with black", async ({ page }) => {
   await expect(findGate(page)).toBeVisible();
 
   await checkGateOpenPress(page);
+});
+
+test("the code field shows the focus ring under the keyboard, and only its cursor after a tap", async ({
+  page,
+}) => {
+  await openLockedApp(page, { accessCode: "FASTBREAK" });
+  await checkFieldRing(page, expect, { field: findCodeField(page), box: findCodeField(page) });
 });

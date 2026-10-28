@@ -12,13 +12,56 @@ import { nameTeam, TEAMS } from "./teams.js";
 
 export const REORDER_EVENT = "rankingreorder";
 
-const MOVES = { ArrowUp: -1, ArrowDown: 1 };
+// Each grip is a vertical slider, which a swipe up or down in VoiceOver adjusts by sending an arrow
+// key: Up or Right moves its club up the list, and Down or Left down it. Home and End move it to
+// either end, as on any slider.
+/** @type {Record<string, (from: number, count: number) => number>} */
+const MOVES = {
+  ArrowUp: (from) => from - 1,
+  ArrowRight: (from) => from - 1,
+  ArrowDown: (from) => from + 1,
+  ArrowLeft: (from) => from + 1,
+  Home: () => 0,
+  End: (from, count) => count - 1,
+};
 
-// A club that's out looks like the rest: the ranking says who you're for, not who's still playing.
-function renderRankItem(id, index) {
+/**
+ * The ranking with a club moved by a slider's key, or null when the key moves it nowhere.
+ * @param {string[]} order
+ * @param {string} id
+ * @param {string} key
+ */
+export function moveClub(order, id, key) {
+  const from = order.indexOf(id);
+  const to = MOVES[key]?.(from, order.length);
+  if (from < 0 || to === undefined || to === from || to < 0 || to >= order.length) return null;
+  const moved = order.filter((club) => club !== id);
+  moved.splice(to, 0, id);
+  return moved;
+}
+
+/**
+ * A club's row. A club that's out looks like the rest: the ranking says who you're for, not who's
+ * still playing.
+ * @param {string} id
+ * @param {number} index
+ * @param {number} count
+ */
+export function renderRankItem(id, index, count) {
   const { league } = TEAMS[id];
+  // Up the list is up the slider, so its value counts from the bottom, and its text says the rank.
   return html`<li class="rank-item" data-id="${id}">
-      <button type="button" class="grip" aria-label="Move ${nameTeam(id)}, ranked ${index + 1}. Use the up and down arrow keys.">&#8942;&#8942;</button>
+      <button
+        type="button"
+        class="grip"
+        role="slider"
+        aria-orientation="vertical"
+        aria-label="Move ${nameTeam(id)}"
+        aria-valuemin="1"
+        aria-valuemax="${count}"
+        aria-valuenow="${count - index}"
+        aria-valuetext="Ranked ${index + 1} of ${count}"
+      >&#8942;&#8942;</button>
       <span class="rank-id">
         ${renderPlainClub(id)}
         <span class="chip filled league-tag ${league}">${league}</span>
@@ -44,7 +87,7 @@ export function renderRanking() {
   // Rank numbers live outside the rows so they stay put while rows are dragged.
   setHtml(numbers, html`${order.map((_, index) => html`<li class="tabular">${index + 1}</li>`)}`);
   const focusedId = findFocusedClub(list);
-  setHtml(list, html`${order.map(renderRankItem)}`);
+  setHtml(list, html`${order.map((id, index) => renderRankItem(id, index, order.length))}`);
   if (focusedId) focusGrip(list, focusedId);
   wireReordering(list);
 }
@@ -67,16 +110,11 @@ const announceOrder = (list, order) =>
 
 function moveWithKeyboard(list, event) {
   const grip = event.target instanceof HTMLElement && event.target.closest(".grip");
-  const step = MOVES[event.key];
-  if (!grip || !step) return;
+  if (!grip || !(event.key in MOVES)) return;
   event.preventDefault();
   const id = /** @type {HTMLElement} */ (grip.closest(".rank-item")).dataset.id;
-  const order = listRankedOrder();
-  const from = order.indexOf(id);
-  const to = from + step;
-  if (to < 0 || to >= order.length) return;
-  [order[from], order[to]] = [order[to], order[from]];
-  announceOrder(list, order);
+  const order = moveClub(listRankedOrder(), id, event.key);
+  if (order) announceOrder(list, order);
 }
 
 // Bound once: the list element survives re-renders.
