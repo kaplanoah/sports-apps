@@ -253,6 +253,19 @@ test("the line under the field is a status VoiceOver reads as it changes, and a 
   expect(await page.evaluate(() => Reflect.get(window, "lineChanges").count)).toBe(0);
 });
 
+test("the line under the field stays a status VoiceOver keeps while it's empty, taking no room", async ({
+  page,
+}) => {
+  await openSeasonGames(page);
+  await tapSearch(page);
+
+  const status = page.locator("#gameSearch").getByRole("status");
+  await expect(status).toHaveCount(1);
+  await expect(status).toBeEmpty();
+  expect((await status.boundingBox())?.height).toBe(0);
+  await expect(status).toHaveCSS("margin-top", "0px");
+});
+
 test("a city finds the games played there, with its team's games as another reading", async ({
   page,
 }) => {

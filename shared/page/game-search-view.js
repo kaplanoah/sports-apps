@@ -675,6 +675,9 @@ function nameField(placeholder) {
   input?.setAttribute("aria-label", placeholder);
 }
 
+/** Makes the line under the field a status, as one put back from an earlier release may not be. */
+const markReadLine = () => findRead()?.setAttribute("role", "status");
+
 /**
  * Wires the search in `element`, which the page may already have put back as it was shown before a
  * reload (show-last-drawn.js), then takes it over, keeping where its list was scrolled.
@@ -686,6 +689,7 @@ export function startGameSearch(element, searchLeague) {
   league = searchLeague;
   if (!findInput()) setHtml(element, renderShell());
   nameField(searchLeague.placeholder);
+  markReadLine();
   placedFor = element.hidden
     ? null
     : {
