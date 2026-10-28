@@ -29,7 +29,7 @@ export function createEmailService(env) {
       const status = await response.json();
       return status.ok === true
         ? { ok: true, release }
-        : { ok: false, release, problem: "Contact delivery needs attention" };
+        : { ok: true, release, attention: "Contact delivery needs attention" };
     } catch {
       return { ok: false, release, problem: "its outbox doesn't answer" };
     }

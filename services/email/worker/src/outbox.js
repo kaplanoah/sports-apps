@@ -5,6 +5,8 @@ const HOUR_MS = 60 * 60 * 1000;
 const RETRY_MS = 60 * 1000;
 const DELIVERY_CHECK_MS = 15 * 60 * 1000;
 const CHUNK_CHARACTERS = 16000;
+const SENDER_REPORTS_PER_HOUR = 5;
+const PENDING_REPORTS_PER_APP = 100;
 // Resend forgets idempotency keys after 24 hours; an uncertain send must stop before then.
 const SAFE_RETRY_MS = 23 * HOUR_MS;
 const DELIVERY_WAIT_MS = 7 * 24 * HOUR_MS;
@@ -54,7 +56,7 @@ export class EmailOutbox {
       const rate =
         previous?.until > this.now() ? previous : { count: 0, until: this.now() + HOUR_MS };
       const appPending = [...pending.values()].filter((report) => report.app === submission.app);
-      if (rate.count >= 5 || appPending.length >= 100)
+      if (rate.count >= SENDER_REPORTS_PER_HOUR || appPending.length >= PENDING_REPORTS_PER_APP)
         return respondContact({ problem: "busy" }, 429);
       const text = JSON.stringify({
         ...submission,
