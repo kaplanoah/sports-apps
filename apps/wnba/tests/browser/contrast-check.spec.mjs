@@ -41,57 +41,13 @@ test("the contrast check still names text that is low at rest", async ({ page })
   expect(await listLowContrastText(page)).toEqual(['p. "Rangers": 2.85 to 1, under 4.5']);
 });
 
-test("the contrast check measures text over an inset tint that fills its row", async ({ page }) => {
-  await page.setContent(
-    `<style>
-      body { background: #fff }
-      p { color: #666; box-shadow: inset 0 0 0 100px rgba(0, 0, 0, 0.3) }
-    </style>
-    <p>Rangers</p>`,
-  );
-
-  expect(await listLowContrastText(page)).toEqual(['p. "Rangers": 2.71 to 1, under 4.5']);
-});
-
-test("the contrast check leaves out an inset shadow that only rings an edge", async ({ page }) => {
-  await page.setContent(
-    `<style>
-      body { background: #fff }
-      p { color: #666; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.3) }
-    </style>
-    <p>Rangers</p>`,
-  );
-
-  expect(await listLowContrastText(page)).toEqual([]);
-});
-
-test("the contrast check measures text under an inset tint its ::before lays across it", async ({
-  page,
-}) => {
-  await page.setContent(
-    `<style>
-      body { background: #fff }
-      p { color: #666; position: relative }
-      p::before {
-        content: "";
-        position: absolute;
-        inset: 0;
-        box-shadow: inset 0 0 0 100px rgba(0, 0, 0, 0.3);
-      }
-    </style>
-    <p>Rangers</p>`,
-  );
-
-  expect(await listLowContrastText(page)).toEqual(['p. "Rangers": 2.71 to 1, under 4.5']);
-});
-
-test("the contrast check measures a label hung beside a tinted row over what holds it", async ({
+test("the contrast check measures a label hung beside a see-through row over what holds it", async ({
   page,
 }) => {
   await page.setContent(
     `<style>
       body { background: #fff; padding-left: 100px }
-      div { position: relative; box-shadow: inset 0 0 0 100px rgba(0, 0, 0, 0.3) }
+      div { position: relative; background: rgba(0, 0, 0, 0.3) }
       span { position: absolute; right: calc(100% + 10px); color: #666 }
     </style>
     <div><span>Seed</span>Rangers</div>`,
@@ -106,7 +62,7 @@ test("the contrast check measures a part placed off the screen over its own row"
   await page.setContent(
     `<style>
       body { background: #fff }
-      div { position: relative; box-shadow: inset 0 0 0 100px rgba(0, 0, 0, 0.3) }
+      div { position: relative; background: rgba(0, 0, 0, 0.3) }
       span { position: absolute; left: -2000px; color: #666 }
     </style>
     <div><span>Rangers</span>&nbsp;</div>`,

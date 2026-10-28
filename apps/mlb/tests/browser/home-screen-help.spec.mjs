@@ -18,7 +18,7 @@ import {
   checkWelcomeWaitsForPress,
   checkWelcomeSwipesDown,
 } from "../../../../tests/browser/home-screen-help.mjs";
-import { test, openApp, openSettings } from "./harness.mjs";
+import { test, openApp, openSettings, THEME_NAMES } from "./harness.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
@@ -52,7 +52,7 @@ test.describe("on an iPhone, in the browser", () => {
   test("in Safari, a theme picked on the welcome from the ? loads the page again still on the welcome, which stays closed once it closes", async ({
     page,
   }) => {
-    await checkPickKeepsWelcome({ page, openApp, openSettings, darkLook: "Night Game" });
+    await checkPickKeepsWelcome({ page, openApp, openSettings, darkLook: THEME_NAMES.dark });
   });
 
   test("a welcome closed before the page's code arrived rises when the ? opens it again", async ({

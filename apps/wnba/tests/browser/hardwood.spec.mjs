@@ -6,6 +6,7 @@ import { scrollSeasonPartToEnd } from "../../../../tests/browser/season-scroll.m
 import { readRole } from "../../../../tests/browser/type-roles.mjs";
 import { readTokenColor } from "./theme.mjs";
 import { SETTINGS } from "../../../../tests/browser/settings.mjs";
+import { THEMES } from "../../../../tests/browser/theme-layout.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
@@ -27,7 +28,7 @@ const readChip = (page, className) =>
     return { color, borderTopColor, borderTopWidth, backgroundColor };
   }, className);
 
-for (const colorScheme of /** @type {const} */ (["light", "dark"])) {
+for (const colorScheme of THEMES) {
   test(`each chip takes the color of its job, in ${colorScheme}: what's happening now outlined in orange, a champion in teal, and a conference in ink`, async ({
     page,
   }) => {
@@ -51,7 +52,7 @@ for (const colorScheme of /** @type {const} */ (["light", "dark"])) {
   });
 }
 
-for (const colorScheme of /** @type {const} */ (["light", "dark"])) {
+for (const colorScheme of THEMES) {
   test(`the Updates box and settings' icon note are cards raised inside an edge, in ${colorScheme}`, async ({
     page,
   }) => {
@@ -166,7 +167,7 @@ const readChannels = (page, color) =>
     return [...context.getImageData(0, 0, 1, 1).data.slice(0, 3)];
   }, color);
 
-for (const colorScheme of /** @type {const} */ (["light", "dark"])) {
+for (const colorScheme of THEMES) {
   test(`the list a pill shows is filled orange, its name in the color on orange, and the other names are in ink, in ${colorScheme}`, async ({
     page,
   }) => {
