@@ -7,6 +7,7 @@ import { describeTeamStatus, findSeries, nameSeries } from "../page/js/bracket.j
 import { renderCardNote, renderMatchupRow } from "../page/js/bracket-view.js";
 import { describeDrought, listRankedOrder, listTitles } from "../page/js/clubs.js";
 import { keepRanking } from "../page/js/kept-on-device.js";
+import { moveClub, renderRankItem } from "../page/js/ranking.js";
 import { describeRace, isSeedFinal } from "../page/js/race.js";
 import { listSeasonDays, renderGameFaceOff } from "../page/js/games-view.js";
 import { listSlateGames } from "../page/js/slate.js";
@@ -908,6 +909,31 @@ test("clubs never dragged into place follow the ranked ones by name", (t) => {
   t.after(() => keepRanking(session.activeYear, []));
   session.state = RANKED_FIELD;
   assert.deepEqual(listRankedOrder(), ["SEA", "ATL", "TB", "NYY"]);
+});
+
+test("a step up or down swaps a club with its neighbor, and a step past either end moves nothing", () => {
+  const order = ["ATL", "SEA", "TB", "NYY"];
+  assert.deepEqual(moveClub(order, "TB", -1), ["ATL", "TB", "SEA", "NYY"]);
+  assert.deepEqual(moveClub(order, "TB", 1), ["ATL", "SEA", "NYY", "TB"]);
+  assert.equal(moveClub(order, "ATL", -1), null);
+  assert.equal(moveClub(order, "NYY", 1), null);
+  assert.deepEqual(order, ["ATL", "SEA", "TB", "NYY"]);
+});
+
+test("each grip is a slider VoiceOver adjusts, higher up the list, saying the club's rank", () => {
+  session.state = RANKED_FIELD;
+  const grip = String(renderRankItem("SEA", 1, 4)).match(/<button[^>]*class="grip"[^>]*>/)?.[0];
+  assert.ok(grip);
+  for (const attribute of [
+    'role="slider"',
+    'aria-orientation="vertical"',
+    'aria-label="Move Mariners"',
+    'aria-valuemin="1"',
+    'aria-valuemax="4"',
+    'aria-valuenow="3"',
+    'aria-valuetext="Ranked 2 of 4"',
+  ])
+    assert.ok(grip.includes(attribute), `${attribute} in ${grip}`);
 });
 
 // Detroit went out in the Wild Card Series and New York in the Division Series.

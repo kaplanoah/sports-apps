@@ -6,6 +6,7 @@ import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
 import { findSeasonTab } from "../../../../tests/browser/season-tab.mjs";
 import { readCapitals } from "../../../../tests/browser/capitals.mjs";
 import { checkGateOpenPress } from "../../../../tests/browser/press-looks.mjs";
+import { checkFieldRing } from "../../../../tests/browser/field-ring.mjs";
 
 /** @param {import("@playwright/test").Page} page */
 const findCodeField = (page) => page.getByRole("textbox", { name: "Access code" });
@@ -140,4 +141,11 @@ test("a press darkens the gate's Open with black", async ({ page }) => {
   await expect(findGate(page)).toBeVisible();
 
   await checkGateOpenPress(page);
+});
+
+test("the code field shows the focus ring under the keyboard, and only its cursor after a tap", async ({
+  page,
+}) => {
+  await openLockedApp(page, { accessCode: "FASTBREAK" });
+  await checkFieldRing(page, expect, { field: findCodeField(page), box: findCodeField(page) });
 });

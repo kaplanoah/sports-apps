@@ -110,7 +110,7 @@ const findList = () =>
 const findRead = () =>
   /** @type {HTMLElement | null} */ (view?.querySelector(".search-read") ?? null);
 
-const renderShell = () =>
+export const renderShell = () =>
   html`<div class="day-bar search-bar is-empty">
       <form class="search-row" role="search">
         <label class="search-field"
@@ -128,7 +128,7 @@ const renderShell = () =>
         >
         <button type="button" class="search-cancel">Cancel</button>
       </form>
-      <p class="search-read"></p>
+      <p class="search-read" role="status"></p>
     </div>
     <div class="day-list search-list"></div>`;
 
