@@ -19,7 +19,7 @@ import { checkService } from "./check-service.mjs";
 import { CHECK_INTERVAL_MS, CHECK_TIMEOUT_MS, waitFor } from "./check-timing.mjs";
 import { decideDeploy, listChangedFiles } from "./deploy-scope.mjs";
 import { createGitHub } from "./github-api.mjs";
-import { isGitObjectId } from "./git-object.mjs";
+import { isAncestor, isGitObjectId } from "./git-object.mjs";
 import { readDeployedMain } from "./production-coverage.mjs";
 
 export const API = "https://api.cloudflare.com/client/v4";
@@ -67,22 +67,6 @@ export const loadWorkerConfig = (worker, channel, roots) =>
 /** @type {Git} */
 export const runGit = (args) =>
   execFileSync("git", args, { cwd: fileURLToPath(root), encoding: "utf8" }).trim();
-
-/**
- * Whether `commit` is `of` or comes before it in its history, and false when git doesn't know
- * either one.
- * @param {Git} git
- * @param {string} commit
- * @param {string} of
- */
-export function isAncestor(git, commit, of) {
-  try {
-    git(["merge-base", "--is-ancestor", commit, of]);
-    return true;
-  } catch {
-    return false;
-  }
-}
 
 // A commit its channel's branch has since moved past is a release a newer one may cover. A branch
 // each push replaces, as beta's force pushes do, can move past a commit without building on it,

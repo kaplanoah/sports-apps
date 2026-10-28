@@ -1952,6 +1952,21 @@ test("a merge that resolves a conflict, or brings in a branch main lacks, is a c
   assert.deepEqual(branch.listFromTested(joined), [joined]);
 });
 
+test("a clean merge of main with code of its own committed in is a change the owner tests again", async (context) => {
+  const branch = createTestedBranch(context);
+  branch.readGit(["merge", "--no-ff", "--no-commit", "main"]);
+  branch.writeFile("shared/page/sheet.js", "export const draw = 4;\n");
+  const merged = branch.commit("2026-10-07T11:00:00Z");
+  assert.deepEqual(branch.listFromTested(merged), [merged]);
+  const verdict = await readRedApproval({
+    diff: RED_DIFF,
+    labels: ["phone-ok"],
+    ...createApprovalApi(branch, merged, branch.base, { [merged]: "2026-10-07T11:05:00Z" }),
+  });
+  assert.equal(verdict.isHeld, true);
+  assert.match(verdict.message, /before the push of its last change/);
+});
+
 /**
  * @param {ReturnType<typeof createGateHistory>} history @param {string} head @param {string} deployed
  * @param {Record<string, string | null>} [pushTimes] when GitHub first saw each commit, or null for

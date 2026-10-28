@@ -12,11 +12,11 @@ import {
   createDeploymentsClient,
   findMainVersion,
   findWorkersApi,
-  isAncestor,
   readAccount,
   loadWorkerConfig,
   runGit,
 } from "./deploy.mjs";
+import { isAncestor } from "./git-object.mjs";
 
 /** @typedef {{ version_id: string, percentage: number }[]} Deployment */
 /** @typedef {{ deployment: Deployment, commit: string }} RecordedDeployment */

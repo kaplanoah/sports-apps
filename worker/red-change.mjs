@@ -14,8 +14,9 @@
 // can't read. A red change merges only once the owner has used it on the beta app and labeled it
 // phone-ok. Anyone who can label a pull request could add the label, so the gate reads who last
 // added it and lets the change through only from the repository's owner, and only when the label
-// came after the pull request's head commit reached GitHub, which the owner hasn't used on the
-// phone otherwise. It also requires the tested head to contain every red main commit and
+// came after the head's last tested change reached GitHub, which the owner hasn't used on the
+// phone otherwise. An empty commit is no new change, and neither is a clean merge of main that
+// brings in no red commit. It also requires the tested head to contain every red main commit and
 // preceding red changes to have verified production coverage. Red approvals refreshes the phone
 // status as main or its deployment changes; this remains asynchronous.
 // Usage: git diff --text --no-textconv --no-ext-diff --no-renames <base> |
@@ -33,7 +34,7 @@ import { findChannel } from "./channels.mjs";
 import { PHONE_OK_LABEL, findLabeling, readPushTime, readTimeline } from "./labeling.mjs";
 import { createGitHub } from "./github-api.mjs";
 import { readDeployedMain } from "./production-coverage.mjs";
-import { isGitObjectId } from "./git-object.mjs";
+import { isAncestor, isGitObjectId } from "./git-object.mjs";
 import {
   LAYER_PROPERTIES,
   createWatchCheck,
@@ -915,16 +916,6 @@ function changesNothingTested({ readGit, commit, parents, mainSha, cwd }) {
   );
 }
 
-/** @param {ReturnType<typeof createGateGit>} readGit @param {string} commit @param {string} descendant */
-function isAncestor(readGit, commit, descendant) {
-  try {
-    readGit(["merge-base", "--is-ancestor", commit, descendant]);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 /**
  * The tree git makes merging two commits, or an empty string when they conflict.
  * @param {ReturnType<typeof createGateGit>} readGit @param {string} first @param {string} second
@@ -974,14 +965,7 @@ export function readMergedChange(main, head, cwd = process.cwd()) {
   const readGit = createGateGit(cwd);
   const mainSha = readGit(["rev-parse", "--verify", "--end-of-options", `${main}^{commit}`]).trim();
   const headSha = readGit(["rev-parse", "--verify", "--end-of-options", `${head}^{commit}`]).trim();
-  const tree = readGit([
-    "-c",
-    "merge.renormalize=false",
-    "merge-tree",
-    "--write-tree",
-    mainSha,
-    headSha,
-  ]).trim();
+  const tree = readCleanMergeTree(readGit, mainSha, headSha);
   if (!isGitObjectId(tree)) throw new Error("The current merge tree could not be read.");
   return readCommitChange(mainSha, tree, cwd);
 }
