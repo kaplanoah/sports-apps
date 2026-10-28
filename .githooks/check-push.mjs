@@ -4,20 +4,13 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 
-/** @typedef {{ name: string, file: string, args: string[] }} Check */
+/** @typedef {{ script: string, args: string[] }} Check an npm script, with what it hands on */
 
 /** @type {Check[]} */
 const CHECKS = [
-  ...["lint", "format:check", "typecheck", "deadcode"].map((script) => ({
-    name: `npm run ${script}`,
-    file: "npm",
-    args: ["run", "--silent", script],
-  })),
-  {
-    name: "node worker/node-tests.mjs --changed",
-    file: process.execPath,
-    args: ["worker/node-tests.mjs", "--changed"],
-  },
+  ...["lint", "format:check", "typecheck", "deadcode"].map((script) => ({ script, args: [] })),
+  // A dot per test keeps a failure within the lines a blocked push shows.
+  { script: "test", args: ["--test-reporter=dot"] },
 ];
 const OUTPUT_LINE_LIMIT = 40;
 
@@ -58,23 +51,28 @@ export async function decidePush({ isTreeClean, hasPackages }, runCheck) {
   const failedIndex = results.findIndex(({ isPassed }) => !isPassed);
   if (failedIndex === -1) return null;
   return (
-    `${CHECKS[failedIndex].name} failed, so the push would turn CI red. ` +
+    `npm run ${CHECKS[failedIndex].script} failed, so the push would turn CI red. ` +
     `Fix it, commit, and push again.\n${trimOutput(results[failedIndex].output)}`
   );
 }
 
 /**
- * Runs a check's command in a folder, with what it wrote.
+ * Runs an npm script in a folder, with what it wrote.
  * @param {string} folder
  * @param {Check} check
  * @returns {Promise<CheckResult>}
  */
-async function runCheckIn(folder, { file, args }) {
+async function runNpmScript(folder, { script, args }) {
+  const handedOn = args.length ? ["--", ...args] : [];
   try {
-    const { stdout, stderr } = await promisify(execFile)(file, args, {
-      cwd: folder,
-      maxBuffer: 64 * 1024 * 1024,
-    });
+    const { stdout, stderr } = await promisify(execFile)(
+      "npm",
+      ["run", "--silent", script, ...handedOn],
+      {
+        cwd: folder,
+        maxBuffer: 64 * 1024 * 1024,
+      },
+    );
     return { isPassed: true, output: `${stdout}${stderr}` };
   } catch (error) {
     const {
@@ -146,7 +144,7 @@ async function checkPush() {
       isTreeClean: isTreeCleanIn(folder),
       hasPackages: existsSync(join(folder, "node_modules")),
     },
-    (check) => runCheckIn(folder, check),
+    (check) => runNpmScript(folder, check),
   );
   if (!reason) return;
   process.stderr.write(`${reason}\n`);

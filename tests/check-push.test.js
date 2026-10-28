@@ -8,22 +8,23 @@ import { decidePush } from "../.githooks/check-push.mjs";
 import { REPO_ROOT, readRepoFile } from "./repo-files.js";
 
 const HOOK = `${import.meta.dirname}/../.githooks/check-push.mjs`;
-const NPM_SCRIPTS = ["lint", "format:check", "typecheck", "deadcode"];
-const NODE_TESTS = "node worker/node-tests.mjs --changed";
-const CHECKS = [...NPM_SCRIPTS.map((script) => `npm run ${script}`), NODE_TESTS];
+const CHECKS = ["lint", "format:check", "typecheck", "deadcode", "test"];
+
+/** @typedef {{ script: string, args: string[] }} Check */
 
 /**
  * A runner that records each check it's asked for, failing those in `failures` with their output.
- * @param {Record<string, string>} [failures] each check's output, by its name
+ * @param {Record<string, string>} [failures] each failing check's output, by its npm script
  */
 function fakeRunner(failures = {}) {
-  /** @type {string[]} */
+  /** @type {Check[]} */
   const checks = [];
-  /** @param {{ name: string }} check */
-  const runCheck = async ({ name }) => {
-    checks.push(name);
-    return name in failures
-      ? { isPassed: false, output: failures[name] }
+  /** @param {Check} check */
+  const runCheck = async (check) => {
+    checks.push(check);
+    const { script } = check;
+    return script in failures
+      ? { isPassed: false, output: failures[script] }
       : { isPassed: true, output: "" };
   };
   return { checks, runCheck };
@@ -39,8 +40,17 @@ async function decide(state = {}, failures = {}) {
   return { reason, checks };
 }
 
-test("a push runs the npm checks and the Node tests the branch reaches, and goes when they pass", async () => {
-  assert.deepEqual(await decide(), { reason: null, checks: CHECKS });
+test("a push runs the four checks and every Node test, and goes when they pass", async () => {
+  assert.deepEqual(await decide(), {
+    reason: null,
+    checks: [
+      { script: "lint", args: [] },
+      { script: "format:check", args: [] },
+      { script: "typecheck", args: [] },
+      { script: "deadcode", args: [] },
+      { script: "test", args: ["--test-reporter=dot"] },
+    ],
+  });
 });
 
 test("a push with uncommitted changes is refused before any check", async () => {
@@ -56,50 +66,37 @@ test("a push without node_modules asks for npm ci before any check", async () =>
 });
 
 test("a failing check blocks the push with its output", async () => {
-  const { reason } = await decide({}, { "npm run typecheck": "page.js(3,1): error TS2304" });
+  const { reason } = await decide({}, { typecheck: "page.js(3,1): error TS2304" });
   assert.match(reason ?? "", /^npm run typecheck failed/);
   assert.match(reason ?? "", /page\.js\(3,1\): error TS2304/);
 });
 
 test("with more than one failing check, the first in order is shown", async () => {
-  const { reason } = await decide({}, { [NODE_TESTS]: "1 failed", "npm run lint": "no-undef" });
+  const { reason } = await decide({}, { deadcode: "unused export", lint: "no-undef" });
   assert.match(reason ?? "", /^npm run lint failed/);
-  assert.doesNotMatch(reason ?? "", /1 failed/);
+  assert.doesNotMatch(reason ?? "", /unused export/);
 });
 
 test("a long failure shows its first lines and how many more there are", async () => {
   const output = Array.from({ length: 50 }, (_, index) => `error ${index + 1}`).join("\n\n");
-  const { reason } = await decide({}, { "npm run lint": output });
+  const { reason } = await decide({}, { lint: output });
   assert.match(reason ?? "", /error 40\n\.\.\. and 10 more lines$/);
   assert.doesNotMatch(reason ?? "", /error 41/);
 });
 
-/**
- * A stand-in for the Node test runner, which passes only when asked for the changed tests.
- * @param {boolean} isFailing
- */
-const writeNodeTestsStub = (isFailing) =>
-  `if (process.argv[2] !== "--changed") process.exit(2);\n` +
-  (isFailing ? 'console.log("node tests broke");\nprocess.exitCode = 1;\n' : "");
-
-/**
- * @param {string[]} [failingScripts]
- * @param {{ isNodeTestsFailing?: boolean }} [options]
- */
-function makeRepo(failingScripts = [], { isNodeTestsFailing = false } = {}) {
+/** @param {string[]} [failingScripts] */
+function makeRepo(failingScripts = []) {
   const repo = mkdtempSync(join(tmpdir(), "check-push-"));
   const scripts = Object.fromEntries(
-    NPM_SCRIPTS.map((script) => [
+    CHECKS.map((script) => [
       script,
-      failingScripts.includes(script) ? `echo ${script} broke && exit 1` : "true",
+      failingScripts.includes(script) ? `echo ${script} broke && false` : "true",
     ]),
   );
   scripts.prepare = JSON.parse(readRepoFile("package.json")).scripts.prepare;
   writeFileSync(join(repo, "package.json"), JSON.stringify({ scripts }));
   writeFileSync(join(repo, ".gitignore"), "node_modules/\n");
   mkdirSync(join(repo, "node_modules"));
-  mkdirSync(join(repo, "worker"));
-  writeFileSync(join(repo, "worker/node-tests.mjs"), writeNodeTestsStub(isNodeTestsFailing));
   cpSync(new URL(".githooks", REPO_ROOT), join(repo, ".githooks"), { recursive: true });
   runGit(repo, ["init"]);
   runGit(repo, ["add", "."]);
@@ -162,7 +159,7 @@ test("npm install installs the executable Git hook and a passing push reaches it
   assert.equal(runGit(clone, ["config", "--local", "core.hooksPath"]).trim(), ".githooks");
 });
 
-for (const script of NPM_SCRIPTS)
+for (const script of CHECKS)
   test(`Git blocks a push when ${script} fails, with its shared check's output`, (context) => {
     const repo = makeRepo([script]);
     context.after(() => rmSync(repo, { recursive: true, force: true }));
@@ -176,16 +173,6 @@ for (const script of NPM_SCRIPTS)
       "",
     );
   });
-
-test("Git blocks a push when the Node tests the branch reaches fail, with their output", (context) => {
-  const repo = makeRepo([], { isNodeTestsFailing: true });
-  context.after(() => rmSync(repo, { recursive: true, force: true }));
-  installPackages(repo);
-  const { status, stderr } = pushRepo(repo);
-  assert.notEqual(status, 0);
-  assert.ok(stderr.includes(`${NODE_TESTS} failed`), stderr);
-  assert.ok(stderr.includes("node tests broke"), stderr);
-});
 
 test("Git refuses a dirty tree and missing packages before running checks", (context) => {
   const repo = makeRepo();

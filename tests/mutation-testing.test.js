@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { cpSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -179,8 +179,10 @@ const invokeRunner = (folder, args = ["--target", "search-reading"]) =>
 
 /** @param {string} folder */
 function copyOrdinaryRunner(folder) {
-  cpSync(new URL("worker/", REPO_ROOT), join(folder, "worker"), { recursive: true });
-  return join(folder, "worker/node-tests.mjs");
+  mkdirSync(join(folder, "worker"), { recursive: true });
+  const runner = join(folder, "worker/node-tests.mjs");
+  writeFileSync(runner, readRepoFile("worker/node-tests.mjs"));
+  return runner;
 }
 
 /** @param {string} folder */
@@ -278,6 +280,28 @@ test("both Node CLIs pass the exact selected arguments and working directory to 
       cwd: folder,
     });
   }
+});
+
+test("the ordinary Node runner hands its arguments to Node ahead of the tests", (t) => {
+  const folder = makeRunnerFixture(t);
+  const executable = join(folder, "record-node.mjs");
+  const record = join(folder, "command.json");
+  writeFileSync(
+    executable,
+    `#!/usr/bin/env node
+    import { writeFileSync } from "node:fs";
+    writeFileSync(${JSON.stringify(record)}, JSON.stringify(process.argv.slice(2)));
+  `,
+    { mode: 0o755 },
+  );
+  const result = invokeLauncher(folder, copyOrdinaryRunner(folder), executable, [
+    "--test-reporter=dot",
+  ]);
+  assert.equal(result.status, 0, result.stderr + result.stdout);
+  assert.deepEqual(JSON.parse(readFileSync(record, "utf8")), [
+    "--test-reporter=dot",
+    ...buildNodeTestArgs(["tests/selected.test.js", "tests/unrelated.test.js"]),
+  ]);
 });
 
 test("the ordinary Node runner uses the same discovery and propagates fixture failures", (t) => {
