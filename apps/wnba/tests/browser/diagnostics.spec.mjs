@@ -216,7 +216,7 @@ test("with Diagnostics on, a tap that opens a team's sheet from a game's, the ro
     expect.arrayContaining([
       "open gameSheet over the page",
       "settle on gameSheet",
-      expect.stringMatching(/^click at \d+,\d+ on (\d+ )?Fever, team details$/),
+      expect.stringMatching(/^click at \d+,\d+ on \d+ Fever, team details$/),
       "open teamSheet over gameSheet",
       "settle on teamSheet",
       expect.stringMatching(/^click at \d+,\d+ on Back to Game$/),
