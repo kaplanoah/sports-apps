@@ -73,6 +73,39 @@ export function registerSettingsContactInteractions({ test, expect, openApp, app
     }
   });
 
+  test("search opens each page of settings itself, with no click on its row", async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await openApp(page);
+    await page.evaluate(() => {
+      document.body.dataset.rowClicks = "0";
+      document.addEventListener(
+        "click",
+        (event) => {
+          if (/** @type {Element} */ (event.target).closest?.("#contactBtn, #rankingBtn"))
+            document.body.dataset.rowClicks = String(Number(document.body.dataset.rowClicks) + 1);
+        },
+        { capture: true },
+      );
+    });
+    const search = page.locator("#gameSearch .search-input");
+    for (const name of app === "mlb" ? ["Ranking", "Contact"] : ["Contact"]) {
+      await page.locator("#tab-search").tap();
+      await search.fill(name.toLowerCase());
+      await search.press("Enter");
+      await page
+        .locator("#gameSearch .search-suggestion")
+        .filter({ hasText: `Settings${name}` })
+        .tap();
+      const title = page.locator(`#${name.toLowerCase()}Dialog h2`);
+      await expect(title).toBeFocused();
+      await expect(title).toBeInViewport();
+      await page.keyboard.press("Escape");
+      await page.keyboard.press("Escape");
+      await expect(page.locator("#settingsDialog")).toBeHidden();
+    }
+    await expect(page.locator("body")).toHaveAttribute("data-row-clicks", "0");
+  });
+
   test("Contact gives focus back to its row once its sheet has closed", async ({ page }) => {
     await page.emulateMedia({ reducedMotion: "reduce" });
     await openApp(page);

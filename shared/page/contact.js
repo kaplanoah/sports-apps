@@ -29,7 +29,10 @@ function readScreenshot(file) {
   });
 }
 
-/** @param {HTMLDialogElement} dialog */
+/**
+ * Wires Contact's sheet and its row in settings, and returns what opens it.
+ * @param {HTMLDialogElement} dialog
+ */
 export function startContact(dialog) {
   const store = createContactDraftStore();
   const ready = store.restore().catch(() => {});
@@ -276,4 +279,5 @@ export function startContact(dialog) {
     },
   });
   keepDialogFor(dialog, START_AFTER_AWAY_MS);
+  return openContact;
 }

@@ -7,7 +7,11 @@ import { runAfterPress } from "./press.js";
 
 /* global START_AFTER_AWAY_MS -- from long-away.js */
 
-/** @param {HTMLDialogElement} dialog @param {{ button: HTMLElement, isOwnGesture?: (target: EventTarget) => boolean }} options */
+/**
+ * Wires a page of settings and the row that opens it, and returns what opens it.
+ * @param {HTMLDialogElement} dialog
+ * @param {{ button: HTMLElement, isOwnGesture?: (target: EventTarget) => boolean }} options
+ */
 export function startSettingsPage(dialog, { button, isOwnGesture }) {
   const title = /** @type {HTMLElement} */ (dialog.querySelector("h2"));
   const back = /** @type {HTMLButtonElement} */ (dialog.querySelector(".settings-back"));
@@ -23,4 +27,5 @@ export function startSettingsPage(dialog, { button, isOwnGesture }) {
   dialog.addEventListener("close", () => button.focus());
   wireSheet(dialog, { name: title.textContent, isOwnGesture });
   keepDialogFor(dialog, START_AFTER_AWAY_MS);
+  return openPage;
 }

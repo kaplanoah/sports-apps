@@ -58,29 +58,36 @@ export function isSettingShown(key) {
   return key === "settings" || (!!row && !row.closest("[hidden]"));
 }
 
+// What opens each page of settings, by the key a search names its row by.
+/** @type {Map<string, () => void>} */
+const pageOpeners = new Map();
+
 /**
- * Opens settings, scrolled to the setting a search names by its key.
+ * Opens settings, with the page of settings a search names by its key, or scrolled to its row.
  * @param {string | null} [key]
  */
 export function openSettings(key = null) {
   openSheet(findDialog());
   if (!key) return;
-  const row = findSettingRow(key);
-  if (row?.matches('button[aria-haspopup="dialog"]')) row.click();
-  else row?.scrollIntoView({ block: "center" });
+  const openPage = pageOpeners.get(key);
+  if (openPage) openPage();
+  else findSettingRow(key)?.scrollIntoView({ block: "center" });
 }
 
 /**
  * Wires the settings button, the dialog's ways to close, and the sheet's swipe, and shows the
  * release. A touch that starts on a picker or a target the app claims never moves the sheet.
- * @param {{ isOwnGesture?: (target: EventTarget) => boolean }} [options]
+ * @param {{ isOwnGesture?: (target: EventTarget) => boolean, pages?: Record<string, () => void> }} [options]
+ *   pages: what opens each of the app's own pages of settings, by its row's key
  */
-export function startSettingsSheet({ isOwnGesture } = {}) {
+export function startSettingsSheet({ isOwnGesture, pages = {} } = {}) {
   const dialog = findDialog();
   findElement("settingsBtn").addEventListener("click", () => openSettings());
   wireSheet(dialog, { isOwnGesture: (target) => isSettingsControlGesture(target, isOwnGesture) });
   keepDialogFor(dialog, START_AFTER_AWAY_MS);
   showRelease();
   setHtml(findElement("contactBtn"), html`Contact${SETTINGS_CARET}`);
-  startContact(/** @type {HTMLDialogElement} */ (findElement("contactDialog")));
+  const openContact = startContact(/** @type {HTMLDialogElement} */ (findElement("contactDialog")));
+  for (const [key, openPage] of Object.entries({ ...pages, "settings:contact": openContact }))
+    pageOpeners.set(key, openPage);
 }
