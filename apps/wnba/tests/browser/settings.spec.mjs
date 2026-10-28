@@ -1,4 +1,4 @@
-import { test, expect, matchPath, openApp } from "./harness.mjs";
+import { test, expect, matchPath, openApp, THEME_NAMES } from "./harness.mjs";
 import { waitForTimedAnimations } from "../../../../tests/browser/animations.mjs";
 import { serveReleases } from "../../../../tests/browser/serve-releases.mjs";
 import { measureFieldFace, readRole } from "../../../../tests/browser/type-roles.mjs";
@@ -400,7 +400,7 @@ test.describe("on a phone", () => {
 
   test("a switch's knob is Walnut's cream in each theme, on or off", async ({ page }) => {
     await openApp(page);
-    for (const appearance of ["Maple", "Walnut"]) {
+    for (const appearance of Object.values(THEME_NAMES)) {
       await chooseAppearance(page, appearance);
       await page.getByRole("button", { name: "Settings", exact: true }).click();
       const knobs = await page

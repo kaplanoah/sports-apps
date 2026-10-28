@@ -2,8 +2,6 @@ import { test, expect, THEME_NAMES } from "./harness.mjs";
 import { VIEW_GROUPS, openWithEverything } from "./views.mjs";
 import { testThemes } from "../../../../tests/browser/themes.mjs";
 
-test.use({ contextOptions: { reducedMotion: "reduce" } });
-
 testThemes(test, expect, {
   openWithEverything,
   viewGroups: VIEW_GROUPS,

@@ -169,6 +169,7 @@ export function testGameReminderSettings(test, expect, app) {
       await expect(page.locator("#settingsDialog")).toBeVisible();
       await expect(page.locator("#reminderTiming")).toBeInViewport();
       await page.locator("#settingsDialog .sheet-close").click();
+      await expect(page.locator("#settingsDialog")).toBeHidden();
     }
   });
 

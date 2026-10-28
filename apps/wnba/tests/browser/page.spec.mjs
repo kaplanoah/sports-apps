@@ -1,4 +1,12 @@
-import { test, expect, keepHighlights, openApp, openGameSheet, matchPath } from "./harness.mjs";
+import {
+  test,
+  expect,
+  keepHighlights,
+  openApp,
+  openGameSheet,
+  matchPath,
+  THEME_NAMES,
+} from "./harness.mjs";
 import { listFontsNotPreloaded } from "../../../../tests/browser/font-loads.mjs";
 import { readCapitals } from "../../../../tests/browser/capitals.mjs";
 import {
@@ -319,14 +327,14 @@ const readBrightness = (page, color) =>
     return red + green + blue;
   }, color);
 
-for (const theme of ["Maple", "Walnut"])
-  test(`in ${theme}, the bracket's and the games' cards sit most of the way from the floor to the card color`, async ({
+for (const colorScheme of THEMES)
+  test(`in ${THEME_NAMES[colorScheme]}, the bracket's and the games' cards sit most of the way from the floor to the card color`, async ({
     page,
   }) => {
     await openApp(page);
-    await page.evaluate((name) => {
-      document.documentElement.dataset.theme = name === "Walnut" ? "dark" : "light";
-    }, theme);
+    await page.evaluate((theme) => {
+      document.documentElement.dataset.theme = theme;
+    }, colorScheme);
     const series = page.locator('.series[data-series="1-0"]');
     await expect(series).toBeVisible();
     const face = await series.evaluate((card) => getComputedStyle(card).backgroundColor);
@@ -516,7 +524,7 @@ test.describe("on a phone", () => {
         probe.remove();
         return result;
       });
-    for (const appearance of ["Maple", "Walnut"]) {
+    for (const appearance of Object.values(THEME_NAMES)) {
       await chooseAppearance(page, appearance);
       expect(await readBacking(), appearance).toEqual({ tint: true, edge: true });
     }
@@ -534,7 +542,7 @@ test.describe("on a phone", () => {
         probe.remove();
         return isSame;
       });
-    for (const appearance of ["Maple", "Walnut"]) {
+    for (const appearance of Object.values(THEME_NAMES)) {
       await chooseAppearance(page, appearance);
       expect(await isWood(), appearance).toBe(true);
     }

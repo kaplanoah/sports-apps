@@ -30,13 +30,40 @@ test("the shared browser tests hold suites", () => {
   assert.ok(sharedSuites.length > 0);
 });
 
+// A league ships in parts, so an app whose part a suite checks is still to come names the suite
+// here until the PR adding that part calls it.
+/** @type {Record<string, string[]>} */
+const SUITES_NOT_YET_REACHED = {};
+
+/**
+ * Each shared suite an app's specs call.
+ * @param {string} app
+ */
+const listSuitesCalled = (app) => {
+  const specs = readFilesEndingIn(new URL("tests/browser/", findAppRoot(app)), ".spec.mjs");
+  return sharedSuites.filter((suite) =>
+    specs.some((text) => new RegExp(`\\b${suite}\\(`).test(text)),
+  );
+};
+
 // A suite an app's specs never call checks nothing of it, and nothing else says so.
-test("each app with browser tests runs every shared browser suite", () => {
+test("each app with browser tests runs every shared browser suite it has reached", () => {
   const missing = listAppsWithBrowserTests().flatMap((app) => {
-    const specs = readFilesEndingIn(new URL("tests/browser/", findAppRoot(app)), ".spec.mjs");
+    const called = listSuitesCalled(app);
+    const notReached = SUITES_NOT_YET_REACHED[app] ?? [];
     return sharedSuites
-      .filter((suite) => !specs.some((text) => new RegExp(`\\b${suite}\\(`).test(text)))
+      .filter((suite) => !called.includes(suite) && !notReached.includes(suite))
       .map((suite) => `${app}: ${suite}`);
   });
   assert.deepEqual(missing, []);
+});
+
+test("each suite an app hasn't reached is a shared suite its specs don't call yet", () => {
+  const stale = Object.entries(SUITES_NOT_YET_REACHED).flatMap(([app, suites]) => {
+    const called = listAppsWithBrowserTests().includes(app) ? listSuitesCalled(app) : [];
+    return suites
+      .filter((suite) => !sharedSuites.includes(suite) || called.includes(suite))
+      .map((suite) => `${app}: ${suite}`);
+  });
+  assert.deepEqual(stale, []);
 });

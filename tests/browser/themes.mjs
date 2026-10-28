@@ -56,6 +56,7 @@ const readPlaces = (page) =>
  * @param {App} app
  */
 export function testThemes(test, expect, app) {
+  test.use({ contextOptions: { reducedMotion: "reduce" } });
   const { light, dark } = app.themeNames;
 
   for (const [screen, viewport] of Object.entries(SCREENS)) {
