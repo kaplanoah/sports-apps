@@ -139,7 +139,7 @@ test("the standings' teams sit on one raised card inside its edge, with their co
         };
       }),
     );
-  const heads = await readCells("thead th");
+  const heads = await readCells("thead :is(th, td)");
   expect(new Set(heads.map((head) => head.background))).toEqual(new Set(["rgba(0, 0, 0, 0)"]));
 
   const rows = await table.locator("tbody tr[data-team]").count();

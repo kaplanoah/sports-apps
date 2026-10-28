@@ -2,9 +2,15 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
 import { ESLint } from "eslint";
+import { REPO_ROOT } from "./repo-files.js";
 
-const eslint = new ESLint({ cwd: fileURLToPath(new URL("..", import.meta.url)) });
-const PAGE_FILES = ["shared/page/example.js", "apps/mlb/page/js/example.js"];
+const eslint = new ESLint({ cwd: fileURLToPath(REPO_ROOT) });
+const PAGE_FILES = [
+  "shared/page/example.js",
+  "apps/mlb/page/js/example.js",
+  "shared/page/html.js",
+  "shared/page/show-last-drawn.js",
+];
 
 /**
  * The messages lint gives `code` as a page module at `filePath`, about hidden fields.
@@ -12,7 +18,9 @@ const PAGE_FILES = ["shared/page/example.js", "apps/mlb/page/js/example.js"];
  * @param {string} filePath
  */
 async function listHiddenFieldMessages(code, filePath) {
-  const [result] = await eslint.lintText(code, { filePath });
+  const [result] = await eslint.lintText(code, {
+    filePath: fileURLToPath(new URL(filePath, REPO_ROOT)),
+  });
   return result.messages.filter(({ message }) => message.includes("Hide a field visually"));
 }
 
@@ -25,6 +33,8 @@ const HIDDEN_FIELDS = {
   "a field hidden by its attribute": 'fileInput.setAttribute("hidden", "");',
   "a field hidden by its attribute off an object": 'this.photoPicker.setAttribute("hidden", "");',
   "a field hidden by a toggle": 'fileInput.toggleAttribute("hidden", true);',
+  "a field named only input": "input.hidden = true;",
+  "an input after a quoted value": 'const markup = `<input value="a > b" hidden>`;',
 };
 
 const SHOWN_FIELDS = {
@@ -33,7 +43,11 @@ const SHOWN_FIELDS = {
   "a hidden form value": 'const markup = `<input type="hidden" name="season" value="2026">`;',
   "an input whose words name hidden":
     'const markup = `<input placeholder="Show hidden-ball plays">`;',
+  "an input whose quoted words hold hidden":
+    'const markup = `<input placeholder="Show hidden plays">`;',
   "a sheet hidden by assignment": "sheet.hidden = true;",
+  "a profile hidden by assignment": "profile.hidden = true;",
+  "a sheet hidden off an object named for a field": "fieldSheet.hidden = true;",
   "a field's own value": "searchInput.value = '';",
 };
 

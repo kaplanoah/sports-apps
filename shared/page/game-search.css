@@ -92,12 +92,14 @@
   color: var(--ink-dim);
   opacity: 1;
 }
-/* Clear reaches over the label's end to the field's edge, so a tap there clears. */
+/* Clear reaches over the label's end to the field's edges, so a tap there clears. */
 .search-clear {
   flex: none;
+  align-self: stretch;
   display: flex;
-  margin: -6px 0 -6px -15px;
-  padding: 6px 9px 6px 6px;
+  align-items: center;
+  margin: 0 0 0 -15px;
+  padding: 0 9px 0 6px;
   border: 0;
   background: none;
   color: var(--ink-dim);

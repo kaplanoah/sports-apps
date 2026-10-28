@@ -79,8 +79,8 @@ const GENERIC_FUNCTION_NAMES = [
 // element only by its variable, so the checks on scripts read the names fields go by.
 const HIDDEN_FIELD_MESSAGE =
   "Hide a field visually, under a label that opens it, never with hidden.";
-const HIDDEN_FIELD_MARKUP = String.raw`/<(input|select|textarea)\b[^>]*\shidden(?=[\s\/>=]|$)/i`;
-const FIELD_NAME = "/(input|field|file|picker|upload)$/i";
+const HIDDEN_FIELD_MARKUP = String.raw`/<(input|select|textarea)\b([^>"']|"[^"]*"|'[^']*')*\shidden(?=[\s\/>=]|$)/i`;
+const FIELD_NAME = "/(Input|Field|File|Picker|Upload)$|^(input|field|file|picker|upload)$/";
 const HIDDEN_FIELDS = [
   `Literal[value=${HIDDEN_FIELD_MARKUP}]`,
   `TemplateElement[value.cooked=${HIDDEN_FIELD_MARKUP}]`,

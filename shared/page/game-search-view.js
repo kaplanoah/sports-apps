@@ -677,7 +677,7 @@ function sendSearch(event) {
 }
 
 /**
- * Names the field by what it finds, as a field put back from an earlier release may not.
+ * Names the field by what it finds, which the shell leaves to the league.
  * @param {string} placeholder
  */
 function nameField(placeholder) {
@@ -686,8 +686,15 @@ function nameField(placeholder) {
   input?.setAttribute("aria-label", placeholder);
 }
 
-/** Makes the line under the field a status, as one put back from an earlier release may not be. */
-const markReadLine = () => findRead()?.setAttribute("role", "status");
+/**
+ * Draws the shell again over one put back from an earlier release, keeping the words it held.
+ * @param {HTMLElement} element
+ */
+function redrawOldShell(element) {
+  const query = readQuery();
+  setHtml(element, renderSearchShell());
+  writeQuery(query);
+}
 
 /**
  * Wires the search in `element`, which the page may already have put back as it was shown before a
@@ -698,9 +705,8 @@ const markReadLine = () => findRead()?.setAttribute("role", "status");
 export function startGameSearch(element, searchLeague) {
   view = element;
   league = searchLeague;
-  if (!hasCurrentShell()) setHtml(element, renderSearchShell());
+  if (!hasCurrentShell()) redrawOldShell(element);
   nameField(searchLeague.placeholder);
-  markReadLine();
   placedFor = element.hidden
     ? null
     : {
