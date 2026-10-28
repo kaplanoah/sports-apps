@@ -14,8 +14,9 @@
 // can't read. A red change merges only once the owner has used it on the beta app and labeled it
 // phone-ok. Anyone who can label a pull request could add the label, so the gate reads who last
 // added it and lets the change through only from the repository's owner, and only when the label
-// came after the pull request's head commit reached GitHub, which the owner hasn't used on the
-// phone otherwise. It also requires the tested head to contain every red main commit and
+// came after the head's last tested change reached GitHub, which the owner hasn't used on the
+// phone otherwise. An empty commit is no new change, and neither is a clean merge of main that
+// brings in no red commit. It also requires the tested head to contain every red main commit and
 // preceding red changes to have verified production coverage. Red approvals refreshes the phone
 // status as main or its deployment changes; this remains asynchronous.
 // Usage: git diff --text --no-textconv --no-ext-diff --no-renames <base> |
@@ -836,11 +837,15 @@ function findLabelProblem({ labeler, isAfterLastPush }, owner) {
     );
   if (!isAfterLastPush)
     return (
-      `A red change labeled ${PHONE_OK_LABEL} before its last push, which the owner hasn't used on the ` +
-      `phone. ${TO_BETA} The owner takes the label off and adds it again after using it on the beta app.`
+      `A red change labeled ${PHONE_OK_LABEL} before the push of its last change, which the owner hasn't ` +
+      `used on the phone. ${TO_BETA} The owner takes the label off and adds it again after using it on ` +
+      "the beta app."
     );
   return null;
 }
+
+// git merge-tree's exit status when the merge conflicts; any other failure is git's own error.
+const MERGE_TREE_CONFLICT = 1;
 
 /** @param {string} cwd */
 function createGateGit(cwd) {
@@ -878,6 +883,85 @@ export function findMissingRedCommits({ main = "origin/main", head, cwd = proces
   });
 }
 
+/**
+ * The head's last tested change and each commit after it, oldest first. A phone-ok label has to come
+ * after that change reached GitHub. An empty commit changes nothing the owner tests, and neither
+ * does a clean merge of main that brings in no red commit, since main merging the commit before it
+ * makes the same code.
+ * @param {{ main?: string, head: string, cwd?: string }} options
+ */
+export function listCommitsFromTestedChange({ main = "origin/main", head, cwd = process.cwd() }) {
+  const readGit = createGateGit(cwd);
+  const mainSha = readGit(["rev-parse", "--verify", "--end-of-options", `${main}^{commit}`]).trim();
+  const commits = [
+    readGit(["rev-parse", "--verify", "--end-of-options", `${head}^{commit}`]).trim(),
+  ];
+  for (;;) {
+    const commit = commits[0];
+    const [, ...parents] = readGit(["rev-list", "--parents", "-n", "1", commit]).trim().split(" ");
+    if (!changesNothingTested({ readGit, commit, parents, mainSha, cwd })) return commits;
+    commits.unshift(parents[0]);
+  }
+}
+
+/**
+ * @param {{ readGit: ReturnType<typeof createGateGit>, commit: string, parents: string[], mainSha: string, cwd: string }} options
+ */
+function changesNothingTested({ readGit, commit, parents, mainSha, cwd }) {
+  const tree = readGit(["rev-parse", `${commit}^{tree}`]).trim();
+  if (parents.length === 1) return readGit(["rev-parse", `${parents[0]}^{tree}`]).trim() === tree;
+  if (parents.length !== 2) return false;
+  const [branch, merged] = parents;
+  return (
+    isAncestor(readGit, merged, mainSha) &&
+    isCleanMerge(readGit, branch, merged, tree) &&
+    !findMissingRedCommits({ main: merged, head: branch, cwd }).length
+  );
+}
+
+/**
+ * Whether git merging the two commits makes the tree. A merge git can't redo, like one of unrelated
+ * histories, is a change the owner tests.
+ * @param {ReturnType<typeof createGateGit>} readGit @param {string} first @param {string} second @param {string} tree
+ */
+function isCleanMerge(readGit, first, second, tree) {
+  try {
+    return readCleanMergeTree(readGit, first, second) === tree;
+  } catch {
+    return false;
+  }
+}
+
+/** @param {ReturnType<typeof createGateGit>} readGit @param {string} commit @param {string} descendant */
+function isAncestor(readGit, commit, descendant) {
+  try {
+    readGit(["merge-base", "--is-ancestor", commit, descendant]);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The tree git makes merging two commits, or an empty string when they conflict.
+ * @param {ReturnType<typeof createGateGit>} readGit @param {string} first @param {string} second
+ */
+function readCleanMergeTree(readGit, first, second) {
+  try {
+    return readGit([
+      "-c",
+      "merge.renormalize=false",
+      "merge-tree",
+      "--write-tree",
+      first,
+      second,
+    ]).trim();
+  } catch (error) {
+    if (/** @type {{ status?: number }} */ (error).status === MERGE_TREE_CONFLICT) return "";
+    throw error;
+  }
+}
+
 /** @param {string} base @param {string} head @param {string} [cwd] */
 export function readCommitChange(base, head, cwd = process.cwd()) {
   const readGit = createGateGit(cwd);
@@ -908,21 +992,15 @@ export function readMergedChange(main, head, cwd = process.cwd()) {
   const readGit = createGateGit(cwd);
   const mainSha = readGit(["rev-parse", "--verify", "--end-of-options", `${main}^{commit}`]).trim();
   const headSha = readGit(["rev-parse", "--verify", "--end-of-options", `${head}^{commit}`]).trim();
-  const tree = readGit([
-    "-c",
-    "merge.renormalize=false",
-    "merge-tree",
-    "--write-tree",
-    mainSha,
-    headSha,
-  ]).trim();
+  const tree = readCleanMergeTree(readGit, mainSha, headSha);
+  if (!tree) throw new Error(`${head} conflicts with ${main}.`);
   if (!isGitObjectId(tree)) throw new Error("The current merge tree could not be read.");
   return readCommitChange(mainSha, tree, cwd);
 }
 
 /**
  * The gate's verdict on a pull request, given its diff, its labels, who last added the phone-ok
- * label and whether that came after its last push, and the repository's owner.
+ * label and whether that came after the push of its last tested change, and the repository's owner.
  * @param {string} diff
  * @param {{ labels: string[], labeling?: Labeling, owner?: string, missingRedCommits?: string[], pendingRedCommits?: string[] }} pullRequest
  * @param {ReadPageFile} [readPageFile]
@@ -978,6 +1056,19 @@ export function decideGate(
 }
 
 /**
+ * When GitHub first saw the head's last tested change. GitHub records only each push's head, so a
+ * change pushed under later commits arrived with the first of them it records.
+ * @param {{ repository: string, head: string, env: NodeJS.ProcessEnv, fetchImpl: typeof fetch, cwd: string }} options
+ */
+async function readTestedPushTime({ repository, head, env, fetchImpl, cwd }) {
+  for (const sha of listCommitsFromTestedChange({ head, cwd })) {
+    const pushedAt = await readPushTime({ repository, sha, env, fetchImpl });
+    if (!Number.isNaN(pushedAt)) return pushedAt;
+  }
+  return Number.NaN;
+}
+
+/**
  * Read approval evidence only for an owner-approved red change.
  * @param {object} options
  * @param {string} options.diff
@@ -1003,11 +1094,11 @@ export async function readRedApproval({
   const repository = env.GITHUB_REPOSITORY ?? "";
   const head = env.HEAD_SHA ?? "";
   try {
-    const [events, headPushedAt] = await Promise.all([
+    const [events, testedPushedAt] = await Promise.all([
       readTimeline({ repository, pullNumber: env.PR ?? "", env, fetchImpl }),
-      readPushTime({ repository, sha: head, env, fetchImpl }),
+      readTestedPushTime({ repository, head, env, fetchImpl, cwd }),
     ]);
-    const labeling = findLabeling(events, PHONE_OK_LABEL, headPushedAt);
+    const labeling = findLabeling(events, PHONE_OK_LABEL, testedPushedAt);
     const labeled = decide({ labels, owner, labeling });
     if (labeled.isHeld) return labeled;
     const missingRedCommits = findMissingRedCommits({ head, cwd });
