@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { execFileSync, spawnSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -24,6 +24,7 @@ import {
   readSweep,
   readTable,
   renderTable,
+  runCommand,
 } from "../worker/report-flaky-tests.mjs";
 import { readRepoFile } from "./repo-files.js";
 import { normalizeSpaces } from "./text.js";
@@ -670,7 +671,7 @@ function createFakeDownloads(filesById) {
   /** @type {FlakyRun[]} */
   const downloaded = [];
   /** @param {FlakyRun} run */
-  const download = (run) => {
+  const download = async (run) => {
     downloaded.push(run);
     const files = run.artifacts.flatMap(({ id }) =>
       Object.entries(filesById[id] ?? {}).map(([path, content]) => [`${id}/${path}`, content]),
@@ -754,8 +755,8 @@ test("a failed download leaves the whole try uncounted while other runs and toni
   const first = await collect({
     github: createFakeRunsApi(state).github,
     nightReports: [nightReport],
-    download: (run) => {
-      const directory = download(run);
+    download: async (run) => {
+      const directory = await download(run);
       if (run.id === 2) throw new Error("HTTP 503 downloading the second shard");
       return directory;
     },
@@ -819,7 +820,7 @@ test("when every CI download fails the nightly results can still prune and updat
   const result = await collect({
     github: createFakeRunsApi(ONE_REPORT).github,
     nightReports: [nightReport],
-    download: () => {
+    download: async () => {
       throw new Error("HTTP 503");
     },
   });
@@ -858,14 +859,21 @@ test("the nightly command posts before failing skipped downloads, reports the ca
   writeFileSync(
     preload,
     `import childProcess from "node:child_process";
+import { EventEmitter } from "node:events";
 import { fstatSync, writeFileSync } from "node:fs";
 import { syncBuiltinESMExports } from "node:module";
+import { Readable } from "node:stream";
 
 let descriptor;
-childProcess.execFileSync = (command, args, options) => {
+childProcess.spawn = (command, args, options) => {
   if (command !== "gh") throw new Error("unexpected command");
   descriptor = options.stdio[1];
-  throw Object.assign(new Error("download command failed"), { stderr: Buffer.from("artifact download unavailable\\nmore detail") });
+  const child = Object.assign(new EventEmitter(), {
+    stderr: Readable.from([Buffer.from("artifact download unavailable\\nmore detail")]),
+    kill: () => true,
+  });
+  child.stderr.on("end", () => child.emit("close", 1, null));
+  return child;
 };
 syncBuiltinESMExports();
 process.on("exit", () => {
@@ -1166,64 +1174,72 @@ const DOWNLOAD_RUN = {
   artifacts: [{ id: 11, name: "browser-report-1", at: TONIGHT.toISOString() }],
 };
 
-/** @param {(command: string, args: readonly string[], options: any) => any} executeFile */
-const downloadWith = (executeFile) =>
-  downloadRun(DOWNLOAD_RUN, { executeFile: /** @type {typeof execFileSync} */ (executeFile) });
+/** @param {import("../worker/report-flaky-tests.mjs").RunCommand} executeFile */
+const downloadWith = (executeFile) => downloadRun(DOWNLOAD_RUN, { executeFile });
 
-test("a stalled artifact download is killed within the collection's remaining budget", () => {
+test("a stalled artifact download is killed within the collection's remaining budget", async () => {
   let timeout;
-  assert.throws(
-    () =>
-      downloadRun(DOWNLOAD_RUN, {
-        deadline: 100,
-        readTime: () => 0,
-        executeFile: /** @type {typeof execFileSync} */ (
-          (command, args, options) => {
-            assert.equal(command, "gh");
-            timeout = options.timeout;
-            assert.equal(options.killSignal, "SIGKILL");
-            return execFileSync(process.execPath, ["-e", "setTimeout(() => {}, 500)"], options);
-          }
-        ),
-      }),
-    /ETIMEDOUT|collection deadline reached/,
+  await assert.rejects(
+    downloadRun(DOWNLOAD_RUN, {
+      deadline: 100,
+      readTime: () => 0,
+      executeFile: (command, args, options) => {
+        assert.equal(command, "gh");
+        timeout = options.timeout;
+        return runCommand(process.execPath, ["-e", "setTimeout(() => {}, 5000)"], options);
+      },
+    }),
+    /ETIMEDOUT/,
   );
   assert.ok(timeout > 0 && timeout <= 100);
 });
 
-test("unzip has its own bound and a stalled unzip leaves the try unavailable", () => {
+test("a failed command's error carries its exit and what it wrote to stderr", async () => {
+  await assert.rejects(
+    runCommand(process.execPath, ["-e", "console.error('HTTP 503'); process.exit(1)"], {
+      stdio: ["ignore", "ignore", "pipe"],
+      timeout: 5000,
+    }),
+    (error) => {
+      const failure = /** @type {Error & { stderr: Buffer }} */ (error);
+      assert.match(failure.message, /exit 1/);
+      assert.equal(failure.stderr.toString().trim(), "HTTP 503");
+      return true;
+    },
+  );
+});
+
+test("unzip has its own bound and a stalled unzip leaves the try unavailable", async () => {
   const commands = [];
-  assert.throws(
-    () =>
-      downloadWith((command, args, options) => {
-        commands.push(command);
-        if (command === "gh") {
-          assert.equal(options.timeout, 30000);
-          return Buffer.from("");
-        }
-        assert.equal(command, "unzip");
-        assert.equal(options.timeout, 10000);
-        assert.equal(options.killSignal, "SIGKILL");
-        throw new Error("unzip stalled");
-      }),
+  await assert.rejects(
+    downloadWith(async (command, args, options) => {
+      commands.push(command);
+      if (command === "gh") {
+        assert.equal(options.timeout, 30000);
+        return;
+      }
+      assert.equal(command, "unzip");
+      assert.equal(options.timeout, 10000);
+      throw new Error("unzip stalled");
+    }),
     /unzip stalled/,
   );
   assert.deepEqual(commands, ["gh", "unzip"]);
 });
 
-test("a transient download retries once with a truncated file, then unzips", () => {
+test("a transient download retries once with a truncated file, then unzips", async () => {
   let tries = 0;
   const commands = [];
-  const directory = downloadWith((command, args, options) => {
+  const directory = await downloadWith(async (command, args, options) => {
     commands.push(command);
-    if (command === "unzip") return Buffer.from("");
+    if (command === "unzip") return;
     tries += 1;
+    const zip = /** @type {number[]} */ (options.stdio)[1];
     if (tries === 1) {
-      writeFileSync(Number(options.stdio[1]), "partial and longer");
+      writeFileSync(zip, "partial and longer");
       throw Object.assign(new Error("download failed"), { stderr: Buffer.from("HTTP 503") });
     }
-    writeFileSync(Number(options.stdio[1]), "whole");
-    return Buffer.from("");
+    writeFileSync(zip, "whole");
   });
   try {
     assert.equal(readFileSync(join(directory, "11.zip"), "utf8"), "whole");
@@ -1233,7 +1249,7 @@ test("a transient download retries once with a truncated file, then unzips", () 
   }
 });
 
-test("permanent download errors never retry, and transient failures retry at most once", () => {
+test("permanent download errors never retry, and transient failures retry at most once", async () => {
   for (const [message, expected] of /** @type {[string, number][]} */ ([
     ["HTTP 401 authentication failed", 1],
     ["HTTP 403 forbidden", 1],
@@ -1244,13 +1260,68 @@ test("permanent download errors never retry, and transient failures retry at mos
     ["ECONNRESET", 2],
   ])) {
     let calls = 0;
-    assert.throws(() =>
-      downloadWith(() => {
+    await assert.rejects(
+      downloadWith(async () => {
         calls += 1;
         throw new Error(message);
       }),
     );
     assert.equal(calls, expected, message);
+  }
+});
+
+test("a download leaves the connection fetch keeps alive able to see the server close it", () => {
+  const directory = mkdtempSync(join(tmpdir(), "idle-connection-"));
+  const bin = join(directory, "bin");
+  mkdirSync(bin);
+  writeFileSync(join(bin, "gh"), "#!/bin/sh\nsleep 1\n", { mode: 0o755 });
+  writeFileSync(join(bin, "unzip"), "#!/bin/sh\n", { mode: 0o755 });
+  const server = join(directory, "server.mjs");
+  writeFileSync(
+    server,
+    `import { createServer } from "node:net";
+const server = createServer((socket) => {
+  socket.on("error", () => {});
+  socket.setTimeout(200, () => socket.resetAndDestroy());
+  socket.on("data", () =>
+    socket.write("HTTP/1.1 200 OK\\r\\nContent-Length: 2\\r\\nConnection: keep-alive\\r\\n\\r\\nok"),
+  );
+});
+server.listen(0, "127.0.0.1", () => console.log(server.address().port));
+`,
+  );
+  const client = join(directory, "client.mjs");
+  writeFileSync(
+    client,
+    `import { spawn } from "node:child_process";
+import { rmSync } from "node:fs";
+import { setTimeout as wait } from "node:timers/promises";
+import { downloadRun } from ${JSON.stringify(new URL("../worker/report-flaky-tests.mjs", import.meta.url).href)};
+
+const server = spawn(process.execPath, [${JSON.stringify(server)}], { stdio: ["ignore", "pipe", "inherit"] });
+const port = await new Promise((resolve) => server.stdout.once("data", (data) => resolve(String(data).trim())));
+const url = "http://127.0.0.1:" + port + "/";
+try {
+  await (await fetch(url)).text();
+  await wait(50);
+  rmSync(await downloadRun(${JSON.stringify(DOWNLOAD_RUN)}), { recursive: true, force: true });
+  console.log("after the download:", await (await fetch(url)).text());
+} catch (error) {
+  console.log("after the download:", error.message, error.cause?.code);
+} finally {
+  server.kill();
+}
+`,
+  );
+  try {
+    const result = spawnSync(process.execPath, [client], {
+      encoding: "utf8",
+      env: { PATH: `${bin}:${process.env.PATH}` },
+    });
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stdout.trim(), "after the download: ok");
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
   }
 });
 
@@ -1277,8 +1348,8 @@ test("the collection deadline leaves later tries untouched and eligible while pa
     ledger: UNCOUNTED,
     deadline: 100,
     readTime: () => elapsed,
-    download: (run) => {
-      const directory = download(run);
+    download: async (run) => {
+      const directory = await download(run);
       elapsed = 100;
       return directory;
     },
@@ -1504,20 +1575,19 @@ test(
   },
 );
 
-test("an unzip failure removes the download's temporary folder", () => {
+test("an unzip failure removes the download's temporary folder", async () => {
   let directory;
-  assert.throws(
-    () =>
-      downloadWith((command, arguments_) => {
-        if (command === "gh") {
-          const match = arguments_[1].match(/\/(\d+)\/zip$/);
-          assert.equal(Number(match[1]), 11);
-          return Buffer.from("");
-        }
-        directory = dirname(arguments_[1]);
-        assert.equal(existsSync(directory), true);
-        throw new Error("unzip failed");
-      }),
+  await assert.rejects(
+    downloadWith(async (command, arguments_) => {
+      if (command === "gh") {
+        const match = arguments_[1].match(/\/(\d+)\/zip$/);
+        assert.equal(Number(match[1]), 11);
+        return;
+      }
+      directory = dirname(arguments_[1]);
+      assert.equal(existsSync(directory), true);
+      throw new Error("unzip failed");
+    }),
     /unzip failed/,
   );
   assert.ok(directory);
@@ -1529,8 +1599,8 @@ test("a successfully read try removes its temporary folder after counting", asyn
   let directory;
   const result = await collect({
     github: createFakeRunsApi(ONE_REPORT).github,
-    download: (run) => {
-      directory = download(run);
+    download: async (run) => {
+      directory = await download(run);
       assert.equal(existsSync(directory), true);
       return directory;
     },
@@ -1588,7 +1658,7 @@ test("a failed download exhausting the budget records the stop even on the last 
     ledger: UNCOUNTED,
     deadline: 100,
     readTime: () => elapsed,
-    download: () => {
+    download: async () => {
       elapsed = 100;
       throw new Error("download failed");
     },
@@ -1612,8 +1682,8 @@ test("a fully counted last try stays complete when it finishes at or after the d
       ledger: UNCOUNTED,
       deadline: 100,
       readTime: () => elapsed,
-      download: (run) => {
-        const directory = download(run);
+      download: async (run) => {
+        const directory = await download(run);
         elapsed = finishedAt;
         return directory;
       },
@@ -1638,7 +1708,7 @@ test("an empty final listing finishing at the deadline leaves collection complet
     ledger: UNCOUNTED,
     deadline: 100,
     readTime: () => elapsed,
-    download: () => {
+    download: async () => {
       throw new Error("An empty listing must download nothing");
     },
   });
