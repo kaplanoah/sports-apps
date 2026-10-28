@@ -34,7 +34,7 @@ import { findChannel } from "./channels.mjs";
 import { PHONE_OK_LABEL, findLabeling, readPushTime, readTimeline } from "./labeling.mjs";
 import { createGitHub } from "./github-api.mjs";
 import { readDeployedMain } from "./production-coverage.mjs";
-import { isAncestor, isGitObjectId } from "./git-object.mjs";
+import { isGitObjectId } from "./git-object.mjs";
 import {
   LAYER_PROPERTIES,
   createWatchCheck,
@@ -914,6 +914,16 @@ function changesNothingTested({ readGit, commit, parents, mainSha, cwd }) {
     readCleanMergeTree(readGit, branch, merged) === tree &&
     !findMissingRedCommits({ main: merged, head: branch, cwd }).length
   );
+}
+
+/** @param {ReturnType<typeof createGateGit>} readGit @param {string} commit @param {string} descendant */
+function isAncestor(readGit, commit, descendant) {
+  try {
+    readGit(["merge-base", "--is-ancestor", commit, descendant]);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /**
