@@ -23,17 +23,27 @@ export const readTopSpacing = (top) =>
   });
 
 /**
- * A settings panel's colors and where its top holds its title and its close or back button, to
- * check a page of settings against settings, whose band may hold more under its title.
+ * A settings panel's colors and where its top holds its title and its close or back button, down
+ * and across, to check a page of settings against settings, whose band may hold more under its
+ * title.
  * @param {import("@playwright/test").Locator} dialog a `.settings-panel`
  */
 export async function readSettingsTop(dialog) {
   const top = dialog.locator(".sheet-top");
-  const colors = await top.evaluate((element) => ({
-    panel: getComputedStyle(/** @type {Element} */ (element.closest("dialog"))).backgroundColor,
-    band: getComputedStyle(element).backgroundColor,
-    shadow: getComputedStyle(element).boxShadow,
-  }));
+  const looks = await top.evaluate((element) => {
+    const panel = /** @type {Element} */ (element.closest("dialog"));
+    const button = /** @type {Element} */ (
+      [...element.querySelectorAll(".sheet-close, .settings-back")].find(
+        (candidate) => getComputedStyle(candidate).display !== "none",
+      )
+    );
+    return {
+      panel: getComputedStyle(panel).backgroundColor,
+      band: getComputedStyle(element).backgroundColor,
+      shadow: getComputedStyle(element).boxShadow,
+      buttonLeft: button.getBoundingClientRect().left - panel.getBoundingClientRect().left,
+    };
+  });
   const { titleTop, buttonTop } = await readTopSpacing(top);
-  return { ...colors, titleTop, buttonTop };
+  return { ...looks, titleTop, buttonTop };
 }

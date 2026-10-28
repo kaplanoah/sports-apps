@@ -59,13 +59,29 @@ test("optional email, required message, bounds and safe screenshot formats", () 
   assert.equal(validateContactScreenshot({ type: "image/png", size: 50 }), null);
 });
 
-test("a report too long to send keeps its newest lines whole and loses its oldest", () => {
-  const line = `${"x".repeat(99)}\n`;
-  const report = line.repeat(CONTACT_LIMITS.diagnostics / line.length + 5);
+test("a report too long to send keeps its header and each log's title and newest lines, losing the largest log's oldest", () => {
+  const writeLog = (title, count) =>
+    [title, ...Array.from({ length: count }, (_, age) => `${title} ${age} ${"x".repeat(90)}`)].join(
+      "\n",
+    );
+  const header = "Release 1.2.3\nDevice: iPhone";
+  const largeCount = CONTACT_LIMITS.diagnostics / 100 + 50;
+  const report = [
+    header,
+    writeLog("Record", 3),
+    writeLog("Sheets", largeCount),
+    writeLog("Day strip", 40),
+    writeLog("Phone look", 5),
+  ].join("\n\n");
   const fitted = fitContactDiagnostics(report);
   assert.ok(fitted.length <= CONTACT_LIMITS.diagnostics);
-  assert.ok(report.startsWith(fitted));
-  assert.ok(report[fitted.length] === "\n");
+  const blocks = fitted.split("\n\n");
+  assert.equal(blocks[0], header);
+  assert.equal(blocks[1], writeLog("Record", 3));
+  assert.ok(blocks[2].startsWith(writeLog("Sheets", 500)));
+  assert.ok(!fitted.includes(`Sheets ${largeCount - 1} `));
+  assert.equal(blocks[3], writeLog("Day strip", 40));
+  assert.equal(blocks[4], writeLog("Phone look", 5));
   assert.equal(fitContactDiagnostics("short\nreport"), "short\nreport");
 });
 

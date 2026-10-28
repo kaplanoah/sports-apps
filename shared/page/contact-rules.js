@@ -41,13 +41,33 @@ export function validateContactFields({ message, email }) {
   return null;
 }
 
-// A report's logs list their newest lines first, so a report too long to send loses its last
-// lines, the oldest.
+/** @param {number[]} sizes */
+const findLargest = (sizes) => sizes.indexOf(Math.max(...sizes));
+
+// A report is its header, then blocks apart by a blank line, each a record or a log listing its
+// newest lines first. One too long to send loses the oldest lines of whichever block is largest,
+// so each log keeps its newest lines, and a block left with only its title goes.
 /** @param {string} report */
 export function fitContactDiagnostics(report) {
   if (report.length <= CONTACT_LIMITS.diagnostics) return report;
-  const lastBreak = report.lastIndexOf("\n", CONTACT_LIMITS.diagnostics);
-  return report.slice(0, lastBreak > 0 ? lastBreak : CONTACT_LIMITS.diagnostics);
+  const [header, ...blocks] = report.split("\n\n");
+  const blockLines = blocks.map((block) => block.split("\n"));
+  const sizes = blocks.map((block) => block.length);
+  let excess = report.length - CONTACT_LIMITS.diagnostics;
+  while (excess > 0 && blockLines.length) {
+    const largest = findLargest(sizes);
+    const lines = blockLines[largest];
+    if (lines.length > 2) {
+      const cut = /** @type {string} */ (lines.pop()).length + 1;
+      sizes[largest] -= cut;
+      excess -= cut;
+    } else {
+      excess -= sizes[largest] + 2;
+      blockLines.splice(largest, 1);
+      sizes.splice(largest, 1);
+    }
+  }
+  return [header, ...blockLines.map((lines) => lines.join("\n"))].join("\n\n");
 }
 
 /** @param {{ type: string, size: number }} file */
