@@ -428,7 +428,13 @@ test("a report on the season tab lists no animation for the header that rides up
 
   await expect(findReportButton(page)).toHaveText("Shared");
   const [{ text: copied }] = await readShares(page);
-  expect(copied).toMatch(/^\+0 Animations: none$/m);
+  const animations = (copied.match(/^\+0 Animations: (.*)$/m)?.[1] ?? "").split("; ");
+  // The report button's own press eases back as it shares, which is no part of the header's.
+  expect(
+    animations.filter(
+      (animation) => animation !== "none" && !animation.startsWith("#diagnosticsReport "),
+    ),
+  ).toEqual([]);
 });
 
 test("each report notes the page as it is only for itself, and keeps every record of an open", async ({

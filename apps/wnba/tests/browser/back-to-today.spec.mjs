@@ -105,7 +105,10 @@ test.describe("with reduced motion", () => {
     await expectDayAtTop(page, "2026-09-30");
     const top = await findList(page).evaluate((list) => list.scrollTop);
 
-    await page.locator("#seasonGames .go-today").click();
+    const today = page.locator("#seasonGames .go-today");
+    await today.click();
+    // Today's own press eases back after the tap, which is no move of the list's.
+    await expect(today).toHaveCSS("opacity", "1");
 
     expect(await findList(page).evaluate((list) => list.scrollTop)).toBe(top);
     expect(await describeTimedAnimations(page)).toEqual([]);
