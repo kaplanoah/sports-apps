@@ -1,12 +1,12 @@
 // Picks the theme before the first paint, so a dark look never flashes the light one. It loads as
 // a plain script in each page's head, before the other plain scripts, which read the picked look
-// and the Home Screen as it does; appearance.js keeps the theme, and the icons and bar color that
-// go with it, current. The browser's address names the theme picked, which a Home Screen app keeps
-// on its first open, and Safari loads the page again after a pick, since it takes the app's
-// address and its bars' color from the page as it loaded. It keeps the look of each install's
-// icon, and an iPhone's app hands Safari a link to add the site again on the theme picked. It first
-// takes the choices a move to the app's own address carries (page-move.js, which loads before it),
-// and leaves the old address for that one.
+// and the Home Screen as it does, and colors the browser's bars to match; appearance.js keeps the
+// theme, and the icons and bar color that go with it, current. The browser's address names the
+// theme picked, which a Home Screen app keeps on its first open, and Safari loads the page again
+// after a pick, since it takes the app's address and its bars' color from the page as it loaded.
+// It keeps the look of each install's icon, and an iPhone's app hands Safari a link to add the
+// site again on the theme picked. It first takes the choices a move to the app's own address
+// carries (page-move.js, which loads before it), and leaves the old address for that one.
 
 /* global leaveOldAddress, takeCarriedChoices -- from page-move.js */
 
@@ -201,9 +201,17 @@ function keepThemeFromAddress() {
   }
 }
 
+// A browser tints its bars with the page's theme color, which is the floor of the theme shown, as
+// the app's stylesheet, linked before this script, sets it.
+function showBarColor() {
+  const floor = getComputedStyle(document.documentElement).getPropertyValue("--bg").trim();
+  if (floor) document.getElementById("themeColor")?.setAttribute("content", floor);
+}
+
 /** @param {string} choice */
 function showTheme(choice) {
   document.documentElement.dataset.theme = resolveTheme(choice);
+  showBarColor();
 }
 
 /** @param {string} choice @param {boolean} [reload] */
@@ -228,6 +236,7 @@ try {
   showTheme(readPickedAppearance());
 } catch {
   document.documentElement.dataset.theme = "light";
+  showBarColor();
 }
 
 leaveOldAddress();

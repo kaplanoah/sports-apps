@@ -393,11 +393,14 @@ export async function serveLockedApp(page, { accessCode, pageHost }) {
   return serveLockedPage(page, { worker, testStore, accessCode, now: NOW, pageHost });
 }
 
+/** What the app calls its light and dark themes. */
+export const THEME_NAMES = { light: "Maple", dark: "Walnut" };
+
 /** The app as the root's page-move.mjs checks move it from its old address to its own. */
 export const MOVING_APP = {
   serve: serveLockedApp,
   appName: "WNBA",
-  looks: { light: "Maple", dark: "Walnut" },
+  looks: THEME_NAMES,
   pageHost: "wnba.sports.example",
   oldHost: "wnba-app.example-subdomain.workers.dev",
 };

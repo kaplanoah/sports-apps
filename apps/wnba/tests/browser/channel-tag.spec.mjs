@@ -1,7 +1,7 @@
 import { test, expect, matchPath, openApp, NOW } from "./harness.mjs";
 import { listLowContrastText } from "../../../../tests/browser/contrast.mjs";
 import { holdRequests } from "../../../../tests/browser/hold-requests.mjs";
-import { showTheme } from "../../../../tests/browser/theme-layout.mjs";
+import { THEMES, showTheme } from "../../../../tests/browser/theme-layout.mjs";
 import { serveReleases } from "../../../../tests/browser/serve-releases.mjs";
 import { readTagOffset } from "../../../../tests/browser/title-row.mjs";
 import { listTextOffRoles } from "../../../../tests/browser/type-roles.mjs";
@@ -102,7 +102,7 @@ test("the tag reads at its type role and clears contrast in both themes", async 
   await openApp(page);
   await expect(page.locator("#channelTag")).toBeVisible();
 
-  for (const theme of /** @type {const} */ (["light", "dark"])) {
+  for (const theme of THEMES) {
     await showTheme(page, theme);
     expect(await listTextOffRoles(page), theme).toEqual([]);
     expect(await listChipsOffCenter(page), theme).toEqual([]);
