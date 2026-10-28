@@ -7,6 +7,7 @@ import { readTagOffset } from "../../../../tests/browser/title-row.mjs";
 import { listTextOffRoles } from "../../../../tests/browser/type-roles.mjs";
 import { listChipsOffCenter } from "../../../../tests/browser/chip-centering.mjs";
 import { passTime, setHidden } from "../../../../tests/browser/visibility.mjs";
+import { checkChannelTagDots } from "../../../../tests/browser/channel-tag-dots.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
@@ -18,6 +19,21 @@ const BETA = {
   builtAt: new Date(Date.parse(EVENING_FIXTURE.now) - FOUR_MINUTES_MS).toISOString(),
   label: "beta",
 };
+
+test("badge dots keep their size, baseline, ink and spacing in every theme and width", async ({
+  page,
+}) => {
+  await serveReleases(page, BETA);
+  await openApp(page);
+  await expect(page.locator("#channelTag")).toBeVisible();
+  for (const width of [390, 1280]) {
+    await page.setViewportSize({ width, height: 844 });
+    for (const theme of /** @type {const} */ (["light", "dark"])) {
+      await showTheme(page, theme);
+      await checkChannelTagDots(page, "mlb");
+    }
+  }
+});
 
 test("beta names its channel, its commit, and how long ago it went live beside the name, counting each minute", async ({
   page,

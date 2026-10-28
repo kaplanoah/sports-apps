@@ -195,6 +195,8 @@
   --radius-sheet: 12px;
   /* Puts the channel tag's middle half a pixel above the middle of the name's capitals. */
   --channel-tag-lift: -0.85px;
+  --channel-tag-dot: "";
+  --channel-tag-glyph: hidden;
   --re-add-note-above: 8px;
   --control-height: 36px;
   --control-room: 14px;
