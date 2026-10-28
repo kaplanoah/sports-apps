@@ -33,7 +33,7 @@ function renderTeamLine(side, series) {
   const isOut = !!series.winner && series.winner !== side.team;
   const isWinner = series.winner === side.team;
   const state = isOut ? " out" : isWinner ? " won" : "";
-  return html`<div class="team-line${state}" data-team="${side.team}">
+  return html`<div class="team-line press-tint${state}" data-team="${side.team}">
     ${renderSeedLabel(side, series)}${renderClub(side.team)}<span class="wins tabular"><span>${side.wins}</span></span>
   </div>`;
 }

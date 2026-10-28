@@ -8,6 +8,7 @@ import {
 } from "../../../../shared/worker/notifications.js";
 import { nameScheduleKey } from "../../page/js/snapshot.js";
 import { nameMeetingsKey } from "./preview.js";
+import { describeFailures } from "./snapshot.js";
 
 // Keeps the current season's saved data up to date from the league, whether or not a page is
 // open, and says which finished games and series are news. `docs` reads and writes the store's
@@ -164,19 +165,20 @@ async function saveSchedule(docs, snapshot) {
 
 // The league's schedule holds one season at a time, so once it lists the next season's games, the
 // season before has no games in it and keeps the ones it saved.
-/** @param {{ missing: string[], standIn?: string | null, openingDay: string | null }} snapshot */
+/** @param {{ missing: string[], standIn?: string | null, isScoreboardIdle?: boolean, openingDay: string | null }} snapshot */
 function readGameFeeds(snapshot) {
   const missing = new Set(snapshot.missing);
   const isStandIn = missing.has("scoreboard") && !!snapshot.standIn;
+  const hasScores = !missing.has("scoreboard") || isStandIn || !!snapshot.isScoreboardIdle;
   const hasSchedule = !missing.has("schedule") && !!snapshot.openingDay;
-  const hasGames = (!missing.has("scoreboard") || isStandIn) && hasSchedule;
-  return { missing, isStandIn, hasGames };
+  return { missing, isStandIn, hasGames: hasScores && hasSchedule };
 }
 
 // The games need both of their feeds: the schedule alone can be behind on today's, and the
-// scoreboard alone has only today's, unless ESPN stood in for the scoreboard. Series counted from
-// games ESPN may lack wait for the bracket. The record's leading scorers are the player job's,
-// saved with every player's averages (player-updater.js), so an update leaves them as they are.
+// scoreboard alone has only today's, unless ESPN stood in for the scoreboard, or the scoreboard
+// has no game to score (`isScoreboardGame` in page/js/snapshot.js). Series counted from games ESPN
+// may lack wait for the bracket. The record's leading scorers are the player job's, saved with
+// every player's averages (player-updater.js), so an update leaves them as they are.
 const saveSeason = (docs, snapshot) =>
   docs.update(nameSeasonKey(snapshot.season), (saved) => describeSavedSeason(saved, snapshot));
 
@@ -213,16 +215,22 @@ export const readUpdates = (docs, year) => docs.read(nameSeasonKey(year));
 
 export const readSchedule = (docs, year) => docs.read(nameScheduleKey(year));
 
+// A feed with nothing to send is idle, like the scoreboard on a day without games, which the league
+// may not send at all, so the page doesn't warn of it. Nor does it warn of the scoreboard while ESPN
+// covers it, before ESPN's scores stand in for a game it has started.
 export function describeSnapshotStatus(snapshot) {
   const missing = snapshot.missing || [];
+  const isIdle = (feed) => feed === "scoreboard" && !!snapshot.isScoreboardIdle;
   return {
     error: missing.length ? "wnba_feeds_missing" : "",
     detail: missing.join(", "),
-    standIn: snapshot.standIn || "",
+    idle: missing.filter(isIdle).join(", "),
+    standIn: snapshot.standIn || snapshot.scoreboardCover || "",
+    reasons: describeFailures(snapshot.failures ?? {}),
   };
 }
 
-export const STATUS_FIELDS = { standIn: "" };
+export const STATUS_FIELDS = { idle: "", standIn: "", reasons: "" };
 
 // A playoff final reads as the Updates box says it, and any other final as its result.
 function describeFinal(game, games) {

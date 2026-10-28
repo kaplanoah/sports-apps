@@ -71,7 +71,7 @@ const renderCard = (card, now) =>
     <div class="sheet-part-head"><h3>${TITLES[card.state]}</h3></div>
     <button
       type="button"
-      class="game-card-button"
+      class="game-card-button press-tint"
       data-game="${card.id}"
       aria-label="Game details: ${card.label}"
     >

@@ -3,7 +3,11 @@ import { basename } from "node:path";
 import { fileURLToPath } from "node:url";
 import { listAppsWithBrowserTests } from "../../worker/apps.mjs";
 
-export const WEBKIT_TEST_MATCH = "at-rest.spec.mjs";
+export const WEBKIT_TEST_MATCH = [
+  "at-rest.spec.mjs",
+  "notification-layout.spec.mjs",
+  "notification-permission.spec.mjs",
+];
 
 /** @param {string} app */
 export const nameWebKitProject = (app) => `${app}-webkit`;
@@ -26,7 +30,7 @@ export function listRequiredBrowsers({ project = "", tests = "" } = {}) {
       isBrowserSpec(path) &&
       !/[*+?^${}()|[\]\\]/.test(path) &&
       existsSync(new URL(`../../${path}`, import.meta.url)) &&
-      basename(path) !== WEBKIT_TEST_MATCH,
+      !WEBKIT_TEST_MATCH.includes(basename(path)),
   );
   return onlyChromium ? ["chromium"] : ["chromium", "webkit"];
 }

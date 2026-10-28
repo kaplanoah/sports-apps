@@ -1,4 +1,9 @@
 import {
+  PUSH_STUB,
+  stubPushManager,
+  stubPushRegistration,
+} from "../../../../tests/browser/push-stub.mjs";
+import {
   test,
   expect,
   openApp,
@@ -9,13 +14,17 @@ import {
   ON_A_PHONE,
   MOVING_APP,
 } from "./harness.mjs";
-import { VIEW_GROUPS, checkEachView, openWithEverything } from "./views.mjs";
+import { VIEW_GROUPS, openWithEverything } from "./views.mjs";
+import { checkEachView } from "../../../../tests/browser/view-walk.mjs";
 import { openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
 import { listRoleLooks } from "../../../../tests/browser/type-roles.mjs";
 import { IPHONE } from "../../../../tests/browser/devices.mjs";
 import { openOldHomeScreenApp } from "../../../../tests/browser/page-move.mjs";
 
-test.use({ contextOptions: { reducedMotion: "reduce" }, viewport: { width: 390, height: 844 } });
+test.use({
+  contextOptions: { reducedMotion: "reduce" },
+  viewport: { width: 390, height: 844 },
+});
 
 // The one font and case each type role draws in.
 const ROLE_LOOKS = {
@@ -32,6 +41,7 @@ const ROLE_LOOKS = {
   label: "Libre Franklin, capitals",
   caption: "Libre Franklin",
   setting: "Libre Franklin",
+  subsetting: "Libre Franklin",
   "setting-note": "Libre Franklin",
   "notice-title": "Libre Franklin",
   "notice-text": "Libre Franklin",
@@ -73,6 +83,16 @@ const SEASON_WITH_A_CLUB_OUT = {
  * }[]}
  */
 const OTHER_PLACES = [
+  {
+    name: "settings with notifications",
+    open: async (page) => {
+      await page.addInitScript(stubPushManager, PUSH_STUB);
+      await page.addInitScript(stubPushRegistration);
+      await openApp(page);
+      await page.getByRole("button", { name: "Settings", exact: true }).click();
+    },
+    shown: (page) => page.locator("#reminderTiming"),
+  },
   {
     name: "the gate",
     open: (page) => openLockedApp(page, { accessCode: "FASTBREAK" }),

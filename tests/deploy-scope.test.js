@@ -15,21 +15,27 @@ function listImported(script) {
   return found;
 }
 
-// Every push to beta runs the claim's check whether or not a Worker deploys, and the production
-// deploy never does, so a change to it needs no deploy to show it works.
+// Every push to beta runs the claim's check, and every production deploy its report, whether or
+// not a Worker deploys, and no Worker runs either, so a change to one needs no deploy to show it
+// works.
 const BETA_CLAIM_CHECK = "worker/beta-claim.mjs";
+const DEPLOY_REPORT = "worker/report-deploy.mjs";
 
-test("every script the deploy runs, and every module those import, deploys when it changes, but the beta claim's check", () => {
+test("every script the deploy runs, and every module those import, deploys when it changes, but the beta claim's check and the deploy's report", () => {
   const workflow = readRepoFile(".github/workflows/deploy.yml");
   const scripts = [...workflow.matchAll(/node (worker\/[\w-]+\.mjs)/g)]
     .map(([, path]) => path)
-    .filter((path) => path !== BETA_CLAIM_CHECK);
+    .filter((path) => path !== BETA_CLAIM_CHECK && path !== DEPLOY_REPORT);
   assert.ok(scripts.includes("worker/deploy.mjs"));
   assert.match(
     workflow,
     /if: env\.CHANNEL == 'beta'\n.*\n.*\n\s+run: node worker\/beta-claim\.mjs/,
   );
-  assert.equal(decideDeploy([BETA_CLAIM_CHECK, "worker/labeling.mjs"]).isNeeded, false);
+  assert.equal(
+    decideDeploy([BETA_CLAIM_CHECK, "worker/labeling.mjs", DEPLOY_REPORT, "worker/issues.mjs"])
+      .isNeeded,
+    false,
+  );
   const run = [".github/workflows/deploy.yml", ...new Set(scripts.flatMap(listImported))];
   assert.deepEqual(
     run.filter((path) => !findDeployedChanges([path]).length),
@@ -42,7 +48,10 @@ test("a merge of only docs, tests, and tooling skips the deploy", () => {
     ".claude/hooks/context-limit.mjs",
     ".claude/rules/page-look.md",
     ".claude/settings.json",
-    ".claude/skills/add-league/SKILL.md",
+    ".githooks/pre-push",
+    ".githooks/check-push.mjs",
+    ".agents/skills/add-league/SKILL.md",
+    ".agents/skills/ship/SKILL.md",
     ".github/workflows/beta.yml",
     ".github/workflows/ci.yml",
     ".github/workflows/flaky.yml",
@@ -64,8 +73,10 @@ test("a merge of only docs, tests, and tooling skips the deploy", () => {
     "tests/deploy.test.js",
     "tests/time-zone-sensitive.json",
     "worker/browser-scope.mjs",
+    "worker/browser-test-calls.mjs",
     "worker/burn-in-specs.mjs",
     "worker/find-trusted-review.mjs",
+    "worker/issues.mjs",
     "worker/mutation-targets.mjs",
     "worker/review-trial.mjs",
     "worker/review-trial-authority.mjs",
@@ -78,6 +89,7 @@ test("a merge of only docs, tests, and tooling skips the deploy", () => {
     "worker/pull-merge.mjs",
     "worker/red-change-styles.mjs",
     "worker/red-change.mjs",
+    "worker/report-deploy.mjs",
     "worker/report-flaky-tests.mjs",
     "worker/review-artifact.mjs",
     "worker/review-context.mjs",
@@ -111,7 +123,6 @@ test("anything in the root's .claude/ folder skips the deploy, a hook no list na
     ".claude/hooks/one-command.mjs",
     ".claude/hooks/install-packages.mjs",
     ".claude/hooks/a-hook-yet-to-come.mjs",
-    ".claude/skills/ship/SKILL.md",
   ]) {
     assert.equal(decideDeploy([path]).isNeeded, false, path);
   }
@@ -184,4 +195,13 @@ test("changes are listed since the live version, with a moved file on both sides
   };
   assert.deepEqual(listChangedFiles("abc1234", git), ["page/js/old.js", "tests/old.test.js"]);
   assert.deepEqual(calls[0], ["diff", "--name-only", "--no-renames", "abc1234", "HEAD"]);
+});
+
+test("executable agent files and unlisted Git hooks still deploy", () => {
+  for (const path of [
+    ".agents/skills/scripts/check.mjs",
+    ".agents/shared.js",
+    ".githooks/future.mjs",
+  ])
+    assert.equal(decideDeploy([path]).isNeeded, true, path);
 });

@@ -16,6 +16,7 @@ import {
   listLowContrastTextAsShown,
 } from "../../../../tests/browser/contrast.mjs";
 import { leavePagePixelDown } from "../../../../tests/browser/page-left-down.mjs";
+import { pressOn } from "../../../../tests/browser/press-looks.mjs";
 import { PHONE, WIDE_SCREEN } from "./screen-sizes.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
@@ -437,8 +438,10 @@ for (const [theme, colorScheme] of /** @type {const} */ ([
     await open.hover();
     expect(await listLowContrastText(page)).toEqual([]);
 
-    await open.evaluate((button) => button.classList.add("is-pressed"));
+    await pressOn(page, open);
+    await expect(open).toHaveClass(/is-row-press/);
     expect(await listLowContrastTextAsShown(page)).toEqual([]);
+    await page.mouse.up();
   });
 }
 

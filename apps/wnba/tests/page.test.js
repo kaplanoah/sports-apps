@@ -426,7 +426,7 @@ test("the bracket pairs each semifinal with the first-round series that feed it"
       text,
       / 6 seed Fever 1 Next game tomorrow at 9:00 PM Liberty 0 TBD Next game TBD TBD TBD Next game TBD TBD TBD Next game TBD$/,
     );
-    assert.match(markup, /class="team-line out"[\s\S]*?Lynx/);
+    assert.match(markup, /class="team-line press-tint out"[\s\S]*?Lynx/);
   }));
 
 test("every series still to finish has a note under its card, which leaves out the game's number", () =>
@@ -823,7 +823,7 @@ test("each card opens its game, and shows the other team's dot, never the team's
     const cards = body.text.slice(0, body.text.indexOf("<section"));
     const buttons = [
       ...cards.matchAll(
-        /<button\s+type="button"\s+class="game-card-button"\s+data-game="(\d+)"\s+aria-label="([^"]+)"/g,
+        /<button\s+type="button"\s+class="game-card-button press-tint"\s+data-game="(\d+)"\s+aria-label="([^"]+)"/g,
       ),
     ];
     assert.deepEqual(
@@ -1208,7 +1208,7 @@ test("each standings row and each team in the bracket opens its team's sheet", (
     bracket,
     /<div class="team-line[^"]*" data-team="LVA">[\s\S]*?aria-label="Team details: Las Vegas Aces"/,
   );
-  assert.doesNotMatch(bracket, /class="team-line tbd" data-team/);
+  assert.doesNotMatch(bracket, /class="team-line[^"]*\btbd\b[^"]*" data-team/);
 });
 
 /**
@@ -1504,10 +1504,23 @@ test("the header names a problem with the page's server or the league's feeds", 
     describeStampProblem({ status, problem: "" }),
     "The WNBA stopped sending the bracket and the standings",
   );
+});
+
+test("the header says nothing of the scoreboard while ESPN's scores stand in for it", () => {
   const standingIn = { error: "wnba_feeds_missing", detail: "scoreboard", standIn: "espn" };
+  assert.equal(describeStampProblem({ status: standingIn, problem: "" }), "");
   assert.equal(
-    describeStampProblem({ status: standingIn, problem: "" }),
-    "The WNBA stopped sending today's scores. Scores are from ESPN for now.",
+    describeStampProblem({ status: { ...standingIn, detail: "bracket, scoreboard" }, problem: "" }),
+    "The WNBA stopped sending the bracket",
+  );
+});
+
+test("the header leaves out a feed the store's status says has nothing to send", () => {
+  const idle = { error: "wnba_feeds_missing", detail: "scoreboard", idle: "scoreboard" };
+  assert.equal(describeStampProblem({ status: idle, problem: "" }), "");
+  assert.equal(
+    describeStampProblem({ status: { ...idle, detail: "scoreboard, standings" }, problem: "" }),
+    "The WNBA stopped sending the standings",
   );
 });
 

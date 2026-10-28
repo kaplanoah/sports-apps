@@ -21,6 +21,7 @@ import {
   readCalendarDate,
   readDayOfMonth,
   readEasternDay,
+  readDeviceTimeZone,
   readMinutesIntoDay,
   readPlayingDay,
   readWeekday,
@@ -309,3 +310,8 @@ test("a moment's date and time name its year only when it isn't now's, by the vi
       "Dec 31, 2026, 9:00 PM",
     );
   }));
+
+test("the saved device zone uses the browser's resolved IANA zone", () => {
+  for (const zone of [EASTERN, "Pacific/Honolulu", "Asia/Tokyo"])
+    checkInTimeZone(zone, () => assert.equal(readDeviceTimeZone(), zone));
+});

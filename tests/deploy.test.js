@@ -184,6 +184,35 @@ test("the beta channel's Worker is named by its environment, with the top level'
   assert.throws(() => readWorkerConfig(toml, "staging"), /no channel named staging/);
 });
 
+// Cloudflare refuses an upload with a binding to a product the account hasn't turned on, so each
+// deploy fails until its owner turns it on in the dashboard.
+const PRODUCTS_TURNED_ON = new Set([
+  "analytics_engine",
+  "durable_object_namespace",
+  "ratelimit",
+  "service",
+  "version_metadata",
+]);
+
+test("every Worker binds only Cloudflare products the account has turned on", async () => {
+  const { listBindings } = await loadDeployModule();
+  const workers = [
+    ...listApps().map((app) => ({ isPageless: false, storeClass: "SeasonStore", worker: app })),
+    ...listServices().map((service) => ({
+      isPageless: true,
+      storeClass: "Store",
+      worker: service,
+    })),
+  ];
+  for (const { worker, ...options } of workers)
+    for (const channel of ["production", "beta"])
+      for (const { type } of listBindings({ ...options, channel }))
+        assert.ok(
+          PRODUCTS_TURNED_ON.has(type),
+          `${worker} on ${channel} binds ${type}. Ask the owner to turn it on in the Cloudflare dashboard before this merges, then add it to PRODUCTS_TURNED_ON.`,
+        );
+});
+
 test("a beta deploy uploads to the beta Worker, with the same bindings", async () => {
   const { deploy } = await loadDeployModule();
   const cloudflare = createFakeCloudflare({ isNew: true });
@@ -256,6 +285,7 @@ test("upload, route, and the Worker URL", async () => {
         namespace_id: "2701",
         simple: { limit: 10, period: 60 },
       },
+      { type: "analytics_engine", name: "DAILY_OPENS", dataset: "daily_opens" },
       { type: "service", name: "ACCOUNTS", service: "accounts" },
       { type: "service", name: "EMAIL", service: "email" },
     ],
@@ -383,6 +413,11 @@ test("each app's wrangler.toml declares the same bindings and migrations", async
       toml,
       /\[\[env\.beta\.ratelimits\]\]\nname = "ACCESS_LIMIT"\nnamespace_id = "2701"\n\n\[env\.beta\.ratelimits\.simple\]\nlimit = 10\nperiod = 60/,
     );
+    assert.match(
+      toml,
+      /\[\[analytics_engine_datasets\]\]\nbinding = "DAILY_OPENS"\ndataset = "daily_opens"/,
+    );
+    assert.doesNotMatch(toml, /env\.beta\.analytics_engine_datasets/);
     for (const { tag, new_sqlite_classes: classes } of listMigrations("SeasonStore")) {
       const declared = `[[migrations]]\ntag = "${tag}"\nnew_sqlite_classes = ${JSON.stringify(classes)}`;
       assert.ok(toml.includes(declared), declared);
@@ -1277,7 +1312,7 @@ test("a checkout at a commit beta never held isn't a beta release, and sends a s
       (/** @type {Error} */ error) => {
         assert.match(
           error.message,
-          /claude\/some-branch at bbbbbbb\) isn't beta as GitHub has it \(aaaaaaa\)\. Put it on beta by the ship skill's "The beta channel" \(\.claude\/skills\/ship\/SKILL\.md\), which claims beta first, or check out origin\/beta/,
+          /claude\/some-branch at bbbbbbb\) isn't beta as GitHub has it \(aaaaaaa\)\. Put it on beta by the beta skill's "The beta channel" \(\.agents\/skills\/beta\/SKILL\.md\), which claims beta first, or check out origin\/beta/,
         );
         assert.doesNotMatch(error.message, /git push/);
         return true;

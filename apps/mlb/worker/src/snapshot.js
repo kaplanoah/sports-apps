@@ -33,7 +33,7 @@ export function createSnapshotLoader({
   now = () => Date.now(),
   storage = undefined,
 } = {}) {
-  const slowFeeds = createFeedKeeper({ feeds: SLOW_FEEDS, leagueName: "MLB", now, storage });
+  const slowFeeds = createFeedKeeper({ feeds: SLOW_FEEDS, now, storage });
 
   /** @param {string} path */
   const fetchFeed = (path) => fetchMlbJson(fetchImpl, path, EDGE_CACHE_SECONDS);
@@ -74,9 +74,19 @@ export function createSnapshotLoader({
     return snapshot;
   }
 
-  /** @param {number} season */
-  const loadSnapshot = (season) =>
-    season < guessSeasonYear(now()) ? loadPastSnapshot(season) : loadCurrentSnapshot(season);
+  /** @param {number} season @param {{ verify?: boolean }} [options] */
+  const loadSnapshot = (season, { verify = false } = {}) => {
+    if (verify)
+      return MLBSnapshot.fetchSnapshot(
+        (path, name) =>
+          name === "postseason"
+            ? slowFeeds.readFeed(name, path, () => fetchFeed(path), { requireFresh: true })
+            : fetchSnapshotJson(path, name),
+        season,
+        now(),
+      );
+    return season < guessSeasonYear(now()) ? loadPastSnapshot(season) : loadCurrentSnapshot(season);
+  };
 
   return { loadSnapshot };
 }

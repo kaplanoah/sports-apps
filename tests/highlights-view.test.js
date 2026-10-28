@@ -77,7 +77,7 @@ test("each clip is a button that names it and carries its video", () => {
 
   assert.match(
     markup,
-    /<button\s+type="button"\s+class="clip-open clip-row"\s+data-video="https:\/\/video\.test\/26\.mp4"\s+aria-label="Play Manny Machado&#39;s RBI single, 0:30"/,
+    /<button\s+type="button"\s+class="clip-open press-tint press-reach clip-row"\s+data-video="https:\/\/video\.test\/26\.mp4"\s+aria-label="Play Manny Machado&#39;s RBI single, 0:30"/,
   );
   assert.equal(markup.match(/class="clip-open/g)?.length, 3);
 });

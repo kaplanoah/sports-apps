@@ -12,13 +12,14 @@ import {
 } from "#shared/stamp.js";
 import { isGameToday, readGameDay } from "./days.js";
 import { describeLiveMoment, listSeasonGames } from "./games-view.js";
-import { isToBePlayed, mapSeriesById } from "./nearest-games.js";
+import { isPlayable, isToBePlayed, mapSeriesById } from "./nearest-games.js";
 import { nameTeam, orderBySeriesWins } from "./series.js";
 
 // The header's lines on the latest score and the next tip-off, or on why the page isn't current.
 
 /** @typedef {import("./games-view.js").Game} Game */
 /** @typedef {import("./series.js").Series} Series */
+/** @typedef {import("#shared/diagnostics.js").UpdateStatus} UpdateStatus */
 
 const FEED_NAMES = {
   scoreboard: "today's scores",
@@ -111,8 +112,7 @@ const listGamesInState = (games, state) =>
 function listDayGames(games, game, seriesById) {
   const day = readGameDay(game)?.getTime();
   return games.filter(
-    (each) =>
-      hasBothTeams(each) && isToBePlayed(each, seriesById) && readGameDay(each)?.getTime() === day,
+    (each) => isPlayable(each, seriesById) && readGameDay(each)?.getTime() === day,
   );
 }
 
@@ -189,21 +189,36 @@ export function renderStampLines(season, now) {
 }
 
 /**
- * @param {{ error?: string, detail?: string, standIn?: string } | null} status
+ * The feeds that didn't answer, but those with nothing to send, like the scoreboard on a day
+ * without games, and the scoreboard while ESPN covers it, answering for any of the league's
+ * games, started or not, since fans still see scores then.
+ * @param {UpdateStatus} status
+ */
+function listMissedFeeds(status) {
+  const covered = String(status.idle ?? "").split(", ");
+  if (status.standIn) covered.push("scoreboard");
+  return String(status.detail ?? "")
+    .split(", ")
+    .filter((feed) => !covered.includes(feed));
+}
+
+/**
+ * @param {UpdateStatus | null} status
  * @returns {string}
  */
 function describeFeedProblem(status) {
   if (!status?.error) return "";
   if (status.error !== "wnba_feeds_missing") return "The WNBA isn't answering right now";
-  const feeds = String(status.detail ?? "")
-    .split(", ")
-    .map((feed) => FEED_NAMES[feed] ?? feed);
-  const stopped = `The WNBA stopped sending ${joinNames(feeds, "and")}`;
-  return status.standIn === "espn" ? `${stopped}. Scores are from ESPN for now.` : stopped;
+  const feeds = listMissedFeeds(status);
+  if (!feeds.length) return "";
+  return `The WNBA stopped sending ${joinNames(
+    feeds.map((feed) => FEED_NAMES[feed] ?? feed),
+    "and",
+  )}`;
 }
 
 /**
- * @param {{ status: { error?: string, detail?: string, standIn?: string } | null, problem: string }} state
+ * @param {{ status: UpdateStatus | null, problem: string }} state
  * @returns {string}
  */
 export const describeStampProblem = ({ status, problem }) => problem || describeFeedProblem(status);

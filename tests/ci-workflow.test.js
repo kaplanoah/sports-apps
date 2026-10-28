@@ -11,6 +11,7 @@ import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "n
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { formatJobOutputs, listJobs as listPlanJobs, writeReview } from "../worker/plan-review.mjs";
+import { buildNodeTestArgs } from "../worker/node-tests.mjs";
 import { findRefusal } from "../worker/review-git.mjs";
 import { escapePattern } from "../shared/page/escape-pattern.js";
 import { REPO_ROOT, readRepoFile } from "./repo-files.js";
@@ -251,8 +252,8 @@ test("the check job needs every other job but caches", () => {
 });
 
 // The config leaves out the WebKit projects wherever WebKit isn't installed, so a job that stopped
-// installing it would skip the at-rest specs in WebKit and still pass.
-test("each job that runs the at-rest specs in WebKit installs WebKit with its system libraries", () => {
+// installing it would skip its WebKit specs and still pass.
+test("each job that runs WebKit specs installs WebKit with its system libraries", () => {
   for (const [job, workflow] of [
     ["burn-in", "ci.yml"],
     ["webkit", "ci.yml"],
@@ -262,13 +263,24 @@ test("each job that runs the at-rest specs in WebKit installs WebKit with its sy
       /run: node worker\/install-browsers\.mjs --with-deps .*\bwebkit\b/,
       `${workflow}: ${job}`,
     );
+  const condition = WEBKIT_TEST_MATCH.map(
+    (spec) => `contains(needs.scope.outputs.specs, '${spec}')`,
+  ).join(" || ");
   assert.match(
     readJob("burn-in"),
-    new RegExp(
-      `- if: contains\\(needs\\.scope\\.outputs\\.specs, '${escapePattern(WEBKIT_TEST_MATCH)}'\\)\\n\\s+run: node worker/install-browsers.mjs --with-deps webkit\\n`,
-    ),
+    new RegExp(`if: &runs-webkit-specs ${escapePattern(condition)}\\n`),
     "burn-in installs WebKit whenever a spec the config's WebKit projects run is among the ones it repeats",
   );
+  assert.match(
+    readJob("burn-in"),
+    /- if: \*runs-webkit-specs\n\s+run: node worker\/install-browsers\.mjs --with-deps webkit\n/,
+  );
+});
+
+test("scope installs the parser dependencies before selecting helper-declared tests", () => {
+  const scope = readJob("scope");
+  assert.match(scope, /- \*restore-modules\n\s+- \*install-modules/);
+  assert.ok(scope.indexOf("*install-modules") < scope.indexOf("node worker/burn-in-specs.mjs"));
 });
 
 test("repeat setup selects browsers from the same unexpanded inputs as the tests", () => {
@@ -299,28 +311,80 @@ test("nightly setup failures retain their failure without a missing-report downl
 });
 
 // A cache saved with WebKit in it would have the browser job, whose machines lack WebKit's system
-// libraries, run the WebKit projects, so only the jobs that install Chromium alone save it.
-test("no job that installs WebKit saves the browsers' cache", () => {
+// libraries, run the WebKit projects.
+test("the browsers' cache is saved only before WebKit is installed", () => {
   for (const job of ["burn-in", "webkit"])
     assert.doesNotMatch(readJob(job), /uses: actions\/cache(?:\/save)?@/, job);
 });
 
+// Ubuntu's mirror can stall for longer than both of the installer's tries, so CI's WebKit installs
+// and the nightly Flaky run first put back the packages main saved.
+test("each job that installs WebKit's system libraries first puts back main's saved packages", () => {
+  const key = "webkit-packages-${{ steps.image.outputs.os }}-${{ hashFiles('package-lock.json') }}";
+  assert.match(
+    readJob("burn-in"),
+    new RegExp(`key: &webkit-packages-key ${escapePattern(key)}\\n`),
+  );
+  assert.match(
+    readJob("burn-in"),
+    /- &stage-webkit-packages\n {8}if: steps\.webkit-packages\.outputs\.cache-hit == 'true'\n {8}run: sudo cp ~\/webkit-packages\/\*\.deb \/var\/cache\/apt\/archives\/\n/,
+  );
+  const nightly = readJob("browser", "flaky.yml");
+  assert.match(nightly, new RegExp(`key: ${escapePattern(key)}\\n`));
+  for (const [job, workflow] of [
+    ["burn-in", "ci.yml"],
+    ["webkit", "ci.yml"],
+    ["browser", "flaky.yml"],
+  ]) {
+    const steps = readJob(job, workflow).split(/^ {6}- /m);
+    const restore = steps.findIndex(
+      (step) =>
+        /uses: actions\/cache\/restore@/.test(step) && /path: ~\/webkit-packages\n/.test(step),
+    );
+    const stage = steps.findIndex(
+      (step) =>
+        /^[&*]stage-webkit-packages\n/.test(step) ||
+        /run: sudo cp ~\/webkit-packages\/\*\.deb \/var\/cache\/apt\/archives\/\n/.test(step),
+    );
+    const install = steps.findIndex((step) =>
+      /run: node worker\/install-browsers\.mjs --with-deps .*\bwebkit\b|--with-deps --only-shell/.test(
+        step,
+      ),
+    );
+    assert.ok(restore > 0 && restore < install, `${job} restores the packages before installing`);
+    assert.ok(stage > restore && stage < install, `${job} stages the packages before installing`);
+  }
+  const caches = readJob("caches").split(/^ {6}- /m);
+  const saveBrowsers = caches.findIndex(
+    (step) => /uses: actions\/cache\/save@/.test(step) && /key: \*browsers-key\n/.test(step),
+  );
+  const install = caches.findIndex((step) =>
+    /run: node worker\/install-browsers\.mjs --with-deps webkit\n/.test(step),
+  );
+  const savePackages = caches.findIndex(
+    (step) => /uses: actions\/cache\/save@/.test(step) && /key: \*webkit-packages-key\n/.test(step),
+  );
+  assert.ok(saveBrowsers > 0 && saveBrowsers < install, "WebKit stays out of the browsers' cache");
+  assert.ok(install < savePackages, "caches saves the packages WebKit's install downloaded");
+});
+
 // A Node test's failure is read from the end of the job's log, which a session reaches only so
-// far back into.
+// far back into, and both runners print it there through buildNodeTestArgs.
 test("each Node test step prints its failures at the end of the run", () => {
   const steps = [...readJob("checks").matchAll(/^ {6}- name: Test.*\n(?:(?: {8}.*)?\n)*/gm)].map(
     ([step]) => step,
   );
   assert.equal(steps.length, 2);
   for (const step of steps)
-    assert.match(step, /NODE_OPTIONS: --test-reporter=dot|run: node worker\/test-time-zone\.mjs/);
+    assert.match(step, /run: npm test\n|run: node worker\/test-time-zone\.mjs/);
+  assert.equal(buildNodeTestArgs(["tests/example.test.js"])[0], "--test-reporter=dot");
 });
 
 test("CI always runs the complete ordinary-zone suite and scopes only its alternate-zone repeat", () => {
   const checks = readJob("checks");
   assert.match(
     checks,
-    /- name: Test\n\s+if: \$\{\{ !cancelled\(\) \}\}\n\s+env:\n\s+NODE_OPTIONS: --test-reporter=dot\n\s+TZ: UTC\n\s+run: npm test\n/,
+    /- name: Test\n\s+if: \$\{\{ !cancelled\(\) \}\}\n\s+env:\n\s+TZ: UTC\n\s+run: npm test\n/,
   );
   assert.match(
     checks,
@@ -358,8 +422,8 @@ test("manual browser runs never restore or save dependency caches", () => {
   const browser = readJob("browser", "flaky.yml");
   const steps = browser.split(/^ {6}- /m).slice(1);
   const caches = steps.filter((step) => /uses: actions\/cache(?:\/(?:restore|save))?@/.test(step));
-  assert.equal(caches.length, 1);
-  assert.match(caches[0], /^ {8}if: github\.event_name == 'schedule'$/m);
+  assert.equal(caches.length, 2);
+  for (const cache of caches) assert.match(cache, /^ {8}if: github\.event_name == 'schedule'$/m);
   const setup = steps.find((step) => /uses: actions\/setup-node@/.test(step));
   assert.ok(setup);
   assert.equal(readStepInput(workflow, setup, "package-manager-cache"), "false");
@@ -393,14 +457,18 @@ test("the browser job's traces leave out the page at each step, which burn-in's 
   assert.doesNotMatch(readJob("burn-in"), /TRACE_SNAPSHOTS/);
 });
 
-test("burn-in runs every test ten times however many fail, and fails only on a test the pull request wrote or edited", () => {
+// Playwright's shards split tests by count in project order, giving the last machines only the
+// last project's tests, WebKit's, the slowest, so each machine runs every test once instead.
+test("burn-in runs every test ten times however many fail, once on each of ten machines, and fails only on a test the pull request wrote or edited", () => {
   const burnIn = readJob("burn-in");
-  assert.match(burnIn, /--repeat-each=10 --retries=0 --max-failures=0/);
+  assert.match(burnIn, /run: \[1, 2, 3, 4, 5, 6, 7, 8, 9, 10\]\n/);
+  assert.match(burnIn, /npm run test:browser -- --retries=0 --max-failures=0 "\$\{specs\[@\]\}"/);
   assert.match(
     burnIn,
-    /git diff -U0 --no-renames HEAD\^1 HEAD .*\| node worker\/judge-burn-in\.mjs/,
+    /name: burn-in-flaky-\$\{\{ matrix\.run \}\}\n/,
+    "each machine's list of flaky tests keeps a name of its own",
   );
-  assert.match(burnIn, /name: burn-in-flaky-/);
+  assert.match(burnIn, /git diff -U0 --no-renames HEAD\^1 HEAD \| node worker\/judge-burn-in\.mjs/);
 });
 
 // Burn-in's machines start only for a pull request with a browser spec to repeat, and check

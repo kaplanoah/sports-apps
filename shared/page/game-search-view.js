@@ -166,7 +166,7 @@ const renderExamples = (examples) =>
     <ul>
       ${examples.map(
         (example) =>
-          html`<li><button type="button" class="search-example" data-search="${example}">${example}</button></li>`,
+          html`<li><button type="button" class="search-example press-tint" data-search="${example}">${example}</button></li>`,
       )}
     </ul>
     <span class="search-cancel search-cancel-room" aria-hidden="true">Cancel</span>
@@ -199,7 +199,7 @@ const renderSuggestions = (suggestions, typed) =>
     ${suggestions.map(
       ({ text, mark, detail }) =>
         html`<li>
-          <button type="button" class="search-suggestion" data-search="${text}">
+          <button type="button" class="search-suggestion press-tint" data-search="${text}">
             <span class="search-mark">${renderMark(mark)}</span
             ><span class="search-words">${renderTyped(text, typed)}</span
             >${detail && html`<span class="search-detail">${detail}</span>`}
@@ -283,12 +283,12 @@ const describeOut = ({ reason, isForSeason }, how) =>
  */
 function renderPageButton(row, pages) {
   if (row.kind === "place")
-    return html`type="button" class="search-suggestion" data-place="${row.place.key}" aria-label="${row.place.name.join(", ")}"`;
+    return html`type="button" class="search-suggestion press-tint" data-place="${row.place.key}" aria-label="${row.place.name.join(", ")}"`;
   if (row.kind === "game")
-    return html`type="button" class="search-suggestion" data-place="${row.part.key}:${row.game.id}"`;
+    return html`type="button" class="search-suggestion press-tint" data-place="${row.part.key}:${row.game.id}"`;
   if (row.kind === "story") return html``;
   const section = row.kind === "team" ? "" : (pages.section?.key ?? "");
-  const opens = html`type="button" class="search-suggestion team-open" data-team="${row.team.code}" data-team-section="${section}"`;
+  const opens = html`type="button" class="search-suggestion press-tint team-open" data-team="${row.team.code}" data-team-section="${section}"`;
   if (!("player" in row)) return opens;
   const { player } = row;
   return html`${opens} data-player="${player.id}" data-player-team="${player.team}" data-player-name="${player.firstName} ${player.lastName}" data-player-number="${player.number}"`;
@@ -334,7 +334,7 @@ const renderStoryRow = (story, content) =>
   isWebAddress(story.url)
     ? html`<li>
         <a
-          class="search-suggestion"
+          class="search-suggestion press-tint"
           href="${story.url}"
           target="_blank"
           rel="noopener noreferrer"
@@ -360,7 +360,7 @@ const renderPageRows = (rows, pages, context) =>
  * @param {string} readText
  */
 const renderGamesLine = (read, readText) =>
-  html`<button type="button" class="search-games-line" data-games="${readText}">
+  html`<button type="button" class="search-games-line press-tint" data-games="${readText}">
     <span class="search-games-words">${renderRead(read)}</span>${CARET}
   </button>`;
 

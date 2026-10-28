@@ -115,8 +115,9 @@ export function checkRelease(
 
 const NO_CREDENTIALS = new Set([9106, 1001]);
 
-// Counts each phone's tries at the access code. The namespace is the account's own number for
-// these counts, and each Worker keys its counts by its own address.
+// Limits each phone's tries at the access code and its daily count's sends, each apart. The
+// namespace is the account's own number for these limits, and each Worker keys them by purpose,
+// its own address, and the phone's.
 const ACCESS_LIMIT_BINDING = {
   type: "ratelimit",
   name: "ACCESS_LIMIT",
@@ -125,6 +126,13 @@ const ACCESS_LIMIT_BINDING = {
 };
 // The version a service runs, as its upload's tag names it, which its health reports.
 const VERSION_BINDING = { type: "version_metadata", name: "VERSION" };
+// Each browser's or Home Screen app's one count a day (shared/worker/daily-count.js). Only
+// production's apps count, so testing on beta adds nothing to the counts.
+const DAILY_OPENS_BINDING = {
+  type: "analytics_engine",
+  name: "DAILY_OPENS",
+  dataset: "daily_opens",
+};
 
 /**
  * An app's binding to each service, named for it, to its Worker on the app's own channel.
@@ -141,10 +149,11 @@ const listServiceBindings = (channel, roots) =>
 /**
  * @param {{ storeClass: string, isPageless: boolean, channel: string, roots?: import("./apps.mjs").WorkerRoots }} worker
  */
-function listBindings({ storeClass, isPageless, channel, roots }) {
+export function listBindings({ storeClass, isPageless, channel, roots }) {
   const store = { type: "durable_object_namespace", name: "STORE", class_name: storeClass };
   if (isPageless) return [store, VERSION_BINDING];
-  return [store, ACCESS_LIMIT_BINDING, ...listServiceBindings(channel, roots)];
+  const counts = channel === "production" ? [DAILY_OPENS_BINDING] : [];
+  return [store, ACCESS_LIMIT_BINDING, ...counts, ...listServiceBindings(channel, roots)];
 }
 
 // Cloudflare records the last tag applied and rejects an upload that repeats one.

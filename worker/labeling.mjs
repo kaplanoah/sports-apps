@@ -1,6 +1,6 @@
 // Reads when a pull request's labels were added and when its head was pushed, from its timeline
 // and its head's check suites.
-import { createGitHub, readAllPages } from "./github-api.mjs";
+import { createGitHub, createGraphQL } from "./github-api.mjs";
 
 export const PHONE_CONTEXT = "phone";
 export const PHONE_OK_LABEL = "phone-ok";
@@ -50,7 +50,7 @@ export function findLabeling(events, label, headPushedAt) {
 }
 
 /**
- * Every event on a pull request's timeline, page by page.
+ * The label, force-push and comment events on a pull request, page by page.
  * @param {object} options
  * @param {string} options.repository as owner/name
  * @param {string} options.pullNumber
@@ -58,8 +58,58 @@ export function findLabeling(events, label, headPushedAt) {
  * @param {NodeJS.ProcessEnv} [options.env] holds GH_TOKEN
  * @returns {Promise<TimelineEvent[]>}
  */
-export const readTimeline = ({ repository, pullNumber, fetchImpl = fetch, env = process.env }) =>
-  readAllPages(createGitHub({ repository, fetchImpl, env }), `/issues/${pullNumber}/timeline`);
+export async function readTimeline({
+  repository,
+  pullNumber,
+  fetchImpl = fetch,
+  env = process.env,
+}) {
+  const graphql = createGraphQL({ fetchImpl, env });
+  const [owner, name] = repository.split("/");
+  const events = [];
+  let after = null;
+  for (;;) {
+    const data = await graphql(READ_TIMELINE, { owner, name, number: Number(pullNumber), after });
+    const timeline = data.repository?.pullRequest?.timelineItems;
+    if (!timeline) throw new Error("GitHub didn't return the pull request's timeline");
+    events.push(...timeline.nodes.map(readTimelineEvent));
+    if (!timeline.pageInfo.hasNextPage) return events;
+    const next = timeline.pageInfo.endCursor;
+    if (!next || next === after) throw new Error("GitHub didn't advance the timeline cursor");
+    after = next;
+  }
+}
+
+const READ_TIMELINE = `query ReadTimeline($owner: String!, $name: String!, $number: Int!, $after: String) {
+  repository(owner: $owner, name: $name) {
+    pullRequest(number: $number) {
+      timelineItems(first: 100, after: $after, itemTypes: [LABELED_EVENT, UNLABELED_EVENT, HEAD_REF_FORCE_PUSHED_EVENT, ISSUE_COMMENT]) {
+        nodes {
+          __typename
+          ... on LabeledEvent { created_at: createdAt label { name } actor { login } }
+          ... on UnlabeledEvent { created_at: createdAt label { name } actor { login } }
+          ... on HeadRefForcePushedEvent { created_at: createdAt actor { login } }
+          ... on IssueComment { created_at: createdAt body actor: author { login } }
+        }
+        pageInfo { hasNextPage endCursor }
+      }
+    }
+  }
+}`;
+
+const TIMELINE_EVENT_NAMES = new Map([
+  ["LabeledEvent", "labeled"],
+  ["UnlabeledEvent", "unlabeled"],
+  ["HeadRefForcePushedEvent", "head_ref_force_pushed"],
+  ["IssueComment", "commented"],
+]);
+
+/** @param {Omit<TimelineEvent, "event"> & { __typename: string }} node @returns {TimelineEvent} */
+function readTimelineEvent({ __typename, ...fields }) {
+  const event = TIMELINE_EVENT_NAMES.get(__typename);
+  if (!event) throw new Error(`GitHub returned an unexpected timeline event: ${__typename}`);
+  return { ...fields, event };
+}
 
 /**
  * When GitHub first saw a commit: its earliest check suite, which GitHub makes as the push that

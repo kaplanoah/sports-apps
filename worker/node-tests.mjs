@@ -14,10 +14,12 @@ const root = new URL("../", import.meta.url);
 export const listNodeTests = (folder = root) =>
   globSync(NODE_TEST_PATTERNS, { cwd: folder }).sort();
 
+// The dot reporter prints each failure in full at the end of the run, where a reader of a log's or
+// a blocked push's last lines finds it, while TAP's five lines a test put it thousands of lines back.
 /** @param {string[]} tests */
 export function buildNodeTestArgs(tests) {
   if (!tests.length) throw new Error("No Node tests were found.");
-  return ["--import", "./tests/no-network.js", "--test", ...tests];
+  return ["--test-reporter=dot", "--import", "./tests/no-network.js", "--test", ...tests];
 }
 
 /**

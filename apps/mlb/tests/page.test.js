@@ -1316,7 +1316,7 @@ test("games list: a starter MLB can't name yet leaves his line out, rather than 
     },
   };
   const rendered = String(renderGameDay(slate));
-  assert.match(rendered, /class="game-row pre"/);
+  assert.match(rendered, /class="game-row press-tint press-reach pre"/);
   assert.doesNotMatch(rendered, /class="starter/);
   assert.doesNotMatch(rendered, /class="game-extra/);
   assert.match(
@@ -1405,7 +1405,7 @@ test("games list: a delay shows under the start time or the score", () => {
     "Orioles 1:05 PM Delayed: Rain Yankees TBD TBD",
     "Rays 0 - 4 Delayed Phillies",
   ]);
-  assert.match(String(renderGameDay(slate)), /class="game-row pre delayed"/);
+  assert.match(String(renderGameDay(slate)), /class="game-row press-tint press-reach pre delayed"/);
 });
 
 test("games list: each club's seed, record, and race, without its rank", () => {

@@ -78,7 +78,7 @@ test("settings open on a reload show again, with the season, notifications, and 
   const settings = page.getByRole("dialog", { name: "Settings" });
   await openSettings(page);
   await expect(settings.locator("#rankList .rank-item")).toHaveCount(12);
-  const notifications = settings.locator("#notifyRow");
+  const notifications = settings.locator("#notificationsGroup");
   await expect(notifications).toBeVisible();
   const note = await notifications.locator("#notifyNote").textContent();
   const release = await holdRequests(page, matchPath("/js/app.js"));

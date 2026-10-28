@@ -131,11 +131,6 @@
   text-box: trim-both cap alphabetic;
 }
 @media (hover: hover) {
-  .news-title a,
-  .news-more-title a,
-  .read-button {
-    transition: color 0.15s;
-  }
   .news-title a:hover,
   .news-more-title a:hover,
   .read-button:hover {

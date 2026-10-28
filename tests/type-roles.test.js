@@ -4,6 +4,7 @@ import {
   listAppStylesheets,
   listRootTokens,
   listSharedStylesheets,
+  listStylesheets,
   readDeclarations,
   readRule,
 } from "./css-rules.js";
@@ -89,18 +90,15 @@ const listRolesUsed = (path) =>
   );
 
 test("every size the stylesheets set comes from a type role", () => {
-  for (const path of [...listSharedStylesheets(), ...listAppStylesheets()])
-    assert.deepEqual(listStraySizes(path), [], path);
+  for (const path of listStylesheets()) assert.deepEqual(listStraySizes(path), [], path);
 });
 
 test("every rule that sets a role's size sets its weight from the same role", () => {
-  for (const path of [...listSharedStylesheets(), ...listAppStylesheets()])
-    assert.deepEqual(listStrayWeights(path), [], path);
+  for (const path of listStylesheets()) assert.deepEqual(listStrayWeights(path), [], path);
 });
 
 test("every rule that sets a heading's or label's size sets its role's letter spacing", () => {
-  for (const path of [...listSharedStylesheets(), ...listAppStylesheets()])
-    assert.deepEqual(listStrayTracking(path), [], path);
+  for (const path of listStylesheets()) assert.deepEqual(listStrayTracking(path), [], path);
 });
 
 test("every app sets the letter spacing of each tracked role", () => {
@@ -127,7 +125,7 @@ test("every app sets the size and weight of each role its page uses", () => {
 
 // A line height in pixels is a box of the layout's, which keeps its pixels whatever the font.
 test("every line height set by its text's size is a share of the app's leading", () => {
-  for (const path of [...listSharedStylesheets(), ...listAppStylesheets()]) {
+  for (const path of listStylesheets()) {
     const strays = readDeclarations(path)
       .filter((declaration) => declaration.property === "line-height")
       .filter(

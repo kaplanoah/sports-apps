@@ -3,7 +3,14 @@ declare const Sortable: {
 };
 
 // The page's plain scripts in its head share these, from shared/page/pick-theme.js, page-move.js,
-// long-away.js, open-last-tab.js, show-last-drawn.js, season-header.js, and draw-channel-tag-age.js.
+// long-away.js, open-last-tab.js, show-last-drawn.js, season-header.js, draw-channel-tag-age.js, and
+// notification-intent.js, which the service worker also imports.
+declare function readGameIntent(message: unknown): { game: string; season: number } | null;
+declare function readNotificationIntent(href: string): {
+  isRequested: boolean;
+  target: { game: string; season: number } | null;
+};
+
 declare function isOnHomeScreen(): boolean;
 declare function isAppleBrowser(): boolean;
 declare function isAppearanceChoice(value: unknown): boolean;
@@ -56,6 +63,7 @@ declare function findPlaceToShow(
   isOnFirstTab: boolean;
 };
 declare function readStored(key: string): string | null;
+declare function readSavedParts(): Record<string, any>;
 declare const LAST_DRAWN_KEY: string;
 declare const OPEN_SHEETS_KEY: string;
 declare const LAST_SWITCHED_KEY: string;

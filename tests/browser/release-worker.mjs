@@ -15,6 +15,7 @@ const answerNothing = () => new Response(null, { status: 500 });
  */
 function serveBundledFiles(pageFiles) {
   const worker = createAppWorker({
+    name: "mlb",
     pageFiles,
     forwardToStore: answerNothing,
     isStoreAnswering: async () => false,

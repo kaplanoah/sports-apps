@@ -27,6 +27,17 @@ export function listSeasonGames(slate, schedule) {
 }
 
 /**
+ * The sheet's game with the slate's current state and today's matchup context.
+ * @param {any} slate
+ * @param {any[] | null} schedule
+ * @param {(game: any) => boolean} matches
+ */
+export function findGameToOpen(slate, schedule, matches) {
+  const game = listSeasonGames(slate, schedule).findLast((each) => !each.allStar && matches(each));
+  return game ? { ...game, today: game.date === slate?.today.date } : null;
+}
+
+/**
  * Each game once, as a club's games count: MLB lists a game it suspended again on the day it's
  * finished, and the game counts on the day it started. A called-off listing stays, for what reads
  * its games to tell from the makeup that shares its id.

@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import { buildSnapshot, readPlayoffGameId } from "../page/js/snapshot.js";
 import { listUpcomingMeetings } from "../worker/src/preview.js";
 import {
+  describeSnapshotStatus,
   listNotifications,
   loadCurrentSnapshot,
   readSchedule,
@@ -83,6 +84,47 @@ const setTonightsState = (snapshot, state) => ({
 });
 
 const findTonight = (season) => season.games.find((game) => game.id === "1042600132");
+
+test("without the league's scoreboard, the schedule is saved only on a day with no game for it to score", async () => {
+  const { scoreboard, backup, ...withoutScores } = RESPONSES;
+  const responses = { ...withoutScores, schedule: GAMES.preview.schedule };
+  const afterLastGame = Date.parse("2026-10-01T03:30:00Z");
+  const idle = buildSnapshot(responses, { season: 2026, now: afterLastGame });
+  assert.deepEqual(idle.missing, ["scoreboard"]);
+  assert.equal(idle.isScoreboardIdle, true);
+  const idleDocs = createDocs();
+  await saveSnapshot(idleDocs, idle);
+  assert.deepEqual(idleDocs.writes, ["seasons/2026", "schedules/2026"]);
+  assert.equal(findTonight(await readUpdates(idleDocs, 2026)).state, "final");
+
+  const gameDay = buildSnapshot(responses, { season: 2026, now: Date.parse(GAMES.now) });
+  assert.equal(gameDay.isScoreboardIdle, false);
+  const gameDayDocs = createDocs();
+  await saveSnapshot(gameDayDocs, gameDay);
+  assert.ok(!gameDayDocs.writes.includes("schedules/2026"));
+  assert.equal((await readUpdates(gameDayDocs, 2026)).games, undefined);
+});
+
+test("the status calls a missing scoreboard idle only on a day the schedule says has no game for it to score", () => {
+  const { scoreboard, backup, ...withoutScores } = RESPONSES;
+  const gameDay = Date.parse(GAMES.now);
+  const describeOn = (schedule) =>
+    describeSnapshotStatus(
+      buildSnapshot({ ...withoutScores, schedule }, { season: 2026, now: gameDay }),
+    );
+  const { detail, idle } = describeOn(GAMES.preview.schedule);
+  assert.deepEqual([detail, idle], ["scoreboard", ""]);
+
+  const putOff = structuredClone(GAMES.preview.schedule);
+  const tonight = putOff.leagueSchedule.gameDates
+    .flatMap((day) => day.games)
+    .find((game) => game.gameId === "1042600123");
+  tonight.gameStatusText = "PPD";
+  assert.equal(describeOn(putOff).idle, "scoreboard");
+
+  const withoutSchedule = describeOn(undefined);
+  assert.deepEqual([withoutSchedule.detail, withoutSchedule.idle], ["schedule, scoreboard", ""]);
+});
 
 test("each upcoming game's meetings are saved for its two teams, only when they change, and stay as they were without the schedule", async () => {
   const docs = createDocs();
@@ -268,7 +310,7 @@ test("a saved final stays final when a later read has the game under way again",
   );
 });
 
-test("the season's games stay as they were unless both the scoreboard and the schedule answered", async () => {
+test("on a game day, the season's games stay as they were unless both the scoreboard and the schedule answered", async () => {
   const docs = createDocs();
   await saveSnapshot(docs, buildTonight(3, [84, 79]));
   const saved = await readSchedule(docs, 2026);
@@ -276,7 +318,7 @@ test("the season's games stay as they were unless both the scoreboard and the sc
   for (const feed of ["scoreboard", "schedule"]) {
     const without = buildSnapshot(
       { ...RESPONSES, schedule: GAMES.preview.schedule, [feed]: null },
-      { season: 2026, now: NOW },
+      { season: 2026, now: Date.parse(GAMES.now) },
     );
     await saveSnapshot(docs, without);
   }
@@ -346,7 +388,7 @@ const setSeattlesLastState = (snapshot, state) => ({
   ),
 });
 
-test("each team's nearest games are saved with the season, and stay as they were unless both the scoreboard and the schedule answered", async () => {
+test("each team's nearest games are saved with the season, and on a game day stay as they were unless both the scoreboard and the schedule answered", async () => {
   const docs = createDocs();
   const live = setSeattlesLastState(WHOLE_SEASON, "live");
   await saveSnapshot(docs, live);
@@ -356,7 +398,7 @@ test("each team's nearest games are saved with the season, and stay as they were
   for (const feed of ["scoreboard", "schedule"]) {
     const without = buildSnapshot(
       { ...RESPONSES, schedule: GAMES.preview.schedule, [feed]: null },
-      { season: 2026, now: NOW },
+      { season: 2026, now: Date.parse(GAMES.now) },
     );
     await saveSnapshot(docs, without);
   }
@@ -434,6 +476,15 @@ test("the games stay as they were unless both the scoreboard and the schedule an
   await saveSnapshot(docs, buildWithout(["schedule"]));
 
   assert.deepEqual((await readUpdates(docs, 2026)).games, finished.games);
+});
+
+test("the games stay as they were while ESPN covers the scoreboard before its scores stand in for any game", async () => {
+  const docs = createDocs();
+  await saveSnapshot(docs, SNAPSHOT);
+
+  await saveSnapshot(docs, { ...buildWithout(["scoreboard"]), scoreboardCover: "espn" });
+
+  assert.deepEqual((await readUpdates(docs, 2026)).games, SNAPSHOT.games);
 });
 
 test("the games are saved while ESPN stands in for the scoreboard", async () => {

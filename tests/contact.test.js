@@ -146,6 +146,7 @@ test("endpoint requires same-origin access, configured delivery and durable serv
 
 test("Contact routes stay behind the existing app path and access gate", async () => {
   const worker = createAppWorker({
+    name: "mlb",
     pageFiles: {},
     forwardToStore: () => new Response(),
     isStoreAnswering: async () => true,

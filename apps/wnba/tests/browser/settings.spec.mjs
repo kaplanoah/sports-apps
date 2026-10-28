@@ -3,7 +3,7 @@ import { waitForTimedAnimations } from "../../../../tests/browser/animations.mjs
 import { serveReleases } from "../../../../tests/browser/serve-releases.mjs";
 import { measureFieldFace, readRole } from "../../../../tests/browser/type-roles.mjs";
 import { keepInOtherTab } from "../../../../tests/browser/other-tab.mjs";
-import { SETTINGS, openSettings } from "../../../../tests/browser/settings.mjs";
+import { SETTINGS, openSettings, checkSelectArrow } from "../../../../tests/browser/settings.mjs";
 import {
   checkFailedPickPutBack,
   checkNewCurrentSeasonListed,
@@ -63,8 +63,14 @@ test("settings' header holds its title, its close button, and the room under the
 test("the Season picker sets 16px, which an iPhone doesn't zoom into on a tap, and looks as big as the detail role's text", async ({
   page,
 }) => {
-  await openApp(page);
+  await openApp(page, ONE_PAST_SEASON);
+  await openSettings(page);
   const picker = page.locator("#seasonPicker");
+  for (const colorScheme of /** @type {const} */ (["light", "dark"])) {
+    await page.emulateMedia({ colorScheme });
+    await expect(page.locator("html")).toHaveAttribute("data-theme", colorScheme);
+    await checkSelectArrow(picker);
+  }
   await expect(picker).toHaveCSS("font-size", "16px");
   const widths = await measureFieldFace(picker, "--type-detail-size");
   expect(widths.field).toBeCloseTo(widths.role, 0);
@@ -183,12 +189,14 @@ test("settings list Notifications, the News switches, and Appearance, with lines
   await page.getByRole("button", { name: "Settings", exact: true }).click();
   const rows = page.locator(`${SETTINGS} .settings-controls .control-row`);
   await expect(rows.locator(".control-label > span:first-child")).toHaveText([
-    "Notifications",
+    "Game starts",
+    "Time before tipoff",
+    "Final scores",
     "Include dedicated Liberty sources",
     "Include content from The Athletic",
     "Appearance",
   ]);
-  await expect(page.locator("#notifyNote")).toHaveText("Final scores");
+  await expect(page.locator("#notifyNote")).toBeHidden();
   const groups = page.locator(`${SETTINGS} .settings-controls > *`);
   const readBorders = () =>
     Promise.all([
@@ -201,11 +209,11 @@ test("settings list Notifications, the News switches, and Appearance, with lines
   // The Season row stays hidden while the store keeps only the current season.
   expect(await readBorders()).toEqual([
     ["none", "none", "solid", "solid"],
-    ["none", "none", "none", "none", "solid"],
+    ["none", "none", "none", "none", "none", "none", "solid"],
     "none",
   ]);
 
-  await page.locator("#notifyRow").evaluate((row) => row.setAttribute("hidden", ""));
+  await page.locator("#notificationsGroup").evaluate((group) => group.setAttribute("hidden", ""));
   expect((await readBorders())[0]).toEqual(["none", "none", "none", "solid"]);
 });
 

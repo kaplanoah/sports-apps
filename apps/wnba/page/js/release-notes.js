@@ -6,6 +6,10 @@ import { html } from "#shared/html.js";
 /** @type {import("#shared/updates.js").ReleaseNote[]} */
 export const RELEASE_NOTES = [
   {
+    at: "2026-10-28T01:02:00Z",
+    text: html`Get a notification before each playoff game. In settings at the top right, turn on <b>Game starts</b> under Notifications, and pick how long before tipoff.`,
+  },
+  {
     at: "2026-10-16T03:45:00Z",
     text: html`<b>Bracket</b> and <b>Standings</b> are combined into one page. Tap the buttons at the top of the page to switch between them. In the regular season, standings show by default. In the playoffs, the bracket shows by default.`,
   },

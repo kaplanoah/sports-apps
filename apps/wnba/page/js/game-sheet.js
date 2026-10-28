@@ -395,7 +395,7 @@ function openGameSheet(id, section) {
 /**
  * Opens a game's sheet on one of its sections, as a search does.
  * @param {string} id
- * @param {string} section
+ * @param {string} [section]
  */
 export const openGameSection = (id, section) => openGameSheet(id, section);
 

@@ -10,6 +10,8 @@ import {
   findDiagnosticsSwitch,
   turnOnDiagnostics,
 } from "../../../../tests/browser/diagnostics-switch.mjs";
+import { showDipAndOffViewport } from "../../../../tests/browser/diagnostics-records.mjs";
+import { listLowContrastTextWithRowsPressed } from "../../../../tests/browser/contrast.mjs";
 import { SETTINGS } from "../../../../tests/browser/settings.mjs";
 import { serveReleases } from "../../../../tests/browser/serve-releases.mjs";
 
@@ -95,6 +97,31 @@ test.describe("on a phone", () => {
     const [{ text: copied }] = await readShares(page);
     expect(copied).toMatch(/^Pitchers job(: no run saved| last ran .*, \d+ requests?)/m);
   });
+
+  test("a report says how the store's last update went, on a line after the time", async ({
+    page,
+  }) => {
+    await stubShare(page);
+    await openApp(page, {
+      store: {
+        "live/status": {
+          at: "2026-09-25T00:45:00.000Z",
+          detail: "MLB answered 503",
+          error: "upstream_error",
+          write: "",
+        },
+      },
+    });
+    await turnOnDiagnostics(page);
+    await openSettings(page);
+    await findReportButton(page).click();
+
+    await expect(findReportButton(page)).toHaveText("Shared");
+    const [{ text: copied }] = await readShares(page);
+    expect(copied).toMatch(
+      /^Now .*\nUpdates since .*: detail MLB answered 503, error upstream_error$/m,
+    );
+  });
 });
 
 test("Diagnostics, once on, start with the app, the release the page came from, and its commit, set apart by dots, without asking the Worker", async ({
@@ -116,6 +143,20 @@ test("Diagnostics, once on, start with the app, the release the page came from, 
   await expect(page.locator("#diagnostics .diagnostics-release")).toHaveText(
     "MLB\u2022v2.33.0-beta\u2022abc1234",
   );
+});
+
+test("each record's flag stays as readable as AA asks with its line pressed, in Ball and Night Game", async ({
+  page,
+}) => {
+  await page.setViewportSize(PHONE);
+  await openApp(page);
+  await turnOnDiagnostics(page);
+  await page.reload();
+  await expect(page.locator("#standingsWrap tbody tr").first()).toBeVisible();
+
+  await showDipAndOffViewport(page, "#standingsWrap");
+
+  expect(await listLowContrastTextWithRowsPressed(page)).toEqual([]);
 });
 
 /**

@@ -100,16 +100,18 @@ export async function createAccessCookie(request, env, prefix) {
   ].join("; ");
 }
 
-// Without the binding, as in tests, nothing limits how often a phone tries.
+// Without the binding, as in tests, nothing limits how often a phone tries. Each purpose counts its
+// tries apart, so a count sent never takes a try at the code.
 /**
  * @param {Request} request
  * @param {any} env
+ * @param {"code" | "count"} purpose
  */
-async function isWithinTryLimit(request, env) {
+export async function isWithinTryLimit(request, env, purpose) {
   if (!env.ACCESS_LIMIT) return true;
   const address = request.headers.get("cf-connecting-ip") ?? "unknown";
   const { success } = await env.ACCESS_LIMIT.limit({
-    key: `${new URL(request.url).hostname} ${address}`,
+    key: `${purpose} ${new URL(request.url).hostname} ${address}`,
   });
   return success;
 }
@@ -130,7 +132,7 @@ async function checkSentCode(request, env, prefix) {
   if (code === null) return respondError(400, "bad_request", "Send the code as { code }.");
   if (!env.ACCESS_SIGNING_KEY)
     return respondError(503, "not_ready", "The Worker has no ACCESS_SIGNING_KEY to sign in with.");
-  if (!(await isWithinTryLimit(request, env)))
+  if (!(await isWithinTryLimit(request, env, "code")))
     return respondError(429, "too_many_tries", "Too many tries. Try again in a minute.");
   const expected = await signCode(env.ACCESS_CODE, env.ACCESS_SIGNING_KEY);
   if (!isSameText(await signCode(code, env.ACCESS_SIGNING_KEY), expected))

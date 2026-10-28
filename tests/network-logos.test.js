@@ -180,12 +180,44 @@ test("a logo whose weight sits low is nudged up, one whose weight sits high is n
   assert.match(renderNetworksLine(["NBC"]), /style="--logo-scale: [\d.]+; --logo-nudge: [\d.]+"/);
 });
 
-test("FOX and FOX One, which share a wordmark, sit at one height in the line", () => {
-  const [fox, foxOne] = listLogos(["FOX", "FOX One"]);
-  assert.deepEqual([fox.nudge, foxOne.nudge], [-0.04, -0.04]);
-  const line = renderNetworksLine(["FOX", "FOX One"]);
-  assert.match(line, /alt="FOX" style="--logo-scale: 0\.84; --logo-nudge: -0\.04"/);
-  assert.match(line, /alt="FOX One" style="--logo-scale: 0\.86; --logo-nudge: -0\.04"/);
+// Edges of the wordmark a channel's file shares with another's, as shares of the file's height
+// from its top, measured from the files. FOX and ESPN match top and bottom, so they draw at one
+// size; NBC matches only its bottom, since NBCSN's heavier letters draw taller.
+const SHARED_WORDMARKS = [
+  { FOX: [0, 1], "FOX One": [0, 1] },
+  { ESPN: [0, 1], ESPN2: [0, 1] },
+  { NBC: [51.92 / 52.9], NBCSN: [201.8 / 263] },
+];
+
+/**
+ * Where a logo draws part of itself in the line, from the line's middle, in `--network-logo-height`s.
+ * @param {import("../shared/page/network-logos.js").NetworkLogo} logo
+ * @param {number[]} edges
+ */
+function placeInLine({ scale = 1, nudge = 0 }, edges) {
+  const top = -scale * nudge - scale / 2;
+  return edges.map((share) => top + share * scale);
+}
+
+test("channels that share a wordmark line up its edges in the line", () => {
+  for (const edgesByName of SHARED_WORDMARKS) {
+    const names = Object.keys(edgesByName);
+    const [first, ...rest] = listLogos(names).map((logo, index) =>
+      placeInLine(logo, edgesByName[names[index]]),
+    );
+    for (const placed of rest) {
+      placed.forEach((edge, index) =>
+        assert.ok(Math.abs(edge - first[index]) < 0.001, names.join()),
+      );
+    }
+  }
+});
+
+// ESPN's own red, as espn.com draws its logo and header.
+test("ESPN and ESPN2 draw in one red, ESPN's own", () => {
+  for (const file of ["espn.svg", "espn2.svg"]) {
+    assert.deepEqual(listDrawingColors(file), new Set(["#d00"]), file);
+  }
 });
 
 test("a game with no channels listed yet says to check back", () => {

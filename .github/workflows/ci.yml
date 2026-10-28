@@ -168,12 +168,9 @@ jobs:
       - name: Find dead code
         if: ${{ !cancelled() }}
         run: npm run deadcode
-      # The dot reporter prints each failure in full at the end of the run, where a reader of the
-      # log's last lines finds it, while TAP's five lines a test put it thousands of lines back.
       - name: Test
         if: ${{ !cancelled() }}
         env:
-          NODE_OPTIONS: --test-reporter=dot
           TZ: UTC
         run: npm test
       # The runner is ahead of MLB's Eastern day; Honolulu is behind it.
@@ -213,6 +210,8 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - *setup-node
+      - *restore-modules
+      - *install-modules
       # Naming the shell adds pipefail, so a failed diff fails the job rather than reading as no
       # change.
       - id: apps
@@ -278,16 +277,18 @@ jobs:
             playwright-report/
             test-results/
 
-  # Each browser spec scope lists, the ones a pull request adds or changes but for one that passed
-  # burn-in in an earlier run and hasn't changed since, with what it runs with unchanged too
-  # (worker/burn-in-specs.mjs), runs ten times over, with no retry, so a test that passes only some
-  # of the time fails on the pull request that brings it, rather than on later ones. Only a test
-  # the pull request wrote or edited fails it: any other that failed goes to the issue Flaky
-  # browser tests from the next nightly run (worker/judge-burn-in.mjs). Ten runs of every spec a
-  # large pull request changes take longer than one machine's limit, so they're split across
-  # machines too, and a machine whose share holds no test passes. When an at-rest spec is among
-  # them, it installs WebKit too, as the webkit job does, so they repeat in WebKit, where they've
-  # failed most.
+  # Each browser spec scope lists, the ones a pull request adds or changes and those importing a
+  # changed helper that declares tests, but for one that passed burn-in in an earlier run and hasn't
+  # changed since, with what it runs with unchanged too (worker/burn-in-specs.mjs), runs ten times
+  # over, with no retry, so a test that passes only some of the time fails on the pull request that
+  # brings it, rather than on later ones. Only a test the pull request wrote or edited fails it: any
+  # other that failed goes to the issue Flaky browser tests from the next nightly run
+  # (worker/judge-burn-in.mjs). Ten runs of every spec a large pull request selects take longer than
+  # one machine's limit, so ten machines each run every test once. Each then has the same share
+  # however slow some tests are, where Playwright's shards, split by count in project order, would
+  # give the last machines only the last project's tests, WebKit's, the slowest. When a spec WebKit's
+  # projects in tests/browser/projects.mjs match is among them, it installs WebKit too, as the webkit
+  # job does, so they repeat in WebKit, where they've failed most.
   burn-in:
     needs: scope
     if: ${{ !cancelled() && needs.scope.result == 'success' && needs.scope.outputs.specs != '' }}
@@ -296,7 +297,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4, 5, 6, 7, 8]
+        run: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -313,37 +314,47 @@ jobs:
           path: ~/.cache/ms-playwright
           key: *browsers-key
       - *install-browsers
-      - if: contains(needs.scope.outputs.specs, 'at-rest.spec.mjs')
+      - &read-image
+        id: image
+        run: echo "os=$ImageOS" >> "$GITHUB_OUTPUT"
+      - id: webkit-packages
+        if: &runs-webkit-specs contains(needs.scope.outputs.specs, 'at-rest.spec.mjs') || contains(needs.scope.outputs.specs, 'notification-layout.spec.mjs') || contains(needs.scope.outputs.specs, 'notification-permission.spec.mjs')
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/webkit-packages
+          key: &webkit-packages-key webkit-packages-${{ steps.image.outputs.os }}-${{ hashFiles('package-lock.json') }}
+      - &stage-webkit-packages
+        if: steps.webkit-packages.outputs.cache-hit == 'true'
+        run: sudo cp ~/webkit-packages/*.deb /var/cache/apt/archives/
+      - if: *runs-webkit-specs
         run: node worker/install-browsers.mjs --with-deps webkit
-      # Every test runs all ten times, however many fail, and the next step decides which
-      # failures fail the pull request, so a failed test doesn't fail this one.
-      - name: Repeat each browser spec scope lists
+      # Every test runs, however many fail, and the next step decides which failures fail the pull
+      # request, so a failed test doesn't fail this one.
+      - name: Run each browser spec scope lists
         shell: bash
         env:
           SPECS: ${{ needs.scope.outputs.specs }}
         run: |
           read -ra specs <<< "$SPECS"
-          npm run test:browser -- --repeat-each=10 --retries=0 --max-failures=0 --pass-with-no-tests \
-            --shard=${{ matrix.shard }}/${{ strategy.job-total }} "${specs[@]}" || true
+          npm run test:browser -- --retries=0 --max-failures=0 "${specs[@]}" || true
       - name: Fail only on a test this pull request wrote or edited
         shell: bash
-        run: git diff -U0 --no-renames HEAD^1 HEAD -- 'apps/*/tests/browser/*.spec.mjs' | node worker/judge-burn-in.mjs test-results/report.json
+        run: git diff -U0 --no-renames HEAD^1 HEAD | node worker/judge-burn-in.mjs test-results/report.json
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         if: ${{ !cancelled() && hashFiles('test-results/burn-in-flaky.json') != '' }}
         with:
-          name: burn-in-flaky-${{ matrix.shard }}
+          name: burn-in-flaky-${{ matrix.run }}
           path: test-results/burn-in-flaky.json
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         if: failure()
         with:
-          name: playwright-report-burn-in-${{ matrix.shard }}
+          name: playwright-report-burn-in-${{ matrix.run }}
           path: |
             playwright-report/
             test-results/
 
-  # iPhones run the pages in WebKit, which runs only the at-rest specs, so one machine runs it. The
-  # installed Playwright installs the WebKit it runs, with the system libraries GitHub's runners
-  # lack, so the browser always matches the lockfile (tests/ci-workflow.test.js).
+  # iPhones run WebKit, so one machine runs its projects' matching specs. Playwright installs the
+  # engine and system libraries that match the lockfile (tests/ci-workflow.test.js).
   webkit:
     needs: [passed, scope]
     if: ${{ !cancelled() && !needs.passed.outputs.run && needs.scope.outputs.apps != '' }}
@@ -356,6 +367,13 @@ jobs:
       - *setup-node
       - *restore-modules
       - *install-modules
+      - *read-image
+      - id: webkit-packages
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/webkit-packages
+          key: *webkit-packages-key
+      - *stage-webkit-packages
       - run: node worker/install-browsers.mjs --with-deps webkit
       - shell: bash
         env:
@@ -398,8 +416,15 @@ jobs:
           path: ~/.cache/ms-playwright
           key: *browsers-key
           lookup-only: true
-      # Installing the browser takes the installed Playwright.
-      - if: steps.modules.outputs.cache-hit != 'true' || steps.browsers.outputs.cache-hit != 'true'
+      - *read-image
+      - id: webkit-packages
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/webkit-packages
+          key: *webkit-packages-key
+          lookup-only: true
+      # Installing a browser takes the installed Playwright.
+      - if: steps.modules.outputs.cache-hit != 'true' || steps.browsers.outputs.cache-hit != 'true' || steps.webkit-packages.outputs.cache-hit != 'true'
         run: npm ci
       - if: steps.modules.outputs.cache-hit != 'true'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -412,6 +437,19 @@ jobs:
         with:
           path: ~/.cache/ms-playwright
           key: *browsers-key
+      # WebKit's system libraries come from Ubuntu's mirror, which can stall for minutes, so CI's
+      # WebKit installs and the nightly Flaky run put back the packages saved here and download only
+      # what's newer.
+      # WebKit goes in after the browsers' cache is saved, which must hold Chromium alone.
+      - if: steps.webkit-packages.outputs.cache-hit != 'true'
+        run: node worker/install-browsers.mjs --with-deps webkit
+      - if: steps.webkit-packages.outputs.cache-hit != 'true'
+        run: mkdir ~/webkit-packages && cp /var/cache/apt/archives/*.deb ~/webkit-packages/
+      - if: steps.webkit-packages.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/webkit-packages
+          key: *webkit-packages-key
 
   # Review credentials and posting live only in the default-branch Trusted review workflow.
   # This PR workflow joins its authenticated result using read-only Actions access.
