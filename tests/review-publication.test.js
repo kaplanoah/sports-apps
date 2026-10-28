@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
+import { GitHubError } from "../worker/github-api.mjs";
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -569,6 +570,60 @@ function completePublication(state, change) {
   state.env.PUBLISH_PHASE = "observe";
   state.env.GITHUB_RUN_ID = "88";
 }
+
+test("an observer invalidates each observed context change before or after restoring success", async () => {
+  for (const changedRead of [2, 3]) {
+    const state = createHarness();
+    await reconcileReviewPublication(state);
+    completePublication(state);
+    const original = state.readGitHub;
+    let contexts = 0;
+    state.readGitHub = async (path) => {
+      if (path.startsWith("/pulls?")) {
+        contexts++;
+        if (contexts === changedRead) state.pull.base.ref = "other";
+      }
+      return original(path);
+    };
+    await assert.rejects(reconcileReviewPublication(state), /context changed/);
+    assert.equal(state.checks[0].conclusion, "failure");
+    assert.equal(state.checks[0].output.title, "Review context changed during publication");
+  }
+});
+
+test("verification outages are reported truthfully and failed invalidation preserves the original error", async () => {
+  for (const changedRead of ["producer", 2, 3]) {
+    for (const failHold of [false, true]) {
+      const state = createHarness();
+      await reconcileReviewPublication(state);
+      completePublication(state);
+      const originalRead = state.readGitHub;
+      const originalWrite = state.writeGitHub;
+      const failure = new GitHubError(503, "GET publication context");
+      let contexts = 0;
+      state.readGitHub = async (path) => {
+        if (changedRead === "producer" && path.startsWith("/actions/runs/7/jobs?")) throw failure;
+        if (path.startsWith("/pulls?") && ++contexts === changedRead) throw failure;
+        return originalRead(path);
+      };
+      state.writeGitHub = async (path, request) => {
+        if (failHold && request?.body?.conclusion === "failure")
+          throw new Error("Hold unavailable");
+        return originalWrite(path, request);
+      };
+      await assert.rejects(reconcileReviewPublication(state), (error) => error === failure);
+      if (!failHold) {
+        assert.equal(state.checks[0].conclusion, "failure");
+        assert.equal(
+          state.checks[0].output.title,
+          changedRead === "producer"
+            ? "Trusted publication evidence is unavailable"
+            : "Publication could not be re-verified",
+        );
+      }
+    }
+  }
+});
 
 test("ordinary label events revalidate the authenticated terminal evidence without resetting its owner", async () => {
   const state = createHarness();

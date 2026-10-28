@@ -16,12 +16,13 @@ import { readNativeReviewName, readStepInput } from "./workflow-step.js";
 
 const SHA = "a".repeat(40);
 const TREE = "e".repeat(40);
-const EXPECTED = { repository: "example/repository", head: SHA, base: "b".repeat(40), pull: "1" };
+const BASE = "b".repeat(40);
+const EXPECTED = { repository: "example/repository", head: SHA, pull: "1" };
 const ID_ENV = {
   GITHUB_REPOSITORY: EXPECTED.repository,
   GITHUB_RUN_ID: "7",
   REVIEW_HEAD: SHA,
-  REVIEW_BASE: EXPECTED.base,
+  REVIEW_BASE: BASE,
   REVIEW_MERGE: "c".repeat(40),
   REVIEW_TRUSTED: "d".repeat(40),
   GITHUB_WORKFLOW_REF: `${EXPECTED.repository}/.github/workflows/review.yml@refs/heads/main`,
@@ -36,7 +37,7 @@ const createRun = (changes = {}) => ({
   head_sha: EXPECTED.head,
   repository: { full_name: EXPECTED.repository, id: 1 },
   pull_requests: [],
-  display_title: `Review 1 head ${SHA} base ${EXPECTED.base} source ${ID_ENV.REVIEW_TRUSTED}`,
+  display_title: `Review 1 head ${SHA} base ${BASE} source ${ID_ENV.REVIEW_TRUSTED}`,
   conclusion: "success",
   status: "completed",
   ...changes,
@@ -44,14 +45,14 @@ const createRun = (changes = {}) => ({
 
 function createRecoveryFixture() {
   const review = createRun({
-    display_title: `Review 1 head ${SHA} base ${EXPECTED.base} source ${ID_ENV.REVIEW_TRUSTED} target main intent review`,
+    display_title: `Review 1 head ${SHA} base ${BASE} source ${ID_ENV.REVIEW_TRUSTED} target main intent review`,
   });
   const pull = {
     number: 1,
     state: "open",
     draft: false,
     head: { sha: SHA },
-    base: { sha: EXPECTED.base, ref: "main" },
+    base: { sha: BASE, ref: "main" },
   };
   const ci = {
     id: 9,
@@ -129,6 +130,18 @@ test("completion recovery tolerates main metadata changes but reruns only the cu
     assert.equal(await recoverTrustedReviewJoin(event, state.env, api), 31);
     assert.equal(state.writes.length, 1);
     assert.equal(state.writes[0].path, "/actions/jobs/31/rerun");
+  }
+});
+
+test("completion recovery refuses stacked targets for both review and CI triggers", async () => {
+  for (const trigger of [7, 9]) {
+    const { state, api, event } = createRecoveryFixture();
+    event.workflow_run.id = trigger;
+    state.review.display_title = state.review.display_title.replace("target main", "target other");
+    state.pull.base.ref = "other";
+    state.ci.pull_requests[0].base.ref = "other";
+    assert.equal(await recoverTrustedReviewJoin(event, state.env, api), null);
+    assert.equal(state.writes.length, 0);
   }
 });
 
@@ -371,7 +384,7 @@ test("actual producer names and CI download inputs agree with the trusted join",
       assert.ok(Object.hasOwn(context, expression), `Unknown workflow expression: ${expression}`);
       return context[expression];
     });
-  for (const source of [EXPECTED.base, ID_ENV.REVIEW_TRUSTED]) {
+  for (const source of [BASE, ID_ENV.REVIEW_TRUSTED]) {
     const context = {
       "steps.result.outputs.tree": TREE,
       "steps.find.outputs.tree": TREE,
@@ -385,7 +398,7 @@ test("actual producer names and CI download inputs agree with the trusted join",
         REPOSITORY: EXPECTED.repository,
         PR: EXPECTED.pull,
         REVIEW_HEAD: EXPECTED.head,
-        REVIEW_BASE: EXPECTED.base,
+        REVIEW_BASE: BASE,
         REVIEW_TRUSTED: source,
       }),
     });
@@ -409,7 +422,7 @@ test("actual producer names and CI download inputs agree with the trusted join",
 
 test("join discovery ignores changing event base metadata while sealed verification keeps the tested base exact", async () => {
   const run = createRun({
-    display_title: createRun().display_title.replace(`base ${EXPECTED.base}`, `base ${TREE}`),
+    display_title: createRun().display_title.replace(`base ${BASE}`, `base ${TREE}`),
   });
   assert.ok(isTrustedReviewRun(run, EXPECTED));
   const readGitHub = async (path) =>
@@ -447,13 +460,13 @@ test("only the exact trusted producer's immutable event identity can join, inclu
   for (const change of [
     { event: "pull_request" },
     { path: ".github/workflows/ci.yml" },
-    { head_sha: EXPECTED.base },
+    { head_sha: BASE },
     { repository: { full_name: EXPECTED.repository, id: 1.5 } },
-    { display_title: `Review 2 head ${SHA} base ${EXPECTED.base} source ${ID_ENV.REVIEW_TRUSTED}` },
+    { display_title: `Review 2 head ${SHA} base ${BASE} source ${ID_ENV.REVIEW_TRUSTED}` },
     { display_title: `Review 1 head ${SHA} base ${SHA}` },
-    { display_title: `Review 1 head ${SHA} base ${EXPECTED.base}` },
-    { display_title: `Review 1 head ${SHA} base ${EXPECTED.base} source refs/heads/main` },
-    { display_title: `Review 1 head ${SHA} base ${EXPECTED.base} source ${TREE} extra` },
+    { display_title: `Review 1 head ${SHA} base ${BASE}` },
+    { display_title: `Review 1 head ${SHA} base ${BASE} source refs/heads/main` },
+    { display_title: `Review 1 head ${SHA} base ${BASE} source ${TREE} extra` },
     { repository: { full_name: "other/repository", id: 1 } },
   ])
     assert.equal(isTrustedReviewRun({ ...run, ...change }, EXPECTED), false);
@@ -707,7 +720,6 @@ function invokeJoin(fixture, changes = {}, args = []) {
         GITHUB_OUTPUT: output,
         GITHUB_WORKSPACE: fixture.checkout,
         REVIEW_HEAD: fixture.head,
-        REVIEW_EVENT_BASE: fixture.base,
         REVIEW_TIMEOUT_MINUTES: "120",
         REVIEW_RUN: "7",
         REVIEW_TREE: fixture.tree,
@@ -868,7 +880,8 @@ test("real verify CLI accepts the merge CI tested, though the event's base lags,
 });
 
 test("native title rendering preserves supplied PR and commit identities", () => {
-  const expected = { ...EXPECTED, head: "f".repeat(40), base: "e".repeat(40), pull: "23" };
+  const base = "e".repeat(40);
+  const expected = { ...EXPECTED, head: "f".repeat(40), pull: "23" };
   const source = "c".repeat(40);
   const title = readNativeReviewName({
     ACTION: "opened",
@@ -877,7 +890,7 @@ test("native title rendering preserves supplied PR and commit identities", () =>
     REPOSITORY: expected.repository,
     PR: expected.pull,
     REVIEW_HEAD: expected.head,
-    REVIEW_BASE: expected.base,
+    REVIEW_BASE: base,
     REVIEW_TRUSTED: source,
   });
   assert.ok(

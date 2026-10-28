@@ -13,6 +13,7 @@ import { matchesReviewProvider } from "./review-state.mjs";
 import {
   readReviewRun,
   requireTrustedReviewAuthority,
+  isPublishableReviewTarget,
   REVIEW_RESULT_PREFIX,
 } from "./review-run.mjs";
 import { isPullRequestRun } from "./find-passed-ci.mjs";
@@ -112,15 +113,15 @@ export async function findTrustedReviewRun(options) {
 /** @param {any} run */
 function readJoinRecoverySubject(run) {
   const review = readReviewRun(run);
-  if (review?.intent) return review.target === "main" ? review : null;
+  if (review?.intent) return isPublishableReviewTarget(review.target) ? review : null;
   if (!isPullRequestRun(run) || run.pull_requests?.length !== 1) return null;
   const pull = run.pull_requests[0];
   return Number.isSafeInteger(pull.number) &&
     pull.number > 0 &&
     isGitObjectId(pull.head?.sha) &&
-    pull.base?.ref === "main" &&
+    isPublishableReviewTarget(pull.base?.ref) &&
     run.head_sha === pull.head.sha
-    ? { pull: pull.number, head: pull.head.sha, target: "main" }
+    ? { pull: pull.number, head: pull.head.sha, target: pull.base.ref }
     : null;
 }
 
@@ -317,7 +318,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   } else {
     const result = await waitForTrustedReview(env);
     if (result.run === null)
-      console.log("No successful trusted review covers this head and base; review remains owed.");
+      console.log("No successful trusted review covers this PR head; review remains owed.");
     appendFileSync(
       env.GITHUB_OUTPUT,
       `run=${result.run ?? ""}\nowed=${result.run === null}\ntree=${result.tree ?? ""}\nsource=${result.source ?? ""}\n`,

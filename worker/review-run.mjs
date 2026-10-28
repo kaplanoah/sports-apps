@@ -3,6 +3,9 @@ import { isGitObjectId } from "./git-object.mjs";
 export const REVIEW_CHECK_NAME = "trusted-review";
 export const REVIEW_RESULT_PREFIX = "trusted-review-passed-";
 
+/** @param {unknown} target */
+export const isPublishableReviewTarget = (target) => target === "main";
+
 /** @param {string | undefined} value */
 export const isRepositoryName = (value) => /^[\w.-]+\/[\w.-]+$/.test(value ?? "");
 

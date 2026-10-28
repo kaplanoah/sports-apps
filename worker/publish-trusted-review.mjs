@@ -254,6 +254,8 @@ async function publishDecision(options, head, decision, repository) {
   return answer.id;
 }
 
+class PublicationContextError extends Error {}
+
 /** @param {any} options @param {any} repository @param {any} previous */
 async function requireFreshContext(options, repository, previous) {
   const current = await readPublicationContext(options, previous.pull.head.sha, repository);
@@ -268,7 +270,7 @@ async function requireFreshContext(options, repository, previous) {
     (current.run?.status === "completed" && current.run.conclusion !== "success") ||
     isPublicationExempt(current.pull) !== isPublicationExempt(previous.pull)
   )
-    throw new Error("PR authorization context changed before publication.");
+    throw new PublicationContextError("PR authorization context changed before publication.");
 }
 
 /** @param {any} request @param {string} title @param {string} summary */
@@ -281,19 +283,28 @@ function holdReviewPublication(request, title, summary) {
   );
 }
 
+/** @param {any} request @param {unknown} error @param {string} title @param {string} summary */
+async function rejectReviewPublication(request, error, title, summary) {
+  await holdReviewPublication(request, title, summary).catch(() => undefined);
+  throw error;
+}
+
 /** @param {any} request @param {any} decision */
 async function publishValidatedDecision(request, decision) {
-  await requireFreshContext(request.options, request.repository, request.context);
-  await publishDecision(request.options, request.head, decision, request.repository);
   try {
     await requireFreshContext(request.options, request.repository, request.context);
+    await publishDecision(request.options, request.head, decision, request.repository);
+    await requireFreshContext(request.options, request.repository, request.context);
   } catch (error) {
-    await holdReviewPublication(
+    const changed = error instanceof PublicationContextError;
+    return rejectReviewPublication(
       request,
-      "Review context changed during publication",
-      "The published result was invalidated. Inspect the current review authorization before recovery.",
+      error,
+      changed
+        ? "Review context changed during publication"
+        : "Publication could not be re-verified",
+      "Success is withheld because current authorization could not be confirmed. Inspect the publisher workflow before recovery.",
     );
-    throw error;
   }
 }
 
@@ -389,14 +400,13 @@ async function revalidatePublication(request) {
   try {
     const jobs = await readProducerJobs(options.readGitHub, run);
     await readTerminalEvidence(options, run, pull, jobs);
-    await requireFreshContext(options, request.repository, request.context);
   } catch (error) {
-    await holdReviewPublication(
+    return rejectReviewPublication(
       request,
+      error,
       "Trusted publication evidence is unavailable",
       "The current attempt has no valid terminal decision. Inspect the publisher workflow before retrying.",
     );
-    throw error;
   }
   await publishValidatedDecision(request, {
     success: true,
@@ -447,7 +457,7 @@ export async function reconcileReviewPublication(options) {
     await holdReviewPublication(
       request,
       "Trusted review is owed",
-      "No authorized trusted review covers this PR head and base.",
+      "No authorized trusted review covers this PR head.",
     );
     return { success: false };
   }
