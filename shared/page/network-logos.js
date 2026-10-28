@@ -73,14 +73,7 @@ const CHANNELS = [
     nudge: -0.04,
   },
   { name: "NBC", file: "nbc.svg", names: [], hasDarkVersion: true, scale: 0.94, nudge: 0.08 },
-  {
-    name: "NBCSN",
-    file: "nbcsn.png",
-    names: [],
-    hasDarkVersion: true,
-    scale: 0.988,
-    nudge: -0.115,
-  },
+  { name: "NBCSN", file: "nbcsn.png", names: [], hasDarkVersion: true, scale: 1.06, nudge: -0.089 },
   { name: "Netflix", file: "netflix.svg", names: [], scale: 0.92, nudge: -0.06 },
   {
     name: "Peacock",
