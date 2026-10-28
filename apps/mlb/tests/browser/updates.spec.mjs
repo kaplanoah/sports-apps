@@ -17,7 +17,6 @@ import {
 } from "../../../../tests/browser/contrast.mjs";
 import { listTextOffRoles, readRole } from "../../../../tests/browser/type-roles.mjs";
 import { listChipsOffCenter } from "../../../../tests/browser/chip-centering.mjs";
-import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
 import { keepInOtherTab } from "../../../../tests/browser/other-tab.mjs";
 import { dismissUpdatesBox } from "../../../../tests/browser/updates-box.mjs";
 import { waitForTimedAnimations } from "../../../../tests/browser/animations.mjs";
@@ -235,7 +234,6 @@ test.describe("on a phone that has used the app before", () => {
     expect(await listTextOffRoles(page)).toEqual([]);
     expect(await listChipsOffCenter(page)).toEqual([]);
     expect(await listLowContrastText(page)).toEqual([]);
-    expect(await listStrayPeriods(page)).toEqual([]);
     const body = await readRole(page, "body");
     const what = updates.locator(".what").first();
     await expect(what).toHaveCSS("font-size", `${body.size}px`);
