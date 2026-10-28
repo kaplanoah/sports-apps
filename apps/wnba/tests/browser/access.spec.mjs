@@ -42,7 +42,6 @@ test("the gate's text keeps to its type roles, with its code light only because 
   expect(await listTextOffRoles(page)).toEqual([]);
   expect(await listChipsOffCenter(page)).toEqual([]);
   expect(await listLowContrastText(page)).toEqual([]);
-  expect(await listStrayPeriods(page)).toEqual([]);
   await expect(page.locator(".code-field")).toHaveCSS("font-size", "24px");
   await expect(page.locator(".code-field")).toHaveCSS("font-weight", "300");
 });

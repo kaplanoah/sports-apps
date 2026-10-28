@@ -333,7 +333,6 @@ for (const { screen, viewport } of [
       expect(await listTextOffRoles(page)).toEqual([]);
       expect(await listChipsOffCenter(page)).toEqual([]);
       expect(await listLowContrastText(page)).toEqual([]);
-      expect(await listStrayPeriods(page)).toEqual([]);
     });
   });
 }
@@ -447,7 +446,6 @@ test("a live game's Runs so far set each runner's name by his base on the field,
   expect(await listTextOffRoles(page)).toEqual([]);
   expect(await listChipsOffCenter(page)).toEqual([]);
   expect(await listLowContrastText(page)).toEqual([]);
-  expect(await listStrayPeriods(page)).toEqual([]);
   expect(await listTapsOffButtons(page)).toEqual([]);
 });
 
@@ -484,7 +482,6 @@ test("a live game's Runs so far center who's pinch running for whom between the 
   expect(await listTextOffRoles(page)).toEqual([]);
   expect(await listChipsOffCenter(page)).toEqual([]);
   expect(await listLowContrastText(page)).toEqual([]);
-  expect(await listStrayPeriods(page)).toEqual([]);
   expect(await listTapsOffButtons(page)).toEqual([]);
 });
 

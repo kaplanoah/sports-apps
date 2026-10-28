@@ -1,6 +1,7 @@
 import { test as base, expect } from "@playwright/test";
 import { escapePattern } from "../../shared/page/escape-pattern.js";
 import { createDurableObjectContext } from "../durable-object-context.js";
+import { listStrayPeriods } from "./stray-periods.mjs";
 
 /** @type {import("@playwright/test").Fixtures<{ pageErrors: string[] }, {}, import("@playwright/test").PlaywrightTestArgs>} */
 const pageErrorsFixture = {
@@ -15,7 +16,23 @@ const pageErrorsFixture = {
   ],
 };
 
-export const test = base.extend(pageErrorsFixture);
+// A page the test wrote itself, or one it closed, isn't the app's, so the rule can't apply to it.
+/** @param {import("@playwright/test").Page} page */
+const isOnApp = (page) => !page.isClosed() && /^https?:/.test(page.url());
+
+/** @type {import("@playwright/test").Fixtures<{ finalScreenPeriods: void }, {}, import("@playwright/test").PlaywrightTestArgs>} */
+const finalScreenPeriodsFixture = {
+  finalScreenPeriods: [
+    async ({ page }, use, testInfo) => {
+      await use();
+      if (testInfo.status !== testInfo.expectedStatus || !isOnApp(page)) return;
+      expect(await listStrayPeriods(page)).toEqual([]);
+    },
+    { auto: true },
+  ],
+};
+
+export const test = base.extend(pageErrorsFixture).extend(finalScreenPeriodsFixture);
 export { expect };
 
 /**
