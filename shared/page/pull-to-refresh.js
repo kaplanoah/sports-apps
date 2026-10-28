@@ -9,7 +9,10 @@ import { isPageOffTop, isPast } from "./spring-scroll.js";
 // one above it, which start to turn once the pull is far enough to refresh. Let go then, and the
 // page stays held down with the spokes turning until the store has caught up, and long enough to
 // see. The browser has a pull to refresh of its own, which reloads the page, so there the page
-// leaves it to the browser.
+// leaves it to the browser. A listener that may stop a scroll makes the browser wait on the page
+// before every scroll, so the page listens that way only while it's at its top, where a pull can
+// start. The browser decides as a touch starts whether the page may stop its scroll, so the
+// listener goes on as the page reaches its top, not as a pull starts.
 
 const START_PX = 8;
 const RESISTANCE = 0.5;
@@ -164,7 +167,7 @@ export function startPullToRefresh({ store, catchUp }) {
   function followTouch(event) {
     if (state === "tracking") decideDirection(event.touches[0]);
     if (state !== "pulling") return;
-    event.preventDefault();
+    if (event.cancelable) event.preventDefault();
     const down = event.touches[0].clientY - startY - START_PX;
     pulledPx = Math.min(MAX_PULL_PX, Math.max(0, down * RESISTANCE));
     movePage(pulledPx, false);
@@ -179,8 +182,15 @@ export function startPullToRefresh({ store, catchUp }) {
     else settle();
   }
 
+  // A pull under way keeps its listener wherever the page is, until it's over.
+  function listenWherePullable() {
+    if (isPageOffTop() && state === "idle") document.removeEventListener("touchmove", followTouch);
+    else document.addEventListener("touchmove", followTouch, { passive: false });
+  }
+
   document.addEventListener("touchstart", startTouch, { passive: true });
-  document.addEventListener("touchmove", followTouch, { passive: false });
-  document.addEventListener("touchend", endTouch);
-  document.addEventListener("touchcancel", endTouch);
+  document.addEventListener("touchend", endTouch, { passive: true });
+  document.addEventListener("touchcancel", endTouch, { passive: true });
+  addEventListener("scroll", listenWherePullable, { passive: true });
+  listenWherePullable();
 }

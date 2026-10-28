@@ -167,6 +167,89 @@ test("a pull on a page left a fraction of a pixel down, as a phone can leave it,
   await expect(page.locator("header.top")).toHaveCSS("top", "56px");
 });
 
+// Whether the page has a touchmove listener that may stop a scroll, which makes the browser wait
+// on the page before scrolling.
+/** @param {import("@playwright/test").Page} page */
+async function isHoldingScrolls(page) {
+  const session = await page.context().newCDPSession(page);
+  const { result } = await session.send("Runtime.evaluate", { expression: "document" });
+  const { listeners } = await session.send("DOMDebugger.getEventListeners", {
+    objectId: /** @type {string} */ (result.objectId),
+  });
+  await session.detach();
+  return listeners.some((listener) => listener.type === "touchmove" && !listener.passive);
+}
+
+/**
+ * @param {import("@playwright/test").Page} page
+ * @param {number} top
+ */
+const scrollPageTo = (page, top) =>
+  page.evaluate(
+    (to) =>
+      new Promise((resolve) => {
+        addEventListener("scroll", resolve, { once: true });
+        scrollTo({ top: to, behavior: "instant" });
+      }),
+    top,
+  );
+
+test("the page holds up the browser's scrolls only at its top, where a pull can start", async ({
+  page,
+}) => {
+  await openFromHomeScreen(page);
+  const app = await openApp(page);
+  await fillNews(page, app.writeDocument);
+  await page.getByRole("tab", { name: "News" }).click();
+  expect(await isHoldingScrolls(page)).toBe(true);
+
+  await scrollPageTo(page, 300);
+  expect(await isHoldingScrolls(page)).toBe(false);
+  await scrollPageTo(page, 0);
+  expect(await isHoldingScrolls(page)).toBe(true);
+
+  await app.holdStore();
+  await pullDown(page, 200);
+  await expect(page.locator(".pull-refresh")).toHaveClass(/turning/);
+});
+
+test("a pull whose moves the browser won't let the page stop still follows the finger, without trying to stop them", async ({
+  page,
+}) => {
+  await openFromHomeScreen(page);
+  await openApp(page);
+  await openGames(page);
+  const header = page.locator("header.top");
+
+  const stopsTried = await header.evaluate((target) => {
+    let stops = 0;
+    /**
+     * @param {string} type
+     * @param {number} clientY
+     */
+    const touch = (type, clientY) => {
+      const finger = new Touch({ identifier: 1, target, clientX: 200, clientY });
+      const event = new TouchEvent(type, {
+        bubbles: true,
+        cancelable: false,
+        touches: [finger],
+        changedTouches: [finger],
+      });
+      event.preventDefault = () => {
+        stops += 1;
+      };
+      target.dispatchEvent(event);
+    };
+    touch("touchstart", 40);
+    touch("touchmove", 60);
+    touch("touchmove", 120);
+    return stops;
+  });
+
+  expect(stopsTried).toBe(0);
+  await expect(header).toHaveCSS("top", "36px");
+});
+
 test("a short pull settles back without refreshing", async ({ page }) => {
   await openFromHomeScreen(page);
   const app = await openApp(page);
