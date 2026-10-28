@@ -4,7 +4,21 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 
-const CHECK_SCRIPTS = ["lint", "format:check", "typecheck", "deadcode"];
+/** @typedef {{ name: string, file: string, args: string[] }} Check */
+
+/** @type {Check[]} */
+const CHECKS = [
+  ...["lint", "format:check", "typecheck", "deadcode"].map((script) => ({
+    name: `npm run ${script}`,
+    file: "npm",
+    args: ["run", "--silent", script],
+  })),
+  {
+    name: "node worker/node-tests.mjs --changed",
+    file: process.execPath,
+    args: ["worker/node-tests.mjs", "--changed"],
+  },
+];
 const OUTPUT_LINE_LIMIT = 40;
 
 /**
@@ -29,7 +43,7 @@ function trimOutput(output) {
 /**
  * Why a push is blocked, or null when the clean working tree passes every check.
  * @param {PushState} state
- * @param {(script: string) => Promise<CheckResult>} runCheck runs one npm script
+ * @param {(check: Check) => Promise<CheckResult>} runCheck
  * @returns {Promise<string | null>}
  */
 export async function decidePush({ isTreeClean, hasPackages }, runCheck) {
@@ -40,24 +54,24 @@ export async function decidePush({ isTreeClean, hasPackages }, runCheck) {
     );
   if (!hasPackages)
     return "node_modules is missing, so the checks can't run: run npm ci, then push again.";
-  const results = await Promise.all(CHECK_SCRIPTS.map(runCheck));
+  const results = await Promise.all(CHECKS.map(runCheck));
   const failedIndex = results.findIndex(({ isPassed }) => !isPassed);
   if (failedIndex === -1) return null;
   return (
-    `npm run ${CHECK_SCRIPTS[failedIndex]} failed, so the push would turn CI red. ` +
+    `${CHECKS[failedIndex].name} failed, so the push would turn CI red. ` +
     `Fix it, commit, and push again.\n${trimOutput(results[failedIndex].output)}`
   );
 }
 
 /**
- * Runs an npm script in a folder, with what it wrote.
+ * Runs a check's command in a folder, with what it wrote.
  * @param {string} folder
- * @param {string} script
+ * @param {Check} check
  * @returns {Promise<CheckResult>}
  */
-async function runNpmScript(folder, script) {
+async function runCheckIn(folder, { file, args }) {
   try {
-    const { stdout, stderr } = await promisify(execFile)("npm", ["run", "--silent", script], {
+    const { stdout, stderr } = await promisify(execFile)(file, args, {
       cwd: folder,
       maxBuffer: 64 * 1024 * 1024,
     });
@@ -132,7 +146,7 @@ async function checkPush() {
       isTreeClean: isTreeCleanIn(folder),
       hasPackages: existsSync(join(folder, "node_modules")),
     },
-    (script) => runNpmScript(folder, script),
+    (check) => runCheckIn(folder, check),
   );
   if (!reason) return;
   process.stderr.write(`${reason}\n`);

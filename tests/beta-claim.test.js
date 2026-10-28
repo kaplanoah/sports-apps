@@ -533,8 +533,8 @@ test("the Beta workflow runs main's rules on pull request events and merges to m
 });
 
 // Sessions wait for this comment, which the skill quotes.
-test("the ship skill quotes the comment that tells a pull request beta is free", () => {
-  assert.ok(readRepoFile(".agents/skills/ship/SKILL.md").includes(FREE_MESSAGE));
+test("the beta skill quotes the comment that tells a pull request beta is free", () => {
+  assert.ok(readRepoFile(".agents/skills/beta/SKILL.md").includes(FREE_MESSAGE));
 });
 
 test("a push to beta checks the claim before anything deploys", () => {

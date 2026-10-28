@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -179,10 +179,8 @@ const invokeRunner = (folder, args = ["--target", "search-reading"]) =>
 
 /** @param {string} folder */
 function copyOrdinaryRunner(folder) {
-  mkdirSync(join(folder, "worker"), { recursive: true });
-  const runner = join(folder, "worker/node-tests.mjs");
-  writeFileSync(runner, readRepoFile("worker/node-tests.mjs"));
-  return runner;
+  cpSync(new URL("worker/", REPO_ROOT), join(folder, "worker"), { recursive: true });
+  return join(folder, "worker/node-tests.mjs");
 }
 
 /** @param {string} folder */
