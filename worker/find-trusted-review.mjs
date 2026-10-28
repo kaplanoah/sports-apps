@@ -120,7 +120,7 @@ async function waitForTrustedReview(env) {
       readGitHub,
       repository: env.GITHUB_REPOSITORY,
       head: env.REVIEW_HEAD,
-      base: env.REVIEW_BASE,
+      base: env.REVIEW_EVENT_BASE,
       pull: env.PR,
     });
     if (!result.pending) return result;
@@ -129,6 +129,22 @@ async function waitForTrustedReview(env) {
     await waitFor(Math.min(interval, remaining));
     interval = Math.min(interval * 2, MAX_POLL_MS);
   }
+}
+
+/**
+ * The base is the first parent of the merge this CI run tested, so the review must cover exactly
+ * the code that merges now, whatever base.sha the pull's event carried.
+ * @param {NodeJS.ProcessEnv} env
+ */
+function readTestedBase(env) {
+  const [base, head, ...others] = runReviewGit(
+    env.GITHUB_WORKSPACE,
+    ["show", "--no-patch", "--format=%P", "HEAD"],
+    { environment: env },
+  ).split(" ");
+  if (head !== env.REVIEW_HEAD || others.length > 0 || !isGitObjectId(base))
+    throw new Error("The tested checkout is not this pull request's merge.");
+  return base;
 }
 
 /** @param {string} folder @param {NodeJS.ProcessEnv} env */
@@ -154,6 +170,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     const { choice } = await readReviewProvider(env, readGitHub);
     const tree = verifyReviewedMerge(process.argv[3], {
       ...env,
+      REVIEW_BASE: readTestedBase(env),
       REVIEW_PROVIDER: choice.provider,
       REVIEW_SELECTION: choice.selection,
     });

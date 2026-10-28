@@ -226,6 +226,46 @@ test("words that ask only for games go straight to them, and one whose games are
   await expect(page.locator('#gameSearch .listed-day[data-day="2026-09-23"]')).toBeInViewport();
 });
 
+test("the line under the field is a status VoiceOver reads as it changes, and a key that leaves it the same changes nothing in it", async ({
+  page,
+}) => {
+  await openSeasonGames(page);
+  await tapSearch(page);
+  await sendSearch(page, "Liberty Dream");
+  const status = page.locator("#gameSearch").getByRole("status");
+  await expect(status).toHaveText("Liberty vs Dream•3 games");
+  await status.evaluate((line) => {
+    const changes = { count: 0 };
+    new MutationObserver((records) => (changes.count += records.length)).observe(line, {
+      subtree: true,
+      childList: true,
+      characterData: true,
+      attributes: true,
+    });
+    Object.assign(window, { lineChanges: changes });
+  });
+
+  await findInput(page).press("End");
+  await findInput(page).press("Space");
+
+  await expect(findInput(page)).toHaveValue("Liberty Dream ");
+  await expect(status).toHaveText("Liberty vs Dream•3 games");
+  expect(await page.evaluate(() => Reflect.get(window, "lineChanges").count)).toBe(0);
+});
+
+test("the line under the field stays a status VoiceOver keeps while it's empty, taking no room", async ({
+  page,
+}) => {
+  await openSeasonGames(page);
+  await tapSearch(page);
+
+  const status = page.locator("#gameSearch").getByRole("status");
+  await expect(status).toHaveCount(1);
+  await expect(status).toBeEmpty();
+  expect((await status.boundingBox())?.height).toBe(0);
+  await expect(status).toHaveCSS("margin-top", "0px");
+});
+
 test("a city finds the games played there, with its team's games as another reading", async ({
   page,
 }) => {
