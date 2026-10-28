@@ -25,6 +25,7 @@ export const CONFIG_ONLY_FILES = new Set([
   "stryker.config.mjs",
   "tests/time-zone-sensitive.json",
   "tsconfig.json",
+  "worker/main-merge.mjs",
 ]);
 const SKIPPED_FILES = new Set([
   ...CONFIG_ONLY_FILES,

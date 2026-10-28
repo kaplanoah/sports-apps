@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
+import { findNeedlessMainMerge } from "../worker/main-merge.mjs";
 
 const CHECKS = ["lint", "format:check", "typecheck", "deadcode", "test"];
 const OUTPUT_LINE_LIMIT = 40;
@@ -126,7 +127,10 @@ const isOnOrigin = (commit) =>
     "refs/remotes/origin/",
   ]) !== "";
 
-/** Checks only unpublished commits, using the working tree only when it is the pushed commit. */
+/**
+ * Checks only unpublished commits, refusing a merge of main they didn't need, and using the
+ * working tree only when it is the pushed commit.
+ */
 async function checkPush() {
   const unpublished = listPushedCommits(readFileSync(0, "utf8")).filter(
     (commit) => !isOnOrigin(commit),
@@ -137,6 +141,12 @@ async function checkPush() {
     process.stderr.write(
       "The push includes an unpublished commit other than HEAD. Check out that commit and push it separately so the checks judge the code being pushed.\n",
     );
+    process.exitCode = 1;
+    return;
+  }
+  const mergeReason = findNeedlessMainMerge({ head });
+  if (mergeReason) {
+    process.stderr.write(`${mergeReason}\n`);
     process.exitCode = 1;
     return;
   }

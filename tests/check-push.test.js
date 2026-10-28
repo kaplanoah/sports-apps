@@ -1,9 +1,18 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
-import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  cpSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { decidePush } from "../.githooks/check-push.mjs";
 import { REPO_ROOT, readRepoFile } from "./repo-files.js";
 
@@ -104,6 +113,7 @@ function makeRepo(failingScripts = []) {
   writeFileSync(join(repo, ".gitignore"), "node_modules/\n");
   mkdirSync(join(repo, "node_modules"));
   cpSync(new URL(".githooks", REPO_ROOT), join(repo, ".githooks"), { recursive: true });
+  symlinkSync(fileURLToPath(new URL("worker", REPO_ROOT)), join(repo, "worker"));
   runGit(repo, ["init"]);
   runGit(repo, ["add", "."]);
   runGit(repo, ["commit", "-m", "start"]);
@@ -323,6 +333,27 @@ test("annotated tags check the commit they name", (context) => {
   const pushed = pushRepo(repo, ["refs/tags/release"]);
   assert.notEqual(pushed.status, 0);
   assert.match(pushed.stderr, /npm run lint failed/);
+});
+
+test("Git refuses a merge of main the branch didn't need before any check", (context) => {
+  const repo = makeRepo(["lint"]);
+  context.after(() => rmSync(repo, { recursive: true, force: true }));
+  installPackages(repo);
+  const base = runGit(repo, ["rev-parse", "HEAD"]).trim();
+  writeFileSync(join(repo, "main.txt"), "main\n");
+  runGit(repo, ["add", "main.txt"]);
+  runGit(repo, ["commit", "-m", "main"]);
+  runGit(repo, ["update-ref", "refs/remotes/origin/main", "HEAD"]);
+  runGit(repo, ["checkout", "-b", "feature", base]);
+  writeFileSync(join(repo, "feature.txt"), "feature\n");
+  runGit(repo, ["add", "feature.txt"]);
+  runGit(repo, ["commit", "-m", "feature"]);
+  runGit(repo, ["merge", "--no-edit", "origin/main"]);
+  const pushed = pushRepo(repo, ["HEAD:refs/heads/feature"]);
+  assert.notEqual(pushed.status, 0);
+  assert.match(pushed.stderr, /brings in main, which wasn't needed/);
+  assert.match(pushed.stderr, /add the review label/);
+  assert.doesNotMatch(pushed.stderr, /npm run lint failed/);
 });
 
 test("the handoff escape can save a committed branch despite a failing check and dirty tree", (context) => {
