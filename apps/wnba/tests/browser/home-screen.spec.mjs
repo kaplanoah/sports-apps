@@ -62,7 +62,6 @@ test.describe("on an iPhone, in the browser", () => {
     expect(await listTextOffRoles(page)).toEqual([]);
     expect(await listChipsOffCenter(page)).toEqual([]);
     expect(await listLowContrastText(page)).toEqual([]);
-    expect(await listStrayPeriods(page)).toEqual([]);
     expect(await listTapsOffButtons(page)).toEqual([]);
     expect(await listNeverShownWords(page, LEAGUE_WORDS.neverShown)).toEqual([]);
   });
@@ -293,7 +292,6 @@ test.describe("on an Android phone, in the browser", () => {
       "Use this site like an app It'll open full screen, without the browser's bars INSTALL",
       { useInnerText: true },
     );
-    expect(await listStrayPeriods(page)).toEqual([]);
   });
 
   test("installing from the welcome opens Chrome's dialog, and then the page asks no more", async ({

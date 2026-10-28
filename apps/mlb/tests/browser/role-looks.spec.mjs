@@ -129,7 +129,7 @@ const OTHER_PLACES = [
       await page.route("**/js/release-notes.js", (route) =>
         route.fulfill({
           contentType: "text/javascript",
-          body: 'import { html } from "#shared/html.js";\nexport const RELEASE_NOTES = [{ at: "2026-09-24T23:00:00Z", text: html`Tap a game, then <b>Matchup</b>.` }];',
+          body: 'import { html } from "#shared/html.js";\nexport const RELEASE_NOTES = [{ at: "2026-09-24T23:00:00Z", text: html`Tap a game, then <b>Matchup</b>` }];',
         }),
       );
       await keepUpdatesFromEarlierVisit(page);

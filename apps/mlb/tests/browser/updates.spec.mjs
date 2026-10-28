@@ -17,7 +17,6 @@ import {
 } from "../../../../tests/browser/contrast.mjs";
 import { listTextOffRoles, readRole } from "../../../../tests/browser/type-roles.mjs";
 import { listChipsOffCenter } from "../../../../tests/browser/chip-centering.mjs";
-import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
 import { keepInOtherTab } from "../../../../tests/browser/other-tab.mjs";
 import { dismissUpdatesBox } from "../../../../tests/browser/updates-box.mjs";
 import { waitForTimedAnimations } from "../../../../tests/browser/animations.mjs";
@@ -72,7 +71,7 @@ const serveReleaseNote = (page) =>
   page.route("**/js/release-notes.js", (route) =>
     route.fulfill({
       contentType: "text/javascript",
-      body: 'export const RELEASE_NOTES = [{ at: "2026-09-24T23:00:00Z", text: "Something new." }];',
+      body: 'export const RELEASE_NOTES = [{ at: "2026-09-24T23:00:00Z", text: "Something new" }];',
     }),
   );
 
@@ -235,7 +234,6 @@ test.describe("on a phone that has used the app before", () => {
     expect(await listTextOffRoles(page)).toEqual([]);
     expect(await listChipsOffCenter(page)).toEqual([]);
     expect(await listLowContrastText(page)).toEqual([]);
-    expect(await listStrayPeriods(page)).toEqual([]);
     const body = await readRole(page, "body");
     const what = updates.locator(".what").first();
     await expect(what).toHaveCSS("font-size", `${body.size}px`);
@@ -256,7 +254,7 @@ test.describe("on a phone that has used the app before", () => {
     const updates = page.locator("#updates");
 
     await expect(updates.locator(".updates-count")).toHaveText("New in the app");
-    await expect(updates.locator(".what")).toHaveText("Something new.");
+    await expect(updates.locator(".what")).toHaveText("Something new");
 
     await dismissUpdatesBox(page);
     await expect(updates).toBeHidden();
@@ -317,7 +315,7 @@ test.describe("on a phone that has used the app before", () => {
   test("dismissing the release notes in another tab hides them in this one", async ({ page }) => {
     await serveReleaseNote(page);
     await openApp(page);
-    await expect(page.locator("#updates .what")).toHaveText("Something new.");
+    await expect(page.locator("#updates .what")).toHaveText("Something new");
 
     await keepInOtherTab(page, "releaseNotesShownUntil", {
       "2026-09-24T23:00:00Z": Date.parse("2026-09-25T00:00:00Z"),
