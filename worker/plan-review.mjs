@@ -11,8 +11,7 @@
 // Usage: node worker/plan-review.mjs <folder>, in a full checkout of the pull request's merge
 // commit, whose first parent is the base branch and second the pull request's head, with GH_TOKEN,
 // GITHUB_REPOSITORY, and PR set to read the last review's summary. It prints the stage, its areas,
-// and their count for $GITHUB_OUTPUT. REVIEW_RULE_ROOT selects preserved trusted rules;
-// REVIEW_BASE binds completion reuse, while the reviewed head selects the incremental range.
+// and their count for $GITHUB_OUTPUT. REVIEW_RULE_ROOT selects preserved trusted rules.
 import { mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -307,25 +306,21 @@ export function listPushedFiles(pushed, readDiff) {
 
 /**
  * Which review this run makes: the first, of the whole change; reviewed, on the head the last
- * full read ended on, as a label's run is, which leaves that read's summary as it is, though the
- * base moved, once the move leaves nothing new to read; one of what the pushes since the last full
- * read changed; or none, when the pushes leave no new changes in files the pull request still
- * changes.
+ * full read ended on with nothing new to read, which leaves that read's summary as it is; one of
+ * what the pushes since the last full read changed; or none, when the pushes leave no new changes
+ * in files the pull request still changes.
  * @param {object} review
  * @param {string | null} review.reviewedHead the head the last full read ended on
  * @param {string} review.head the pull request's head
- * @param {boolean} [review.isSameBase] whether a trusted review completed on the current base
  * @param {boolean} review.isOnBranch whether that head is still in the pull request's history
  * @param {() => string[]} review.listChanged the files both the pull request and the pushes since changed
  * @returns {{ stage: "first" | "reviewed" | "none" } | { stage: "push", files: string[] }}
  */
-export function chooseStage({ reviewedHead, head, isSameBase = true, isOnBranch, listChanged }) {
+export function chooseStage({ reviewedHead, head, isOnBranch, listChanged }) {
   if (!reviewedHead || !isOnBranch) return { stage: "first" };
-  const isReviewedHead = reviewedHead === head;
-  if (isReviewedHead && isSameBase) return { stage: "reviewed" };
   const files = listChanged();
   if (files.length) return { stage: "push", files };
-  return { stage: isReviewedHead ? "reviewed" : "none" };
+  return { stage: reviewedHead === head ? "reviewed" : "none" };
 }
 
 // A stale name lists its first places only, enough for a reviewer to find the rest, and
@@ -821,7 +816,6 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const choice = chooseStage({
     reviewedHead,
     head,
-    isSameBase: !process.env.REVIEW_BASE || reviewed?.base === process.env.REVIEW_BASE,
     isOnBranch,
     listChanged: () => listPushedFiles(readPushedRange(), readDiff),
   });

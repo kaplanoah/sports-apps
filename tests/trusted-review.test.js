@@ -1179,7 +1179,7 @@ test("stacked target runs plan and summarize with the same owed and result gates
   assert.doesNotMatch(workflow, /pattern: trusted-review-\*\n/);
 });
 
-test("every review stage and the join read the base the plan took from the test merge", () => {
+test("every review stage reads the base the plan took from the test merge, and the join finds its run by the event's base", () => {
   const workflow = readRepoFile(".github/workflows/review.yml");
   const readJob = (name) => workflow.split(`  ${name}:\n`)[1].split(/^ {2}[a-z][\w-]*:/m)[0];
   assert.match(readJob("review-plan"), /\n {6}base: \$\{\{ steps.prepare.outputs.base \}\}\n/);
