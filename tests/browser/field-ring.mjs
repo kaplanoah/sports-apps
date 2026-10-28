@@ -1,4 +1,5 @@
-// How a text field shows its focus (controls.css): no ring once a tap focuses it, and the app's
+// How a text field shows its focus (controls.css): no ring once a tap focuses it, nor as keys move
+// its cursor, and the app's
 // focus ring around the box that looks like the field once the keyboard reaches it, in the phone's
 // light and dark looks.
 
@@ -27,6 +28,11 @@ export async function checkFieldRing(page, expect, { field, box }) {
     await page.emulateMedia({ colorScheme });
     await field.click();
     await expect(field).toBeFocused();
+    expect((await readRing(box)).outline).toMatch(/^none /);
+    for (const key of ["ArrowLeft", "ArrowRight", "Home", "End", "ArrowUp", "ArrowDown"]) {
+      await page.keyboard.press(key);
+    }
+    await expect(page.locator("body")).not.toHaveClass(/\bkbd\b/);
     expect((await readRing(box)).outline).toMatch(/^none /);
 
     await page.keyboard.press("Shift+Tab");

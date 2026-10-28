@@ -13,22 +13,29 @@ import { nameTeam, TEAMS } from "./teams.js";
 export const REORDER_EVENT = "rankingreorder";
 
 // Each grip is a vertical slider, which a swipe up or down in VoiceOver adjusts by sending an arrow
-// key: Up or Right moves its club up the list, and Down or Left down it. Up the list is up the
-// slider, so its value counts from the bottom, and its text says the rank.
-const MOVES = { ArrowUp: -1, ArrowRight: -1, ArrowDown: 1, ArrowLeft: 1 };
+// key: Up or Right moves its club up the list, Down or Left down it, and Home or End to either end.
+/** @type {Record<string, (from: number, count: number) => number>} */
+const MOVES = {
+  ArrowUp: (from) => from - 1,
+  ArrowRight: (from) => from - 1,
+  ArrowDown: (from) => from + 1,
+  ArrowLeft: (from) => from + 1,
+  Home: () => 0,
+  End: (from, count) => count - 1,
+};
 
 /**
- * The ranking with a club moved a step up (-1) or down (1), or null when it's already at that end.
+ * The ranking with a club moved by a slider's key, or null when the key moves it nowhere.
  * @param {string[]} order
  * @param {string} id
- * @param {number} step
+ * @param {string} key
  */
-export function moveClub(order, id, step) {
+export function moveClub(order, id, key) {
   const from = order.indexOf(id);
-  const to = from + step;
-  if (from < 0 || to < 0 || to >= order.length) return null;
-  const moved = [...order];
-  [moved[from], moved[to]] = [moved[to], moved[from]];
+  const to = MOVES[key]?.(from, order.length);
+  if (from < 0 || to === undefined || to === from || to < 0 || to >= order.length) return null;
+  const moved = order.filter((club) => club !== id);
+  moved.splice(to, 0, id);
   return moved;
 }
 
@@ -41,6 +48,7 @@ export function moveClub(order, id, step) {
  */
 export function renderRankItem(id, index, count) {
   const { league } = TEAMS[id];
+  // Up the list is up the slider, so its value counts from the bottom, and its text says the rank.
   return html`<li class="rank-item" data-id="${id}">
       <button
         type="button"
@@ -101,11 +109,10 @@ const announceOrder = (list, order) =>
 
 function moveWithKeyboard(list, event) {
   const grip = event.target instanceof HTMLElement && event.target.closest(".grip");
-  const step = MOVES[event.key];
-  if (!grip || !step) return;
+  if (!grip || !(event.key in MOVES)) return;
   event.preventDefault();
   const id = /** @type {HTMLElement} */ (grip.closest(".rank-item")).dataset.id;
-  const order = moveClub(listRankedOrder(), id, step);
+  const order = moveClub(listRankedOrder(), id, event.key);
   if (order) announceOrder(list, order);
 }
 

@@ -911,12 +911,19 @@ test("clubs never dragged into place follow the ranked ones by name", (t) => {
   assert.deepEqual(listRankedOrder(), ["SEA", "ATL", "TB", "NYY"]);
 });
 
-test("a step up or down swaps a club with its neighbor, and a step past either end moves nothing", () => {
+test("a grip's keys move its club a step or to either end, and a key past an end or no slider's moves nothing", () => {
   const order = ["ATL", "SEA", "TB", "NYY"];
-  assert.deepEqual(moveClub(order, "TB", -1), ["ATL", "TB", "SEA", "NYY"]);
-  assert.deepEqual(moveClub(order, "TB", 1), ["ATL", "SEA", "NYY", "TB"]);
-  assert.equal(moveClub(order, "ATL", -1), null);
-  assert.equal(moveClub(order, "NYY", 1), null);
+  for (const key of ["ArrowUp", "ArrowRight"])
+    assert.deepEqual(moveClub(order, "TB", key), ["ATL", "TB", "SEA", "NYY"]);
+  for (const key of ["ArrowDown", "ArrowLeft"])
+    assert.deepEqual(moveClub(order, "TB", key), ["ATL", "SEA", "NYY", "TB"]);
+  assert.deepEqual(moveClub(order, "TB", "Home"), ["TB", "ATL", "SEA", "NYY"]);
+  assert.deepEqual(moveClub(order, "SEA", "End"), ["ATL", "TB", "NYY", "SEA"]);
+  for (const key of ["ArrowUp", "ArrowRight", "Home"])
+    assert.equal(moveClub(order, "ATL", key), null);
+  for (const key of ["ArrowDown", "ArrowLeft", "End"])
+    assert.equal(moveClub(order, "NYY", key), null);
+  assert.equal(moveClub(order, "TB", "Enter"), null);
   assert.deepEqual(order, ["ATL", "SEA", "TB", "NYY"]);
 });
 
