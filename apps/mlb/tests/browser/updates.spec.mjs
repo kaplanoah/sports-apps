@@ -222,7 +222,9 @@ test.describe("on a phone that has used the app before", () => {
     await expect.poll(() => app.countOpenSockets()).toBe(1);
     await expect(updates).toBeHidden();
     await app.updateFromWorker();
-    await expect(updates).toContainText(/Yankees passed the .*Red Sox for the AL 4 seed/);
+    await expect(updates).toContainText(
+      /Yankees(, team details)? passed the .*Red Sox(, team details)? for the AL 4 seed/,
+    );
 
     app.changeSnapshots((snapshot) => {
       const { PHI, ...teams } = snapshot.teams;
@@ -230,7 +232,7 @@ test.describe("on a phone that has used the app before", () => {
     });
     await app.updateFromWorker();
 
-    await expect(updates).toContainText(/Mets .*Phillies/);
+    await expect(updates).toContainText(/Mets\b.*Phillies/);
     expect((await app.readDocument(`readings-2026/${part}`)).changes).toHaveLength(2);
     expect(await listTextOffRoles(page)).toEqual([]);
     expect(await listChipsOffCenter(page)).toEqual([]);
