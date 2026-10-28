@@ -213,6 +213,52 @@ test("the page holds up the browser's scrolls only at its top, where a pull can 
   await expect(page.locator(".pull-refresh")).toHaveClass(/turning/);
 });
 
+test("a refresh that ends with the page scrolled down stops holding up the browser's scrolls", async ({
+  page,
+}) => {
+  await openFromHomeScreen(page);
+  const app = await openApp(page);
+  await fillNews(page, app.writeDocument);
+  await page.getByRole("tab", { name: "News" }).click();
+  const release = await app.holdStore();
+  await pullDown(page, 200);
+  await expect(page.locator(".pull-refresh")).toHaveClass(/turning/);
+  await scrollPageTo(page, 300);
+  expect(await isHoldingScrolls(page)).toBe(true);
+
+  release();
+  await page.clock.runFor(SHORTEST_REFRESH_MS);
+
+  await expect(page.locator(".pull-refresh")).toBeHidden();
+  expect(await isHoldingScrolls(page)).toBe(false);
+});
+
+test("a touch from the top lifted with the page scrolled down stops holding up the browser's scrolls", async ({
+  page,
+}) => {
+  await openFromHomeScreen(page);
+  const app = await openApp(page);
+  await fillNews(page, app.writeDocument);
+  await page.getByRole("tab", { name: "News" }).click();
+  const header = page.locator("header.top");
+  /** @param {string} type */
+  const touch = (type) =>
+    header.evaluate((target, eventType) => {
+      const finger = new Touch({ identifier: 1, target, clientX: 200, clientY: 40 });
+      const touches = eventType === "touchstart" ? [finger] : [];
+      target.dispatchEvent(
+        new TouchEvent(eventType, { bubbles: true, touches, changedTouches: [finger] }),
+      );
+    }, type);
+  await touch("touchstart");
+  await scrollPageTo(page, 300);
+  expect(await isHoldingScrolls(page)).toBe(true);
+
+  await touch("touchend");
+
+  expect(await isHoldingScrolls(page)).toBe(false);
+});
+
 test("a pull whose moves the browser won't let the page stop still follows the finger, without trying to stop them", async ({
   page,
 }) => {

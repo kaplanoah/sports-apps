@@ -122,7 +122,7 @@ export function startPullToRefresh({ store, catchUp }) {
     movePage(0, !!first && first.style.top !== "0px");
     spinner.hidden = true;
     spinner.classList.remove("turning");
-    state = "idle";
+    becomeIdle();
     if (!first || !first.style.transition) return releaseParts(settled);
     /** @param {TransitionEvent} event */
     const releaseOnceBack = (event) => {
@@ -159,8 +159,9 @@ export function startPullToRefresh({ store, catchUp }) {
     const across = Math.abs(touch.clientX - startX);
     const down = touch.clientY - startY;
     if (down < START_PX && across < START_PX) return;
-    state = down > across ? "pulling" : "idle";
-    if (state === "pulling") movedParts = listMovedParts(spinner);
+    if (down <= across) return becomeIdle();
+    state = "pulling";
+    movedParts = listMovedParts(spinner);
   }
 
   /** @param {TouchEvent} event */
@@ -176,16 +177,21 @@ export function startPullToRefresh({ store, catchUp }) {
 
   /** @param {TouchEvent} event */
   function endTouch(event) {
-    if (state === "tracking") state = "idle";
+    if (state === "tracking") becomeIdle();
     if (state !== "pulling") return;
     if (event.type === "touchend" && pulledPx >= REFRESH_PULL_PX) refresh();
     else settle();
   }
 
-  // A pull under way keeps its listener wherever the page is, until it's over.
+  // A touch under way keeps its listener wherever the page is, until it's over.
   function listenWherePullable() {
     if (isPageOffTop() && state === "idle") document.removeEventListener("touchmove", followTouch);
     else document.addEventListener("touchmove", followTouch, { passive: false });
+  }
+
+  function becomeIdle() {
+    state = "idle";
+    listenWherePullable();
   }
 
   document.addEventListener("touchstart", startTouch, { passive: true });
