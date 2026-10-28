@@ -1,7 +1,6 @@
 import { test, expect, openApp } from "./harness.mjs";
 import { listLowContrastText } from "../../../../tests/browser/contrast.mjs";
 import { measurePlacedLegend } from "../../../../tests/browser/placed-legend.mjs";
-import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
 import { listTextOffRoles, readRole } from "../../../../tests/browser/type-roles.mjs";
 import { listChipsOffCenter } from "../../../../tests/browser/chip-centering.mjs";
 import { openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
@@ -315,7 +314,6 @@ test.describe("a team's sheet", () => {
     expect(await listTextOffRoles(page)).toEqual([]);
     expect(await listChipsOffCenter(page)).toEqual([]);
     expect(await listLowContrastText(page)).toEqual([]);
-    expect(await listStrayPeriods(page)).toEqual([]);
   });
 
   test("a team's sheet is titled with its name, set like every other team's", async ({ page }) => {

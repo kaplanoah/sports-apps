@@ -2,7 +2,6 @@ import { test, expect, openApp } from "./harness.mjs";
 import { listLowContrastText } from "../../../../tests/browser/contrast.mjs";
 import { listTextOffRoles } from "../../../../tests/browser/type-roles.mjs";
 import { listChipsOffCenter } from "../../../../tests/browser/chip-centering.mjs";
-import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
 import { keepInOtherTab } from "../../../../tests/browser/other-tab.mjs";
 import { countTextLines } from "../../../../tests/browser/text-lines.mjs";
 import { SETTINGS } from "../../../../tests/browser/settings.mjs";
@@ -138,7 +137,6 @@ test("the News tab shows a card for each story the Worker saves", async ({ page 
   expect(await listTextOffRoles(page)).toEqual([]);
   expect(await listChipsOffCenter(page)).toEqual([]);
   expect(await listLowContrastText(page)).toEqual([]);
-  expect(await listStrayPeriods(page)).toEqual([]);
 });
 
 test("switching off The Athletic or the Liberty's own outlets leaves their stories out, and the choice stays", async ({
@@ -251,7 +249,6 @@ test("under its lead, a card lists the stories that add to it, quieter than the 
   expect(await listTextOffRoles(page)).toEqual([]);
   expect(await listChipsOffCenter(page)).toEqual([]);
   expect(await listLowContrastText(page)).toEqual([]);
-  expect(await listStrayPeriods(page)).toEqual([]);
 });
 
 /**

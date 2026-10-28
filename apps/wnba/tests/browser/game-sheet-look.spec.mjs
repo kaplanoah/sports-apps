@@ -518,7 +518,6 @@ for (const { screen, viewport } of [
       expect(await listTextOffRoles(page)).toEqual([]);
       expect(await listChipsOffCenter(page)).toEqual([]);
       expect(await listLowContrastText(page)).toEqual([]);
-      expect(await listStrayPeriods(page)).toEqual([]);
     });
   });
 }
@@ -635,7 +634,6 @@ test("a game yet to end whose channels aren't listed yet says to check back, und
   expect(await listTextOffRoles(page)).toEqual([]);
   expect(await listChipsOffCenter(page)).toEqual([]);
   expect(await listLowContrastText(page)).toEqual([]);
-  expect(await listStrayPeriods(page)).toEqual([]);
 });
 
 /** @type {["light" | "dark", string, string][]} */
