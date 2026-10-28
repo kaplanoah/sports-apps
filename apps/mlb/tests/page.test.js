@@ -983,7 +983,7 @@ function renderGameDay(slate, day = slate?.today.date, schedule = null) {
 // One line of text per game, after the day's heading, with a space wherever a tag was.
 const describeGameList = (slate, day, schedule) =>
   String(renderGameDay(slate, day, schedule))
-    .split(/<li|<h3/)
+    .split(/<li|<h2/)
     .map((part) =>
       normalizeSpaces(part.replace(/<[^>]*>|^[^>]*>/g, " "))
         .replace(/&bull;/g, "•")

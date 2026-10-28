@@ -133,6 +133,7 @@ test("mutation discovery includes both typing sweeps and the focused module test
   assert.deepEqual(listMutationTests([readMutationTarget("search-reading")]), [
     "apps/mlb/tests/search-typing.test.js",
     "apps/wnba/tests/search-typing.test.js",
+    "tests/game-search-view.test.js",
     "tests/game-search.test.js",
   ]);
   assert.ok(

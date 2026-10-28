@@ -71,7 +71,7 @@ async function openNews(page) {
 }
 
 /** @param {import("@playwright/test").Page} page */
-const readHeadlines = (page) => page.locator(".news-card h3").allTextContents();
+const readHeadlines = (page) => page.locator(".news-card h2").allTextContents();
 
 /**
  * @param {import("@playwright/test").Page} page

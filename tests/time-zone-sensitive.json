@@ -96,6 +96,7 @@
     "tests/game-cards.test.js",
     "tests/game-reminders.test.js",
     "tests/game-search-two-leagues.test.js",
+    "tests/game-search-view.test.js",
     "tests/game-search.test.js",
     "tests/highlights-job.test.js",
     "tests/highlights-view.test.js",

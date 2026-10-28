@@ -1,7 +1,7 @@
 import { holdClock } from "../../../../tests/browser/harness.mjs";
 import { test, expect, openApp } from "./harness.mjs";
 import { drag } from "../../../../tests/browser/touch.mjs";
-import { findCenter } from "../../../../tests/browser/season-scroll.mjs";
+import { findMiddle } from "../../../../tests/browser/season-scroll.mjs";
 import { findSeasonPill, openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
 import { SETTINGS, openSettings } from "../../../../tests/browser/settings.mjs";
 import { turnOnDiagnostics } from "../../../../tests/browser/diagnostics-switch.mjs";
@@ -22,12 +22,6 @@ test.use({
   isMobile: true,
   contextOptions: { reducedMotion: "reduce" },
 });
-
-/**
- * The middle of what a locator shows.
- * @param {import("@playwright/test").Locator} locator
- */
-const findMiddle = async (locator) => findCenter(await locator.boundingBox());
 
 /**
  * Notes, in the page, each time a button is first marked pressed.
@@ -367,7 +361,7 @@ async function openNewsStory(page) {
       },
     ],
   });
-  const headline = page.locator(".news-card h3.news-title a");
+  const headline = page.locator(".news-card h2.news-title a");
   await expect(headline).toBeVisible();
   return headline;
 }

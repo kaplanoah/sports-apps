@@ -1,14 +1,7 @@
 // How a test presses a control and reads the look its press takes (press.js and controls.css).
 
 import { expect } from "@playwright/test";
-
-/** @param {import("@playwright/test").Locator} locator */
-async function findMiddle(locator) {
-  await locator.scrollIntoViewIfNeeded();
-  const box = await locator.boundingBox();
-  if (!box) throw new Error("Nothing shows to press");
-  return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
-}
+import { findMiddle } from "./season-scroll.mjs";
 
 /**
  * Holds the mouse down on the middle of what a locator shows.
@@ -16,6 +9,7 @@ async function findMiddle(locator) {
  * @param {import("@playwright/test").Locator} locator
  */
 export async function pressOn(page, locator) {
+  await locator.scrollIntoViewIfNeeded();
   const middle = await findMiddle(locator);
   await page.mouse.move(middle.x, middle.y);
   await page.mouse.down();

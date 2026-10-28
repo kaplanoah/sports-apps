@@ -120,7 +120,7 @@ function renderRecordCells(row) {
 
 function renderHeader(gamesBackLabel, eliminationLabel, eliminationTitle) {
   return html`<thead><tr>
-        <th></th><th>Seed</th><th class="left">Team</th><th class="mid">W</th><th class="mid">L</th><th class="mid pct">PCT</th><th>${gamesBackLabel}</th>
+        <td></td><th>Seed</th><th class="left">Team</th><th class="mid">W</th><th class="mid">L</th><th class="mid pct">PCT</th><th>${gamesBackLabel}</th>
         <th class="mid" title="${eliminationTitle}">${eliminationLabel}</th><th class="left next-cell">Next</th>
       </tr></thead>`;
 }
@@ -209,14 +209,14 @@ function renderMagicCell(leader) {
 
 function renderFieldHead() {
   return html`<thead><tr>
-        <th></th><th>Seed</th><th class="left">Division leaders</th><th class="mid">W</th><th class="mid">L</th><th class="mid pct">PCT</th><th>Lead</th>
+        <td></td><th>Seed</th><th class="left">Division leaders</th><th class="mid">W</th><th class="mid">L</th><th class="mid pct">PCT</th><th>Lead</th>
         <th class="mid" title="${MAGIC_NUMBER_TITLE}">M#</th><th class="left next-cell">Next</th>
       </tr></thead>`;
 }
 
 const WILD_CARD_HEAD = html`<tr class="wild-card-head">
-    <th></th><th></th><th class="left">Wild cards</th><th></th><th></th><th></th><th>WCGB</th>
-    <th class="mid" title="${WILD_CARD_ELIMINATION_TITLE}">WCE</th><th></th>
+    <td></td><td></td><th class="left">Wild cards</th><td></td><td></td><td></td><th>WCGB</th>
+    <th class="mid" title="${WILD_CARD_ELIMINATION_TITLE}">WCE</th><td></td>
   </tr>`;
 
 export function renderFieldBlock(league, divisions) {

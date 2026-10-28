@@ -146,6 +146,7 @@ The Worker serves every file here, its `networks/` logos too, under `shared/`, b
 - `kept-place.js`: keeping rows in place as what's above them changes
 - `eased-redraw.js`: easing parts to their new heights on a redraw
 - `slide-panels.js`: side-by-side panels a finger drags
+- `shown-view.js`: hearing that the view shown changed without a scroll
 - `side-swipe.js`: each sideways swipe the page's code follows
 
 ### Sheets

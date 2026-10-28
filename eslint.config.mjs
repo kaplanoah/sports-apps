@@ -74,6 +74,22 @@ const GENERIC_FUNCTION_NAMES = [
   message: "Name the function with a verb for what it does, not call, run, execute, or handle.",
 }));
 
+// A field hidden with `hidden` is gone to VoiceOver and the keyboard; a field the page shows its
+// own face for stays in the page, visually hidden, under a label that opens it. Scripts name an
+// element only by its variable, so the checks on scripts read the names fields go by.
+const HIDDEN_FIELD_MESSAGE =
+  "Hide a field visually, under a label that opens it, never with hidden.";
+const HIDDEN_FIELD_MARKUP = String.raw`/<(input|select|textarea)\b([^>"']|"[^"]*"|'[^']*')*\shidden(?=[\s\/>=]|$)/i`;
+const FIELD_NAME = "/(Input|Field|File|Picker|Upload)$|^(input|field|file|picker|upload)$/";
+const HIDDEN_FIELDS = [
+  `Literal[value=${HIDDEN_FIELD_MARKUP}]`,
+  `TemplateElement[value.cooked=${HIDDEN_FIELD_MARKUP}]`,
+  `AssignmentExpression[left.property.name='hidden'][left.object.name=${FIELD_NAME}]`,
+  `AssignmentExpression[left.property.name='hidden'][left.object.property.name=${FIELD_NAME}]`,
+  `CallExpression[callee.property.name=/^(setAttribute|toggleAttribute)$/][arguments.0.value='hidden'][callee.object.name=${FIELD_NAME}]`,
+  `CallExpression[callee.property.name=/^(setAttribute|toggleAttribute)$/][arguments.0.value='hidden'][callee.object.property.name=${FIELD_NAME}]`,
+].map((selector) => ({ selector, message: HIDDEN_FIELD_MESSAGE }));
+
 // A tap, press, key, or Escape the page's code fakes runs the control's listeners without the
 // browser's own handling of the input, so it drifts from what a person's does. The page calls the
 // function the control's listener would. Lint sees an event built in dispatchEvent's own call.
@@ -121,6 +137,7 @@ export default [
       "no-restricted-syntax": [
         "error",
         ...GENERIC_FUNCTION_NAMES,
+        ...HIDDEN_FIELDS,
         ...SYNTHETIC_INPUT,
         {
           selector:
@@ -140,7 +157,14 @@ export default [
   },
   {
     files: ["shared/page/html.js", "shared/page/show-last-drawn.js"],
-    rules: { "no-restricted-syntax": ["error", ...GENERIC_FUNCTION_NAMES, ...SYNTHETIC_INPUT] },
+    rules: {
+      "no-restricted-syntax": [
+        "error",
+        ...GENERIC_FUNCTION_NAMES,
+        ...HIDDEN_FIELDS,
+        ...SYNTHETIC_INPUT,
+      ],
+    },
   },
   {
     // Only days.js reads the viewer's calendar and clock, so a day or time reads the same in every
