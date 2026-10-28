@@ -32,7 +32,7 @@ const finalScreenPeriodsFixture = {
   ],
 };
 
-export const test = base.extend({ ...pageErrorsFixture, ...finalScreenPeriodsFixture });
+export const test = base.extend(pageErrorsFixture).extend(finalScreenPeriodsFixture);
 export { expect };
 
 /**
