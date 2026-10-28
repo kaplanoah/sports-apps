@@ -3,7 +3,8 @@
  * fill. Apps link it before their own styles.css, and define --raised, --ink-mid, --radius-chip,
  * and --channel-tag-lift, how far the tag moves from where its row centers it, so its middle sits
  * where the app picked against the name's capitals. An app can replace the font's bullet with
- * a circle by setting --channel-tag-dot to "" and --channel-tag-glyph to hidden.
+ * a circle by setting --channel-tag-dot to "" and --channel-tag-glyph to hidden, and raise the
+ * circle from the middle of the lowercase letters with --channel-tag-dot-lift.
  */
 
 .channel-tag {
@@ -37,7 +38,7 @@
   content: var(--channel-tag-dot, none);
   position: absolute;
   left: 50%;
-  bottom: calc(0.5ex - var(--channel-tag-dot-diameter) / 2);
+  bottom: calc(0.5ex - var(--channel-tag-dot-diameter) / 2 + var(--channel-tag-dot-lift, 0px));
   width: var(--channel-tag-dot-diameter);
   height: var(--channel-tag-dot-diameter);
   border-radius: 50%;
