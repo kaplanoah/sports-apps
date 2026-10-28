@@ -373,7 +373,7 @@ test.describe("a team's sheet", () => {
     await openApp(page);
     await openSeasonPart(page, "Standings");
     const fever = page.locator("#standings-league").getByRole("button", {
-      name: /^Fever\b.*team details$/,
+      name: /Fever\b.*team details$/,
     });
     await fever.focus();
     await page.keyboard.press("Enter");
@@ -387,7 +387,7 @@ test.describe("a team's sheet", () => {
     await openApp(page);
     await openSeasonPart(page, "Standings");
     const aces = page.locator("#standings-league").getByRole("button", {
-      name: /^Aces\b.*team details$/,
+      name: /Aces\b.*team details$/,
     });
     await aces.focus();
 

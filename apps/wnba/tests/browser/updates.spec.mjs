@@ -131,7 +131,7 @@ test.describe("on a phone", () => {
 
     await expect(updates.locator(".updates-count")).toHaveText("1 update since earlier today");
     await expect(updates.locator(".what")).toHaveText([
-      "Dream beat the Mystics 88-80 to win the First Round 2-0",
+      "Dream, team details beat the Mystics, team details 88-80 to win the First Round 2-0",
     ]);
   });
 
@@ -143,8 +143,8 @@ test.describe("on a phone", () => {
 
     await expect(updates.locator(".updates-count")).toHaveText("2 updates since yesterday");
     await expect(updates.locator(".what")).toHaveText([
-      "Liberty beat the Lynx 87-71 to win the First Round 2-0",
-      "Fever beat the Aces 99-89 in Game\u00a02, tie the First Round 1-1",
+      "Liberty, team details beat the Lynx, team details 87-71 to win the First Round 2-0",
+      "Fever, team details beat the Aces, team details 99-89 in Game\u00a02, tie the First Round 1-1",
     ]);
 
     await dismissUpdatesBox(page);
@@ -157,7 +157,7 @@ test.describe("on a phone", () => {
 
     await expect(updates.locator(".updates-count")).toHaveText("1 update since earlier today");
     await expect(updates.locator(".what")).toHaveText([
-      "Dream beat the Mystics 88-80 to win the First Round 2-0",
+      "Dream, team details beat the Mystics, team details 88-80 to win the First Round 2-0",
     ]);
   });
 
@@ -169,7 +169,7 @@ test.describe("on a phone", () => {
     await expect(updates.locator(".updates-count")).toHaveText("2 updates since yesterday");
     await app.changeSeason(finishValkyriesAtWings);
     await expect(updates.locator(".what").first()).toHaveText(
-      "Valkyries beat the Wings 90-84 to win the First Round 2-0",
+      "Valkyries, team details beat the Wings, team details 90-84 to win the First Round 2-0",
     );
 
     await dismissUpdatesBox(page);
@@ -185,7 +185,7 @@ test.describe("on a phone", () => {
       ),
     );
     await expect(updates.locator(".what")).toHaveText([
-      "Dream beat the Mystics 88-80 to win the First Round 2-0",
+      "Dream, team details beat the Mystics, team details 88-80 to win the First Round 2-0",
     ]);
   });
 

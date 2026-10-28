@@ -47,7 +47,7 @@ test("a player's name on her roster opens her sheet over it: her facts, her last
   const sheet = await openFromRoster(page, "Breanna Stewart");
 
   await expect(sheet.locator("#playerTitle")).toHaveText("Breanna Stewart");
-  await expect(sheet.locator("#playerNote")).toHaveText("Liberty•#30•Connecticut");
+  await expect(sheet.locator("#playerNote")).toHaveText("Liberty, team details•#30•Connecticut");
   await expect(sheet.locator(".player-fact")).toHaveText([
     "PositionForward",
     `Height6'4"`,

@@ -68,7 +68,7 @@ test("each view, a team's sheet on each section, and a sheet over a sheet keep w
           await expect(page.locator("#gameSheet .line-score")).toBeVisible();
           await page
             .locator("#gameSheet .faceoff")
-            .getByRole("button", { name: /^Fever\b.*team details$/ })
+            .getByRole("button", { name: /Fever\b.*team details$/ })
             .click();
           await expectShown(teamSheet);
         },

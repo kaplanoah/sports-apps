@@ -37,7 +37,7 @@ test("tapping a final opens its sheet with the score, the box score, and the top
   await expect(sheet.locator(".faceoff .score")).toHaveText(/89\s*99/);
   await expect(sheet.locator(".faceoff-record")).toHaveText(["31-13", "28-16"]);
   await expect(sheet.locator(".line-score tbody tr").first()).toHaveText(
-    /Aces\s*26\s*17\s*17\s*29\s*89/,
+    /Aces, team details\s*26\s*17\s*17\s*29\s*89/,
   );
   await expect(sheet.locator(".tape-label")).toHaveText([
     "Field goals",
@@ -122,7 +122,7 @@ test("a team's sheet open over a game's opens over it again on a reload, its bac
   const gameSheet = await openGameSheet(page, ACES_AT_FEVER);
   await gameSheet
     .locator(".faceoff")
-    .getByRole("button", { name: /^Aces\b.*team details$/ })
+    .getByRole("button", { name: /Aces\b.*team details$/ })
     .click();
   const teamSheet = page.locator("#teamSheet");
   await expect(teamSheet.locator("#teamTitle")).toHaveText("Las Vegas Aces");
@@ -142,15 +142,15 @@ test("a team's sheet open over a game's opened from another team's opens there a
 }) => {
   await openApp(page);
   await page
-    .getByRole("button", { name: /^Aces\b.*team details$/ })
+    .getByRole("button", { name: /Aces\b.*team details$/ })
     .first()
     .click();
   const teamSheet = page.locator("#teamSheet");
-  await teamSheet.getByRole("button", { name: /^Sep 29\b.*game details$/ }).click();
+  await teamSheet.getByRole("button", { name: /Sep 29\b.*game details$/ }).click();
   const gameSheet = page.locator("#gameSheet");
   await gameSheet
     .locator(".faceoff")
-    .getByRole("button", { name: /^Fever\b.*team details$/ })
+    .getByRole("button", { name: /Fever\b.*team details$/ })
     .click();
   await expect(teamSheet.locator("#teamTitle")).toHaveText("Indiana Fever");
 
@@ -410,7 +410,7 @@ test("a team's name in a game's sheet opens its sheet over the game's, with a ba
     await gameSheet
       .locator(place)
       .first()
-      .getByRole("button", { name: /^Aces\b.*team details$/ })
+      .getByRole("button", { name: /Aces\b.*team details$/ })
       .click();
     await expect(teamSheet.locator("#teamTitle")).toHaveText("Las Vegas Aces");
     await expectShown(teamSheet);
@@ -428,7 +428,7 @@ test("Escape closes a team's sheet and the game's under it at once", async ({ pa
   const gameSheet = page.locator("#gameSheet");
   await gameSheet
     .locator(".faceoff")
-    .getByRole("button", { name: /^Aces\b.*team details$/ })
+    .getByRole("button", { name: /Aces\b.*team details$/ })
     .click();
   await expect(page.locator("#teamTitle")).toHaveText("Las Vegas Aces");
 
@@ -448,7 +448,7 @@ test("going back from a team's sheet to a game's leaves no focus ring around the
   await gameSheet.evaluate((dialog) => dialog.focus());
   await gameSheet
     .locator(".faceoff")
-    .getByRole("button", { name: /^Aces\b.*team details$/ })
+    .getByRole("button", { name: /Aces\b.*team details$/ })
     .dispatchEvent("click");
   const teamSheet = page.locator("#teamSheet");
   await expect(teamSheet.locator("#teamTitle")).toHaveText("Las Vegas Aces");

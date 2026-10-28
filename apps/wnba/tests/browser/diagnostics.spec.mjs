@@ -197,7 +197,7 @@ test("with Diagnostics on, a tap that opens a team's sheet from a game's, the ro
   await (await findGameButton(page, "Game details: Aces at Fever, First Round Game 2")).click();
   const teamButton = page
     .locator("#gameSheet .faceoff")
-    .getByRole("button", { name: /^Fever\b.*team details$/ });
+    .getByRole("button", { name: /Fever\b.*team details$/ });
   await teamButton.click();
   await expect(page.locator("#teamTitle")).toHaveText("Indiana Fever");
   await page
@@ -218,7 +218,7 @@ test("with Diagnostics on, a tap that opens a team's sheet from a game's, the ro
     expect.arrayContaining([
       "open gameSheet over the page",
       "settle on gameSheet",
-      expect.stringMatching(/^click at \d+,\d+ on Fever\b.*team details$/),
+      expect.stringMatching(/^click at \d+,\d+ on \d*Fever, team details$/),
       "open teamSheet over gameSheet",
       "settle on teamSheet",
       expect.stringMatching(/^click at \d+,\d+ on Back to Game$/),

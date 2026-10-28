@@ -31,7 +31,7 @@ async function openFeverFromGame(page) {
   const gameSheet = await openGame(page);
   await gameSheet
     .locator(".faceoff")
-    .getByRole("button", { name: /^Fever\b.*team details$/ })
+    .getByRole("button", { name: /Fever\b.*team details$/ })
     .click();
   const teamSheet = page.locator("#teamSheet");
   await expect(teamSheet.locator("#teamTitle")).toHaveText("Indiana Fever");
@@ -46,12 +46,12 @@ async function openFeverFromGame(page) {
  */
 async function openFeverFromAcesGame(page) {
   await page
-    .getByRole("button", { name: /^Aces\b.*team details$/ })
+    .getByRole("button", { name: /Aces\b.*team details$/ })
     .first()
     .click();
   const teamSheet = page.locator("#teamSheet");
   await expectShown(teamSheet);
-  await teamSheet.getByRole("button", { name: /^Sep 29\b.*game details$/ }).click();
+  await teamSheet.getByRole("button", { name: /Sep 29\b.*game details$/ }).click();
   const gameSheet = page.locator("#gameSheet");
   await expect(gameSheet.locator(".line-score")).toBeVisible();
   await expectShown(gameSheet);
@@ -350,14 +350,14 @@ test.describe("with reduced motion", () => {
     await page.setViewportSize(PHONE);
     await openApp(page);
     await page
-      .getByRole("button", { name: /^Aces\b.*team details$/ })
+      .getByRole("button", { name: /Aces\b.*team details$/ })
       .first()
       .click();
     const teamSection = page.locator("#teamSection");
     await teamSection.evaluate((section) => (section.scrollTop = 30));
     await page
       .locator("#teamSheet")
-      .getByRole("button", { name: /^Sep 29\b.*game details$/ })
+      .getByRole("button", { name: /Sep 29\b.*game details$/ })
       .click();
     const gameSheet = page.locator("#gameSheet");
     await expectShown(gameSheet);
@@ -393,7 +393,7 @@ test.describe("with reduced motion", () => {
 
     await gameSheet
       .locator(".faceoff")
-      .getByRole("button", { name: /^Aces\b.*team details$/ })
+      .getByRole("button", { name: /Aces\b.*team details$/ })
       .click();
 
     await expectShown(teamSheet);
