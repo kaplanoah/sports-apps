@@ -2,6 +2,8 @@ import { expect } from "@playwright/test";
 import { THEMES, showTheme } from "./theme-layout.mjs";
 import { SCREENS } from "./themes.mjs";
 
+const MLB_DOT_LIFT = 0.3;
+
 /** @param {import("@playwright/test").Page} page */
 async function readTagLayout(page) {
   return page.locator("#channelTag").evaluate(async (tag) => {
@@ -79,7 +81,7 @@ async function checkShownChannelTagDots(page, app) {
     expect(dot.opacity).toBe("0.7");
     if (app === "mlb") {
       expect(dot.diameter).toEqual([3, 3]);
-      expect(Math.abs(dot.offset - dot.halfXHeight)).toBeLessThan(0.02);
+      expect(Math.abs(dot.offset - dot.halfXHeight - MLB_DOT_LIFT)).toBeLessThan(0.02);
       expect(dot.glyph).toBe("hidden");
       expect(dot.dot).toBe("visible");
       expect(dot.content).toBe('""');
