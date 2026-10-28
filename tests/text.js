@@ -12,8 +12,16 @@ export const normalizeSpaces = (value) => {
 export const dropSpokenOnly = (text) =>
   text.replace(/<span class="spoken-only">[^<]*<\/span>/g, "");
 
+// Markup's text without its tags, cut at each tag, since replacing tags with nothing can join
+// what's left around one into another.
+export const removeTags = (markup) =>
+  markup
+    .split("<")
+    .map((part, index) => (index === 0 ? part : part.slice(part.indexOf(">") + 1)))
+    .join("");
+
 // Markup as it shows: without its tags or the words only a screen reader speaks.
-export const stripTags = (value) => dropSpokenOnly(readText(value)).replace(/<[^>]+>/g, "");
+export const stripTags = (value) => removeTags(dropSpokenOnly(readText(value)));
 
 // A stamp's markup as it reads: its AM/PM is set apart by a margin, which reads as a space.
 export const readStampText = (value) =>

@@ -23,7 +23,7 @@ import {
   renderEntryText,
   renderUpdateText,
 } from "../page/js/updates.js";
-import { normalizeSpaces, stripTags } from "../../../tests/text.js";
+import { normalizeSpaces, removeTags, stripTags } from "../../../tests/text.js";
 import { readFontFaces } from "../../../tests/css-rules.js";
 import { EASTERN, checkInTimeZone, useTimeZone } from "../../../tests/time-zone.js";
 import { dropSavedStorage, useKeptChoices } from "../../../tests/saved-storage.js";
@@ -1663,7 +1663,7 @@ const listTeamButtons = (rendered) =>
     ...String(rendered).matchAll(
       /<button type="button" class="[^"]*team-open" data-team="(\w+)">([\s\S]*?)<\/button>/g,
     ),
-  ].map(([, id, content]) => `${id} ${content.replace(/<[^>]*>/g, "").trim()}`);
+  ].map(([, id, content]) => `${id} ${removeTags(content).trim()}`);
 
 test("a club's name in the standings and the updates opens its sheet, and in a game's row, which opens the matchup wherever it's tapped, it's plain", () => {
   session.state = { teams: { NYY: { league: "AL", seed: 4 } } };
