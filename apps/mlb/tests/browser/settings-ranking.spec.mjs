@@ -30,8 +30,8 @@ const readCenters = (locator) =>
 test("the ranking has no tab of its own; settings hold it, numbered 1 to 12", async ({ page }) => {
   await openApp(page);
   const tabs = page.getByRole("tablist", { name: "Views" }).getByRole("tab");
-  await expect(tabs).toHaveCount(3);
-  for (const [index, name] of ["Standings", "Games", "News"].entries())
+  await expect(tabs).toHaveCount(4);
+  for (const [index, name] of ["Standings", "Games", "News", "Search"].entries())
     await expect(tabs.nth(index)).toHaveAccessibleName(name);
 
   await openSettings(page);

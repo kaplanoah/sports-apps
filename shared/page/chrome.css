@@ -112,6 +112,8 @@ nav.tabs {
   display: flex;
   margin-bottom: 28px;
 }
+/* The tabs and search, one tablist inside the nav landmark, lay out as the nav's own children. */
+.tab-row,
 .tab-bar {
   display: contents;
 }

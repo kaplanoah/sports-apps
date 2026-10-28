@@ -24,12 +24,14 @@ function findPartNamed() {
 }
 
 /**
- * The page's own parts: the body's children, in order, but for its dialogs and scripts. What moves
- * as the header rides or the page is pulled comes from these.
+ * The page's own parts: the body's children, with its main landmark's in its place, in order, but
+ * for its dialogs and scripts. What moves as the header rides or the page is pulled comes from these.
  */
 function listPageParts() {
   return /** @type {HTMLElement[]} */ (
-    [...document.body.children].filter((element) => !["DIALOG", "SCRIPT"].includes(element.tagName))
+    [...document.body.children]
+      .flatMap((element) => (element.tagName === "MAIN" ? [...element.children] : [element]))
+      .filter((element) => !["DIALOG", "SCRIPT"].includes(element.tagName))
   );
 }
 

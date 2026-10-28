@@ -5,11 +5,6 @@ const RULES_LEFT_OUT = [
   // contrast.mjs already holds every shown text to WCAG's AA contrast, pressed too, from the colors
   // the page draws, where axe guesses at what sits behind text and gives up on much of it.
   "color-contrast",
-  // The views sit outside a main landmark, and the Search tab outside its tablist, until
-  // MAIN_LANDMARK_PR puts them in theirs.
-  "region",
-  "landmark-one-main",
-  "aria-required-parent",
 ];
 
 /**
