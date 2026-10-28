@@ -165,16 +165,15 @@ test("a search put back from an earlier release, with Clear in the field's label
   await expect(lastDay).toBeInViewport();
   await page.addInitScript(() => {
     const saved = JSON.parse(localStorage.getItem("lastDrawn") ?? "{}");
-    const shell = new DOMParser().parseFromString(saved.gameSearch.markup, "text/html").body;
-    const field = /** @type {Element} */ (shell.querySelector(".search-field"));
-    const label = document.createElement("label");
-    label.className = "search-field";
-    label.append(
-      /** @type {Element} */ (field.querySelector(".search-input")),
-      /** @type {Element} */ (field.querySelector(".search-clear")),
-    );
-    field.replaceWith(label);
-    saved.gameSearch.markup = shell.innerHTML;
+    saved.gameSearch.markup = saved.gameSearch.markup
+      .replace(
+        /<div class="search-field">\s*<label class="search-label"\s*>/,
+        '<label class="search-field">',
+      )
+      .replace(
+        /<\/label>\s*(<button[^>]*class="search-clear"[\s\S]*?<\/button>)\s*<\/div>/,
+        "$1</label>",
+      );
     localStorage.setItem("lastDrawn", JSON.stringify(saved));
   });
 
