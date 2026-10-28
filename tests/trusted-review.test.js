@@ -711,6 +711,7 @@ async function verifyHostileReviewIsolation(baseRef) {
     PR: "1",
     REVIEW_HEAD: head,
     REVIEW_BASE: base,
+    REVIEW_TARGET: baseRef,
     REVIEW_TRUSTED: source,
     GITHUB_WORKFLOW_REF: ID_ENV.GITHUB_WORKFLOW_REF,
     GITHUB_REPOSITORY: "example/repository",
@@ -734,24 +735,22 @@ async function verifyHostileReviewIsolation(baseRef) {
     base: { ref: baseRef, sha: base },
     merge_commit_sha: merge,
   };
-  for (const initial of [undefined, head]) {
+  const selection = { merge, base };
+  for (const initial of [null, head]) {
     let reads = 0;
     let waits = 0;
-    const selected = await resolveReviewMerge(
-      { ...event, REVIEW_MERGE: initial },
-      {
-        readPull: async (path) => {
-          assert.equal(path, "/pulls/1");
-          reads++;
-          return { ...pull, merge_commit_sha: reads === 1 ? (initial ?? null) : merge };
-        },
-        wait: async (delay) => {
-          assert.ok(delay > 0);
-          waits++;
-        },
+    const selected = await resolveReviewMerge(event, {
+      readPull: async (path) => {
+        assert.equal(path, "/pulls/1");
+        reads++;
+        return { ...pull, merge_commit_sha: reads === 1 ? initial : merge };
       },
-    );
-    assert.equal(selected, merge);
+      wait: async (delay) => {
+        assert.ok(delay > 0);
+        waits++;
+      },
+    });
+    assert.deepEqual(selected, selection);
     assert.equal(reads, 2);
     assert.equal(waits, 1);
     assert.equal(
@@ -760,11 +759,20 @@ async function verifyHostileReviewIsolation(baseRef) {
       "resolving never checks out reviewed code",
     );
   }
+  const lagging = { ...pull, base: { ...pull.base, sha: "f".repeat(40) } };
+  assert.deepEqual(
+    await resolveReviewMerge(event, {
+      readPull: async () => lagging,
+      wait: async () => {
+        assert.fail("a merge onto the live tip needs no delay, though base.sha lags");
+      },
+    }),
+    selection,
+  );
   for (const changed of [
     { ...pull, state: "closed" },
-    { ...pull, base: { sha: "f".repeat(40) } },
     { ...pull, head: { sha: base } },
-    { ...pull, base: { ...pull.base, sha: head } },
+    { ...pull, base: { ...pull.base, ref: "retargeted" } },
     { ...pull, mergeable: false },
   ]) {
     let reads = 0;
@@ -782,6 +790,52 @@ async function verifyHostileReviewIsolation(baseRef) {
     );
     assert.equal(reads, 1);
   }
+  const sibling = readGit(hostile, ["commit-tree", `${base}^{tree}`, "-p", base, "-m", "sibling"]);
+  const offTip = readGit(hostile, [
+    "commit-tree",
+    `${merge}^{tree}`,
+    "-p",
+    sibling,
+    "-p",
+    head,
+    "-m",
+    "off tip",
+  ]);
+  readGit(hostile, ["update-ref", "refs/pull/2/merge", offTip]);
+  /** @param {string} candidate */
+  const resolveOffTip = async (candidate) => {
+    let reads = 0;
+    assert.equal(
+      await resolveReviewMerge(event, {
+        readPull: async () => {
+          reads++;
+          return { ...pull, merge_commit_sha: candidate };
+        },
+        wait: async () => {},
+      }),
+      null,
+      "a merge whose first parent is not the base branch's tip is never reviewed",
+    );
+    assert.equal(reads, 6);
+  };
+  await resolveOffTip(offTip);
+  readGit(hostile, ["update-ref", `refs/heads/${baseRef}`, sibling]);
+  try {
+    await resolveOffTip(merge);
+  } finally {
+    readGit(hostile, ["update-ref", `refs/heads/${baseRef}`, base]);
+  }
+  await assert.rejects(
+    () =>
+      resolveReviewMerge(
+        { ...event, REVIEW_TARGET: "absent" },
+        {
+          readPull: async () => ({ ...pull, base: { ...pull.base, ref: "absent" } }),
+          wait: async () => {},
+        },
+      ),
+    /base branch's current tip/,
+  );
   let exhausted = 0;
   let waited = 0;
   assert.equal(
@@ -798,18 +852,6 @@ async function verifyHostileReviewIsolation(baseRef) {
   );
   assert.equal(exhausted, 6, "review uses the shared mergeability retry budget");
   assert.equal(waited, 25000, "review waits for GitHub's established mergeability budget");
-  assert.equal(
-    await resolveReviewMerge(
-      { ...event, REVIEW_MERGE: merge },
-      {
-        readPull: async () => {
-          assert.fail("a pinned matching merge never follows the live PR");
-        },
-        wait: async () => {},
-      },
-    ),
-    merge,
-  );
   await assert.rejects(
     () =>
       resolveReviewMerge(
@@ -824,22 +866,10 @@ async function verifyHostileReviewIsolation(baseRef) {
   );
   const missing = "f".repeat(40);
   assert.equal(
-    await resolveReviewMerge(
-      { ...event, REVIEW_MERGE: missing },
-      {
-        readPull: async () => pull,
-        wait: async () => {
-          assert.fail("fresh matching metadata needs no delay");
-        },
-      },
-    ),
-    merge,
-  );
-  assert.equal(
-    await resolveReviewMerge(
-      { ...event, REVIEW_MERGE: missing },
-      { readPull: async () => ({ ...pull, merge_commit_sha: missing }), wait: async () => {} },
-    ),
+    await resolveReviewMerge(event, {
+      readPull: async () => ({ ...pull, merge_commit_sha: missing }),
+      wait: async () => {},
+    }),
     null,
   );
   assert.throws(() => prepareReviewCheckout({ ...event, REVIEW_MERGE: missing }), /not our ref/);
@@ -859,14 +889,12 @@ async function verifyHostileReviewIsolation(baseRef) {
   try {
     await assert.rejects(
       () =>
-        resolveReviewMerge(
-          { ...event, REVIEW_MERGE: missing },
-          {
-            readPull: async () => {
-              assert.fail("non-availability Git failures must propagate");
-            },
+        resolveReviewMerge(event, {
+          readPull: async () => pull,
+          wait: async () => {
+            assert.fail("non-availability Git failures must propagate");
           },
-        ),
+        }),
       /does not appear to be a git repository/,
     );
   } finally {
@@ -877,7 +905,7 @@ async function verifyHostileReviewIsolation(baseRef) {
   const recoveryPreload = join(directory, "recovery-fetch.mjs");
   writeFileSync(
     recoveryPreload,
-    `globalThis.fetch = async () => ({ ok: true, json: async () => (${JSON.stringify(pull)}) });`,
+    `globalThis.fetch = async () => ({ ok: true, json: async () => (${JSON.stringify(lagging)}) });`,
   );
   const recovered = spawnSync(
     process.execPath,
@@ -889,6 +917,7 @@ async function verifyHostileReviewIsolation(baseRef) {
         RUNNER_TEMP: directory,
         GITHUB_OUTPUT: recoveredOutput,
         GITHUB_ENV: recoveredEnvironment,
+        REVIEW_BASE: "",
         REVIEW_MERGE: "",
         GH_TOKEN: "example",
       },
@@ -896,7 +925,11 @@ async function verifyHostileReviewIsolation(baseRef) {
     },
   );
   assert.equal(recovered.status, 0, recovered.stderr);
-  assert.match(readFileSync(recoveredOutput, "utf8"), new RegExp(`available=true\nmerge=${merge}`));
+  assert.equal(
+    readFileSync(recoveredOutput, "utf8"),
+    `available=true\nmerge=${merge}\nbase=${base}\n`,
+  );
+  assert.match(readFileSync(recoveredEnvironment, "utf8"), new RegExp(`\nREVIEW_BASE=${base}\n`));
   assert.equal(readGit(checkout, ["rev-parse", "HEAD"]), merge);
   const envFile = join(directory, "env");
   prepareReviewCheckout({
@@ -1057,10 +1090,7 @@ async function verifyHostileReviewIsolation(baseRef) {
       },
     );
     assert.equal(next.status, 0, next.stderr);
-    assert.equal(
-      JSON.parse(readFileSync(join(nextFolder, "plan.json"), "utf8")).stage,
-      reviewedBase === base ? "reviewed" : "none",
-    );
+    assert.equal(JSON.parse(readFileSync(join(nextFolder, "plan.json"), "utf8")).stage, "reviewed");
   }
   assert.equal(existsSync(marker), false);
   assert.equal(readFileSync(join(trusted, ".nvmrc"), "utf8"), readRepoFile(".nvmrc"));
@@ -1091,21 +1121,21 @@ test("missing merge metadata leaves review owed without following a moving ref",
   assert.equal(readFileSync(output, "utf8"), "available=false\n");
 });
 
-test("posting rechecks the open pull and head while retaining its immutable reviewed base", async () => {
+test("posting rechecks the open pull, head and base branch while retaining its immutable reviewed base", async () => {
   const pull = {
     state: "open",
     head: { sha: SHA },
     base: { sha: ID_ENV.REVIEW_BASE, ref: "main" },
   };
-  const env = { ...ID_ENV, PR: "1" };
-  for (const ref of ["main", "stack"])
-    await verifyReviewEvent(env, async (path) => {
-      assert.equal(path, "/pulls/1");
-      return { ...pull, base: { sha: "f".repeat(40), ref } };
-    });
+  const env = { ...ID_ENV, PR: "1", REVIEW_TARGET: "main" };
+  await verifyReviewEvent(env, async (path) => {
+    assert.equal(path, "/pulls/1");
+    return { ...pull, base: { sha: "f".repeat(40), ref: "main" } };
+  });
   for (const changed of [
     { ...pull, state: "closed" },
     { ...pull, head: { sha: "e".repeat(40) } },
+    { ...pull, base: { ...pull.base, ref: "stack" } },
   ])
     await assert.rejects(() => verifyReviewEvent(env, async () => changed), /moved/);
 });
@@ -1147,6 +1177,25 @@ test("stacked target runs plan and summarize with the same owed and result gates
   }
   assert.match(workflow, /id: result\n {8}if: .*steps.prepare.outputs.available == 'true'/);
   assert.doesNotMatch(workflow, /pattern: trusted-review-\*\n/);
+});
+
+test("every review stage reads the base the plan took from the test merge, and the join finds its run by the event's base", () => {
+  const workflow = readRepoFile(".github/workflows/review.yml");
+  const readJob = (name) => workflow.split(`  ${name}:\n`)[1].split(/^ {2}[a-z][\w-]*:/m)[0];
+  assert.match(readJob("review-plan"), /\n {6}base: \$\{\{ steps.prepare.outputs.base \}\}\n/);
+  for (const name of ["review-area", "review-codex", "review-codex-across"])
+    assert.match(readJob(name), /\n {6}base: \$\{\{ needs.review-plan.outputs.base \}\}\n/);
+  for (const name of ["review-across", "review-post", "review"])
+    assert.match(readJob(name), /REVIEW_BASE: \$\{\{ needs.review-plan.outputs.base \}\}\n/);
+  for (const file of ["trusted-review-area.yml", "trusted-codex-review.yml"]) {
+    const called = readRepoFile(`.github/workflows/${file}`);
+    assert.match(called, /\n {6}base:\n {8}type: string\n {8}required: true\n/);
+    assert.match(called, /\n {2}REVIEW_BASE: \$\{\{ inputs.base \}\}\n/);
+  }
+  assert.match(
+    readRepoFile(".github/workflows/ci.yml"),
+    /REVIEW_EVENT_BASE: \$\{\{ github.event.pull_request.base.sha \}\}\n/,
+  );
 });
 
 test("trusted prompts retain the authoritative reporting guide after bootstrap", () => {

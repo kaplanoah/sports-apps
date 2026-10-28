@@ -28,6 +28,7 @@ const BASE = "b".repeat(40);
 const MERGE = "c".repeat(40);
 const SOURCE = "d".repeat(40);
 const TREE = "e".repeat(40);
+const TIP = "f".repeat(40);
 const REPOSITORY = "example/repository";
 const sha256 = (text) => createHash("sha256").update(text).digest("hex");
 
@@ -104,7 +105,7 @@ function createHarness() {
       },
     ]),
   );
-  needs["review-plan"].outputs = { count: "0", labeled: "false" };
+  needs["review-plan"].outputs = { count: "0", labeled: "false", base: TIP };
   const jobs = Object.entries(needs).map(([name, state], index) => ({
     id: index + 20,
     name: name === "review-begin" ? "review-begin / publish" : name,
@@ -125,7 +126,7 @@ function createHarness() {
     GITHUB_REPOSITORY: REPOSITORY,
     GITHUB_RUN_ID: "7",
     REVIEW_HEAD: HEAD,
-    REVIEW_BASE: BASE,
+    REVIEW_BASE: TIP,
     REVIEW_MERGE: MERGE,
     REVIEW_TRUSTED: SOURCE,
     GITHUB_WORKFLOW_REF: `${REPOSITORY}/.github/workflows/review.yml@refs/heads/main`,
@@ -162,7 +163,7 @@ function createHarness() {
     archives: new Map([[5, archive]]),
     artifacts: [artifact],
     failWrites: false,
-    commit: { sha: MERGE, tree: { sha: TREE }, parents: [{ sha: BASE }, { sha: HEAD }] },
+    commit: { sha: MERGE, tree: { sha: TREE }, parents: [{ sha: TIP }, { sha: HEAD }] },
     suites: null,
     changeWriteAnswer: (answer) => answer,
     async readGitHub(path) {
@@ -269,6 +270,7 @@ test("Codex publication requires every fresh request, model and validation stage
   state.needs["review-plan"].outputs = {
     count: "2",
     labeled: "false",
+    base: TIP,
     provider: "codex",
     selection: "initial",
   };
@@ -716,6 +718,24 @@ test("authenticated upload outputs, artifact names and merge metadata are mandat
         state.commit.parents.pop();
       },
       /merge parents or tree/,
+    ],
+    [
+      (state) => {
+        state.commit.parents[0].sha = BASE;
+      },
+      /merge parents or tree/,
+    ],
+    [
+      (state) => {
+        delete state.needs["review-plan"].outputs.base;
+      },
+      /Missing reviewed base/,
+    ],
+    [
+      (state) => {
+        state.needs["review-plan"].outputs.base = BASE;
+      },
+      /stale or foreign artifact/,
     ],
   ])) {
     const state = createHarness();

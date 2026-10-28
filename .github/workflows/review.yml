@@ -11,8 +11,7 @@ permissions:
 env:
   REVIEW_LABEL: review
   REVIEW_HEAD: ${{ github.event.pull_request.head.sha }}
-  REVIEW_BASE: ${{ github.event.pull_request.base.sha }}
-  REVIEW_MERGE: ${{ github.event.pull_request.merge_commit_sha }}
+  REVIEW_TARGET: ${{ github.event.pull_request.base.ref }}
   REVIEW_TRUSTED: ${{ github.sha }}
   PR: ${{ github.event.pull_request.number }}
 
@@ -87,6 +86,7 @@ jobs:
       count: ${{ steps.plan.outputs.count }}
       integration: ${{ steps.plan.outputs.integration }}
       merge: ${{ steps.prepare.outputs.merge }}
+      base: ${{ steps.prepare.outputs.base }}
       available: ${{ steps.prepare.outputs.available }}
     steps:
       - name: Decide whether to review
@@ -220,6 +220,7 @@ jobs:
       area: ${{ fromJSON(needs.review-plan.outputs.area-numbers)[matrix.name] }}
       name: ${{ matrix.name }}
       merge: ${{ needs.review-plan.outputs.merge }}
+      base: ${{ needs.review-plan.outputs.base }}
     secrets:
       CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -240,6 +241,7 @@ jobs:
       REVIEW_PROVIDER: ${{ needs.review-plan.outputs.provider }}
       REVIEW_SELECTION: ${{ needs.review-plan.outputs.selection }}
       REVIEW_MERGE: ${{ needs.review-plan.outputs.merge }}
+      REVIEW_BASE: ${{ needs.review-plan.outputs.base }}
       STAGE: ${{ needs.review-plan.outputs.stage }}
     steps:
       - *trusted-checkout
@@ -337,6 +339,7 @@ jobs:
       portion: ${{ format('{0}', fromJSON(needs.review-plan.outputs.area-numbers)[matrix.name]) }}
       selection: ${{ needs.review-plan.outputs.selection }}
       merge: ${{ needs.review-plan.outputs.merge }}
+      base: ${{ needs.review-plan.outputs.base }}
     secrets:
       TRUSTED_REVIEW_OPENAI_API_KEY: ${{ secrets.TRUSTED_REVIEW_OPENAI_API_KEY }}
 
@@ -351,6 +354,7 @@ jobs:
       portion: integration
       selection: ${{ needs.review-plan.outputs.selection }}
       merge: ${{ needs.review-plan.outputs.merge }}
+      base: ${{ needs.review-plan.outputs.base }}
     secrets:
       TRUSTED_REVIEW_OPENAI_API_KEY: ${{ secrets.TRUSTED_REVIEW_OPENAI_API_KEY }}
 
@@ -361,6 +365,7 @@ jobs:
       REVIEW_PROVIDER: ${{ needs.review-plan.outputs.provider }}
       REVIEW_SELECTION: ${{ needs.review-plan.outputs.selection }}
       REVIEW_MERGE: ${{ needs.review-plan.outputs.merge }}
+      REVIEW_BASE: ${{ needs.review-plan.outputs.base }}
     needs: [review-plan, review-across, review-codex, review-codex-across]
     if: ${{ !cancelled() && needs.review-plan.outputs.count > 0 }}
     runs-on: ubuntu-latest
@@ -398,6 +403,7 @@ jobs:
       REVIEW_PROVIDER: ${{ needs.review-plan.outputs.provider }}
       REVIEW_SELECTION: ${{ needs.review-plan.outputs.selection }}
       REVIEW_MERGE: ${{ needs.review-plan.outputs.merge }}
+      REVIEW_BASE: ${{ needs.review-plan.outputs.base }}
     needs: [review-plan, review-area, review-across, review-codex, review-codex-across, review-post]
     if: ${{ !cancelled() }}
     runs-on: ubuntu-latest

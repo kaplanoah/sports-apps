@@ -76,6 +76,8 @@ async function downloadRunArtifact(options, artifact, run, names, digest) {
 /** @param {any} options @param {any} run @param {any} needs @param {any} identity */
 async function validateResultArtifact(options, run, needs, identity) {
   const outputs = needs.review?.outputs;
+  const base = needs["review-plan"]?.outputs?.base;
+  if (!isGitObjectId(base)) throw new Error("Missing reviewed base.");
   const artifactId = Number(outputs?.artifact);
   if (!Number.isSafeInteger(artifactId) || !/^[a-f0-9]{64}$/.test(outputs?.digest ?? ""))
     throw new Error("Missing authenticated review upload outputs.");
@@ -98,7 +100,7 @@ async function validateResultArtifact(options, run, needs, identity) {
       GITHUB_REPOSITORY: options.env.GITHUB_REPOSITORY,
       REVIEW_RUN: String(run.id),
       REVIEW_HEAD: identity.head,
-      REVIEW_BASE: identity.base,
+      REVIEW_BASE: base,
       REVIEW_TRUSTED: identity.source,
       REVIEW_TREE: outputs.tree,
       ...(needs["review-plan"]?.outputs?.provider
@@ -115,7 +117,7 @@ async function validateResultArtifact(options, run, needs, identity) {
       commit.sha !== result.merge ||
       commit.tree?.sha !== result.tree ||
       JSON.stringify(commit.parents?.map((parent) => parent.sha)) !==
-        JSON.stringify([identity.base, identity.head])
+        JSON.stringify([base, identity.head])
     )
       throw new Error("Reviewed merge parents or tree changed.");
     return { artifact: artifactId, digest: outputs.digest, merge: result.merge, tree: result.tree };
