@@ -95,6 +95,20 @@ The one-day codex-proof-input artifact holds the synthetic project, prompt, sche
 
 Read the completed job log separately: neither `TRUSTED_CODEX_TOOL_PROOF_OK` nor `TRUSTED_CODEX_CAPTURE_PROOF` may appear there. Record the source SHA, run, proof artifact, observed CLI, configured action and model, observed usage and log inspection. Apply the activation gate above; this proof establishes only the tested runner behavior. A model-started failure needs fresh owner authorization before another attempt.
 
+### Hosted validator controls
+
+Dispatch `codex-validation-proof.yml` once on main with the gate still off. It uses no model, API key or publisher credential. One runner seals synthetic empty-candidate portions and integration through the production validators; a second downloads those artifacts and revalidates them before testing negative controls. Neither runner posts a review or writes a commit check.
+
+The `codex-validation-proof` artifact binds the source and run and lists each passing control. A valid baseline must pass before rejection can count. Stale head/base/source/run, changed provider/selection, malformed or incomplete answers, unjudged work, missing supplied-content coverage and changed integration evidence must fail. Producer checks separately reject missing integration, cancelled model and missing validation stages.
+
+| This proof establishes | Evidence still required separately |
+| --- | --- |
+| Actual artifact transfer and production validator rejection on fresh hosted runners | Native model investigation and empty-candidate integration |
+| Rejection of a synthetic cancelled producer | Actual interruption, retained evidence and recovery behavior |
+| Production publisher's producer-selection validation with synthetic records | Protected App publishing and live head/base/provider reconciliation |
+
+Synthetic records use an example repository identity and cannot authorize a real PR. Keep this distinction in every activation report. A passing fixture workflow does not satisfy the native interruption, empty-integration or live publishing requirements above.
+
 ## Verified official Codex configuration
 
 The official [action README](https://github.com/openai/codex-action/blob/c05cfd74ad95c626cdf05c6685e62becc3bf7813/README.md), [action inputs](https://github.com/openai/codex-action/blob/c05cfd74ad95c626cdf05c6685e62becc3bf7813/action.yml), and [security guidance](https://github.com/openai/codex-action/blob/c05cfd74ad95c626cdf05c6685e62becc3bf7813/docs/security.md) define the pinned action's behavior. The CLI and API proxy are pinned to `0.164.0`. Permission profiles require CLI `0.138.0` or later. The pinned CLI's official model catalog includes `gpt-6.1-sol`; this path uses that model with high reasoning effort.
