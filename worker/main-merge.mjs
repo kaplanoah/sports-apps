@@ -70,25 +70,20 @@ const isNeeded = (cwd, merge, parent, main) =>
   changesOwnDiff(cwd, merge, parent, main);
 
 /**
- * Whether a merge brings in main and needed none of what it brings.
- * @param {string} cwd @param {string[]} parents the merge, its first parent, and what it merges
+ * What a merge brings in from main, which is nothing for a merge of another branch.
+ * @param {string} cwd @param {string[]} merged the merge's parents after its first
  */
-function isNeedlessMainMerge(cwd, [merge, parent, ...merged]) {
-  const mainParents = merged.filter(
-    (commit) => isAncestor(cwd, commit, MAIN) && !isAncestor(cwd, commit, parent),
-  );
-  return mainParents.length > 0 && mainParents.every((main) => !isNeeded(cwd, merge, parent, main));
-}
+const listMainParents = (cwd, merged) => merged.filter((commit) => isAncestor(cwd, commit, MAIN));
 
 /**
- * Why pushing a commit is refused for an unpublished merge of main it didn't need, or null.
- * @param {{ head: string, cwd?: string }} options
- * @returns {string | null}
+ * The unpublished merges on a commit's first-parent line, newest first, each as the merge, its
+ * first parent, and what it merges.
+ * @param {string} cwd @param {string} head
  */
-export function findNeedlessMainMerge({ head, cwd = process.cwd() }) {
-  if (!hasMain(cwd)) return null;
-  const needless = readGit(cwd, [
+const listMerges = (cwd, head) =>
+  readGit(cwd, [
     "rev-list",
+    "--first-parent",
     "--merges",
     "--parents",
     head,
@@ -97,14 +92,27 @@ export function findNeedlessMainMerge({ head, cwd = process.cwd() }) {
   ])
     .split("\n")
     .filter(Boolean)
-    .map((line) => line.split(" "))
-    .find((commits) => isNeedlessMainMerge(cwd, commits));
-  if (!needless) return null;
+    .map((line) => line.split(" "));
+
+/**
+ * Why pushing a commit is refused for a merge of main it didn't need, or null. Only the newest
+ * unpublished merge of main counts, since it brings in all that an earlier one did.
+ * @param {{ head: string, cwd?: string }} options
+ * @returns {string | null}
+ */
+export function findMainMergeProblem({ head, cwd = process.cwd() }) {
+  if (!hasMain(cwd)) return null;
+  const newest = listMerges(cwd, head).find(
+    ([, , ...merged]) => listMainParents(cwd, merged).length > 0,
+  );
+  if (!newest) return null;
+  const [merge, parent, ...merged] = newest;
+  if (listMainParents(cwd, merged).some((main) => isNeeded(cwd, merge, parent, main))) return null;
   return (
-    `Merge ${needless[0].slice(0, 7)} brings in main, which wasn't needed: it has no conflict, ` +
+    `Merge ${merge.slice(0, 7)} brings in main, which wasn't needed: it has no conflict, ` +
     "no red commit is missing from the branch, and the pull request's own change is unchanged. " +
     "Drop the merge commit (for example git reset --hard HEAD^1 if it's the newest commit and " +
-    "the tree is clean) and add the review label, which tests and reviews the pull request " +
-    "merged onto current main."
+    "the tree is clean) and, once the pull request is ready for review, add the review label, " +
+    "which tests and reviews it merged onto current main."
   );
 }

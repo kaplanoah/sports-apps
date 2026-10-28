@@ -3,7 +3,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
-import { findNeedlessMainMerge } from "../worker/main-merge.mjs";
+import { findMainMergeProblem } from "../worker/main-merge.mjs";
 
 const CHECKS = ["lint", "format:check", "typecheck", "deadcode", "test"];
 const OUTPUT_LINE_LIMIT = 40;
@@ -144,7 +144,7 @@ async function checkPush() {
     process.exitCode = 1;
     return;
   }
-  const mergeReason = findNeedlessMainMerge({ head });
+  const mergeReason = findMainMergeProblem({ head });
   if (mergeReason) {
     process.stderr.write(`${mergeReason}\n`);
     process.exitCode = 1;

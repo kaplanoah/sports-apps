@@ -4,7 +4,7 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { findNeedlessMainMerge } from "../worker/main-merge.mjs";
+import { findMainMergeProblem } from "../worker/main-merge.mjs";
 
 const LINES = ["one", "two", "three", "four", "five", "six", "seven", "eight", "nine"];
 
@@ -58,7 +58,7 @@ function createHistory(context) {
     readGit(["merge", "-q", "--no-edit", revision]);
     return readGit(["rev-parse", "HEAD"]);
   };
-  const find = () => findNeedlessMainMerge({ head: "HEAD", cwd });
+  const find = () => findMainMergeProblem({ head: "HEAD", cwd });
   readGit(["init", "-q"]);
   const base = commit({ "notes.txt": `${LINES.join("\n")}\n`, "shared/page/sheet.js": "1;\n" });
   readGit(["update-ref", "refs/remotes/origin/main", base]);
@@ -106,6 +106,34 @@ test("a merge of main that keeps both sides of a conflict on adjacent lines, lea
   const both = editLine(5, "branch five").replace("four", "main four");
   history.commit({ "notes.txt": both });
   assert.equal(history.find(), null);
+});
+
+test("a needless merge of main goes once a later, needed merge of main brings in all it did", (context) => {
+  const history = createHistory(context);
+  history.branch("feature", history.base);
+  history.commit({ "notes.txt": editLine(5, "branch five") });
+  history.commitToMain({ "main.txt": "main\n" });
+  history.checkout("feature");
+  history.merge("origin/main");
+  history.commitToMain({ "notes.txt": editLine(5, "main five") });
+  history.checkout("feature");
+  assert.throws(() => history.merge("origin/main"));
+  history.commit({ "notes.txt": editLine(5, "both fives") });
+  assert.equal(history.find(), null);
+});
+
+test("a needless merge of main after a needed one is refused by its own commit", (context) => {
+  const history = createHistory(context);
+  history.branch("feature", history.base);
+  history.commit({ "notes.txt": editLine(5, "branch five") });
+  history.commitToMain({ "notes.txt": editLine(5, "main five") });
+  history.checkout("feature");
+  assert.throws(() => history.merge("origin/main"));
+  history.commit({ "notes.txt": editLine(5, "both fives") });
+  history.commitToMain({ "main.txt": "main\n" });
+  history.checkout("feature");
+  const merge = history.merge("origin/main");
+  assert.match(history.find() ?? "", new RegExp(`^Merge ${merge.slice(0, 7)} `));
 });
 
 test("a merge of main that brings in a red commit the branch lacked goes", (context) => {
