@@ -104,6 +104,26 @@ test("a final's Game section shows its innings, then each club's batters and pit
   expect(await listStrayPeriods(page)).toEqual([]);
 });
 
+test("every head cell of a final's innings and box score has the divider under it", async ({
+  page,
+}) => {
+  const { sheet } = await openOctoberGame(page, "Brewers at Padres, Tue, Oct 6");
+  await expect(sheet.locator(".line-score")).toBeVisible();
+  const divider = await readColor(page, "--divider");
+
+  const heads = await sheet
+    .locator(":is(.line-score, .box-table) thead :is(th, td)")
+    .evaluateAll((cells) =>
+      cells.map((cell) => {
+        const style = getComputedStyle(cell);
+        return style.borderBottomStyle === "none" ? null : style.borderBottomColor;
+      }),
+    );
+
+  expect(heads.length).toBeGreaterThan(13);
+  expect(new Set(heads)).toEqual(new Set([divider]));
+});
+
 test("today's game still to start shows each club's lineup once it's posted, and a later day's shows none", async ({
   page,
 }) => {

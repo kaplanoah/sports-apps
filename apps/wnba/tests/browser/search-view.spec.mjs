@@ -155,6 +155,36 @@ test("two minutes away closes the search and goes back to the tab before it, and
   await expect(findSearch(page)).toBeHidden();
 });
 
+test("a search put back from an earlier release, with Clear in the field's label, keeps its list where it was once it's drawn again", async ({
+  page,
+}) => {
+  await openSeasonGames(page);
+  await tapSearch(page);
+  await sendSearch(page, "May");
+  const lastDay = page.locator('#gameSearch .listed-day[data-day="2026-05-31"]');
+  await expect(lastDay).toBeInViewport();
+  await page.addInitScript(() => {
+    const saved = JSON.parse(localStorage.getItem("lastDrawn") ?? "{}");
+    const shell = new DOMParser().parseFromString(saved.gameSearch.markup, "text/html").body;
+    const field = /** @type {Element} */ (shell.querySelector(".search-field"));
+    const label = document.createElement("label");
+    label.className = "search-field";
+    label.append(
+      /** @type {Element} */ (field.querySelector(".search-input")),
+      /** @type {Element} */ (field.querySelector(".search-clear")),
+    );
+    field.replaceWith(label);
+    saved.gameSearch.markup = shell.innerHTML;
+    localStorage.setItem("lastDrawn", JSON.stringify(saved));
+  });
+
+  await page.reload();
+
+  await expect(findInput(page)).toHaveValue("May");
+  await expect(page.locator("#gameSearch .search-label")).toHaveCount(1);
+  await expect(lastDay).toBeInViewport();
+});
+
 test("a reload shows the search as it was before the page's code arrives, and the tab before it after two minutes away", async ({
   page,
 }) => {
