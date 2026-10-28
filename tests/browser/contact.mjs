@@ -216,6 +216,30 @@ export function testContact(test, expect, { openApp, league }) {
     await expect(dialog.locator("pre")).not.toHaveText(report);
   });
 
+  test("a bug report keeps a failed send's diagnostics until its message changes, then sends the page's as they are", async ({
+    page,
+  }) => {
+    const { requests, delivery } = await serveContact(page);
+    delivery.mode = "failure";
+    await openApp(page);
+    const dialog = await openContact(page, "Bug report");
+    await dialog.locator("textarea").fill("The score stopped changing");
+    await dialog.getByRole("button", { name: "Send", exact: true }).click();
+    await expect(dialog.getByRole("alert")).toContainText("Couldn't confirm your message was sent");
+    await dialog.getByRole("button", { name: "Back to Contact", exact: true }).click();
+    const viewport = page.viewportSize();
+    await page.setViewportSize({ width: viewport.width - 40, height: viewport.height - 40 });
+    await dialog.getByRole("button", { name: "Bug report", exact: true }).click();
+    await dialog.getByRole("button", { name: "View diagnostics" }).click();
+    await expect(dialog.locator("pre")).toHaveText(requests[0].diagnostics);
+    await dialog.locator("textarea").fill("The score stopped changing in the ninth");
+    delivery.mode = "success";
+    await dialog.getByRole("button", { name: "Try again", exact: true }).click();
+    await expect(dialog.getByRole("heading", { name: "Message sent" })).toBeVisible();
+    expect(requests[1].id).not.toBe(requests[0].id);
+    expect(requests[1].diagnostics).not.toBe(requests[0].diagnostics);
+  });
+
   test("trying again takes away the failed send's note while it sends", async ({ page }) => {
     const { requests, delivery } = await serveContact(page);
     delivery.mode = "failure";

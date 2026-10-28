@@ -1,5 +1,7 @@
 // Where a sheet's or settings' top holds what it shows, to compare one screen with another.
 
+import { openSettings, SETTINGS } from "./settings.mjs";
+
 /**
  * How far under the top's edge its title and its close or back button sit, and the room under its
  * last line.
@@ -46,4 +48,29 @@ export async function readSettingsTop(dialog) {
   });
   const { titleTop, buttonTop } = await readTopSpacing(top);
   return { ...looks, titleTop, buttonTop };
+}
+
+/**
+ * @param {any} test
+ * @param {any} expect
+ * @param {{ openApp: (page: import("@playwright/test").Page) => Promise<unknown>, settingsPages: string[] }} options
+ */
+export function testSettingsPageTops(test, expect, { openApp, settingsPages }) {
+  test("every page of settings has settings' own top, its colors, its title, and its back arrow where settings' close button is", async ({
+    page,
+  }) => {
+    await openApp(page);
+    await openSettings(page);
+    const settings = page.locator(SETTINGS);
+    const settingsTop = await readSettingsTop(settings);
+
+    for (const name of settingsPages) {
+      await settings.locator(`#${name.toLowerCase()}Btn`).click();
+      const dialog = page.locator(`#${name.toLowerCase()}Dialog`);
+      await expect(dialog.locator(".settings-back")).toBeVisible();
+      expect(await readSettingsTop(dialog), name).toEqual(settingsTop);
+      await dialog.locator(".settings-back").click();
+      await expect(dialog).toBeHidden();
+    }
+  });
 }

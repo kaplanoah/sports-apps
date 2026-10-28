@@ -33,6 +33,9 @@ export async function openHighlights(page) {
 
 /** @typedef {import("../../../../tests/browser/view-walk.mjs").View} View */
 
+// The pages settings opens, in the order its rows list them.
+export const SETTINGS_PAGES = ["Contact"];
+
 /**
  * Each view, opened from the last, and what shows once it's drawn, in groups that each check
  * within a test's time.

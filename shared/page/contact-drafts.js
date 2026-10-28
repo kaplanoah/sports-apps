@@ -17,21 +17,28 @@ export const createContactDraft = () => ({
 });
 
 /** @param {string} category @param {ContactDraft} draft */
+const collectContactFields = (category, draft) => ({
+  category,
+  message: draft.message,
+  email: draft.email.trim(),
+  screenshot: draft.screenshot && {
+    type: draft.screenshot.type,
+    filename: draft.screenshot.filename,
+    content: draft.screenshot.content,
+  },
+  ...(category === "bug" && draft.includeDiagnostics && { diagnostics: draft.diagnostics }),
+});
+
+// Whether sending the draft now tries again the send it couldn't confirm, unedited since.
+/** @param {string} category @param {ContactDraft} draft */
+export const isContactRetry = (category, draft) =>
+  Boolean(draft.attempt) &&
+  JSON.stringify(draft.attempt.fields) === JSON.stringify(collectContactFields(category, draft));
+
+/** @param {string} category @param {ContactDraft} draft */
 export function prepareContactSubmission(category, draft) {
-  const fields = {
-    category,
-    message: draft.message,
-    email: draft.email.trim(),
-    screenshot: draft.screenshot && {
-      type: draft.screenshot.type,
-      filename: draft.screenshot.filename,
-      content: draft.screenshot.content,
-    },
-    ...(category === "bug" && draft.includeDiagnostics && { diagnostics: draft.diagnostics }),
-  };
-  const previous = draft.attempt;
-  if (previous && JSON.stringify(previous.fields) === JSON.stringify(fields))
-    return previous.request;
+  if (isContactRetry(category, draft)) return draft.attempt.request;
+  const fields = collectContactFields(category, draft);
   const request = { id: crypto.randomUUID(), ...fields };
   draft.attempt = { fields, request };
   return request;

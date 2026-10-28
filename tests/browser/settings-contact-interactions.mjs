@@ -82,17 +82,18 @@ export function testSettingsContactInteractions(test, expect, { openApp, setting
   test("search opens each page of settings itself, with no click on its row", async ({ page }) => {
     await page.emulateMedia({ reducedMotion: "reduce" });
     await openApp(page);
-    await page.evaluate(() => {
+    const rowSelector = settingsPages.map((name) => `#${name.toLowerCase()}Btn`).join(", ");
+    await page.evaluate((selector) => {
       document.body.dataset.rowClicks = "0";
       document.addEventListener(
         "click",
         (event) => {
-          if (/** @type {Element} */ (event.target).closest?.("#contactBtn, #rankingBtn"))
+          if (/** @type {Element} */ (event.target).closest?.(selector))
             document.body.dataset.rowClicks = String(Number(document.body.dataset.rowClicks) + 1);
         },
         { capture: true },
       );
-    });
+    }, rowSelector);
     const search = page.locator("#gameSearch .search-input");
     for (const name of settingsPages) {
       await page.locator("#tab-search").tap();

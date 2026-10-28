@@ -7,7 +7,11 @@ import {
   validateContactFields,
   validateContactScreenshot,
 } from "../shared/page/contact-rules.js";
-import { createContactDraft, prepareContactSubmission } from "../shared/page/contact-drafts.js";
+import {
+  createContactDraft,
+  isContactRetry,
+  prepareContactSubmission,
+} from "../shared/page/contact-drafts.js";
 import { renderContact } from "../shared/page/contact-view.js";
 
 test("each form labels its message for its category, with the email's note between its label and field", () => {
@@ -116,6 +120,9 @@ test("diagnostics opt-out is complete; a retry keeps its identifier and exact re
   const optedOut = prepareContactSubmission("bug", draft);
   assert.ok(!Object.hasOwn(optedOut, "diagnostics"));
   assert.equal(prepareContactSubmission("bug", draft).id, optedOut.id);
+  assert.ok(isContactRetry("bug", draft));
+  draft.message = "The score stays still in the ninth";
+  assert.ok(!isContactRetry("bug", draft));
   for (const category of ["feature", "other"])
     assert.ok(!Object.hasOwn(prepareContactSubmission(category, draft), "diagnostics"));
 });

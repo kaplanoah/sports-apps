@@ -162,9 +162,10 @@ for (const { id, name, read, open } of SHEETS)
     const reread = read && page.waitForRequest(matchPath(read));
 
     await page.reload();
-    await reread;
+    if (reread) await reread;
+    else await expect(page.locator(`#${id}`)).toBeVisible();
 
     await expect(page.locator(`#${id} .placeholder`)).toHaveCount(0);
-    await expect.poll(() => readSheetText(page, id)).toBe(before);
+    expect(await readSheetText(page, id)).toBe(before);
     for (const release of releases) release();
   });

@@ -3,7 +3,8 @@ import { waitForTimedAnimations } from "../../../../tests/browser/animations.mjs
 import { recordSheetMotions } from "../../../../tests/browser/sheet-motions.mjs";
 import { expectShown, readLeft } from "../../../../tests/browser/sheet-row.mjs";
 import { openSettings, SETTINGS } from "../../../../tests/browser/settings.mjs";
-import { readSettingsTop } from "../../../../tests/browser/sheet-top.mjs";
+import { testSettingsPageTops } from "../../../../tests/browser/sheet-top.mjs";
+import { SETTINGS_PAGES } from "./views.mjs";
 import { drag } from "../../../../tests/browser/touch.mjs";
 import { THEMES } from "../../../../tests/browser/theme-layout.mjs";
 
@@ -224,23 +225,7 @@ test.describe("with reduced motion", () => {
       });
   });
 
-  test("every page of settings has settings' own top, its colors, its title, and its back arrow where settings' close button is", async ({
-    page,
-  }) => {
-    await openApp(page);
-    await openSettings(page);
-    const settings = page.locator(SETTINGS);
-    const settingsTop = await readSettingsTop(settings);
-
-    for (const name of ["contact"]) {
-      await settings.locator(`#${name}Btn`).click();
-      const dialog = page.locator(`#${name}Dialog`);
-      await expect(dialog.locator(".settings-back")).toBeVisible();
-      expect(await readSettingsTop(dialog), name).toEqual(settingsTop);
-      await dialog.locator(".settings-back").click();
-      await expect(dialog).toBeHidden();
-    }
-  });
+  testSettingsPageTops(test, expect, { openApp, settingsPages: SETTINGS_PAGES });
 
   for (const theme of THEMES)
     test(`in ${theme}, every sheet and its roster's pinned cells are the card's color, and settings and their pages stay the page's own`, async ({

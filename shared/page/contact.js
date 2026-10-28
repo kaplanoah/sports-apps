@@ -1,5 +1,9 @@
 import { buildDiagnosticsReport } from "./diagnostics.js";
-import { createContactDraftStore, prepareContactSubmission } from "./contact-drafts.js";
+import {
+  createContactDraftStore,
+  isContactRetry,
+  prepareContactSubmission,
+} from "./contact-drafts.js";
 import {
   CONTACT_CATEGORIES,
   CONTACT_ROUTE,
@@ -109,11 +113,11 @@ export function startContact(dialog, button) {
 
   const focusTitle = () => focusSettingsTitle(dialog);
 
-  // A draft waiting on a send it couldn't confirm keeps its report, so trying again sends the same
-  // request.
+  // A draft unedited since a send it couldn't confirm keeps that send's report, so trying again
+  // sends the same request.
   function refreshDiagnostics() {
     const draft = readDraft();
-    if (view.screen === "form" && view.category === "bug" && !draft.attempt)
+    if (view.screen === "form" && view.category === "bug" && !isContactRetry("bug", draft))
       draft.diagnostics = fitContactDiagnostics(buildDiagnosticsReport());
   }
 
@@ -243,6 +247,7 @@ export function startContact(dialog, button) {
     view.validation = null;
     await screenshotRead;
     draft.failed = false;
+    if (draft.attempt) refreshDiagnostics();
     const request = prepareContactSubmission(category, draft);
     await store.save(category);
     drawContact();
