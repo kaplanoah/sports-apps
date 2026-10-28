@@ -1,10 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { parse } from "parse5";
 import { listApps } from "../worker/apps.mjs";
+import { REPO_ROOT } from "./repo-files.js";
 import {
   HOME_SCREEN_ICONS,
   listModules,
@@ -187,6 +188,37 @@ function listParsedNodes(page) {
   for (const node of nodes) if ("childNodes" in node) nodes.push(...node.childNodes);
   return nodes;
 }
+
+const FIELD_TAGS = new Set(["input", "select", "textarea"]);
+
+/**
+ * The fields in `page` hidden with `hidden`, which takes them from VoiceOver and the keyboard.
+ * @param {string} page
+ */
+const listHiddenFields = (page) =>
+  listParsedNodes(page).filter(
+    (node) =>
+      "tagName" in node &&
+      FIELD_TAGS.has(node.tagName) &&
+      node.attrs.some(({ name }) => name === "hidden") &&
+      !node.attrs.some(({ name, value }) => name === "type" && value === "hidden"),
+  );
+
+test("a hidden field is found in a page's markup, but a hidden button or form value isn't", () => {
+  const page = `<label><input type="file" HIDDEN></label><select hidden=""></select>
+<button hidden></button><input type="hidden" name="season"><input data-note="hidden">`;
+  assert.deepEqual(
+    listHiddenFields(page).map((node) => "tagName" in node && node.tagName),
+    ["select", "input"],
+  );
+});
+
+for (const app of listApps())
+  for (const name of ["index.html", "gate.html"])
+    test(`${app}: ${name} hides no field with hidden`, () => {
+      const page = readFileSync(new URL(`apps/${app}/page/${name}`, REPO_ROOT), "utf8");
+      assert.deepEqual(listHiddenFields(page), []);
+    });
 
 for (const [tag, expected] of [
   ['<SCRIPT SRC="js/app.js"></SCRIPT>', '<SCRIPT src="release/abc1234/js/app.js"></SCRIPT>'],

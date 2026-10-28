@@ -96,29 +96,52 @@ test("a reload puts back the colors a part's code gave it, but nothing else in i
   release();
 });
 
-test("search put back from a release whose line under the field wasn't a status has it as one once the page's code runs", async ({
-  page,
-}) => {
-  await openApp(page);
-  const markup = await page
-    .locator("#gameSearch")
-    .evaluate((search) => search.innerHTML.replace(' role="status"', ""));
-  expect(markup).toContain("search-input");
-  await storeBeforeLoad(page, {
-    lastDrawn: JSON.stringify({ gameSearch: { markup, hidden: true } }),
-  });
-
-  await page.reload();
-
-  await expect(page.locator('#gameSearch .search-read[role="status"]')).toHaveCount(1);
-});
-
 test("saved markup that can't be read leaves the page to open as it would", async ({ page }) => {
   await storeBeforeLoad(page, { lastDrawn: "{not json", lastTab: "games" });
 
   await openApp(page);
 
   await expect(page.locator("#view-games")).toBeVisible();
+});
+
+test("a search put back from an earlier release, with Clear in the field's label, is drawn again with Clear beside it", async ({
+  page,
+}) => {
+  await storeBeforeLoad(page, {
+    lastDrawn: JSON.stringify({
+      gameSearch: {
+        markup: `<div class="day-bar search-bar is-empty"><form class="search-row" role="search"><label class="search-field"><input type="search" class="search-input" value=""><button type="button" class="search-clear" aria-label="Clear" hidden></button></label><button type="button" class="search-cancel">Cancel</button></form><p class="search-read"></p></div><div class="day-list search-list"></div>`,
+        hidden: true,
+      },
+    }),
+  });
+
+  await openApp(page);
+
+  const search = page.locator("#gameSearch");
+  await expect(search.locator("label .search-input")).toHaveCount(1);
+  await expect(search.locator("label button")).toHaveCount(0);
+  await expect(search.locator(".search-field > .search-clear")).toHaveCount(1);
+});
+
+test("a search put back open from an earlier release keeps its words and Clear when it's drawn again", async ({
+  page,
+}) => {
+  await storeBeforeLoad(page, {
+    lastDrawn: JSON.stringify({
+      gameSearch: {
+        markup: `<div class="day-bar search-bar"><form class="search-row" role="search"><label class="search-field"><input type="search" class="search-input" value="liberty"><button type="button" class="search-clear" aria-label="Clear"></button></label><button type="button" class="search-cancel">Cancel</button></form><p class="search-read"></p></div><div class="day-list search-list"></div>`,
+        hidden: false,
+      },
+    }),
+  });
+
+  await openApp(page);
+
+  const search = page.locator("#gameSearch");
+  await expect(search.locator(".search-label .search-input")).toHaveValue("liberty");
+  await expect(search.locator(".search-field > .search-clear")).not.toHaveAttribute("hidden");
+  await expect(search.locator('.search-read[role="status"]')).toHaveCount(1);
 });
 
 test.describe("on a phone", () => {

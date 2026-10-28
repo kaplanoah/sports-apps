@@ -1,5 +1,6 @@
 import { readTabBeforeLast, saveLastTab } from "./last-tab.js";
 import { watchTimeAway } from "./resume.js";
+import { noteShownViewChange } from "./shown-view.js";
 import { isPageOffTop, scrollToTop } from "./spring-scroll.js";
 import { moveTabSelection } from "./tab-bar.js";
 import { readSelectedTab, selectTab, wireTabs } from "./tabs.js";
@@ -37,6 +38,7 @@ function switchTab(tab) {
   }
   showTab(tab);
   if (before !== tab) scrollTo({ top: tabScrolls.get(tab) ?? 0, behavior: "instant" });
+  noteShownViewChange();
   moveTabSelection(tab);
   saveLastTab(tab, before);
 }
