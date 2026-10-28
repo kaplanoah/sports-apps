@@ -2,7 +2,7 @@ name: Reconcile trusted review
 
 on:
   workflow_run:
-    workflows: [Trusted review]
+    workflows: [Trusted review, CI]
     types: [requested, in_progress, completed]
   pull_request_target:
     types:
@@ -25,7 +25,7 @@ permissions:
 
 jobs:
   discover:
-    if: vars.TRUSTED_REVIEW_PUBLISHER_ENABLED == 'true'
+    if: vars.TRUSTED_REVIEW_PUBLISHER_ENABLED == 'true' && (github.event_name != 'workflow_run' || github.event.workflow_run.name == 'Trusted review')
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
@@ -44,6 +44,35 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: node worker/publish-trusted-review.mjs discover
+
+  recover-join:
+    if: >-
+      github.event_name == 'workflow_run' && github.event.action == 'completed' && github.run_attempt == 1 &&
+      ((github.event.workflow_run.name == 'Trusted review' && github.event.workflow_run.conclusion == 'success') ||
+       (github.event.workflow_run.name == 'CI' && github.event.workflow_run.event == 'pull_request' && github.event.workflow_run.conclusion == 'failure'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: write
+      pull-requests: read
+    concurrency:
+      group: trusted-review-join-recovery-${{ github.repository }}-${{ github.event.workflow_run.head_sha }}
+      cancel-in-progress: false
+      queue: max
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version-file: .nvmrc
+          package-manager-cache: false
+      - name: Recover only the current read-only CI join
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node worker/find-trusted-review.mjs recover
 
   reconcile:
     needs: discover

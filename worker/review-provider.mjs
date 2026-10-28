@@ -1,9 +1,26 @@
 import { appendFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { createGitHub, readAllPages } from "./github-api.mjs";
+import { isRepositoryName, isRunId } from "./review-run.mjs";
 
 export const PROVIDER_MARKER = "<!-- trusted-review-provider ";
 const PROVIDERS = ["claude", "codex"];
+
+/** @param {NodeJS.ProcessEnv} env @param {string} provider @param {number | string} portion */
+export function writeReviewModelQueue(env, provider, portion) {
+  if (
+    !PROVIDERS.includes(provider) ||
+    !isRepositoryName(env.GITHUB_REPOSITORY) ||
+    (provider === "claude" &&
+      (!isRunId(env.GITHUB_RUN_ID) || !/^(integration|[1-9]\d*)$/.test(String(portion))))
+  )
+    throw new Error("Invalid review model queue identity.");
+  const group =
+    provider === "codex"
+      ? `trusted-codex-api-${env.GITHUB_REPOSITORY}`
+      : `trusted-claude-trial-${env.GITHUB_REPOSITORY}-${env.GITHUB_RUN_ID}-${portion}`;
+  appendFileSync(env.GITHUB_OUTPUT, `model-queue=${group}\n`);
+}
 
 /** @param {any[]} comments */
 function findProviderComment(comments) {

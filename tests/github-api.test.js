@@ -18,6 +18,34 @@ const answerWith = (status, body) => async () => new Response(body, { status });
 
 const env = { GH_TOKEN: "t0ken" };
 
+test("a successful empty-body job rerun is sent once without parsing or retrying its response", async () => {
+  const requests = [];
+  const api = createGitHub({
+    repository: "example/repository",
+    env,
+    fetchImpl: async (url, init) => {
+      requests.push({ url, init });
+      return new Response(null, { status: 201 });
+    },
+  });
+  assert.equal(await api("/actions/jobs/7/rerun", { method: "POST", readBody: false }), null);
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0].init.method, "POST");
+  const failed = createGitHub({
+    repository: "example/repository",
+    env,
+    fetchImpl: async () => {
+      requests.push(null);
+      return new Response("private failure", { status: 503 });
+    },
+  });
+  await assert.rejects(
+    failed("/actions/jobs/7/rerun", { method: "POST", readBody: false }),
+    /GitHub answered 503/,
+  );
+  assert.equal(requests.length, 2);
+});
+
 test("installation metadata uses the shared authenticated API-root policy", async () => {
   const requests = [];
   const readRoot = createGitHubRoot({

@@ -36,6 +36,8 @@ jobs:
   request:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    outputs:
+      model-queue: ${{ steps.request.outputs.model-queue }}
     permissions:
       contents: read
       pull-requests: read
@@ -89,6 +91,10 @@ jobs:
 
   model:
     needs: request
+    concurrency:
+      group: ${{ needs.request.outputs.model-queue }}
+      cancel-in-progress: false
+      queue: max
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:

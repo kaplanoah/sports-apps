@@ -8,6 +8,7 @@ import {
   findTrustedReviewRun,
   isTrustedReviewRun,
   verifyTrustedReviewResult,
+  recoverTrustedReviewJoin,
 } from "../worker/find-trusted-review.mjs";
 import { readReviewIdentity, sealReviewArtifact } from "../worker/review-data.mjs";
 import { readRepoFile, REPO_ROOT } from "./repo-files.js";
@@ -15,12 +16,13 @@ import { readNativeReviewName, readStepInput } from "./workflow-step.js";
 
 const SHA = "a".repeat(40);
 const TREE = "e".repeat(40);
-const EXPECTED = { repository: "example/repository", head: SHA, base: "b".repeat(40), pull: "1" };
+const BASE = "b".repeat(40);
+const EXPECTED = { repository: "example/repository", head: SHA, pull: "1" };
 const ID_ENV = {
   GITHUB_REPOSITORY: EXPECTED.repository,
   GITHUB_RUN_ID: "7",
   REVIEW_HEAD: SHA,
-  REVIEW_BASE: EXPECTED.base,
+  REVIEW_BASE: BASE,
   REVIEW_MERGE: "c".repeat(40),
   REVIEW_TRUSTED: "d".repeat(40),
   GITHUB_WORKFLOW_REF: `${EXPECTED.repository}/.github/workflows/review.yml@refs/heads/main`,
@@ -35,10 +37,323 @@ const createRun = (changes = {}) => ({
   head_sha: EXPECTED.head,
   repository: { full_name: EXPECTED.repository, id: 1 },
   pull_requests: [],
-  display_title: `Review 1 head ${SHA} base ${EXPECTED.base} source ${ID_ENV.REVIEW_TRUSTED}`,
+  display_title: `Review 1 head ${SHA} base ${BASE} source ${ID_ENV.REVIEW_TRUSTED}`,
   conclusion: "success",
   status: "completed",
   ...changes,
+});
+
+function createRecoveryFixture() {
+  const review = createRun({
+    display_title: `Review 1 head ${SHA} base ${BASE} source ${ID_ENV.REVIEW_TRUSTED} target main intent review`,
+  });
+  const pull = {
+    number: 1,
+    state: "open",
+    draft: false,
+    head: { sha: SHA },
+    base: { sha: BASE, ref: "main" },
+  };
+  const ci = {
+    id: 9,
+    path: ".github/workflows/ci.yml",
+    event: "pull_request",
+    repository: review.repository,
+    head_repository: { id: 1 },
+    head_sha: SHA,
+    pull_requests: [structuredClone(pull)],
+    run_attempt: 1,
+    status: "completed",
+    conclusion: "failure",
+  };
+  const jobs = [
+    { id: 31, run_id: 9, name: "review-join", status: "completed", conclusion: "timed_out" },
+    { id: 32, run_id: 9, name: "check", status: "completed", conclusion: "failure" },
+    { id: 33, run_id: 9, name: "checks", status: "completed", conclusion: "success" },
+  ];
+  const env = {
+    GITHUB_REPOSITORY: EXPECTED.repository,
+    GITHUB_REF: "refs/heads/main",
+    GITHUB_EVENT_NAME: "workflow_run",
+    GITHUB_WORKFLOW_REF: `${EXPECTED.repository}/.github/workflows/trusted-review-publisher.yml@refs/heads/main`,
+    GITHUB_RUN_ATTEMPT: "1",
+  };
+  const writes = [];
+  const state = { review, pull, ci, jobs, env, writes, result: true };
+  const api = async (path, request) => {
+    if (request) {
+      writes.push({ path, request });
+      assert.equal(path, "/actions/jobs/31/rerun");
+      state.ci.run_attempt++;
+      return null;
+    }
+    if (path === "/actions/runs/7") return state.review;
+    if (path === "/actions/runs/9") return state.ci;
+    if (path === "/pulls/1") return state.pull;
+    if (path.startsWith("/actions/workflows/review.yml/runs?"))
+      return { workflow_runs: [state.review] };
+    if (path.startsWith("/actions/workflows/ci.yml/runs?")) return { workflow_runs: [state.ci] };
+    if (path.startsWith("/actions/runs/7/artifacts?"))
+      return {
+        artifacts: state.result
+          ? [{ name: `trusted-review-passed-${TREE}`, workflow_run: { id: 7 } }]
+          : [],
+      };
+    if (path.startsWith("/actions/runs/9/jobs?")) return { jobs: state.jobs };
+    throw new Error("Unexpected recovery request");
+  };
+  return { state, api, event: { action: "completed", workflow_run: { id: 7 } } };
+}
+
+test("completion of a delayed review or failed CI recovers only its current join once, never a model", async () => {
+  for (const trigger of [7, 9]) {
+    const { state, api, event } = createRecoveryFixture();
+    event.workflow_run.id = trigger;
+    assert.equal(await recoverTrustedReviewJoin(event, state.env, api), 31);
+    assert.deepEqual(state.writes, [
+      { path: "/actions/jobs/31/rerun", request: { method: "POST", readBody: false } },
+    ]);
+    assert.equal(await recoverTrustedReviewJoin(event, state.env, api), null);
+    assert.equal(state.writes.length, 1);
+  }
+  const { state, api, event } = createRecoveryFixture();
+  state.jobs[0].conclusion = "success";
+  assert.equal(await recoverTrustedReviewJoin(event, state.env, api), 31);
+});
+
+test("completion recovery tolerates main metadata changes but reruns only the current exact-code join", async () => {
+  for (const trigger of [7, 9]) {
+    const { state, api, event } = createRecoveryFixture();
+    event.workflow_run.id = trigger;
+    state.pull.base.sha = TREE;
+    state.ci.pull_requests[0].base.sha = ID_ENV.REVIEW_TRUSTED;
+    assert.equal(await recoverTrustedReviewJoin(event, state.env, api), 31);
+    assert.equal(state.writes.length, 1);
+    assert.equal(state.writes[0].path, "/actions/jobs/31/rerun");
+  }
+});
+
+test("completion recovery refuses stacked targets for both review and CI triggers", async () => {
+  for (const trigger of [7, 9]) {
+    const { state, api, event } = createRecoveryFixture();
+    event.workflow_run.id = trigger;
+    state.review.display_title = state.review.display_title.replace("target main", "target other");
+    state.pull.base.ref = "other";
+    state.ci.pull_requests[0].base.ref = "other";
+    assert.equal(await recoverTrustedReviewJoin(event, state.env, api), null);
+    assert.equal(state.writes.length, 0);
+  }
+});
+
+test("join recovery waits for both completions and refuses stale, foreign, failed or already-retried evidence", async () => {
+  const changes = [
+    (s) => {
+      s.review.status = "in_progress";
+    },
+    (s) => {
+      s.review.conclusion = "failure";
+    },
+    (s) => {
+      s.review.path = ".github/workflows/untrusted.yml";
+    },
+    (s) => {
+      s.review.repository = { ...s.review.repository, full_name: "example/another" };
+    },
+    (s) => {
+      s.review.id = 8;
+    },
+    (s) => {
+      s.pull.head.sha = "f".repeat(40);
+    },
+    (s) => {
+      s.pull.base.ref = "other";
+    },
+    (s) => {
+      s.pull.state = "closed";
+    },
+    (s) => {
+      s.pull.draft = true;
+    },
+    (s) => {
+      s.result = false;
+    },
+    (s) => {
+      s.ci.status = "in_progress";
+    },
+    (s) => {
+      s.ci.conclusion = "success";
+    },
+    (s) => {
+      s.ci.run_attempt = 2;
+    },
+    (s) => {
+      s.ci.head_repository.id = 2;
+    },
+    (s) => {
+      s.ci.path = ".github/workflows/review.yml";
+    },
+    (s) => {
+      s.jobs[2].conclusion = "failure";
+    },
+    (s) => {
+      s.jobs[0].conclusion = "cancelled";
+    },
+    (s) => {
+      s.jobs[1].conclusion = "success";
+    },
+  ];
+  for (const change of changes) {
+    const { state, api, event } = createRecoveryFixture();
+    change(state);
+    assert.equal(await recoverTrustedReviewJoin(event, state.env, api), null);
+    assert.equal(state.writes.length, 0);
+  }
+  for (const change of [
+    { GITHUB_REF: "refs/pull/1/merge" },
+    { GITHUB_RUN_ATTEMPT: "2" },
+    { GITHUB_EVENT_NAME: "pull_request" },
+  ]) {
+    const { state, api, event } = createRecoveryFixture();
+    await assert.rejects(recoverTrustedReviewJoin(event, { ...state.env, ...change }, api));
+    assert.equal(state.writes.length, 0);
+  }
+});
+
+test("join recovery never guesses an ambiguous job or treats a write failure as success", async () => {
+  for (const change of [
+    (s) => s.jobs.push({ ...s.jobs[0], id: 34 }),
+    (s) => {
+      s.jobs[0].run_id = 8;
+    },
+  ]) {
+    const { state, api, event } = createRecoveryFixture();
+    change(state);
+    await assert.rejects(recoverTrustedReviewJoin(event, state.env, api));
+    assert.equal(state.writes.length, 0);
+  }
+  const { state, api, event } = createRecoveryFixture();
+  let writes = 0;
+  await assert.rejects(
+    recoverTrustedReviewJoin(event, state.env, async (path, request) => {
+      if (request) {
+        writes++;
+        throw new Error("request failed");
+      }
+      return api(path);
+    }),
+  );
+  assert.equal(writes, 1);
+});
+
+test("join recovery never replaces newer pending CI or a newer pending or failed requested review", async () => {
+  for (const kind of ["ci", "pending-review", "failed-review"]) {
+    const { state, api, event } = createRecoveryFixture();
+    const newer =
+      kind === "ci"
+        ? { ...state.ci, id: 10, status: "in_progress" }
+        : {
+            ...state.review,
+            id: 8,
+            status: kind === "pending-review" ? "in_progress" : "completed",
+            conclusion: "failure",
+          };
+    const readGitHub = async (path, request) => {
+      if (kind === "ci" && path.startsWith("/actions/workflows/ci.yml/runs?"))
+        return { workflow_runs: [state.ci, newer] };
+      if (kind !== "ci" && path.startsWith("/actions/workflows/review.yml/runs?"))
+        return { workflow_runs: [state.review, newer] };
+      return api(path, request);
+    };
+    assert.equal(await recoverTrustedReviewJoin(event, state.env, readGitHub), null);
+    assert.equal(state.writes.length, 0);
+  }
+});
+
+test("real recovery CLI distinguishes a declined rerun from success and keeps request failures private", () => {
+  for (const outcome of ["requested", "failed", "declined"]) {
+    const failWrite = outcome === "failed";
+    const { state, event } = createRecoveryFixture();
+    if (outcome === "declined") state.ci.run_attempt = 2;
+    const folder = createFolder();
+    const preload = join(folder, "api.mjs");
+    const eventPath = join(folder, "event.json");
+    const calls = join(folder, "calls.jsonl");
+    writeFileSync(calls, "");
+    writeJson(folder, "event.json", event);
+    writeFileSync(
+      preload,
+      `
+      import { appendFileSync } from 'node:fs';
+      const state = ${JSON.stringify(state)};
+      globalThis.fetch = async (url, request) => {
+        const path = new URL(url).pathname;
+        if (request.method === 'POST') {
+          appendFileSync(${JSON.stringify(calls)}, path + '\\n');
+          return new Response(${JSON.stringify(failWrite ? "private provider diagnostic" : "")}, { status: ${failWrite ? 503 : 201} });
+        }
+        const value = path.endsWith('/actions/runs/7') ? state.review
+          : path.endsWith('/pulls/1') ? state.pull
+          : path.includes('/workflows/review.yml/') ? { workflow_runs: [state.review] }
+          : path.includes('/workflows/ci.yml/') ? { workflow_runs: [state.ci] }
+          : path.endsWith('/artifacts') ? { artifacts: [{ name: 'trusted-review-passed-${TREE}', workflow_run: { id: 7 } }] }
+          : path.endsWith('/jobs') ? { jobs: state.jobs } : null;
+        if (!value) throw new Error('Unexpected API path');
+        return Response.json(value);
+      };
+    `,
+    );
+    const result = spawnSync(
+      process.execPath,
+      [
+        "--import",
+        preload,
+        new URL("worker/find-trusted-review.mjs", REPO_ROOT).pathname,
+        "recover",
+      ],
+      {
+        encoding: "utf8",
+        env: { ...process.env, ...state.env, GH_TOKEN: "example", GITHUB_EVENT_PATH: eventPath },
+      },
+    );
+    assert.equal(result.status, failWrite ? 1 : 0, result.stderr);
+    assert.equal(
+      readFileSync(calls, "utf8"),
+      outcome === "declined" ? "" : "/repos/example/repository/actions/jobs/31/rerun\n",
+    );
+    assert.match(
+      failWrite ? result.stderr : result.stdout,
+      failWrite
+        ? /GitHub answered 503/
+        : outcome === "declined"
+          ? /did not request a rerun.*Inspect the current CI join/
+          : /no model was rerun/,
+    );
+    assert.doesNotMatch(result.stdout + result.stderr, /private provider diagnostic/);
+  }
+});
+
+test("completion recovery runs trusted main code with only Actions write and no model or publisher secrets", () => {
+  const workflow = readRepoFile(".github/workflows/trusted-review-publisher.yml");
+  assert.match(workflow, /workflows: \[Trusted review, CI\]/);
+  const discover = workflow.split(/\n {2}discover:\n/)[1].split(/\n {2}[\w-]+:\n/)[0];
+  assert.match(
+    discover,
+    /github\.event_name != 'workflow_run' \|\| github\.event\.workflow_run\.name == 'Trusted review'/,
+  );
+  const job = workflow.split(/\n {2}recover-join:\n/)[1].split(/\n {2}[\w-]+:\n/)[0];
+  assert.match(job, /github\.event\.action == 'completed'.*github\.run_attempt == 1/);
+  assert.match(
+    job,
+    /github\.event\.workflow_run\.name == 'CI' && github\.event\.workflow_run\.event == 'pull_request' && github\.event\.workflow_run\.conclusion == 'failure'/,
+  );
+  assert.match(job, /actions: write/);
+  assert.match(job, /ref: \$\{\{ github\.sha \}\}/);
+  assert.match(job, /cancel-in-progress: false\n {6}queue: max/);
+  assert.match(job, /run: node worker\/find-trusted-review.mjs recover/);
+  assert.doesNotMatch(
+    job,
+    /secrets\.|checks: write|pull-requests: write|dispatches|rerun-failed-jobs/,
+  );
 });
 
 test("actual producer names and CI download inputs agree with the trusted join", async () => {
@@ -69,7 +384,7 @@ test("actual producer names and CI download inputs agree with the trusted join",
       assert.ok(Object.hasOwn(context, expression), `Unknown workflow expression: ${expression}`);
       return context[expression];
     });
-  for (const source of [EXPECTED.base, ID_ENV.REVIEW_TRUSTED]) {
+  for (const source of [BASE, ID_ENV.REVIEW_TRUSTED]) {
     const context = {
       "steps.result.outputs.tree": TREE,
       "steps.find.outputs.tree": TREE,
@@ -83,7 +398,7 @@ test("actual producer names and CI download inputs agree with the trusted join",
         REPOSITORY: EXPECTED.repository,
         PR: EXPECTED.pull,
         REVIEW_HEAD: EXPECTED.head,
-        REVIEW_BASE: EXPECTED.base,
+        REVIEW_BASE: BASE,
         REVIEW_TRUSTED: source,
       }),
     });
@@ -105,6 +420,33 @@ test("actual producer names and CI download inputs agree with the trusted join",
   }
 });
 
+test("join discovery ignores changing event base metadata while sealed verification keeps the tested base exact", async () => {
+  const run = createRun({
+    display_title: createRun().display_title.replace(`base ${BASE}`, `base ${TREE}`),
+  });
+  assert.ok(isTrustedReviewRun(run, EXPECTED));
+  const readGitHub = async (path) =>
+    path.includes("/artifacts?")
+      ? { artifacts: [{ name: `trusted-review-passed-${TREE}`, workflow_run: { id: 7 } }] }
+      : { workflow_runs: [run] };
+  assert.deepEqual(await findTrustedReviewRun({ ...EXPECTED, readGitHub }), {
+    run: 7,
+    tree: TREE,
+    source: ID_ENV.REVIEW_TRUSTED,
+    pending: false,
+  });
+  const folder = createFolder();
+  const identity = readReviewIdentity(ID_ENV);
+  writeJson(folder, "result.json", { identity, tree: TREE, passed: true });
+  sealReviewArtifact(folder, "result", identity, ["result.json"]);
+  const env = { ...ID_ENV, REVIEW_RUN: "7", REVIEW_TREE: TREE };
+  assert.equal(verifyTrustedReviewResult(folder, env).tree, TREE);
+  assert.throws(
+    () => verifyTrustedReviewResult(folder, { ...env, REVIEW_BASE: TREE }),
+    /stale or foreign artifact/,
+  );
+});
+
 test("only the exact trusted producer's immutable event identity can join, including forks", async () => {
   const run = createRun();
   assert.ok(isTrustedReviewRun(run, EXPECTED));
@@ -118,13 +460,13 @@ test("only the exact trusted producer's immutable event identity can join, inclu
   for (const change of [
     { event: "pull_request" },
     { path: ".github/workflows/ci.yml" },
-    { head_sha: EXPECTED.base },
+    { head_sha: BASE },
     { repository: { full_name: EXPECTED.repository, id: 1.5 } },
-    { display_title: `Review 2 head ${SHA} base ${EXPECTED.base} source ${ID_ENV.REVIEW_TRUSTED}` },
+    { display_title: `Review 2 head ${SHA} base ${BASE} source ${ID_ENV.REVIEW_TRUSTED}` },
     { display_title: `Review 1 head ${SHA} base ${SHA}` },
-    { display_title: `Review 1 head ${SHA} base ${EXPECTED.base}` },
-    { display_title: `Review 1 head ${SHA} base ${EXPECTED.base} source refs/heads/main` },
-    { display_title: `Review 1 head ${SHA} base ${EXPECTED.base} source ${TREE} extra` },
+    { display_title: `Review 1 head ${SHA} base ${BASE}` },
+    { display_title: `Review 1 head ${SHA} base ${BASE} source refs/heads/main` },
+    { display_title: `Review 1 head ${SHA} base ${BASE} source ${TREE} extra` },
     { repository: { full_name: "other/repository", id: 1 } },
   ])
     assert.equal(isTrustedReviewRun({ ...run, ...change }, EXPECTED), false);
@@ -378,7 +720,6 @@ function invokeJoin(fixture, changes = {}, args = []) {
         GITHUB_OUTPUT: output,
         GITHUB_WORKSPACE: fixture.checkout,
         REVIEW_HEAD: fixture.head,
-        REVIEW_EVENT_BASE: fixture.base,
         REVIEW_TIMEOUT_MINUTES: "120",
         REVIEW_RUN: "7",
         REVIEW_TREE: fixture.tree,
@@ -539,7 +880,8 @@ test("real verify CLI accepts the merge CI tested, though the event's base lags,
 });
 
 test("native title rendering preserves supplied PR and commit identities", () => {
-  const expected = { ...EXPECTED, head: "f".repeat(40), base: "e".repeat(40), pull: "23" };
+  const base = "e".repeat(40);
+  const expected = { ...EXPECTED, head: "f".repeat(40), pull: "23" };
   const source = "c".repeat(40);
   const title = readNativeReviewName({
     ACTION: "opened",
@@ -548,7 +890,7 @@ test("native title rendering preserves supplied PR and commit identities", () =>
     REPOSITORY: expected.repository,
     PR: expected.pull,
     REVIEW_HEAD: expected.head,
-    REVIEW_BASE: expected.base,
+    REVIEW_BASE: base,
     REVIEW_TRUSTED: source,
   });
   assert.ok(
