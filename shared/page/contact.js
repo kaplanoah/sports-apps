@@ -2,6 +2,7 @@ import { buildDiagnosticsReport } from "./diagnostics.js";
 import { createContactDraftStore, prepareContactSubmission } from "./contact-drafts.js";
 import {
   CONTACT_CATEGORIES,
+  CONTACT_ROUTE,
   validateContactFields,
   validateContactScreenshot,
 } from "./contact-rules.js";
@@ -100,7 +101,7 @@ export function startContact(dialog) {
 
   async function readContactAddress() {
     try {
-      const response = await fetch("contact", {
+      const response = await fetch(CONTACT_ROUTE, {
         cache: "no-store",
         signal: AbortSignal.timeout(10000),
       });
@@ -217,7 +218,7 @@ export function startContact(dialog) {
     await store.save(category);
     drawContact();
     try {
-      const response = await fetch("contact", {
+      const response = await fetch(CONTACT_ROUTE, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(request),
