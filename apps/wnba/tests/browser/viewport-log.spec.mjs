@@ -5,6 +5,7 @@ import { openSettings } from "../../../../tests/browser/settings.mjs";
 import {
   findRecords,
   moveVisualViewportOff,
+  scrollVisualViewport,
 } from "../../../../tests/browser/diagnostics-records.mjs";
 import { reloadAndRecord } from "./diagnostics-records.mjs";
 
@@ -58,7 +59,7 @@ for (const { moved, moveViewport } of [
   { moved: "as the page scrolls", moveViewport: () => scrollTo(0, 1) },
   {
     moved: "as the visual viewport moves",
-    moveViewport: () => visualViewport?.dispatchEvent(new Event("scroll")),
+    moveViewport: scrollVisualViewport,
   },
 ]) {
   test(`a visual viewport out of line with the layout one is flagged as off ${moved}`, async ({

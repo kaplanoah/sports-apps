@@ -26,16 +26,16 @@ export async function makeDip(page, part) {
   await page.clock.runFor(RECORD_MS);
 }
 
+/** Tells the page its visual viewport moved. */
+export const scrollVisualViewport = () => visualViewport?.dispatchEvent(new Event("scroll"));
+
 /**
  * Moves the visual viewport out of line with the layout one, so the Viewport record is flagged as
  * off once the page reads it.
  * @param {import("@playwright/test").Page} page
  * @param {() => void} moveViewport what tells the page the viewport moved
  */
-export async function moveVisualViewportOff(
-  page,
-  moveViewport = () => visualViewport?.dispatchEvent(new Event("scroll")),
-) {
+export async function moveVisualViewportOff(page, moveViewport = scrollVisualViewport) {
   await page.evaluate(() =>
     Object.defineProperty(visualViewport, "offsetTop", { configurable: true, get: () => 110 }),
   );
