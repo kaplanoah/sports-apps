@@ -17,7 +17,10 @@ const PHONE = { width: 390, height: 844 };
 /** @param {import("@playwright/test").Page} page */
 async function openLibertyRoster(page) {
   await openSeasonPart(page, "Standings");
-  await page.getByRole("button", { name: "Team details: New York Liberty" }).first().click();
+  await page
+    .getByRole("button", { name: /^Liberty\b.*team details$/ })
+    .first()
+    .click();
   await page.locator("#teamSheet").getByRole("tab", { name: "Roster" }).click();
   const roster = page.locator("#rosterSection");
   await expect(roster.locator(".roster-coach")).toBeVisible();
@@ -330,7 +333,10 @@ test("a top scorer's name in a box score opens her sheet over the game's, and a 
   await expect(sheet).toBeHidden();
   await page.keyboard.press("Escape");
   await openSeasonPart(page, "Standings");
-  await page.getByRole("button", { name: "Team details: New York Liberty" }).first().click();
+  await page
+    .getByRole("button", { name: /^Liberty\b.*team details$/ })
+    .first()
+    .click();
   await page.locator("#teamSection").getByRole("button", { name: "Breanna Stewart" }).click();
   await expect(sheet.locator("#playerTitle")).toHaveText("Breanna Stewart");
   await expect(sheet.getByRole("button", { name: "Back to Team" })).toBeVisible();

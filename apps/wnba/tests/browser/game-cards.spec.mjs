@@ -37,7 +37,10 @@ function playTonight(season) {
 
 /** @param {import("@playwright/test").Page} page */
 async function openDream(page) {
-  await page.getByRole("button", { name: "Team details: Atlanta Dream" }).first().click();
+  await page
+    .getByRole("button", { name: /^Dream\b.*team details$/ })
+    .first()
+    .click();
   const sheet = page.locator("#teamSheet");
   await expect(sheet.locator("#teamTitle")).toHaveText("Atlanta Dream");
   return sheet;
@@ -145,10 +148,13 @@ test("a tap on a card opens its game's sheet beside the team's, and Back returns
 }) => {
   await page.setViewportSize(PHONE);
   await openApp(page);
-  await page.getByRole("button", { name: "Team details: Las Vegas Aces" }).first().click();
+  await page
+    .getByRole("button", { name: /^Aces\b.*team details$/ })
+    .first()
+    .click();
   const teamSheet = page.locator("#teamSheet");
 
-  await teamSheet.getByRole("button", { name: "Game details: Aces at Fever, Sep 29" }).click();
+  await teamSheet.getByRole("button", { name: /^Sep 29\b.*game details$/ }).click();
 
   const gameSheet = page.locator("#gameSheet");
   await expect(gameSheet.locator("#gameTitle")).toHaveText("First Round Game 2");

@@ -197,7 +197,7 @@ test("with Diagnostics on, a tap that opens a team's sheet from a game's, the ro
   await (await findGameButton(page, "Game details: Aces at Fever, First Round Game 2")).click();
   const teamButton = page
     .locator("#gameSheet .faceoff")
-    .getByRole("button", { name: "Team details: Indiana Fever" });
+    .getByRole("button", { name: /^Fever\b.*team details$/ });
   await teamButton.click();
   await expect(page.locator("#teamTitle")).toHaveText("Indiana Fever");
   await page
@@ -218,7 +218,7 @@ test("with Diagnostics on, a tap that opens a team's sheet from a game's, the ro
     expect.arrayContaining([
       "open gameSheet over the page",
       "settle on gameSheet",
-      expect.stringMatching(/^click at \d+,\d+ on Team details: Indiana Fever$/),
+      expect.stringMatching(/^click at \d+,\d+ on Fever\b.*team details$/),
       "open teamSheet over gameSheet",
       "settle on teamSheet",
       expect.stringMatching(/^click at \d+,\d+ on Back to Game$/),
@@ -280,9 +280,9 @@ test("with Diagnostics on, each tap on the Games list's strip and Today is logge
   expect(steps).toEqual([
     expect.stringMatching(/^jump to 2026-09-30, list 0 to \d+$/),
     "arrived at 2026-09-30",
-    expect.stringMatching(/^touchstart at \d+,\d+ on Tuesday, September 29$/),
-    expect.stringMatching(/^touchend at \d+,\d+ on Tuesday, September 29$/),
-    expect.stringMatching(/^click at \d+,\d+ on Tuesday, September 29$/),
+    expect.stringMatching(/^touchstart at \d+,\d+ on Tue 29, September$/),
+    expect.stringMatching(/^touchend at \d+,\d+ on Tue 29, September$/),
+    expect.stringMatching(/^click at \d+,\d+ on Tue 29, September$/),
     expect.stringMatching(/^jump to 2026-09-29, list \d+ to \d+$/),
     "arrived at 2026-09-29",
     expect.stringMatching(/^touchstart at \d+,\d+ on Today$/),

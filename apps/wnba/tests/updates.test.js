@@ -6,6 +6,7 @@ import { session } from "../page/js/session.js";
 import { listFreshUpdates, listPlayoffWins } from "../page/js/updates.js";
 import { useDeniedStorage, useKeptChoices, useSavedStorage } from "../../../tests/saved-storage.js";
 import { checkInTimeZone, EASTERN } from "../../../tests/time-zone.js";
+import { dropSpokenOnly } from "../../../tests/text.js";
 
 const AFTERNOON = JSON.parse(
   readFileSync(`${import.meta.dirname}/fixtures/2026-09-30-afternoon.json`, "utf8"),
@@ -13,7 +14,10 @@ const AFTERNOON = JSON.parse(
 const SEASON = buildSnapshot(AFTERNOON.responses, { season: 2026, now: Date.parse(AFTERNOON.now) });
 
 /** @param {{ text: { text: string } }} update */
-const readText = (update) => update.text.text.replace(/<[^>]+>/g, "").replace(/&nbsp;/g, " ");
+const readText = (update) =>
+  dropSpokenOnly(update.text.text)
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/g, " ");
 
 /** @param {any} season */
 const readWins = (season) => listPlayoffWins(season).map(readText);
@@ -70,7 +74,7 @@ test("each update's winner and loser open their teams' sheets", () => {
   for (const pair of teams) assert.equal(new Set(pair).size, 2);
   assert.match(
     texts.find((text, index) => teams[index][0] === "LVA"),
-    /Las Vegas Aces">Aces</,
+    /data-team="LVA">Aces<span class="spoken-only">, team details<\/span><\/button>/,
   );
 });
 

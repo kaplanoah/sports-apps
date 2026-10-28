@@ -49,7 +49,7 @@ test.describe("with reduced motion", () => {
     await expect(page.locator("#seasonGames .strip-month")).toHaveText("September");
     const today = findCell(page, "2026-09-30");
     await expect(today).toHaveAttribute("aria-current", "date");
-    await expect(today).toHaveAttribute("aria-label", "Wednesday, September 30");
+    await expect(today).toHaveAccessibleName(/^Today\b.*\b30\b.*Wednesday, September$/);
 
     const listed = await page
       .locator("#seasonGames .listed-day")

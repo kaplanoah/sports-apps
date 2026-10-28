@@ -72,13 +72,14 @@ test("the section is the recap video, then the story with a button to read it, t
   );
 });
 
-test("each clip is a button that names it and carries its video", () => {
+test("each clip is a button named by what it shows, then that a tap plays it, carrying its video", () => {
   const markup = renderHighlights(HIGHLIGHTS, { describePlay, now: NOW }).text;
 
   assert.match(
     markup,
-    /<button\s+type="button"\s+class="clip-open press-tint press-reach clip-row"\s+data-video="https:\/\/video\.test\/26\.mp4"\s+aria-label="Play Manny Machado&#39;s RBI single, 0:30"/,
+    /<button\s+type="button"\s+class="clip-open press-tint press-reach clip-row"\s+data-video="https:\/\/video\.test\/26\.mp4"\s*>[^]*?Manny Machado&#39;s RBI single[^]*?<span class="spoken-only">, play video<\/span>\s*<\/button>/,
   );
+  assert.doesNotMatch(markup, /<button(?=[^>]*class="clip-open)[^>]*aria-label/);
   assert.equal(markup.match(/class="clip-open/g)?.length, 3);
 });
 

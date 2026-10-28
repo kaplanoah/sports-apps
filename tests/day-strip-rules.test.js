@@ -12,7 +12,9 @@ import {
   isRowOutOfSight,
   listShownDays,
   listStripDays,
+  readCellWord,
   readFollowStartUntil,
+  readUnshownCellWords,
 } from "../shared/page/day-strip-rules.js";
 
 const SECOND_MS = 1000;
@@ -33,6 +35,15 @@ test("a day in the strip is named Today, its month on the first, and otherwise i
   assert.equal(chooseCellLabel("2026-07-01", "2026-06-10"), "month");
   assert.equal(chooseCellLabel("2026-07-02", "2026-06-10"), "weekday");
   assert.equal(chooseCellLabel("2026-06-30", "2026-06-10"), "weekday");
+});
+
+test("a day's name in the strip starts with the words it shows, then what they leave out", () => {
+  assert.equal(readCellWord("2026-09-12", "2026-06-10"), "Sat");
+  assert.equal(readUnshownCellWords("2026-09-12", "2026-06-10"), "September");
+  assert.equal(readCellWord("2026-10-01", "2026-06-10"), "Oct");
+  assert.equal(readUnshownCellWords("2026-10-01", "2026-06-10"), "Thursday");
+  assert.equal(readCellWord("2026-10-28", "2026-10-28"), "Today");
+  assert.equal(readUnshownCellWords("2026-10-28", "2026-10-28"), "Wednesday, October");
 });
 
 test("a date is led by a 1 on the 1st and the 10th to the 19th, and on no other day", () => {

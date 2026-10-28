@@ -329,7 +329,10 @@ test("a finger the browser takes for a scroll on a player's name in a roster nev
 }) => {
   await openApp(page);
   await openSeasonPart(page, "Standings");
-  await page.getByRole("button", { name: "Team details: New York Liberty" }).first().click();
+  await page
+    .getByRole("button", { name: /^Liberty\b.*team details$/ })
+    .first()
+    .click();
   await page.locator("#teamSheet").getByRole("tab", { name: "Roster" }).click();
   const name = page.locator("#rosterSection .player-open").first();
   await expect(name).toBeVisible();

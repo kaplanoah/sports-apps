@@ -64,7 +64,7 @@ async function openGame(page) {
 async function openFeverOverGame(page) {
   await page
     .locator("#gameSheet .faceoff")
-    .getByRole("button", { name: "Team details: Indiana Fever" })
+    .getByRole("button", { name: /^Fever\b.*team details$/ })
     .click();
   const teamSheet = page.locator("#teamSheet");
   await expect(teamSheet.locator("#teamTitle")).toHaveText("Indiana Fever");

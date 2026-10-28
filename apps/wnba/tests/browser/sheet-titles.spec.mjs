@@ -31,7 +31,7 @@ for (const [screen, size] of Object.entries(SCREENS))
     await expect(gameSheet.locator(".line-score")).toBeVisible();
     await gameSheet
       .locator(".faceoff")
-      .getByRole("button", { name: "Team details: Indiana Fever" })
+      .getByRole("button", { name: /^Fever\b.*team details$/ })
       .click();
     const teamSheet = page.locator("#teamSheet");
     await expectShown(teamSheet);

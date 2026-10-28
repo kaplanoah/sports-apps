@@ -122,7 +122,7 @@ test("a team's sheet open over a game's opens over it again on a reload, its bac
   const gameSheet = await openGameSheet(page, ACES_AT_FEVER);
   await gameSheet
     .locator(".faceoff")
-    .getByRole("button", { name: "Team details: Las Vegas Aces" })
+    .getByRole("button", { name: /^Aces\b.*team details$/ })
     .click();
   const teamSheet = page.locator("#teamSheet");
   await expect(teamSheet.locator("#teamTitle")).toHaveText("Las Vegas Aces");
@@ -141,13 +141,16 @@ test("a team's sheet open over a game's opened from another team's opens there a
   page,
 }) => {
   await openApp(page);
-  await page.getByRole("button", { name: "Team details: Las Vegas Aces" }).first().click();
+  await page
+    .getByRole("button", { name: /^Aces\b.*team details$/ })
+    .first()
+    .click();
   const teamSheet = page.locator("#teamSheet");
-  await teamSheet.getByRole("button", { name: "Game details: Aces at Fever, Sep 29" }).click();
+  await teamSheet.getByRole("button", { name: /^Sep 29\b.*game details$/ }).click();
   const gameSheet = page.locator("#gameSheet");
   await gameSheet
     .locator(".faceoff")
-    .getByRole("button", { name: "Team details: Indiana Fever" })
+    .getByRole("button", { name: /^Fever\b.*team details$/ })
     .click();
   await expect(teamSheet.locator("#teamTitle")).toHaveText("Indiana Fever");
 
@@ -365,7 +368,7 @@ test("a game's row names its teams in their own type, and a tap anywhere on it, 
   const fever = row.locator(".game-side.home .team-name");
   await expect(fever).toHaveCSS("font-family", /^"Barlow Condensed"/);
   await expect(fever).toHaveCSS("font-weight", String((await readRole(page, "team")).weight));
-  await expect(row.getByRole("button", { name: /^Team details/ })).toHaveCount(0);
+  await expect(row.getByRole("button", { name: /team details$/ })).toHaveCount(0);
 
   // The row's button lies over its names, so a click on a name lands on it.
   const box = await fever.boundingBox();
@@ -407,7 +410,7 @@ test("a team's name in a game's sheet opens its sheet over the game's, with a ba
     await gameSheet
       .locator(place)
       .first()
-      .getByRole("button", { name: "Team details: Las Vegas Aces" })
+      .getByRole("button", { name: /^Aces\b.*team details$/ })
       .click();
     await expect(teamSheet.locator("#teamTitle")).toHaveText("Las Vegas Aces");
     await expectShown(teamSheet);
@@ -425,7 +428,7 @@ test("Escape closes a team's sheet and the game's under it at once", async ({ pa
   const gameSheet = page.locator("#gameSheet");
   await gameSheet
     .locator(".faceoff")
-    .getByRole("button", { name: "Team details: Las Vegas Aces" })
+    .getByRole("button", { name: /^Aces\b.*team details$/ })
     .click();
   await expect(page.locator("#teamTitle")).toHaveText("Las Vegas Aces");
 
@@ -445,7 +448,7 @@ test("going back from a team's sheet to a game's leaves no focus ring around the
   await gameSheet.evaluate((dialog) => dialog.focus());
   await gameSheet
     .locator(".faceoff")
-    .getByRole("button", { name: "Team details: Las Vegas Aces" })
+    .getByRole("button", { name: /^Aces\b.*team details$/ })
     .dispatchEvent("click");
   const teamSheet = page.locator("#teamSheet");
   await expect(teamSheet.locator("#teamTitle")).toHaveText("Las Vegas Aces");

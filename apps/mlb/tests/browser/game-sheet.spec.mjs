@@ -38,7 +38,10 @@ test("tapping a game opens its sheet on Game: its row, then its starters on one 
   await expect(sheet.locator("#gameWhen")).toHaveText("Today");
   await expect(sheet.getByRole("tab", { name: "Game" })).toHaveAttribute("aria-selected", "true");
   const row = sheet.locator("#gameBody .game-row");
-  await expect(row.locator(".game-side")).toHaveText(["Astros78-800.5 GB", "Athletics63-95"]);
+  await expect(row.locator(".game-side")).toHaveText([
+    "Astros, team details78-800.5 GB",
+    "Athletics, team details63-95",
+  ]);
   await expect(row.locator(".game-headline")).toHaveText("9:40 PM");
   await expect(row.locator(".game-extra, .game-open")).toHaveCount(0);
   const starters = sheet.getByRole("button", { name: BLUBAUGH_VS_SPRINGS });
@@ -121,7 +124,7 @@ test("a tap on a club in the game's row opens its sheet over the game's, which a
   const sheet = await openGame(page);
   await sheet
     .locator("#gameBody .game-row")
-    .getByRole("button", { name: "Team details: Athletics" })
+    .getByRole("button", { name: /^Athletics\b.*team details$/ })
     .click();
   const teamSheet = page.locator("#teamSheet");
   await expect(teamSheet.locator("#teamTitle")).toHaveText("Athletics");

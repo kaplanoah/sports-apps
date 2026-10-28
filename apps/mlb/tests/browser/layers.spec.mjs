@@ -57,7 +57,7 @@ test("each view, a game's sheet, and a club's sheet over it keep within their la
         show: async () => {
           await page
             .locator("#gameSheet")
-            .getByRole("button", { name: "Team details: Astros" })
+            .getByRole("button", { name: /^Astros\b.*team details$/ })
             .first()
             .click();
           await expect(page.locator("#teamTitle")).toHaveText("Houston Astros");

@@ -140,14 +140,13 @@ test("the close button closes the sheet", () => {
   assert.equal(page.dialog.open, false);
 });
 
-test("a team's button names the team for a screen reader and keeps any class of what it holds", () => {
+test("a team's button is named by what it shows, then that it opens the team, and keeps any class of what it holds", () => {
   assert.equal(
-    renderTeamSheetButton({ team: "NYY", name: "New York Yankees", content: "Yankees" }).text,
-    '<button type="button" class="team-open" data-team="NYY" aria-label="Team details: New York Yankees">Yankees</button>',
+    renderTeamSheetButton({ team: "NYY", content: "Yankees" }).text,
+    '<button type="button" class="team-open" data-team="NYY">Yankees<span class="spoken-only">, team details</span></button>',
   );
   assert.match(
-    renderTeamSheetButton({ team: "NYY", name: "Yankees", content: "Yankees", className: "club" })
-      .text,
+    renderTeamSheetButton({ team: "NYY", content: "Yankees", className: "club" }).text,
     /^<button type="button" class="club team-open" data-team="NYY"/,
   );
 });

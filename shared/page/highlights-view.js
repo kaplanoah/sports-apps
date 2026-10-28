@@ -65,9 +65,8 @@ function renderStill(clip) {
   </span>`;
 }
 
-/** @param {Clip} clip */
-const describeClipLabel = (clip) =>
-  [`Play ${clip.title}`, formatClipLength(clip.length)].filter(Boolean).join(", ");
+// A clip's button says what it shows, then that a tap plays it.
+const PLAY_VIDEO = html`<span class="spoken-only">, play video</span>`;
 
 /** @param {Clip & { blurb: string }} recap */
 const renderRecap = (recap) =>
@@ -75,13 +74,13 @@ const renderRecap = (recap) =>
     type="button"
     class="clip-open press-tint press-reach clip-feature"
     data-video="${recap.video}"
-    aria-label="${describeClipLabel(recap)}"
   >
     ${renderStill(recap)}
     <span class="clip-text">
       <span class="clip-title" data-quoted>${recap.title}</span>
       ${recap.blurb && html`<span class="clip-blurb" data-quoted>${recap.blurb}</span>`}
     </span>
+    ${PLAY_VIDEO}
   </button>`;
 
 /** @param {NonNullable<Highlights["story"]>} story */
@@ -106,13 +105,13 @@ function renderPlay(clip, describePlay) {
     type="button"
     class="clip-open press-tint press-reach clip-row"
     data-video="${clip.video}"
-    aria-label="${describeClipLabel(clip)}"
   >
     ${renderStill(clip)}
     <span class="clip-text">
       <span class="clip-title" data-quoted>${clip.title}</span>
       ${facts.length > 0 && html`<span class="clip-meta">${joinWithSeparator(facts)}</span>`}
     </span>
+    ${PLAY_VIDEO}
   </button>`;
 }
 

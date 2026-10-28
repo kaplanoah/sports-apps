@@ -350,7 +350,11 @@ test("update log: each club is its name in bold, without its rank or dot", () =>
     }),
   );
   assert.deepEqual(
-    [...rendered.matchAll(/<b><button [^>]*>([^<]+)<\/button><\/b>/g)].map(([, name]) => name),
+    [
+      ...rendered.matchAll(
+        /<b><button [^>]*>([^<]+)<span class="spoken-only">, team details<\/span><\/button><\/b>/g,
+      ),
+    ].map(([, name]) => name),
     ["Yankees", "Blue Jays"],
   );
   assert.doesNotMatch(rendered, /rank-tag|class="dot"/);
@@ -1624,9 +1628,9 @@ test("games list: a season with no live data says why", () => {
 const listTeamButtons = (rendered) =>
   [
     ...String(rendered).matchAll(
-      /<button type="button" class="[^"]*team-open" data-team="(\w+)" aria-label="Team details: ([^"]+)">/g,
+      /<button type="button" class="[^"]*team-open" data-team="(\w+)">([\s\S]*?)<\/button>/g,
     ),
-  ].map(([, id, name]) => `${id} ${name}`);
+  ].map(([, id, content]) => `${id} ${content.replace(/<[^>]*>/g, "").trim()}`);
 
 test("a club's name in the standings and the updates opens its sheet, and in a game's row, which opens the matchup wherever it's tapped, it's plain", () => {
   session.state = { teams: { NYY: { league: "AL", seed: 4 } } };
@@ -1646,12 +1650,15 @@ test("a club's name in the standings and the updates opens its sheet, and in a g
   const games = String(renderGameDay(slate));
   assert.deepEqual(listTeamButtons(games), []);
   assert.equal([...games.matchAll(/<span class="club">/g)].length, 2);
-  assert.deepEqual(listTeamButtons(standings), ["NYY Yankees", "BAL Orioles"]);
+  assert.deepEqual(listTeamButtons(standings), [
+    "NYY Yankees, team details",
+    "BAL Orioles, team details",
+  ]);
   assert.deepEqual(
     [...standings.matchAll(/<tr class="[^"]*" data-team="(\w+)">/g)].map(([, id]) => id),
     ["NYY", "BAL"],
   );
-  assert.deepEqual(listTeamButtons(update), ["BAL Orioles"]);
+  assert.deepEqual(listTeamButtons(update), ["BAL Orioles, team details"]);
 });
 
 const GAMES_VIEW = {

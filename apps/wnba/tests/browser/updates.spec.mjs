@@ -276,13 +276,13 @@ test.describe("on a phone, tapping an update", () => {
    * Taps the middle of a team's name in an update, as a thumb would.
    * @param {import("@playwright/test").Page} page
    * @param {number} index
-   * @param {string} name the team's full name
+   * @param {string} name the team's name as the update shows it
    */
   async function tapTeamName(page, index, name) {
     const team = page
       .locator("#updates li")
       .nth(index)
-      .getByRole("button", { name: `Team details: ${name}` });
+      .getByRole("button", { name: new RegExp(`^${name}\\b.*team details$`) });
     const box = await team.boundingBox();
     if (!box) throw new Error(`${name} isn't in update ${index}`);
     await page.touchscreen.tap(box.x + box.width / 2, box.y + box.height / 2);
@@ -293,13 +293,13 @@ test.describe("on a phone, tapping an update", () => {
     await expect(page.locator("#updates .what")).toHaveCount(2);
     const sheet = page.locator("#gameSheet");
 
-    await tapTeamName(page, 0, "Minnesota Lynx");
+    await tapTeamName(page, 0, "Lynx");
     await expect(sheet.locator("#gameWhen")).toContainText("Liberty won");
     await expect(page.locator("#teamSheet")).toBeHidden();
     await page.locator("#gameSheet .sheet-close").dispatchEvent("click");
     await expect(sheet).toBeHidden();
 
-    await tapTeamName(page, 1, "Indiana Fever");
+    await tapTeamName(page, 1, "Fever");
     await expect(sheet.locator("#gameWhen")).toContainText("Fever won");
     await expect(page.locator("#teamSheet")).toBeHidden();
   });

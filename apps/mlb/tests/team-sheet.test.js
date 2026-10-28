@@ -7,7 +7,7 @@ import { keepRanking } from "../page/js/kept-on-device.js";
 import { reopenRoster } from "../page/js/roster-section.js";
 import { renderTeamSheet } from "../page/js/team-view.js";
 import { TEAMS } from "../page/js/teams.js";
-import { stripTags } from "../../../tests/text.js";
+import { dropSpokenOnly, stripTags } from "../../../tests/text.js";
 import { EASTERN, checkInTimeZone, useTimeZone } from "../../../tests/time-zone.js";
 
 // The expected times below are what a viewer in Eastern time sees.
@@ -15,7 +15,7 @@ useTimeZone(EASTERN);
 
 // A sheet's markup as it reads, its pieces apart, each separator a bar, and runs of space one.
 const readText = (markup) =>
-  String(markup)
+  dropSpokenOnly(String(markup))
     .replace(/<[^>]+>/g, " ")
     .replace(/&bull;/g, "|")
     .replace(/&mdash;/g, "-")
@@ -359,11 +359,10 @@ const listCards = (body) =>
   );
 
 /** @param {{ text: string }} body */
-const listCardButtons = (body) =>
-  [...body.text.matchAll(/data-game="([^"]*)"\s*aria-label="([^"]*)"/g)].map(([, key, label]) => [
-    key,
-    label,
-  ]);
+const listCardGames = (body) =>
+  [...body.text.matchAll(/class="game-card-button[^"]*"\s*data-game="([^"]*)"/g)].map(
+    ([, key]) => key,
+  );
 
 const DURING_TONIGHTS_GAMES = Date.parse("2026-09-25T02:30:00Z");
 const WEEKS_LATER = Date.parse("2026-10-20T16:00:00Z");
@@ -377,10 +376,10 @@ test("a club's sheet opens on cards of its last game, the one it's playing, and 
     "Now Top 5th UP 2-1 @ ATH",
     "Next game Tomorrow 9:40 PM @ ATH",
   ]);
-  assert.deepEqual(listCardButtons(body), [
-    ["910001 2026-09-23", "Game details: Astros at Mariners, Wed, Sep 23"],
-    ["910004 2026-09-24", "Game details: Astros at Athletics, Thu, Sep 24"],
-    ["910006 2026-09-25", "Game details: Astros at Athletics, Fri, Sep 25"],
+  assert.deepEqual(listCardGames(body), [
+    "910001 2026-09-23",
+    "910004 2026-09-24",
+    "910006 2026-09-25",
   ]);
   assert.ok(body.text.indexOf('class="game-cards"') < body.text.indexOf("<h3>"));
 });
@@ -472,19 +471,6 @@ test("a club's card names its next game's day on the viewer's own calendar, as i
     card: "Next game Tomorrow 3:40 AM vs LAA",
     row: "Fri 3:40 vs LAA",
   });
-});
-
-test("a club's card button names its game by MLB's day, as the Games list files it, wherever the viewer is", () => {
-  session.state = { ...session.state, slate: ASTROS_SLATE };
-  const readLabels = () =>
-    listCardButtons(renderTeamSheet("SEA", { now: DURING_TONIGHTS_GAMES }).body).map(
-      ([, label]) => label,
-    );
-
-  assert.deepEqual(checkInTimeZone("Europe/Paris", readLabels), [
-    "Game details: Astros at Mariners, Wed, Sep 23",
-    "Game details: Angels at Mariners, Thu, Sep 24",
-  ]);
 });
 
 test("a club's next game without a set time takes MLB's day, though its placeholder start falls the day before out west", () => {

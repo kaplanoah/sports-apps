@@ -22,9 +22,6 @@ const renderSeed = (seed) => (seed ? html`<span class="seed">${seed}</span>` : "
 const renderClubParts = (code, seed) =>
   html`${renderDot(code)}${renderSeed(seed)}<span class="team-name">${nameTeam(code)}</span>`;
 
-/** @param {string} code */
-const nameFullTeam = (code) => `${TEAMS[code].city} ${TEAMS[code].name}`;
-
 /**
  * A team's dot, seed, and name, that opens its sheet, or TBD while it isn't known.
  * @param {string | null} code
@@ -35,7 +32,6 @@ export function renderClub(code, { seed } = {}) {
     return html`<span class="club tbd">${renderClubParts(code, seed)}</span>`;
   return renderTeamSheetButton({
     team: code,
-    name: nameFullTeam(code),
     content: renderClubParts(code, seed),
     className: "club",
   });
@@ -54,8 +50,7 @@ export const renderPlainClub = (code, { seed } = {}) =>
  * @param {string} code
  * @param {import("#shared/html.js").Markup | string} content
  */
-export const renderTeamButton = (code, content) =>
-  renderTeamSheetButton({ team: code, name: nameFullTeam(code), content });
+export const renderTeamButton = (code, content) => renderTeamSheetButton({ team: code, content });
 
 /**
  * A team's name in a line of text, that opens its sheet once the team is known.
