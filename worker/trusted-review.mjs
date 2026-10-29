@@ -19,7 +19,7 @@ import { formatJobOutputs, listJobs } from "./plan-review.mjs";
 import { isContainedCodexReview, needsCodexIntegration } from "./review-supplied.mjs";
 import { WEIGHTS } from "./review-state.mjs";
 import { createGitHub, readAllPages } from "./github-api.mjs";
-import { runReviewGit } from "./review-repository.mjs";
+import { fetchReviewHistory, isReviewAncestor, runReviewGit } from "./review-repository.mjs";
 import { isGitObjectId } from "./git-object.mjs";
 import {
   readJson,
@@ -118,28 +118,10 @@ function readBranchTip(branch, env) {
   return tips[0];
 }
 
-/** @param {string} ancestor @param {string} descendant @param {NodeJS.ProcessEnv} env */
-function isReviewAncestor(ancestor, descendant, env) {
-  try {
-    runReviewGit(env.GITHUB_WORKSPACE, ["merge-base", "--is-ancestor", ancestor, descendant]);
-    return true;
-  } catch (error) {
-    if (/** @type {{ status?: number }} */ (error).status === 1) return false;
-    throw error;
-  }
-}
-
 /** @param {NodeJS.ProcessEnv} env */
 function pinReviewTarget(env) {
   const tip = readBranchTip(env.REVIEW_TARGET, env);
-  const shallow = runReviewGit(env.GITHUB_WORKSPACE, ["rev-parse", "--is-shallow-repository"]);
-  runReviewGit(env.GITHUB_WORKSPACE, [
-    "fetch",
-    "--no-tags",
-    ...(shallow === "true" ? ["--unshallow"] : []),
-    "origin",
-    tip,
-  ]);
+  fetchReviewHistory(env.GITHUB_WORKSPACE, tip);
   return tip;
 }
 
@@ -177,7 +159,7 @@ export async function resolveReviewMerge(
       head === env.REVIEW_HEAD &&
       others.length === 0 &&
       isGitObjectId(base) &&
-      isReviewAncestor(base, target, env)
+      isReviewAncestor(env.GITHUB_WORKSPACE, base, target)
     ) {
       selected = { merge, base };
       return true;

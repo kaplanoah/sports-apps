@@ -1,4 +1,5 @@
-// Runs Git against reviewed data without inheriting credentials or executable Git configuration.
+// Makes the Git environment and runner CI's review uses, which inherit no credentials or executable
+// Git configuration, and Git helpers that use that runner or one the caller passes.
 import { execFileSync } from "node:child_process";
 import { isGitObjectId } from "./git-object.mjs";
 
@@ -51,4 +52,67 @@ export function runReviewGit(cwd, args, options = {}) {
     ...options,
     maxBuffer: options.maxBuffer ?? 1024 * 1024,
   }).trim();
+}
+
+/**
+ * Fetches a revision with all of its history, which a shallow checkout lacks for ancestry and
+ * merge bases.
+ * @param {string} cwd @param {string} revision @param {ReviewGitOptions} [options]
+ */
+export function fetchReviewHistory(cwd, revision, options = {}) {
+  const shallow = runReviewGit(cwd, ["rev-parse", "--is-shallow-repository"], options);
+  runReviewGit(
+    cwd,
+    ["fetch", "--no-tags", ...(shallow === "true" ? ["--unshallow"] : []), "origin", revision],
+    options,
+  );
+}
+
+/**
+ * @param {string} cwd @param {string} ancestor @param {string} descendant
+ * @param {ReviewGitOptions} [options]
+ */
+export function isReviewAncestor(cwd, ancestor, descendant, options = {}) {
+  try {
+    runReviewGit(cwd, ["merge-base", "--is-ancestor", ancestor, descendant], options);
+    return true;
+  } catch (error) {
+    if (/** @type {{ status?: number }} */ (error).status === 1) return false;
+    throw error;
+  }
+}
+
+/** @param {string} cwd @param {string} revision @param {ReviewGitOptions} [options] */
+export function hasReviewCommit(cwd, revision, options = {}) {
+  try {
+    runReviewGit(cwd, ["cat-file", "-e", `${revision}^{commit}`], options);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// git merge-tree's exit status when the merge conflicts, having still written the merged tree;
+// any other failure is git's own error.
+export const MERGE_TREE_CONFLICT = 1;
+
+/**
+ * The tree git makes merging two commits, or null when they conflict.
+ * @param {(args: string[]) => string} readGit throws as execFileSync does where git exits with an error
+ * @param {string} first @param {string} second
+ */
+export function readMergeTree(readGit, first, second) {
+  try {
+    return readGit([
+      "-c",
+      "merge.renormalize=false",
+      "merge-tree",
+      "--write-tree",
+      first,
+      second,
+    ]).trim();
+  } catch (error) {
+    if (/** @type {{ status?: number }} */ (error).status === MERGE_TREE_CONFLICT) return null;
+    throw error;
+  }
 }
