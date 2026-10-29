@@ -1,6 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readNativeReviewName, readReviewConcurrency } from "./workflow-step.js";
+import {
+  readNativeReviewName,
+  readReviewConcurrency,
+  readReviewTemplates,
+} from "./workflow-step.js";
 import { readRepoFile } from "./repo-files.js";
 
 const OWNER_PULL = { ASSOCIATION: "OWNER", HEAD_REPOSITORY: "example/repository" };
@@ -65,13 +69,22 @@ test("a push or the owner's provider choice still stops a review running or wait
   );
 });
 
-/** The provider labels the run name's intent accepts, so `group` and `cancel-in-progress` must too. */
-function readProviderLabels() {
-  const runName = readRepoFile(".github/workflows/review.yml").match(/^run-name: (.*)$/m)?.[1];
-  const list = runName?.match(/fromJSON\('(\["review-provider:[^']*\])'\)/)?.[1];
-  if (!list) throw new Error("No provider list in the review workflow's run name");
+/**
+ * The provider labels one review workflow expression accepts.
+ * @param {string} template
+ */
+function readProviderLabels(template) {
+  const list = template.match(/fromJSON\('(\["review-provider:[^']*\])'\)/)?.[1];
+  if (!list) throw new Error(`No provider list in ${template}`);
   return /** @type {string[]} */ (JSON.parse(list));
 }
+
+test("the run name, the group, and cancel-in-progress accept the same providers", () => {
+  const { runName, group, cancelInProgress } = readReviewTemplates();
+  const providers = readProviderLabels(runName);
+  assert.deepEqual(readProviderLabels(group), providers);
+  assert.deepEqual(readProviderLabels(cancelInProgress), providers);
+});
 
 /** Every label event a pull request can get: each label, sender, author and draft state. */
 function listLabelEvents() {
@@ -79,7 +92,7 @@ function listLabelEvents() {
   for (const action of ["labeled", "unlabeled"])
     for (const name of [
       "review",
-      ...readProviderLabels(),
+      ...readProviderLabels(readReviewTemplates().runName),
       "review-provider:unknown",
       ...OBSERVED_LABELS,
     ])
