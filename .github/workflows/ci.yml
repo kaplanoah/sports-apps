@@ -107,6 +107,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           PR: ${{ github.event.pull_request.number }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          HEAD_BRANCH: ${{ github.event.pull_request.head.ref }}
         run: git diff --text --no-textconv --no-ext-diff --no-renames HEAD^1 HEAD | node "$RUNNER_TEMP/base/worker/red-change.mjs" "$LABELS"
 
   # The status a red change waits on until phone approval, complete red history and verified

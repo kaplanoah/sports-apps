@@ -1023,13 +1023,22 @@ export function decideGate(
 
 /**
  * Whether the gate finds the head the owner labeled, with nothing red pushed since. The labeled
- * head is the head's newest first parent GitHub saw before the label. GitHub records only each
- * push's head, so a commit it never saw arrived under a later one.
- * @param {{ repository: string, head: string, labeledAt: number, env: NodeJS.ProcessEnv, fetchImpl: typeof fetch, cwd: string }} options
+ * head is the head's newest first parent GitHub saw pushed to the pull request's branch before the
+ * label. GitHub records only each push's head, so a commit it never saw there arrived under a later
+ * one.
+ * @param {{ repository: string, head: string, branch: string, labeledAt: number, env: NodeJS.ProcessEnv, fetchImpl: typeof fetch, cwd: string }} options
  */
-async function hasNothingRedSinceLabeledHead({ repository, head, labeledAt, env, fetchImpl, cwd }) {
+async function hasNothingRedSinceLabeledHead({
+  repository,
+  head,
+  branch,
+  labeledAt,
+  env,
+  fetchImpl,
+  cwd,
+}) {
   for (const sha of listFirstParents({ head, cwd })) {
-    const pushedAt = await readPushTime({ repository, sha, env, fetchImpl });
+    const pushedAt = await readPushTime({ repository, sha, branch, env, fetchImpl });
     if (pushedAt < labeledAt) return !isRedChange(readCommitChange(sha, head, cwd));
   }
   return false;
@@ -1038,7 +1047,7 @@ async function hasNothingRedSinceLabeledHead({ repository, head, labeledAt, env,
 /**
  * The owner's phone approval of a pull request's head, from its timeline and the pushes since the
  * head it was labeled on.
- * @param {{ repository: string, head: string, events: import('./labeling.mjs').TimelineEvent[], env: NodeJS.ProcessEnv, fetchImpl: typeof fetch, cwd: string }} options
+ * @param {{ repository: string, head: string, branch: string, events: import('./labeling.mjs').TimelineEvent[], env: NodeJS.ProcessEnv, fetchImpl: typeof fetch, cwd: string }} options
  * @returns {Promise<PhoneApproval>}
  */
 async function readPhoneApproval({ events, ...options }) {
@@ -1078,9 +1087,18 @@ export async function readRedApproval({
   if (!initial.isHeld || !labels.includes(PHONE_OK_LABEL)) return initial;
   const repository = env.GITHUB_REPOSITORY ?? "";
   const head = env.HEAD_SHA ?? "";
+  const branch = env.HEAD_BRANCH ?? "";
   try {
     const events = await readTimeline({ repository, pullNumber: env.PR ?? "", env, fetchImpl });
-    const approval = await readPhoneApproval({ repository, head, events, env, fetchImpl, cwd });
+    const approval = await readPhoneApproval({
+      repository,
+      head,
+      branch,
+      events,
+      env,
+      fetchImpl,
+      cwd,
+    });
     const labeled = decide({ labels, owner, approval });
     if (labeled.isHeld) return labeled;
     const missingRedCommits = findMissingRedCommits({ head, cwd });

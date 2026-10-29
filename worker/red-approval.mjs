@@ -45,7 +45,7 @@ export async function refreshRedApprovals({
         diff: files.diff,
         labels: pull.labels.map((label) => label.name),
         files,
-        env: { ...env, PR: String(pull.number), HEAD_SHA: head },
+        env: { ...env, PR: String(pull.number), HEAD_SHA: head, HEAD_BRANCH: pull.head.ref },
         fetchImpl,
         cwd,
       });

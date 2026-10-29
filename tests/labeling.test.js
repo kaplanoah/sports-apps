@@ -86,22 +86,23 @@ test("a head pushed after the phone-ok label leaves it before the last push, wha
   );
 });
 
-test("a head's push time is its earliest check suite's", async () => {
+test("a head's push time is its earliest check suite's on the pull request's branch", async () => {
   /** @type {string[]} */
   const urls = [];
-  /** @param {{ created_at: string }[]} suites */
+  /** @param {{ created_at: string, head_branch: string }[]} suites */
   const createFetch = (suites) => async (/** @type {string} */ url) => {
     urls.push(url);
     return Response.json({ total_count: suites.length, check_suites: suites });
   };
   const sha = "a".repeat(40);
-  const options = { repository: "owner/repo", sha, env: { GH_TOKEN: "token" } };
+  const options = { repository: "owner/repo", sha, branch: "feature", env: { GH_TOKEN: "token" } };
   assert.equal(
     await readPushTime({
       ...options,
       fetchImpl: createFetch([
-        { created_at: "2026-10-07T11:00:00Z" },
-        { created_at: "2026-10-07T09:00:00Z" },
+        { created_at: "2026-10-07T11:00:00Z", head_branch: "feature" },
+        { created_at: "2026-10-07T08:00:00Z", head_branch: "beta" },
+        { created_at: "2026-10-07T09:00:00Z", head_branch: "feature" },
       ]),
     }),
     HEAD_PUSHED_AT,
@@ -110,6 +111,8 @@ test("a head's push time is its earliest check suite's", async () => {
     `https://api.github.com/repos/owner/repo/commits/${sha}/check-suites?per_page=100`,
   ]);
   assert.ok(Number.isNaN(await readPushTime({ ...options, fetchImpl: createFetch([]) })));
+  const elsewhere = createFetch([{ created_at: "2026-10-07T08:00:00Z", head_branch: "beta" }]);
+  assert.ok(Number.isNaN(await readPushTime({ ...options, fetchImpl: elsewhere })));
 });
 
 test("the GraphQL timeline is paginated with authentication and mapped for both gates", async () => {

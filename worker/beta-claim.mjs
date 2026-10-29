@@ -294,7 +294,13 @@ export async function readOpenPulls({ repository, fetchImpl = fetch, env = proce
       labels: names,
       events: await readTimeline({ repository, pullNumber: String(pull.number), fetchImpl, env }),
       headPushedAt: names.includes(BETA_LABEL)
-        ? await readPushTime({ repository, sha: pull.head.sha, fetchImpl, env })
+        ? await readPushTime({
+            repository,
+            sha: pull.head.sha,
+            branch: pull.head.ref,
+            fetchImpl,
+            env,
+          })
         : Number.NaN,
     })),
   );

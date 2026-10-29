@@ -1914,12 +1914,12 @@ function createTestedBranch(context) {
     history.readGit(["merge", "--no-ff", "-m", "merge main", "main"], date);
     return history.readGit(["rev-parse", "HEAD"]);
   };
-  /** @param {string} head @param {Record<string, string | null>} pushTimes @param {string[]} [forcePushTimes] */
-  const decide = (head, pushTimes, forcePushTimes) =>
+  /** @param {string} head @param {Record<string, string | null>} pushTimes @param {Omit<ApprovalTimes, "pushTimes">} [times] */
+  const decide = (head, pushTimes, times) =>
     readRedApproval({
       diff: RED_DIFF,
       labels: ["phone-ok"],
-      ...createApprovalApi(history, head, history.base, pushTimes, forcePushTimes),
+      ...createApprovalApi(history, head, history.base, { pushTimes, ...times }),
     });
   return { ...history, tested, mergeMain, decide };
 }
@@ -2007,19 +2007,50 @@ test("a label on a head GitHub never saw before it holds the change", async (con
 
 test("a force push after the label holds phone-ok, even back to the head the owner labeled", async (context) => {
   const branch = createTestedBranch(context);
-  const held = await branch.decide(branch.tested, {}, [PUSHED_AFTER_LABEL]);
+  const held = await branch.decide(branch.tested, {}, { forcePushTimes: [PUSHED_AFTER_LABEL] });
   assert.equal(held.isHeld, true);
   assert.match(held.message, FORCE_PUSH_PROBLEM);
-  assert.equal((await branch.decide(branch.tested, {}, ["2026-10-07T09:50:00Z"])).isHeld, false);
+  const before = await branch.decide(
+    branch.tested,
+    {},
+    { forcePushTimes: ["2026-10-07T09:50:00Z"] },
+  );
+  assert.equal(before.isHeld, false);
+});
+
+test("a commit pushed to another branch before the label isn't taken for the head the owner labeled", async (context) => {
+  const branch = createTestedBranch(context);
+  branch.writeFile("shared/page/sheet.js", "export const draw = 4;\n");
+  const red = branch.commit("2026-10-07T09:40:00Z");
+  branch.writeFile("tests/sheet.test.js", "test('draws', () => {});\n");
+  const tests = branch.commit("2026-10-07T11:00:00Z");
+  const held = await branch.decide(
+    tests,
+    { [red]: null, [tests]: PUSHED_AFTER_LABEL },
+    { betaTimes: { [red]: "2026-10-07T09:50:00Z" } },
+  );
+  assert.equal(held.isHeld, true);
+  assert.match(held.message, LABEL_PROBLEM);
 });
 
 /**
- * @param {ReturnType<typeof createGateHistory>} history @param {string} head @param {string} deployed
- * @param {Record<string, string | null>} [pushTimes] when GitHub first saw each commit, or null for
- *   one it never saw as a push's head
- * @param {string[]} [forcePushTimes] when the head was force-pushed
+ * @typedef {object} ApprovalTimes
+ * @property {Record<string, string | null>} [pushTimes] when each commit was first pushed to the
+ *   pull request's branch, or null for one never pushed there as a push's head
+ * @property {Record<string, string>} [betaTimes] when a commit was pushed to beta
+ * @property {string[]} [forcePushTimes] when the head was force-pushed
  */
-function createApprovalApi(history, head, deployed, pushTimes = {}, forcePushTimes = []) {
+
+/**
+ * @param {ReturnType<typeof createGateHistory>} history @param {string} head @param {string} deployed
+ * @param {ApprovalTimes} [times]
+ */
+function createApprovalApi(
+  history,
+  head,
+  deployed,
+  { pushTimes = {}, betaTimes = {}, forcePushTimes = [] } = {},
+) {
   history.readGit(["update-ref", "refs/remotes/origin/main", "main"]);
   const statuses = [];
   const reads = [];
@@ -2027,6 +2058,7 @@ function createApprovalApi(history, head, deployed, pushTimes = {}, forcePushTim
     GITHUB_REPOSITORY: "owner/example",
     GITHUB_REPOSITORY_OWNER: "owner",
     HEAD_SHA: head,
+    HEAD_BRANCH: "feature",
     PR: "1",
     GH_TOKEN: "token",
   };
@@ -2039,7 +2071,7 @@ function createApprovalApi(history, head, deployed, pushTimes = {}, forcePushTim
       answer = [
         {
           number: 1,
-          head: { sha: head, repo: { full_name: env.GITHUB_REPOSITORY } },
+          head: { sha: head, ref: env.HEAD_BRANCH, repo: { full_name: env.GITHUB_REPOSITORY } },
           labels: [{ name: "phone-ok" }],
         },
       ];
@@ -2056,7 +2088,9 @@ function createApprovalApi(history, head, deployed, pushTimes = {}, forcePushTim
     else if (url.pathname.endsWith("/check-suites")) {
       const sha = url.pathname.split("/").at(-2) ?? "";
       const pushedAt = sha in pushTimes ? pushTimes[sha] : "2026-10-07T09:45:00Z";
-      answer = { check_suites: pushedAt ? [{ created_at: pushedAt }] : [] };
+      const pushed = pushedAt ? [{ created_at: pushedAt, head_branch: env.HEAD_BRANCH }] : [];
+      const toBeta = sha in betaTimes ? [{ created_at: betaTimes[sha], head_branch: "beta" }] : [];
+      answer = { check_suites: [...toBeta, ...pushed] };
     } else if (url.pathname.endsWith("/deploy.yml/runs"))
       answer = {
         workflow_runs: [
@@ -2196,6 +2230,7 @@ test("a failed pending status or malformed head does not stop later PR refreshes
             number,
             head: {
               sha: number === 1 ? "malformed" : head,
+              ref: api.env.HEAD_BRANCH,
               repo: { full_name: api.env.GITHUB_REPOSITORY },
             },
             labels: [{ name: "phone-ok" }],

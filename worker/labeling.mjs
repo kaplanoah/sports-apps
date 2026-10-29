@@ -124,19 +124,27 @@ function readTimelineEvent({ __typename, ...fields }) {
 }
 
 /**
- * When GitHub first saw a commit: its earliest check suite, which GitHub makes as the push that
- * brings the commit arrives, or NaN when it has none.
+ * When a commit was first pushed to `branch`: its earliest check suite there, which GitHub makes as
+ * the push that brings the commit arrives, or NaN when it has none. A suite on another branch, like
+ * beta or a scratch branch, says nothing of when the commit reached this one.
  * @param {object} options
  * @param {string} options.repository as owner/name
  * @param {string} options.sha
+ * @param {string} options.branch
  * @param {typeof fetch} [options.fetchImpl]
  * @param {NodeJS.ProcessEnv} [options.env] holds GH_TOKEN
  */
-export async function readPushTime({ repository, sha, fetchImpl = fetch, env = process.env }) {
+export async function readPushTime({
+  repository,
+  sha,
+  branch,
+  fetchImpl = fetch,
+  env = process.env,
+}) {
   const github = createGitHub({ repository, fetchImpl, env });
   const { check_suites: suites } = await github(`/commits/${sha}/check-suites?per_page=100`);
-  const times = suites.map((/** @type {{ created_at: string }} */ suite) =>
-    Date.parse(suite.created_at),
-  );
+  const times = suites
+    .filter((/** @type {{ head_branch: string }} */ suite) => suite.head_branch === branch)
+    .map((/** @type {{ created_at: string }} */ suite) => Date.parse(suite.created_at));
   return times.length ? Math.min(...times) : Number.NaN;
 }
