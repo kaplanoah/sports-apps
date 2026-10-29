@@ -1,12 +1,15 @@
 import { readCapitals } from "./capitals.mjs";
 
+export const ALIGNMENT_TOLERANCE = 0.08;
+
 /**
  * Real team-line geometry, measured against the loaded font's cap and x heights.
  * @param {import("@playwright/test").Page} page
  * @param {"mlb" | "wnba"} league
  */
 export const readTeamLines = async (page, league) => {
-  const drawn = await page.evaluate(async (app) => {
+  const configuration = { app: league, tolerance: ALIGNMENT_TOLERANCE };
+  const drawn = await page.evaluate(async ({ app, tolerance }) => {
     await document.fonts.ready;
     const values =
       app === "mlb"
@@ -33,7 +36,7 @@ export const readTeamLines = async (page, league) => {
       return box.top + box.height / 2;
     };
     const check = (actual, expected, description) => {
-      if (Math.abs(actual - expected) > 0.08)
+      if (Math.abs(actual - expected) > tolerance)
         problems.push(`${description}: ${actual}, expected ${expected}`);
     };
     const fonts = new Map();
@@ -177,10 +180,10 @@ export const readTeamLines = async (page, league) => {
       }
     }
     for (const placeholder of document.querySelectorAll(
-      ".matchup-row .tbd, .game-side .club > .tbd",
+      ".matchup-row .tbd, .game-side .club > .tbd, .series-opp .tbd",
     )) {
       if (!placeholder.checkVisibility()) continue;
-      states.add("TBD");
+      states.add(placeholder.textContent.trim());
       const style = getComputedStyle(placeholder);
       check(parseFloat(style.fontSize), values.team.size, "TBD size");
       check(Number(style.fontWeight), values.team.weight, "TBD weight");
@@ -193,10 +196,12 @@ export const readTeamLines = async (page, league) => {
       names: [...names],
       attachments: [...attachments],
     };
-  }, league);
+  }, configuration);
 
   if (league === "mlb") {
-    const heads = page.locator(".field-heads, .sheet-part-head:has(h3 .club):has(> span)");
+    const heads = page.locator(
+      ".field-heads, .sheet-part-head:has(h3 .club):has(> span), .series-row:has(.club)",
+    );
     for (const head of await heads.all()) {
       if (!(await head.isVisible())) continue;
       const name = head.locator(".team-name").first();
@@ -206,11 +211,12 @@ export const readTeamLines = async (page, league) => {
         readCapitals(name),
         readCapitals(note),
       ]);
-      if (Math.abs(nameCapitals.bottom - noteCapitals.bottom) > 0.08)
+      if (Math.abs(nameCapitals.bottom - noteCapitals.bottom) > ALIGNMENT_TOLERANCE)
         drawn.problems.push(
-          `heading baseline: ${nameCapitals.bottom}, expected ${noteCapitals.bottom}`,
+          `club baseline: ${nameCapitals.bottom}, expected ${noteCapitals.bottom}`,
         );
-      drawn.states.push("baseline heading");
+      const isSeries = await head.evaluate((element) => element.matches(".series-row"));
+      drawn.states.push(isSeries ? "baseline series" : "baseline heading");
     }
   }
   return drawn;

@@ -246,7 +246,6 @@
   --team-seed-after: -0.25px;
   --team-conference-offset: -1.75px;
   --team-seed-note-offset: -0.5px;
-  /* Large outside-seed offset: 0px, centered as one unit. */
   --team-large-seed-before: 0.75px;
   --team-large-seed-after: -0.25px;
   --type-score-size: calc(22rem / 16);
@@ -546,7 +545,6 @@ header.top h1 .title-letter:nth-child(3) {
 }
 .club.tbd {
   color: var(--ink-dim);
-  font-weight: calc(var(--type-team-weight) - 100);
 }
 .seed {
   font-size: var(--type-caption-size);
@@ -567,10 +565,6 @@ header.top h1 .title-letter:nth-child(3) {
 .team-line .club,
 .game-side .club {
   gap: 8px;
-}
-/* A Games placeholder keeps Team weight; the bracket's TBD state is lighter. */
-.game-side .club.tbd {
-  font-weight: var(--type-team-weight);
 }
 .team-line .club,
 .faceoff-side .club {

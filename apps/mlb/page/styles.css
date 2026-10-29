@@ -112,7 +112,6 @@
   --team-label-dot-before: -0.25px;
   --team-label-dot-after: -0.25px;
   --team-league-offset: -1px;
-  /* Team rank chip offset: 0px, the native box center. */
   --type-score-size: calc(15.75rem / 16);
   --type-score-weight: 500;
   --type-stat-large-size: calc(15.5rem / 16);
@@ -1181,9 +1180,12 @@ table.st .seed-cell {
   max-width: 100%;
   vertical-align: baseline;
 }
-/* These headings share their name's baseline with the adjoining note. The empty dot must not
-   supply it or add ascent; its center still follows the name's native capital height. */
-:is(.sheet-part-head h3, .field-heads) .club > .dot {
+.club:has(> .dot) {
+  align-items: baseline;
+}
+/* The name supplies the inline baseline. An empty dot must not add ascent; its center still
+   follows the name's native capital height. */
+.club > .dot {
   margin-top: calc(-1 * var(--team-dot-size));
   translate: 0 calc((var(--team-dot-size) - 1cap) / 2 + var(--team-mark-shift));
 }
@@ -1563,7 +1565,6 @@ body.kbd .rank-item .grip:focus {
 /* The Game section's box score: a lineup, the runs by inning, and each club's batters and pitchers. */
 .sheet-part-head h3 .club {
   display: inline-flex;
-  align-items: baseline;
   gap: 6px;
   text-transform: none;
   letter-spacing: 0;
@@ -1614,7 +1615,6 @@ table.st.line-score td.total {
 }
 table.st.line-score td.team .club {
   display: inline-flex;
-  align-items: center;
   gap: 6px;
 }
 .sheet-part:has(> .box-wrap > .line-score) {
@@ -2001,7 +2001,6 @@ table.st.line-score td.team .club {
 }
 .field-heads .club {
   display: inline-flex;
-  align-items: baseline;
   gap: 6px;
   color: var(--ink);
 }
@@ -2683,10 +2682,6 @@ nav.tabs .search-tab,
 }
 .series-opp {
   min-width: 0;
-}
-.series-opp .tbd {
-  font-size: var(--type-detail-size);
-  font-weight: var(--type-detail-weight);
 }
 .series-result {
   text-align: right;
