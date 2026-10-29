@@ -1,13 +1,19 @@
 import { expect } from "@playwright/test";
 import { waitForLoadToSettle } from "./at-rest.mjs";
 import { holdClock, matchPath } from "./harness.mjs";
-import { findMiddle, findSeasonPart, readScroll, scrollSeasonPart } from "./season-scroll.mjs";
+import {
+  findMiddle,
+  findSeasonPart,
+  readHeaderReach,
+  readScroll,
+  scrollSeasonPart,
+} from "./season-scroll.mjs";
 import { findSeasonPill, openSeasonPart } from "./season-tab.mjs";
 import { setHidden } from "./visibility.mjs";
 import { drag, openFromHomeScreen, PULL_START } from "./touch.mjs";
 
 /** @param {import("@playwright/test").Page} page @param {string} cards */
-const readGeometry = (page, cards) =>
+export const readGeometry = (page, cards) =>
   page.locator("#bracketWrap").evaluate((wrap, selector) => {
     const top = wrap.getBoundingClientRect().top;
     return [...wrap.querySelectorAll(selector)].map((card) => {
@@ -18,33 +24,44 @@ const readGeometry = (page, cards) =>
 
 /** @param {import("@playwright/test").Page} page @param {string} cards */
 async function watchSettlement(page, cards) {
-  await page.locator("#bracketWrap").evaluate((wrap, selector) => {
-    const header = /** @type {HTMLElement} */ (document.querySelector("header.top"));
-    const frames = /** @type {{ offset: number, tops: number[] }[]} */ ([]);
-    Object.assign(window, { bracketPullFrames: frames, isBracketPullSettled: false });
-    function sampleFrame() {
-      dispatchEvent(new Event("resize"));
-      const top = wrap.getBoundingClientRect().top;
-      frames.push({
-        offset: parseFloat(getComputedStyle(header).top) || 0,
-        tops: [...wrap.querySelectorAll(selector)].map(
-          (card) => Math.round((card.getBoundingClientRect().top - top) * 100) / 100,
-        ),
-      });
-      if (header.style.top) requestAnimationFrame(sampleFrame);
-      else Object.assign(window, { isBracketPullSettled: true });
+  await page.evaluate(() => {
+    function pauseSettlement() {
+      document.removeEventListener("touchend", pauseSettlement);
+      document.removeEventListener("touchcancel", pauseSettlement);
+      const animations = document
+        .getAnimations()
+        .filter(
+          (animation) =>
+            animation instanceof CSSTransition && animation.transitionProperty === "top",
+        );
+      for (const animation of animations) animation.pause();
+      Object.assign(window, { bracketPullAnimations: animations });
     }
-    requestAnimationFrame(sampleFrame);
-  }, cards);
-  return async () => {
-    await page.waitForFunction(() => /** @type {any} */ (window).isBracketPullSettled);
-    return page.evaluate(
-      () =>
-        /** @type {{ offset: number, tops: number[] }[]} */ (
-          /** @type {any} */ (window).bracketPullFrames
-        ),
-    );
-  };
+    document.addEventListener("touchend", pauseSettlement);
+    document.addEventListener("touchcancel", pauseSettlement);
+  });
+  return () =>
+    page.locator("#bracketWrap").evaluate((wrap, selector) => {
+      const animations = /** @type {Animation[]} */ (
+        /** @type {any} */ (window).bracketPullAnimations
+      );
+      const header = /** @type {HTMLElement} */ (document.querySelector("header.top"));
+      const frames = [];
+      for (const progress of [0, 0.25, 0.5, 0.75, 0.99]) {
+        for (const animation of animations)
+          animation.currentTime = Number(animation.effect?.getTiming().duration) * progress;
+        dispatchEvent(new Event("resize"));
+        const top = wrap.getBoundingClientRect().top;
+        frames.push({
+          offset: parseFloat(getComputedStyle(header).top) || 0,
+          tops: [...wrap.querySelectorAll(selector)].map(
+            (card) => Math.round((card.getBoundingClientRect().top - top) * 100) / 100,
+          ),
+        });
+      }
+      for (const animation of animations) animation.finish();
+      return frames;
+    }, cards);
 }
 
 /**
@@ -111,12 +128,12 @@ export function checkBracketPull({ test, openApp, cards, sideways }) {
         if (isCancelled)
           await page.locator("header.top").dispatchEvent("touchcancel", { touches: [] });
         await liftFinger();
+        const frames = await readFrames();
         await expect(page.locator(".pull-refresh")).toBeHidden();
         await expect
           .poll(() => page.locator("header.top").evaluate((element) => element.style.top))
           .toBe("");
         expect(await readGeometry(page, cards)).toEqual(geometry);
-        const frames = await readFrames();
         for (const frame of frames) expect(frame.tops).toEqual(geometry.map(([top]) => top));
         if (reducedMotion === "no-preference") {
           expect(new Set(frames.map(({ offset }) => offset)).size).toBeGreaterThan(2);
@@ -148,6 +165,7 @@ export function checkBracketPull({ test, openApp, cards, sideways }) {
     };
     await resizeRoom(40, 820);
     const resized = await readGeometry(page, cards);
+    const resizedReach = await readHeaderReach(page);
     expect(resized).not.toEqual(original);
     await resizeRoom(0, 900);
     expect(await readGeometry(page, cards)).toEqual(original);
@@ -155,6 +173,7 @@ export function checkBracketPull({ test, openApp, cards, sideways }) {
     const liftFinger = await drag(page, PULL_START, { y: 60 });
     await resizeRoom(40, 820);
     expect(await readGeometry(page, cards)).toEqual(resized);
+    expect(await readHeaderReach(page)).toBe(resizedReach);
     await liftFinger();
     await expect(page.locator(".pull-refresh")).toBeHidden();
     expect(await readGeometry(page, cards)).toEqual(resized);

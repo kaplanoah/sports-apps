@@ -1,5 +1,5 @@
 import { markBarHeld, markBarStuck } from "./held-bar.js";
-import { findKeptTop, findShortfall, readPulledBy } from "./kept-place.js";
+import { findKeptTop, findShortfall } from "./kept-place.js";
 import { showOpeningRound } from "./opening-round.js";
 import { setTabStart } from "./page-tabs.js";
 import { showPillName } from "./pill-thumb.js";
@@ -13,7 +13,7 @@ import { createSlidePanels } from "./slide-panels.js";
 import { isAsFarAs, isAwayFrom, scrollWithSpring } from "./spring-scroll.js";
 import { readSelectedTab, wireTabList } from "./tabs.js";
 
-/* global followSeasonPart, listAboveSeasonView -- from season-header.js */
+/* global followSeasonPart, listAboveSeasonView, readPulledBy -- from season-header.js */
 /* global isAwayLong -- from long-away.js */
 
 // One tab holds a season's standings and its bracket, side by side under a pill, one shown at a
