@@ -224,12 +224,13 @@ export function startPullToRefresh({ store, catchUp }) {
     startY = event.touches[0].clientY;
   }
 
-  // A touch that starts sideways or upward is someone else's, like a pager's swipe or a scroll.
+  // A touch that starts sideways is someone else's, like a pager's swipe. One that goes up scrolls
+  // the page, and keeps being followed, so coming back down past where it landed still pulls.
   /** @param {Touch} touch */
   function decideDirection(touch) {
     const across = Math.abs(touch.clientX - startX);
     const down = touch.clientY - startY;
-    if (!isPastDrift(across, down)) return;
+    if (!isPastDrift(across, Math.max(0, down))) return;
     if (down <= across) return becomeIdle();
     state = "pulling";
     movedParts = listMovedParts(spinner);

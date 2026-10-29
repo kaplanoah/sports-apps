@@ -2,6 +2,7 @@ import { countScrollHoldersAt } from "../../../../tests/browser/held-scrolls.mjs
 import { findMiddle, readScroll } from "../../../../tests/browser/season-scroll.mjs";
 import {
   drag,
+  dragAlong,
   openFromHomeScreen,
   pullDown,
   PULL_START,
@@ -82,4 +83,22 @@ test("on Games, a pull doesn't start from the view's bare edge beside the list s
     await drag(page, edge, { y: 200 })
   )();
   await expect(page.locator(".pull-refresh")).toBeHidden();
+});
+
+test("a finger that first goes up past the press's drift, then comes back down, still pulls", async ({
+  page,
+}) => {
+  await openFromHomeScreen(page);
+  const app = await openApp(page);
+  await page.getByRole("tab", { name: "Games" }).click();
+  await app.holdStore();
+  const path = [0, -6, -12, -18, 0, 50, 100, 150, 200, 250];
+
+  const release = await dragAlong(
+    page,
+    path.map((by) => ({ x: PULL_START.x, y: PULL_START.y + 20 + by })),
+  );
+  await release();
+
+  await expect(page.locator(".pull-refresh")).toHaveClass(/turning/);
 });
