@@ -2007,15 +2007,58 @@ test("a label on a head GitHub never saw before it holds the change", async (con
 
 test("a force push after the label holds phone-ok, even back to the head the owner labeled", async (context) => {
   const branch = createTestedBranch(context);
-  const held = await branch.decide(branch.tested, {}, { forcePushTimes: [PUSHED_AFTER_LABEL] });
+  const held = await branch.decide(
+    branch.tested,
+    {},
+    { forcePushes: [{ at: PUSHED_AFTER_LABEL, head: branch.tested }] },
+  );
   assert.equal(held.isHeld, true);
   assert.match(held.message, FORCE_PUSH_PROBLEM);
   const before = await branch.decide(
     branch.tested,
     {},
-    { forcePushTimes: ["2026-10-07T09:50:00Z"] },
+    { forcePushes: [{ at: "2026-10-07T09:50:00Z", head: branch.tested }] },
   );
   assert.equal(before.isHeld, false);
+});
+
+test("a red commit force-pushed off the branch before the label and pushed again after it holds phone-ok", async (context) => {
+  const branch = createTestedBranch(context);
+  branch.writeFile("shared/page/sheet.js", "export const draw = 4;\n");
+  const red = branch.commit("2026-10-07T09:46:00Z");
+  branch.writeFile("tests/sheet.test.js", "test('draws', () => {});\n");
+  const tests = branch.commit("2026-10-07T11:00:00Z");
+  const held = await branch.decide(
+    tests,
+    { [red]: "2026-10-07T09:48:00Z", [tests]: PUSHED_AFTER_LABEL },
+    { forcePushes: [{ at: "2026-10-07T09:50:00Z", head: branch.tested }] },
+  );
+  assert.equal(held.isHeld, true);
+  assert.match(held.message, LABEL_PROBLEM);
+});
+
+test("the gate looks for the labeled head only among the branch's own commits, and not at all without its name", async (context) => {
+  const branch = createTestedBranch(context);
+  branch.writeFile("tests/sheet.test.js", "test('draws', () => {});\n");
+  const pushed = branch.commit("2026-10-07T11:00:00Z");
+  const api = createApprovalApi(branch, pushed, branch.base, {
+    pushTimes: { [pushed]: PUSHED_AFTER_LABEL, [branch.tested]: PUSHED_AFTER_LABEL },
+  });
+  const held = await readRedApproval({ diff: RED_DIFF, labels: ["phone-ok"], ...api });
+  assert.equal(held.isHeld, true);
+  const suiteReads = api.reads.filter((path) => path.endsWith("/check-suites"));
+  assert.deepEqual(
+    suiteReads.map((path) => path.split("/").at(-2)),
+    [pushed, branch.tested],
+  );
+  const unnamed = createApprovalApi(branch, pushed, branch.base);
+  unnamed.env.HEAD_BRANCH = "";
+  const unnamedHeld = await readRedApproval({ diff: RED_DIFF, labels: ["phone-ok"], ...unnamed });
+  assert.equal(unnamedHeld.isHeld, true);
+  assert.equal(
+    unnamed.reads.some((path) => path.endsWith("/check-suites")),
+    false,
+  );
 });
 
 test("a commit pushed to another branch before the label isn't taken for the head the owner labeled", async (context) => {
@@ -2038,7 +2081,8 @@ test("a commit pushed to another branch before the label isn't taken for the hea
  * @property {Record<string, string | null>} [pushTimes] when each commit was first pushed to the
  *   pull request's branch, or null for one never pushed there as a push's head
  * @property {Record<string, string>} [betaTimes] when a commit was pushed to beta
- * @property {string[]} [forcePushTimes] when the head was force-pushed
+ * @property {{ at: string, head: string }[]} [forcePushes] when the head was force-pushed, and to
+ *   which commit
  */
 
 /**
@@ -2049,7 +2093,7 @@ function createApprovalApi(
   history,
   head,
   deployed,
-  { pushTimes = {}, betaTimes = {}, forcePushTimes = [] } = {},
+  { pushTimes = {}, betaTimes = {}, forcePushes = [] } = {},
 ) {
   history.readGit(["update-ref", "refs/remotes/origin/main", "main"]);
   const statuses = [];
@@ -2083,7 +2127,11 @@ function createApprovalApi(
           actor: { login: "owner" },
           created_at: "2026-10-07T10:00:00Z",
         },
-        ...forcePushTimes.map((at) => ({ event: "head_ref_force_pushed", created_at: at })),
+        ...forcePushes.map(({ at, head: pushedHead }) => ({
+          event: "head_ref_force_pushed",
+          created_at: at,
+          head: { oid: pushedHead },
+        })),
       ]);
     else if (url.pathname.endsWith("/check-suites")) {
       const sha = url.pathname.split("/").at(-2) ?? "";
@@ -2118,23 +2166,27 @@ test("the live gate holds a contained red merge until a successful production de
   const history = createGateHistory(context);
   history.writeFile("shared/page/sheet.js", "export const draw = 2;\n");
   const red = history.commit("2026-10-07T09:30:00Z");
+  history.readGit(["checkout", "-qb", "feature"]);
+  history.writeFile("tests/sheet.test.js", "test('draws', () => {});\n");
+  const head = history.commit("2026-10-07T09:40:00Z");
+  history.readGit(["checkout", "main"]);
   const waiting = await readRedApproval({
     diff: RED_DIFF,
     labels: ["phone-ok"],
-    ...createApprovalApi(history, red, history.base),
+    ...createApprovalApi(history, head, history.base),
   });
   assert.equal(waiting.isHeld, true);
   assert.match(waiting.message, /waiting for main's red deploy to finish successfully/);
   const deployed = await readRedApproval({
     diff: RED_DIFF,
     labels: ["phone-ok"],
-    ...createApprovalApi(history, red, red),
+    ...createApprovalApi(history, head, red),
   });
   assert.equal(deployed.isHeld, false);
   const failed = await readRedApproval({
     diff: RED_DIFF,
     labels: ["phone-ok"],
-    ...createApprovalApi(history, red, red),
+    ...createApprovalApi(history, head, red),
     fetchImpl: async () => new Response("{}", { status: 403 }),
   });
   assert.equal(failed.isHeld, true);

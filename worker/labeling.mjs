@@ -1,6 +1,6 @@
 // Reads when a pull request's labels were added and when a commit was pushed, from its timeline
 // and the commit's check suites.
-import { createGitHub, createGraphQL } from "./github-api.mjs";
+import { createGitHub, createGraphQL, readAllPages } from "./github-api.mjs";
 
 export const PHONE_CONTEXT = "phone";
 export const PHONE_OK_LABEL = "phone-ok";
@@ -12,6 +12,7 @@ export const PHONE_OK_LABEL = "phone-ok";
  * @property {{ name: string }} [label]
  * @property {{ login: string } | null} [actor]
  * @property {string} [body] a comment's text
+ * @property {{ oid: string } | null} [head] the commit a force push left as the head
  */
 
 /**
@@ -47,12 +48,28 @@ export const findLastForcePushAt = (events) =>
   Math.max(...events.filter((event) => event.event === "head_ref_force_pushed").map(readEventTime));
 
 /**
+ * The last force push before `time`, when it was and the head it left, or -Infinity and null when
+ * there was none.
+ * @param {TimelineEvent[]} events
+ * @param {number} time
+ */
+export function findLastForcePushBefore(events, time) {
+  const lastForcePush = events
+    .filter((event) => event.event === "head_ref_force_pushed" && readEventTime(event) < time)
+    .toSorted((first, second) => readEventTime(first) - readEventTime(second))
+    .at(-1);
+  if (!lastForcePush) return { at: -Infinity, head: null };
+  return { at: readEventTime(lastForcePush), head: lastForcePush.head?.oid ?? null };
+}
+
+/**
  * Who last added `label` to a pull request, when, and whether they added it after a push and after
  * its last force push, from its timeline. A commit's own date is when it was made, which can be long
  * before it was pushed, so the push time comes from GitHub.
  * @param {TimelineEvent[]} events
  * @param {string} label
- * @param {number} pushedAt when GitHub first saw the pushed commit, or NaN when it can't say
+ * @param {number} pushedAt when its head was first pushed to the pull request's branch, or NaN when
+ *   it wasn't read
  * @returns {Labeling}
  */
 export function findLabeling(events, label, pushedAt) {
@@ -100,7 +117,7 @@ const READ_TIMELINE = `query ReadTimeline($owner: String!, $name: String!, $numb
           __typename
           ... on LabeledEvent { created_at: createdAt label { name } actor { login } }
           ... on UnlabeledEvent { created_at: createdAt label { name } actor { login } }
-          ... on HeadRefForcePushedEvent { created_at: createdAt actor { login } }
+          ... on HeadRefForcePushedEvent { created_at: createdAt actor { login } head: afterCommit { oid } }
           ... on IssueComment { created_at: createdAt body actor: author { login } }
         }
         pageInfo { hasNextPage endCursor }
@@ -142,7 +159,11 @@ export async function readPushTime({
   env = process.env,
 }) {
   const github = createGitHub({ repository, fetchImpl, env });
-  const { check_suites: suites } = await github(`/commits/${sha}/check-suites?per_page=100`);
+  const suites = await readAllPages(
+    github,
+    `/commits/${sha}/check-suites`,
+    (answer) => answer.check_suites,
+  );
   const times = suites
     .filter((/** @type {{ head_branch: string }} */ suite) => suite.head_branch === branch)
     .map((/** @type {{ created_at: string }} */ suite) => Date.parse(suite.created_at));

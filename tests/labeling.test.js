@@ -4,6 +4,7 @@ import {
   findLabeling,
   findLastAdding,
   findLastForcePushAt,
+  findLastForcePushBefore,
   readPushTime,
   readTimeline,
 } from "../worker/labeling.mjs";
@@ -74,6 +75,19 @@ test("a head pushed after the phone-ok label leaves it before the last push, wha
   );
   assert.equal(findLastForcePushAt([labeled, forcePush]), Date.parse("2026-10-07T11:00:00Z"));
   assert.equal(findLastForcePushAt([labeled]), -Infinity);
+  const earlierForcePush = {
+    event: "head_ref_force_pushed",
+    created_at: "2026-10-07T09:50:00Z",
+    head: { oid: "b".repeat(40) },
+  };
+  assert.deepEqual(
+    findLastForcePushBefore([forcePush, labeled, earlierForcePush], Date.parse(labeled.created_at)),
+    { at: Date.parse("2026-10-07T09:50:00Z"), head: "b".repeat(40) },
+  );
+  assert.deepEqual(findLastForcePushBefore([labeled, forcePush], Date.parse(labeled.created_at)), {
+    at: -Infinity,
+    head: null,
+  });
   const labeledAgain = createEvent("labeled", "phone-ok", "owner", "2026-10-07T12:00:00Z");
   assert.equal(
     findLabeling([labeled, forcePush, labeledAgain], "phone-ok", HEAD_PUSHED_AT).isAfterLastPush,
@@ -86,13 +100,14 @@ test("a head pushed after the phone-ok label leaves it before the last push, wha
   );
 });
 
-test("a head's push time is its earliest check suite's on the pull request's branch", async () => {
+test("a head's push time is its earliest check suite's on the pull request's branch, on any page", async () => {
   /** @type {string[]} */
   const urls = [];
   /** @param {{ created_at: string, head_branch: string }[]} suites */
   const createFetch = (suites) => async (/** @type {string} */ url) => {
     urls.push(url);
-    return Response.json({ total_count: suites.length, check_suites: suites });
+    const page = Number(new URL(url).searchParams.get("page"));
+    return Response.json({ check_suites: suites.slice((page - 1) * 100, page * 100) });
   };
   const sha = "a".repeat(40);
   const options = { repository: "owner/repo", sha, branch: "feature", env: { GH_TOKEN: "token" } };
@@ -108,8 +123,17 @@ test("a head's push time is its earliest check suite's on the pull request's bra
     HEAD_PUSHED_AT,
   );
   assert.deepEqual(urls, [
-    `https://api.github.com/repos/owner/repo/commits/${sha}/check-suites?per_page=100`,
+    `https://api.github.com/repos/owner/repo/commits/${sha}/check-suites?per_page=100&page=1`,
   ]);
+  const otherBranches = Array.from({ length: 100 }, () => ({
+    created_at: "2026-10-07T08:00:00Z",
+    head_branch: "scratch",
+  }));
+  const onSecondPage = createFetch([
+    ...otherBranches,
+    { created_at: "2026-10-07T09:00:00Z", head_branch: "feature" },
+  ]);
+  assert.equal(await readPushTime({ ...options, fetchImpl: onSecondPage }), HEAD_PUSHED_AT);
   assert.ok(Number.isNaN(await readPushTime({ ...options, fetchImpl: createFetch([]) })));
   const elsewhere = createFetch([{ created_at: "2026-10-07T08:00:00Z", head_branch: "beta" }]);
   assert.ok(Number.isNaN(await readPushTime({ ...options, fetchImpl: elsewhere })));
@@ -128,6 +152,7 @@ test("the GraphQL timeline is paginated with authentication and mapped for both 
       event: "head_ref_force_pushed",
       created_at: "2026-10-07T12:00:00Z",
       actor: { login: "owner" },
+      head: { oid: "c".repeat(40) },
     },
     {
       event: "commented",
@@ -178,6 +203,7 @@ test("the GraphQL timeline is paginated with authentication and mapped for both 
     assert.ok(requests[0].query.includes(type));
   assert.match(requests[0].query, /created_at: createdAt/);
   assert.match(requests[0].query, /actor: author/);
+  assert.match(requests[0].query, /head: afterCommit \{ oid \}/);
 });
 
 test("unavailable or malformed GraphQL history fails closed", async () => {

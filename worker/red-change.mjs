@@ -34,6 +34,7 @@ import {
   PHONE_OK_LABEL,
   findLastAdding,
   findLastForcePushAt,
+  findLastForcePushBefore,
   readPushTime,
   readTimeline,
 } from "./labeling.mjs";
@@ -899,14 +900,18 @@ function isRedChange({ diff, readPageFile, listStylesheets }) {
 }
 
 /**
- * The head and the commits before it, newest first, along its first parents, which a push to the
- * branch keeps in the order it made them.
+ * The head and the commits before it that main lacks, newest first, along its first parents, which
+ * a push to the branch keeps in the order it made them.
  * @param {{ head: string, cwd?: string }} options
  */
-function listFirstParents({ head, cwd = process.cwd() }) {
+function listBranchFirstParents({ head, cwd = process.cwd() }) {
   const readGit = createGateGit(cwd);
+  const mainSha = readGit(["rev-parse", "--verify", "origin/main^{commit}"]).trim();
   const headSha = readGit(["rev-parse", "--verify", "--end-of-options", `${head}^{commit}`]).trim();
-  return readGit(["rev-list", "--first-parent", headSha, "--"]).trim().split("\n").filter(Boolean);
+  return readGit(["rev-list", "--first-parent", headSha, "--not", mainSha, "--"])
+    .trim()
+    .split("\n")
+    .filter(Boolean);
 }
 
 /**
@@ -1023,23 +1028,30 @@ export function decideGate(
 
 /**
  * Whether the gate finds the head the owner labeled, with nothing red pushed since. The labeled
- * head is the head's newest first parent GitHub saw pushed to the pull request's branch before the
- * label. GitHub records only each push's head, so a commit it never saw there arrived under a later
- * one.
- * @param {{ repository: string, head: string, branch: string, labeledAt: number, env: NodeJS.ProcessEnv, fetchImpl: typeof fetch, cwd: string }} options
+ * head is the head's newest first parent off main that GitHub saw pushed to the pull request's
+ * branch before the label. GitHub records only each push's head, so a commit it never saw there
+ * arrived under a later one. After a force push, only the head it left or a commit pushed since
+ * counts, since a commit pushed before it may have been dropped from the branch and pushed again
+ * after the label.
+ * @param {{ repository: string, head: string, branch: string, labeledAt: number, lastForcePush: { at: number, head: string | null }, env: NodeJS.ProcessEnv, fetchImpl: typeof fetch, cwd: string }} options
  */
 async function hasNothingRedSinceLabeledHead({
   repository,
   head,
   branch,
   labeledAt,
+  lastForcePush,
   env,
   fetchImpl,
   cwd,
 }) {
-  for (const sha of listFirstParents({ head, cwd })) {
+  if (!branch) return false;
+  for (const sha of listBranchFirstParents({ head, cwd })) {
     const pushedAt = await readPushTime({ repository, sha, branch, env, fetchImpl });
-    if (pushedAt < labeledAt) return !isRedChange(readCommitChange(sha, head, cwd));
+    if (pushedAt < labeledAt) {
+      const isOnLabeledBranch = sha === lastForcePush.head || pushedAt > lastForcePush.at;
+      return isOnLabeledBranch && !isRedChange(readCommitChange(sha, head, cwd));
+    }
   }
   return false;
 }
@@ -1058,7 +1070,11 @@ async function readPhoneApproval({ events, ...options }) {
     isForcePushedSince,
     isTestedHeadKept:
       !isForcePushedSince &&
-      (await hasNothingRedSinceLabeledHead({ ...options, labeledAt: addedAt })),
+      (await hasNothingRedSinceLabeledHead({
+        ...options,
+        labeledAt: addedAt,
+        lastForcePush: findLastForcePushBefore(events, addedAt),
+      })),
   };
 }
 

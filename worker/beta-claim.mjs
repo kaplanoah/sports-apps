@@ -48,7 +48,8 @@ const REFUSED = "so nothing was deployed to beta";
  * @property {string} headSha empty for a closed one
  * @property {string[]} labels
  * @property {TimelineEvent[]} events its timeline, empty for a closed one
- * @property {number} headPushedAt when GitHub first saw its head, or NaN when it wasn't read
+ * @property {number} headPushedAt when its head was first pushed to the pull request's branch, or
+ *   NaN when it wasn't read
  */
 
 /** @typedef {{ number: number, label: string, isAdded: boolean }} LabelChange */
