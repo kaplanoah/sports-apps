@@ -84,7 +84,9 @@ test("the hosted harness invokes only pinned CLI sandbox and never a native eval
     /"--no-new-privs", "--bounding-set=-all", "--inh-caps=-all", "--ambient-caps=-all"/,
   );
   assert.match(harness, /"-n", "\/usr\/bin\/env", "-i"/);
-  assert.doesNotMatch(harness, /\["exec"|systemctl|useradd|sudoers|setcap|sysctl|iptables/);
+  assert.doesNotMatch(harness, /\["exec"|systemctl|useradd|sudoers|setcap|iptables/);
+  assert.match(harness, /env.RUNNER_ENVIRONMENT !== "github-hosted"/);
+  assert.match(harness, /verifyWithRateNamespaces\(/);
   assert.match(harness, /nativeModelStarted: false, realCredentialUsed: false/);
 });
 
@@ -110,6 +112,7 @@ test("missing, false or invented isolation facts cannot pass the proof", () => {
     rootRuntimeRemoved: true,
     listenersClosed: true,
     noCapturedCanary: true,
+    namespacesRestored: true,
   };
   assert.doesNotThrow(() => validateRateIsolationFacts(facts));
   for (const name of Object.keys(facts)) {

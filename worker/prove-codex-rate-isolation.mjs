@@ -14,6 +14,7 @@ import { dirname, join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { randomBytes } from "node:crypto";
+import { verifyWithRateNamespaces, RateNamespaceError } from "./codex-rate-namespaces.mjs";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const proofModules = [
@@ -39,6 +40,8 @@ const proofStages = new Set([
   "pinned-read-only-sandbox",
   "authorized-fake-route",
   "privileged-process",
+  "namespace-preparation",
+  "namespace-restoration",
 ]);
 
 class IsolationProofError extends Error {
@@ -95,7 +98,7 @@ const sandboxFacts = [
   "upstreamNetworkDenied",
   "checkoutWriteDenied",
 ];
-const completedFacts = [
+const runnerFacts = [
   ...new Set([
     ...baselineFacts,
     ...processFacts,
@@ -106,6 +109,7 @@ const completedFacts = [
     "noCapturedCanary",
   ]),
 ];
+const completedFacts = [...runnerFacts, "namespacesRestored"];
 
 export function requiresRateIsolation(paths) {
   return paths.some(
@@ -128,6 +132,7 @@ export function validateRateIsolationFacts(facts, stage = "complete") {
     "unsandboxed-baseline": baselineFacts,
     "root-process-boundary": processFacts,
     "pinned-read-only-sandbox": sandboxFacts,
+    "runner-complete": runnerFacts,
     complete: completedFacts,
   }[stage];
   if (
@@ -276,6 +281,10 @@ function waitForHolder(holder) {
       clearTimeout(timeout);
       reject(new Error("Holder exited before readiness."));
     });
+    holder.once("error", () => {
+      clearTimeout(timeout);
+      reject(new Error("Holder startup failed."));
+    });
   });
 }
 
@@ -292,9 +301,7 @@ async function stopHolder(holder) {
   });
 }
 
-async function proveRootBoundary(settings) {
-  if (process.getuid() !== 0 || settings.uid === 0)
-    throw new Error("Expected disposable root holder and unprivileged probe.");
+async function proveRunnerBoundary(settings) {
   const fixtures = createRootFixtures(settings);
   const holder = fork(join(fixtures.worker, "codex-rate-isolation-holder.mjs"), [], {
     env: { ...createProbeEnvironment(fixtures), ISOLATION_FAKE_CANARY: fixtures.canary },
@@ -363,9 +370,12 @@ async function proveRootBoundary(settings) {
     throw new IsolationProofError(
       stage,
       error instanceof IsolationProofError ? error.failedFacts : [],
-      error instanceof IsolationProofError
-        ? error.commandFacts
-        : summarizeIsolationCommandFailure(error),
+      {
+        ...(error instanceof IsolationProofError
+          ? error.commandFacts
+          : summarizeIsolationCommandFailure(error)),
+        ...settings.namespaceFacts,
+      },
     );
   } finally {
     await stopHolder(holder);
@@ -379,15 +389,30 @@ async function proveRootBoundary(settings) {
       listenersClosed: closed,
       noCapturedCanary: !captured.includes(fixtures.canary),
     },
-    "complete",
+    "runner-complete",
   );
   return { ...facts, rootRuntimeRemoved: true, listenersClosed: true, noCapturedCanary: true };
+}
+
+async function proveRootBoundary(settings) {
+  if (process.getuid() !== 0 || settings.uid === 0 || settings.githubHosted !== true)
+    throw new Error("Expected disposable hosted root holder and unprivileged probe.");
+  try {
+    const { namespacePolicy, ...facts } = await verifyWithRateNamespaces((namespaceFacts) =>
+      proveRunnerBoundary({ ...settings, namespaceFacts }),
+    );
+    return { facts, namespacePolicy };
+  } catch (error) {
+    if (error instanceof RateNamespaceError) throw new IsolationProofError(error.phase);
+    throw error;
+  }
 }
 
 async function proveHostedBoundary(env) {
   if (
     env.GITHUB_ACTIONS !== "true" ||
     env.RUNNER_OS !== "Linux" ||
+    env.RUNNER_ENVIRONMENT !== "github-hosted" ||
     privateEnvironment.some((name) => env[name])
   ) {
     throw new Error("Proof requires a secret-free GitHub-hosted Linux job.");
@@ -400,6 +425,7 @@ async function proveHostedBoundary(env) {
     gid: process.getgid(),
     groups: process.getgroups(),
     cliFolder: profile.folder,
+    githubHosted: true,
   };
   const output = execFileSync(
     "sudo",
@@ -415,10 +441,10 @@ async function proveHostedBoundary(env) {
     ],
     { encoding: "utf8", timeout: 120000, maxBuffer: 65536, stdio: ["ignore", "pipe", "pipe"] },
   );
-  const facts = JSON.parse(output);
-  if (facts.passed === false)
-    throw new IsolationProofError(facts.stage, facts.failedFacts, facts.commandFacts);
-  validateRateIsolationFacts(facts);
+  const result = JSON.parse(output);
+  if (result.passed === false)
+    throw new IsolationProofError(result.stage, result.failedFacts, result.commandFacts);
+  validateRateIsolationFacts(result.facts);
   return {
     version: 1,
     passed: true,
@@ -428,7 +454,8 @@ async function proveHostedBoundary(env) {
     nativeModelStarted: false,
     realCredentialUsed: false,
     cliVersion: profile.cli,
-    facts,
+    facts: result.facts,
+    namespacePolicy: result.namespacePolicy,
   };
 }
 
