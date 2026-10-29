@@ -25,12 +25,14 @@ async function readContactMenuLayout(page) {
     probe.style.color = "var(--contact-menu-surface)";
     probe.style.borderColor = "var(--contact-menu-edge)";
     probe.style.borderRadius = "var(--radius-control)";
+    probe.style.padding = "12px 14px calc(12px + var(--lowercase-lift))";
     document.body.append(probe);
     const tokens = getComputedStyle(probe);
     const surface = {
       background: tokens.color,
       edge: tokens.borderColor,
       radius: tokens.borderRadius,
+      padding: tokens.padding,
     };
     probe.remove();
     const buttons = [...menu.querySelectorAll("button")];
@@ -412,7 +414,7 @@ export function testContact(test, expect, { openApp, league }) {
           expect(row.height).toBe(56);
           expect(row.width).toBe(row.menuWidth);
           expect(row.gap).toBe(index ? 12 : null);
-          expect(row.padding).toBe("12px 14px");
+          expect(row.padding).toBe(row.surface.padding);
           expect(row.border).toBe("1px");
           expect(row.borderColor).toBe(row.surface.edge);
           expect(row.radius).toBe(row.surface.radius);

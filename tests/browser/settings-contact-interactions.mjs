@@ -2,12 +2,13 @@ import { holdClock } from "./harness.mjs";
 import { openContact, serveContact } from "./contact-views.mjs";
 
 /**
- * Measures each Settings page row, its words, and its caret, and how far the rows lift their words
- * over their middles.
+ * Measures each page row in a dialog, its words, and its caret, and how far the rows lift their
+ * words over their middles.
  * @param {import("@playwright/test").Page} page
+ * @param {string} dialogSelector
  */
-async function measurePageRows(page) {
-  const rows = await page.locator("#settingsDialog .settings-page-row").evaluateAll((buttons) =>
+async function measurePageRows(page, dialogSelector = "#settingsDialog") {
+  const rows = await page.locator(`${dialogSelector} .settings-page-row`).evaluateAll((buttons) =>
     buttons.map((button) => {
       const words = document.createRange();
       words.selectNodeContents(
@@ -22,6 +23,7 @@ async function measurePageRows(page) {
         top: box.top,
         bottom: box.bottom,
         line: Number.parseFloat(getComputedStyle(button).borderTopWidth),
+        lineBelow: Number.parseFloat(getComputedStyle(button).borderBottomWidth),
         textTop: text.top,
         textBottom: text.bottom,
         caretMiddle: (caret.top + caret.bottom) / 2,
@@ -223,21 +225,28 @@ export function testSettingsContactInteractions(test, expect, { openApp, setting
     expect(Math.abs(spaceUnderLine - spaceUnderLineBetween)).toBeLessThanOrEqual(1);
   });
 
-  test("a Settings page row lifts its words as search lifts its examples, its caret beside them", async ({
+  test("a Settings page row and a Contact category row lift their words as search lifts its examples, each caret beside them", async ({
     page,
   }) => {
     await page.emulateMedia({ reducedMotion: "reduce" });
     await openApp(page);
     await page.getByRole("button", { name: "Settings", exact: true }).click();
     await expect(page.locator("#contactBtn")).toBeVisible();
-    const { rows, lift } = await measurePageRows(page);
+    const settingsRows = await measurePageRows(page);
+    await page.locator("#contactBtn").click();
+    await expect(page.locator("#contactDialog h2")).toHaveText("Contact");
+    const contactRows = await measurePageRows(page, "#contactDialog");
+    const { lift } = settingsRows;
     expect(lift).toBeGreaterThan(0);
-    for (const row of rows) {
-      const rowMiddle = (row.top + row.line + row.bottom) / 2;
+    expect(contactRows.rows).toHaveLength(3);
+    for (const row of [...settingsRows.rows, ...contactRows.rows]) {
+      const rowMiddle = (row.top + row.line + row.bottom - row.lineBelow) / 2;
       const wordsMiddle = (row.textTop + row.textBottom) / 2;
       expect(rowMiddle - wordsMiddle).toBeCloseTo(lift, 1);
       expect(Math.abs(row.caretMiddle - wordsMiddle)).toBeLessThanOrEqual(0.5);
     }
+    await page.keyboard.press("Escape");
+    await expect(page.locator("#contactDialog")).toBeHidden();
     await page.keyboard.press("Escape");
     await expect(page.locator("#settingsDialog")).toBeHidden();
     await page.locator("#tab-search").tap();
