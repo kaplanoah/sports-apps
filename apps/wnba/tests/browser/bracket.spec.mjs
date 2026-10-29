@@ -526,6 +526,7 @@ test("a bracket's large dots and outside seeds center on their names without loc
   page,
 }) => {
   await openApp(page);
+  await expect(page.locator(".team-line .club").first()).toBeVisible();
   const drawn = await readTeamLines(page, "wnba");
   expect(drawn.problems).toEqual([]);
   expect(drawn.roles).toContain("large");
