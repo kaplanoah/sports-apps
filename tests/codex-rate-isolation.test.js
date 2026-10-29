@@ -4,9 +4,32 @@ import { readFileSync } from "node:fs";
 import {
   requiresRateIsolation,
   validateRateIsolationFacts,
+  summarizeIsolationCommandFailure,
 } from "../worker/prove-codex-rate-isolation.mjs";
 
 const workflow = readFileSync(new URL("../.github/workflows/ci.yml", import.meta.url), "utf8");
+
+test("command diagnostics keep exit facts and fixed flags without publishing private output", () => {
+  const facts = summarizeIsolationCommandFailure({
+    status: 1,
+    signal: null,
+    stderr: Buffer.from(
+      "bwrap: user namespace: Operation not permitted; fake-private-output; https://example.invalid/private",
+    ),
+    stdout: "fake-private-output",
+  });
+  assert.equal(facts.exitCode, 1);
+  assert.equal(facts.mentionsPermissionDenial, true);
+  assert.equal(facts.mentionsUserNamespace, true);
+  assert.equal(facts.malformedProbeOutput, false);
+  assert.equal(JSON.stringify(facts).includes("fake-private-output"), false);
+  assert.equal(JSON.stringify(facts).includes("https://"), false);
+  assert.equal(
+    summarizeIsolationCommandFailure(new SyntaxError("private")).malformedProbeOutput,
+    true,
+  );
+  assert.equal(summarizeIsolationCommandFailure({}).exitCode, null);
+});
 const readJob = (name) =>
   workflow.match(new RegExp(`^  ${name}:\\n(?:(?:    .*|)\\n)*`, "m"))?.[0] ?? "";
 

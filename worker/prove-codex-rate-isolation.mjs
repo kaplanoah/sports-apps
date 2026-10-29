@@ -42,11 +42,36 @@ const proofStages = new Set([
 ]);
 
 class IsolationProofError extends Error {
-  constructor(stage, failedFacts = []) {
+  constructor(stage, failedFacts = [], commandFacts = null) {
     super("Isolation proof could not establish its facts.");
     this.stage = proofStages.has(stage) ? stage : "privileged-process";
     this.failedFacts = failedFacts.filter((name) => completedFacts.includes(name));
+    this.commandFacts = commandFacts;
   }
+}
+
+/** @param {any} error */
+export function summarizeIsolationCommandFailure(error) {
+  const stderr = Buffer.isBuffer(error?.stderr)
+    ? error.stderr.toString("utf8")
+    : typeof error?.stderr === "string"
+      ? error.stderr
+      : "";
+  return {
+    exitCode: Number.isSafeInteger(error?.status) ? error.status : null,
+    terminated: typeof error?.signal === "string",
+    timedOut: error?.code === "ETIMEDOUT",
+    malformedProbeOutput: error instanceof SyntaxError,
+    mentionsPermissionDenial: /permission denied|operation not permitted/i.test(stderr),
+    mentionsUserNamespace: /user namespace|userns|bubblewrap|bwrap/i.test(stderr),
+    mentionsMissingFile: /no such file|not found/i.test(stderr),
+    mentionsInvalidConfiguration: /invalid config|error loading config|config.*invalid/i.test(
+      stderr,
+    ),
+    mentionsUnsupportedOption: /unexpected argument|unrecognized option|unknown option/i.test(
+      stderr,
+    ),
+  };
 }
 
 const baselineFacts = ["gatewayReachable", "upstreamReachable", "checkoutWritable"];
@@ -338,6 +363,9 @@ async function proveRootBoundary(settings) {
     throw new IsolationProofError(
       stage,
       error instanceof IsolationProofError ? error.failedFacts : [],
+      error instanceof IsolationProofError
+        ? error.commandFacts
+        : summarizeIsolationCommandFailure(error),
     );
   } finally {
     await stopHolder(holder);
@@ -388,7 +416,8 @@ async function proveHostedBoundary(env) {
     { encoding: "utf8", timeout: 120000, maxBuffer: 65536, stdio: ["ignore", "pipe", "pipe"] },
   );
   const facts = JSON.parse(output);
-  if (facts.passed === false) throw new IsolationProofError(facts.stage, facts.failedFacts);
+  if (facts.passed === false)
+    throw new IsolationProofError(facts.stage, facts.failedFacts, facts.commandFacts);
   validateRateIsolationFacts(facts);
   return {
     version: 1,
@@ -445,8 +474,12 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   } catch (error) {
     const stage = error instanceof IsolationProofError ? error.stage : "privileged-process";
     const failedFacts = error instanceof IsolationProofError ? error.failedFacts : [];
+    const commandFacts =
+      error instanceof IsolationProofError
+        ? error.commandFacts
+        : summarizeIsolationCommandFailure(error);
     if (command === "privileged") {
-      process.stdout.write(JSON.stringify({ passed: false, stage, failedFacts }));
+      process.stdout.write(JSON.stringify({ passed: false, stage, failedFacts, commandFacts }));
     }
     if (command === "prove")
       writeFileSync(
@@ -459,6 +492,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
           attempt: process.env.GITHUB_RUN_ATTEMPT,
           stage,
           failedFacts,
+          commandFacts,
           nativeModelStarted: false,
           realCredentialUsed: false,
         }),
