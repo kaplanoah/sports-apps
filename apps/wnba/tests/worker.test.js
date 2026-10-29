@@ -207,7 +207,7 @@ test("ESPN's backup reads only its site scoreboard of yesterday and today, which
   assert.deepEqual(espnReads.sort(), [SEP_30, OCT_1]);
 });
 
-test("the backup and the game sheet keep a day's ESPN scoreboard at the edge alike, so the backup never reads a copy the sheet's read left older", async () => {
+test("the backup and the game sheet keep a day's ESPN scoreboard at the edge as long as the league's scoreboard, so the backup never reads older scores than those it stands in for", async () => {
   const [game] = ESPN.answers[OCT_1].events;
   const league = createLeague({
     refuse: { scoreboard: "page" },
@@ -233,8 +233,8 @@ test("the backup and the game sheet keep a day's ESPN scoreboard at the edge ali
   const cacheTimes = league.reads
     .filter((read) => read.url === OCT_1)
     .map((read) => read.cacheSeconds);
-  assert.equal(cacheTimes.length, 2);
-  assert.equal(new Set(cacheTimes).size, 1);
+  const scoreboardRead = league.reads.find((read) => read.feed === "scoreboard");
+  assert.deepEqual(cacheTimes, [scoreboardRead.cacheSeconds, scoreboardRead.cacheSeconds]);
 });
 
 test("a day ESPN doesn't answer for doesn't keep the other's games from standing in", async () => {

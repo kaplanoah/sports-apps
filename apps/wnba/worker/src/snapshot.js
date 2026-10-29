@@ -5,9 +5,8 @@ import { createReusedLoader } from "../../../../shared/worker/upstream.js";
 import { createGameEnds } from "./game-ends.js";
 import { createEspnGameReader, readEndTime } from "./lead.js";
 import { listUpcomingMeetings } from "./preview.js";
-import { fetchEspnDay, fetchEspnJson, fetchWnbaJson } from "./wnba.js";
+import { fetchEspnDay, fetchEspnJson, fetchWnbaJson, LIVE_CACHE_SECONDS } from "./wnba.js";
 
-const EDGE_CACHE_SECONDS = 5;
 // No longer than the wait between updates in a game's closing stretch, so each one reads the league.
 const SNAPSHOT_REUSE_MS = 5000;
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -105,7 +104,7 @@ export function createSnapshotLoader({
    * @param {string} url
    */
   const fetchFeed = (name, url) =>
-    fetchWnbaJson(fetchImpl, url, EDGE_CACHE_SECONDS, (answer) => hasFeedData(name, answer));
+    fetchWnbaJson(fetchImpl, url, LIVE_CACHE_SECONDS, (answer) => hasFeedData(name, answer));
 
   /**
    * @param {keyof typeof SLOW_FEEDS} name
@@ -116,7 +115,7 @@ export function createSnapshotLoader({
     slowFeeds.readFeed(name, url, () => fetchFeed(name, url), options);
 
   /** @param {string} url */
-  const fetchEspn = (url) => fetchEspnJson(fetchImpl, url, EDGE_CACHE_SECONDS);
+  const fetchEspn = (url) => fetchEspnJson(fetchImpl, url, LIVE_CACHE_SECONDS);
 
   // Yesterday's games too, since a late game is still being played after midnight Eastern. A day
   // ESPN didn't answer for is left out, so it doesn't keep the other's games from standing in.

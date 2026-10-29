@@ -63,8 +63,9 @@ export const fetchEspnJson = (fetchImpl, url, cacheSeconds) =>
     cacheSeconds,
   });
 
-// ESPN's backup reads live scores from a day's scoreboard, so every read of one keeps it this long.
-const ESPN_DAY_CACHE_SECONDS = 5;
+// How long the edge keeps an answer with live scores, the league's or ESPN's backup for them, so
+// each update of the snapshot reads fresh ones.
+export const LIVE_CACHE_SECONDS = 5;
 
 /**
  * ESPN's scoreboard of one day.
@@ -72,7 +73,7 @@ const ESPN_DAY_CACHE_SECONDS = 5;
  * @param {string} day as YYYYMMDD
  */
 export const fetchEspnDay = (fetchImpl, day) =>
-  fetchEspnJson(fetchImpl, ESPN_DAY_REQUEST(day), ESPN_DAY_CACHE_SECONDS);
+  fetchEspnJson(fetchImpl, ESPN_DAY_REQUEST(day), LIVE_CACHE_SECONDS);
 
 /**
  * The rows of one of the stats site's tables, each keyed by its column names.

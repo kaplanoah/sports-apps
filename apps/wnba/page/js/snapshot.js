@@ -399,17 +399,17 @@ const BACKUP_STATES = { pre: "pre", in: "live", post: "final" };
 const readEspnScore = (score) => (typeof score === "string" && score !== "" ? Number(score) : null);
 
 // An ESPN scoreboard game's competition, when it starts, and its teams, home and away, each as
-// `readSide` reads it.
+// `readCompetitorDetails` reads it.
 /**
  * @param {any} event
- * @param {(competitor: any) => object} readSide
+ * @param {(competitor: any) => object} readCompetitorDetails
  */
-function readEspnEvent(event, readSide) {
+function readEspnEvent(event, readCompetitorDetails) {
   const competition = event.competitions?.[0] ?? {};
   const sides = Object.fromEntries(
     (competition.competitors ?? []).map((competitor) => [
       competitor.homeAway,
-      { team: findTeamCodeByEspnId(competitor.id), ...readSide(competitor) },
+      { team: findTeamCodeByEspnId(competitor.id), ...readCompetitorDetails(competitor) },
     ]),
   );
   return { competition, start: competition.date ?? event.date, home: sides.home, away: sides.away };
