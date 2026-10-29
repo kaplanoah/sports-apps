@@ -1,4 +1,5 @@
 import { createBoxScoreReader } from "./box-score.js";
+import { isFromEspn } from "./espn-box-score.js";
 import { createEspnGameReader, describeGameLead } from "./lead.js";
 import { nameGameDetailsKey } from "./store-docs.js";
 import { createGameDetailsJob, nameReadsKey } from "../../../../shared/worker/game-details-job.js";
@@ -49,7 +50,7 @@ const readAnswer = (result) => (result.status === "fulfilled" ? result.value : n
  * Whether a box score is the league's own final.
  * @param {any} boxScore
  */
-const isLeagueFinal = (boxScore) => boxScore?.state === "final" && boxScore.source !== "espn";
+const isLeagueFinal = (boxScore) => boxScore?.state === "final" && !isFromEspn(boxScore);
 
 /**
  * Whether the league answered with a final box score, and ESPN with a lead that's over, or that it
@@ -68,13 +69,10 @@ const isWhole = (boxScore, lead) =>
  * @param {any} kept
  */
 const chooseBoxScore = (read, kept) =>
-  read?.source === "espn" && isLeagueFinal(kept) ? kept : (read ?? kept);
+  isFromEspn(read) && isLeagueFinal(kept) ? kept : (read ?? kept);
 
-/**
- * Whether the box score kept is ESPN's, standing in for the league's.
- * @param {any} details
- */
-const isStandIn = (details) => details.boxScore?.source === "espn";
+/** @param {any} details */
+const isStandIn = (details) => isFromEspn(details.boxScore);
 
 /**
  * A game's box score and lead, each kept as stored when it didn't answer.

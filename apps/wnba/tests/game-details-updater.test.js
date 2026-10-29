@@ -438,6 +438,7 @@ test("a final's box score kept from the league stays when the league refuses a l
     answer: (url) => answers[url],
   });
   await runJob();
+  takeRequests();
   const fromLeague = describeBoxScore(GAMES.boxScores[VALKYRIES_AT_WINGS.id]);
   assert.deepEqual((await docs.read(`games/${VALKYRIES_AT_WINGS.id}`)).boxScore, fromLeague);
 
@@ -445,7 +446,9 @@ test("a final's box score kept from the league stays when the league refuses a l
   wait(10);
   await runJob();
 
-  assert.ok(takeRequests().includes(nameSummaryRequest(eventId)));
+  const requests = takeRequests();
+  assert.ok(requests.includes(nameBoxScoreRequest(VALKYRIES_AT_WINGS.id)));
+  assert.ok(requests.includes(nameSummaryRequest(eventId)));
   assert.deepEqual((await docs.read(`games/${VALKYRIES_AT_WINGS.id}`)).boxScore, fromLeague);
 });
 

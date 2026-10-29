@@ -7,6 +7,14 @@ import { readNameLetters } from "../../../../shared/worker/injury-report.js";
 // her sheet, from the season's list of players by her name on her team; one the list doesn't name
 // has none.
 
+const ESPN_SOURCE = "espn";
+
+/**
+ * Whether a box score is ESPN's, standing in for the league's.
+ * @param {any} boxScore
+ */
+export const isFromEspn = (boxScore) => boxScore?.source === ESPN_SOURCE;
+
 /**
  * A team's players on the season's list, by name.
  * @param {any} index the season's list of players (`player-index.js`), or null
@@ -155,7 +163,7 @@ export function describeEspnBoxScore(summary, id, index) {
   const leadChanges = readStat(summary.boxscore.teams?.[0]?.statistics ?? [], "leadChanges");
   return {
     id,
-    source: "espn",
+    source: ESPN_SOURCE,
     state,
     period: Math.max(away.periods.length, home.periods.length) || null,
     leadChanges: leadChanges === undefined ? null : Number(leadChanges),
