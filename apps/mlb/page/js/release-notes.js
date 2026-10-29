@@ -6,7 +6,7 @@ import { html } from "#shared/html.js";
 /** @type {import("#shared/updates.js").ReleaseNote[]} */
 export const RELEASE_NOTES = [
   {
-    at: "2026-10-29T04:00:00Z",
+    at: "2026-10-29T04:13:00Z",
     text: html`Send a feature request, bug report, or anything else. From settings in the top right, tap <b>Contact</b>.`,
   },
   {
