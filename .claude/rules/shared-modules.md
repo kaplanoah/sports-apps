@@ -63,6 +63,11 @@ The Worker serves every file here, its `networks/` logos too, under `shared/`, b
 ### Settings and Diagnostics
 
 - `settings-sheet.js`: the settings sheet
+- `settings-page.js`: a page of settings and the row that opens it
+- `settings-icons.js`: Settings caret and Back icons
+- `contact.js`: Contact navigation, validation, screenshots, and sending
+- `contact-view.js`: Contact's menu, forms, and what a send shows
+- `contact-drafts.js`: separate category drafts and stable submission identifiers
 - `contact-rules.js`: Contact categories and shared input limits
 - `season-picker.js`: settings' Season picker
 - `notifications.js`: the Notifications group's permission, saving and timing changes
@@ -208,6 +213,7 @@ Pages link these before their own stylesheet, and theme them with the tokens the
 - `type.css`: the type roles
 - `chrome.css`: the tab bar, settings, round dots, the welcome and its box, the catching-up line, and pull to refresh
 - `diagnostics.css`: the Diagnostics and the look the stylesheets see
+- `contact.css`: the Contact menu, forms, and delivery states
 - `pager.css`: a pill's names and the standings and bracket under one
 - `day-strip.css`: a season's list of days and its strip
 - `game-search.css`: the search's view

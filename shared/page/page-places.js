@@ -89,6 +89,13 @@ export const DIAGNOSTICS_SETTING = {
   words: ["diagnostics", "report"],
 };
 
+/** @type {SettingRow} */
+export const CONTACT_SETTING = {
+  key: "settings:contact",
+  name: ["Contact"],
+  words: ["contact", "bug report", "feature request", "something else", "feedback", "support"],
+};
+
 /**
  * The row of the switch for a team's own outlets.
  * @param {string} team the team's name, as the row says it

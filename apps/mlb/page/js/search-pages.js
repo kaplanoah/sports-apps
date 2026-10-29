@@ -6,6 +6,7 @@ import { LEAGUE_WORDS } from "./league-words.js";
 import {
   ATHLETIC_SETTING,
   DIAGNOSTICS_SETTING,
+  CONTACT_SETTING,
   NEWS_TAB,
   describeNotificationsSetting,
   describeRemindersSetting,
@@ -95,6 +96,7 @@ const LEAGUE_PAGES = {
       name: ["Ranking"],
       words: ["ranking", "rank", "favorite teams", "rooting"],
     },
+    CONTACT_SETTING,
     DIAGNOSTICS_SETTING,
   ],
   gameParts: [

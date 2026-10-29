@@ -103,6 +103,7 @@ export function testThemes(test, expect, app) {
   }
 
   test("the views show every tab and sheet the page has, and settings", async ({ page }) => {
+    test.slow();
     await page.setViewportSize(SCREENS["a phone"]);
     await app.openWithEverything(page);
     const held = new Set();

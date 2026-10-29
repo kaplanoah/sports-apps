@@ -1,0 +1,266 @@
+/*
+ * Contact's menu, its forms, and what a send shows, inside a settings page.
+ *
+ * Each app's :root sets the tokens it reads:
+ *   --contact-menu-surface, --contact-menu-edge   the fill and edge of the menu's rows
+ *   --raised, --edge                             Add screenshot's fill and edge
+ *   --card, --card-border                        the fields, the report, and a failed send's box
+ *   --ink, --ink-dim, --ink-hover                text, notes, and a hovered link
+ *   --accent, --accent-ink                       links, icons, and Send with its text
+ *   --search-face                                the fields' font, drawn at its role's size
+ *   --radius-control, --radius-card              buttons and fields, and the boxes
+ *   --leading                                    the fields' line height
+ *   --type-setting-*, --type-setting-note-*,     the type roles it sets
+ *   --type-body-*, --type-detail-*,
+ *   --type-field-size, --type-confirmation-*
+ * chrome.css sets --label-note-gap and --label-field-gap.
+ */
+.contact-menu {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.contact-menu .settings-page-row {
+  padding-inline: 14px;
+  border: 1px solid var(--contact-menu-edge);
+  border-radius: var(--radius-control);
+  background: var(--contact-menu-surface);
+}
+.contact-domain {
+  margin: 0;
+  padding-inline-start: 1px;
+  overflow-wrap: anywhere;
+  color: var(--ink-dim);
+  font-size: var(--type-setting-note-size);
+  font-weight: var(--type-setting-note-weight);
+}
+.contact-domain a,
+.contact-quiet {
+  color: var(--accent);
+  font-size: var(--type-setting-note-size);
+  font-weight: var(--type-setting-note-weight);
+  text-decoration: none;
+}
+#contactForm fieldset {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.contact-field {
+  margin-bottom: 22px;
+}
+.contact-field label {
+  display: block;
+  margin-bottom: var(--label-field-gap);
+  font-size: var(--type-setting-size);
+  font-weight: var(--type-setting-weight);
+}
+.contact-field label:has(+ .contact-note) {
+  margin-bottom: var(--label-note-gap);
+}
+.contact-field :is(input, textarea) {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  padding: 11px;
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-control);
+  background: var(--card);
+  color: var(--ink);
+  font-family: var(--search-face);
+  font-size: var(--type-field-size);
+  font-weight: var(--type-body-weight);
+  line-height: calc(1.5 * var(--leading));
+}
+.contact-field textarea {
+  height: 144px;
+  min-height: 110px;
+  resize: vertical;
+}
+.contact-field ::placeholder {
+  color: var(--ink-dim);
+  opacity: 1;
+}
+.contact-note,
+.contact-attachment,
+.contact-diagnostics,
+.contact-validation,
+.contact-success p {
+  font-size: var(--type-setting-note-size);
+  font-weight: var(--type-setting-note-weight);
+}
+.contact-note {
+  margin: 0 0 var(--label-field-gap);
+  color: var(--ink-dim);
+}
+.contact-secondary,
+.contact-quiet {
+  min-height: 44px;
+  font-family: inherit;
+  cursor: pointer;
+}
+.contact-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 8px 12px;
+  border: 1px solid var(--edge);
+  border-radius: var(--radius-control);
+  background: var(--raised);
+  color: var(--ink);
+  font-size: var(--type-body-size);
+  font-weight: var(--type-body-weight);
+}
+.contact-secondary svg {
+  width: 18px;
+  height: 18px;
+  color: var(--accent);
+}
+/* Hidden from sight but not from VoiceOver or Tab, so its label opens the picker natively. */
+.contact-file {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  font-size: var(--type-field-size);
+  font-weight: var(--type-body-weight);
+}
+.contact-attachment-area {
+  position: relative;
+  margin: -8px 0 22px;
+}
+.contact-attachment {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 9px;
+}
+.contact-attachment img {
+  width: 44px;
+  height: 44px;
+  object-fit: cover;
+  border-radius: var(--radius-card);
+}
+.contact-attachment span {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.contact-quiet {
+  padding: 8px 0;
+  border: 0;
+  background: none;
+}
+.contact-diagnostics {
+  margin-bottom: 22px;
+}
+.contact-diagnostics-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  column-gap: 12px;
+}
+.contact-diagnostics label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+}
+.contact-diagnostics input {
+  width: 17px;
+  height: 17px;
+  accent-color: var(--accent);
+}
+.contact-diagnostics pre {
+  max-height: 240px;
+  margin: 8px 0 0;
+  padding: 12px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  background: var(--card);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-card);
+  font-family: inherit;
+  font-size: var(--type-detail-size);
+  font-weight: var(--type-detail-weight);
+}
+.contact-primary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 46px;
+  padding: 11px;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-family: inherit;
+  font-size: var(--type-setting-size);
+  font-weight: var(--type-setting-weight);
+  cursor: pointer;
+}
+.contact-primary:disabled {
+  opacity: 0.65;
+  cursor: wait;
+}
+.contact-spinner {
+  width: 16px;
+  height: 16px;
+  border: 1.5px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: catch-up-turn 1s linear infinite;
+}
+.contact-validation {
+  color: var(--ink);
+}
+.contact-failure {
+  padding: 12px;
+  margin-bottom: 14px;
+  background: var(--card);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-card);
+  font-size: var(--type-body-size);
+  font-weight: var(--type-body-weight);
+}
+.contact-failure strong {
+  display: block;
+  margin-bottom: 4px;
+  font-weight: calc(var(--type-body-weight) + 100);
+}
+.contact-failure p {
+  margin: 0;
+}
+.contact-success {
+  padding-top: 6px;
+}
+.contact-success h3 {
+  margin: 0 0 10px;
+  font-size: var(--type-confirmation-size);
+  font-weight: var(--type-confirmation-weight);
+}
+.contact-success p {
+  margin: 0;
+  color: var(--ink-dim);
+}
+.contact-success .contact-primary {
+  margin-top: 26px;
+}
+@media (hover: hover) {
+  :is(.contact-domain a, .contact-quiet, .contact-secondary):hover {
+    color: var(--ink-hover);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .contact-spinner {
+    animation: none;
+  }
+}

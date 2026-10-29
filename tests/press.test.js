@@ -17,6 +17,9 @@ function createElement(localName, { attributes = {}, classes = [], parent } = {}
     hasAttribute: (/** @type {string} */ name) => name in attributes,
     classList: { contains: (/** @type {string} */ name) => classes.includes(name) },
     /** @param {string} selector */
+    matches: (selector) =>
+      selector.split(", ").some((part) => part.startsWith(".") && classes.includes(part.slice(1))),
+    /** @param {string} selector */
     closest(selector) {
       const isLabel = selector === "label";
       const matches = isLabel
@@ -28,11 +31,12 @@ function createElement(localName, { attributes = {}, classes = [], parent } = {}
   return element;
 }
 
-test("a button, a link, a details' summary, and an Appearance choice show their press", () => {
+test("a button, a link, a details' summary, an Appearance choice, and Contact's Add screenshot show their press", () => {
   assert.equal(isPressable(createElement("button")), true);
   assert.equal(isPressable(createElement("a", { attributes: { href: "#" } })), true);
   assert.equal(isPressable(createElement("summary")), true);
   assert.equal(isPressable(createElement("label", { classes: ["appearance-choice"] })), true);
+  assert.equal(isPressable(createElement("label", { classes: ["contact-secondary"] })), true);
 });
 
 test("a switch, a disabled button, a link with nowhere to go, a select, a field, and a plain label never show one", () => {

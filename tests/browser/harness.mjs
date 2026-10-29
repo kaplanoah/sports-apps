@@ -232,13 +232,20 @@ export async function loadPageAt(page, now, { isShowingWelcome = false, path = "
 
 /**
  * Holds the page's clock still, so its frames and timers move only as the test moves them,
- * however slow the machine. The second's lead keeps the clock from passing the pause before it holds.
+ * however slow the machine. A machine slow enough to pass the second's lead before the pause lands
+ * reads the clock again and pauses from there.
  * @param {import("@playwright/test").Page} page
  */
 export async function holdClock(page) {
-  const now = await page.evaluate(() => Date.now());
-  await page.clock.pauseAt(now + 1000);
-  return now;
+  for (;;) {
+    const now = await page.evaluate(() => Date.now());
+    try {
+      await page.clock.pauseAt(now + 1000);
+      return now;
+    } catch (error) {
+      if (!String(error).includes("Cannot fast-forward to the past")) throw error;
+    }
+  }
 }
 
 const PAGE_KEY = "test-key";

@@ -12,7 +12,8 @@ const executablePath = process.env.CHROMIUM_PATH;
 const appsWithBrowserTests = listAppsWithBrowserTests();
 const findPort = (index) => FIRST_PORT + index;
 
-// iPhones run WebKit, so motion and notification layout run there too wherever it's installed.
+// iPhones run WebKit, so motion, notification layout, and Contact's settings run there too
+// wherever it's installed.
 const hasWebKit = existsSync(webkit.executablePath());
 
 export default defineConfig({

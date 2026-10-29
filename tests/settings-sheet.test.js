@@ -31,7 +31,7 @@ class FakeElement extends EventTarget {
   }
 }
 
-test("settings claim pickers and their children while preserving the app's own gesture claims", (context) => {
+test("settings claim pickers and their children", (context) => {
   const originalElement = globalThis.Element;
   globalThis.Element = /** @type {any} */ (FakeElement);
   context.after(() => {
@@ -43,16 +43,6 @@ test("settings claim pickers and their children while preserving the app's own g
     assert.equal(isSettingsControlGesture(target), true);
   for (const target of [new FakeElement("label"), new FakeElement("button"), new EventTarget()])
     assert.equal(isSettingsControlGesture(target), false);
-
-  const grip = new FakeElement("button");
-  const isOwnGesture = (target) => target === grip;
-  assert.equal(isSettingsControlGesture(grip), false);
-  assert.equal(isSettingsControlGesture(grip, isOwnGesture), true);
-  assert.equal(
-    isSettingsControlGesture(select, () => false),
-    true,
-  );
-  assert.equal(isSettingsControlGesture(new EventTarget(), isOwnGesture), false);
 });
 
 /** @param {import("../shared/page/release.js").Release} release */

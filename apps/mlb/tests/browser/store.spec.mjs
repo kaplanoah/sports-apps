@@ -1,3 +1,4 @@
+import { openRanking } from "./settings-sheet.mjs";
 import {
   test,
   expect,
@@ -63,6 +64,7 @@ test.describe("on a phone", () => {
     await dismissUpdatesBox(page);
     await expect(page.locator("#updates")).toBeHidden();
     await openSettings(page);
+    await openRanking(page);
     await expect(page.locator("#rankList .rank-item")).toHaveCount(12);
     const byName = await listShownRanking(page);
     await page.locator("#rankList .rank-item").first().locator(".grip").focus();
@@ -75,11 +77,14 @@ test.describe("on a phone", () => {
     expect(storeWrites).toEqual([]);
 
     await page.keyboard.press("Escape");
+    await expect(page.locator("#rankingDialog")).toBeHidden();
+    await page.keyboard.press("Escape");
     await expect(page.getByRole("dialog", { name: "Settings" })).toBeHidden();
     await page.evaluate(() => localStorage.clear());
     await page.reload();
     await expect(page.locator("#updates")).toContainText("The official bracket is set");
     await openSettings(page);
+    await openRanking(page);
     await expect.poll(() => listShownRanking(page)).toEqual(byName);
     expect(await readKept(page, "rankings")).toBeNull();
   });

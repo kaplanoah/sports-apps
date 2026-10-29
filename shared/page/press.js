@@ -25,7 +25,7 @@ const LIFT_CLICK_MS = 1000;
 const GLIDE_REST_MS = 100;
 
 // The buttons of the rows every app shares: a game's, a card's, a search's, a table's, a clip's,
-// and a Diagnostics record's.
+// a Diagnostics record's, and a settings page's.
 const SHARED_ROW_BUTTONS = [
   ".game-open",
   ".game-card-button",
@@ -35,6 +35,7 @@ const SHARED_ROW_BUTTONS = [
   ".row-button-cell button",
   ".clip-open",
   ".diagnostics-record summary",
+  ".settings-page-row",
 ];
 // What an iPhone hands a tap to, whatever listens for it.
 export const TAPPABLE = "button, a[href], label, summary, select, input, textarea";
@@ -64,8 +65,9 @@ function letGo() {
 }
 
 /**
- * Whether a control shows its press: a button, a link, a details' summary, or an Appearance
- * choice, but never a switch, a select, or a field, which draw their own, nor a disabled button.
+ * Whether a control shows its press: a button, a link, a details' summary, an Appearance choice,
+ * or Contact's Add screenshot, but never a switch, a select, or a field, which draw their own,
+ * nor a disabled button.
  * @param {Element} control
  */
 export function isPressable(control) {
@@ -77,7 +79,7 @@ export function isPressable(control) {
     case "summary":
       return true;
     case "label":
-      return control.classList.contains("appearance-choice");
+      return control.matches(".appearance-choice, .contact-secondary");
     default:
       return false;
   }

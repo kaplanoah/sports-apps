@@ -1,3 +1,4 @@
+import { CONTACT_VIEWS } from "../../../../tests/browser/contact-views.mjs";
 import {
   expect,
   openApp,
@@ -72,12 +73,36 @@ export async function openHighlights(page) {
 
 /** @typedef {import("../../../../tests/browser/view-walk.mjs").View} View */
 
+// The pages settings opens, in the order its rows list them.
+export const SETTINGS_PAGES = ["Ranking", "Contact"];
+
 /**
  * Each view, opened from the last, and what shows once it's drawn, in groups that each check
  * within a test's time.
  * @type {Record<string, View[]>}
  */
 export const VIEW_GROUPS = {
+  "the settings pages": [
+    ...CONTACT_VIEWS,
+    {
+      name: "Ranking",
+      open: async (page) => {
+        await openSettings(page);
+        await page.locator("#rankingBtn").click();
+      },
+      shown: (page) => page.locator("#rankingDialog #rankList"),
+      close: async (page) => {
+        await page.keyboard.press("Escape");
+        await page.keyboard.press("Escape");
+      },
+    },
+    {
+      name: "settings",
+      open: (page) => openSettings(page),
+      shown: (page) => page.locator(`${SETTINGS} .appearance-row`),
+      close: (page) => page.keyboard.press("Escape"),
+    },
+  ],
   "the page's tabs": [
     {
       name: "Bracket",
@@ -114,12 +139,6 @@ export const VIEW_GROUPS = {
       name: "News",
       open: (page) => page.getByRole("tab", { name: "News" }).click(),
       shown: (page) => page.locator(".news-more-title").first(),
-    },
-    {
-      name: "settings",
-      open: (page) => openSettings(page),
-      shown: (page) => page.locator(`${SETTINGS} .appearance-row`),
-      close: (page) => page.keyboard.press("Escape"),
     },
   ],
   "a game's sheets": [

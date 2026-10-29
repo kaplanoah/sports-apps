@@ -83,7 +83,7 @@ Each app's news needs an Anthropic API key, as its Worker's `ANTHROPIC_API_KEY` 
 
 **6. Turn on notifications.** From the home screen icon, have them tap the sliders at the top right to open settings, turn on **Game updates** (MLB) or **Final scores** (WNBA), and allow them. **Game starts** independently enables playoff game reminders, with its timing chosen beneath it. iPhones send web notifications only to pages opened from the home screen. Each device turns them on for itself. A notification comes for each new update about a team in the ranking: a postseason game or series result, a clinch, an elimination, or a change in the field or seeds.
 
-Finish by telling the user they can set their ranking in settings, below Notifications. If they made a Cloudflare token only for this setup, tell them they can delete it now, or remove the environment credential. The page keeps running without it. To deploy future changes on merge instead, see "Deploying on merge" below.
+Finish by telling the user they can set their MLB ranking from Settings > Ranking. If they made a Cloudflare token only for this setup, tell them they can delete it now, or remove the environment credential. The page keeps running without it. To deploy future changes on merge instead, see "Deploying on merge" below.
 
 ### If they deploy it themselves
 

@@ -1,3 +1,4 @@
+import { CONTACT_VIEWS } from "../../../../tests/browser/contact-views.mjs";
 import { expect, openApp, openGameSheet, keepHighlights } from "./harness.mjs";
 import { openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
 import { SETTINGS } from "../../../../tests/browser/settings.mjs";
@@ -32,12 +33,24 @@ export async function openHighlights(page) {
 
 /** @typedef {import("../../../../tests/browser/view-walk.mjs").View} View */
 
+// The pages settings opens, in the order its rows list them.
+export const SETTINGS_PAGES = ["Contact"];
+
 /**
  * Each view, opened from the last, and what shows once it's drawn, in groups that each check
  * within a test's time.
  * @type {Record<string, View[]>}
  */
 export const VIEW_GROUPS = {
+  "the settings pages": [
+    ...CONTACT_VIEWS,
+    {
+      name: "settings",
+      open: (page) => page.getByRole("button", { name: "Settings", exact: true }).click(),
+      shown: (page) => page.locator(`${SETTINGS} .appearance-row`),
+      close: (page) => page.keyboard.press("Escape"),
+    },
+  ],
   "the page's tabs": [
     {
       name: "Bracket",
@@ -84,12 +97,6 @@ export const VIEW_GROUPS = {
       name: "News",
       open: (page) => page.getByRole("tab", { name: "News" }).click(),
       shown: (page) => page.locator(".news-more").first(),
-    },
-    {
-      name: "settings",
-      open: (page) => page.getByRole("button", { name: "Settings", exact: true }).click(),
-      shown: (page) => page.locator(`${SETTINGS} .appearance-row`),
-      close: (page) => page.keyboard.press("Escape"),
     },
   ],
   "a team's and a player's sheets": [

@@ -24,6 +24,7 @@
   />
   <link rel="preload" href="fonts/chivo-mono-latin.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="stylesheet" href="shared/type.css" />
+  <link rel="stylesheet" href="shared/contact.css" />
   <link rel="stylesheet" href="shared/chrome.css" />
   <link rel="stylesheet" href="shared/diagnostics.css" />
   <link rel="stylesheet" href="shared/game-row.css" />
@@ -391,21 +392,29 @@
             </div>
           </div>
         </div>
+        <div class="settings-pages">
+          <button
+            type="button"
+            class="settings-page-row press-tint press-reach"
+            id="rankingBtn"
+            data-last-drawn
+            data-setting="settings:ranking"
+            aria-haspopup="dialog"
+          >
+            Ranking
+          </button>
+          <button
+            type="button"
+            class="settings-page-row press-tint press-reach"
+            id="contactBtn"
+            data-last-drawn
+            data-setting="settings:contact"
+            aria-haspopup="dialog"
+          >
+            Contact
+          </button>
+        </div>
       </div>
-      <section
-        class="settings-ranking"
-        aria-labelledby="rankingTitle"
-        data-setting="settings:ranking"
-      >
-        <div class="ranking-heading">
-          <h3 id="rankingTitle">Ranking</h3>
-          <p class="ranking-note">Who you want to win the World Series</p>
-        </div>
-        <div class="rank-frame">
-          <ol class="rank-numbers" id="rankNumbers" aria-hidden="true" data-last-drawn></ol>
-          <ul class="rank-list" id="rankList" data-last-drawn></ul>
-        </div>
-      </section>
       <footer class="settings-footer">
         <p class="settings-version" id="versionNote" hidden data-last-drawn></p>
         <p class="settings-version">&copy; 2026 Noah Kaplan</p>
@@ -429,6 +438,33 @@
         <div class="diagnostics" id="diagnostics" hidden></div>
       </section>
     </div>
+  </dialog>
+
+  <dialog id="rankingDialog" class="settings-panel" aria-labelledby="rankingTitle">
+    <div class="settings-body ranking-body" id="rankingBody">
+      <div class="sheet-top">
+        <div class="sheet-head">
+          <button type="button" class="settings-back" aria-label="Back to Settings">
+            <!-- Phosphor's arrow-left, at its Light weight. -->
+            <svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true">
+              <path
+                d="M222,128a6,6,0,0,1-6,6H54.49l61.75,61.76a6,6,0,1,1-8.48,8.48l-72-72a6,6,0,0,1,0-8.48l72-72a6,6,0,0,1,8.48,8.48L54.49,122H216A6,6,0,0,1,222,128Z"
+              />
+            </svg>
+          </button>
+          <div class="sheet-title"><h2 id="rankingTitle">Ranking</h2></div>
+        </div>
+        <p class="ranking-note">Who you want to win the World Series</p>
+      </div>
+      <div class="rank-frame">
+        <ol class="rank-numbers" id="rankNumbers" aria-hidden="true" data-last-drawn></ol>
+        <ul class="rank-list" id="rankList" data-last-drawn></ul>
+      </div>
+    </div>
+  </dialog>
+
+  <dialog id="contactDialog" class="settings-panel" aria-labelledby="contactTitle">
+    <div class="settings-body" id="contactBody" data-last-drawn></div>
   </dialog>
 
   <dialog id="sheetDialog" class="sheet-panel" aria-labelledby="gameTitle">

@@ -25,6 +25,11 @@ body.kbd
   outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
+/* Contact's file field is hidden from sight, so its label shows the ring. */
+body.kbd .contact-file:focus + .contact-secondary {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
 
 /* A press (press.js) shows at once and eases back as it lets go, as an iPhone's controls do. A
    filled button darkens, an outlined one takes some ink, and every other control fades. A row's
@@ -32,7 +37,15 @@ body.kbd
 :where(button:not([role="switch"]), a[href], summary, .appearance-choice) {
   transition: opacity var(--press-ease-back);
 }
-:where(.accent-button, .diagnostics-button, .open-button, .retry-button, .read-button) {
+:where(
+  .accent-button,
+  .diagnostics-button,
+  .open-button,
+  .retry-button,
+  .read-button,
+  .contact-primary,
+  .contact-secondary
+) {
   transition: background-color var(--press-ease-back);
 }
 .is-pressed:not(
@@ -41,18 +54,29 @@ body.kbd
   .diagnostics-button,
   .open-button,
   .retry-button,
-  .read-button
+  .read-button,
+  .contact-primary,
+  .contact-secondary
 ) {
   opacity: 0.3;
   transition: none;
 }
-:is(.accent-button, .diagnostics-button, .open-button, .retry-button.filled).is-pressed:not(
-    .move-card-button-outlined
-  ) {
+:is(
+    .accent-button,
+    .diagnostics-button,
+    .open-button,
+    .retry-button.filled,
+    .contact-primary
+  ).is-pressed:not(.move-card-button-outlined) {
   background: color-mix(in srgb, var(--accent) 80%, #000);
   transition: none;
 }
-:is(.retry-button:not(.filled), .read-button, .move-card-button-outlined).is-pressed {
+:is(
+  .retry-button:not(.filled),
+  .read-button,
+  .move-card-button-outlined,
+  .contact-secondary
+).is-pressed {
   background: color-mix(in srgb, var(--ink) 10%, var(--raised));
   transition: none;
 }
