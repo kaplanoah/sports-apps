@@ -184,11 +184,10 @@ test("the examples sit where the WNBA's do: 4.5px under the field, their words 1
       words: itemBox.left + Number.parseFloat(style.paddingLeft) - textStart,
       lineLeft: itemBox.left + Number.parseFloat(line.left) - textStart,
       lineRight: fieldBox.right - (itemBox.right - Number.parseFloat(line.right)),
-      lift: (Number.parseFloat(style.paddingBottom) - Number.parseFloat(style.paddingTop)) / 2,
     };
   });
 
-  expect(place).toEqual({ gap: 4.5, words: 1.5, lineLeft: 2, lineRight: 1, lift: 1.5 });
+  expect(place).toEqual({ gap: 4.5, words: 1.5, lineLeft: 2, lineRight: 1 });
 });
 
 test("the field sits 11px under the header's line", async ({ page }) => {

@@ -1008,7 +1008,9 @@ test("proof and trial workflows collect and upload failure evidence without anot
     }
     const checkout = steps.find((step) => /path: (?:controls|trial-validator)/.test(step));
     assert.match(checkout, /if: always\(\)/);
-    const collect = steps.find((step) => /run: node .* collect/.test(step));
+    const collect = steps.find((step) =>
+      /run: node .*\/worker\/(?:prove-codex-runner|review-trial)\.mjs collect/.test(step),
+    );
     assert.match(collect, /if: always\(\)/);
     assert.match(
       collect,
@@ -1017,8 +1019,12 @@ test("proof and trial workflows collect and upload failure evidence without anot
         : /MODEL_OUTCOME: .*steps.model.outcome/,
     );
     const uploads = steps.filter((step) => step.includes("uses: actions/upload-artifact@"));
-    assert.equal(uploads.length, 2);
+    assert.equal(uploads.length, 4);
     for (const upload of uploads) assert.match(upload, /if: always\(\)/);
+    const quota = uploads.find((step) => step.includes("name: ${{ steps.rate.outputs.artifact }}"));
+    assert.ok(quota);
+    assert.match(quota, /steps.rate.outcome == 'success'/);
+    assert.match(quota, /retention-days: 90/);
     const encrypted = uploads.find((step) => step.includes(`name: ${artifact}`));
     assert.match(encrypted, /if-no-files-found: error/);
     assert.match(encrypted, /trial-private\/evidence.cms/);

@@ -171,6 +171,15 @@ test("while the scoreboard doesn't answer, ESPN stands in for the games it has s
   assert.deepEqual(describe("1042600123"), ["pre", "9:00 pm ET", null, 0, 0]);
 });
 
+// What the store's status says of ESPN's backup, or null when it says nothing.
+const readBackupReason = (snapshot) =>
+  describeSnapshotStatus(snapshot)
+    .reasons.split("; ")
+    .find((reason) => reason.startsWith("backup: "))
+    ?.slice("backup: ".length) ?? null;
+
+const ESPN_LISTING = Object.keys(ESPN.answers).find((url) => url.includes("/events?dates="));
+
 test("a game ESPN doesn't answer for doesn't keep its others from standing in", async () => {
   const espn = structuredClone(ESPN.answers);
   const dallasStatus = Object.keys(espn).find((url) => url.includes("401918020/status"));
@@ -186,12 +195,17 @@ test("a game ESPN doesn't answer for doesn't keep its others from standing in", 
   assert.equal(snapshot.standIn, "espn");
   const readState = (id) => snapshot.games.find((game) => game.id === id).state;
   assert.deepEqual([readState("1042600132"), readState("1042600112")], ["final", "pre"]);
+  assert.equal(
+    readBackupReason(snapshot),
+    `ESPN didn't answer for 1 of the 3 it listed from 20260930 to 20261001: ESPN answered 404 for ${new URL(dallasStatus).pathname}`,
+  );
 });
 
 test("while the scoreboard doesn't answer, ESPN covers it before any of its games has started, and its scores stand in for none", async () => {
   const espn = structuredClone(ESPN.answers);
-  const listing = Object.keys(espn).find((url) => url.includes("/events?dates="));
-  espn[listing].items = espn[listing].items.filter((item) => item.$ref.includes("401918022"));
+  espn[ESPN_LISTING].items = espn[ESPN_LISTING].items.filter((item) =>
+    item.$ref.includes("401918022"),
+  );
   const league = createLeague({ refuse: { scoreboard: "page" }, espn });
   const loader = createSnapshotLoader({
     fetchImpl: league.fetchImpl,
@@ -206,6 +220,64 @@ test("while the scoreboard doesn't answer, ESPN covers it before any of its game
   );
   assert.equal(describeSnapshotStatus(snapshot).standIn, "espn");
   assert.equal(snapshot.games.find((game) => game.id === "1042600132").state, "pre");
+  assert.equal(readBackupReason(snapshot), null);
+});
+
+test("while the scoreboard doesn't answer, ESPN's listing without the league's games covers nothing, and the status says so", async () => {
+  const espn = structuredClone(ESPN.answers);
+  espn[ESPN_LISTING].items = [];
+  const league = createLeague({ refuse: { scoreboard: "page" }, espn });
+  const loader = createSnapshotLoader({
+    fetchImpl: league.fetchImpl,
+    now: () => Date.parse(ESPN.now),
+  });
+
+  const snapshot = await loader.loadSnapshot(2026);
+
+  assert.deepEqual([snapshot.standIn, snapshot.scoreboardCover], [null, null]);
+  assert.equal(
+    readBackupReason(snapshot),
+    "ESPN listed none of the league's games from 20260930 to 20261001, of 0 in all",
+  );
+});
+
+test("while the scoreboard doesn't answer and no score is due, ESPN's listing without the league's games gives no backup reason", async () => {
+  const espn = structuredClone(ESPN.answers);
+  espn[ESPN_LISTING].items = [];
+  const { schedule } = readNextMorning();
+  const games = schedule.leagueSchedule.gameDates.flatMap((day) => day.games);
+  Object.assign(
+    games.find((game) => game.gameId === "1042600112"),
+    {
+      gameStatus: 3,
+      gameStatusText: "Final/OT",
+    },
+  );
+  const league = createLeague({ refuse: { scoreboard: "page" }, answers: { schedule }, espn });
+  const loader = createSnapshotLoader({
+    fetchImpl: league.fetchImpl,
+    now: () => Date.parse(ESPN.now),
+  });
+
+  const snapshot = await loader.loadSnapshot(2026);
+
+  assert.deepEqual([snapshot.missing, snapshot.hasScoreDue], [["scoreboard"], false]);
+  assert.equal(readBackupReason(snapshot), null);
+});
+
+test("while the scoreboard answers, ESPN's listing without a game the schedule holds as under way gives no backup reason", async () => {
+  const espn = structuredClone(ESPN.answers);
+  espn[ESPN_LISTING].items = [];
+  const league = createLeague({ answers: readNextMorning(), espn });
+  const loader = createSnapshotLoader({
+    fetchImpl: league.fetchImpl,
+    now: () => Date.parse(ESPN.now),
+  });
+
+  const snapshot = await loader.loadSnapshot(2026);
+
+  assert.deepEqual([snapshot.missing, snapshot.standIn], [[], null]);
+  assert.equal(readBackupReason(snapshot), null);
 });
 
 test("while neither the scoreboard nor ESPN answers, nothing covers it", async () => {
@@ -222,6 +294,10 @@ test("while neither the scoreboard nor ESPN answers, nothing covers it", async (
     [["scoreboard"], null, null],
   );
   assert.equal(describeSnapshotStatus(snapshot).standIn, "");
+  assert.equal(
+    readBackupReason(snapshot),
+    `ESPN answered 404 for ${new URL(ESPN_LISTING).pathname}`,
+  );
 });
 
 test("while the scoreboard doesn't answer, ESPN lists its games but answers for none of them, nothing covers it", async () => {
@@ -242,6 +318,10 @@ test("while the scoreboard doesn't answer, ESPN lists its games but answers for 
     [["scoreboard"], null, null],
   );
   assert.equal(describeSnapshotStatus(snapshot).standIn, "");
+  assert.match(
+    readBackupReason(snapshot),
+    /^ESPN didn't answer for 3 of the 3 it listed from 20260930 to 20261001: ESPN answered 404 for \/.+\/status$/,
+  );
 });
 
 test("while the scoreboard answers, ESPN's game-by-game feeds aren't read", async () => {
@@ -317,9 +397,10 @@ test("the store's status says why each feed that didn't answer failed", async ()
   assert.equal(status.detail, "scoreboard, standings");
   const scoreboardPath = new URL(REQUESTS.scoreboard).pathname;
   const standingsPath = new URL(REQUESTS.standings(2026)).pathname;
+  const listingPath = new URL(ESPN_LISTING).pathname;
   assert.equal(
     status.reasons,
-    `scoreboard: The WNBA answered 503 for ${scoreboardPath}; standings: The WNBA answered ${standingsPath} with a web page rather than data`,
+    `scoreboard: The WNBA answered 503 for ${scoreboardPath}; standings: The WNBA answered ${standingsPath} with a web page rather than data; backup: ESPN answered 404 for ${listingPath}`,
   );
 });
 
@@ -346,10 +427,14 @@ test("the store's status gives a slow feed's same reason while it waits to be as
   assert.deepEqual(waiting, failed);
 });
 
-test("the reasons name the feeds in one order, whichever failed first", () => {
+test("the reasons name the feeds in one order, whichever failed first, with ESPN's backup last", () => {
   assert.equal(
-    describeFailures({ standings: "The WNBA answered 503", scoreboard: "The WNBA answered 403" }),
-    "scoreboard: The WNBA answered 403; standings: The WNBA answered 503",
+    describeFailures({
+      backup: "ESPN answered 403",
+      standings: "The WNBA answered 503",
+      scoreboard: "The WNBA answered 403",
+    }),
+    "scoreboard: The WNBA answered 403; standings: The WNBA answered 503; backup: ESPN answered 403",
   );
 });
 
