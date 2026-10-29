@@ -45,6 +45,19 @@ function isInFlow(element) {
 }
 
 /**
+ * How far a pull to refresh holds `element` down, by the relative offset it gives the page's parts
+ * (pull-to-refresh.js), which isn't where it sits on the page. The offset is read as drawn, partway
+ * through an ease back.
+ * @param {HTMLElement} element
+ */
+function readPulledBy(element) {
+  let pulled = 0;
+  for (let part = /** @type {HTMLElement | null} */ (element); part; part = part.parentElement)
+    if (part.style.top) pulled += parseFloat(getComputedStyle(part).top) || 0;
+  return pulled;
+}
+
+/**
  * Whether `element` holds a part fixed to the screen, like a phone's tab bar in the row of tabs,
  * which a transform would carry along.
  * @param {Element} element
@@ -86,7 +99,10 @@ function findRiders() {
  */
 function measureRide(view) {
   const pill = findSeasonPill();
-  const viewTop = view.getBoundingClientRect().top - document.body.getBoundingClientRect().top;
+  const viewTop =
+    view.getBoundingClientRect().top -
+    document.body.getBoundingClientRect().top -
+    readPulledBy(view);
   const pillTop = viewTop + pill.offsetTop;
   const holdTop = parseFloat(getComputedStyle(pill, "::before").height) || 0;
   return {

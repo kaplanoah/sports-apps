@@ -16,6 +16,8 @@ import { markScrolledRound, renderRoundDots } from "#shared/round-dots.js";
 import { findPartHolding } from "#shared/season-part.js";
 import { session } from "./session.js";
 
+/* global readPulledBy -- from season-header.js */
+
 const renderSeriesWins = (wins, isWinner = false) =>
   html`<span class="nscore tabular ${isWinner ? "lead" : ""}">${wins ?? ""}</span>`;
 
@@ -284,6 +286,7 @@ function findSpaceBottom(part) {
     return (
       part.getBoundingClientRect().bottom +
       scrollY -
+      readPulledBy(part) -
       parseFloat(getComputedStyle(part).paddingBottom)
     );
   const tabBarTop = innerHeight - parseFloat(tabBarStyle.bottom) - tabBar.offsetHeight;
