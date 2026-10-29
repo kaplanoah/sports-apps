@@ -76,7 +76,7 @@ test("the check that the page is at rest lets a tap's press go and ease back fir
 }) => {
   await openApp(page);
   await waitForLoadToSettle(page);
-  await page.addStyleTag({ content: ":root { --press-ease-back: 2s }" });
+  await page.addStyleTag({ content: ":root { --press-ease-back: 1s }" });
   await holdClock(page);
 
   await openSeasonPart(page, "Standings");
