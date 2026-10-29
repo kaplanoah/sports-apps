@@ -570,8 +570,8 @@ export function createSeasonStore(league) {
     async saveFeedFailures(listFailures) {
       const stored = await this.docs.read(FEEDS_KEY);
       const failing = stored?.failing ?? {};
-      const current = { failing: noteFeedFailures(failing, listFailures(failing), this.now()) };
-      if (!isSameJson(stored, current)) await this.docs.write(FEEDS_KEY, current);
+      const current = noteFeedFailures(failing, listFailures(failing), this.now());
+      if (!isSameJson(failing, current)) await this.docs.write(FEEDS_KEY, { failing: current });
     }
 
     // Returns how long to wait before the next update.
