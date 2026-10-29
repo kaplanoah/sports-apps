@@ -25,25 +25,26 @@ export const PHONE_OK_LABEL = "phone-ok";
 export const readEventTime = (event) => Date.parse(event.created_at ?? "");
 
 /**
- * The event that last added `label` to a pull request, if any.
+ * Who last added `label` to a pull request and when, or null and NaN when no one ever did.
  * @param {TimelineEvent[]} events
  * @param {string} label
+ * @returns {{ labeler: string | null, addedAt: number }}
  */
-const findLastAdded = (events, label) =>
-  events
+export function findLastAdding(events, label) {
+  const lastAdded = events
     .filter((event) => event.event === "labeled" && event.label?.name === label)
     .toSorted((first, second) => readEventTime(first) - readEventTime(second))
     .at(-1);
+  if (!lastAdded) return { labeler: null, addedAt: Number.NaN };
+  return { labeler: lastAdded.actor?.login ?? null, addedAt: readEventTime(lastAdded) };
+}
 
 /**
- * When `label` was last added to a pull request, or NaN when it never was.
+ * When a pull request's head was last force-pushed, or -Infinity when it never was.
  * @param {TimelineEvent[]} events
- * @param {string} label
  */
-export function findAddedAt(events, label) {
-  const lastAdded = findLastAdded(events, label);
-  return lastAdded ? readEventTime(lastAdded) : Number.NaN;
-}
+export const findLastForcePushAt = (events) =>
+  Math.max(...events.filter((event) => event.event === "head_ref_force_pushed").map(readEventTime));
 
 /**
  * Who last added `label` to a pull request, when, and whether they added it after a push and after
@@ -55,16 +56,9 @@ export function findAddedAt(events, label) {
  * @returns {Labeling}
  */
 export function findLabeling(events, label, pushedAt) {
-  const lastAdded = findLastAdded(events, label);
-  if (!lastAdded) return { labeler: null, addedAt: Number.NaN, isAfterLastPush: false };
-  const forcePushes = events.filter((event) => event.event === "head_ref_force_pushed");
-  const lastPush = Math.max(pushedAt, ...forcePushes.map(readEventTime));
-  const addedAt = readEventTime(lastAdded);
-  return {
-    labeler: lastAdded.actor?.login ?? null,
-    addedAt,
-    isAfterLastPush: addedAt > lastPush,
-  };
+  const { labeler, addedAt } = findLastAdding(events, label);
+  const lastPush = Math.max(pushedAt, findLastForcePushAt(events));
+  return { labeler, addedAt, isAfterLastPush: addedAt > lastPush };
 }
 
 /**

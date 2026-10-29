@@ -14,10 +14,10 @@
 // can't read. A red change merges only once the owner has used it on the beta app and labeled it
 // phone-ok. Anyone who can label a pull request could add the label, so the gate reads who last
 // added it and lets the change through only from the repository's owner, and only when nothing
-// pushed since the head the owner labeled is red, since the owner hasn't used that on the phone.
-// It also requires the tested head to contain every red main commit and preceding red changes to
-// have verified production coverage. Red approvals refreshes the phone
-// status as main or its deployment changes; this remains asynchronous.
+// pushed since the head the owner labeled is red and nothing was force-pushed since the label,
+// since the owner hasn't used that on the phone. It also requires the tested head to contain every
+// red main commit and preceding red changes to have verified production coverage. Red approvals
+// refreshes the phone status as main or its deployment changes; this remains asynchronous.
 // Usage: git diff --text --no-textconv --no-ext-diff --no-renames <base> |
 //   node worker/red-change.mjs '<labels as JSON>'
 // with PR, HEAD_SHA, GH_TOKEN, GITHUB_REPOSITORY, and GITHUB_REPOSITORY_OWNER set, as Actions sets
@@ -32,8 +32,8 @@ import { fileURLToPath } from "node:url";
 import { findChannel } from "./channels.mjs";
 import {
   PHONE_OK_LABEL,
-  findAddedAt,
-  findLabeling,
+  findLastAdding,
+  findLastForcePushAt,
   readPushTime,
   readTimeline,
 } from "./labeling.mjs";
@@ -825,26 +825,34 @@ export function findRedReasons(
   return files.flatMap((file) => findFileReasons(file, styles));
 }
 
-/** @typedef {import('./labeling.mjs').Labeling} Labeling */
+/**
+ * @typedef {object} PhoneApproval
+ * @property {string | null} labeler who last added the phone-ok label
+ * @property {boolean} isForcePushedSince whether the head was force-pushed after the label
+ * @property {boolean} isTestedHeadKept whether the gate found the head the owner labeled, with
+ *   nothing red pushed since
+ */
 
 const TO_BETA = `${findChannel("beta").howToShip}.`;
+const RELABEL = `${TO_BETA} The owner takes the label off and adds it again after using it on the beta app.`;
 
 /**
  * Why a red change labeled phone-ok is still held, or null when the label lets it through.
- * @param {Labeling} labeling
+ * @param {PhoneApproval} approval
  * @param {string} owner
  */
-function findLabelProblem({ labeler, isAfterLastPush }, owner) {
+function findLabelProblem({ labeler, isForcePushedSince, isTestedHeadKept }, owner) {
   if (!owner || labeler !== owner)
     return (
       `A red change labeled ${PHONE_OK_LABEL} by ${labeler ?? "someone GitHub doesn't name"}, but the label ` +
       `has to come from the repository's owner, ${owner}, after using it on the beta app.`
     );
-  if (!isAfterLastPush)
+  if (isForcePushedSince)
+    return `A red change force-pushed after it was labeled ${PHONE_OK_LABEL}. ${RELABEL}`;
+  if (!isTestedHeadKept)
     return (
       `A red change labeled ${PHONE_OK_LABEL} before a push that changed what the owner used on the phone, ` +
-      `or on a head the gate can't find. ${TO_BETA} The owner takes the label off and adds it again after using it on ` +
-      "the beta app."
+      `or on a head the gate can't find. ${RELABEL}`
     );
   return null;
 }
@@ -959,9 +967,9 @@ export function readMergedChange(main, head, cwd = process.cwd()) {
 
 /**
  * The gate's verdict on a pull request, given its diff, its labels, who last added the phone-ok
- * label and whether nothing red was pushed after it, and the repository's owner.
+ * label and whether the head they labeled still stands, and the repository's owner.
  * @param {string} diff
- * @param {{ labels: string[], labeling?: Labeling, owner?: string, missingRedCommits?: string[], pendingRedCommits?: string[] }} pullRequest
+ * @param {{ labels: string[], approval?: PhoneApproval, owner?: string, missingRedCommits?: string[], pendingRedCommits?: string[] }} pullRequest
  * @param {ReadPageFile} [readPageFile]
  * @param {() => string[]} [listStylesheets]
  * @returns {{ isHeld: boolean, message: string }}
@@ -970,7 +978,7 @@ export function decideGate(
   diff,
   {
     labels,
-    labeling = { labeler: null, addedAt: Number.NaN, isAfterLastPush: false },
+    approval = { labeler: null, isForcePushedSince: false, isTestedHeadKept: false },
     owner = "",
     missingRedCommits = [],
     pendingRedCommits = [],
@@ -993,15 +1001,14 @@ export function decideGate(
         `${TO_BETA} The owner adds the ${PHONE_OK_LABEL} label after using it on the beta app, ` +
         "which runs this check again.",
     };
-  const problem = findLabelProblem(labeling, owner);
+  const problem = findLabelProblem(approval, owner);
   if (problem) return { isHeld: true, message: `${problem}\n${listed}` };
   if (missingRedCommits.length)
     return {
       isHeld: true,
       message:
         `A red change labeled ${PHONE_OK_LABEL} whose phone-tested head lacks a red change already merged to main: ` +
-        `${missingRedCommits.join(", ")}. Merge main into the branch. ${TO_BETA} ` +
-        `The owner takes the label off and adds it again after using it on the beta app.\n${listed}`,
+        `${missingRedCommits.join(", ")}. Merge main into the branch. ${RELABEL}\n${listed}`,
     };
   if (pendingRedCommits.length)
     return {
@@ -1015,19 +1022,35 @@ export function decideGate(
 }
 
 /**
- * When GitHub first saw the head the owner labeled, or NaN when that head can't be found or a red
- * change came after it. The labeled head is the head's newest first parent GitHub saw before the
- * label. GitHub records only each push's head, so a commit it never saw arrived under a later one.
+ * Whether the gate finds the head the owner labeled, with nothing red pushed since. The labeled
+ * head is the head's newest first parent GitHub saw before the label. GitHub records only each
+ * push's head, so a commit it never saw arrived under a later one.
  * @param {{ repository: string, head: string, labeledAt: number, env: NodeJS.ProcessEnv, fetchImpl: typeof fetch, cwd: string }} options
  */
-async function readLabeledPushTime({ repository, head, labeledAt, env, fetchImpl, cwd }) {
-  if (Number.isNaN(labeledAt)) return Number.NaN;
+async function hasNothingRedSinceLabeledHead({ repository, head, labeledAt, env, fetchImpl, cwd }) {
   for (const sha of listFirstParents({ head, cwd })) {
     const pushedAt = await readPushTime({ repository, sha, env, fetchImpl });
-    if (pushedAt < labeledAt)
-      return isRedChange(readCommitChange(sha, head, cwd)) ? Number.NaN : pushedAt;
+    if (pushedAt < labeledAt) return !isRedChange(readCommitChange(sha, head, cwd));
   }
-  return Number.NaN;
+  return false;
+}
+
+/**
+ * The owner's phone approval of a pull request's head, from its timeline and the pushes since the
+ * head it was labeled on.
+ * @param {{ repository: string, head: string, events: import('./labeling.mjs').TimelineEvent[], env: NodeJS.ProcessEnv, fetchImpl: typeof fetch, cwd: string }} options
+ * @returns {Promise<PhoneApproval>}
+ */
+async function readPhoneApproval({ events, ...options }) {
+  const { labeler, addedAt } = findLastAdding(events, PHONE_OK_LABEL);
+  const isForcePushedSince = findLastForcePushAt(events) >= addedAt;
+  return {
+    labeler,
+    isForcePushedSince,
+    isTestedHeadKept:
+      !isForcePushedSince &&
+      (await hasNothingRedSinceLabeledHead({ ...options, labeledAt: addedAt })),
+  };
 }
 
 /**
@@ -1057,24 +1080,15 @@ export async function readRedApproval({
   const head = env.HEAD_SHA ?? "";
   try {
     const events = await readTimeline({ repository, pullNumber: env.PR ?? "", env, fetchImpl });
-    const labeledAt = findAddedAt(events, PHONE_OK_LABEL);
-    const labeledPushedAt = await readLabeledPushTime({
-      repository,
-      head,
-      labeledAt,
-      env,
-      fetchImpl,
-      cwd,
-    });
-    const labeling = findLabeling(events, PHONE_OK_LABEL, labeledPushedAt);
-    const labeled = decide({ labels, owner, labeling });
+    const approval = await readPhoneApproval({ repository, head, events, env, fetchImpl, cwd });
+    const labeled = decide({ labels, owner, approval });
     if (labeled.isHeld) return labeled;
     const missingRedCommits = findMissingRedCommits({ head, cwd });
-    const fresh = decide({ labels, owner, labeling, missingRedCommits });
+    const fresh = decide({ labels, owner, approval, missingRedCommits });
     if (fresh.isHeld) return fresh;
     const deployed = await readDeployedMain(createGitHub({ repository, fetchImpl, env }));
     const pendingRedCommits = findMissingRedCommits({ head: deployed, cwd });
-    return decide({ labels, owner, labeling, pendingRedCommits });
+    return decide({ labels, owner, approval, pendingRedCommits });
   } catch (error) {
     return {
       isHeld: true,

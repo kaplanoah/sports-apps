@@ -1727,11 +1727,7 @@ test("a red change is held until it has the phone-ok label, and says why", () =>
 
   const labeled = decideGate(diff, {
     labels: ["phone-ok"],
-    labeling: {
-      labeler: "owner",
-      addedAt: Date.parse("2026-10-07T10:00:00Z"),
-      isAfterLastPush: true,
-    },
+    approval: { labeler: "owner", isForcePushedSince: false, isTestedHeadKept: true },
     owner: "owner",
   });
   assert.equal(labeled.isHeld, false);
@@ -1743,7 +1739,7 @@ test("a red change labeled phone-ok by anyone but the owner is held, and says th
   const decideLabeledBy = (labeler, owner) =>
     decideGate(RED_DIFF, {
       labels: ["phone-ok"],
-      labeling: { labeler, addedAt: Date.parse("2026-10-07T10:00:00Z"), isAfterLastPush: true },
+      approval: { labeler, isForcePushedSince: false, isTestedHeadKept: true },
       owner,
     });
   const held = decideLabeledBy("helper", "owner");
@@ -1758,21 +1754,26 @@ test("a red change labeled phone-ok by anyone but the owner is held, and says th
 
 const LABEL_PROBLEM =
   /labeled phone-ok before a push that changed what the owner used on the phone/;
+const FORCE_PUSH_PROBLEM = /force-pushed after it was labeled phone-ok/;
 
-test("a red change the owner labeled phone-ok before a red push is held until they label it again", () => {
-  const held = decideGate(RED_DIFF, {
-    labels: ["phone-ok"],
-    labeling: {
-      labeler: "owner",
-      addedAt: Date.parse("2026-10-07T10:00:00Z"),
-      isAfterLastPush: false,
-    },
-    owner: "owner",
-  });
-  assert.equal(held.isHeld, true);
-  assert.match(held.message, LABEL_PROBLEM);
-  assertSendsToBetaClaim(held.message);
-  assert.match(held.message, /takes the label off and adds it again/);
+test("a red change the owner labeled phone-ok before a red push or a force push is held until they label it again", () => {
+  /** @param {{ isForcePushedSince: boolean, isTestedHeadKept: boolean }} pushes */
+  const decidePushed = (pushes) =>
+    decideGate(RED_DIFF, {
+      labels: ["phone-ok"],
+      approval: { labeler: "owner", ...pushes },
+      owner: "owner",
+    });
+  const redPush = decidePushed({ isForcePushedSince: false, isTestedHeadKept: false });
+  assert.equal(redPush.isHeld, true);
+  assert.match(redPush.message, LABEL_PROBLEM);
+  const forcePush = decidePushed({ isForcePushedSince: true, isTestedHeadKept: true });
+  assert.equal(forcePush.isHeld, true);
+  assert.match(forcePush.message, FORCE_PUSH_PROBLEM);
+  for (const held of [redPush, forcePush]) {
+    assertSendsToBetaClaim(held.message);
+    assert.match(held.message, /takes the label off and adds it again/);
+  }
 });
 
 test("a change that isn't red passes without the label", () => {
@@ -1785,10 +1786,9 @@ test("a change that isn't red passes without the label", () => {
   });
 });
 
-const APPROVED_AT = Date.parse("2026-10-07T10:00:00Z");
 const APPROVED = {
   labels: ["phone-ok"],
-  labeling: { labeler: "owner", addedAt: APPROVED_AT, isAfterLastPush: true },
+  approval: { labeler: "owner", isForcePushedSince: false, isTestedHeadKept: true },
   owner: "owner",
 };
 
@@ -1914,12 +1914,12 @@ function createTestedBranch(context) {
     history.readGit(["merge", "--no-ff", "-m", "merge main", "main"], date);
     return history.readGit(["rev-parse", "HEAD"]);
   };
-  /** @param {string} head @param {Record<string, string | null>} pushTimes */
-  const decide = (head, pushTimes) =>
+  /** @param {string} head @param {Record<string, string | null>} pushTimes @param {string[]} [forcePushTimes] */
+  const decide = (head, pushTimes, forcePushTimes) =>
     readRedApproval({
       diff: RED_DIFF,
       labels: ["phone-ok"],
-      ...createApprovalApi(history, head, history.base, pushTimes),
+      ...createApprovalApi(history, head, history.base, pushTimes, forcePushTimes),
     });
   return { ...history, tested, mergeMain, decide };
 }
@@ -1989,25 +1989,37 @@ test("a clean merge of main after the label with red code of its own committed i
   assert.match(held.message, LABEL_PROBLEM);
 });
 
-test("a label on a head the gate can't find holds the change", async (context) => {
+test("a label on a head GitHub never saw before it holds the change", async (context) => {
   const branch = createTestedBranch(context);
-  const merged = branch.mergeMain();
-  const pushedTogether = await branch.decide(merged, {
-    [branch.tested]: null,
-    [merged]: PUSHED_AFTER_LABEL,
-  });
-  assert.equal(pushedTogether.isHeld, true);
-  assert.match(pushedTogether.message, /or on a head the gate can't find/);
+  branch.writeFile("tests/sheet.test.js", "test('draws', () => {});\n");
+  const pushed = branch.commit("2026-10-07T11:00:00Z");
+  const firstParents = branch.readGit(["rev-list", "--first-parent", pushed]).trim().split("\n");
+  const pushedAfterLabel = Object.fromEntries(firstParents.map((sha) => [sha, PUSHED_AFTER_LABEL]));
+  const neverSeen = Object.fromEntries(firstParents.map((sha) => [sha, null]));
+  for (const pushTimes of [pushedAfterLabel, neverSeen]) {
+    const held = await branch.decide(pushed, pushTimes);
+    assert.equal(held.isHeld, true);
+    assert.match(held.message, /or on a head the gate can't find/);
+  }
   const unknown = await branch.decide("unknown-revision", {});
   assert.equal(unknown.isHeld, true);
+});
+
+test("a force push after the label holds phone-ok, even back to the head the owner labeled", async (context) => {
+  const branch = createTestedBranch(context);
+  const held = await branch.decide(branch.tested, {}, [PUSHED_AFTER_LABEL]);
+  assert.equal(held.isHeld, true);
+  assert.match(held.message, FORCE_PUSH_PROBLEM);
+  assert.equal((await branch.decide(branch.tested, {}, ["2026-10-07T09:50:00Z"])).isHeld, false);
 });
 
 /**
  * @param {ReturnType<typeof createGateHistory>} history @param {string} head @param {string} deployed
  * @param {Record<string, string | null>} [pushTimes] when GitHub first saw each commit, or null for
  *   one it never saw as a push's head
+ * @param {string[]} [forcePushTimes] when the head was force-pushed
  */
-function createApprovalApi(history, head, deployed, pushTimes = {}) {
+function createApprovalApi(history, head, deployed, pushTimes = {}, forcePushTimes = []) {
   history.readGit(["update-ref", "refs/remotes/origin/main", "main"]);
   const statuses = [];
   const reads = [];
@@ -2039,6 +2051,7 @@ function createApprovalApi(history, head, deployed, pushTimes = {}) {
           actor: { login: "owner" },
           created_at: "2026-10-07T10:00:00Z",
         },
+        ...forcePushTimes.map((at) => ({ event: "head_ref_force_pushed", created_at: at })),
       ]);
     else if (url.pathname.endsWith("/check-suites")) {
       const sha = url.pathname.split("/").at(-2) ?? "";

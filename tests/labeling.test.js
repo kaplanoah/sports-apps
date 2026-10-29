@@ -1,6 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { findAddedAt, findLabeling, readPushTime, readTimeline } from "../worker/labeling.mjs";
+import {
+  findLabeling,
+  findLastAdding,
+  findLastForcePushAt,
+  readPushTime,
+  readTimeline,
+} from "../worker/labeling.mjs";
 import { createTimelineAnswer } from "./timeline.js";
 
 /**
@@ -38,8 +44,14 @@ test("a label's adder and when it was added are whoever added it last and then, 
     addedAt: Number.NaN,
     isAfterLastPush: false,
   });
-  assert.equal(findAddedAt(events.toReversed(), "phone-ok"), lastAdded.addedAt);
-  assert.equal(findAddedAt(events.slice(3), "phone-ok"), Number.NaN);
+  assert.deepEqual(findLastAdding(events.toReversed(), "phone-ok"), {
+    labeler: "helper",
+    addedAt: lastAdded.addedAt,
+  });
+  assert.deepEqual(findLastAdding(events.slice(3), "phone-ok"), {
+    labeler: null,
+    addedAt: Number.NaN,
+  });
 });
 
 test("a head pushed after the phone-ok label leaves it before the last push, whatever its commit's date says", () => {
@@ -60,6 +72,8 @@ test("a head pushed after the phone-ok label leaves it before the last push, wha
     false,
     "a force push back to a commit GitHub saw before the label",
   );
+  assert.equal(findLastForcePushAt([labeled, forcePush]), Date.parse("2026-10-07T11:00:00Z"));
+  assert.equal(findLastForcePushAt([labeled]), -Infinity);
   const labeledAgain = createEvent("labeled", "phone-ok", "owner", "2026-10-07T12:00:00Z");
   assert.equal(
     findLabeling([labeled, forcePush, labeledAgain], "phone-ok", HEAD_PUSHED_AT).isAfterLastPush,

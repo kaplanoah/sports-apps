@@ -16,6 +16,7 @@ import { GitHubError, createGitHub, readAllPages } from "./github-api.mjs";
 import {
   PHONE_OK_LABEL,
   findLabeling,
+  findLastAdding,
   readEventTime,
   readPushTime,
   readTimeline,
@@ -71,7 +72,7 @@ const hasLabel = (pull, label) => pull.labels.includes(label);
  * @param {PullRequest} pull
  * @param {string} label
  */
-const findAddedAt = (pull, label) => findLabeling(pull.events, label, pull.headPushedAt).addedAt;
+const findAddedAt = (pull, label) => findLastAdding(pull.events, label).addedAt;
 
 /**
  * Orders pull requests by when a label was last added to them, earliest first, and one GitHub
