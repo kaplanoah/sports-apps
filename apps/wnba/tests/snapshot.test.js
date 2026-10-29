@@ -633,6 +633,19 @@ test("the scoreboard has a game to score on the league's today or yesterday, one
   assert.equal(isScored({ home: { team: null } }), false);
 });
 
+test("the scoreboard owes a score only for one of its games under way or past its start", () => {
+  const tipOff = Date.parse(FINALS_GAME.start);
+  const isDue = (change, now = tipOff) =>
+    WNBASnapshot.isScoreDue({ ...FINALS_GAME, ...change }, UNDECIDED, now);
+  assert.equal(isDue({}), true);
+  assert.equal(isDue({}, tipOff - 1), false);
+  assert.equal(isDue({}, GAME_DAY_NOON), false);
+  assert.equal(isDue({ start: "2026-10-27T04:00:00Z", isTimeSet: false }, GAME_DAY_NOON), true);
+  assert.equal(isDue({ state: "live", start: "2026-10-28T23:30:00Z" }, GAME_DAY_NOON), false);
+  assert.equal(isDue({ state: "live" }, GAME_DAY_NOON), true);
+  assert.equal(isDue({ status: "Postponed" }), false);
+});
+
 test("the scoreboard's day is the league's, wherever the viewer is", () => {
   const isScored = (zone, start, now) =>
     checkInTimeZone(zone, () =>

@@ -101,7 +101,7 @@ test("the model host receives only the disposable fixture before execution and n
   );
   assert.match(before, /permission-profile: ":read-only"/);
   assert.match(before, /safety-strategy: drop-sudo/);
-  assert.match(before, /BASH_ENV: \$\{\{ runner.temp \}\}\/codex-log-capture.sh/);
+  assert.match(before, /BASH_ENV: \$\{\{ steps.rate.outputs.hook \}\}/);
   assert.match(after, /codex-proof-result\/proof.json/);
   assert.doesNotMatch(after, /codex-events|answer.json|usage.jsonl/);
   assert.doesNotMatch(workflow, /pull-requests: write|checks: write|secrets: inherit/);

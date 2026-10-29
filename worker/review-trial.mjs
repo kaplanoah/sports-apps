@@ -441,7 +441,6 @@ export function prepareTrialSession(env, portion, snapshot) {
     env.RUNNER_TEMP,
     "trial",
     "codex-home",
-    "codex-log-capture.sh",
   ]);
   writeReviewModelQueue(env, identity.provider, portion);
 }

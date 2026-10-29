@@ -165,11 +165,11 @@ async function saveSchedule(docs, snapshot) {
 
 // The league's schedule holds one season at a time, so once it lists the next season's games, the
 // season before has no games in it and keeps the ones it saved.
-/** @param {{ missing: string[], standIn?: string | null, isScoreboardIdle?: boolean, openingDay: string | null }} snapshot */
+/** @param {{ missing: string[], standIn?: string | null, hasNoScoreboardGame?: boolean, openingDay: string | null }} snapshot */
 function readGameFeeds(snapshot) {
   const missing = new Set(snapshot.missing);
   const isStandIn = missing.has("scoreboard") && !!snapshot.standIn;
-  const hasScores = !missing.has("scoreboard") || isStandIn || !!snapshot.isScoreboardIdle;
+  const hasScores = !missing.has("scoreboard") || isStandIn || !!snapshot.hasNoScoreboardGame;
   const hasSchedule = !missing.has("schedule") && !!snapshot.openingDay;
   return { missing, isStandIn, hasGames: hasScores && hasSchedule };
 }
@@ -215,12 +215,12 @@ export const readUpdates = (docs, year) => docs.read(nameSeasonKey(year));
 
 export const readSchedule = (docs, year) => docs.read(nameScheduleKey(year));
 
-// A feed with nothing to send is idle, like the scoreboard on a day without games, which the league
+// A feed with nothing to send is idle, like the scoreboard before a game is due, which the league
 // may not send at all, so the page doesn't warn of it. Nor does it warn of the scoreboard while ESPN
 // covers it, before ESPN's scores stand in for a game it has started.
 export function describeSnapshotStatus(snapshot) {
   const missing = snapshot.missing || [];
-  const isIdle = (feed) => feed === "scoreboard" && !!snapshot.isScoreboardIdle;
+  const isIdle = (feed) => feed === "scoreboard" && !snapshot.hasScoreDue;
   return {
     error: missing.length ? "wnba_feeds_missing" : "",
     detail: missing.join(", "),

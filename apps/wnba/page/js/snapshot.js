@@ -547,6 +547,19 @@ export function isScoreboardGame(game, seriesById, now) {
   return game.state === "live" || (game.state === "pre" && isPlayable(game, seriesById));
 }
 
+// The scoreboard has no score to send for a game before it's due, so a feed that refuses then
+// keeps nothing from fans, though the schedule alone may still be behind on the game. A game
+// without a set time starts at midnight Eastern, so it's due all its day.
+/**
+ * Whether the scoreboard owes fans a game's score now: one of its games under way or past its start.
+ * @param {import("./nearest-games.js").SeasonGame & { start: string | null }} game
+ * @param {Map<string, import("./nearest-games.js").DecidedSeries>} seriesById
+ * @param {number} now
+ */
+export const isScoreDue = (game, seriesById, now) =>
+  isScoreboardGame(game, seriesById, now) &&
+  (game.state === "live" || Date.parse(String(game.start)) <= now);
+
 // Matched by day rather than by the nearest start, since the league's placeholder start, at midnight
 // Eastern, can be nearer the same teams' game the night before.
 function findEspnStart(game, networkGames) {
@@ -657,8 +670,11 @@ export function buildSnapshot(responses, { season, now = Date.now() }) {
     missing: LEAGUE_FEEDS.filter((name) => !responses[name]),
     standIn: standIns.size ? "espn" : null,
     scoreboardCover: isEspnCovering(leagueGames, responses, backupGames) ? "espn" : null,
-    isScoreboardIdle:
+    hasNoScoreboardGame:
       !!responses.schedule && !seasonGames.some((game) => isScoreboardGame(game, seriesById, now)),
+    // Without the schedule, which says when each game starts, a score may be due.
+    hasScoreDue:
+      !responses.schedule || seasonGames.some((game) => isScoreDue(game, seriesById, now)),
     openingDay: readOpeningDay(responses.schedule, season),
   };
 }

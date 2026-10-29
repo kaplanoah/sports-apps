@@ -21,6 +21,31 @@ function listImported(script) {
 const BETA_CLAIM_CHECK = "worker/beta-claim.mjs";
 const DEPLOY_REPORT = "worker/report-deploy.mjs";
 
+test("rate-control tooling changes do not deploy Workers while unknown root code still does", () => {
+  for (const name of [
+    "access",
+    "source",
+    "handoff",
+    "lifecycle",
+    "policy",
+    "runtime",
+    "budget",
+    "controller",
+    "estimate",
+    "gateway",
+    "isolation-access",
+    "isolation-holder",
+    "isolation-probe",
+    "namespaces",
+    "probe-output",
+  ]) {
+    assert.equal(decideDeploy([`worker/codex-rate-${name}.mjs`]).isNeeded, false, name);
+  }
+  assert.equal(decideDeploy(["worker/prove-codex-rate-isolation.mjs"]).isNeeded, false);
+  assert.equal(decideDeploy(["worker/prepare-codex-rate.mjs"]).isNeeded, false);
+  assert.equal(decideDeploy(["worker/example-runtime.mjs"]).isNeeded, true);
+});
+
 test("every script the deploy runs, and every module those import, deploys when it changes, but the beta claim's check and the deploy's report", () => {
   const workflow = readRepoFile(".github/workflows/deploy.yml");
   const scripts = [...workflow.matchAll(/node (worker\/[\w-]+\.mjs)/g)]
