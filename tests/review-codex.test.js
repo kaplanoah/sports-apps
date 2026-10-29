@@ -14,6 +14,7 @@ import { recomputeReviewCoverage, readReviewIdentity } from "../worker/review-da
 import { exportReviewArtifact, importReviewArtifacts } from "../worker/trusted-review.mjs";
 import { readRepoFile, REPO_ROOT } from "./repo-files.js";
 import { createNativeRateHook } from "../worker/codex-rate-runtime.mjs";
+import { listToPost } from "../worker/post-review.mjs";
 
 const ENV = {
   GITHUB_REPOSITORY: "example/repository",
@@ -171,6 +172,52 @@ test("Codex instructions disclose that unjudged work prevents approval", () => {
     buildCodexRequest(folder, 1, IDENTITY).prompt,
     /any unfinished or unjudged work prevents approval/,
   );
+});
+
+test("every native phase distinguishes an investigated uncertain claim from unjudged work", () => {
+  const contained = createFixture();
+  const large = createFixture(true);
+  writeFileSync(join(large.folder, "candidates.json"), "[]");
+  for (const request of [
+    buildCodexRequest(contained.folder, 1, IDENTITY),
+    buildCodexRequest(large.folder, 1, IDENTITY),
+    buildCodexRequest(large.folder, "integration", IDENTITY),
+    buildCodexRequest(large.folder, 1, { ...IDENTITY, kind: "offline-trial" }),
+  ]) {
+    const instructions = request.prompt.split("\n\n--- BEGIN SUPPLIED")[0];
+    assert.match(instructions, /candidate with honest confidence/);
+    assert.match(instructions, /use verdict=unsure and explain what would settle it/);
+    assert.match(instructions, /An unsure finding is not by itself unjudged review work/);
+    assert.match(instructions, /Do not relabel unfinished or unjudged work/);
+    assert.doesNotMatch(instructions, /Use unjudged for anything read but unsettled/);
+  }
+});
+
+test("an investigated unsure finding can be posted while genuinely incomplete work still rejects", () => {
+  const candidate = { ...CANDIDATE, confidence: "low" };
+  const finding = {
+    ...FINDING,
+    verdict: "unsure",
+    why: "Both callers were traced; a browser timing check would settle the observed risk.",
+  };
+  const { folder } = createFixture();
+  const changes = { candidates: [candidate], findings: [finding] };
+  acceptCodexAnswer(folder, 1, IDENTITY, createAnswer(folder, 1, changes));
+  const record = JSON.parse(readFileSync(join(folder, "across.json"), "utf8"));
+  assert.equal(listToPost(record.items)[0].weight, "Unsure");
+  for (const incomplete of [
+    { complete: false },
+    { unfinished: ["Inspect a required caller."] },
+    { unjudged: [{ file: CANDIDATE.path, why: "Could not assess the required rule." }] },
+  ])
+    assert.throws(() =>
+      acceptCodexAnswer(
+        folder,
+        1,
+        IDENTITY,
+        createAnswer(folder, 1, { ...changes, ...incomplete }),
+      ),
+    );
 });
 
 test("the trusted shell capture keeps native events out of stdout and preserves failure status", () => {
