@@ -9,6 +9,7 @@ export const WEBKIT_TEST_MATCH = [
   "notification-layout.spec.mjs",
   "notification-permission.spec.mjs",
   "settings-contact.spec.mjs",
+  "word-centering.spec.mjs",
 ];
 
 /** @param {string} app */

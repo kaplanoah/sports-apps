@@ -76,7 +76,6 @@ function prepareCodexProof(env) {
     env.RUNNER_TEMP,
     "codex-proof",
     "codex-home",
-    "codex-log-capture.sh",
   ]);
   writeReviewModelQueue(env, "codex", "proof");
 }

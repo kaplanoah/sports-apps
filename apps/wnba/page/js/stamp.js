@@ -189,8 +189,8 @@ export function renderStampLines(season, now) {
 }
 
 /**
- * The feeds that didn't answer, but those with nothing to send, like the scoreboard on a day
- * without games, and the scoreboard while ESPN covers it, answering for any of the league's
+ * The feeds that didn't answer, but those with nothing to send, like the scoreboard before a game
+ * is due, and the scoreboard while ESPN covers it, answering for any of the league's
  * games, started or not, since fans still see scores then.
  * @param {UpdateStatus} status
  */

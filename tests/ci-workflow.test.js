@@ -952,6 +952,7 @@ test("the tests-only record depends only on test jobs, even when review fails or
     "browser",
     "burn-in",
     "webkit",
+    "codex-rate-control-isolation",
   ]);
   assert.doesNotMatch(tested, /review|gate/);
   for (const job of ["checks", "scope", "browser", "webkit", "burn-in"])

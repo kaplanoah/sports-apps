@@ -13,6 +13,7 @@ import {
 } from "./review-supplied.mjs";
 import { retainCodexUsage } from "./review-evaluation.mjs";
 import { writeReviewModelQueue } from "./review-provider.mjs";
+import { createBoundedNativeConfig } from "./codex-rate-policy.mjs";
 
 const CANDIDATE_FIELDS = {
   path: { type: "string" },
@@ -126,7 +127,9 @@ export function buildCodexRequest(folder, portion, identity) {
       : integrated
         ? "Candidate ids for integration are supplied in candidates.json."
         : "No candidates.json or prior candidate ids are supplied or required in this stage. Generate candidates for the later integration pass.",
-    "Return complete=false and list unfinished work if any required investigation or verification remains. Never claim completion after partial coverage. Use unjudged for anything read but unsettled; any unfinished or unjudged work prevents approval. Echo the exact binding in the structured answer.",
+    "An investigated claim can remain uncertain. Keep it as a candidate with honest confidence; when verifying, use verdict=unsure and explain what would settle it, as REVIEW.md requires. An unsure finding is not by itself unjudged review work.",
+    "Use unfinished for required investigation or verification you have not completed, and unjudged for required code or rules you read but could not assess. Do not relabel unfinished or unjudged work as an unsure finding merely to claim completion.",
+    "Return complete=false and list unfinished work if any required investigation or verification remains. Never claim completion after partial coverage; any unfinished or unjudged work prevents approval. Echo the exact binding in the structured answer.",
   ].join("\n");
   const prompt =
     instructions +
@@ -237,21 +240,13 @@ function writeCodexConfig(env) {
     [
       "project_doc_max_bytes = 0",
       'approval_policy = "never"',
+      createBoundedNativeConfig().trimEnd(),
       "[shell_environment_policy]",
       'inherit = "none"',
       "[shell_environment_policy.set]",
       'PATH = "/usr/local/bin:/usr/bin:/bin"',
       `[projects.${JSON.stringify(env.REVIEW_CHECKOUT)}]`,
       'trust_level = "untrusted"',
-      "",
-    ].join("\n"),
-  );
-  writeFileSync(
-    join(env.RUNNER_TEMP, "codex-log-capture.sh"),
-    [
-      'if [ -n "${CODEX_PROMPT_FILE:-}" ]; then',
-      '  exec > "$RUNNER_TEMP/codex-events.jsonl" 2>&1',
-      "fi",
       "",
     ].join("\n"),
   );

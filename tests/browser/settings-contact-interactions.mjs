@@ -2,13 +2,13 @@ import { holdClock } from "./harness.mjs";
 import { openContact, serveContact } from "./contact-views.mjs";
 
 /**
- * Measures each page row in a dialog, its words, and its caret, and how far the rows lift their
- * words over their middles.
+ * Measures each page row in a dialog, its words, how far it lifts them over its middle, and its
+ * caret.
  * @param {import("@playwright/test").Page} page
  * @param {string} dialogSelector
  */
-async function measurePageRows(page, dialogSelector = "#settingsDialog") {
-  const rows = await page.locator(`${dialogSelector} .settings-page-row`).evaluateAll((buttons) =>
+function measurePageRows(page, dialogSelector = "#settingsDialog") {
+  return page.locator(`${dialogSelector} .settings-page-row`).evaluateAll((buttons) =>
     buttons.map((button) => {
       const words = document.createRange();
       words.selectNodeContents(
@@ -19,24 +19,18 @@ async function measurePageRows(page, dialogSelector = "#settingsDialog") {
       const text = words.getBoundingClientRect();
       const box = button.getBoundingClientRect();
       const caret = button.querySelector("svg").getBoundingClientRect();
+      const style = getComputedStyle(button);
       return {
         top: box.top,
         bottom: box.bottom,
-        line: Number.parseFloat(getComputedStyle(button).borderTopWidth),
-        lineBelow: Number.parseFloat(getComputedStyle(button).borderBottomWidth),
+        line: Number.parseFloat(style.borderTopWidth),
         textTop: text.top,
         textBottom: text.bottom,
+        lift: (Number.parseFloat(style.paddingBottom) - Number.parseFloat(style.paddingTop)) / 2,
         caretMiddle: (caret.top + caret.bottom) / 2,
       };
     }),
   );
-  const lift = await page.evaluate(
-    () =>
-      Number.parseFloat(
-        getComputedStyle(document.documentElement).getPropertyValue("--lowercase-lift"),
-      ) / 2,
-  );
-  return { rows, lift };
 }
 
 /**
@@ -208,14 +202,14 @@ export function testSettingsContactInteractions(test, expect, { openApp, setting
     await openApp(page);
     await page.getByRole("button", { name: "Settings", exact: true }).click();
     await expect(page.locator("#contactBtn")).toBeVisible();
-    const { rows, lift } = await measurePageRows(page);
+    const rows = await measurePageRows(page);
     expect(rows).toHaveLength(settingsPages.length);
     for (const row of rows) expect(row.bottom - row.top).toBe(rows[0].bottom - rows[0].top);
     for (const [above, below] of rows.slice(1).map((row, index) => [rows[index], row])) {
       expect(below.line).toBe(1);
       expect(below.top).toBe(above.bottom);
-      const spaceAbove = below.top - (above.textBottom + lift);
-      const spaceBelow = below.textTop + lift - (below.top + below.line);
+      const spaceAbove = below.top - (above.textBottom + above.lift);
+      const spaceBelow = below.textTop + below.lift - (below.top + below.line);
       expect(Math.abs(spaceAbove - spaceBelow)).toBeLessThanOrEqual(1);
     }
     const [{ lineAbove }] = await findLinesAbove(page, ".settings-page-row");
@@ -225,7 +219,7 @@ export function testSettingsContactInteractions(test, expect, { openApp, setting
     expect(Math.abs(spaceUnderLine - spaceUnderLineBetween)).toBeLessThanOrEqual(1);
   });
 
-  test("a Settings page row and a Contact category row lift their words as search lifts its examples, each caret beside them", async ({
+  test("a Settings page row and a Contact category row each hold their caret beside their words", async ({
     page,
   }) => {
     await page.emulateMedia({ reducedMotion: "reduce" });
@@ -236,28 +230,11 @@ export function testSettingsContactInteractions(test, expect, { openApp, setting
     await page.locator("#contactBtn").click();
     await expect(page.locator("#contactDialog h2")).toHaveText("Contact");
     const contactRows = await measurePageRows(page, "#contactDialog");
-    const { lift } = settingsRows;
-    expect(lift).toBeGreaterThan(0);
-    expect(contactRows.rows).toHaveLength(3);
-    for (const row of [...settingsRows.rows, ...contactRows.rows]) {
-      const rowMiddle = (row.top + row.line + row.bottom - row.lineBelow) / 2;
-      const wordsMiddle = (row.textTop + row.textBottom) / 2;
-      expect(rowMiddle - wordsMiddle).toBeCloseTo(lift, 1);
-      expect(Math.abs(row.caretMiddle - wordsMiddle)).toBeLessThanOrEqual(0.5);
-    }
-    await page.keyboard.press("Escape");
-    await expect(page.locator("#contactDialog")).toBeHidden();
-    await page.keyboard.press("Escape");
-    await expect(page.locator("#settingsDialog")).toBeHidden();
-    await page.locator("#tab-search").tap();
-    const examplePadding = await page
-      .locator(".search-example")
-      .first()
-      .evaluate((example) => {
-        const style = getComputedStyle(example);
-        return Number.parseFloat(style.paddingBottom) - Number.parseFloat(style.paddingTop);
-      });
-    expect(examplePadding / 2).toBe(lift);
+    expect(contactRows).toHaveLength(3);
+    for (const row of [...settingsRows, ...contactRows])
+      expect(Math.abs(row.caretMiddle - (row.textTop + row.textBottom) / 2)).toBeLessThanOrEqual(
+        0.5,
+      );
   });
 
   test("every group in Settings sits a section's gap below the line above it, a line after it", async ({

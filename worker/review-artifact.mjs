@@ -23,7 +23,8 @@ with zipfile.ZipFile(sys.argv[1]) as archive:
 
 /** @param {Response} response */
 async function readBoundedArchive(response) {
-  if (!response.ok || !response.body) throw new Error("Review artifact download failed.");
+  if (!response.ok || !response.body)
+    throw Object.assign(new Error("Review artifact download failed."), { status: response.status });
   const reader = response.body.getReader();
   const chunks = [];
   let size = 0;
@@ -45,7 +46,7 @@ async function readBoundedArchive(response) {
  * @param {any} artifact
  * @param {{ repository: string, repositoryId: number, run: number, token: string, names: string[], digest?: string, fetchImpl?: typeof fetch }} options
  */
-export async function readReviewArtifact(artifact, options) {
+export async function readVerifiedArtifactArchive(artifact, options) {
   if (
     !Number.isSafeInteger(artifact?.id) ||
     artifact.workflow_run?.id !== options.run ||
@@ -71,6 +72,15 @@ export async function readReviewArtifact(artifact, options) {
   const archive = await readBoundedArchive(response);
   if (`sha256:${createHash("sha256").update(archive).digest("hex")}` !== artifact.digest)
     throw new Error("Review artifact archive digest mismatch.");
+  return archive;
+}
+
+/**
+ * @param {any} artifact
+ * @param {{ repository: string, repositoryId: number, run: number, token: string, names: string[], digest?: string, fetchImpl?: typeof fetch }} options
+ */
+export async function readReviewArtifact(artifact, options) {
+  const archive = await readVerifiedArtifactArchive(artifact, options);
   const folder = mkdtempSync(join(tmpdir(), "review-publication-"));
   try {
     const archivePath = join(folder, "artifact.zip");
