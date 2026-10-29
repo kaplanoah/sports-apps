@@ -24,8 +24,8 @@ import { describeError, respondError, respondJson, respondMethodNotAllowed } fro
  * What a league's own work gets from the store: its documents, storage of its own under keys the
  * store's paths can't name, the store's reading of the league, the Worker's secrets, and the clock.
  * @typedef {object} JobContext
- * @property {any} docs
- * @property {(fetchImpl: typeof fetch) => (season: number, options?: { verify?: boolean }) => Promise<any>} createLoadSnapshot
+ * @property {SeasonDocuments} docs
+ * @property {(fetchImpl: typeof fetch) => SnapshotLoader<SeasonSnapshot>} createLoadSnapshot
  *   the store's reading of the league, made on the fetch it's handed, so a run that counts its
  *   requests counts these too
  * @property {{ get: (key: string) => Promise<any>, put: (key: string, value: any) => Promise<void>, delete: (key: string) => Promise<boolean>, list: (prefix: string) => Promise<Map<string, any>> }} storage
@@ -243,6 +243,7 @@ export function createSeasonStore(league) {
       });
       /** @type {Map<string, Promise<void>>} */
       this.docUpdates = new Map();
+      /** @type {SeasonDocuments} */
       this.docs = {
         read: async (key) => (await ctx.storage.get(key)) ?? null,
         list: async (collection) => [

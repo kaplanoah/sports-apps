@@ -7,7 +7,6 @@ import {
   describeSnapshotStatus,
   listNotifications,
   loadCurrentSnapshot,
-  nameSeasonKey,
   readSchedule,
   readUpdates,
   saveSnapshot,
@@ -31,7 +30,7 @@ const SNAPSHOT = buildSnapshot(RESPONSES, { season: 2026, now: NOW });
 testSeasonUpdater({
   snapshot: SNAPSHOT,
   saveSnapshot,
-  nameSeasonKey,
+  nameSeasonKey: (season) => `seasons/${season}`,
   omitStandings: (snapshot) => ({ ...snapshot, standings: [], missing: ["standings"] }),
   advanceStandings: (snapshot) => ({
     ...snapshot,
