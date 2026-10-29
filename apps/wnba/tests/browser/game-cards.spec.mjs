@@ -238,7 +238,9 @@ test("a card's lines sit at their spacing, from the tops of their capitals to th
   expect(now.margin?.weight).toBe("500");
 });
 
-test("a team without a game yet starts its sheet 20px under the band", async ({ page }) => {
+test("a team without a game yet starts its sheet a heading's room under the band", async ({
+  page,
+}) => {
   await page.setViewportSize(PHONE);
   await openApp(page);
   await openSeasonPart(page, "Standings");
@@ -249,5 +251,12 @@ test("a team without a game yet starts its sheet 20px under the band", async ({ 
 
   const top = await sheet.locator(".sheet-top").boundingBox();
   const firstPart = await sheet.locator(".sheet-part-head").first().boundingBox();
-  expect((firstPart?.y ?? 0) - ((top?.y ?? 0) + (top?.height ?? 0))).toBeCloseTo(20, 0);
+  const headingBelowLine = await page.evaluate(() =>
+    parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--heading-below-line")),
+  );
+  expect(headingBelowLine).toBeGreaterThan(0);
+  expect((firstPart?.y ?? 0) - ((top?.y ?? 0) + (top?.height ?? 0))).toBeCloseTo(
+    headingBelowLine,
+    0,
+  );
 });
