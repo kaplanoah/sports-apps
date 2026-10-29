@@ -88,11 +88,13 @@ const refuseCopies = (page) =>
  * Opens the app as beta serves it while a round is open, with the panel open.
  * @param {App} app
  * @param {import("../../shared/page/tuning-round.js").Round} [round]
+ * @param {(page: import("@playwright/test").Page) => Promise<unknown>} [showView]
  */
-async function openTuning({ page, app, openApp }, round = SAMPLE_ROUND) {
+async function openTuning({ page, app, openApp }, round = SAMPLE_ROUND, showView) {
   await keepCopies(page);
   await servePageFiles(page, buildTuningServer(app, round, "beta"));
   await openApp(page);
+  if (showView) await showView(page);
   await findToggle(page).click();
   await expect(findPanel(page)).toBeVisible();
   await expect(findToggle(page)).toBeHidden();
@@ -352,7 +354,9 @@ export async function checkAlignmentControls(app, { width, colorScheme }) {
   const round = readAlignmentRound(app.app);
   await page.setViewportSize({ width, height: 900 });
   await page.emulateMedia({ colorScheme });
-  await openTuning(app, round);
+  await openTuning(app, round, (shown) =>
+    shown.getByRole("tab", { name: "Games", exact: true }).click(),
+  );
   const group = findPanel(page).getByRole("combobox", { name: "Role" });
   for (const name of ["Small", "Team", "Large", "Label"]) {
     await group.selectOption(name);
@@ -362,7 +366,6 @@ export async function checkAlignmentControls(app, { width, colorScheme }) {
     await expect(findPanel(page).locator(".tuning-note")).toHaveCount(0);
   }
   await group.selectOption("Team");
-  await page.getByRole("tab", { name: "Games", exact: true }).click();
   const club = page.locator("#seasonGames .game-side.away .club").first();
   const dot = club.locator(":scope > .dot");
   const name = club.locator(".team-name");
@@ -422,10 +425,11 @@ export async function checkAlignmentControls(app, { width, colorScheme }) {
  */
 export async function checkAlignmentAttachments(app) {
   const { page } = app;
-  await openTuning(app, readAlignmentRound(app.app));
+  await openTuning(app, readAlignmentRound(app.app), (shown) =>
+    openSeasonPart(shown, app.app === "mlb" ? "Bracket" : "Standings"),
+  );
   const group = findPanel(page).getByRole("combobox", { name: "Role" });
   await group.selectOption("Team");
-  await openSeasonPart(page, app.app === "mlb" ? "Bracket" : "Standings");
   const property = app.app === "mlb" ? "--team-rank-offset" : "--team-conference-offset";
   const selector =
     app.app === "mlb" ? "#bracketWrap .rank-tag" : "#standings-league .conference-tag";
@@ -456,7 +460,7 @@ export async function checkAlignmentAttachments(app) {
 }
 
 /** @param {App} app */
-export async function checkAlignmentCopyAndReload(app) {
+async function setAlignmentChoices(app) {
   const { page } = app;
   const round = readAlignmentRound(app.app);
   await openTuning(app, round);
@@ -468,6 +472,13 @@ export async function checkAlignmentCopyAndReload(app) {
   await group.selectOption("Large");
   const large = findRow(page, "--team-large-dot-size");
   await large.getByRole("slider").fill("16.5");
+  return { round, group, small, large, start };
+}
+
+/** @param {App} app */
+export async function checkAlignmentCopy(app) {
+  const { page } = app;
+  const { round, start } = await setAlignmentChoices(app);
   await findPanel(page).getByRole("button", { name: "Copy", exact: true }).click();
   const copies = await page.evaluate(() => /** @type {any} */ (window).copies);
   const lines = copies[0].split("\n");
@@ -477,6 +488,12 @@ export async function checkAlignmentCopyAndReload(app) {
     expect(lines.some((line) => line.startsWith(`${value.property}: `))).toBe(true);
   expect(lines).toContain(`--type-team-small-size: ${start + 0.25}px`);
   expect(lines).toContain("--team-large-dot-size: 16.5px");
+}
+
+/** @param {App} app */
+export async function checkAlignmentReloadAndReset(app) {
+  const { page } = app;
+  const { group, small, large, start } = await setAlignmentChoices(app);
   await page.reload({ waitUntil: "domcontentloaded" });
   await expect(group).toHaveValue("Large");
   await expect(large.locator("output")).toHaveText("16.5px");
@@ -515,77 +532,104 @@ export async function checkAlignmentStaysOutOfProduction(app) {
 }
 
 /**
+ * @param {import("@playwright/test").Locator} line
+ * @param {string} nameSelector
+ */
+const readDotOffset = (line, nameSelector) =>
+  line.evaluate((element, selector) => {
+    const dot = element.querySelector(":scope > .dot").getBoundingClientRect();
+    const name = element.querySelector(selector).getBoundingClientRect();
+    return dot.top + dot.height / 2 - name.top - name.height / 2;
+  }, nameSelector);
+
+/**
  * @param {import("@playwright/test").Page} page
  * @param {string} role
  * @param {import("@playwright/test").Locator} line
  * @param {string} nameSelector
+ * @param {import("../../shared/page/tuning-round.js").Round} round
+ * @param {string} label
  */
-async function checkRoleTypography(page, role, line, nameSelector) {
+async function checkRoleControl(page, role, line, nameSelector, round, label) {
   await expect(line).toBeVisible();
   await findPanel(page).getByRole("combobox", { name: "Role" }).selectOption(role);
-  const name = line.locator(nameSelector);
-  const dot = line.locator(":scope > .dot");
-  const checks = [
-    { label: "Name size", element: name, css: "font-size" },
-    { label: "Name weight", element: name, css: "font-weight" },
-    { label: "Dot size", element: dot, css: "width" },
-  ];
-  for (const { label, element, css } of checks) {
-    const row = findPanel(page)
-      .locator(".tuning-row")
-      .filter({ has: page.getByRole("button", { name: `Reset ${label}`, exact: true }) });
-    const slider = row.getByRole("slider");
-    const step = Number(await slider.getAttribute("step"));
-    const before = await element.evaluate(
-      (part, property) => getComputedStyle(part).getPropertyValue(property),
-      css,
-    );
-    await row.getByRole("button", { name: `${label} a step up`, exact: true }).click();
-    await expect(element).toHaveCSS(
-      css,
-      `${parseFloat(before) + step}${css === "font-weight" ? "" : "px"}`,
-    );
-    await row.getByRole("button", { name: `Reset ${label}`, exact: true }).click();
-    await expect(element).toHaveCSS(css, before);
+  await page.evaluate(() => document.fonts.ready);
+  const value = round.values.find((each) => each.group === role && each.label === label);
+  if (!value || !("step" in value)) throw new Error(`No slider for ${role} ${label}`);
+  const row = findRow(page, value.property);
+  if (label === "Dot before name") {
+    const before = await readDotOffset(line, nameSelector);
+    await row.getByRole("button", { name: "Dot before name down", exact: true }).click();
+    expect(await readDotOffset(line, nameSelector)).toBeCloseTo(before + value.step, 2);
+    await row.getByRole("button", { name: "Reset Dot before name", exact: true }).click();
+    expect(await readDotOffset(line, nameSelector)).toBeCloseTo(before, 2);
+    return;
   }
-  const offset = findPanel(page)
-    .locator(".tuning-row")
-    .filter({ has: page.getByRole("button", { name: "Reset Dot before name", exact: true }) });
-  const before = (await readMiddle(dot)) - (await readMiddle(name));
-  await offset.getByRole("button", { name: "Dot before name down", exact: true }).click();
-  expect((await readMiddle(dot)) - (await readMiddle(name))).toBeCloseTo(before + 0.25, 2);
-  await offset.getByRole("button", { name: "Reset Dot before name", exact: true }).click();
-  expect((await readMiddle(dot)) - (await readMiddle(name))).toBeCloseTo(before, 2);
+  const css = { "Name size": "font-size", "Name weight": "font-weight", "Dot size": "width" }[
+    label
+  ];
+  const element = label === "Dot size" ? line.locator(":scope > .dot") : line.locator(nameSelector);
+  const before = await element.evaluate(
+    (part, property) => getComputedStyle(part).getPropertyValue(property),
+    css,
+  );
+  await row.getByRole("button", { name: `${label} a step up`, exact: true }).click();
+  await expect(element).toHaveCSS(
+    css,
+    `${parseFloat(before) + value.step}${css === "font-weight" ? "" : "px"}`,
+  );
+  await page.evaluate(() => document.fonts.ready);
+  await row.getByRole("button", { name: `Reset ${label}`, exact: true }).click();
+  await expect(element).toHaveCSS(css, before);
+}
+
+/**
+ * @param {import("@playwright/test").Page} page
+ * @param {string} role
+ */
+async function showAlignmentRole(page, role) {
+  if (role === "Team" || role === "Label") {
+    await page.getByRole("tab", { name: role === "Team" ? "Games" : "News", exact: true }).click();
+    return;
+  }
+  await openSeasonPart(page, "Bracket");
+  await page.locator("#bracketWrap .team-open").first().click();
+}
+
+/**
+ * @param {import("@playwright/test").Page} page
+ * @param {string} role
+ */
+function findAlignmentRole(page, role) {
+  if (role === "Team")
+    return { line: page.locator("#seasonGames .game-side.away .club").first(), name: ".team-name" };
+  if (role === "Label")
+    return { line: page.locator(".news-teams .club").first(), name: ".team-name" };
+  if (role === "Large")
+    return { line: page.locator("#teamSheet .team-title"), name: ":scope > span:not(.dot)" };
+  return { line: page.locator("#teamSheet .game-card-opponent").first(), name: ".game-card-name" };
 }
 
 /**
  * @param {App} app
  * @param {string} role
+ * @param {string} label
  */
-export async function checkAlignmentRoleTypography(app, role) {
+export async function checkAlignmentRoleControl(app, role, label) {
   const { page } = app;
   await page.setViewportSize({ width: 1280, height: 900 });
-  await openTuning(app, readAlignmentRound(app.app));
-  if (role === "Team") {
-    await page.getByRole("tab", { name: "Games", exact: true }).click();
-    const club = page.locator("#seasonGames .game-side.away .club").first();
-    await checkRoleTypography(page, role, club, ".team-name");
-    return;
-  }
-  if (role === "Label") {
-    await page.getByRole("tab", { name: "News", exact: true }).click();
-    await checkRoleTypography(page, role, page.locator(".news-teams .club").first(), ".team-name");
-    return;
-  }
-  await openSeasonPart(page, "Bracket");
-  await page.locator("#bracketWrap .team-open").first().click();
-  if (role === "Large") {
-    const title = page.locator("#teamSheet .team-title");
-    await checkRoleTypography(page, role, title, ":scope > span:not(.dot)");
-    return;
-  }
-  const card = page.locator("#teamSheet .game-card-opponent").first();
-  await checkRoleTypography(page, role, card, ".game-card-name");
+  const round = readAlignmentRound(app.app);
+  await openTuning(app, round, (shown) => showAlignmentRole(shown, role));
+  const { line, name } = findAlignmentRole(page, role);
+  await checkRoleControl(page, role, line, name, round, label);
+}
+
+/** @param {App} app */
+export async function checkAlignmentCardFit(app) {
+  const { page } = app;
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await openTuning(app, readAlignmentRound(app.app), (shown) => showAlignmentRole(shown, "Small"));
+  await findPanel(page).getByRole("combobox", { name: "Role" }).selectOption("Small");
   const sizeRow = findRow(page, "--type-team-small-size");
   await sizeRow.getByRole("slider").fill("18");
   await expect(sizeRow.locator("output")).toHaveText("18px");
