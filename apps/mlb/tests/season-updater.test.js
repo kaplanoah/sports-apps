@@ -6,7 +6,8 @@ import { sortInScheduleOrder } from "../page/js/schedule-order.js";
 import * as MLBSnapshot from "../page/js/snapshot.js";
 import { OFF_DAY_CHECK_MS } from "#shared/poll-schedule.js";
 import { composeLog, createReading, sortParts } from "../worker/src/readings.js";
-import { loadCurrentSnapshot } from "../worker/src/season-updater.js";
+import { loadCurrentSnapshot, saveSnapshot } from "../worker/src/season-updater.js";
+import { testSeasonUpdater } from "../../../tests/season-updater-contract.js";
 import { SeasonStore } from "../worker/src/store.js";
 import {
   createDurableObjectContext,
@@ -19,6 +20,25 @@ const EVENING = JSON.parse(
 const NOW = Date.parse(EVENING.now);
 const SNAPSHOT = MLBSnapshot.buildSnapshot(EVENING.responses, { season: 2026, now: NOW });
 const TODAY = SNAPSHOT.slate.today.date;
+
+testSeasonUpdater({
+  snapshot: SNAPSHOT,
+  saveSnapshot,
+  nameSeasonKey: (season) => `seasons/${season}`,
+  omitStandings: (snapshot) => ({ ...snapshot, standings: null }),
+  advanceStandings: (snapshot) => ({
+    ...snapshot,
+    standings: {
+      ...snapshot.standings,
+      divisions: Object.fromEntries(
+        Object.entries(snapshot.standings.divisions).map(([division, rows]) => [
+          division,
+          rows.map((row, index) => (index === 0 ? { ...row, w: row.w + 1 } : row)),
+        ]),
+      ),
+    },
+  }),
+});
 
 function createUpdatingStore({ stored = {}, snapshot = SNAPSHOT, now = NOW } = {}) {
   const context = createDurableObjectContext();
