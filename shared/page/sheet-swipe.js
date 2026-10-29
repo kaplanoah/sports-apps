@@ -87,7 +87,7 @@ export function closeOnCancel(dialog) {
  *   `findScroller` names what scrolls the content the finger is on
  */
 export function closeOnSwipeDown(dialog, { isOwnGesture, findScroller }) {
-  /** @type {{ originX: number, originY: number, startY: number, lastY: number, lastTime: number, speed: number, isDragging: boolean } | null} */
+  /** @type {{ originX: number, originY: number, startY: number, lastY: number, lastTime: number, speed: number, isPastPress: boolean, isDragging: boolean } | null} */
   let swipe = null;
 
   /** @param {TouchEvent} event */
@@ -102,6 +102,7 @@ export function closeOnSwipeDown(dialog, { isOwnGesture, findScroller }) {
       lastY: clientY,
       lastTime: event.timeStamp,
       speed: 0,
+      isPastPress: false,
       isDragging: false,
     };
   }
@@ -120,16 +121,18 @@ export function closeOnSwipeDown(dialog, { isOwnGesture, findScroller }) {
 
   // Until the sheet moves, the swipe counts from the finger's highest point since the content
   // last scrolled, so a swipe that scrolls the content back to its top goes on to move the sheet.
-  // It also waits for the finger to leave where it landed by as much as a press lets it drift.
+  // It also waits until the finger has drifted from where it landed as far as a press lets it.
   /**
    * @param {number} clientX
    * @param {number} clientY
-   * @param {{ originX: number, originY: number, startY: number }} moving
+   * @param {{ originX: number, originY: number, startY: number, isPastPress: boolean }} moving
    */
   function startsDragging(clientX, clientY, moving) {
     if (findScroller().scrollTop > 0 || clientY < moving.startY) moving.startY = clientY;
-    const isPastPress = Math.hypot(clientX - moving.originX, clientY - moving.originY) > DRIFT_PX;
-    return clientY - moving.startY > DRIFT_PX && isPastPress;
+    if (Math.hypot(clientX - moving.originX, clientY - moving.originY) > DRIFT_PX) {
+      moving.isPastPress = true;
+    }
+    return moving.isPastPress && clientY - moving.startY > DRIFT_PX;
   }
 
   // A swipe that sets off mostly sideways is another gesture's, like stepping between sheets.
