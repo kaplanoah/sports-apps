@@ -433,7 +433,7 @@ section.view.active:not([data-follows]):has(> :is(.day-view, .season-parts)) {
   justify-content: space-between;
   width: 100%;
   min-height: 56px;
-  padding: 12px 0 calc(12px + var(--lowercase-lift));
+  padding: calc(12px - var(--word-lift) / 2) 0 calc(12px + var(--word-lift) / 2);
   border: 0;
   background: none;
   color: var(--ink);
@@ -756,6 +756,11 @@ body.kbd .appearance-choice:has(input:focus) .appearance-icon {
   flex-direction: column;
   gap: var(--label-note-gap);
   min-width: 0;
+}
+/* A row centers the label's box, so its words take their lift in margins of their own, leaving
+   the control beside them centered. Appearance's label heads its choices instead. */
+.control-row:not(.appearance-row) > .control-label {
+  margin-block: calc(var(--word-lift) / -2) calc(var(--word-lift) / 2);
 }
 .control-note {
   font-size: var(--type-setting-note-size);
