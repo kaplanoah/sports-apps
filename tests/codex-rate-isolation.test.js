@@ -7,6 +7,7 @@ import {
   summarizeIsolationCommandFailure,
   parseIsolationCommandResult,
   createProbeEnvironment,
+  validateSandboxLauncherResult,
 } from "../worker/prove-codex-rate-isolation.mjs";
 
 const workflow = readFileSync(new URL("../.github/workflows/ci.yml", import.meta.url), "utf8");
@@ -31,6 +32,30 @@ test("command diagnostics keep exit facts and fixed flags without publishing pri
     true,
   );
   assert.equal(summarizeIsolationCommandFailure({}).exitCode, null);
+});
+
+test("sandbox launcher must preserve the harmless child's exact output and intentional nonzero status", () => {
+  assert.doesNotThrow(() =>
+    validateSandboxLauncherResult({ status: 19, stdout: "rate-proof-launcher" }),
+  );
+  for (const result of [
+    { status: 0, stdout: "" },
+    { status: 0, stdout: "rate-proof-launcher" },
+    { status: 19, stdout: "" },
+    { status: 19, stdout: "fake-private-output" },
+    { status: 19, stdout: "rate-proof-launcher", error: { code: "ETIMEDOUT" } },
+  ]) {
+    assert.throws(
+      () => validateSandboxLauncherResult(result),
+      (error) => {
+        if (!(error instanceof Error) || !("stage" in error) || !("commandFacts" in error))
+          return false;
+        assert.equal(error.stage, "pinned-sandbox-launcher");
+        assert.equal(JSON.stringify(error.commandFacts).includes("fake-private-output"), false);
+        return true;
+      },
+    );
+  }
 });
 
 test("the cleared probe environment keeps CLI home outside its temporary directory", () => {
@@ -137,6 +162,7 @@ test("the hosted harness invokes only pinned CLI sandbox and never a native eval
   assert.doesNotMatch(harness, /\["exec"|systemctl|useradd|sudoers|setcap|iptables/);
   assert.match(harness, /env.RUNNER_ENVIRONMENT !== "github-hosted"/);
   assert.match(harness, /verifyWithRateNamespaces\(/);
+  assert.match(harness, /validateSandboxLauncherResult\( launchBoundaryCommand\(/);
   assert.match(harness, /nativeModelStarted: false, realCredentialUsed: false/);
 });
 
@@ -159,6 +185,7 @@ test("missing, false or invented isolation facts cannot pass the proof", () => {
     upstreamNetworkDenied: true,
     checkoutWriteDenied: true,
     authorizedFakeRoute: true,
+    sandboxLauncherExecuted: true,
     rootRuntimeRemoved: true,
     listenersClosed: true,
     noCapturedCanary: true,

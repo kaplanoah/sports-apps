@@ -38,6 +38,7 @@ const proofStages = new Set([
   "unsandboxed-baseline",
   "root-process-boundary",
   "pinned-read-only-sandbox",
+  "pinned-sandbox-launcher",
   "authorized-fake-route",
   "privileged-process",
   "namespace-preparation",
@@ -110,6 +111,22 @@ export function parseIsolationCommandResult(result) {
   }
 }
 
+export function validateSandboxLauncherResult(result) {
+  if (result.error || result.status !== 19 || result.stdout !== "rate-proof-launcher") {
+    throw new IsolationProofError("pinned-sandbox-launcher", [], {
+      ...summarizeIsolationCommandFailure({
+        status: result.status,
+        signal: result.signal,
+        code: result.error?.code,
+        stdout: result.stdout,
+        stderr: result.stderr,
+      }),
+      expectedExitStatus: result.status === 19,
+      expectedOutput: result.stdout === "rate-proof-launcher",
+    });
+  }
+}
+
 const baselineFacts = ["gatewayReachable", "upstreamReachable", "checkoutWritable"];
 const processFacts = [
   "unprivileged",
@@ -137,6 +154,7 @@ const runnerFacts = [
     ...processFacts,
     ...sandboxFacts,
     "authorizedFakeRoute",
+    "sandboxLauncherExecuted",
     "rootRuntimeRemoved",
     "listenersClosed",
     "noCapturedCanary",
@@ -277,11 +295,11 @@ export function createProbeEnvironment(fixtures) {
   };
 }
 
-function probeBoundary(settings, fixtures, command) {
+function launchBoundaryCommand(settings, fixtures, command) {
   const groups = settings.groups.length
     ? [`--groups=${settings.groups.join(",")}`]
     : ["--clear-groups"];
-  const result = spawnSync(
+  return spawnSync(
     "/usr/bin/setpriv",
     [
       `--reuid=${settings.uid}`,
@@ -301,7 +319,23 @@ function probeBoundary(settings, fixtures, command) {
       stdio: ["ignore", "pipe", "pipe"],
     },
   );
-  return parseIsolationCommandResult(result);
+}
+
+function probeBoundary(settings, fixtures, command) {
+  return parseIsolationCommandResult(launchBoundaryCommand(settings, fixtures, command));
+}
+
+function createSandboxCommand(fixtures, command) {
+  return [
+    fixtures.cli,
+    "sandbox",
+    "--permission-profile",
+    ":read-only",
+    "--cd",
+    fixtures.project,
+    "--",
+    ...command,
+  ];
 }
 
 /** @returns {Promise<any>} */
@@ -376,20 +410,24 @@ async function proveRunnerBoundary(settings) {
       input,
     ]);
     validateRateIsolationFacts(processBoundary, stage);
+    stage = "pinned-sandbox-launcher";
+    validateSandboxLauncherResult(
+      launchBoundaryCommand(
+        settings,
+        fixtures,
+        createSandboxCommand(fixtures, [
+          process.execPath,
+          "-e",
+          'process.stdout.write("rate-proof-launcher"); process.exitCode = 19;',
+        ]),
+      ),
+    );
     stage = "pinned-read-only-sandbox";
-    const sandbox = probeBoundary(settings, fixtures, [
-      fixtures.cli,
-      "sandbox",
-      "--permission-profile",
-      ":read-only",
-      "--cd",
-      fixtures.project,
-      "--",
-      process.execPath,
-      fixtures.probe,
-      "sandbox",
-      input,
-    ]);
+    const sandbox = probeBoundary(
+      settings,
+      fixtures,
+      createSandboxCommand(fixtures, [process.execPath, fixtures.probe, "sandbox", input]),
+    );
     validateRateIsolationFacts(sandbox, stage);
     stage = "authorized-fake-route";
     const response = await fetch(`http://127.0.0.1:${ports.gateway}/v1/responses`, {
@@ -400,7 +438,13 @@ async function proveRunnerBoundary(settings) {
     });
     if (!response.ok || !(await response.text()).includes('"input_tokens":4'))
       throw new Error(stage);
-    facts = { ...baseline, ...processBoundary, ...sandbox, authorizedFakeRoute: true };
+    facts = {
+      ...baseline,
+      ...processBoundary,
+      ...sandbox,
+      sandboxLauncherExecuted: true,
+      authorizedFakeRoute: true,
+    };
   } catch (error) {
     throw new IsolationProofError(
       stage,
