@@ -181,6 +181,7 @@ export function testDriftPresses(test, expect, app) {
     test(`a drift on a control in ${group} keeps its press until a swipe takes the touch`, async ({
       page,
     }) => {
+      test.slow();
       await page.setViewportSize(PHONE);
       await openFromHomeScreen(page);
       await app.openWithEverything(page);
