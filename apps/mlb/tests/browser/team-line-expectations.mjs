@@ -60,7 +60,10 @@ export const TEAM_LINE_EXPECTATIONS = {
       delta: 150,
     },
   ],
-  stateSelectors: [{ selector: ".field-heads .club", state: "field comparison" }],
+  stateSelectors: [
+    { selector: ".field-heads .club", state: "field comparison" },
+    { selector: ".matchup-row.winner .club, .game-side.won .club", state: "winner" },
+  ],
   baselines: [
     {
       selector: ".field-heads, .sheet-part-head:has(h3 .club):has(> span)",

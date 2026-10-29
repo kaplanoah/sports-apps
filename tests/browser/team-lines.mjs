@@ -88,7 +88,6 @@ export const readTeamLines = async (page, expectations) => {
       placements.add(`${role} ${isAfter ? "after" : "before"}`);
       names.add(text);
       if (line.closest(".tbd") || name.matches(".tbd") || text === "TBD") states.add("TBD");
-      if (line.closest(".won, .winner")) states.add("winner");
       for (const { selector, state } of expectations.stateSelectors)
         if (line.matches(selector)) states.add(state);
       check(parseFloat(style.fontSize), size, `${description} size`);
