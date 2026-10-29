@@ -69,6 +69,8 @@ function showTeam(team, section) {
 function openTeamSheet(team, section = "") {
   if (!league?.isTeam(team)) return;
   openSheet(findSheet(), { key: team, show: () => showTeam(team, section) });
+  // A closed dialog had no width when renderSheet first tried to fit the cards.
+  fitGameCards(findElement("teamBody"));
 }
 
 const readShownTeam = () =>

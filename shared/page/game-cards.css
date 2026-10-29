@@ -5,14 +5,15 @@
  * when the row .is-stacked. fitGameCards sets every card's --game-card-width and the row's
  * --game-cards-gap from what it measures, each piece of a line being as wide as its own text;
  * until then each card is as wide as what it holds. Apps link it after sheet.css, before their own
- * styles.css, which places the row among the sheet's parts and sizes the other team's dot.
+ * styles.css, which places the row among the sheet's parts. team-line.css sets the other
+ * team's Small name and dot.
  *
  * Beside chrome.css's --ink, --ink-dim, --ink-hover, and --radius-card, and sheet.css's
  * --sheet-part-head, an app's :root defines these tokens:
+ *   --text                   the font for vs and @
  *   --game-card-edge         a card's border
  *   --game-card-now          the clock of a game being played, and the day of one later today
  *   --game-card-won          a win's W
- *   --game-card-team-font    the other team's name, in the face team names take
  */
 
 .game-cards {
@@ -97,16 +98,15 @@
 }
 .game-card-opponent {
   display: flex;
-  align-items: center;
   gap: 5px;
-  font-size: var(--type-detail-size);
-  font-weight: var(--type-detail-weight);
 }
 .game-card-at {
+  font-family: var(--text);
+  font-size: var(--type-detail-size);
+  font-weight: var(--type-detail-weight);
   color: var(--ink-dim);
 }
 .game-card-name {
-  font-family: var(--game-card-team-font);
   letter-spacing: 0.02em;
 }
 /* Each line's space is its letters' own, from the tops of its capitals to its baseline. */

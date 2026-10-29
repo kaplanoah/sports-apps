@@ -184,6 +184,9 @@ const LIVE_GAME = "1042600132";
 export async function openWithEverything(page) {
   await page.emulateMedia({ colorScheme: "light" });
   const app = await openApp(page);
+  // Games draws its rows when opened; wait for one before pushing its live update.
+  await page.getByRole("tab", { name: "Games", exact: true }).click();
+  await expect(page.locator(`[data-game="${LIVE_GAME}"]`).first()).toBeVisible();
   await app.changeSeason((season) => {
     const game = season.games.find((each) => each.id === LIVE_GAME);
     Object.assign(game, { state: "live", status: "Q2 5:10", period: 2, clock: "5:10" });

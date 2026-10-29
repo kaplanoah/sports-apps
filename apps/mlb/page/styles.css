@@ -94,8 +94,24 @@
   --type-heading-tracking: 0.035em;
   --type-team-large-size: calc(16rem / 16);
   --type-team-large-weight: 525;
+  --type-team-small-size: calc(12.75rem / 16);
+  --type-team-small-weight: 400;
   --type-team-size: calc(13.5rem / 16);
   --type-team-weight: 400;
+  /* Team marks and attachment offsets (shared/page/team-line.css). */
+  --team-dot-size: 14px;
+  --team-dot-before: 0px;
+  --team-dot-after: -1.5px;
+  --team-small-dot-size: 10px;
+  --team-small-dot-before: 0px;
+  --team-small-dot-after: -0.5px;
+  --team-large-dot-size: 16px;
+  --team-large-dot-before: -0.5px;
+  --team-large-dot-after: -1.5px;
+  --team-label-dot-size: 14px;
+  --team-label-dot-before: -0.25px;
+  --team-label-dot-after: -0.25px;
+  --team-league-offset: -1px;
   --type-score-size: calc(15.75rem / 16);
   --type-score-weight: 500;
   --type-stat-large-size: calc(15.5rem / 16);
@@ -229,7 +245,6 @@
   --game-card-edge: var(--card-border);
   --game-card-now: var(--now);
   --game-card-won: var(--highlight);
-  --game-card-team-font: inherit;
   --game-row-height: 82.5px;
   --strip-month: var(--highlight);
   --strip-today: var(--highlight);
@@ -241,6 +256,7 @@
   --edge: var(--card-border);
   --action: var(--highlight);
   --text: "Libre Franklin", system-ui, sans-serif;
+  --team-name: var(--text);
   --numbers: "Chivo Mono", "JetBrains Mono", monospace;
   --search-face: "Libre Franklin Search", system-ui, sans-serif;
   --select-face: "Chivo Mono Select", "JetBrains Mono", monospace;
@@ -769,10 +785,7 @@ table.st .seed-cell {
 .game-side {
   gap: 5.5px;
 }
-.game-side .club {
-  font-size: var(--type-team-size);
-  font-weight: var(--type-team-weight);
-}
+
 .game-side.home .club,
 .game-side.home .game-facts {
   flex-direction: row-reverse;
@@ -1160,22 +1173,21 @@ table.st .seed-cell {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-/* Only the name aligns to the baseline, so the piece sits in running text like a word. */
 .club {
   display: inline-flex;
-  align-items: center;
   gap: 8px;
   min-width: 0;
   max-width: 100%;
   vertical-align: baseline;
 }
-.club > .team-name {
-  align-self: baseline;
+:is(.sheet-part-head h3, .field-heads, .series-opp) .club {
+  align-items: baseline;
 }
-.matchup-row .team-name,
-table.st td.team .team-name {
-  font-size: var(--type-team-size);
-  font-weight: var(--type-team-weight);
+/* The name supplies the inline baseline. An empty dot must not add ascent; its center still
+   follows the name's native capital height. */
+:is(.sheet-part-head h3, .field-heads, .series-opp) .club > .dot {
+  margin-top: calc(-1 * var(--team-dot-size));
+  translate: 0 calc((var(--team-dot-size) - 1cap) / 2 + var(--team-mark-shift));
 }
 .tbd {
   color: var(--ink-dim);
@@ -1342,9 +1354,16 @@ body.kbd .rank-item .grip:focus {
 .rank-id .club {
   grid-area: club;
 }
+.rank-id,
+.rank-id .club,
+.pitcher-id .club {
+  --team-dot-size: var(--team-small-dot-size);
+  --team-dot-before: var(--team-small-dot-before);
+  --team-dot-after: var(--team-small-dot-after);
+  font-size: var(--type-team-small-size);
+  font-weight: var(--type-team-small-weight);
+}
 .rank-id .team-name {
-  font-size: var(--type-detail-size);
-  font-weight: var(--type-detail-weight);
   line-height: 16px;
 }
 .rank-item .league-tag {
@@ -1374,8 +1393,6 @@ body.kbd .rank-item .grip:focus {
     row-gap: 2px;
   }
   .rank-id .team-name {
-    font-size: var(--type-caption-size);
-    font-weight: var(--type-caption-weight);
     line-height: 15px;
   }
   .rank-ws {
@@ -1392,12 +1409,11 @@ body.kbd .rank-item .grip:focus {
   .rank-ws {
     display: none;
   }
+  .rank-item .league-tag {
+    translate: 0 calc(var(--team-lower-center) + var(--team-league-offset));
+  }
   .rank-drought {
     display: inline;
-  }
-  .rank-id .team-name {
-    font-size: var(--type-caption-size);
-    font-weight: var(--type-caption-weight);
   }
 }
 
@@ -1549,10 +1565,7 @@ body.kbd .rank-item .grip:focus {
 /* The Game section's box score: a lineup, the runs by inning, and each club's batters and pitchers. */
 .sheet-part-head h3 .club {
   display: inline-flex;
-  align-items: center;
   gap: 6px;
-  font-size: var(--type-team-size);
-  font-weight: var(--type-team-weight);
   text-transform: none;
   letter-spacing: 0;
   color: var(--ink-dim);
@@ -1602,7 +1615,6 @@ table.st.line-score td.total {
 }
 table.st.line-score td.team .club {
   display: inline-flex;
-  align-items: center;
   gap: 6px;
 }
 .sheet-part:has(> .box-wrap > .line-score) {
@@ -1627,17 +1639,12 @@ table.st.line-score td.team .club {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   column-gap: 8px;
-  align-items: baseline;
   margin: 0;
   font-size: var(--type-label-size);
   font-weight: var(--type-label-weight);
   letter-spacing: var(--type-label-tracking);
   text-transform: uppercase;
   color: var(--ink-dim);
-}
-.runs-half-head .dot {
-  position: relative;
-  top: 1px;
 }
 .runs-changes {
   display: grid;
@@ -1994,7 +2001,6 @@ table.st.line-score td.team .club {
 }
 .field-heads .club {
   display: inline-flex;
-  align-items: center;
   gap: 6px;
   color: var(--ink);
 }
@@ -2042,14 +2048,8 @@ table.st.line-score td.team .club {
   line-height: calc(1.1 * var(--leading));
 }
 .pitcher-id .club {
-  font-size: var(--type-caption-size);
-  font-weight: var(--type-caption-weight);
   color: var(--ink-dim);
   gap: 6px;
-}
-.pitcher-id .dot {
-  width: 10px;
-  height: 10px;
 }
 .pitcher-id.home .club {
   flex-direction: row-reverse;
@@ -2661,10 +2661,6 @@ nav.tabs .search-tab,
 .team-sheet-body > .game-cards {
   margin: 8px -13.5px 0;
 }
-.game-card-opponent .dot {
-  width: 9.5px;
-  height: 9.5px;
-}
 .game-card-score {
   font-weight: calc(var(--type-detail-weight) + 150);
 }
@@ -2692,10 +2688,6 @@ nav.tabs .search-tab,
 }
 .series-opp {
   min-width: 0;
-}
-.series-opp .tbd {
-  font-size: var(--type-detail-size);
-  font-weight: var(--type-detail-weight);
 }
 .series-result {
   text-align: right;

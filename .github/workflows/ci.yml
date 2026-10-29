@@ -158,6 +158,20 @@ jobs:
         if: steps.modules.outputs.cache-hit != 'true'
         run: npm ci
       # Each check runs even when one before it failed, so one run reports them all.
+      - name: Verify provider history with the PR-scoped token
+        if: ${{ !cancelled() && github.event_name == 'pull_request' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          node --input-type=module <<'NODE'
+          import { createGitHub } from './worker/github-api.mjs';
+          import { readReviewProvider } from './worker/review-provider.mjs';
+          const env = process.env;
+          const readGitHub = createGitHub({ repository: env.GITHUB_REPOSITORY, env, fetchImpl: fetch });
+          await readReviewProvider(env, readGitHub);
+          console.log('Provider history is readable with the PR-scoped token.');
+          NODE
       - name: Lint
         if: ${{ !cancelled() }}
         run: npm run lint
@@ -320,7 +334,7 @@ jobs:
         id: image
         run: echo "os=$ImageOS" >> "$GITHUB_OUTPUT"
       - id: webkit-packages
-        if: &runs-webkit-specs contains(needs.scope.outputs.specs, 'at-rest.spec.mjs') || contains(needs.scope.outputs.specs, 'notification-layout.spec.mjs') || contains(needs.scope.outputs.specs, 'notification-permission.spec.mjs') || contains(needs.scope.outputs.specs, 'settings-contact.spec.mjs') || contains(needs.scope.outputs.specs, 'word-centering.spec.mjs')
+        if: &runs-webkit-specs contains(needs.scope.outputs.specs, 'at-rest.spec.mjs') || contains(needs.scope.outputs.specs, 'team-lines.spec.mjs') || contains(needs.scope.outputs.specs, 'notification-layout.spec.mjs') || contains(needs.scope.outputs.specs, 'notification-permission.spec.mjs') || contains(needs.scope.outputs.specs, 'settings-contact.spec.mjs') || contains(needs.scope.outputs.specs, 'word-centering.spec.mjs')
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/webkit-packages
@@ -676,8 +690,9 @@ jobs:
             echo "::error::Trusted review covers different code than this check."
             exit 1
           fi
-      # A ready pull request's code merges only once a review of exactly that code passed, so a run
-      # that wasn't asked to review, a push's or a label's, holds it until the review label asks.
+      # A ready pull request's code merges only once a passed review of its head covers that code,
+      # directly or carried over from a base main only moved forward from, so a run that wasn't asked
+      # to review, a push's or a label's, holds it until the review label asks.
       # A draft is reviewed once it's ready, so it isn't held.
       - name: Require a review of this code
         if: needs.review-join.outputs.owed == 'true' && !github.event.pull_request.draft

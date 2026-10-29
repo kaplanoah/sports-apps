@@ -59,15 +59,10 @@
 /* A team's name and dot, over its facts, wherever a sheet's title names the team. */
 .sheet-head h2.team-title {
   display: flex;
-  align-items: center;
   gap: 8px;
   font-size: var(--type-team-large-size);
   font-weight: var(--type-team-large-weight);
   text-transform: none;
-}
-.sheet-head .team-title .dot {
-  width: 14px;
-  height: 14px;
 }
 .sheet-head .team-note {
   font-weight: calc(var(--type-detail-weight) + 100);

@@ -33,4 +33,4 @@ This skill holds what "Shipping a change" in AGENTS.md and the `ship` skill leav
 ## Step 8: a red PR
 
 - Merge a red PR only once `check` and `phone` passed with the `phone-ok` label on it: the label is the owner's sign-off from beta and their go-ahead to merge, so don't ask again, before the merge or once it's live. Until then, tell the user it's ready and wait. An OK in chat never stands in for the label. Merge it yourself: the owner doesn't.
-- `check` holds the code that merges, the PR merged into `main` as `main` is then, so when `main` moved after the PR's last review, the run `phone-ok` starts fails `check` for want of a review. Answer it as the steward skill says for a `check` with no review on the code that merges.
+- `check` holds the code that merges, the PR merged into `main` as `main` is then. When `main` moved after the PR's last review, CI's join carries that review over as the steward skill says, so the run `phone-ok` starts fails `check` for want of a review only when it can't. Answer that as the steward skill says for a `check` with no review on the code that merges.

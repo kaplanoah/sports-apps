@@ -32,6 +32,7 @@ const ROLE_LOOKS = {
   headline: "Libre Franklin",
   heading: "Libre Franklin, capitals",
   "team-large": "Libre Franklin",
+  "team-small": "Libre Franklin",
   team: "Libre Franklin",
   score: "Chivo Mono",
   "stat-large": "Chivo Mono",

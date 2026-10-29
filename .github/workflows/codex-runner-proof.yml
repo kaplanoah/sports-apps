@@ -3,6 +3,11 @@ name: Prove Codex hosted runner
 on:
   workflow_dispatch:
     inputs:
+      scenario:
+        description: One bounded proof; interruption retains a failure requiring external timeout verification
+        type: choice
+        options: [runner, interruption, integration]
+        default: runner
       evidence-certificate:
         description: Public evidence encryption certificate, never a private key or API credential
         type: string
@@ -13,6 +18,7 @@ permissions:
 
 env:
   TRUSTED_CODEX_REVIEW_ENABLED: ${{ vars.TRUSTED_CODEX_REVIEW_ENABLED }}
+  CODEX_PROOF_SCENARIO: ${{ inputs.scenario || 'runner' }}
 
 jobs:
   prepare:
@@ -22,6 +28,7 @@ jobs:
     outputs:
       model-queue: ${{ steps.request.outputs.model-queue }}
       node-version: ${{ steps.node.outputs.node-version }}
+      model-timeout: ${{ steps.request.outputs.model-timeout }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -86,6 +93,7 @@ jobs:
         run: node "$RUNNER_TEMP/native-rate-input/runtime.mjs" prepare "$RUNNER_TEMP/native-rate-input"
       - name: Run one native Codex proof
         id: model
+        timeout-minutes: ${{ fromJSON(needs.prepare.outputs.model-timeout) }}
         continue-on-error: true
         uses: openai/codex-action@c05cfd74ad95c626cdf05c6685e62becc3bf7813
         env:

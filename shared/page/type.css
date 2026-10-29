@@ -16,8 +16,8 @@
  *   headline      a news story's title
  *   heading       a sheet's title, a bracket round, the access gate's title
  *   team-large    the team or player a sheet is about, the teams facing off on a game's sheet
- *   team          team names in game rows, standings, and comparisons
- *   team-compact  team names over a game sheet's tables
+ *   team          team names in game rows, standings, comparisons, and over game-sheet tables
+ *   team-small    team names on game cards, in Ranking, and under pitchers
  *   score         the big numbers: bracket series wins, a day's date beside its games
  *   stat-large    a game row's lead and a sheet's lead numbers
  *   stat          numbers in a game sheet's tables and comparisons
