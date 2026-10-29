@@ -102,12 +102,7 @@ test("screenshots require matching image signatures and receive safe filenames",
     await assert.rejects(readContactRequest(createRequest({ ...SUBMISSION, screenshot: invalid })));
 });
 
-test("endpoint requires same-origin access, configured delivery and durable server acceptance", async () => {
-  assert.equal(
-    (await serveContact(createRequest(SUBMISSION, { origin: "https://elsewhere.example" }), ENV))
-      .status,
-    403,
-  );
+test("endpoint requires configured delivery and durable server acceptance", async () => {
   assert.equal((await serveContact(createRequest(), {})).status, 503);
   let received;
   const env = {

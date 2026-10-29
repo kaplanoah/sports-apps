@@ -119,8 +119,6 @@ export async function serveContact(request, env, app) {
     }
   }
   if (request.method !== "POST") return respondMethodNotAllowed(["GET", "POST"]);
-  if (request.headers.get("origin") !== new URL(request.url).origin)
-    return respondJson({ problem: "origin" }, 403);
   if (!env.EMAIL) return respondJson({ problem: "unavailable" }, 503);
   let submission;
   try {

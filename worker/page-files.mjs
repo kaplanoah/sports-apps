@@ -2,6 +2,7 @@
 // where the page's import map points #shared/. Node reads them from disk through the app's
 // #page-files/<app> import; the Worker bundle gets the same data embedded by worker/build.mjs.
 // The page's index.html also names every module its entry loads, to fetch them all at once.
+import { createHash } from "node:crypto";
 import { readdirSync, readFileSync } from "node:fs";
 import { extname, join, posix, relative } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -93,6 +94,30 @@ function readElementText(page, element) {
     endTag?.startOffset ?? element.sourceCodeLocation.endOffset,
   );
 }
+/** @param {string} page */
+function listScriptHashes(page) {
+  return listPageElements(page)
+    .filter(
+      (element) =>
+        element.tagName === "script" &&
+        !readAttribute(element, "src") &&
+        !isScriptType(element, "application/json"),
+    )
+    .map((element) => createHash("sha256").update(readElementText(page, element)).digest("base64"));
+}
+
+/** @param {ReturnType<typeof readFolder>} files */
+function addScriptHashes(files) {
+  return Object.fromEntries(
+    Object.entries(files).map(([path, file]) => [
+      path,
+      file.contentType.startsWith("text/html")
+        ? { ...file, scriptHashes: listScriptHashes(file.text) }
+        : file,
+    ]),
+  );
+}
+
 const MODULE_IMPORT =
   /^(?:import\s[^;]*?\sfrom|export\s*(?:\*|\{)[^;]*?\sfrom|import)\s*"([^"]+)"/gm;
 
@@ -188,8 +213,10 @@ export function readPageFiles(pageRoot) {
     `shared/${path}`,
     file,
   ]);
-  return addModulePreloads(
-    addHomeScreenIcons({ ...readFolder(pageRoot), ...Object.fromEntries(shared) }),
+  return addScriptHashes(
+    addModulePreloads(
+      addHomeScreenIcons({ ...readFolder(pageRoot), ...Object.fromEntries(shared) }),
+    ),
   );
 }
 
@@ -326,5 +353,5 @@ export function pinPageFiles(files, release) {
         throw new Error(`The head of ${path} must load shared/release-guard.js.`);
       return [path, { ...file, text: pinPage(writeRelease(file.text, release), guard, folder) }];
     });
-  return { ...files, ...Object.fromEntries(pinned) };
+  return addScriptHashes({ ...files, ...Object.fromEntries(pinned) });
 }

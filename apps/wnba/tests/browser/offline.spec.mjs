@@ -1,3 +1,4 @@
+import { checkOfflineSecurity } from "../../../../tests/browser/offline-security.mjs";
 import { NEXT_RELEASE, serveReleases } from "../../../../tests/browser/serve-releases.mjs";
 import { findDiagnosticsSwitch } from "../../../../tests/browser/diagnostics-switch.mjs";
 import { takeAwayPush } from "../../../../tests/browser/devices.mjs";
@@ -112,4 +113,8 @@ test("Diagnostics show the steps the service worker kept: its start, install, an
     "Activated",
     "Opened the page from the copy",
   ]);
+});
+
+test("an old cached page upgrades to enforced CSP and keeps it offline", async ({ page }) => {
+  await checkOfflineSecurity(page, openApp);
 });

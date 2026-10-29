@@ -80,6 +80,43 @@ function judgeSignIn(status) {
   return markBroken(`the access code's route answered ${status}`);
 }
 
+/** @param {import("@playwright/test").Response | null} response @param {string} address */
+function judgeSecurityHeaders(response, address) {
+  if (!response?.ok()) return markBroken(`the page answered ${response?.status()}`);
+  const headers = response.headers();
+  const policy = headers["content-security-policy"] ?? "";
+  if (!policy.includes("frame-ancestors 'none'") || !policy.includes("script-src 'self'"))
+    return markBroken("the page is missing its enforced security policy");
+  if (headers["x-frame-options"] !== "DENY")
+    return markBroken("the page is missing its embedding protection");
+  if (
+    new URL(address).protocol === "https:" &&
+    !/max-age=31536000(?:;|$)/.test(headers["strict-transport-security"] ?? "")
+  )
+    return markBroken("the page is missing its HTTPS protection");
+  return null;
+}
+
+/** @param {import("@playwright/test").Page} page @param {string[]} addresses */
+async function checkHttpRedirects(page, addresses) {
+  const origins = new Set(addresses.map((address) => new URL(address).origin));
+  for (const origin of origins) {
+    const url = new URL("/robots.txt", origin);
+    if (url.protocol !== "https:") continue;
+    url.protocol = "http:";
+    const response = await page.request.get(url.href, { maxRedirects: 0 });
+    const location = response.headers()["location"];
+    const target = location && new URL(location, url);
+    if (
+      ![301, 302, 307, 308].includes(response.status()) ||
+      !target ||
+      target.protocol !== "https:"
+    )
+      return markBroken("HTTP does not redirect to HTTPS");
+  }
+  return null;
+}
+
 /**
  * Signs the page in with its code and opens it again, or says why it couldn't.
  * @param {import("@playwright/test").Page} page
@@ -92,8 +129,9 @@ async function signInWithCode(page, pageUrl, accessCode) {
   if (status === NO_CODE_ASKED) return { isOpenWithoutCode: true };
   const problem = judgeSignIn(status);
   if (problem) return { problem };
-  await page.goto(pageUrl);
-  return {};
+  const response = await page.goto(pageUrl);
+  const securityProblem = judgeSecurityHeaders(response, page.url());
+  return securityProblem ? { problem: securityProblem } : {};
 }
 
 /**
@@ -175,7 +213,8 @@ export async function checkPage(
   const errors = [];
   page.on("pageerror", (error) => errors.push(error.message));
   const response = await page.goto(pageUrl);
-  if (!response?.ok()) return markBroken(`the page answered ${response?.status()}`);
+  const securityProblem = judgeSecurityHeaders(response, page.url());
+  if (securityProblem) return securityProblem;
   // An app moving to its own address sends a browser that isn't signed in there, so the check
   // signs in wherever a phone would land.
   const signIn = accessCode ? await signInWithCode(page, page.url(), accessCode) : {};
@@ -349,9 +388,14 @@ export async function checkAppPage({
           isContextClosed = true;
         });
         const page = await context.newPage();
-        const opened = await checkPage(page, { ...access, commit }).catch((error) =>
-          judgePageFailure(error, isContextClosed || !browser.isConnected(), env),
-        );
+        const opened = await checkPage(page, { ...access, commit })
+          .then(async (result) => {
+            if (result.status !== "drawn") return result;
+            return (await checkHttpRedirects(page, [access.pageUrl, page.url()])) ?? result;
+          })
+          .catch((error) =>
+            judgePageFailure(error, isContextClosed || !browser.isConnected(), env),
+          );
         landedUrl = page.url();
         check = hideAddress(opened, access.pageUrl, landedUrl, access.accessCode);
         await closeAfterPageCheck(() => context.close(), check);

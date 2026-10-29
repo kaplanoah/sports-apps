@@ -1,5 +1,6 @@
 import { createServer } from "node:http";
 import { join } from "node:path";
+import { createAppWorker } from "../../shared/worker/app-worker.js";
 import { readPageFiles } from "../../worker/page-files.mjs";
 
 // Serves one app's page, named from the repo's root, as its Worker bundles it, at the server's root.
@@ -8,32 +9,22 @@ if (!port || !pageFolder) {
   console.error("usage: node tests/browser/serve.mjs <port> apps/<app>/page");
   process.exit(1);
 }
-const PAGE_FILES = new Map(
-  Object.entries(readPageFiles(join(import.meta.dirname, "..", "..", pageFolder))),
-);
-
-/** @param {string} requestUrl */
-function findPageFile(requestUrl) {
-  try {
-    const { pathname } = new URL(requestUrl, "http://localhost");
-    return PAGE_FILES.get(pathname === "/" ? "index.html" : pathname.slice(1)) ?? null;
-  } catch {
-    return null;
-  }
-}
+const worker = createAppWorker({
+  name: "test",
+  pageFiles: readPageFiles(join(import.meta.dirname, "..", "..", pageFolder)),
+  forwardToStore: () => new Response(null, { status: 404 }),
+  readFeedFailures: async () => ({}),
+});
 
 /**
  * @param {import("node:http").IncomingMessage} request
  * @param {import("node:http").ServerResponse} response
  */
-function servePageFile(request, response) {
-  const file = findPageFile(request.url);
-  if (!file) {
-    response.writeHead(404).end("not found");
-    return;
-  }
-  response.writeHead(200, { "content-type": file.contentType });
-  response.end(file.text ?? Buffer.from(file.base64, "base64"));
+async function servePageFile(request, response) {
+  const url = new URL(`/test-key${request.url}`, `http://${request.headers.host}`);
+  const answer = await worker.fetch(new Request(url), { APP_KEY: "test-key" });
+  response.writeHead(answer.status, Object.fromEntries(answer.headers));
+  response.end(Buffer.from(await answer.arrayBuffer()));
 }
 
 createServer(servePageFile).listen(Number(port), "127.0.0.1");

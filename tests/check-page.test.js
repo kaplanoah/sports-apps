@@ -68,15 +68,25 @@ test("a browser that doesn't start fails the check rather than skipping it", asy
  * Playwright routes only a redirect's first request, so a browser test can't follow the Worker's
  * move.
  * @param {string} landedUrl
- * @param {{ thrown?: string }} [options]
+ * @param {{ thrown?: string, headers?: Record<string, string> }} [options]
  */
-function openMovedPage(landedUrl, { thrown } = {}) {
+function openMovedPage(landedUrl, { thrown, headers = {} } = {}) {
   /** @type {string[]} */
   const visits = [];
   /** @type {string[]} */
   const codeAddresses = [];
+  const httpVisits = [];
   let address = "about:blank";
   const page = {
+    request: {
+      get: async (address) => {
+        httpVisits.push(address);
+        return {
+          status: () => 301,
+          headers: () => ({ location: address.replace("http:", "https:") }),
+        };
+      },
+    },
     /** @param {string} event @param {(error: Error) => void} listener */
     on(event, listener) {
       if (thrown && event === "pageerror") listener(new Error(thrown));
@@ -86,7 +96,15 @@ function openMovedPage(landedUrl, { thrown } = {}) {
     async goto(visited) {
       visits.push(visited);
       address = landedUrl;
-      return { ok: () => true };
+      return {
+        ok: () => true,
+        headers: () => ({
+          "content-security-policy": "script-src 'self'; frame-ancestors 'none'",
+          "x-frame-options": "DENY",
+          "strict-transport-security": "max-age=31536000",
+          ...headers,
+        }),
+      };
     },
     /** @param {unknown} _ @param {{ address: string }} sent */
     async evaluate(_, sent) {
@@ -101,6 +119,7 @@ function openMovedPage(landedUrl, { thrown } = {}) {
     page: /** @type {import("@playwright/test").Page} */ (/** @type {unknown} */ (page)),
     visits,
     codeAddresses,
+    httpVisits,
   };
 }
 
@@ -481,4 +500,54 @@ test("a drawn page without an access route reports that it opened without a code
     status: "drawn",
     isOpenWithoutCode: true,
   });
+});
+
+test("live page verification rejects missing security headers before accepting a drawing", async () => {
+  for (const [name, reason] of [
+    ["content-security-policy", "the page is missing its enforced security policy"],
+    ["x-frame-options", "the page is missing its embedding protection"],
+    ["strict-transport-security", "the page is missing its HTTPS protection"],
+  ]) {
+    const { page } = openMovedPage(PAGE_URL, { headers: { [name]: "" } });
+    assert.deepEqual(await checkPage(page, { pageUrl: PAGE_URL }), { status: "broken", reason });
+  }
+});
+
+test("a drawn live page is rejected when HTTP serves content instead of redirecting to HTTPS", async () => {
+  const { page } = openMovedPage(PAGE_URL);
+  page.request.get = async () => /** @type {any} */ ({ status: () => 200, headers: () => ({}) });
+  const browser = {
+    isConnected: () => true,
+    newContext: async () => ({ on: () => {}, newPage: async () => page, close: async () => {} }),
+    close: async () => {},
+  };
+  const result = await checkAppPage({
+    app: "wnba",
+    channel: "production",
+    env: { WNBA_PAGE_URL: PAGE_URL },
+    attempts: 1,
+    launchBrowser: async () => /** @type {any} */ (browser),
+  });
+  assert.deepEqual(result, { status: "broken", reason: "HTTP does not redirect to HTTPS" });
+});
+
+test("HTTP redirect checks probe public paths without sending keys or query strings in plaintext", async () => {
+  const { page, httpVisits } = openMovedPage("https://page.example/private/?carried=private");
+  const browser = {
+    isConnected: () => true,
+    newContext: async () => ({ on: () => {}, newPage: async () => page, close: async () => {} }),
+    close: async () => {},
+  };
+  const result = await checkAppPage({
+    app: "wnba",
+    channel: "production",
+    env: { WNBA_PAGE_URL: PAGE_URL },
+    attempts: 1,
+    launchBrowser: async () => /** @type {any} */ (browser),
+  });
+  assert.deepEqual(result, { status: "drawn" });
+  assert.deepEqual(httpVisits, [
+    "http://wnba-app.example-subdomain.workers.dev/robots.txt",
+    "http://page.example/robots.txt",
+  ]);
 });

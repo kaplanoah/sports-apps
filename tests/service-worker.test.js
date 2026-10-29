@@ -100,7 +100,7 @@ function startServiceWorker({ publicKey = "AQID_w", app = "mlb", answer = null }
       },
     },
   };
-  const context = createContext({ self, fetch, caches, URL, JSON, atob, Response });
+  const context = createContext({ self, fetch, caches, URL, JSON, atob, Response, Headers });
   context.importScripts = (...paths) =>
     paths.forEach((path) => runInContext(readPageFile(app, path), context));
   runInContext(readPageFile(app, "sw.js"), context);
@@ -243,7 +243,7 @@ const STYLESHEET = `@font-face { src: url("fonts/text.woff2") format("woff2"); }
  * The Worker as the service worker reaches it, on one release at a time, or not at all, with the
  * files of any `earlier` releases still there, as while a deploy reaches each server, and each
  * file `held` answering only once its promise settles.
- * @param {{ release: string, earlier?: string[], held?: Map<string, Promise<void>>, pageStatus?: number, isOffline?: boolean, isSignedOut?: boolean, missing?: Set<string> }} server
+ * @param {{ release: string, earlier?: string[], held?: Map<string, Promise<void>>, headers?: Record<string, string>, pageStatus?: number, isOffline?: boolean, isSignedOut?: boolean, missing?: Set<string> }} server
  */
 const serveRelease = (server) => async (url) => {
   if (server.isOffline) throw new TypeError("Failed to fetch");
@@ -252,7 +252,9 @@ const serveRelease = (server) => async (url) => {
   if (url === SCOPE && server.isSignedOut)
     return new Response(GATE, { headers: { "cache-control": "no-store" } });
   if (url === SCOPE)
-    return new Response(writePage(server.release), { headers: { "cache-control": "no-cache" } });
+    return new Response(writePage(server.release), {
+      headers: { "cache-control": "no-cache", ...server.headers },
+    });
   const path = url.slice(SCOPE.length);
   const isServed = [server.release, ...(server.earlier ?? [])].some((release) =>
     path.startsWith(`release/${release}/`),
@@ -734,4 +736,33 @@ test("page and service worker share game intent validation, including invalid re
     assert.deepEqual(read(`${SCOPE}?${query}`), { isRequested: true, target: null });
   }
   assert.deepEqual(read(SCOPE), { isRequested: false, target: null });
+});
+
+test("an old offline copy keeps working until a complete new release preserves its security policy", async () => {
+  const server = { release: "a", missing: new Set(), headers: {} };
+  const worker = startServiceWorker({ answer: serveRelease(server) });
+  await worker.request(SCOPE, NAVIGATION);
+  const headers = {
+    "content-security-policy": "default-src 'self'; frame-ancestors 'none'",
+    "x-frame-options": "DENY",
+    "referrer-policy": "no-referrer",
+    "x-content-type-options": "nosniff",
+    "strict-transport-security": "max-age=31536000",
+  };
+  Object.assign(server, {
+    release: "b",
+    headers: { ...headers, "set-cookie": "access=secret", "x-private": "private" },
+  });
+  server.missing.add("release/b/js/app.js");
+  await worker.request(SCOPE, NAVIGATION);
+  assert.equal(await readCopy(worker), writePage("a"));
+  server.missing.clear();
+  await worker.refreshCopy();
+  assert.equal(await readCopy(worker), writePage("b"));
+  Object.assign(server, { isOffline: true });
+  const offline = await worker.request(SCOPE, NAVIGATION);
+  for (const [name, value] of Object.entries(headers))
+    assert.equal(offline.headers.get(name), value);
+  assert.equal(offline.headers.get("set-cookie"), null);
+  assert.equal(offline.headers.get("x-private"), null);
 });

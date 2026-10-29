@@ -29,6 +29,45 @@ const PAGE_HEADERS = {
   "referrer-policy": "no-referrer",
   "x-content-type-options": "nosniff",
 };
+/** @param {string[]} hashes @param {Request} request */
+function createContentSecurityPolicy(hashes, request) {
+  const socket = new URL(request.url);
+  socket.protocol = socket.protocol === "https:" ? "wss:" : "ws:";
+  return [
+    "default-src 'self'",
+    `script-src 'self' ${hashes.map((hash) => `'sha256-${hash}'`).join(" ")}`.trim(),
+    "script-src-attr 'none'",
+    "style-src 'self'",
+    "style-src-attr 'unsafe-inline'",
+    "img-src 'self' https: data: blob:",
+    "media-src 'self' https:",
+    `connect-src 'self' ${socket.origin}`,
+    "object-src 'none'",
+    "base-uri 'none'",
+    "form-action 'self'",
+    "frame-ancestors 'none'",
+  ].join("; ");
+}
+
+/** @param {Request} request @param {URL} url */
+function isUntrustedRequest(request, url) {
+  const needsOrigin =
+    !["GET", "HEAD"].includes(request.method) ||
+    url.pathname.endsWith("/watch") ||
+    request.headers.get("upgrade")?.toLowerCase() === "websocket";
+  return needsOrigin && request.headers.get("origin") !== url.origin;
+}
+
+/** @param {Response} response @param {Request} request */
+function addSecurityHeaders(response, request) {
+  if (response.status === 101) return response;
+  const secured = new Response(response.body, response);
+  secured.headers.set("x-frame-options", "DENY");
+  if (new URL(request.url).protocol === "https:")
+    secured.headers.set("strict-transport-security", "max-age=31536000");
+  return secured;
+}
+
 // No other release uses these addresses, so a browser keeps release files except index.html for good.
 const RELEASE_FILE_HEADERS = {
   ...PAGE_HEADERS,
@@ -45,11 +84,11 @@ export const nameReleaseFolder = (commit) => `release/${commit}/`;
 const decodeBase64 = (text) => Uint8Array.from(atob(text), (character) => character.charCodeAt(0));
 const textEncoder = new TextEncoder();
 
-/** @param {Record<string, { contentType: string, text?: string, base64?: string }>} pageFiles */
+/** @param {Record<string, { contentType: string, text?: string, base64?: string, scriptHashes?: string[] }>} pageFiles */
 function decodePageFiles(pageFiles) {
   const files = new Map();
-  for (const [path, { contentType, text, base64 }] of Object.entries(pageFiles)) {
-    files.set(path, { contentType, body: text ?? decodeBase64(base64), etag: null });
+  for (const [path, { contentType, text, base64, scriptHashes }] of Object.entries(pageFiles)) {
+    files.set(path, { contentType, body: text ?? decodeBase64(base64), etag: null, scriptHashes });
   }
   return files;
 }
@@ -156,6 +195,14 @@ function createPageServer(pageFiles, releaseFolder) {
     const etag = body === file.body ? await file.etag : await hashBody(body);
     const headers = {
       "content-type": file.contentType,
+      ...(file.contentType.startsWith("text/html")
+        ? {
+            "content-security-policy": createContentSecurityPolicy(
+              file.scriptHashes ?? [],
+              request,
+            ),
+          }
+        : {}),
       etag,
       ...(path === "index.html" ? PAGE_HEADERS : cacheHeaders),
       ...(path === MANIFEST_PATH ? { vary: "user-agent" } : {}),
@@ -283,7 +330,7 @@ export function createAppWorker({ name, pageFiles, forwardToStore, readFeedFailu
     return page;
   }
 
-  return {
+  const worker = {
     async fetch(request, env = {}) {
       const url = new URL(request.url);
       if (url.pathname === "/robots.txt") return serveRobots(releaseCommit);
@@ -291,6 +338,7 @@ export function createAppWorker({ name, pageFiles, forwardToStore, readFeedFailu
       const prefix = findAppPrefix(url, env);
       const appPath = prefix === null ? null : findAppPath(url.pathname, prefix);
       if (appPath === null) return serveNotFound();
+      if (isUntrustedRequest(request, url)) return respondText("Forbidden.\n", 403);
       if (appPath === "") return redirectToFolder(url);
       if (appPath === ACCESS_PATH) return serveAccess(request, env, prefix);
       if (appPath === HANDOFF_PATH) return serveHandoff(request, env, prefix);
@@ -305,6 +353,11 @@ export function createAppWorker({ name, pageFiles, forwardToStore, readFeedFailu
         return reads[appPath](url, env);
       if (isIndexPath(appPath)) return servePage(request, env, appPath, prefix);
       return servePageFile(request, appPath);
+    },
+  };
+  return {
+    async fetch(request, env = {}) {
+      return addSecurityHeaders(await worker.fetch(request, env), request);
     },
   };
 }
