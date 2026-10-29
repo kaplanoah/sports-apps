@@ -441,15 +441,18 @@ for (const app of listApps()) {
     });
     for (const path of ["index.html", "gate.html"]) {
       const page = files[path].text;
-      const scripts = [...page.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/g)].filter(
-        ([, attributes]) => !/\bsrc=|application\/json/.test(attributes),
-      );
+      const scripts = listParsedNodes(page).flatMap((node) => {
+        if (!("tagName" in node) || node.tagName !== "script") return [];
+        const attributes = Object.fromEntries(node.attrs.map(({ name, value }) => [name, value]));
+        if ("src" in attributes || attributes.type === "application/json") return [];
+        return node.childNodes.map((child) => ("value" in child ? child.value : "")).join("");
+      });
       assert.ok(scripts.length > 0);
       const response = await worker.fetch(new Request(`https://worker.example/k3y/${path}`), {
         APP_KEY: "k3y",
       });
       const policy = response.headers.get("content-security-policy");
-      for (const [, , script] of scripts) {
+      for (const script of scripts) {
         const hash = createHash("sha256").update(script).digest("base64");
         assert.ok(policy.includes(`'sha256-${hash}'`), path);
       }
