@@ -36,7 +36,7 @@ export const TEAM_LINE_EXPECTATIONS = {
   },
   roleSelectors: [
     {
-      selector: ".news-teams .club, .runs-half-head",
+      selector: ".news-teams .club",
       role: "label",
     },
     {
@@ -59,20 +59,12 @@ export const TEAM_LINE_EXPECTATIONS = {
     offset: -1,
   },
   seeds: {
-    small: {
-      before: 0,
-      after: -0.25,
-    },
     team: {
       before: 0,
       after: -0.25,
     },
     large: {
       before: 0.75,
-      after: -0.25,
-    },
-    label: {
-      before: 0,
       after: -0.25,
     },
   },
