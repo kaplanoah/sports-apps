@@ -4,15 +4,86 @@ import {
   PROVIDER_MARKER,
   selectReviewProvider,
   verifyReviewProvider,
+  writeReviewModelQueue,
 } from "../worker/review-provider.mjs";
 import { readLastReview } from "../worker/plan-review.mjs";
 import { writeReviewedHead, SUMMARY_MARKER } from "../worker/review-state.mjs";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createReviewDecisionEnvironment, readStepScript } from "./workflow-step.js";
 import { readRepoFile } from "./repo-files.js";
+
+test("native model jobs share a non-cancelling queued API slot while trial Claude jobs keep separate slots", () => {
+  for (const [path, dependency, command] of [
+    [
+      ".github/workflows/trusted-codex-review.yml",
+      "request",
+      'review-codex.mjs" request "$PORTION"',
+    ],
+    [
+      ".github/workflows/provider-review-session.yml",
+      "request",
+      'review-trial.mjs request "$PORTION"',
+    ],
+    [".github/workflows/codex-runner-proof.yml", "prepare", "prove-codex-runner.mjs prepare"],
+  ]) {
+    const workflow = readRepoFile(path);
+    const model = workflow.split(/^ {2}model:\n/m)[1].split(/^ {2}[\w-]+:\n/m)[0];
+    assert.match(
+      model,
+      new RegExp(
+        `concurrency:\\n {6}group: \\$\\{\\{ needs\\.${dependency}\\.outputs\\.model-queue \\}\\}\\n {6}cancel-in-progress: false\\n {6}queue: max`,
+      ),
+    );
+    const producer = workflow.split(`\n  ${dependency}:\n`)[1].split(/^ {2}[\w-]+:\n/m)[0];
+    assert.match(producer, /model-queue: \$\{\{ steps\.request\.outputs\.model-queue \}\}/);
+    const request = producer.split(/^ {6}- /m).find((step) => /^ {8}id: request$/m.test(step));
+    assert.ok(request);
+    assert.ok(request.includes(command));
+  }
+});
+
+test("one repository Codex slot spans runs and phases without serializing unrelated Claude trials", (context) => {
+  const root = mkdtempSync(join(tmpdir(), "review-model-queue-"));
+  context.after(() => rmSync(root, { recursive: true, force: true }));
+  const env = {
+    GITHUB_REPOSITORY: "example/repository",
+    GITHUB_RUN_ID: "1",
+    GITHUB_OUTPUT: join(root, "output"),
+  };
+  const groups = [];
+  for (const [provider, run, portion, repository] of [
+    ["codex", "1", 1, env.GITHUB_REPOSITORY],
+    ["codex", "2", "integration", env.GITHUB_REPOSITORY],
+    ["codex", "3", "proof", env.GITHUB_REPOSITORY],
+    ["codex", "1", 1, "example/another"],
+    ["claude", "1", 1, env.GITHUB_REPOSITORY],
+    ["claude", "1", 2, env.GITHUB_REPOSITORY],
+    ["claude", "2", 1, env.GITHUB_REPOSITORY],
+  ]) {
+    writeReviewModelQueue(
+      { ...env, GITHUB_RUN_ID: String(run), GITHUB_REPOSITORY: String(repository) },
+      String(provider),
+      portion,
+    );
+    groups.push(readFileSync(env.GITHUB_OUTPUT, "utf8").trim().split("\n").at(-1));
+  }
+  assert.equal(groups[0], groups[1]);
+  assert.equal(groups[1], groups[2]);
+  assert.notEqual(groups[0], groups[3]);
+  assert.equal(new Set(groups.slice(3)).size, 4);
+  for (const { provider, change } of [
+    { provider: "unknown", change: {} },
+    { provider: "codex", change: { GITHUB_REPOSITORY: "private\nvalue" } },
+    { provider: "claude", change: { GITHUB_RUN_ID: "private" } },
+  ])
+    assert.throws(
+      () => writeReviewModelQueue({ ...env, ...change }, provider, 1),
+      /Invalid review model queue identity/,
+    );
+});
 
 /** @param {string} provider @param {string} selection */
 const createComment = (provider, selection) => ({

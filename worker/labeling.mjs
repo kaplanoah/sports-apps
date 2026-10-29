@@ -1,5 +1,5 @@
-// Reads when a pull request's labels were added and when its head was pushed, from its timeline
-// and its head's check suites.
+// Reads when a pull request's labels were added and when a commit was pushed, from its timeline
+// and the commit's check suites.
 import { createGitHub, createGraphQL } from "./github-api.mjs";
 
 export const PHONE_CONTEXT = "phone";
@@ -25,22 +25,22 @@ export const PHONE_OK_LABEL = "phone-ok";
 export const readEventTime = (event) => Date.parse(event.created_at ?? "");
 
 /**
- * Who last added `label` to a pull request, when, and whether they added it after its head commit
- * reached GitHub and after its last force push, from its timeline. A commit's own date is when it
- * was made, which can be long before it was pushed, so the head's arrival comes from GitHub.
+ * Who last added `label` to a pull request, when, and whether they added it after a push and after
+ * its last force push, from its timeline. A commit's own date is when it was made, which can be long
+ * before it was pushed, so the push time comes from GitHub.
  * @param {TimelineEvent[]} events
  * @param {string} label
- * @param {number} headPushedAt when GitHub first saw the head commit, or NaN when it can't say
+ * @param {number} pushedAt when GitHub first saw the pushed commit, or NaN when it can't say
  * @returns {Labeling}
  */
-export function findLabeling(events, label, headPushedAt) {
+export function findLabeling(events, label, pushedAt) {
   const lastAdded = events
     .filter((event) => event.event === "labeled" && event.label?.name === label)
     .toSorted((first, second) => readEventTime(first) - readEventTime(second))
     .at(-1);
   if (!lastAdded) return { labeler: null, addedAt: Number.NaN, isAfterLastPush: false };
   const forcePushes = events.filter((event) => event.event === "head_ref_force_pushed");
-  const lastPush = Math.max(headPushedAt, ...forcePushes.map(readEventTime));
+  const lastPush = Math.max(pushedAt, ...forcePushes.map(readEventTime));
   const addedAt = readEventTime(lastAdded);
   return {
     labeler: lastAdded.actor?.login ?? null,

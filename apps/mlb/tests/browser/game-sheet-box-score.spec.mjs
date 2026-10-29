@@ -146,7 +146,7 @@ test("today's game still to start shows each club's lineup once it's posted, and
     .locator("#seasonGames")
     .getByRole("button", { name: /^Game details: Guardians at White Sox, Thu, Oct 8/ })
     .click();
-  await expect(sheet.getByRole("button", { name: /^Pitching matchup/ })).toBeVisible();
+  await expect(sheet.getByRole("button", { name: /pitching matchup$/ })).toBeVisible();
   await expect(sheet.locator("#gameBody .sheet-part")).toHaveCount(0);
   expect(reads).toEqual([]);
 });

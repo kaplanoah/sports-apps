@@ -115,7 +115,9 @@ test("a game that hasn't started previews the meetings, the season stats, and th
     /Season series\s*Fever won 2-1/,
   );
   await expect(sheet.locator(".meetings li")).toHaveCount(3);
-  await expect(sheet.locator(".meetings li").first()).toHaveText(/Jul 5\s*Fever\s*84-68\s*at Aces/);
+  await expect(sheet.locator(".meetings li").first()).toHaveText(
+    /Jul 5\s*Fever, team details84-68\s*at Aces, team details/,
+  );
   await expect(sheet.locator(".tape-label")).toHaveText([
     "Record",
     "PPG",
@@ -197,14 +199,14 @@ test("a final's box score and a preview's meetings open from what the store keep
 
   const sheet = await openGameSheet(page, ACES_AT_FEVER);
   await expect(sheet.locator(".line-score tbody tr").first()).toHaveText(
-    /Aces\s*26\s*17\s*17\s*29\s*89/,
+    /Aces, team details\s*26\s*17\s*17\s*29\s*89/,
   );
   await sheet.getByRole("button", { name: "Close" }).click();
 
   const preview = await openGameSheet(page, FEVER_AT_ACES);
   await expect(preview.locator(".meetings li")).toHaveCount(3);
   await expect(preview.locator(".meetings li").first()).toHaveText(
-    /Jul 5\s*Fever\s*84-68\s*at Aces/,
+    /Jul 5\s*Fever, team details84-68\s*at Aces, team details/,
   );
 });
 
@@ -289,13 +291,16 @@ test("while its box score loads, the sheet holds the box score's shape, then fil
     "Top scorers",
   ]);
   await expect(sheet.locator(".tape-label")).toHaveCount(8);
-  await expect(sheet.locator(".line-score tbody th")).toHaveText(["Aces", "Fever"]);
+  await expect(sheet.locator(".line-score tbody th")).toHaveText([
+    "Aces, team details",
+    "Fever, team details",
+  ]);
   await expect(sheet.locator(".players tbody tr:not(.players-head)")).toHaveCount(10);
   await expect(sheet.locator(".tape-value .placeholder")).toHaveCount(16);
 
   release();
   await expect(sheet.locator(".line-score tbody tr").first()).toHaveText(
-    /Aces\s*26\s*17\s*17\s*29\s*89/,
+    /Aces, team details\s*26\s*17\s*17\s*29\s*89/,
   );
   await expect(sheet.locator(".placeholder")).toHaveCount(0);
   await expect(body).toHaveAttribute("aria-busy", "false");

@@ -98,6 +98,28 @@ function createAnswer(folder, portion, changes = {}) {
   return JSON.stringify(answer);
 }
 
+test("the native request exports the shared queue before the model job can start", () => {
+  const { folder } = createFixture();
+  const upload = mkdtempSync(join(tmpdir(), "codex-request-"));
+  const output = join(upload, "output");
+  const result = spawnSync(
+    process.execPath,
+    [fileURLToPath(new URL("worker/review-codex.mjs", REPO_ROOT)), "request", "1"],
+    {
+      env: {
+        ...process.env,
+        ...ENV,
+        REVIEW_FOLDER: folder,
+        REVIEW_UPLOAD: upload,
+        GITHUB_OUTPUT: output,
+      },
+      encoding: "utf8",
+    },
+  );
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(readFileSync(output, "utf8"), /^model-queue=[\w./-]+$/m);
+});
+
 test("native portions follow semantic code and tests rather than Claude area counts or line limits", () => {
   const { plan } = createFixture(true);
   const one = { ...plan.areas[0], name: "shared page part 1" };

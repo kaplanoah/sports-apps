@@ -10,16 +10,11 @@ import {
   isRowOutOfSight,
   listShownDays,
   listStripDays,
+  readCellWord,
   readFollowStartUntil,
+  readUnshownCellWords,
 } from "./day-strip-rules.js";
-import {
-  formatLongDate,
-  formatMonth,
-  formatShortMonth,
-  formatShortWeekday,
-  readCalendarDate,
-  readDayOfMonth,
-} from "./days.js";
+import { formatMonth, readCalendarDate, readDayOfMonth } from "./days.js";
 import { dayStripLog } from "./day-strip-log.js";
 import { markBarStuck } from "./held-bar.js";
 import { html, setHtml } from "./html.js";
@@ -124,11 +119,8 @@ function setHeld(next) {
  * @param {string} today
  */
 function renderCellLabel(day, today) {
-  const date = readCalendarDate(day);
-  const label = chooseCellLabel(day, today);
-  if (label === "today") return html`<span class="cell-name">Today</span>`;
-  if (label === "month") return html`<span class="cell-month">${formatShortMonth(date)}</span>`;
-  return html`<span class="cell-name">${formatShortWeekday(date)}</span>`;
+  const kind = chooseCellLabel(day, today) === "month" ? "cell-month" : "cell-name";
+  return html`<span class="${kind}">${readCellWord(day, today)}</span>`;
 }
 
 /**
@@ -136,7 +128,6 @@ function renderCellLabel(day, today) {
  * @param {{ today: string, isListed: boolean, isChosen: boolean }} state
  */
 function renderCell(day, { today, isListed, isChosen }) {
-  const date = readCalendarDate(day);
   const isToday = day === today;
   const label = renderCellLabel(day, today);
   const classes = [
@@ -147,8 +138,8 @@ function renderCell(day, { today, isListed, isChosen }) {
   ]
     .filter(Boolean)
     .join(" ");
-  const content = html`${label}<span class="cell-number${isLedByOne(day) ? " leads-with-one" : ""}">${readDayOfMonth(day)}</span>`;
-  return html`<button type="button" class="${classes}" data-day="${day}" aria-label="${formatLongDate(date)}"${isToday ? html` aria-current="date"` : ""}>${content}</button>`;
+  const content = html`${label} <span class="cell-number${isLedByOne(day) ? " leads-with-one" : ""}">${readDayOfMonth(day)}</span><span class="spoken-only">, ${readUnshownCellWords(day, today)}</span>`;
+  return html`<button type="button" class="${classes}" data-day="${day}"${isToday ? html` aria-current="date"` : ""}>${content}</button>`;
 }
 
 /** @param {DayStripFill} fill */

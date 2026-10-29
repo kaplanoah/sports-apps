@@ -814,14 +814,44 @@ async function verifyHostileReviewIsolation(baseRef) {
         wait: async () => {},
       }),
       null,
-      "a merge whose first parent is not the base branch's tip is never reviewed",
+      "a merge outside the target branch history is never reviewed",
     );
     assert.equal(reads, 6);
   };
   await resolveOffTip(offTip);
   readGit(hostile, ["update-ref", `refs/heads/${baseRef}`, sibling]);
   try {
-    await resolveOffTip(merge);
+    assert.deepEqual(
+      await resolveReviewMerge(event, {
+        readPull: async () => pull,
+        wait: async () => assert.fail("a stale cached merge remains an exact reviewable pair"),
+      }),
+      selection,
+      "main may advance before queued selection without discarding the cached pair",
+    );
+    let reads = 0;
+    assert.deepEqual(
+      await resolveReviewMerge(event, {
+        readPull: async () => {
+          reads++;
+          if (reads === 1) return { ...pull, merge_commit_sha: null };
+          return pull;
+        },
+        wait: async () => {
+          const later = readGit(hostile, [
+            "commit-tree",
+            `${sibling}^{tree}`,
+            "-p",
+            sibling,
+            "-m",
+            "later",
+          ]);
+          readGit(hostile, ["update-ref", `refs/heads/${baseRef}`, later]);
+        },
+      }),
+      selection,
+      "main may advance while selection waits without moving the selected pair",
+    );
   } finally {
     readGit(hostile, ["update-ref", `refs/heads/${baseRef}`, base]);
   }
@@ -1179,7 +1209,7 @@ test("stacked target runs plan and summarize with the same owed and result gates
   assert.doesNotMatch(workflow, /pattern: trusted-review-\*\n/);
 });
 
-test("every review stage reads the base the plan took from the test merge, and the join finds its run by the event's base", () => {
+test("every review stage reads the pinned base and the join verifies the tested pair independently of event metadata", () => {
   const workflow = readRepoFile(".github/workflows/review.yml");
   const readJob = (name) => workflow.split(`  ${name}:\n`)[1].split(/^ {2}[a-z][\w-]*:/m)[0];
   assert.match(readJob("review-plan"), /\n {6}base: \$\{\{ steps.prepare.outputs.base \}\}\n/);
@@ -1192,10 +1222,7 @@ test("every review stage reads the base the plan took from the test merge, and t
     assert.match(called, /\n {6}base:\n {8}type: string\n {8}required: true\n/);
     assert.match(called, /\n {2}REVIEW_BASE: \$\{\{ inputs.base \}\}\n/);
   }
-  assert.match(
-    readRepoFile(".github/workflows/ci.yml"),
-    /REVIEW_EVENT_BASE: \$\{\{ github.event.pull_request.base.sha \}\}\n/,
-  );
+  assert.doesNotMatch(readRepoFile(".github/workflows/ci.yml"), /REVIEW_EVENT_BASE:/);
 });
 
 test("trusted prompts retain the authoritative reporting guide after bootstrap", () => {

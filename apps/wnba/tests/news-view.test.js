@@ -5,6 +5,7 @@ import { pickReadCards } from "../../../shared/page/news-picks.js";
 import { renderNews as renderLeagueNews } from "../../../shared/page/news-view.js";
 import { NEWS_LEAGUE } from "../page/js/news-league.js";
 import { checkInTimeZone, EASTERN } from "../../../tests/time-zone.js";
+import { dropSpokenOnly } from "../../../tests/text.js";
 
 const NOW = Date.parse("2026-10-05T16:00:00Z");
 
@@ -30,7 +31,7 @@ const createStory = (fields) => ({
 
 // Each tag reads as a space, and the page's separator as a bar.
 const readText = (markup) =>
-  markup.text
+  dropSpokenOnly(markup.text)
     .replace(/<[^>]+>/g, " ")
     .replace(/&bull;/g, "|")
     .replace(/&#39;/g, "'")

@@ -95,6 +95,23 @@ test("Search beside the tab bar opens its own view, an empty field ready to type
   expect((await readSearchTabLook(page)).isAccent).toBe(false);
 });
 
+test("Search is the last of the Views tabs, which the arrow keys move through", async ({
+  page,
+}) => {
+  await openSeasonGames(page);
+  const tabs = page.getByRole("tablist", { name: "Views" }).getByRole("tab");
+  await expect(tabs).toHaveCount(4);
+  for (const [index, name] of ["Games", "News", "Search"].entries())
+    await expect(tabs.nth(index + 1)).toHaveAccessibleName(name);
+
+  await tabs.nth(2).focus();
+  await page.keyboard.press("ArrowRight");
+  await expect(tabs.nth(3)).toHaveAttribute("aria-selected", "true");
+  await tabs.nth(3).focus();
+  await page.keyboard.press("ArrowRight");
+  await expect(tabs.nth(0)).toHaveAttribute("aria-selected", "true");
+});
+
 test("the Games tab has no Search of its own", async ({ page }) => {
   await openSeasonGames(page);
   await expect(page.locator("#view-games .go-search")).toHaveCount(0);

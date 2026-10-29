@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { buildSnapshot } from "../page/js/snapshot.js";
 import { renderSeasonSeries } from "../page/js/season-series.js";
+import { dropSpokenOnly } from "../../../tests/text.js";
 
 /** @param {string} name */
 const loadFixture = (name) =>
@@ -19,7 +20,7 @@ const GAMES = Object.values(SNAPSHOT.schedule).flat();
 
 /** @param {unknown} markup */
 const readText = (markup) =>
-  String(markup)
+  dropSpokenOnly(String(markup))
     .replace(/<[^>]+>/g, " ")
     .replace(/\s+/g, " ")
     .trim();

@@ -35,6 +35,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     outputs:
+      model-queue: ${{ steps.request.outputs.model-queue }}
       node-version: ${{ steps.node.outputs.node-version }}
       claude-model: ${{ steps.request.outputs.claude-model }}
       claude-turns: ${{ steps.request.outputs.claude-turns }}
@@ -73,6 +74,10 @@ jobs:
   model:
     needs: request
     if: *trial-authority
+    concurrency:
+      group: ${{ needs.request.outputs.model-queue }}
+      cancel-in-progress: false
+      queue: max
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
