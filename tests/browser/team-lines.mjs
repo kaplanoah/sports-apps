@@ -150,7 +150,7 @@ export const readTeamLines = (page, league) =>
         check(middle(chip) - (middle(name) + (cap - x) / 2), -1, `${description} league chip`);
       }
     }
-    for (const placeholder of document.querySelectorAll(".tbd:not(.club)")) {
+    for (const placeholder of document.querySelectorAll(".matchup-row .tbd, .game-side .club > .tbd")) {
       if (!placeholder.checkVisibility()) continue;
       states.add("TBD");
       const style = getComputedStyle(placeholder);

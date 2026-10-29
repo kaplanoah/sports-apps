@@ -246,6 +246,24 @@ test("a game's dots and seeds follow its name's capital center before it and low
   expect(drawn.attachments).toEqual(
     expect.arrayContaining(["team seed before", "team seed after"]),
   );
+  const row = page
+    .locator("#seasonGames .game-row")
+    .filter({ has: page.locator(".time") })
+    .first();
+  const [name, time] = await Promise.all(
+    [".game-side.away .team-name", ".time"].map((selector) =>
+      row.locator(selector).evaluate((element) => {
+        const box = element.getBoundingClientRect();
+        return {
+          middle: box.top + box.height / 2,
+          height: box.height,
+          size: parseFloat(getComputedStyle(element).fontSize),
+        };
+      }),
+    ),
+  );
+  expect(time.middle).toBeCloseTo(name.middle, 1);
+  expect(time.height).toBeLessThan(time.size * 0.8);
 });
 
 test("a game that may never happen says If necessary in a status's dim ink, a weight lighter than Final", async ({

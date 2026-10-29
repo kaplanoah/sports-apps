@@ -530,6 +530,7 @@ test("a bracket's large dots and outside seeds center on their names without loc
   expect(drawn.problems).toEqual([]);
   expect(drawn.roles).toContain("large");
   expect(drawn.attachments).toContain("outside seed");
+  await expect(page.locator(".team-line .wins").first()).toHaveCSS("translate", "none");
 });
 
 test("each team's wins sit on a block that casts a shadow on the card", async ({ page }) => {
