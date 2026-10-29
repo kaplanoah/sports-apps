@@ -194,6 +194,29 @@ function leaveOutGames(...days) {
   return espn;
 }
 
+test("ESPN's backup keeps a score it sends as a number, and takes one that isn't a number as none", async () => {
+  const espn = structuredClone(ESPN.answers);
+  for (const event of espn[SEP_30].events) {
+    for (const competitor of event.competitions[0].competitors) {
+      competitor.score = competitor.homeAway === "away" ? Number(competitor.score) : "--";
+    }
+  }
+  const league = createLeague({ refuse: { scoreboard: "page" }, espn });
+  const loader = createSnapshotLoader({
+    fetchImpl: league.fetchImpl,
+    now: () => Date.parse(ESPN.now),
+  });
+
+  const snapshot = await loader.loadSnapshot(2026);
+
+  const readScores = (id) => {
+    const game = snapshot.games.find((candidate) => candidate.id === id);
+    return [game.away.score, game.home.score];
+  };
+  assert.deepEqual(readScores("1042600132"), [93, null]);
+  assert.deepEqual(readScores("1042600112"), [100, null]);
+});
+
 test("ESPN's backup reads only its site scoreboard of yesterday and today, which answers a Worker, not its core API, which turns one away", async () => {
   const league = createLeague({ refuse: { scoreboard: "page" }, espn: ESPN.answers });
   const loader = createSnapshotLoader({

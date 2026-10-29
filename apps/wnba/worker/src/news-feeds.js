@@ -1,5 +1,6 @@
 import { readNewsFeeds } from "../../../../shared/worker/news-feeds.js";
 import { parseAtom, parseEspnNews, parseRss } from "../../../../shared/worker/news-parse.js";
+import { ESPN_SITE } from "../../page/js/snapshot.js";
 import { ESPN_HEADERS } from "./wnba.js";
 
 // The outlets the WNBA's news reads, the Liberty's own beat writers among them.
@@ -10,7 +11,7 @@ export const NEWS_FEEDS = [
     id: "espn",
     source: "espn",
     outlet: "ESPN",
-    url: "https://site.api.espn.com/apis/site/v2/sports/basketball/wnba/news?limit=50",
+    url: `${ESPN_SITE}/news?limit=50`,
     parse: (text) => parseEspnNews(JSON.parse(text)),
   },
   {

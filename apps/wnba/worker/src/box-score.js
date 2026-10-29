@@ -2,7 +2,7 @@ import { readGameState } from "../../page/js/snapshot.js";
 import { describeError, respondError, respondJson } from "../../../../shared/worker/responses.js";
 import { nameGameDetailsKey } from "./store-docs.js";
 import { readKeptDoc } from "../../../../shared/worker/store-reads.js";
-import { fetchWnbaJson } from "./wnba.js";
+import { fetchWnbaJson, LIVE_CACHE_SECONDS } from "./wnba.js";
 
 // Reads the league's box score for one game, for the game sheet: each team's points by quarter,
 // its stats, and every player who got in. The store keeps each finished game's
@@ -11,8 +11,6 @@ import { fetchWnbaJson } from "./wnba.js";
 
 /** @typedef {import("../../../../shared/worker/store-reads.js").ReadDoc} ReadDoc */
 
-// A live game's box score changes with every play, so it's kept as briefly as the scoreboard.
-const BOX_SCORE_CACHE_SECONDS = 5;
 export const GAME_ID = /^\d{10}$/;
 // The league's CDN has no box score for a game that hasn't started, and says so with a 403.
 const NOT_YET_STATUSES = [403, 404];
@@ -85,7 +83,7 @@ export async function fetchBoxScore(fetchImpl, id) {
   const response = await fetchWnbaJson(
     fetchImpl,
     nameBoxScoreRequest(id),
-    BOX_SCORE_CACHE_SECONDS,
+    LIVE_CACHE_SECONDS,
     hasBoxScore,
   );
   return describeBoxScore(response);

@@ -394,9 +394,12 @@ function combineSeries(bracketSeries, countedSeries, games) {
 
 const BACKUP_STATES = { pre: "pre", in: "live", post: "final" };
 
-// ESPN's scoreboard gives each score as text.
+// ESPN's scoreboard gives each score as text, and a stand-in game takes one only as a number.
 /** @param {unknown} score */
-const readEspnScore = (score) => (typeof score === "string" && score !== "" ? Number(score) : null);
+function readEspnScore(score) {
+  const value = typeof score === "string" && score.trim() !== "" ? Number(score) : score;
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
 
 // An ESPN scoreboard game's competition, when it starts, and its teams, home and away, each as
 // `readCompetitorDetails` reads it.

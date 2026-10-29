@@ -63,8 +63,8 @@ export const fetchEspnJson = (fetchImpl, url, cacheSeconds) =>
     cacheSeconds,
   });
 
-// How long the edge keeps an answer with live scores, the league's or ESPN's backup for them, so
-// each update of the snapshot reads fresh ones.
+// How long the edge keeps an answer with live scores, the league's scoreboard and box score or
+// ESPN's backup for them, so each update of the snapshot and of a watched game reads fresh ones.
 export const LIVE_CACHE_SECONDS = 5;
 
 /**
