@@ -10,6 +10,7 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { formatJobOutputs, listJobs as listPlanJobs, writeReview } from "../worker/plan-review.mjs";
 import { buildNodeTestArgs } from "../worker/node-tests.mjs";
 import { findRefusal } from "../worker/review-git.mjs";
@@ -35,6 +36,54 @@ const WORKFLOWS = readdirSync(new URL(".github/workflows/", REPO_ROOT)).filter((
 // Trusted review calls its area workflow once for each review area.
 const REVIEW_WORKFLOW = "review.yml";
 const AREA_WORKFLOW = "trusted-review-area.yml";
+
+test("hosted provider-history smoke uses the existing PR-only read token and never changes selection", () => {
+  const workflow = readRepoFile(".github/workflows/ci.yml");
+  const checks = workflow.split("\n  checks:\n")[1].split("\n  scope:\n")[0];
+  const permissions = checks.split("permissions:\n")[1].split("    steps:")[0];
+  assert.match(permissions, /pull-requests: read/);
+  assert.doesNotMatch(permissions, /issues:|write/);
+  const script = readStepScript(
+    workflow,
+    "Verify provider history with the PR-scoped token",
+  ).replace(/^ {10}/gm, "");
+  const folder = mkdtempSync(join(tmpdir(), "provider-history-token-"));
+  try {
+    const preload = join(folder, "api.mjs");
+    writeFileSync(
+      preload,
+      `
+      import { createTimelineAnswer } from ${JSON.stringify(new URL("./timeline.js", import.meta.url).href)};
+      globalThis.fetch = async (url, request) => {
+        if (String(url).includes('/issues/1/comments?')) {
+          if (request.method !== 'GET') throw new Error('Unexpected write');
+          return Response.json([]);
+        }
+        if (url !== 'https://api.github.com/graphql' || /mutation/.test(JSON.parse(request.body).query)) throw new Error('Unexpected API request');
+        return Response.json(process.env.FAIL_HISTORY === 'true' ? { errors: [{ message: 'Unavailable' }] } : createTimelineAnswer([]));
+      };
+    `,
+    );
+    for (const failed of [false, true]) {
+      const result = spawnSync("bash", ["-e", "-c", script], {
+        cwd: fileURLToPath(REPO_ROOT),
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          NODE_OPTIONS: [process.env.NODE_OPTIONS, `--import=${preload}`].filter(Boolean).join(" "),
+          GITHUB_REPOSITORY: "example/repository",
+          PR: "1",
+          GH_TOKEN: "example",
+          FAIL_HISTORY: String(failed),
+        },
+      });
+      assert.equal(result.status === 0, !failed, result.stderr);
+      assert.equal(result.stdout.includes("Provider history is readable"), !failed);
+    }
+  } finally {
+    rmSync(folder, { recursive: true, force: true });
+  }
+});
 
 // A tag can be moved to other code, so each action is named by its commit, which can't. A
 // workflow of this repo's own runs from the same commit as the one that calls it.

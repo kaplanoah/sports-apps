@@ -681,6 +681,7 @@ function invokeJoin(fixture, changes = {}, args = []) {
     preload,
     `
     import { appendFileSync } from 'node:fs';
+    import { createTimelineAnswer } from ${JSON.stringify(new URL("./timeline.js", import.meta.url).href)};
     let now = 0, reads = 0;
     const fixture = ${JSON.stringify(fixture)};
     const record = (value) => appendFileSync(${JSON.stringify(calls)}, JSON.stringify(value) + '\\n');
@@ -700,11 +701,9 @@ function invokeJoin(fixture, changes = {}, args = []) {
           conclusion: fixture.failure ? 'failure' : 'success'
         }] });
       }
-      if (path.includes('/issues/1/comments?')) return Response.json([]);
-      if (path === '/graphql') return Response.json({ data: { repository: { pullRequest: { timelineItems: {
-        nodes: (fixture.providerEvents ?? []).map((event) => ({ ...event, __typename: 'LabeledEvent' })),
-        pageInfo: { hasNextPage: false, endCursor: null }
-      } } } } });
+      if (path.includes('/issues/1/comments?')) return Response.json(fixture.providerComments ?? []);
+      if (path.startsWith('/repos/example/repository/issues/events/')) return Response.json(fixture.providerLegacy);
+      if (path === '/graphql') return Response.json(createTimelineAnswer(fixture.providerEvents ?? []));
       if (path.includes('/actions/runs/7/artifacts?'))
         return Response.json({ artifacts: [{ name: 'trusted-review-passed-' + fixture.tree, workflow_run: { id: 7 } }] });
       throw new Error('Unexpected API request: ' + path);
@@ -803,6 +802,56 @@ test("real CLI deadline derives from job timeout and bounds API use while absent
   }
   const invalid = invokeJoin(fixture, { REVIEW_TIMEOUT_MINUTES: "10" });
   assert.match(invalid.stderr, /longer than its finish budget/);
+});
+
+test("real verify CLI binds saved node and legacy selections to complete live provider history", () => {
+  const fixture = { ...createMergeFixture(), source: TREE };
+  const event = {
+    id: "LE_saved",
+    event: "labeled",
+    actor: { login: "example" },
+    label: { name: "review-provider:codex" },
+  };
+  for (const selection of ["node:LE_saved", "12"]) {
+    const folder = createFolder();
+    const identity = readReviewIdentity({
+      ...ID_ENV,
+      REVIEW_HEAD: fixture.head,
+      REVIEW_BASE: fixture.tip,
+      REVIEW_MERGE: fixture.merge,
+      REVIEW_TRUSTED: fixture.source,
+      REVIEW_PROVIDER: "codex",
+      REVIEW_SELECTION: selection,
+    });
+    sealResult(folder, { identity, tree: fixture.tree, passed: true }, identity);
+    const selected = {
+      ...fixture,
+      providerEvents: [event],
+      providerComments: [
+        {
+          user: { login: "github-actions[bot]" },
+          body: `<!-- trusted-review-provider ${JSON.stringify({ provider: "codex", selection })} -->\nChoice.`,
+        },
+      ],
+      providerLegacy: {
+        ...event,
+        id: 12,
+        node_id: event.id,
+        issue: { number: 1, url: "https://api.github.com/repos/example/repository/issues/1" },
+      },
+    };
+    const verified = invokeJoin(selected, {}, ["verify", folder]);
+    assert.equal(verified.status, 0, verified.stderr);
+    assert.equal(verified.output, `tree=${fixture.tree}\n`);
+    for (const events of [
+      [],
+      [event, { ...event, id: "LE_new", label: { name: "review-provider:claude" } }],
+    ]) {
+      const rejected = invokeJoin({ ...selected, providerEvents: events }, {}, ["verify", folder]);
+      assert.notEqual(rejected.status, 0);
+      assert.equal(rejected.output, "");
+    }
+  }
 });
 
 test("real verify CLI accepts the merge CI tested, though the event's base lags, and rejects any other", () => {

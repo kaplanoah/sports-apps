@@ -8,16 +8,20 @@ import { measureReviewTokens, readCodexEvents, retainCodexUsage } from "./review
 import { hashReviewContent } from "./review-supplied.mjs";
 import { gatherCandidates } from "./judge-review.mjs";
 
+const PROOF_TIMEOUTS = Object.freeze({ runner: 20, interruption: 5, integration: 20 });
+
 /** @param {string | undefined} value */
 export function readCodexProofScenario(value) {
   const scenario = value || "runner";
-  if (!["runner", "interruption", "integration"].includes(scenario))
-    throw new Error("Unknown Codex proof scenario.");
+  if (!Object.hasOwn(PROOF_TIMEOUTS, scenario)) throw new Error("Unknown Codex proof scenario.");
   return scenario;
 }
 
+/** @param {string | undefined} scenario */
+export const readCodexProofTimeout = (scenario) => PROOF_TIMEOUTS[readCodexProofScenario(scenario)];
+
 /** @param {string} checkout @param {string[]} args */
-function readFixtureGit(checkout, args) {
+function invokeFixtureGit(checkout, args) {
   return execFileSync("git", ["-C", checkout, ...args], {
     encoding: "utf8",
     env: {
@@ -48,9 +52,9 @@ function writeIntegrationFixtureHistory(checkout) {
       mkdirSync(dirname(join(checkout, file)), { recursive: true });
       writeFileSync(join(checkout, file), contents[position]);
     });
-    readFixtureGit(checkout, ["add", "--", ...files]);
-    readFixtureGit(checkout, ["commit", "--quiet", "-m", `Fixture ${index + 1}`]);
-    return readFixtureGit(checkout, ["rev-parse", "HEAD"]);
+    invokeFixtureGit(checkout, ["add", "--", ...files]);
+    invokeFixtureGit(checkout, ["commit", "--quiet", "-m", `Fixture ${index + 1}`]);
+    return invokeFixtureGit(checkout, ["rev-parse", "HEAD"]);
   });
   return { files, base: commits[0], head: commits[1] };
 }
@@ -75,8 +79,14 @@ function writeIntegrationFixturePlan(data, checkout, fixture) {
   fixture.files.forEach((file, index) =>
     writeFileSync(
       join(data, `first/${index + 1}.diff`),
-      readFixtureGit(checkout, ["diff", "--no-ext-diff", fixture.base, fixture.head, "--", file]) +
-        "\n",
+      invokeFixtureGit(checkout, [
+        "diff",
+        "--no-ext-diff",
+        fixture.base,
+        fixture.head,
+        "--",
+        file,
+      ]) + "\n",
     ),
   );
   writeFileSync(join(data, "plan.json"), JSON.stringify(plan));

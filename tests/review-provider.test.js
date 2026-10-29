@@ -16,6 +16,7 @@ import { join } from "node:path";
 import { createReviewDecisionEnvironment, readStepScript } from "./workflow-step.js";
 import { readRepoFile } from "./repo-files.js";
 import { readReviewIdentity } from "../worker/review-data.mjs";
+import { createTimelineAnswer } from "./timeline.js";
 
 test("native model jobs share a non-cancelling queued API slot while trial Claude jobs keep separate slots", () => {
   for (const [path, dependency, command] of [
@@ -92,7 +93,7 @@ const createComment = (provider, selection) => ({
   user: { login: "github-actions[bot]" },
   body: `${PROVIDER_MARKER}${JSON.stringify({ provider, selection })} -->\nProvider choice.`,
 });
-/** @param {string | number} id @param {string} provider @param {string} [actor] */
+/** @param {string} id @param {string} provider @param {string} [actor] */
 const createEvent = (id, provider, actor = "example") => ({
   id,
   event: "labeled",
@@ -104,21 +105,7 @@ const createEvent = (id, provider, actor = "example") => ({
 function createTimelineFetch(readEvents) {
   return async (url) => {
     assert.equal(url, "https://api.github.com/graphql");
-    return Response.json({
-      data: {
-        repository: {
-          pullRequest: {
-            timelineItems: {
-              nodes: readEvents().map((event) => ({
-                ...event,
-                __typename: event.event === "unlabeled" ? "UnlabeledEvent" : "LabeledEvent",
-              })),
-              pageInfo: { hasNextPage: false, endCursor: null },
-            },
-          },
-        },
-      },
-    });
+    return Response.json(createTimelineAnswer(readEvents()));
   };
 }
 
@@ -133,31 +120,16 @@ test("authoritative label history preserves a newer choice omitted by REST timel
     }
     assert.equal(path, "/issues/events/11");
     return {
-      ...createEvent(11, "codex"),
+      ...createEvent("LE_new", "codex"),
+      id: 11,
       node_id: "LE_new",
       issue: { number: 1, url: "https://api.github.com/repos/example/repository/issues/1" },
     };
   };
-  const fetchImpl = async (url) => {
-    assert.equal(url, "https://api.github.com/graphql");
-    return new Response(
-      JSON.stringify({
-        data: {
-          repository: {
-            pullRequest: {
-              timelineItems: {
-                nodes: [
-                  { ...createEvent("LE_old", "claude"), __typename: "LabeledEvent" },
-                  { ...createEvent("LE_new", "codex"), __typename: "LabeledEvent" },
-                ],
-                pageInfo: { hasNextPage: false, endCursor: null },
-              },
-            },
-          },
-        },
-      }),
-    );
-  };
+  const fetchImpl = createTimelineFetch(() => [
+    createEvent("LE_old", "claude"),
+    createEvent("LE_new", "codex"),
+  ]);
   const result = await readReviewProvider(env, readGitHub, fetchImpl);
   assert.deepEqual(result.choice, { provider: "codex", selection: "11" });
   assert.equal(timelineReads, 0);
@@ -267,7 +239,8 @@ test("connection order distinguishes rapid switches without comparing opaque IDs
 test("legacy epochs require the exact owner event and this PR before keeping sealed results reusable", async () => {
   const env = { GITHUB_REPOSITORY: "example/repository", PR: "1" };
   const legacy = {
-    ...createEvent(12, "codex"),
+    ...createEvent("LE_anchor", "codex"),
+    id: 12,
     node_id: "LE_anchor",
     issue: { number: 1, url: "https://api.github.com/repos/example/repository/issues/1" },
   };
@@ -300,45 +273,26 @@ test("all GraphQL pages are required and a missing or nonadvancing page holds pr
     const { variables, query } = JSON.parse(request.body);
     assert.match(query, /on LabeledEvent \{ id /);
     cursors.push(variables.after);
-    return Response.json({
-      data: {
-        repository: {
-          pullRequest: {
-            timelineItems: {
-              nodes: [
-                {
-                  ...createEvent(
-                    variables.after ? "LE_last" : "LE_first",
-                    variables.after ? "codex" : "claude",
-                  ),
-                  __typename: "LabeledEvent",
-                },
-              ],
-              pageInfo: { hasNextPage: !variables.after, endCursor: "cursor" },
-            },
-          },
-        },
-      },
-    });
+    const answer = createTimelineAnswer([
+      createEvent(variables.after ? "LE_last" : "LE_first", variables.after ? "codex" : "claude"),
+    ]);
+    answer.data.repository.pullRequest.timelineItems.pageInfo = {
+      hasNextPage: !variables.after,
+      endCursor: "cursor",
+    };
+    return Response.json(answer);
   };
   assert.equal(
     (await readReviewProvider(env, readGitHub, fetchImpl)).choice.selection,
     "node:LE_last",
   );
   assert.deepEqual(cursors, [null, "cursor"]);
-  for (const response of [
-    { data: {} },
-    { errors: [{ message: "Unavailable" }] },
-    {
-      data: {
-        repository: {
-          pullRequest: {
-            timelineItems: { nodes: [], pageInfo: { hasNextPage: true, endCursor: "cursor" } },
-          },
-        },
-      },
-    },
-  ])
+  const stalled = createTimelineAnswer([]);
+  stalled.data.repository.pullRequest.timelineItems.pageInfo = {
+    hasNextPage: true,
+    endCursor: "cursor",
+  };
+  for (const response of [{ data: {} }, { errors: [{ message: "Unavailable" }] }, stalled])
     await assert.rejects(readReviewProvider(env, readGitHub, async () => Response.json(response)));
 });
 
@@ -379,8 +333,7 @@ test("publication rechecks the live provider and rejects a same-code switch, inc
     REVIEW_SELECTION: "initial",
   };
   let events = [];
-  const readGitHub = async (path) =>
-    path.includes("/timeline?") ? events : [createComment("claude", "initial")];
+  const readGitHub = async () => [createComment("claude", "initial")];
   const fetchImpl = createTimelineFetch(() => events);
   await verifyReviewProvider(env, readGitHub, fetchImpl);
   events = [createEvent("LE_2", "codex")];

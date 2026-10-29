@@ -303,6 +303,30 @@ test("the trusted shell capture keeps native events out of stdout and preserves 
   );
 });
 
+test("offline native configuration disables web search without changing live configuration", () => {
+  for (const offline of [undefined, "true"]) {
+    const folder = mkdtempSync(join(tmpdir(), "codex-offline-config-"));
+    const result = spawnSync(
+      process.execPath,
+      [fileURLToPath(new URL("worker/review-codex.mjs", REPO_ROOT)), "config"],
+      {
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          RUNNER_TEMP: folder,
+          REVIEW_CHECKOUT: folder,
+          REVIEW_OFFLINE: offline,
+        },
+      },
+    );
+    assert.equal(result.status, 0, result.stderr);
+    const config = readFileSync(join(folder, "codex-home/config.toml"), "utf8");
+    assert.equal(config.includes('web_search = "disabled"'), offline === "true");
+    assert.match(config, /unbounded_connection_retries = false/);
+    assert.match(config, /inherit = "none"/);
+  }
+});
+
 test("a contained session receives all content and verifies every candidate without fake Read events", () => {
   const { folder, plan } = createFixture();
   const request = buildCodexRequest(folder, 1, IDENTITY);

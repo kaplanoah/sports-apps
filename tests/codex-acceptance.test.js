@@ -7,6 +7,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   readCodexProofScenario,
+  readCodexProofTimeout,
   verifyEmptyCodexIntegration,
 } from "../worker/codex-acceptance.mjs";
 import { inspectCodexInterruption } from "../worker/prove-codex-runner.mjs";
@@ -49,7 +50,7 @@ test("proof scenarios are explicit and never imply another model execution", () 
   assert.equal(readCodexProofScenario(undefined), "runner");
   for (const scenario of ["runner", "interruption", "integration"])
     assert.equal(readCodexProofScenario(scenario), scenario);
-  for (const scenario of ["other", "integration\nrunner", "retry"])
+  for (const scenario of ["other", "integration\nrunner", "retry", "constructor", "__proto__"])
     assert.throws(() => readCodexProofScenario(scenario));
   const workflow = readRepoFile(".github/workflows/codex-runner-proof.yml");
   assert.match(workflow, /options: \[runner, interruption, integration\]/);
@@ -57,6 +58,11 @@ test("proof scenarios are explicit and never imply another model execution", () 
     workflow,
     /timeout-minutes: \$\{\{ fromJSON\(needs.prepare.outputs.model-timeout\) \}\}/,
   );
+  const modelMinutes = Number(workflow.split("\n  model:\n")[1].match(/timeout-minutes: (\d+)/)[1]);
+  for (const scenario of ["runner", "interruption", "integration"])
+    assert.ok(readCodexProofTimeout(scenario) <= modelMinutes - 10);
+  assert.equal(readCodexProofTimeout("interruption"), 5);
+  assert.equal(readCodexProofTimeout("integration"), 20);
   assert.equal(workflow.match(/uses: openai\/codex-action@/g).length, 1);
   assert.doesNotMatch(
     workflow,
@@ -88,6 +94,7 @@ test("an unfinished native wait is only an interruption candidate until the actu
     [PROBE_EVENT, WAIT_EVENT, USAGE_EVENT],
     [PROBE_EVENT, WAIT_EVENT, { type: "error" }],
     [PROBE_EVENT, WAIT_EVENT, { type: "turn.failed" }],
+    [WAIT_EVENT, PROBE_EVENT],
     [PROBE_EVENT, { ...WAIT_EVENT, item: { ...WAIT_EVENT.item, id: "probe" } }],
     [PROBE_EVENT, { ...WAIT_EVENT, item: { ...WAIT_EVENT.item, id: undefined } }],
     [PROBE_EVENT, { ...WAIT_EVENT, item: { ...WAIT_EVENT.item, command: "echo fake" } }],

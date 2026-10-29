@@ -93,7 +93,7 @@ Before activation, record the separate provider measurements described in `TRUST
 
 ### Bounded native acceptance checks
 
-The owner-only `Prove Codex hosted runner` dispatch accepts one scenario per first-attempt run. The default `runner` keeps the security smoke proof. Neither preparation nor a successful proof enables live reviews. Each native action uses the existing shared queue, protected admission, credential isolation, encrypted evidence and cleanup. There is no automatic workflow or model retry.
+The owner-only `Prove Codex hosted runner` dispatch accepts one scenario per first-attempt run. The default `runner` keeps the security smoke proof with a twenty-minute native step limit, leaving time for collection within the sixty-minute job. Neither preparation nor a successful proof enables live reviews. Each native action uses the existing shared queue, protected admission, credential isolation, encrypted evidence and cleanup. There is no automatic workflow or model retry.
 
 | Scenario | Bound and evidence | What it does not prove |
 | --- | --- | --- |

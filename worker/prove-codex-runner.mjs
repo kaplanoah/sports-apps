@@ -1,5 +1,4 @@
 import { execFileSync } from "node:child_process";
-import { createHash } from "node:crypto";
 import {
   appendFileSync,
   copyFileSync,
@@ -22,8 +21,10 @@ import { writeReviewModelQueue } from "./review-provider.mjs";
 import {
   prepareEmptyCodexIntegration,
   readCodexProofScenario,
+  readCodexProofTimeout,
   verifyEmptyCodexIntegration,
 } from "./codex-acceptance.mjs";
+import { hashReviewContent } from "./review-supplied.mjs";
 
 class CodexProofError extends Error {}
 
@@ -87,13 +88,13 @@ function prepareCodexProof(env) {
     process.execPath,
     [fileURLToPath(new URL("./review-codex.mjs", import.meta.url)), "config"],
     {
-      env: { ...env, REVIEW_CHECKOUT: join(folder, "checkout") },
+      env: {
+        ...env,
+        REVIEW_CHECKOUT: join(folder, "checkout"),
+        REVIEW_OFFLINE: String(scenario === "integration"),
+      },
     },
   );
-  if (scenario === "integration") {
-    const config = join(env.RUNNER_TEMP, "codex-home/config.toml");
-    writeFileSync(config, 'web_search = "disabled"\n' + readFileSync(config, "utf8"));
-  }
   execFileSync("tar", [
     "-czf",
     join(env.RUNNER_TEMP, "codex-proof-input.tgz"),
@@ -103,10 +104,7 @@ function prepareCodexProof(env) {
     "codex-home",
   ]);
   writeReviewModelQueue(env, "codex", "proof");
-  appendFileSync(
-    env.GITHUB_OUTPUT,
-    `model-timeout=${{ runner: 60, interruption: 5, integration: 20 }[scenario]}\n`,
-  );
+  appendFileSync(env.GITHUB_OUTPUT, `model-timeout=${readCodexProofTimeout(scenario)}\n`);
 }
 
 /** @param {string} transcript @param {string} output @param {string} probePath */
@@ -132,7 +130,7 @@ export function verifyCodexProof(transcript, output, probePath) {
     nativeToolProof: true,
     structuredAnswer: true,
     tokens: measureReviewTokens(usage, "codex"),
-    transcriptSha256: createHash("sha256").update(transcript).digest("hex"),
+    transcriptSha256: hashReviewContent(transcript),
   };
 }
 
@@ -178,8 +176,12 @@ export function inspectCodexInterruption(transcript, probePath, outcome) {
       event.item?.type === "command_execution" &&
       /^(sleep 3600|\/(bin|usr\/bin)\/(bash|sh) -l?c 'sleep 3600')$/.test(event.item.command),
   );
+  const probeIndex = events.findIndex(
+    (event) => event.type === "item.completed" && event.item?.type === "command_execution",
+  );
   if (
     waiting.length !== 1 ||
+    events.indexOf(waiting[0]) <= probeIndex ||
     typeof waiting[0].item.id !== "string" ||
     events.some((event) => event.type === "item.completed" && event.item?.id === waiting[0].item.id)
   )
@@ -189,7 +191,7 @@ export function inspectCodexInterruption(transcript, probePath, outcome) {
     interruptionCandidate: true,
     workflowTimeoutVerificationRequired: true,
     nativeOutcome: outcome,
-    transcriptSha256: createHash("sha256").update(transcript).digest("hex"),
+    transcriptSha256: hashReviewContent(transcript),
   };
 }
 

@@ -238,6 +238,7 @@ function writeCodexConfig(env) {
   writeFileSync(
     join(folder, "config.toml"),
     [
+      ...(env.REVIEW_OFFLINE === "true" ? ['web_search = "disabled"'] : []),
       "project_doc_max_bytes = 0",
       'approval_policy = "never"',
       createBoundedNativeConfig().trimEnd(),

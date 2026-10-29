@@ -22,6 +22,7 @@ import {
   reconcileReviewPublication,
 } from "../worker/publish-trusted-review.mjs";
 import { readRepoFile } from "./repo-files.js";
+import { createTimelineAnswer } from "./timeline.js";
 
 const HEAD = "a".repeat(40);
 const BASE = "b".repeat(40);
@@ -167,7 +168,6 @@ function createHarness() {
     suites: null,
     changeWriteAnswer: (answer) => answer,
     async readGitHub(path) {
-      if (path.startsWith("/issues/1/timeline?")) return state.providerEvents;
       if (path.startsWith("/issues/1/comments?")) return state.providerComments;
       if (path === "") return { full_name: REPOSITORY, id: 1 };
       if (path.startsWith("/pulls?")) return state.pulls;
@@ -204,21 +204,7 @@ function createHarness() {
     },
     async fetchImpl(url) {
       if (url === "https://api.github.com/graphql")
-        return Response.json({
-          data: {
-            repository: {
-              pullRequest: {
-                timelineItems: {
-                  nodes: state.providerEvents.map((event) => ({
-                    ...event,
-                    __typename: "LabeledEvent",
-                  })),
-                  pageInfo: { hasNextPage: false, endCursor: null },
-                },
-              },
-            },
-          },
-        });
+        return Response.json(createTimelineAnswer(state.providerEvents));
       const id = Number(String(url).match(/artifacts\/(\d+)\/zip$/)?.[1]);
       assert.ok(state.archives.has(id));
       return new Response(state.archives.get(id));
