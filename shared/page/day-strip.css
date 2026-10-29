@@ -134,7 +134,7 @@
 }
 .day-cell.is-today .cell-name,
 .day-name.is-tomorrow {
-  --type-label-tracking: 0.02em;
+  letter-spacing: var(--type-relative-label-tracking);
 }
 .cell-number {
   font-size: var(--type-body-size);

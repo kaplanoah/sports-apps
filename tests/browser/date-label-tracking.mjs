@@ -3,6 +3,8 @@ import { readRole } from "./type-roles.mjs";
 import { SCREENS } from "./themes.mjs";
 import { THEMES, showTheme } from "./theme-layout.mjs";
 
+const RELATIVE_DAY_TRACKING = 0.02;
+
 /**
  * @param {import("@playwright/test").TestType<any, any>} test
  * @param {import("@playwright/test").Expect<any>} expect
@@ -33,7 +35,7 @@ export function testDateLabelTracking(test, expect, app) {
         await showTheme(page, theme);
         const label = await readRole(page, "label");
         expect(label.spacing).toBeCloseTo(app.size * app.labelTracking, 6);
-        await expect(word).toHaveCSS("letter-spacing", `${app.size * 0.02}px`);
+        await expect(word).toHaveCSS("letter-spacing", `${app.size * RELATIVE_DAY_TRACKING}px`);
         await expect(word).toHaveCSS("font-size", `${app.size}px`);
         await expect(word).toHaveCSS("font-weight", String(app.weight));
         expect(await word.evaluate((element) => getComputedStyle(element).fontFamily)).toContain(
@@ -49,7 +51,10 @@ export function testDateLabelTracking(test, expect, app) {
           );
           await expect(tomorrow).toHaveAccessibleName(app.tomorrow.accessibleName);
           await expect(tomorrow.locator(".day-name")).toHaveText("Tmrw");
-          await expect(tomorrow.locator(".day-name")).toHaveCSS("letter-spacing", "0.26px");
+          await expect(tomorrow.locator(".day-name")).toHaveCSS(
+            "letter-spacing",
+            `${app.size * RELATIVE_DAY_TRACKING}px`,
+          );
           await expect(tomorrow.locator(".day-name")).toHaveCSS("font-size", `${app.size}px`);
           await expect(tomorrow.locator(".day-name")).toHaveCSS(
             "font-weight",
@@ -75,7 +80,7 @@ export function testDateLabelTracking(test, expect, app) {
       await page.locator("#seasonGames .go-today").focus();
       await page.keyboard.press("Enter");
       await expect(today).toHaveClass(/is-chosen/);
-      await expect(word).toHaveCSS("letter-spacing", `${app.size * 0.02}px`);
+      await expect(word).toHaveCSS("letter-spacing", `${app.size * RELATIVE_DAY_TRACKING}px`);
       expect(await today.boundingBox()).toEqual(before);
     });
   }
@@ -99,14 +104,20 @@ export function testDateLabelTracking(test, expect, app) {
     await page.clock.runFor(100);
     const copy = page.locator("#seasonGames .strip-lens .day-cell.is-today .cell-name");
     await expect(copy).toHaveCount(1);
-    await expect(copy).toHaveCSS("letter-spacing", `${app.size * 0.02}px`);
-    await expect(today.locator(".cell-name")).toHaveCSS("letter-spacing", `${app.size * 0.02}px`);
+    await expect(copy).toHaveCSS("letter-spacing", `${app.size * RELATIVE_DAY_TRACKING}px`);
+    await expect(today.locator(".cell-name")).toHaveCSS(
+      "letter-spacing",
+      `${app.size * RELATIVE_DAY_TRACKING}px`,
+    );
     await expect(page.locator('#seasonGames [aria-current="date"]')).toHaveCount(1);
     await page.clock.runFor(1500);
     await expect(page.locator("#seasonGames .strip-lens")).toHaveCount(0);
     await page.locator("#seasonGames .go-today").click();
     await page.clock.runFor(1500);
     await expect(today).toHaveClass(/is-chosen/);
-    await expect(today.locator(".cell-name")).toHaveCSS("letter-spacing", `${app.size * 0.02}px`);
+    await expect(today.locator(".cell-name")).toHaveCSS(
+      "letter-spacing",
+      `${app.size * RELATIVE_DAY_TRACKING}px`,
+    );
   });
 }
