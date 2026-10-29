@@ -26,7 +26,7 @@ export const FEED_HEADERS = {
   "sec-fetch-site": "same-site",
 };
 
-// ESPN answers any caller, so it needs only to be asked for JSON.
+// ESPN's site feeds answer a Worker when asked for JSON, though its core API turns one away.
 export const ESPN_HEADERS = {
   accept: "application/json",
   "user-agent": FEED_HEADERS["user-agent"],

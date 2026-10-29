@@ -32,7 +32,6 @@ export const nameScheduleKey = (year) => `schedules/${year}`;
 
 const WNBA_CDN = "https://cdn.wnba.com";
 const WNBA_STATS = "https://stats.wnba.com";
-const ESPN_CORE = "https://sports.core.api.espn.com/v2/sports/basketball/leagues/wnba";
 const ESPN_SITE = "https://site.api.espn.com/apis/site/v2/sports/basketball/wnba";
 
 const LEAGUE_FEEDS = ["bracket", "schedule", "scoreboard", "standings"];
@@ -48,15 +47,9 @@ export const REQUESTS = {
     `${WNBA_STATS}/stats/leaguestandingsv3?LeagueID=10&Season=${season}&SeasonType=Regular+Season`,
 };
 
-export const BACKUP_REQUESTS = {
-  /**
-   * @param {string} firstDay as YYYYMMDD
-   * @param {string} lastDay as YYYYMMDD
-   */
-  events: (firstDay, lastDay) => `${ESPN_CORE}/events?dates=${firstDay}-${lastDay}`,
-  /** @param {string} eventId */
-  competition: (eventId) => `${ESPN_CORE}/events/${eventId}/competitions/${eventId}`,
-};
+// ESPN's scoreboard answers for one day at a time, with each game's clock and scores.
+/** @param {string} day as YYYYMMDD */
+export const BACKUP_REQUEST = (day) => `${ESPN_SITE}/scoreboard?dates=${day}`;
 
 // A month's scoreboard holds every game ESPN lists that month, with room to spare.
 /** @param {string} month as YYYYMM */
@@ -397,17 +390,23 @@ function combineSeries(bracketSeries, countedSeries, games) {
 
 const BACKUP_STATES = { pre: "pre", in: "live", post: "final" };
 
-/** @param {{ competition: any, status: any, scores: any[] }} answers */
-function readBackupGame({ competition, status, scores }) {
+// ESPN's scoreboard gives each score as text.
+/** @param {unknown} score */
+const readEspnScore = (score) => (typeof score === "string" && score !== "" ? Number(score) : null);
+
+/** @param {any} event */
+function readBackupGame(event) {
+  const competition = event.competitions?.[0] ?? {};
+  const status = competition.status ?? event.status;
   const state = BACKUP_STATES[status?.type?.state] ?? "pre";
   const sides = Object.fromEntries(
-    competition.competitors.map((competitor, index) => [
+    (competition.competitors ?? []).map((competitor) => [
       competitor.homeAway,
-      { team: findTeamCodeByEspnId(competitor.id), score: scores[index]?.value ?? null },
+      { team: findTeamCodeByEspnId(competitor.id), score: readEspnScore(competitor.score) },
     ]),
   );
   return {
-    start: competition.date,
+    start: competition.date ?? event.date,
     state,
     status: status?.type?.shortDetail?.trim() || "",
     period: state === "pre" ? null : (status?.period ?? null),
@@ -634,11 +633,13 @@ export function listScheduledStarts(schedule, season) {
 }
 
 /**
- * @param {{ scoreboard?: any, schedule?: any, bracket?: any, standings?: any, backup?: { games: any[] } | null, networks?: any[] | null }} responses
+ * @param {{ scoreboard?: any, schedule?: any, bracket?: any, standings?: any, backup?: { answers: any[] } | null, networks?: any[] | null }} responses
  * @param {{ season: number, now?: number }} options
  */
 export function buildSnapshot(responses, { season, now = Date.now() }) {
-  const backupGames = (responses.backup?.games ?? []).map(readBackupGame);
+  const backupGames = (responses.backup?.answers ?? [])
+    .flatMap((answer) => answer.events ?? [])
+    .map(readBackupGame);
   const leagueGames = mergeGames(responses.schedule, responses.scoreboard, season);
   const standIns = matchBackupGames(
     listGamesForBackup(leagueGames, responses, season),
