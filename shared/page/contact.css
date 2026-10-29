@@ -21,7 +21,7 @@
   gap: 12px;
 }
 .contact-menu .settings-page-row {
-  padding: 12px 14px calc(12px + var(--lowercase-lift));
+  padding-inline: 14px;
   border: 1px solid var(--contact-menu-edge);
   border-radius: var(--radius-control);
   background: var(--contact-menu-surface);
