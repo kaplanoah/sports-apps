@@ -56,7 +56,7 @@ function readBranchBase(git) {
 export function readRelease(app, git = runGit, now = new Date(), channel = "production") {
   let commit;
   try {
-    commit = git(["log", "-1", "--format=%h"]).trim();
+    commit = git(["log", "-1", "--format=%h", "--abbrev=7"]).trim();
   } catch {
     return null;
   }
