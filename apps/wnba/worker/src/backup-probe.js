@@ -1,3 +1,4 @@
+import { FAILED_FEED_WAIT_MS } from "../../../../shared/worker/feed-keeper.js";
 import { describeError } from "../../../../shared/worker/responses.js";
 
 // ESPN's backup is read only while the league's scoreboard falls short, so a backup that broke
@@ -8,7 +9,6 @@ import { describeError } from "../../../../shared/worker/responses.js";
 // reads nothing more than it needs.
 
 const BACKUP_PROBE_MS = 60 * 60 * 1000;
-const BACKUP_RETRY_MS = 5 * 60 * 1000;
 const STORAGE_KEY = "backup-probe";
 
 /**
@@ -43,7 +43,7 @@ async function fetchBackupOrFailure(fetchBackup) {
  * @param {number} now
  */
 const isProbeDue = (probe, now) =>
-  now - probe.at >= (probe.failure === null ? BACKUP_PROBE_MS : BACKUP_RETRY_MS);
+  now - probe.at >= (probe.failure === null ? BACKUP_PROBE_MS : FAILED_FEED_WAIT_MS);
 
 /**
  * @param {object} options
