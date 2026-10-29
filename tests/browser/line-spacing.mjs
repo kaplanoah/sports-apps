@@ -12,7 +12,7 @@ const SCREENS = { phone: { width: 390, height: 844 }, wide: { width: 1280, heigh
  * answers to the card's edges, not the line.
  * @param {import("@playwright/test").Page} page
  */
-export const listLineSpacingProblems = (page) => page.evaluate(findLineSpacingProblems);
+const listLineSpacingProblems = (page) => page.evaluate(findLineSpacingProblems);
 
 function findLineSpacingProblems() {
   const TOLERANCE = 0.5;
