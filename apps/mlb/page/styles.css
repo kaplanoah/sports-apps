@@ -136,7 +136,6 @@
   --sheet-band-line: transparent;
   --sheet-gap: 0px;
   --meeting-day-width: 4.5em;
-  --meeting-room: 8px;
   --meeting-result-gap: 10px;
   /* Chivo Mono's digits ride a little high beside Libre Franklin's names when both are centered. */
   --meeting-score-lift: 0.25px;
@@ -556,7 +555,7 @@ table.st th {
   text-transform: uppercase;
   letter-spacing: var(--type-label-tracking);
   color: var(--ink-dim);
-  padding: 7px 0 4px 10px;
+  padding: 7px 0 var(--row-line-room) 10px;
   border-bottom: 1px solid var(--divider);
   white-space: nowrap;
 }
@@ -570,7 +569,7 @@ table.st th[title] {
   cursor: help;
 }
 table.st td {
-  padding: 5px 0 5px 10px;
+  padding: var(--row-line-room) 0 var(--row-line-room) 10px;
   font-size: var(--type-detail-size);
   font-weight: var(--type-detail-weight);
   border-bottom: 1px solid var(--divider);
@@ -2004,9 +2003,15 @@ table.st.line-score td.team .club {
   color: var(--ink-dim);
 }
 .matchup-body {
+  --matchup-gap: 22px;
   display: grid;
-  gap: 22px;
+  gap: var(--matchup-gap);
   padding-top: 6px;
+}
+/* A starter's title under the tape sits the shared --heading-below-line under its line, as every
+   heading under a line does. */
+.matchup-body > .tape + .scout {
+  margin-top: calc(var(--heading-below-line) - var(--matchup-gap));
 }
 .faceoff {
   display: grid;

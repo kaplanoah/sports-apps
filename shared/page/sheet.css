@@ -18,7 +18,6 @@
  * A game's sheet before it starts lists the teams' meetings, and a player's sheet the player's
  * facts, which take these, set by eye for the app's fonts:
  *   --meeting-day-width     the column of each meeting's day
- *   --meeting-room          the room above and below each meeting
  *   --meeting-result-gap    the room between a meeting's winner and its score
  *   --meeting-score-lift    how far the score sits below its middle, to look level with the name
  *   --numbers               the font the score is set in, the app's face for numbers
@@ -49,6 +48,15 @@
  *   --network-name-offset    how far a channel without a logo sits below the logos' middle, set
  *                            by eye for the app's font
  */
+
+/* Every heading under a line, in a sheet or in settings, sits --heading-below-line below it,
+   whether the line ends a band, a tape, or a group of settings. Rows of text with a line between
+   them, like a box score's or the meetings, sit --row-line-room from it on each side, while a row
+   of a set height, like a roster's, centers its text in its own height. */
+:root {
+  --heading-below-line: 14px;
+  --row-line-room: 6px;
+}
 
 /* The dialog only frames its sheets. */
 .sheet-panel {
@@ -290,7 +298,7 @@
   grid-template-columns: var(--meeting-day-width) minmax(0, 1fr) auto;
   align-items: center;
   gap: 8px;
-  padding: var(--meeting-room) 0;
+  padding: var(--row-line-room) 0;
   border-bottom: 1px solid var(--divider);
   font-size: var(--type-detail-size);
   font-weight: var(--type-detail-weight);

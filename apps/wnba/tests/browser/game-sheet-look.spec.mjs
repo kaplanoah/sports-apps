@@ -30,7 +30,7 @@ import { THEMES } from "../../../../tests/browser/theme-layout.mjs";
 const NUMBER_COLUMN_PX = 52;
 // The room between the band's line and the first part's title, above each later title, below each
 // title, below By quarter's, and between a tape's rows.
-const FIRST_TITLE_SPACE_PX = 20;
+const FIRST_TITLE_SPACE_PX = 14;
 // How far a game's teams sit under the middle of its score or its time, how far its band ends under
 // a final's pills or a game's channels, and how far Bonus hangs under its team's record.
 const SCORE_TEAMS_DROP_PX = 3;
