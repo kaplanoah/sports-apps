@@ -1,7 +1,6 @@
 import { expect } from "@playwright/test";
-import { QUICK_TAP_MS } from "../../shared/page/press.js";
 import { describeTimedAnimations } from "./animations.mjs";
-import { waitForPressesToEnd } from "./tap-states.mjs";
+import { letPressesGo } from "./tap-states.mjs";
 
 /**
  * Keeps each "ResizeObserver loop" error the page reports from then on, which a browser raises
@@ -222,16 +221,6 @@ export async function waitForLoadToSettle(page) {
   await expect(page.locator("#loadNote")).toHaveCount(0, { timeout: LOAD_TIMEOUT_MS });
   await waitForCatchUp(page);
   await waitForNoFrameRequests(page);
-}
-
-/**
- * Lets go of the press a test's tap still shows, which press.js lets go on the page's clock, so its
- * ease back is over before the page is counted at rest rather than starting while it's counted.
- * @param {import("@playwright/test").Page} page
- */
-async function letPressesGo(page) {
-  await page.clock.runFor(QUICK_TAP_MS);
-  await waitForPressesToEnd(page);
 }
 
 /**
