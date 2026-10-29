@@ -570,35 +570,25 @@ test("reminders require confirmed necessary playoff games and successful source 
     assert.equal(WNBASnapshot.listReminderGames({ ...snapshot, missing: [missing] }), null);
 });
 
-test("an if-needed first-round Game 3 is confirmed when its series reaches 1-1", () => {
-  const snapshot = buildAfternoon();
-  const candidate = snapshot.games.find((game) => game.round === 1);
-  assert.ok(candidate);
-  const game = {
-    ...candidate,
-    state: "pre",
-    status: "Scheduled",
-    isTimeSet: true,
-    isIfNeeded: true,
-    number: 3,
-  };
-  const listWithWins = (top, bottom) =>
-    WNBASnapshot.listReminderGames({
-      ...snapshot,
-      games: [game],
-      series: snapshot.series.map((series) =>
-        series.id === game.series
-          ? {
-              ...series,
-              winner: null,
-              top: { ...series.top, wins: top },
-              bottom: { ...series.bottom, wins: bottom },
-            }
-          : series,
-      ),
-    });
-  assert.equal(listWithWins(1, 0).length, 0);
-  assert.equal(listWithWins(1, 1).length, 1);
+/**
+ * The afternoon's responses, with the league's schedule marking each game named if necessary or not.
+ * @param {Record<string, boolean>} marks
+ */
+function markIfNecessary(marks) {
+  const schedule = structuredClone(RESPONSES.schedule);
+  for (const game of schedule.leagueSchedule.gameDates.flatMap((day) => day.games))
+    if (game.gameId in marks) game.ifNecessary = marks[game.gameId];
+  return { ...RESPONSES, schedule };
+}
+
+test("a game the league still marks if necessary once its series needs it isn't marked, and is reminded of", () => {
+  const snapshot = buildAfternoon(markIfNecessary({ 1042600123: true }));
+  const tiedGameThree = (games) => games.find((game) => game.id === "1042600123");
+  assert.equal(tiedGameThree(snapshot.games).isIfNeeded, false, "series tied 1-1");
+  assert.equal(tiedGameThree(snapshot.schedule).isIfNeeded, false, "series tied 1-1");
+  assert.ok(WNBASnapshot.listReminderGames(snapshot).some((game) => game.id === "1042600123"));
+  const leadGameThree = snapshot.games.find((game) => game.id === "1042600133");
+  assert.equal(leadGameThree.isIfNeeded, true, "series led 1-0");
 });
 
 const FINALS_GAME = {
