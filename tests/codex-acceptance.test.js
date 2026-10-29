@@ -75,6 +75,11 @@ test("an unfinished native wait is only an interruption candidate until the actu
   assert.equal(candidate.nativeOutcome, "failure");
   assert.equal("tokens" in candidate, false);
   assert.equal("passed" in candidate, false);
+  assert.equal(
+    inspectCodexInterruption(renderEvents([PROBE_EVENT, WAIT_EVENT]), PROBE, "cancelled")
+      .nativeOutcome,
+    "cancelled",
+  );
   for (const events of [
     [],
     [WAIT_EVENT],
@@ -93,7 +98,7 @@ test("an unfinished native wait is only an interruption candidate until the actu
     ],
   ])
     assert.throws(() => inspectCodexInterruption(renderEvents(events), PROBE, "failure"));
-  for (const outcome of ["success", "cancelled", undefined])
+  for (const outcome of ["success", undefined])
     assert.throws(() =>
       inspectCodexInterruption(renderEvents([PROBE_EVENT, WAIT_EVENT]), PROBE, outcome),
     );

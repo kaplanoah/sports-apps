@@ -700,7 +700,11 @@ function invokeJoin(fixture, changes = {}, args = []) {
           conclusion: fixture.failure ? 'failure' : 'success'
         }] });
       }
-      if (path.includes('/issues/1/comments?') || path.includes('/issues/1/timeline?')) return Response.json(fixture.providerEvents ?? []);
+      if (path.includes('/issues/1/comments?')) return Response.json([]);
+      if (path === '/graphql') return Response.json({ data: { repository: { pullRequest: { timelineItems: {
+        nodes: (fixture.providerEvents ?? []).map((event) => ({ ...event, __typename: 'LabeledEvent' })),
+        pageInfo: { hasNextPage: false, endCursor: null }
+      } } } } });
       if (path.includes('/actions/runs/7/artifacts?'))
         return Response.json({ artifacts: [{ name: 'trusted-review-passed-' + fixture.tree, workflow_run: { id: 7 } }] });
       throw new Error('Unexpected API request: ' + path);

@@ -165,7 +165,7 @@ function verifyCodexProbe(events, probePath) {
 export function inspectCodexInterruption(transcript, probePath, outcome) {
   const events = readCodexEvents(transcript);
   if (
-    outcome !== "failure" ||
+    !["failure", "cancelled"].includes(outcome ?? "") ||
     events.some((event) => ["error", "turn.failed", "turn.completed"].includes(event.type))
   )
     throw new CodexProofError(
