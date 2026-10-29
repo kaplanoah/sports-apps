@@ -161,36 +161,39 @@ export async function checkWelcomeRises({ page, openApp, openSettings }) {
 }
 
 /**
- * The welcome's Continue in browser and its caret each show their press before the welcome closes.
+ * The welcome's Continue in browser and its caret each start closing the welcome on the frame of
+ * their tap, while their press shows.
  * @param {App} app
  */
-export async function checkWelcomeWaitsForPress({ page, openApp, openSettings }) {
+export async function checkWelcomeClosesOnTap({ page, openApp, openSettings }) {
   await takeAwayPush(page);
   await openApp(page, { isShowingWelcome: true });
   const welcome = page.locator(WELCOME);
 
-  await checkPressShowsBeforeClose(
-    page,
-    welcome.getByRole("button", { name: "Continue in browser" }),
-  );
+  await checkCloseStartsOnTap(page, welcome.locator(".welcome-continue"));
   await openSettings(page);
   await findHelp(page).click();
-  await checkPressShowsBeforeClose(page, welcome.getByRole("button", { name: "Close" }));
+  await checkCloseStartsOnTap(page, welcome.locator(".welcome-close"));
 }
 
 /**
  * @param {import("@playwright/test").Page} page
  * @param {import("@playwright/test").Locator} button
  */
-async function checkPressShowsBeforeClose(page, button) {
+async function checkCloseStartsOnTap(page, button) {
   const welcome = page.locator(WELCOME);
   await expect(welcome).toBeVisible();
   await holdClock(page);
 
   await button.click();
+  await page.clock.runFor(16);
 
   await expect(button).toHaveCSS("opacity", "0.3");
-  await expect(welcome).toHaveAttribute("open");
+  expect(
+    await welcome.evaluate(
+      (dialog) => !dialog.open || dialog.style.transform === "translateY(100%)",
+    ),
+  ).toBe(true);
   await page.clock.runFor(1000);
   await expect(welcome).toBeHidden();
   await page.clock.resume();
