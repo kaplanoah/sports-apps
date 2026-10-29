@@ -40,7 +40,7 @@ import {
 } from "./labeling.mjs";
 import { createGitHub } from "./github-api.mjs";
 import { readDeployedMain } from "./production-coverage.mjs";
-import { isGitObjectId } from "./git-object.mjs";
+import { MERGE_TREE_CONFLICT, isGitObjectId } from "./git-object.mjs";
 import {
   LAYER_PROPERTIES,
   createWatchCheck,
@@ -857,9 +857,6 @@ function findLabelProblem({ labeler, isForcePushedSince, isTestedHeadKept }, own
     );
   return null;
 }
-
-// git merge-tree's exit status when the merge conflicts; any other failure is git's own error.
-const MERGE_TREE_CONFLICT = 1;
 
 /** @param {string} cwd */
 function createGateGit(cwd) {

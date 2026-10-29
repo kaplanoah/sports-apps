@@ -676,8 +676,9 @@ jobs:
             echo "::error::Trusted review covers different code than this check."
             exit 1
           fi
-      # A ready pull request's code merges only once a review of exactly that code passed, so a run
-      # that wasn't asked to review, a push's or a label's, holds it until the review label asks.
+      # A ready pull request's code merges only once a passed review of its head covers that code,
+      # directly or carried over from a base main only moved forward from, so a run that wasn't asked
+      # to review, a push's or a label's, holds it until the review label asks.
       # A draft is reviewed once it's ready, so it isn't held.
       - name: Require a review of this code
         if: needs.review-join.outputs.owed == 'true' && !github.event.pull_request.draft

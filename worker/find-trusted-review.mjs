@@ -11,7 +11,7 @@ import {
   isReviewAncestor,
   runReviewGit,
 } from "./review-repository.mjs";
-import { isGitObjectId } from "./git-object.mjs";
+import { MERGE_TREE_CONFLICT, isGitObjectId } from "./git-object.mjs";
 import { waitFor } from "./check-timing.mjs";
 import { readReviewProvider } from "./review-provider.mjs";
 import { matchesReviewProvider } from "./review-state.mjs";
@@ -273,11 +273,18 @@ function readTestedBase(env) {
   return base;
 }
 
-/** @param {string} base @param {NodeJS.ProcessEnv} env */
+/**
+ * Returns the tree of the head merged onto a base, or null where that merge conflicts.
+ * @param {string} base @param {NodeJS.ProcessEnv} env
+ */
 function readMergedTree(base, env) {
-  return runReviewGit(env.GITHUB_WORKSPACE, ["merge-tree", "--write-tree", base, env.REVIEW_HEAD], {
-    environment: env,
-  });
+  try {
+    const args = ["merge-tree", "--write-tree", base, env.REVIEW_HEAD];
+    return runReviewGit(env.GITHUB_WORKSPACE, args, { environment: env });
+  } catch (error) {
+    if (/** @type {{ status?: number }} */ (error).status === MERGE_TREE_CONFLICT) return null;
+    throw error;
+  }
 }
 
 /**

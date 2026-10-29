@@ -836,16 +836,6 @@ test("real verify CLI accepts the merge CI tested, though the event's base lags,
     assert.notEqual(rejected.status, 0);
     assert.equal(rejected.output, "");
   }
-  for (const changes of [
-    { REVIEW_BASE: fixture.base },
-    { REVIEW_BASE: fixture.base, REVIEW_MERGE: fixture.stale },
-  ]) {
-    sealIdentity(changes);
-    const rejected = invokeJoin(fixture, {}, ["verify", folder]);
-    assert.notEqual(rejected.status, 0);
-    assert.match(rejected.stderr, /does not carry over/);
-    assert.equal(rejected.output, "");
-  }
   for (const changed of [
     { ...result, identity: { ...result.identity, merge: fixture.head } },
     { ...result, tree: SHA },
@@ -930,7 +920,7 @@ test("real verify CLI carries a review over a main that only moved forward to CI
   );
 });
 
-test("real verify CLI carries no review over a changed head, a differing merge, an unreproduced tree or a moved-off base", () => {
+test("real verify CLI carries no review over a changed head, a differing merge, an unreproduced tree, a moved-off base or a conflicting base", () => {
   const fixture = { ...createMergeFixture(), source: TREE };
   const folder = createFolder();
   const pushed = writeOriginCommit(fixture, "pushed", [fixture.tree, "-p", fixture.head]);
@@ -988,6 +978,26 @@ test("real verify CLI carries no review over a changed head, a differing merge, 
     assert.match(movedOff.stderr, /does not carry over/);
     assert.equal(movedOff.output, "");
   }
+
+  readGit(fixture.origin, ["checkout", "-b", "conflicting", fixture.tip]);
+  writeFileSync(join(fixture.origin, "a.js"), "conflicting\n");
+  readGit(fixture.origin, ["commit", "-am", "main changed the head's line"]);
+  const conflicting = readGit(fixture.origin, ["rev-parse", "HEAD"]);
+  checkOutTested(
+    fixture,
+    writeOriginCommit(fixture, "conflicting-tested", [
+      fixture.tree,
+      "-p",
+      conflicting,
+      "-p",
+      fixture.head,
+    ]),
+  );
+  sealEarlierReview(fixture, folder, fixture.base, fixture.stale);
+  const conflicted = invokeJoin(fixture, { REVIEW_TREE: reviewedTree }, ["verify", folder]);
+  assert.notEqual(conflicted.status, 0);
+  assert.match(conflicted.stderr, /does not carry over/);
+  assert.equal(conflicted.output, "");
 });
 
 test("native title rendering preserves supplied PR and commit identities", () => {

@@ -17,6 +17,7 @@ import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { escapePattern } from "../shared/page/escape-pattern.js";
 import { isTestPath } from "./deploy-scope.mjs";
+import { MERGE_TREE_CONFLICT } from "./git-object.mjs";
 import { createGitHub, readAllPages } from "./github-api.mjs";
 import { resolvePackageImport } from "./package-imports.mjs";
 import { readReviewGit } from "./review-repository.mjs";
@@ -699,9 +700,6 @@ export const grepRepo = (pattern, isWord, git) =>
     .filter(Boolean)
     .map((hit) => hit.replace(/^HEAD:/, ""));
 
-// merge-tree's exit code when the merge conflicts, having still written the merged tree.
-const MERGE_CONFLICTS = 1;
-
 /**
  * The range that holds what the pushes since a head changed: from that head merged onto the base
  * to the pull request merged onto it, which leaves out the base's own edits. Where that merge
@@ -717,7 +715,7 @@ export function findPushedRange(since, git) {
     output = git(args);
   } catch (error) {
     const failure = /** @type {{ status?: number, stdout?: string }} */ (error);
-    if (failure.status !== MERGE_CONFLICTS || !failure.stdout) throw error;
+    if (failure.status !== MERGE_TREE_CONFLICT || !failure.stdout) throw error;
     output = failure.stdout;
   }
   return [output.split("\n")[0], "HEAD"];
