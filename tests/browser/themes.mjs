@@ -17,7 +17,7 @@ import { THEMES, listThemeLayoutChanges, showTheme } from "./theme-layout.mjs";
  * }} App
  */
 
-const SCREENS = {
+export const SCREENS = {
   "a phone": { width: 390, height: 844 },
   "a wide screen": { width: 1280, height: 900 },
 };
