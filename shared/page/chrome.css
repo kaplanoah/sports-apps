@@ -757,6 +757,11 @@ body.kbd .appearance-choice:has(input:focus) .appearance-icon {
   gap: var(--label-note-gap);
   min-width: 0;
 }
+/* A row centers the label's box, so its words take their lift in margins of their own, leaving
+   the control beside them centered. Appearance's label heads its choices instead. */
+.control-row:not(.appearance-row) > .control-label {
+  margin-block: calc(var(--word-lift) / -2) calc(var(--word-lift) / 2);
+}
 .control-note {
   font-size: var(--type-setting-note-size);
   font-weight: var(--type-setting-note-weight);

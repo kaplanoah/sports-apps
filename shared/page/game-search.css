@@ -243,8 +243,10 @@
 .search-typed {
   color: var(--ink-dim);
 }
+/* A row's detail takes the same lift, in margins, since it pads nothing of its own. */
 .search-detail {
   flex: none;
+  margin-block: calc(var(--word-lift) / -2) calc(var(--word-lift) / 2);
   font-size: var(--type-detail-size);
   font-weight: var(--type-detail-weight);
   color: var(--ink-dim);
