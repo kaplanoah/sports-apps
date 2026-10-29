@@ -1,6 +1,6 @@
 import { expect } from "@playwright/test";
 import { waitForTimedAnimations } from "./animations.mjs";
-import { waitForPressesToEnd } from "./tap-states.mjs";
+import { letPressesGo } from "./tap-states.mjs";
 
 // The parts a theme may lift a pixel or two, where its colors look off center otherwise.
 const PLACED_BY_EYE = ".nscore";
@@ -14,7 +14,7 @@ const PLACED_BY_EYE = ".nscore";
  * @returns {Promise<Record<string, string>>}
  */
 export async function readLayout(page) {
-  await waitForPressesToEnd(page);
+  await letPressesGo(page);
   return page.evaluate((placedByEye) => {
     /** @param {number} value */
     const round = (value) => Math.round(value * 2) / 2;

@@ -14,7 +14,7 @@ import { isStandIn } from "./rider-taps.js";
 
 // How long a finger rests before its press shows, and how long a quick tap's press stays.
 const TOUCH_SETTLE_MS = 60;
-const QUICK_TAP_MS = 120;
+export const QUICK_TAP_MS = 120;
 // How far a finger may drift before its press lets go.
 const DRIFT_PX = 10;
 // Longer than iOS waits after a lift to tell a tap from a double tap, so its click for the lift
