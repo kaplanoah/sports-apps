@@ -240,17 +240,6 @@ function endPress() {
 }
 
 /**
- * Runs what a control's tap does once its press has shown, so the press is seen before what it
- * opens, closes, or runs replaces it, and at once for a tap that isn't a press, like a key's.
- * @param {Element} control
- * @param {() => void} action
- */
-export function runAfterPress(control, action) {
-  if (control.classList.contains("is-pressed")) window.setTimeout(action, QUICK_TAP_MS);
-  else action();
-}
-
-/**
  * Shows each control's press, tinting the rows the page shares and any the app adds by its
  * buttons' selectors, and drops the click iOS sends for a touch that's part of a scroll.
  * @param {string[]} [appRowButtons] the buttons of the app's own rows, like a bracket's team lines

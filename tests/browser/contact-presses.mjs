@@ -8,8 +8,8 @@ import {
   readPressTint,
 } from "./press-looks.mjs";
 
-// How the settings pages' controls show their press (press.js and controls.css), and which wait
-// for it before they act, in every app.
+// How the settings pages' controls show their press (press.js and controls.css), and that each acts
+// on its tap, in every app.
 
 /** @param {import("@playwright/test").Page} page */
 async function openBugReport(page) {
@@ -127,7 +127,7 @@ export function testContactPresses(test, expect, { openApp, settingsPages }) {
     await expectFade(page, dialog.getByRole("button", { name: "Back to Contact" }), expect);
   });
 
-  test("the settings pages' Back, Contact's category rows, and Done show their press before they act", async ({
+  test("the settings pages' Back, Contact's category rows, and Done act on the frame of their tap", async ({
     page,
   }) => {
     await serveContact(page);
@@ -136,13 +136,12 @@ export function testContactPresses(test, expect, { openApp, settingsPages }) {
     const title = page.locator("#contactDialog h2");
     await holdClock(page);
 
-    /** @param {import("@playwright/test").Locator} control @param {() => Promise<void>} isUnchanged @param {() => Promise<void>} isDone */
-    const expectPressFirst = async (control, isUnchanged, isDone) => {
+    /** @param {import("@playwright/test").Locator} control @param {() => Promise<void>} isDone */
+    const expectActOnTap = async (control, isDone) => {
       await control.click();
-      await expect(control).toHaveClass(/is-pressed/);
-      await isUnchanged();
-      await page.clock.runFor(1000);
+      await page.clock.runFor(16);
       await isDone();
+      await page.clock.runFor(1000);
     };
 
     for (const name of settingsPages) {
@@ -150,10 +149,8 @@ export function testContactPresses(test, expect, { openApp, settingsPages }) {
       await page.locator(`#${name.toLowerCase()}Btn`).click();
       await page.clock.runFor(1000);
       await expect(sheet.locator("h2")).toHaveText(name);
-      await expectPressFirst(
-        sheet.getByRole("button", { name: "Back to Settings" }),
-        () => expect(sheet).toBeVisible(),
-        () => expect(sheet).toBeHidden(),
+      await expectActOnTap(sheet.getByRole("button", { name: "Back to Settings" }), () =>
+        expect(sheet).toBeHidden(),
       );
     }
     const dialog = page.locator("#contactDialog");
@@ -168,29 +165,21 @@ export function testContactPresses(test, expect, { openApp, settingsPages }) {
     };
     await page.locator("#contactBtn").click();
     await page.clock.runFor(1000);
-    await expectPressFirst(
-      dialog.getByRole("button", { name: "Bug report", exact: true }),
-      () => expect(title).toHaveText("Contact"),
-      () => expect(title).toHaveText("Bug report"),
+    await expectActOnTap(dialog.getByRole("button", { name: "Bug report", exact: true }), () =>
+      expect(title).toHaveText("Bug report"),
     );
-    await expectPressFirst(
-      dialog.getByRole("button", { name: "Back to Contact" }),
-      () => expect(title).toHaveText("Bug report"),
-      () => expect(title).toHaveText("Contact"),
+    await expectActOnTap(dialog.getByRole("button", { name: "Back to Contact" }), () =>
+      expect(title).toHaveText("Contact"),
     );
     await page.keyboard.press("Escape");
     await page.clock.runFor(1000);
     await sendBugReport();
-    await expectPressFirst(
-      dialog.getByRole("button", { name: "Done", exact: true }),
-      () => expect(dialog).toBeVisible(),
-      () => expect(dialog).toBeHidden(),
+    await expectActOnTap(dialog.getByRole("button", { name: "Done", exact: true }), () =>
+      expect(dialog).toBeHidden(),
     );
     await sendBugReport();
-    await expectPressFirst(
-      dialog.getByRole("button", { name: "Back to Settings" }),
-      () => expect(dialog).toBeVisible(),
-      () => expect(dialog).toBeHidden(),
+    await expectActOnTap(dialog.getByRole("button", { name: "Back to Settings" }), () =>
+      expect(dialog).toBeHidden(),
     );
   });
 }

@@ -13,7 +13,6 @@ import {
 } from "./contact-rules.js";
 import { renderContact } from "./contact-view.js";
 import { setHtml } from "./html.js";
-import { runAfterPress } from "./press.js";
 import { closeSheet } from "./sheet-swipe.js";
 import { focusSettingsTitle, showSettingsPage, wireSettingsPage } from "./settings-page.js";
 
@@ -232,7 +231,7 @@ export function startContact(dialog, button) {
     if (!button || view.sending) return;
     saveFields();
     const action = button.dataset.contact;
-    if (action === "category") runAfterPress(button, () => showCategory(button.dataset.category));
+    if (action === "category") showCategory(button.dataset.category);
     else if (action === "remove") {
       changeDraft(view.category, (draft) => {
         draft.screenshot = null;
@@ -245,8 +244,8 @@ export function startContact(dialog, button) {
       store.save(view.category);
       drawContact();
     } else if (action === "done" || (action === "back" && view.screen !== "form"))
-      runAfterPress(button, () => closeSheet(dialog));
-    else if (action === "back") runAfterPress(button, showMenu);
+      closeSheet(dialog);
+    else if (action === "back") showMenu();
   }
 
   function showMenu() {

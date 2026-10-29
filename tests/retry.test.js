@@ -88,8 +88,7 @@ test("one part that didn't load is why, after a warning icon, over an outlined T
   assert.match(note.text, /<button type="button" class="retry-button" data-retry>/);
 });
 
-test("a Try again a press holds reads again only once the press has shown", (t) => {
-  t.mock.timers.enable({ apis: ["setTimeout"] });
+test("a Try again a press holds reads again on its tap, without waiting for the press", (t) => {
   globalThis.window = /** @type {any} */ (globalThis);
   t.after(() => Reflect.deleteProperty(globalThis, "window"));
   globalThis.addEventListener = () => {};
@@ -108,7 +107,5 @@ test("a Try again a press holds reads again only once the press has shown", (t) 
 
   hearClick({ target: { closest: () => button } });
 
-  assert.equal(reads, 0);
-  t.mock.timers.tick(120);
   assert.equal(reads, 1);
 });
