@@ -9,7 +9,6 @@ import {
   decideGate,
   findKeyframeLines,
   findMissingRedCommits,
-  listCommitsFromTestedChange,
   findRedReasons,
   findStyleObjectLines,
   listPageStylesheets,
@@ -1728,11 +1727,7 @@ test("a red change is held until it has the phone-ok label, and says why", () =>
 
   const labeled = decideGate(diff, {
     labels: ["phone-ok"],
-    labeling: {
-      labeler: "owner",
-      addedAt: Date.parse("2026-10-07T10:00:00Z"),
-      isAfterLastPush: true,
-    },
+    approval: { labeler: "owner", isForcePushedSince: false, isTestedHeadKept: true },
     owner: "owner",
   });
   assert.equal(labeled.isHeld, false);
@@ -1744,7 +1739,7 @@ test("a red change labeled phone-ok by anyone but the owner is held, and says th
   const decideLabeledBy = (labeler, owner) =>
     decideGate(RED_DIFF, {
       labels: ["phone-ok"],
-      labeling: { labeler, addedAt: Date.parse("2026-10-07T10:00:00Z"), isAfterLastPush: true },
+      approval: { labeler, isForcePushedSince: false, isTestedHeadKept: true },
       owner,
     });
   const held = decideLabeledBy("helper", "owner");
@@ -1757,20 +1752,28 @@ test("a red change labeled phone-ok by anyone but the owner is held, and says th
   assert.equal(decideGate(RED_DIFF, { labels: ["phone-ok"], owner: "owner" }).isHeld, true);
 });
 
-test("a red change the owner labeled phone-ok before the push of its last change is held until they label it again", () => {
-  const held = decideGate(RED_DIFF, {
-    labels: ["phone-ok"],
-    labeling: {
-      labeler: "owner",
-      addedAt: Date.parse("2026-10-07T10:00:00Z"),
-      isAfterLastPush: false,
-    },
-    owner: "owner",
-  });
-  assert.equal(held.isHeld, true);
-  assert.match(held.message, /labeled phone-ok before the push of its last change/);
-  assertSendsToBetaClaim(held.message);
-  assert.match(held.message, /takes the label off and adds it again/);
+const LABEL_PROBLEM =
+  /labeled phone-ok before a push that changed what the owner used on the phone/;
+const FORCE_PUSH_PROBLEM = /force-pushed after it was labeled phone-ok/;
+
+test("a red change the owner labeled phone-ok before a red push or a force push is held until they label it again", () => {
+  /** @param {{ isForcePushedSince: boolean, isTestedHeadKept: boolean }} pushes */
+  const decidePushed = (pushes) =>
+    decideGate(RED_DIFF, {
+      labels: ["phone-ok"],
+      approval: { labeler: "owner", ...pushes },
+      owner: "owner",
+    });
+  const redPush = decidePushed({ isForcePushedSince: false, isTestedHeadKept: false });
+  assert.equal(redPush.isHeld, true);
+  assert.match(redPush.message, LABEL_PROBLEM);
+  const forcePush = decidePushed({ isForcePushedSince: true, isTestedHeadKept: true });
+  assert.equal(forcePush.isHeld, true);
+  assert.match(forcePush.message, FORCE_PUSH_PROBLEM);
+  for (const held of [redPush, forcePush]) {
+    assertSendsToBetaClaim(held.message);
+    assert.match(held.message, /takes the label off and adds it again/);
+  }
 });
 
 test("a change that isn't red passes without the label", () => {
@@ -1783,10 +1786,9 @@ test("a change that isn't red passes without the label", () => {
   });
 });
 
-const APPROVED_AT = Date.parse("2026-10-07T10:00:00Z");
 const APPROVED = {
   labels: ["phone-ok"],
-  labeling: { labeler: "owner", addedAt: APPROVED_AT, isAfterLastPush: true },
+  approval: { labeler: "owner", isForcePushedSince: false, isTestedHeadKept: true },
   owner: "owner",
 };
 
@@ -1894,7 +1896,8 @@ test("unreadable history fails closed", (context) => {
 });
 
 /**
- * A branch whose red change the owner tested, with main advanced by a README change.
+ * A branch whose red change the owner labeled phone-ok at 10:00, pushed at 09:45, with main
+ * advanced by a README change.
  * @param {import('node:test').TestContext} context
  */
 function createTestedBranch(context) {
@@ -1906,89 +1909,259 @@ function createTestedBranch(context) {
   history.writeFile("README.md", "Main advanced.\n");
   history.commit("2026-10-07T10:30:00Z");
   history.readGit(["checkout", "feature"]);
-  /** @param {string} head */
-  const listFromTested = (head) =>
-    listCommitsFromTestedChange({ cwd: history.cwd, head, main: "main" });
   /** @param {string} [date] */
   const mergeMain = (date = "2026-10-07T11:00:00Z") => {
     history.readGit(["merge", "--no-ff", "-m", "merge main", "main"], date);
     return history.readGit(["rev-parse", "HEAD"]);
   };
-  return { ...history, tested, listFromTested, mergeMain };
+  /** @param {string} head @param {Record<string, string | string[] | null>} pushTimes @param {Omit<ApprovalTimes, "pushTimes">} [times] */
+  const decide = (head, pushTimes, times) =>
+    readRedApproval({
+      diff: RED_DIFF,
+      labels: ["phone-ok"],
+      ...createApprovalApi(history, head, history.base, { pushTimes, ...times }),
+    });
+  return { ...history, tested, mergeMain, decide };
 }
 
-test("an empty commit and a clean merge of main that brings in nothing red leave the tested change where it was", (context) => {
+const PUSHED_AFTER_LABEL = "2026-10-07T11:05:00Z";
+
+test("a push after the label that changes only tests, or nothing, keeps the owner's phone-ok", async (context) => {
   const branch = createTestedBranch(context);
-  const merged = branch.mergeMain();
-  branch.readGit(["commit", "-q", "--allow-empty", "-m", "empty"], "2026-10-07T11:30:00Z");
+  branch.writeFile("tests/sheet.test.js", "test('draws', () => {});\n");
+  const tests = branch.commit("2026-10-07T11:00:00Z");
+  branch.readGit(["commit", "-q", "--allow-empty", "-m", "empty"], "2026-10-07T11:10:00Z");
   const empty = branch.readGit(["rev-parse", "HEAD"]);
-  assert.deepEqual(branch.listFromTested(empty), [branch.tested, merged, empty]);
-  assert.deepEqual(branch.listFromTested(branch.tested), [branch.tested]);
+  const pushTimes = { [tests]: PUSHED_AFTER_LABEL, [empty]: "2026-10-07T11:15:00Z" };
+  assert.equal((await branch.decide(tests, pushTimes)).isHeld, false);
+  assert.equal((await branch.decide(empty, pushTimes)).isHeld, false);
 });
 
-test("a merge of main that brings in a red commit is a change the owner tests again", (context) => {
+test("a push after the label with a red change holds the owner's phone-ok, even under a later test-only commit", async (context) => {
   const branch = createTestedBranch(context);
+  branch.writeFile("shared/page/sheet.js", "export const draw = 4;\n");
+  const red = branch.commit("2026-10-07T11:00:00Z");
+  branch.writeFile("tests/sheet.test.js", "test('draws', () => {});\n");
+  const tests = branch.commit("2026-10-07T11:10:00Z");
+  const pushTimes = { [red]: PUSHED_AFTER_LABEL, [tests]: "2026-10-07T11:15:00Z" };
+  for (const head of [red, tests]) {
+    const held = await branch.decide(head, pushTimes);
+    assert.equal(held.isHeld, true);
+    assert.match(held.message, LABEL_PROBLEM);
+    assert.match(held.message, /takes the label off and adds it again/);
+  }
+});
+
+test("a merge of main after the label keeps phone-ok unless it brings in a red change", async (context) => {
+  const branch = createTestedBranch(context);
+  const merged = branch.mergeMain();
+  assert.equal((await branch.decide(merged, { [merged]: PUSHED_AFTER_LABEL })).isHeld, false);
   branch.readGit(["checkout", "main"]);
   branch.writeFile("shared/page/side-swipe.js", "export const swipe = 3;\n");
-  branch.commit("2026-10-07T10:45:00Z");
+  branch.commit("2026-10-07T11:10:00Z");
   branch.readGit(["checkout", "feature"]);
-  const merged = branch.mergeMain();
-  assert.deepEqual(branch.listFromTested(merged), [merged]);
+  const mergedRed = branch.mergeMain("2026-10-07T11:20:00Z");
+  const held = await branch.decide(mergedRed, {
+    [merged]: PUSHED_AFTER_LABEL,
+    [mergedRed]: "2026-10-07T11:25:00Z",
+  });
+  assert.equal(held.isHeld, true);
+  assert.match(held.message, LABEL_PROBLEM);
 });
 
-test("a merge that resolves a conflict, or brings in a branch main lacks, is a change the owner tests again", (context) => {
+test("a merge after the label that resolves a conflict outside the page keeps phone-ok", async (context) => {
   const branch = createTestedBranch(context);
   branch.writeFile("README.md", "The branch's own words.\n");
-  const own = branch.commit("2026-10-07T10:40:00Z");
+  branch.commit("2026-10-07T09:40:00Z");
   assert.throws(() => branch.readGit(["merge", "--no-ff", "-m", "merge main", "main"]));
   branch.writeFile("README.md", "Both.\n");
   const resolved = branch.commit("2026-10-07T11:00:00Z");
-  assert.deepEqual(branch.listFromTested(resolved), [resolved]);
-  branch.readGit(["checkout", "-qb", "other", own]);
-  branch.writeFile("docs.md", "Not on main.\n");
-  branch.commit("2026-10-07T11:10:00Z");
-  branch.readGit(["checkout", "-qb", "joined", own]);
-  branch.readGit(["merge", "--no-ff", "-m", "merge other", "other"], "2026-10-07T11:20:00Z");
-  const joined = branch.readGit(["rev-parse", "HEAD"]);
-  assert.deepEqual(branch.listFromTested(joined), [joined]);
+  assert.equal((await branch.decide(resolved, { [resolved]: PUSHED_AFTER_LABEL })).isHeld, false);
 });
 
-test("a merge of main that git can't redo, as one of unrelated histories, is a change the owner tests again", (context) => {
-  const history = createGateHistory(context);
-  history.readGit(["checkout", "-q", "--orphan", "unrelated"]);
-  history.writeFile("shared/page/other.js", "export const other = 1;\n");
-  history.commit("2026-10-07T10:00:00Z");
-  history.readGit(
-    ["merge", "--no-ff", "--allow-unrelated-histories", "-m", "merge main", "main"],
-    "2026-10-07T11:00:00Z",
-  );
-  const merged = history.readGit(["rev-parse", "HEAD"]);
-  assert.deepEqual(listCommitsFromTestedChange({ cwd: history.cwd, head: merged, main: "main" }), [
-    merged,
-  ]);
-});
-
-test("a clean merge of main with code of its own committed in is a change the owner tests again", async (context) => {
+test("a clean merge of main after the label with red code of its own committed in holds phone-ok", async (context) => {
   const branch = createTestedBranch(context);
   branch.readGit(["merge", "--no-ff", "--no-commit", "main"]);
   branch.writeFile("shared/page/sheet.js", "export const draw = 4;\n");
   const merged = branch.commit("2026-10-07T11:00:00Z");
-  assert.deepEqual(branch.listFromTested(merged), [merged]);
-  const verdict = await readRedApproval({
-    diff: RED_DIFF,
-    labels: ["phone-ok"],
-    ...createApprovalApi(branch, merged, branch.base, { [merged]: "2026-10-07T11:05:00Z" }),
-  });
-  assert.equal(verdict.isHeld, true);
-  assert.match(verdict.message, /before the push of its last change/);
+  const held = await branch.decide(merged, { [merged]: PUSHED_AFTER_LABEL });
+  assert.equal(held.isHeld, true);
+  assert.match(held.message, LABEL_PROBLEM);
 });
+
+test("a label on a head GitHub never saw before it holds the change", async (context) => {
+  const branch = createTestedBranch(context);
+  branch.writeFile("tests/sheet.test.js", "test('draws', () => {});\n");
+  const pushed = branch.commit("2026-10-07T11:00:00Z");
+  const firstParents = branch.readGit(["rev-list", "--first-parent", pushed]).trim().split("\n");
+  const pushedAfterLabel = Object.fromEntries(firstParents.map((sha) => [sha, PUSHED_AFTER_LABEL]));
+  const neverSeen = Object.fromEntries(firstParents.map((sha) => [sha, null]));
+  for (const pushTimes of [pushedAfterLabel, neverSeen]) {
+    const held = await branch.decide(pushed, pushTimes);
+    assert.equal(held.isHeld, true);
+    assert.match(held.message, /or on a head the gate can't find/);
+  }
+  const unknown = await branch.decide("unknown-revision", {});
+  assert.equal(unknown.isHeld, true);
+});
+
+test("a force push after the label holds phone-ok, even back to the head the owner labeled", async (context) => {
+  const branch = createTestedBranch(context);
+  const held = await branch.decide(
+    branch.tested,
+    {},
+    { forcePushes: [{ at: PUSHED_AFTER_LABEL, head: branch.tested }] },
+  );
+  assert.equal(held.isHeld, true);
+  assert.match(held.message, FORCE_PUSH_PROBLEM);
+  const before = await branch.decide(
+    branch.tested,
+    {},
+    { forcePushes: [{ at: "2026-10-07T09:50:00Z", head: branch.tested }] },
+  );
+  assert.equal(before.isHeld, false);
+});
+
+test("a red commit force-pushed off the branch before the label and pushed again after it holds phone-ok", async (context) => {
+  const branch = createTestedBranch(context);
+  branch.writeFile("shared/page/sheet.js", "export const draw = 4;\n");
+  const red = branch.commit("2026-10-07T09:46:00Z");
+  branch.writeFile("tests/sheet.test.js", "test('draws', () => {});\n");
+  const tests = branch.commit("2026-10-07T11:00:00Z");
+  const held = await branch.decide(
+    tests,
+    { [red]: "2026-10-07T09:48:00Z", [tests]: PUSHED_AFTER_LABEL },
+    { forcePushes: [{ at: "2026-10-07T09:50:00Z", head: branch.tested }] },
+  );
+  assert.equal(held.isHeld, true);
+  assert.match(held.message, LABEL_PROBLEM);
+});
+
+test("a red commit pushed between two force pushes before the label holds phone-ok", async (context) => {
+  const branch = createTestedBranch(context);
+  branch.writeFile("shared/page/sheet.js", "export const draw = 4;\n");
+  const red = branch.commit("2026-10-07T09:44:00Z");
+  branch.writeFile("tests/sheet.test.js", "test('draws', () => {});\n");
+  const tests = branch.commit("2026-10-07T11:00:00Z");
+  const held = await branch.decide(
+    tests,
+    { [red]: "2026-10-07T09:46:00Z", [tests]: PUSHED_AFTER_LABEL },
+    {
+      forcePushes: [
+        { at: "2026-10-07T09:50:00Z", head: branch.tested },
+        { at: "2026-10-07T09:42:00Z", head: branch.tested },
+      ],
+    },
+  );
+  assert.equal(held.isHeld, true);
+  assert.match(held.message, LABEL_PROBLEM);
+});
+
+test("a head pushed, force-pushed off, and pushed again before the label keeps phone-ok, but not pushed again only after it", async (context) => {
+  const branch = createTestedBranch(context);
+  branch.writeFile("tests/sheet.test.js", "test('draws', () => {});\n");
+  const tests = branch.commit("2026-10-07T11:00:00Z");
+  const decision = await branch.decide(
+    tests,
+    {
+      [branch.tested]: ["2026-10-07T09:45:00Z", "2026-10-07T09:30:00Z"],
+      [tests]: PUSHED_AFTER_LABEL,
+    },
+    { forcePushes: [{ at: "2026-10-07T09:40:00Z", head: branch.base }] },
+  );
+  assert.equal(decision.isHeld, false);
+  const pushedAgainAfterLabel = await branch.decide(
+    tests,
+    {
+      [branch.tested]: ["2026-10-07T09:30:00Z", PUSHED_AFTER_LABEL],
+      [tests]: "2026-10-07T11:15:00Z",
+    },
+    { forcePushes: [{ at: "2026-10-07T09:40:00Z", head: branch.base }] },
+  );
+  assert.equal(pushedAgainAfterLabel.isHeld, true);
+});
+
+test("another App's check on a dropped red commit between the last force push and the label isn't taken for a push", async (context) => {
+  const branch = createTestedBranch(context);
+  branch.writeFile("shared/page/sheet.js", "export const draw = 4;\n");
+  const red = branch.commit("2026-10-07T09:44:00Z");
+  branch.writeFile("tests/sheet.test.js", "test('draws', () => {});\n");
+  const tests = branch.commit("2026-10-07T11:00:00Z");
+  const held = await branch.decide(
+    tests,
+    { [red]: "2026-10-07T09:46:00Z", [tests]: PUSHED_AFTER_LABEL },
+    {
+      otherAppTimes: { [red]: "2026-10-07T09:55:00Z" },
+      forcePushes: [{ at: "2026-10-07T09:50:00Z", head: branch.tested }],
+    },
+  );
+  assert.equal(held.isHeld, true);
+  assert.match(held.message, LABEL_PROBLEM);
+});
+
+test("the gate looks for the labeled head only among the branch's own commits, and not at all without its name", async (context) => {
+  const branch = createTestedBranch(context);
+  branch.writeFile("tests/sheet.test.js", "test('draws', () => {});\n");
+  const pushed = branch.commit("2026-10-07T11:00:00Z");
+  const api = createApprovalApi(branch, pushed, branch.base, {
+    pushTimes: { [pushed]: PUSHED_AFTER_LABEL, [branch.tested]: PUSHED_AFTER_LABEL },
+  });
+  const held = await readRedApproval({ diff: RED_DIFF, labels: ["phone-ok"], ...api });
+  assert.equal(held.isHeld, true);
+  const suiteReads = api.reads.filter((path) => path.endsWith("/check-suites"));
+  assert.deepEqual(
+    suiteReads.map((path) => path.split("/").at(-2)),
+    [pushed, branch.tested],
+  );
+  const unnamed = createApprovalApi(branch, pushed, branch.base);
+  unnamed.env.HEAD_BRANCH = "";
+  const unnamedHeld = await readRedApproval({ diff: RED_DIFF, labels: ["phone-ok"], ...unnamed });
+  assert.equal(unnamedHeld.isHeld, true);
+  assert.equal(
+    unnamed.reads.some((path) => path.endsWith("/check-suites")),
+    false,
+  );
+});
+
+test("a commit pushed to another branch before the label isn't taken for the head the owner labeled", async (context) => {
+  const branch = createTestedBranch(context);
+  branch.writeFile("shared/page/sheet.js", "export const draw = 4;\n");
+  const red = branch.commit("2026-10-07T09:40:00Z");
+  branch.writeFile("tests/sheet.test.js", "test('draws', () => {});\n");
+  const tests = branch.commit("2026-10-07T11:00:00Z");
+  const held = await branch.decide(
+    tests,
+    { [red]: null, [tests]: PUSHED_AFTER_LABEL },
+    { betaTimes: { [red]: "2026-10-07T09:50:00Z" } },
+  );
+  assert.equal(held.isHeld, true);
+  assert.match(held.message, LABEL_PROBLEM);
+});
+
+const ACTIONS = { slug: "github-actions" };
+const OTHER_APP = { slug: "trusted-review" };
+
+/**
+ * @typedef {object} ApprovalTimes
+ * @property {Record<string, string | string[] | null>} [pushTimes] when each commit was pushed to
+ *   the pull request's branch, or null for one never pushed there as a push's head
+ * @property {Record<string, string>} [betaTimes] when a commit was pushed to beta
+ * @property {Record<string, string>} [otherAppTimes] when another App posted a check on a commit
+ *   on the pull request's branch
+ * @property {{ at: string, head: string }[]} [forcePushes] when the head was force-pushed, and to
+ *   which commit
+ */
 
 /**
  * @param {ReturnType<typeof createGateHistory>} history @param {string} head @param {string} deployed
- * @param {Record<string, string | null>} [pushTimes] when GitHub first saw each commit, or null for
- *   one it never saw as a push's head
+ * @param {ApprovalTimes} [times]
  */
-function createApprovalApi(history, head, deployed, pushTimes = {}) {
+function createApprovalApi(
+  history,
+  head,
+  deployed,
+  { pushTimes = {}, betaTimes = {}, otherAppTimes = {}, forcePushes = [] } = {},
+) {
   history.readGit(["update-ref", "refs/remotes/origin/main", "main"]);
   const statuses = [];
   const reads = [];
@@ -1996,6 +2169,7 @@ function createApprovalApi(history, head, deployed, pushTimes = {}) {
     GITHUB_REPOSITORY: "owner/example",
     GITHUB_REPOSITORY_OWNER: "owner",
     HEAD_SHA: head,
+    HEAD_BRANCH: "feature",
     PR: "1",
     GH_TOKEN: "token",
   };
@@ -2008,7 +2182,7 @@ function createApprovalApi(history, head, deployed, pushTimes = {}) {
       answer = [
         {
           number: 1,
-          head: { sha: head, repo: { full_name: env.GITHUB_REPOSITORY } },
+          head: { sha: head, ref: env.HEAD_BRANCH, repo: { full_name: env.GITHUB_REPOSITORY } },
           labels: [{ name: "phone-ok" }],
         },
       ];
@@ -2020,11 +2194,25 @@ function createApprovalApi(history, head, deployed, pushTimes = {}) {
           actor: { login: "owner" },
           created_at: "2026-10-07T10:00:00Z",
         },
+        ...forcePushes.map(({ at, head: pushedHead }) => ({
+          event: "head_ref_force_pushed",
+          created_at: at,
+          head: { oid: pushedHead },
+        })),
       ]);
     else if (url.pathname.endsWith("/check-suites")) {
       const sha = url.pathname.split("/").at(-2) ?? "";
       const pushedAt = sha in pushTimes ? pushTimes[sha] : "2026-10-07T09:45:00Z";
-      answer = { check_suites: pushedAt ? [{ created_at: pushedAt }] : [] };
+      const pushed = [pushedAt ?? []]
+        .flat()
+        .map((created_at) => ({ created_at, head_branch: env.HEAD_BRANCH, app: ACTIONS }));
+      const toBeta =
+        sha in betaTimes ? [{ created_at: betaTimes[sha], head_branch: "beta", app: ACTIONS }] : [];
+      const fromOtherApp =
+        sha in otherAppTimes
+          ? [{ created_at: otherAppTimes[sha], head_branch: env.HEAD_BRANCH, app: OTHER_APP }]
+          : [];
+      answer = { check_suites: [...toBeta, ...fromOtherApp, ...pushed] };
     } else if (url.pathname.endsWith("/deploy.yml/runs"))
       answer = {
         workflow_runs: [
@@ -2052,52 +2240,31 @@ test("the live gate holds a contained red merge until a successful production de
   const history = createGateHistory(context);
   history.writeFile("shared/page/sheet.js", "export const draw = 2;\n");
   const red = history.commit("2026-10-07T09:30:00Z");
+  history.readGit(["checkout", "-qb", "feature"]);
+  history.writeFile("tests/sheet.test.js", "test('draws', () => {});\n");
+  const head = history.commit("2026-10-07T09:40:00Z");
+  history.readGit(["checkout", "main"]);
   const waiting = await readRedApproval({
     diff: RED_DIFF,
     labels: ["phone-ok"],
-    ...createApprovalApi(history, red, history.base),
+    ...createApprovalApi(history, head, history.base),
   });
   assert.equal(waiting.isHeld, true);
   assert.match(waiting.message, /waiting for main's red deploy to finish successfully/);
   const deployed = await readRedApproval({
     diff: RED_DIFF,
     labels: ["phone-ok"],
-    ...createApprovalApi(history, red, red),
+    ...createApprovalApi(history, head, red),
   });
   assert.equal(deployed.isHeld, false);
   const failed = await readRedApproval({
     diff: RED_DIFF,
     labels: ["phone-ok"],
-    ...createApprovalApi(history, red, red),
+    ...createApprovalApi(history, head, red),
     fetchImpl: async () => new Response("{}", { status: 403 }),
   });
   assert.equal(failed.isHeld, true);
   assert.match(failed.message, /cannot be verified.*403/);
-});
-
-test("the live gate keeps the owner's label through a later push that changes nothing they test, but not one that does", async (context) => {
-  const branch = createTestedBranch(context);
-  const merged = branch.mergeMain("2026-10-07T10:50:00Z");
-  /** @param {string} head @param {Record<string, string | null>} pushTimes */
-  const decide = (head, pushTimes) =>
-    readRedApproval({
-      diff: RED_DIFF,
-      labels: ["phone-ok"],
-      ...createApprovalApi(branch, head, branch.base, pushTimes),
-    });
-  const kept = await decide(merged, { [merged]: "2026-10-07T11:00:00Z" });
-  assert.equal(kept.isHeld, false);
-  const pushedTogether = await decide(merged, {
-    [branch.tested]: null,
-    [merged]: "2026-10-07T11:00:00Z",
-  });
-  assert.equal(pushedTogether.isHeld, true);
-  assert.match(pushedTogether.message, /before the push of its last change/);
-  branch.writeFile("shared/page/sheet.js", "export const draw = 4;\n");
-  const changed = branch.commit("2026-10-07T11:10:00Z");
-  const held = await decide(changed, { [changed]: "2026-10-07T11:15:00Z" });
-  assert.equal(held.isHeld, true);
-  assert.match(held.message, /before the push of its last change/);
 });
 
 test("trusted refresh invalidates an old phone status after a red merge and restores a current approval", async (context) => {
@@ -2189,6 +2356,7 @@ test("a failed pending status or malformed head does not stop later PR refreshes
             number,
             head: {
               sha: number === 1 ? "malformed" : head,
+              ref: api.env.HEAD_BRANCH,
               repo: { full_name: api.env.GITHUB_REPOSITORY },
             },
             labels: [{ name: "phone-ok" }],

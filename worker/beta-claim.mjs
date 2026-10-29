@@ -16,6 +16,7 @@ import { GitHubError, createGitHub, readAllPages } from "./github-api.mjs";
 import {
   PHONE_OK_LABEL,
   findLabeling,
+  findLastAdding,
   readEventTime,
   readPushTime,
   readTimeline,
@@ -47,7 +48,8 @@ const REFUSED = "so nothing was deployed to beta";
  * @property {string} headSha empty for a closed one
  * @property {string[]} labels
  * @property {TimelineEvent[]} events its timeline, empty for a closed one
- * @property {number} headPushedAt when GitHub first saw its head, or NaN when it wasn't read
+ * @property {number} headPushedAt when its head was first pushed to the pull request's branch, or
+ *   NaN when it wasn't read
  */
 
 /** @typedef {{ number: number, label: string, isAdded: boolean }} LabelChange */
@@ -71,7 +73,7 @@ const hasLabel = (pull, label) => pull.labels.includes(label);
  * @param {PullRequest} pull
  * @param {string} label
  */
-const findAddedAt = (pull, label) => findLabeling(pull.events, label, pull.headPushedAt).addedAt;
+const findAddedAt = (pull, label) => findLastAdding(pull.events, label).addedAt;
 
 /**
  * Orders pull requests by when a label was last added to them, earliest first, and one GitHub
@@ -293,7 +295,13 @@ export async function readOpenPulls({ repository, fetchImpl = fetch, env = proce
       labels: names,
       events: await readTimeline({ repository, pullNumber: String(pull.number), fetchImpl, env }),
       headPushedAt: names.includes(BETA_LABEL)
-        ? await readPushTime({ repository, sha: pull.head.sha, fetchImpl, env })
+        ? await readPushTime({
+            repository,
+            sha: pull.head.sha,
+            branch: pull.head.ref,
+            fetchImpl,
+            env,
+          })
         : Number.NaN,
     })),
   );
