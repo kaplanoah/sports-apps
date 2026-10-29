@@ -1,0 +1,105 @@
+/* Team names and their marks, for the current MLB and WNBA views. Before-name marks use the
+   capital center and after-name marks use the lowercase center; uppercase Label uses capitals
+   on both sides. Computed native font lengths inherit across differently sized attachments.
+   Apps link this after type.css and the component styles, before their own stylesheets.
+   Each app supplies these :root tokens:
+   --team-name                  the team-name font
+   --type-team-size              Team name size
+   --type-team-weight            Team name weight
+   --type-team-small-size        Small name size
+   --type-team-small-weight      Small name weight
+   --team-dot-size               Team dot diameter
+   --team-dot-before             Team before-name offset
+   --team-dot-after              Team after-name offset
+   --team-small-dot-size         Small dot diameter
+   --team-small-dot-before       Small before-name offset
+   --team-small-dot-after        Small after-name offset
+   --team-large-dot-size         Large dot diameter
+   --team-large-dot-before       Large before-name offset
+   --team-large-dot-after        Large after-name offset
+   --team-label-dot-size         Label dot diameter
+   --team-label-dot-before       Label before-name offset
+   --team-label-dot-after        Label after-name offset
+   --team-seed-before            inline seed before-name offset, optional
+   --team-seed-after             inline seed after-name offset, optional
+*/
+@property --team-lower-center {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 0px;
+}
+
+.club,
+.team-cell,
+.team-id {
+  font-family: var(--team-name);
+  font-size: var(--type-team-size);
+  font-weight: var(--type-team-weight);
+}
+.row-button-cell > .club,
+.rank-cell > .rank-slot {
+  display: flex;
+}
+.club,
+.team-title,
+.game-card-opponent,
+.team-cell,
+.team-id,
+.rank-id,
+.runs-half-head {
+  --team-lower-center: calc((1cap - 1ex) / 2);
+}
+.club,
+.team-title,
+.game-card-opponent,
+.runs-half-head {
+  --team-mark-shift: var(--team-dot-before);
+  --team-seed-shift: var(--team-seed-before, 0px);
+  align-items: center;
+}
+.club > .team-name,
+.club > .tbd,
+.team-title > span:not(.dot),
+.runs-half-head > span:not(.dot),
+.club > .seed,
+.seed-note {
+  text-box: trim-both cap alphabetic;
+}
+.club > .team-name {
+  min-width: 0;
+  overflow: clip visible;
+}
+:is(.club, .team-title, .game-card-opponent, .runs-half-head) > .dot {
+  width: var(--team-dot-size);
+  height: var(--team-dot-size);
+  translate: 0 var(--team-mark-shift);
+}
+.club .seed {
+  translate: 0 var(--team-seed-shift);
+}
+:is(.game-side.home, .faceoff-side.home, .pitcher-id.home) .club,
+.tape-teams .club + .club {
+  --team-mark-shift: calc(var(--team-lower-center) + var(--team-dot-after));
+  --team-seed-shift: calc(var(--team-lower-center) + var(--team-seed-after, 0px));
+}
+.game-card-opponent {
+  font-family: var(--team-name);
+  font-size: var(--type-team-small-size);
+  font-weight: var(--type-team-small-weight);
+  --team-dot-size: var(--team-small-dot-size);
+  --team-dot-before: var(--team-small-dot-before);
+  --team-dot-after: var(--team-small-dot-after);
+}
+.sheet-head h2.team-title {
+  min-height: 1lh;
+  --team-dot-size: var(--team-large-dot-size);
+  --team-dot-before: var(--team-large-dot-before);
+  --team-dot-after: var(--team-large-dot-after);
+}
+.news-teams .club,
+.runs-half-head {
+  --team-lower-center: 0px;
+  --team-dot-size: var(--team-label-dot-size);
+  --team-dot-before: var(--team-label-dot-before);
+  --team-dot-after: var(--team-label-dot-after);
+}

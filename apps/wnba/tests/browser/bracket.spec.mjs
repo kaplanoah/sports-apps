@@ -1,3 +1,4 @@
+import { readTeamLines } from "../../../../tests/browser/team-lines.mjs";
 import { TEAMS } from "../../page/js/teams.js";
 import { finishFirstRound, finishSemifinals, showFirstRoundFinished } from "./bracket-rounds.mjs";
 import { test, expect, openApp, formatRgb } from "./harness.mjs";
@@ -521,15 +522,16 @@ test("a series' winner's row is washed in teal, more on Walnut, and its loser's 
   await expect(out.locator(".dot")).toHaveCSS("opacity", "0.55");
 });
 
-test("each team's name sits a pixel above its dot and wins, which stay where they were", async ({
+test("a bracket's large dots and outside seeds center on their names' capitals", async ({
   page,
 }) => {
   await openApp(page);
-  const row = page.locator('[data-series="1-0"] .team-line[data-team="NYL"]');
-  await expect(row).toBeVisible();
-  await expect(row.locator(".team-name")).toHaveCSS("translate", "0px -1px");
-  for (const part of [".dot", ".wins"])
-    await expect(row.locator(part)).toHaveCSS("translate", "none");
+  await expect(page.locator(".team-line .club").first()).toBeVisible();
+  const drawn = await readTeamLines(page, "wnba");
+  expect(drawn.problems).toEqual([]);
+  expect(drawn.roles).toContain("large");
+  expect(drawn.attachments).toContain("outside seed");
+  await expect(page.locator(".team-line .wins").first()).toHaveCSS("translate", "none");
 });
 
 test("each team's wins sit on a block that casts a shadow on the card", async ({ page }) => {

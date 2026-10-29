@@ -554,7 +554,7 @@ test.describe("on a phone, the news", () => {
     expect(defense.y - (practice.y + practice.height)).toBeCloseTo(sideMargin, 0);
   });
 
-  test("puts a card's teams as far under its photo as in from its side, beside the photo's credit, wrapping before they reach it", async ({
+  test("puts a card's team line under its photo with its Label dots centered on capitals, beside the credit, wrapping before they reach it", async ({
     page,
   }) => {
     await openNewsWithStories(page, (photoUrl) => [
@@ -575,7 +575,8 @@ test.describe("on a phone, the news", () => {
     const libertyDot = await page.locator(".news-teams .dot").first().boundingBox();
     const cardBorder = 1;
 
-    expect(libertyDot.y - (photo.y + photo.height)).toBeCloseTo(16, 0);
+    expect(libertyDot.y - (photo.y + photo.height)).toBeCloseTo(16, 1);
+    expect(libertyDot.y - liberty.y).toBeCloseTo(-0.25, 1);
     expect(libertyDot.x - (card.x + cardBorder)).toBeCloseTo(16, 0);
     expect(credit.y - (photo.y + photo.height)).toBeCloseTo(5, 0);
     expect(card.x + card.width - cardBorder - (credit.x + credit.width)).toBeCloseTo(8, 0);
