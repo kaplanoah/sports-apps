@@ -5,8 +5,9 @@ import { describeError } from "./responses.js";
 // end reaches a league's stats a little after its scoreboard, so a feed is read as a game ends
 // and once more a few minutes later, and again every few minutes while another feed shows its
 // answer is still behind. Each keeps its last good answer to stand in when a read fails, and one
-// that didn't answer isn't asked again for a while, since a hung read holds up each update until
-// it times out, and meanwhile fails for the same reason its last read did. What it keeps goes in
+// that didn't answer is asked again every few minutes, however young its kept answer, until one
+// answers: not sooner, since a hung read holds up each update until it times out, and meanwhile it
+// fails for the same reason its last read did. What it keeps goes in
 // `storage`, since a Durable Object leaves memory between updates.
 
 const SETTLE_MS = 10 * 60 * 1000;
@@ -124,8 +125,7 @@ export function createFeedKeeper({ feeds, now, storage = createMemoryStorage() }
    * @param {(data: any) => boolean} isBehind
    */
   async function isDue(name, record, isBehind) {
-    if (record?.failedAt !== undefined && now() - record.failedAt < FAILED_FEED_WAIT_MS)
-      return false;
+    if (record?.failedAt !== undefined) return now() - record.failedAt >= FAILED_FEED_WAIT_MS;
     const { maxAgeMs, changesWithGames } = feeds[name];
     if (!record?.answer || now() - record.answer.at >= maxAgeMs) return true;
     if (isBehindLong(record.answer, isBehind)) return true;

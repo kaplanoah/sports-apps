@@ -159,6 +159,45 @@ test("a feed whose kept answer stands in says why its read failed, until a read 
   assert.equal(reasons.length, 2);
 });
 
+test("a feed that failed is asked again five minutes on, however young its kept answer", async () => {
+  const { clock, keeper, reads, read } = createKeeper();
+  /** @type {string[]} */
+  const reasons = [];
+  const readNotingFailure = () =>
+    keeper.readFeed(
+      "standings",
+      "/standings",
+      async () => {
+        reads.standings += 1;
+        return { name: "standings", read: reads.standings };
+      },
+      { onFailure: (reason) => reasons.push(reason) },
+    );
+  await read("standings");
+  await assert.rejects(
+    keeper.readFeed(
+      "standings",
+      "/standings",
+      async () => {
+        throw new Error("The league answered 503");
+      },
+      { requireFresh: true },
+    ),
+  );
+
+  clock.now = 4 * MINUTE_MS;
+  await readNotingFailure();
+  assert.equal(reads.standings, 1);
+  assert.deepEqual(reasons, ["The league answered 503"]);
+
+  clock.now = 5 * MINUTE_MS;
+  assert.deepEqual(await readNotingFailure(), { name: "standings", read: 2 });
+  clock.now = 6 * MINUTE_MS;
+  await readNotingFailure();
+  assert.equal(reads.standings, 2);
+  assert.deepEqual(reasons, ["The league answered 503"]);
+});
+
 test("what a keeper kept outlasts it, as a Durable Object's storage outlasts its memory", async () => {
   const storage = createMemoryStorage();
   const clock = { now: 0 };

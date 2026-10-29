@@ -46,7 +46,7 @@ import { describeError, respondError, respondJson, respondMethodNotAllowed } fro
  */
 
 /**
- * The only snapshot field the store itself reads. Other fields belong to the league's callbacks.
+ * The snapshot fields the store itself reads. Other fields belong to the league's callbacks.
  * @typedef {{ season: number, failures?: Record<string, string> }} SeasonSnapshot
  */
 
