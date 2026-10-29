@@ -1,3 +1,8 @@
+import {
+  TRANSPORT_SECURITY,
+  SECURITY_HEADERS,
+  REQUIRED_CSP_DIRECTIVES,
+} from "../shared/page/security-headers.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
@@ -801,9 +806,9 @@ function createCleanupFailureBrowser(cleanup, result) {
       ok: () => result !== "broken response",
       status: () => 500,
       headers: () => ({
-        "content-security-policy": "script-src 'self'; frame-ancestors 'none'",
-        "x-frame-options": "DENY",
-        "strict-transport-security": "max-age=31536000",
+        ...SECURITY_HEADERS,
+        "content-security-policy": Object.values(REQUIRED_CSP_DIRECTIVES).join("; "),
+        "strict-transport-security": TRANSPORT_SECURITY,
       }),
     }),
     request: {

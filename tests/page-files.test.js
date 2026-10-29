@@ -456,6 +456,16 @@ for (const app of listApps()) {
         const hash = createHash("sha256").update(script).digest("base64");
         assert.ok(policy.includes(`'sha256-${hash}'`), path);
       }
+      assert.ok(policy.includes("connect-src 'self' wss://worker.example;"));
+      const local = await worker.fetch(new Request(`http://localhost:4173/k3y/${path}`), {
+        APP_KEY: "k3y",
+      });
+      assert.equal(local.status, 200);
+      assert.ok(
+        local.headers
+          .get("content-security-policy")
+          .includes("connect-src 'self' ws://localhost:4173;"),
+      );
       assert.ok(policy.includes("frame-ancestors 'none'"));
       assert.ok(policy.includes("script-src-attr 'none'"));
       assert.ok(!/script-src[^;]*unsafe-inline/.test(policy));

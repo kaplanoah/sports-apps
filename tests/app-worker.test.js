@@ -761,7 +761,24 @@ test("writes and watch reject missing, null, sibling and unrelated origins befor
     LOCKED_ENV,
   );
   assert.equal(allowed.status, 200);
-  assert.equal((await requestLocked("/", { cookie })).status, 200);
+  assert.equal(
+    (
+      await worker.fetch(
+        new Request("https://worker.example/key/", { headers: { cookie } }),
+        LOCKED_ENV,
+      )
+    ).status,
+    200,
+  );
+  assert.equal(
+    (
+      await worker.fetch(
+        new Request("https://worker.example/key/not-watch/watch", { headers: { cookie } }),
+        LOCKED_ENV,
+      )
+    ).status,
+    404,
+  );
 });
 
 test("security headers cover HTTPS pages, errors, redirects and health without setting HSTS on HTTP", async () => {
@@ -771,7 +788,8 @@ test("security headers cover HTTPS pages, errors, redirects and health without s
     assert.equal(response.headers.get("x-frame-options"), "DENY");
     assert.equal(response.headers.get("strict-transport-security"), "max-age=31536000");
   }
-  const local = await worker.fetch(new Request("http://worker.example/key/"), LOCKED_ENV);
+  const local = await worker.fetch(new Request("http://localhost/key/"), LOCKED_ENV);
+  assert.equal(local.status, 200);
   assert.equal(local.headers.get("strict-transport-security"), null);
 });
 

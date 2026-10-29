@@ -55,4 +55,30 @@ export function checkAppSecurity(app, openApp, serveLockedApp) {
     expect(securityViolations.shift()).toBe("CSP violation: script-src-elem inline");
     await expect(page.locator("html")).toHaveAttribute("data-security-test", "blocked");
   });
+
+  test("browser serving preserves methods, origins, agents and conditional requests", async ({
+    request,
+    baseURL,
+  }) => {
+    const page = await request.get("/");
+    const etag = page.headers()["etag"];
+    expect(etag).toBeTruthy();
+    const unchanged = await request.get("/", { headers: { "if-none-match": etag } });
+    expect(unchanged.status()).toBe(304);
+    const refused = await request.post("/styles.css");
+    expect(refused.status()).toBe(403);
+    const sameOrigin = await request.post("/styles.css", {
+      headers: { origin: new URL(baseURL).origin },
+      data: "request body",
+    });
+    expect(sameOrigin.status()).toBe(405);
+    const safari = await request.get("/manifest.webmanifest", {
+      headers: { "user-agent": "iPhone" },
+    });
+    expect(await safari.json()).not.toHaveProperty("start_url");
+    const chrome = await request.get("/manifest.webmanifest", {
+      headers: { "user-agent": "Chrome" },
+    });
+    expect(await chrome.json()).toHaveProperty("start_url");
+  });
 }

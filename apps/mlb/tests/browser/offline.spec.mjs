@@ -1,16 +1,8 @@
-import { checkOfflineSecurity } from "../../../../tests/browser/offline-security.mjs";
+import { checkOfflineSecurity, waitForCopy } from "../../../../tests/browser/offline-security.mjs";
 import { takeAwayPush } from "../../../../tests/browser/devices.mjs";
 import { test, expect, openApp } from "./harness.mjs";
 
 test.use({ serviceWorkers: "allow", contextOptions: { reducedMotion: "reduce" } });
-
-// The service worker keeps its copy of the page behind the page's own load.
-const waitForCopy = (page) =>
-  expect
-    .poll(() =>
-      page.evaluate(async () => !!(await caches.match(location.href, { cacheName: "page" }))),
-    )
-    .toBe(true);
 
 test("a page opened offline opens from its copy and shows what it last showed", async ({
   page,

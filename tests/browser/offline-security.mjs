@@ -1,17 +1,38 @@
 import { expect } from "./harness.mjs";
 
+/** @param {import("@playwright/test").Page} page */
+export const waitForCopy = (page) =>
+  expect
+    .poll(() =>
+      page.evaluate(async () => !!(await caches.match(location.href, { cacheName: "page" }))),
+    )
+    .toBe(true);
+
+/** @param {import("@playwright/test").Page} page */
+export const waitForController = (page) =>
+  expect.poll(() => page.evaluate(() => !!navigator.serviceWorker.controller)).toBe(true);
+
+/** @param {import("@playwright/test").Page} page */
+export const askForFreshCopy = (page) =>
+  page.evaluate(
+    () =>
+      new Promise((resolve) => {
+        const channel = new MessageChannel();
+        channel.port1.onmessage = ({ data }) => resolve(data);
+        navigator.serviceWorker.controller.postMessage({ type: "refreshPageCopy" }, [
+          channel.port2,
+        ]);
+      }),
+  );
+
 /**
  * @param {import("@playwright/test").Page} page
  * @param {(page: import("@playwright/test").Page) => Promise<unknown>} openApp
  */
 export async function checkOfflineSecurity(page, openApp) {
   await openApp(page);
-  await expect
-    .poll(() =>
-      page.evaluate(async () => !!(await caches.match(location.href, { cacheName: "page" }))),
-    )
-    .toBe(true);
-  await expect.poll(() => page.evaluate(() => !!navigator.serviceWorker.controller)).toBe(true);
+  await waitForCopy(page);
+  await waitForController(page);
   await page.evaluate(async () => {
     const cache = await caches.open("page");
     const saved = await cache.match(location.href);
@@ -24,16 +45,7 @@ export async function checkOfflineSecurity(page, openApp) {
   expect(old.headers()["content-security-policy"]).toBeUndefined();
   await expect(page.locator("#loadNote")).toHaveCount(0);
   await page.context().setOffline(false);
-  const updated = await page.evaluate(
-    () =>
-      new Promise((resolve) => {
-        const channel = new MessageChannel();
-        channel.port1.onmessage = ({ data }) => resolve(data);
-        navigator.serviceWorker.controller.postMessage({ type: "refreshPageCopy" }, [
-          channel.port2,
-        ]);
-      }),
-  );
+  const updated = await askForFreshCopy(page);
   expect(updated).toBe(true);
   await page.context().setOffline(true);
   const next = await page.reload();

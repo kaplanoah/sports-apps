@@ -1,3 +1,8 @@
+import {
+  TRANSPORT_SECURITY,
+  SECURITY_HEADERS,
+  REQUIRED_CSP_DIRECTIVES,
+} from "../shared/page/security-headers.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -68,9 +73,9 @@ test("a browser that doesn't start fails the check rather than skipping it", asy
  * Playwright routes only a redirect's first request, so a browser test can't follow the Worker's
  * move.
  * @param {string} landedUrl
- * @param {{ thrown?: string, headers?: Record<string, string> }} [options]
+ * @param {{ thrown?: string, headers?: Record<string, string>, signedIn?: { headers?: Record<string, string>, status?: number } }} [options]
  */
-function openMovedPage(landedUrl, { thrown, headers = {} } = {}) {
+function openMovedPage(landedUrl, { thrown, headers = {}, signedIn } = {}) {
   /** @type {string[]} */
   const visits = [];
   /** @type {string[]} */
@@ -96,13 +101,16 @@ function openMovedPage(landedUrl, { thrown, headers = {} } = {}) {
     async goto(visited) {
       visits.push(visited);
       address = landedUrl;
+      const status = visits.length > 1 ? (signedIn?.status ?? 200) : 200;
       return {
-        ok: () => true,
+        ok: () => status >= 200 && status < 300,
+        status: () => status,
         headers: () => ({
-          "content-security-policy": "script-src 'self'; frame-ancestors 'none'",
-          "x-frame-options": "DENY",
-          "strict-transport-security": "max-age=31536000",
+          ...SECURITY_HEADERS,
+          "content-security-policy": Object.values(REQUIRED_CSP_DIRECTIVES).join("; "),
+          "strict-transport-security": TRANSPORT_SECURITY,
           ...headers,
+          ...(visits.length > 1 ? signedIn?.headers : {}),
         }),
       };
     },
@@ -505,7 +513,7 @@ test("a drawn page without an access route reports that it opened without a code
 test("live page verification rejects missing security headers before accepting a drawing", async () => {
   for (const [name, reason] of [
     ["content-security-policy", "the page is missing its enforced security policy"],
-    ["x-frame-options", "the page is missing its embedding protection"],
+    ["x-frame-options", "the page is missing x-frame-options"],
     ["strict-transport-security", "the page is missing its HTTPS protection"],
   ]) {
     const { page } = openMovedPage(PAGE_URL, { headers: { [name]: "" } });
@@ -550,4 +558,26 @@ test("HTTP redirect checks probe public paths without sending keys or query stri
     "http://wnba-app.example-subdomain.workers.dev/robots.txt",
     "http://page.example/robots.txt",
   ]);
+});
+
+test("a secure gate cannot hide missing headers or a failed document after sign-in", async () => {
+  for (const [name, reason] of [
+    ["content-security-policy", "the page is missing its enforced security policy"],
+    ...Object.keys(SECURITY_HEADERS).map((name) => [name, `the page is missing ${name}`]),
+    ["strict-transport-security", "the page is missing its HTTPS protection"],
+  ]) {
+    const { page, visits } = openMovedPage(PAGE_URL, { signedIn: { headers: { [name]: "" } } });
+    assert.deepEqual(await checkPage(page, { pageUrl: PAGE_URL, accessCode: "LAYUP" }), {
+      status: "broken",
+      reason,
+    });
+    assert.equal(visits.length, 2);
+  }
+  for (const status of [401, 503]) {
+    const { page } = openMovedPage(PAGE_URL, { signedIn: { status } });
+    assert.deepEqual(await checkPage(page, { pageUrl: PAGE_URL, accessCode: "LAYUP" }), {
+      status: "broken",
+      reason: `the page answered ${status}`,
+    });
+  }
 });

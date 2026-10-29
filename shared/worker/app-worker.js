@@ -5,6 +5,11 @@
 // commit. Browsers keep its code and styles for good, but always revalidate index.html.
 
 import {
+  TRANSPORT_SECURITY,
+  SECURITY_HEADERS,
+  REQUIRED_CSP_DIRECTIVES,
+} from "../page/security-headers.js";
+import {
   ACCESS_PATH,
   buildPageHostAddress,
   createAccessCookie,
@@ -21,13 +26,12 @@ import { serveContact } from "./contact-request.js";
 import { COUNT_PATH, serveCount } from "./daily-count.js";
 import { createHealthServer } from "./health.js";
 
+const WATCH_PATH = "/watch";
 const CONTACT_PATH = `/${CONTACT_ROUTE}`;
 
 const PAGE_HEADERS = {
   "cache-control": "no-cache",
   "x-robots-tag": "noindex, nofollow",
-  "referrer-policy": "no-referrer",
-  "x-content-type-options": "nosniff",
 };
 /** @param {string[]} hashes @param {Request} request */
 function createContentSecurityPolicy(hashes, request) {
@@ -35,7 +39,7 @@ function createContentSecurityPolicy(hashes, request) {
   socket.protocol = socket.protocol === "https:" ? "wss:" : "ws:";
   return [
     "default-src 'self'",
-    `script-src 'self' ${hashes.map((hash) => `'sha256-${hash}'`).join(" ")}`.trim(),
+    `${REQUIRED_CSP_DIRECTIVES.scripts} ${hashes.map((hash) => `'sha256-${hash}'`).join(" ")}`.trim(),
     "script-src-attr 'none'",
     "style-src 'self'",
     "style-src-attr 'unsafe-inline'",
@@ -45,16 +49,13 @@ function createContentSecurityPolicy(hashes, request) {
     "object-src 'none'",
     "base-uri 'none'",
     "form-action 'self'",
-    "frame-ancestors 'none'",
+    REQUIRED_CSP_DIRECTIVES.frames,
   ].join("; ");
 }
 
-/** @param {Request} request @param {URL} url */
-function isUntrustedRequest(request, url) {
-  const needsOrigin =
-    !["GET", "HEAD"].includes(request.method) ||
-    url.pathname.endsWith("/watch") ||
-    request.headers.get("upgrade")?.toLowerCase() === "websocket";
+/** @param {Request} request @param {URL} url @param {string} appPath */
+function isUntrustedRequest(request, url, appPath) {
+  const needsOrigin = !["GET", "HEAD"].includes(request.method) || appPath === WATCH_PATH;
   return needsOrigin && request.headers.get("origin") !== url.origin;
 }
 
@@ -70,9 +71,9 @@ function redirectToHttps(url) {
 function addSecurityHeaders(response, request) {
   if (response.status === 101) return response;
   const secured = new Response(response.body, response);
-  secured.headers.set("x-frame-options", "DENY");
+  for (const [name, value] of Object.entries(SECURITY_HEADERS)) secured.headers.set(name, value);
   if (new URL(request.url).protocol === "https:")
-    secured.headers.set("strict-transport-security", "max-age=31536000");
+    secured.headers.set("strict-transport-security", TRANSPORT_SECURITY);
   return secured;
 }
 
@@ -287,7 +288,7 @@ function redirectToPageHost(url, appPath, env) {
 }
 
 const isStorePath = (appPath) =>
-  appPath === "/watch" || appPath.startsWith("/store/") || appPath.startsWith("/push/");
+  appPath === WATCH_PATH || appPath.startsWith("/store/") || appPath.startsWith("/push/");
 
 const GATE_PATH = "/gate.html";
 
@@ -348,7 +349,7 @@ export function createAppWorker({ name, pageFiles, forwardToStore, readFeedFailu
       const prefix = findAppPrefix(url, env);
       const appPath = prefix === null ? null : findAppPath(url.pathname, prefix);
       if (appPath === null) return serveNotFound();
-      if (isUntrustedRequest(request, url)) return respondText("Forbidden.\n", 403);
+      if (isUntrustedRequest(request, url, appPath)) return respondText("Forbidden.\n", 403);
       if (appPath === "") return redirectToFolder(url);
       if (appPath === ACCESS_PATH) return serveAccess(request, env, prefix);
       if (appPath === HANDOFF_PATH) return serveHandoff(request, env, prefix);

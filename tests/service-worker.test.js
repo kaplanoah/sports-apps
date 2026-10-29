@@ -1,3 +1,7 @@
+import { readPageFiles } from "../worker/page-files.mjs";
+import { findPageRoot } from "../worker/apps.mjs";
+import { createAppWorker } from "../shared/worker/app-worker.js";
+import { OFFLINE_HEADER_NAMES } from "../shared/page/security-headers.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createContext, runInContext } from "node:vm";
@@ -8,13 +12,11 @@ const SCOPE = "https://mlb-app.example.workers.dev/k3y/";
 const OLD_ENDPOINT = "https://web.push.apple.com/old";
 const NEW_ENDPOINT = "https://web.push.apple.com/new";
 
-// The Worker serves the shared page files under shared/, beside each app's own.
-const readPageFile = (app, path) =>
-  readRepoFile(
-    path.startsWith("shared/")
-      ? `shared/page/${path.slice("shared/".length)}`
-      : `apps/${app}/page/${path}`,
-  );
+const pageFilesByApp = new Map();
+const readPageFile = (app, path) => {
+  if (!pageFilesByApp.has(app)) pageFilesByApp.set(app, readPageFiles(findPageRoot(app)));
+  return pageFilesByApp.get(app)[path].text;
+};
 
 /**
  * A browser's cache of responses, in memory, with the parts of the cache API the worker uses.
@@ -742,13 +744,14 @@ test("an old offline copy keeps working until a complete new release preserves i
   const server = { release: "a", missing: new Set(), headers: {} };
   const worker = startServiceWorker({ answer: serveRelease(server) });
   await worker.request(SCOPE, NAVIGATION);
-  const headers = {
-    "content-security-policy": "default-src 'self'; frame-ancestors 'none'",
-    "x-frame-options": "DENY",
-    "referrer-policy": "no-referrer",
-    "x-content-type-options": "nosniff",
-    "strict-transport-security": "max-age=31536000",
-  };
+  const app = createAppWorker({
+    name: "mlb",
+    pageFiles: { "index.html": { contentType: "text/html", text: writePage("b") } },
+    forwardToStore: () => new Response(),
+    readFeedFailures: async () => ({}),
+  });
+  const published = await app.fetch(new Request(SCOPE), { APP_KEY: "k3y" });
+  const headers = Object.fromEntries(published.headers);
   Object.assign(server, {
     release: "b",
     headers: { ...headers, "set-cookie": "access=secret", "x-private": "private" },
@@ -761,8 +764,9 @@ test("an old offline copy keeps working until a complete new release preserves i
   assert.equal(await readCopy(worker), writePage("b"));
   Object.assign(server, { isOffline: true });
   const offline = await worker.request(SCOPE, NAVIGATION);
-  for (const [name, value] of Object.entries(headers))
-    assert.equal(offline.headers.get(name), value);
+  for (const name of OFFLINE_HEADER_NAMES)
+    assert.equal(offline.headers.get(name), published.headers.get(name));
+  assert.equal(offline.headers.get("strict-transport-security"), null);
   assert.equal(offline.headers.get("set-cookie"), null);
   assert.equal(offline.headers.get("x-private"), null);
 });

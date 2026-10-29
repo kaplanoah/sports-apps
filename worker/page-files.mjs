@@ -7,6 +7,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { extname, join, posix, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parse } from "parse5";
+import { buildSync } from "esbuild";
 import { html, joinWithSeparator } from "../shared/page/html.js";
 import { nameReleaseFolder } from "../shared/worker/app-worker.js";
 
@@ -207,16 +208,30 @@ function addHomeScreenIcons(files) {
   return { ...files, "home-screen-icons.css": { contentType: TEXT_TYPES[".css"], text } };
 }
 
+/** @param {{ contentType: string, text?: string }} file */
+function bundleOfflineWorker(file) {
+  const bundled = buildSync({
+    stdin: { contents: file.text, resolveDir: SHARED_PAGE_ROOT, sourcefile: "offline-worker.js" },
+    bundle: true,
+    format: "iife",
+    target: "safari15.4",
+    write: false,
+  });
+  return { ...file, text: bundled.outputFiles[0].text };
+}
+
 /** @param {string} pageRoot the app's page/ folder */
 export function readPageFiles(pageRoot) {
   const shared = Object.entries(readFolder(SHARED_PAGE_ROOT)).map(([path, file]) => [
     `shared/${path}`,
     file,
   ]);
+  const sharedFiles = Object.fromEntries(shared);
+  sharedFiles["shared/offline-worker.js"] = bundleOfflineWorker(
+    sharedFiles["shared/offline-worker.js"],
+  );
   return addScriptHashes(
-    addModulePreloads(
-      addHomeScreenIcons({ ...readFolder(pageRoot), ...Object.fromEntries(shared) }),
-    ),
+    addModulePreloads(addHomeScreenIcons({ ...readFolder(pageRoot), ...sharedFiles })),
   );
 }
 

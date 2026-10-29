@@ -1,6 +1,11 @@
 // Opens an app's live page as a phone does, signed in with its access code, and says whether it
-// drew what its store sent. CI runs the page against recorded data; this reaches what only the
-// live Worker has, like its secrets, its store, and what the league says today.
+// drew what its store sent, with security headers and HTTPS redirects. CI runs the page against
+// recorded data; this reaches the live Worker's secrets, store and current league feeds.
+import {
+  TRANSPORT_SECURITY,
+  SECURITY_HEADERS,
+  REQUIRED_CSP_DIRECTIVES,
+} from "../shared/page/security-headers.js";
 import { waitFor } from "./check-timing.mjs";
 
 const DRAW_TIMEOUT_MS = 30 * 1000;
@@ -85,13 +90,13 @@ function judgeSecurityHeaders(response, address) {
   if (!response?.ok()) return markBroken(`the page answered ${response?.status()}`);
   const headers = response.headers();
   const policy = headers["content-security-policy"] ?? "";
-  if (!policy.includes("frame-ancestors 'none'") || !policy.includes("script-src 'self'"))
+  if (Object.values(REQUIRED_CSP_DIRECTIVES).some((directive) => !policy.includes(directive)))
     return markBroken("the page is missing its enforced security policy");
-  if (headers["x-frame-options"] !== "DENY")
-    return markBroken("the page is missing its embedding protection");
+  for (const [name, value] of Object.entries(SECURITY_HEADERS))
+    if (headers[name] !== value) return markBroken(`the page is missing ${name}`);
   if (
     new URL(address).protocol === "https:" &&
-    !/max-age=31536000(?:;|$)/.test(headers["strict-transport-security"] ?? "")
+    headers["strict-transport-security"] !== TRANSPORT_SECURITY
   )
     return markBroken("the page is missing its HTTPS protection");
   return null;
