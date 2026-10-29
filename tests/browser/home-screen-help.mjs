@@ -191,7 +191,8 @@ async function checkCloseStartsOnTap(page, button) {
   await expect(button).toHaveCSS("opacity", "0.3");
   expect(
     await welcome.evaluate(
-      (dialog) => !dialog.open || dialog.style.transform === "translateY(100%)",
+      (/** @type {HTMLDialogElement} */ dialog) =>
+        !dialog.open || dialog.style.transform === "translateY(100%)",
     ),
   ).toBe(true);
   await page.clock.runFor(1000);
