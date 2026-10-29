@@ -1,4 +1,4 @@
-import { checkEachView } from "./view-walk.mjs";
+import { TABS_GROUP, checkEachView } from "./view-walk.mjs";
 import { THEMES, showTheme } from "./theme-layout.mjs";
 import { SCREENS } from "./themes.mjs";
 
@@ -280,6 +280,8 @@ export function testLineSpacing(test, expect, app) {
   for (const [screen, viewport] of Object.entries(SCREENS)) {
     for (const theme of THEMES) {
       for (const [group, views] of Object.entries(app.viewGroups)) {
+        // The tabs space their own lines, like the Games list's held day headings.
+        if (group === TABS_GROUP) continue;
         test(`lines in ${group} keep their spacing, ${theme}, on ${screen}`, async ({ page }) => {
           await page.setViewportSize(viewport);
           await app.openWithEverything(page);

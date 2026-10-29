@@ -1,4 +1,5 @@
 import { CONTACT_VIEWS } from "../../../../tests/browser/contact-views.mjs";
+import { TABS_GROUP } from "../../../../tests/browser/view-walk.mjs";
 import {
   expect,
   openApp,
@@ -103,7 +104,7 @@ export const VIEW_GROUPS = {
       close: (page) => page.keyboard.press("Escape"),
     },
   ],
-  "the page's tabs": [
+  [TABS_GROUP]: [
     {
       name: "Bracket",
       open: (page) => openSeasonPart(page, "Bracket"),

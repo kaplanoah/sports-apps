@@ -1,5 +1,8 @@
 import { expect } from "@playwright/test";
 
+/** The group of each app's views that are its tabs, not a sheet or settings. */
+export const TABS_GROUP = "the page's tabs";
+
 /**
  * @typedef {{
  *   name: string,

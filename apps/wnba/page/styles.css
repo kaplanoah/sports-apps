@@ -816,14 +816,13 @@ header.top h1 .title-letter:nth-child(3) {
 }
 
 /* The game sheet: the two teams across the score in its band, then the game's parts, each under a
-   teal title: a first title --heading-below-line under the band's line, anything else that comes
-   first --part-space-first under it, --part-space-above each later title, and --part-space-below
-   it. Each team's side of a chart or
-   bar is in its color for the theme, which js/sheet-colors.js hands the sheet, with its name and
-   numbers in a darker shade of it where the color is too light to read as text, and the side
-   behind on a measure gets a paler bar of the same hue, faded toward a gray as light as the
-   sheet, since fading it toward the tan track or the cream sheet would turn blue gray and green
-   olive. */
+   teal title: a first title --heading-below-line under the band's line, a message that comes first
+   --part-space-first under it, --part-space-above each later title, and --part-space-below it.
+   Each team's side of a chart or bar is in its color for the theme, which js/sheet-colors.js
+   hands the sheet, with its name and numbers in a darker shade of it where the color is too light
+   to read as text, and the side behind on a measure gets a paler bar of the same hue, faded
+   toward a gray as light as the sheet, since fading it toward the tan track or the cream sheet
+   would turn blue gray and green olive. */
 .game-sheet-body {
   --away: var(--away-light, var(--ink-dim));
   --home: var(--home-light, var(--ink-dim));
@@ -2085,9 +2084,9 @@ table.standings tr.playoff-line + tr td {
   letter-spacing: 0.02em;
 }
 /* A team's sheet's parts are spaced like the game sheet's: a first title --heading-below-line
-   under the band's line, anything else that comes first --part-space-first under it,
-   --part-space-above each later title, and --part-space-below each title. Last 10 and Streak sit --form-space-above under the numbers
-   before them, --form-space-between apart. */
+   under the band's line, a message that comes first --part-space-first under it,
+   --part-space-above each later title, and --part-space-below each title. Last 10 and Streak sit
+   --form-space-above under the numbers before them, --form-space-between apart. */
 .team-sheet-body {
   --part-space-first: 20px;
   --part-space-above: 29px;
