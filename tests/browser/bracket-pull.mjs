@@ -1,0 +1,251 @@
+import { expect } from "@playwright/test";
+import { waitForLoadToSettle } from "./at-rest.mjs";
+import { holdClock, matchPath } from "./harness.mjs";
+import { findMiddle, findSeasonPart, readScroll, scrollSeasonPart } from "./season-scroll.mjs";
+import { findSeasonPill, openSeasonPart } from "./season-tab.mjs";
+import { setHidden } from "./visibility.mjs";
+import { drag, openFromHomeScreen, PULL_START } from "./touch.mjs";
+
+/** @param {import("@playwright/test").Page} page @param {string} cards */
+const readGeometry = (page, cards) =>
+  page.locator("#bracketWrap").evaluate((wrap, selector) => {
+    const top = wrap.getBoundingClientRect().top;
+    return [...wrap.querySelectorAll(selector)].map((card) => {
+      const box = card.getBoundingClientRect();
+      return [Math.round((box.top - top) * 100) / 100, box.height];
+    });
+  }, cards);
+
+/** @param {import("@playwright/test").Page} page @param {string} cards */
+async function watchSettlement(page, cards) {
+  await page.locator("#bracketWrap").evaluate((wrap, selector) => {
+    const header = /** @type {HTMLElement} */ (document.querySelector("header.top"));
+    const frames = /** @type {{ offset: number, tops: number[] }[]} */ ([]);
+    Object.assign(window, { bracketPullFrames: frames, isBracketPullSettled: false });
+    function sampleFrame() {
+      dispatchEvent(new Event("resize"));
+      const top = wrap.getBoundingClientRect().top;
+      frames.push({
+        offset: parseFloat(getComputedStyle(header).top) || 0,
+        tops: [...wrap.querySelectorAll(selector)].map(
+          (card) => Math.round((card.getBoundingClientRect().top - top) * 100) / 100,
+        ),
+      });
+      if (header.style.top) requestAnimationFrame(sampleFrame);
+      else Object.assign(window, { isBracketPullSettled: true });
+    }
+    requestAnimationFrame(sampleFrame);
+  }, cards);
+  return async () => {
+    await page.waitForFunction(() => /** @type {any} */ (window).isBracketPullSettled);
+    return page.evaluate(
+      () =>
+        /** @type {{ offset: number, tops: number[] }[]} */ (
+          /** @type {any} */ (window).bracketPullFrames
+        ),
+    );
+  };
+}
+
+/**
+ * @param {object} options
+ * @param {typeof import("./harness.mjs").test} options.test
+ * @param {(page: import("@playwright/test").Page) => Promise<{ holdStore: () => Promise<() => void> }>} options.openApp
+ * @param {string} options.cards
+ * @param {string} options.sideways
+ */
+export function checkBracketPull({ test, openApp, cards, sideways }) {
+  test.use({ viewport: { width: 390, height: 900 }, hasTouch: true, isMobile: true });
+
+  for (const reducedMotion of /** @type {const} */ (["reduce", "no-preference"])) {
+    test(`bracket card spacing survives held-pull recalculation and repeated refreshes with ${reducedMotion} motion`, async ({
+      page,
+    }) => {
+      await page.emulateMedia({ reducedMotion });
+      await openFromHomeScreen(page);
+      const app = await openApp(page);
+      await openSeasonPart(page, "Bracket");
+      await waitForLoadToSettle(page);
+      await holdClock(page);
+      const geometry = await readGeometry(page, cards);
+      expect(geometry.length).toBeGreaterThan(3);
+      const header = page.locator("header.top");
+
+      for (let refresh = 0; refresh < 2; refresh += 1) {
+        const answerStore = await app.holdStore();
+        const liftFinger = await drag(page, PULL_START, { y: 200 }, { durationMs: 400 });
+        await expect(header).toHaveCSS("top", "96px");
+        expect(await readGeometry(page, cards)).toEqual(geometry);
+        await page.evaluate(() => dispatchEvent(new Event("resize")));
+        await page.clock.runFor(100);
+        expect(await readGeometry(page, cards)).toEqual(geometry);
+        await liftFinger();
+        await expect(header).toHaveCSS("top", "56px");
+        await page.evaluate(() => dispatchEvent(new Event("resize")));
+        await page.clock.runFor(900);
+        await expect(page.locator(".pull-refresh")).toHaveClass(/turning/);
+        expect(await readGeometry(page, cards)).toEqual(geometry);
+        answerStore();
+        await expect.poll(() => header.evaluate((element) => element.style.top)).toBe("");
+        await expect(page.locator(".pull-refresh")).toBeHidden();
+        expect(await readGeometry(page, cards)).toEqual(geometry);
+      }
+    });
+
+    test(`short and cancelled pulls preserve bracket spacing with ${reducedMotion} motion`, async ({
+      page,
+    }) => {
+      await page.emulateMedia({ reducedMotion });
+      await openFromHomeScreen(page);
+      await openApp(page);
+      await openSeasonPart(page, "Bracket");
+      await waitForLoadToSettle(page);
+      const geometry = await readGeometry(page, cards);
+
+      for (const isCancelled of [false, true]) {
+        const liftFinger = await drag(page, PULL_START, { y: isCancelled ? 200 : 60 });
+        await page.evaluate(() => dispatchEvent(new Event("resize")));
+        await page.clock.runFor(100);
+        expect(await readGeometry(page, cards)).toEqual(geometry);
+        const readFrames = await watchSettlement(page, cards);
+        if (isCancelled)
+          await page.locator("header.top").dispatchEvent("touchcancel", { touches: [] });
+        await liftFinger();
+        await expect(page.locator(".pull-refresh")).toBeHidden();
+        await expect
+          .poll(() => page.locator("header.top").evaluate((element) => element.style.top))
+          .toBe("");
+        expect(await readGeometry(page, cards)).toEqual(geometry);
+        const frames = await readFrames();
+        for (const frame of frames) expect(frame.tops).toEqual(geometry.map(([top]) => top));
+        if (reducedMotion === "no-preference") {
+          expect(new Set(frames.map(({ offset }) => offset)).size).toBeGreaterThan(2);
+          for (let index = 1; index < frames.length; index += 1)
+            expect(frames[index].offset).toBeLessThanOrEqual(frames[index - 1].offset);
+        }
+      }
+    });
+  }
+
+  test("a real header and viewport resize changes bracket room equally at rest and during a pull", async ({
+    page,
+  }) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await openFromHomeScreen(page);
+    await openApp(page);
+    await openSeasonPart(page, "Bracket");
+    await waitForLoadToSettle(page);
+    const original = await readGeometry(page, cards);
+    const header = page.locator("header.top");
+    /** @param {number} padding @param {number} height */
+    const resizeRoom = async (padding, height) => {
+      await header.evaluate(
+        (element, pixels) => (element.style.paddingBottom = pixels ? `${pixels}px` : ""),
+        padding,
+      );
+      await page.setViewportSize({ width: 390, height });
+      await page.clock.runFor(100);
+    };
+    await resizeRoom(40, 820);
+    const resized = await readGeometry(page, cards);
+    expect(resized).not.toEqual(original);
+    await resizeRoom(0, 900);
+    expect(await readGeometry(page, cards)).toEqual(original);
+
+    const liftFinger = await drag(page, PULL_START, { y: 60 });
+    await resizeRoom(40, 820);
+    expect(await readGeometry(page, cards)).toEqual(resized);
+    await liftFinger();
+    await expect(page.locator(".pull-refresh")).toBeHidden();
+    expect(await readGeometry(page, cards)).toEqual(resized);
+    await resizeRoom(0, 900);
+    expect(await readGeometry(page, cards)).toEqual(original);
+  });
+
+  test("a failed refresh settles without keeping a pull offset and a later refresh recovers", async ({
+    page,
+  }) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await openFromHomeScreen(page);
+    await openApp(page);
+    await openSeasonPart(page, "Bracket");
+    await waitForLoadToSettle(page);
+    await holdClock(page);
+    const original = await readGeometry(page, cards);
+    let failures = 0;
+    /** @param {import("@playwright/test").Route} route */
+    const failStore = (route) => {
+      failures += 1;
+      return route.fulfill({ status: 503, body: "" });
+    };
+    await page.route(matchPath("/store/"), failStore);
+    await (
+      await drag(page, PULL_START, { y: 200 })
+    )();
+    await expect.poll(() => failures).toBeGreaterThan(0);
+    await page.evaluate(() => dispatchEvent(new Event("resize")));
+    await page.clock.runFor(900);
+    expect(await readGeometry(page, cards)).toEqual(original);
+    await page.clock.runFor(10_000);
+    await expect(page.locator(".pull-refresh")).toBeHidden();
+    await page.clock.runFor(100);
+    expect(await page.locator("header.top").evaluate((element) => element.style.top)).toBe("");
+    const failed = await readGeometry(page, cards);
+    await page.evaluate(() => dispatchEvent(new Event("resize")));
+    await page.clock.runFor(100);
+    expect(await readGeometry(page, cards)).toEqual(failed);
+
+    await page.unroute(matchPath("/store/"), failStore);
+    await (
+      await drag(page, PULL_START, { y: 200 })
+    )();
+    await page.clock.runFor(1000);
+    await expect(page.locator(".pull-refresh")).toBeHidden();
+    await expect(page.locator(".catch-up-line")).toHaveCount(0);
+    await page.clock.runFor(100);
+    expect(await readGeometry(page, cards)).toEqual(original);
+  });
+
+  test("refresh and reload preserve the bracket column and each season part's vertical place", async ({
+    page,
+  }) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await openFromHomeScreen(page);
+    const app = await openApp(page);
+    await openSeasonPart(page, "Standings");
+    await waitForLoadToSettle(page);
+    await scrollSeasonPart(page, "standings", 100);
+    const pillName = findSeasonPill(page).getByRole("tab", { name: "Bracket", exact: true });
+    await pillName.click();
+    await scrollSeasonPart(page, "bracket", 80);
+    const bracket = page.locator(sideways);
+    await bracket.evaluate((element) =>
+      element.scrollTo({ left: element.scrollWidth, behavior: "instant" }),
+    );
+    const readPlace = async () => ({
+      standings: await readScroll(findSeasonPart(page, "standings")),
+      bracket: await readScroll(findSeasonPart(page, "bracket")),
+      left: await bracket.evaluate((element) => element.scrollLeft),
+    });
+    const place = await readPlace();
+    expect(place.standings).toBeGreaterThan(0);
+    expect(place.bracket).toBeGreaterThan(0);
+    expect(place.left).toBeGreaterThan(0);
+    const geometry = await readGeometry(page, cards);
+    const answerStore = await app.holdStore();
+    await (
+      await drag(page, await findMiddle(pillName), { y: 200 })
+    )();
+    await expect(page.locator(".pull-refresh")).toHaveClass(/turning/);
+    await page.evaluate(() => dispatchEvent(new Event("resize")));
+    await page.clock.runFor(900);
+    expect(await readGeometry(page, cards)).toEqual(geometry);
+    answerStore();
+    await expect(page.locator(".pull-refresh")).toBeHidden();
+    expect(await readPlace()).toEqual(place);
+    await setHidden(page, true);
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await waitForLoadToSettle(page);
+    expect(await readPlace()).toEqual(place);
+  });
+}

@@ -31,7 +31,7 @@ export function findShortfall(wanted, landed) {
  * through an ease back.
  * @param {HTMLElement} element
  */
-function readPulledBy(element) {
+export function readPulledBy(element) {
   let pulled = 0;
   for (let part = /** @type {HTMLElement | null} */ (element); part; part = part.parentElement)
     if (part.style.top) pulled += parseFloat(getComputedStyle(part).top) || 0;
