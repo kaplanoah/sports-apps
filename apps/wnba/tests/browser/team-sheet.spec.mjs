@@ -361,10 +361,10 @@ test.describe("a team's sheet", () => {
     const sheet = page.locator("#teamSheet");
     await expect(sheet.locator("#teamTitle")).toHaveText("New York Liberty");
     const opponent = sheet.locator(".team-matchup").first().getByRole("button");
-    const label = await opponent.getAttribute("aria-label");
+    const name = (await opponent.textContent()).replace(", team details", "");
 
     await opponent.click();
-    await expect(sheet.locator("#teamTitle")).toHaveText(label.replace("Team details: ", ""));
+    await expect(sheet.locator("#teamTitle")).toContainText(name);
     await expect(sheet.locator("#teamTitle")).not.toHaveText("New York Liberty");
   });
 
@@ -372,7 +372,7 @@ test.describe("a team's sheet", () => {
     await openApp(page);
     await openSeasonPart(page, "Standings");
     const fever = page.locator("#standings-league").getByRole("button", {
-      name: "Team details: Indiana Fever",
+      name: /Fever\b.*team details$/,
     });
     await fever.focus();
     await page.keyboard.press("Enter");
@@ -386,7 +386,7 @@ test.describe("a team's sheet", () => {
     await openApp(page);
     await openSeasonPart(page, "Standings");
     const aces = page.locator("#standings-league").getByRole("button", {
-      name: "Team details: Las Vegas Aces",
+      name: /Aces\b.*team details$/,
     });
     await aces.focus();
 

@@ -12,7 +12,6 @@ const NOW = new Date(2026, 8, 30, 17, 55);
  */
 const describeCard = (fields) => ({
   id: "1022600400",
-  label: "Storm at Sky",
   state: "pre",
   day: null,
   clock: "",
@@ -60,4 +59,11 @@ test("a game still to come today stands out as a game being played does, and one
 
 test("a card without a day leaves the line empty", () => {
   assert.equal(readWhen({ day: null }), "");
+});
+
+test("a card's button is named by what it shows, then that it opens the game", () => {
+  const text = renderGameCards([describeCard({ day: new Date(2026, 9, 2) })], NOW)?.text ?? "";
+
+  assert.match(text, /<span class="spoken-only">, game details<\/span>\s*<\/button>/);
+  assert.doesNotMatch(text, /aria-label/);
 });

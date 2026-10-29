@@ -5,7 +5,12 @@ import { createGitHub, readAllPages } from "./github-api.mjs";
 import { isGitObjectId } from "./git-object.mjs";
 import { readReviewProvider } from "./review-provider.mjs";
 import { matchesReviewProvider } from "./review-state.mjs";
-import { readReviewRun, REVIEW_CHECK_NAME, REVIEW_RESULT_PREFIX } from "./review-run.mjs";
+import {
+  readReviewRun,
+  requireTrustedReviewAuthority,
+  REVIEW_CHECK_NAME,
+  REVIEW_RESULT_PREFIX,
+} from "./review-run.mjs";
 import { readReviewArtifact } from "./review-artifact.mjs";
 import { verifyTrustedReviewResult } from "./find-trusted-review.mjs";
 import {
@@ -18,23 +23,9 @@ import {
   validatePublicationAttestation,
 } from "./review-publication.mjs";
 
-/** @param {NodeJS.ProcessEnv} env */
-export function requirePublisherAuthority(env) {
-  if (
-    env.GITHUB_REF !== "refs/heads/main" ||
-    !["pull_request_target", "workflow_run"].includes(env.GITHUB_EVENT_NAME) ||
-    !["review.yml", "trusted-review-publisher.yml"].some(
-      (name) =>
-        env.GITHUB_WORKFLOW_REF ===
-        `${env.GITHUB_REPOSITORY}/.github/workflows/${name}@refs/heads/main`,
-    )
-  )
-    throw new Error("Publisher requires trusted main workflow authority.");
-}
-
 /** @param {any} event @param {NodeJS.ProcessEnv} env @param {(path:string)=>Promise<any>} readGitHub */
 export async function discoverPublicationHeads(event, env, readGitHub) {
-  requirePublisherAuthority(env);
+  requireTrustedReviewAuthority(env);
   if (env.GITHUB_EVENT_NAME === "workflow_run") {
     if (!Number.isSafeInteger(event.workflow_run?.id)) throw new Error("Missing workflow run.");
     const run = await readGitHub(`/actions/runs/${event.workflow_run.id}`);
@@ -178,7 +169,11 @@ async function readPublicationContext(options, head, repository) {
     (answer) => answer.workflow_runs,
   );
   const run = selectPublicationRun(runs, pull, { name: repository.full_name, id: repository.id });
-  return { pull, run };
+  const { choice } = await readReviewProvider(
+    { ...options.env, PR: String(pull.number) },
+    options.readGitHub,
+  );
+  return { pull, run, choice };
 }
 
 /** @param {any} options @param {string} head */
@@ -259,20 +254,23 @@ async function publishDecision(options, head, decision, repository) {
   return answer.id;
 }
 
+class PublicationContextError extends Error {}
+
 /** @param {any} options @param {any} repository @param {any} previous */
 async function requireFreshContext(options, repository, previous) {
   const current = await readPublicationContext(options, previous.pull.head.sha, repository);
   if (
     !current.pull ||
     current.pull.number !== previous.pull.number ||
-    current.pull.base.sha !== previous.pull.base.sha ||
     current.pull.base.ref !== previous.pull.base.ref ||
     current.run?.id !== previous.run?.id ||
     current.run?.run_attempt !== previous.run?.run_attempt ||
+    current.choice?.provider !== previous.choice?.provider ||
+    current.choice?.selection !== previous.choice?.selection ||
     (current.run?.status === "completed" && current.run.conclusion !== "success") ||
     isPublicationExempt(current.pull) !== isPublicationExempt(previous.pull)
   )
-    throw new Error("PR authorization context changed before publication.");
+    throw new PublicationContextError("PR authorization context changed before publication.");
 }
 
 /** @param {any} request @param {string} title @param {string} summary */
@@ -285,20 +283,39 @@ function holdReviewPublication(request, title, summary) {
   );
 }
 
+/** @param {any} request @param {unknown} error @param {string} title @param {string} summary */
+async function rejectReviewPublication(request, error, title, summary) {
+  await holdReviewPublication(request, title, summary).catch(() => undefined);
+  throw error;
+}
+
+/** @param {any} request @param {any} decision */
+async function publishValidatedDecision(request, decision) {
+  try {
+    await requireFreshContext(request.options, request.repository, request.context);
+    await publishDecision(request.options, request.head, decision, request.repository);
+    await requireFreshContext(request.options, request.repository, request.context);
+  } catch (error) {
+    const changed = error instanceof PublicationContextError;
+    return rejectReviewPublication(
+      request,
+      error,
+      changed
+        ? "Review context changed during publication"
+        : "Publication could not be re-verified",
+      "Success is withheld because current authorization could not be confirmed. Inspect the publisher workflow before recovery.",
+    );
+  }
+}
+
 /** @param {any} request */
 async function publishExemption(request) {
-  await requireFreshContext(request.options, request.repository, request.context);
-  await publishDecision(
-    request.options,
-    request.head,
-    {
-      success: true,
-      title: "Review not required for Dependabot",
-      summary:
-        "The trusted publisher verified the existing Dependabot exemption. This is not reviewed evidence.",
-    },
-    request.repository,
-  );
+  await publishValidatedDecision(request, {
+    success: true,
+    title: "Review not required for Dependabot",
+    summary:
+      "The trusted publisher verified the existing Dependabot exemption. This is not reviewed evidence.",
+  });
   return { success: true, exempt: true };
 }
 
@@ -329,7 +346,7 @@ async function buildPublicationEvidence(request, check) {
     repositoryId: request.repository.id,
     pull: pull.number,
     head: request.head,
-    base: pull.base.sha,
+    base: needs["review-plan"].outputs.base,
     target: pull.base.ref,
     source: identity.source,
     run: run.id,
@@ -356,18 +373,12 @@ async function publishFinish(request) {
     "Earlier success is invalid until this attempt's result is verified.",
   );
   const evidence = await buildPublicationEvidence(request, check);
-  await requireFreshContext(request.options, request.repository, request.context);
-  await publishDecision(
-    request.options,
-    request.head,
-    {
-      success: true,
-      title: "Validated trusted review passed",
-      summary: `Trusted run ${evidence.run}, attempt ${evidence.attempt}, PR #${evidence.pull}. Reviewed head ${evidence.head}, base ${evidence.base}, tree ${evidence.tree}.`,
-      stamp: createPublicationStamp(evidence),
-    },
-    request.repository,
-  );
+  await publishValidatedDecision(request, {
+    success: true,
+    title: "Validated trusted review passed",
+    summary: `Trusted run ${evidence.run}, attempt ${evidence.attempt}, PR #${evidence.pull}. Reviewed head ${evidence.head}, base ${evidence.base}, tree ${evidence.tree}.`,
+    stamp: createPublicationStamp(evidence),
+  });
   writePublicationDecision(request.options.env, evidence);
   return { success: true };
 }
@@ -389,25 +400,19 @@ async function revalidatePublication(request) {
   try {
     const jobs = await readProducerJobs(options.readGitHub, run);
     await readTerminalEvidence(options, run, pull, jobs);
-    await requireFreshContext(options, request.repository, request.context);
   } catch (error) {
-    await holdReviewPublication(
+    return rejectReviewPublication(
       request,
+      error,
       "Trusted publication evidence is unavailable",
       "The current attempt has no valid terminal decision. Inspect the publisher workflow before retrying.",
     );
-    throw error;
   }
-  await publishDecision(
-    options,
-    request.head,
-    {
-      success: true,
-      title: "Validated trusted review passed",
-      summary: `Revalidated trusted run ${run.id}, attempt ${run.run_attempt}, PR #${pull.number}.`,
-    },
-    request.repository,
-  );
+  await publishValidatedDecision(request, {
+    success: true,
+    title: "Validated trusted review passed",
+    summary: `Revalidated trusted run ${run.id}, attempt ${run.run_attempt}, PR #${pull.number}.`,
+  });
   return { success: true };
 }
 
@@ -428,7 +433,7 @@ function requireDirectPublisherSource(env, run) {
 /** @param {any} options */
 export async function reconcileReviewPublication(options) {
   const { env } = options;
-  requirePublisherAuthority(env);
+  requireTrustedReviewAuthority(env);
   const head = env.PUBLISH_HEAD;
   const phase = env.PUBLISH_PHASE;
   if (!isGitObjectId(head) || !["begin", "finish", "observe"].includes(phase))
@@ -452,7 +457,7 @@ export async function reconcileReviewPublication(options) {
     await holdReviewPublication(
       request,
       "Trusted review is owed",
-      "No authorized trusted review covers this PR head and base.",
+      "No authorized trusted review covers this PR head.",
     );
     return { success: false };
   }

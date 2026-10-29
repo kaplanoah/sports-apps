@@ -139,6 +139,18 @@ export function readCodexEvents(text) {
     .map((line) => JSON.parse(line));
 }
 
+/** @param {any} usage */
+function hasValidCodexSubcounts(usage) {
+  return [
+    ["cache_write_input_tokens", usage.input_tokens - usage.cached_input_tokens],
+    ["reasoning_output_tokens", usage.output_tokens],
+  ].every(
+    ([field, limit]) =>
+      usage[field] === undefined ||
+      (Number.isSafeInteger(usage[field]) && usage[field] >= 0 && usage[field] <= limit),
+  );
+}
+
 /** @param {string} text @param {string} provider */
 function readReviewUsage(text, provider) {
   let events;
@@ -166,7 +178,8 @@ function readReviewUsage(text, provider) {
         (provider === "codex"
           ? !Number.isSafeInteger(usage.cached_input_tokens) ||
             usage.cached_input_tokens < 0 ||
-            usage.cached_input_tokens > usage.input_tokens
+            usage.cached_input_tokens > usage.input_tokens ||
+            !hasValidCodexSubcounts(usage)
           : !Number.isSafeInteger(usage.cache_read_input_tokens) ||
             !Number.isSafeInteger(usage.cache_creation_input_tokens) ||
             usage.cache_read_input_tokens < 0 ||
@@ -179,19 +192,38 @@ function readReviewUsage(text, provider) {
 
 /** @param {string} text */
 export function retainCodexUsage(text) {
+  const fields = [
+    "input_tokens",
+    "cached_input_tokens",
+    "cache_write_input_tokens",
+    "output_tokens",
+    "reasoning_output_tokens",
+  ];
   return readReviewUsage(text, "codex")
-    .map(({ input_tokens, cached_input_tokens, output_tokens }) =>
+    .map((usage) =>
       JSON.stringify({
         type: "turn.completed",
-        usage: { input_tokens, cached_input_tokens, output_tokens },
+        usage: Object.fromEntries(
+          fields
+            .filter((field) => Object.hasOwn(usage, field))
+            .map((field) => [field, usage[field]]),
+        ),
       }),
     )
     .join("\n");
 }
 
+/** @param {any[]} usages @param {string} field */
+function sumReportedUsage(usages, field) {
+  return usages.some((usage) => usage[field] === undefined)
+    ? null
+    : usages.reduce((total, usage) => total + usage[field], 0);
+}
+
 /** @param {string} text @param {string} provider */
 export function measureReviewTokens(text, provider) {
-  return readReviewUsage(text, provider).reduce(
+  const usages = readReviewUsage(text, provider);
+  const total = usages.reduce(
     (total, usage) => ({
       input:
         total.input + usage.input_tokens - (provider === "codex" ? usage.cached_input_tokens : 0),
@@ -199,11 +231,16 @@ export function measureReviewTokens(text, provider) {
       cached:
         total.cached +
         (provider === "codex" ? usage.cached_input_tokens : usage.cache_read_input_tokens),
-      cacheWrite:
-        total.cacheWrite + (provider === "claude" ? usage.cache_creation_input_tokens : 0),
     }),
-    { input: 0, output: 0, cached: 0, cacheWrite: 0 },
+    { input: 0, output: 0, cached: 0 },
   );
+  return provider === "codex"
+    ? {
+        ...total,
+        cacheWrite: sumReportedUsage(usages, "cache_write_input_tokens"),
+        reasoningOutput: sumReportedUsage(usages, "reasoning_output_tokens"),
+      }
+    : { ...total, cacheWrite: sumReportedUsage(usages, "cache_creation_input_tokens") };
 }
 
 /** @param {any} trial @param {string} telemetry */

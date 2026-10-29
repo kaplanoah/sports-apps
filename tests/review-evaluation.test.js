@@ -82,7 +82,8 @@ test("evaluation counts native provider usage separately without counting interm
     input: 120,
     output: 35,
     cached: 30,
-    cacheWrite: 0,
+    cacheWrite: null,
+    reasoningOutput: null,
   });
   assert.deepEqual(measureReviewTokens(CLAUDE, "claude"), {
     input: 100,
@@ -97,6 +98,71 @@ test("evaluation counts native provider usage separately without counting interm
     [CODEX, "other"],
   ])
     assert.throws(() => measureReviewTokens(text, provider));
+});
+
+test("native cache writes and reasoning are retained numeric subsets, never added to total input or output", () => {
+  const usages = [
+    {
+      input_tokens: 100,
+      cached_input_tokens: 20,
+      cache_write_input_tokens: 70,
+      output_tokens: 30,
+      reasoning_output_tokens: 15,
+    },
+    {
+      input_tokens: 50,
+      cached_input_tokens: 10,
+      cache_write_input_tokens: 30,
+      output_tokens: 5,
+      reasoning_output_tokens: 2,
+    },
+  ];
+  const events = usages
+    .map((usage) => JSON.stringify({ type: "turn.completed", usage }))
+    .join("\n");
+  const retained = retainCodexUsage(events);
+  assert.deepEqual(
+    retained.split("\n").map((line) => JSON.parse(line).usage),
+    usages,
+  );
+  assert.deepEqual(measureReviewTokens(retained, "codex"), {
+    input: 120,
+    output: 35,
+    cached: 30,
+    cacheWrite: 100,
+    reasoningOutput: 17,
+  });
+  for (const field of ["cache_write_input_tokens", "reasoning_output_tokens"]) {
+    for (const value of [
+      -1,
+      1.5,
+      "private",
+      null,
+      field === "cache_write_input_tokens" ? 81 : 31,
+    ]) {
+      const usage = { ...usages[0], [field]: value };
+      assert.throws(
+        () => retainCodexUsage(JSON.stringify({ type: "turn.completed", usage })),
+        /usage is missing/,
+      );
+    }
+    const partial = structuredClone(usages);
+    delete partial[1][field];
+    const missing = partial
+      .map((usage) => JSON.stringify({ type: "turn.completed", usage }))
+      .join("\n");
+    const measured = measureReviewTokens(retainCodexUsage(missing), "codex");
+    assert.equal(
+      measured[field === "cache_write_input_tokens" ? "cacheWrite" : "reasoningOutput"],
+      null,
+    );
+  }
+  const zero = JSON.stringify({
+    type: "turn.completed",
+    usage: { ...usages[0], cache_write_input_tokens: 0, reasoning_output_tokens: 0 },
+  });
+  assert.equal(measureReviewTokens(zero, "codex").cacheWrite, 0);
+  assert.equal(measureReviewTokens(zero, "codex").reasoningOutput, 0);
 });
 
 test("cache telemetry must be observed, nonnegative and consistent with native input totals", () => {

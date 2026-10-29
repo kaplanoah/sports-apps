@@ -104,7 +104,10 @@ export const VIEW_GROUPS = {
       name: "a team's sheet",
       open: async (page) => {
         await openSeasonPart(page, "Standings");
-        await page.getByRole("button", { name: "Team details: Minnesota Lynx" }).first().click();
+        await page
+          .getByRole("button", { name: /^Lynx\b.*team details$/ })
+          .first()
+          .click();
       },
       shown: (page) => page.locator("#teamSheet table.players"),
       close: (page) => page.keyboard.press("Escape"),
@@ -112,7 +115,10 @@ export const VIEW_GROUPS = {
     {
       name: "a team's roster",
       open: async (page) => {
-        await page.getByRole("button", { name: "Team details: New York Liberty" }).first().click();
+        await page
+          .getByRole("button", { name: /^Liberty\b.*team details$/ })
+          .first()
+          .click();
         await page.locator("#teamSheet").getByRole("tab", { name: "Roster" }).click();
       },
       shown: (page) => page.locator("#rosterSection .roster-coach"),
@@ -121,7 +127,10 @@ export const VIEW_GROUPS = {
     {
       name: "a player's sheet",
       open: async (page) => {
-        await page.getByRole("button", { name: "Team details: New York Liberty" }).first().click();
+        await page
+          .getByRole("button", { name: /^Liberty\b.*team details$/ })
+          .first()
+          .click();
         await page.locator("#teamSheet").getByRole("tab", { name: "Roster" }).click();
         await page
           .locator("#rosterSection")
@@ -134,7 +143,10 @@ export const VIEW_GROUPS = {
     {
       name: "the sheet of a player who is out",
       open: async (page) => {
-        await page.getByRole("button", { name: "Team details: New York Liberty" }).first().click();
+        await page
+          .getByRole("button", { name: /^Liberty\b.*team details$/ })
+          .first()
+          .click();
         await page.locator("#teamSheet").getByRole("tab", { name: "Roster" }).click();
         await page
           .locator("#rosterSection")

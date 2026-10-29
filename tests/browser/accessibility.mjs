@@ -15,14 +15,6 @@ const RULES_LEFT_OUT = [
   // contrast.mjs already holds every shown text at rest to WCAG's AA contrast, from the colors
   // the page draws, where axe guesses at what sits behind text and gives up on much of it.
   "color-contrast",
-  // Buttons whose names put their context before their visible words, until #907 leads
-  // each name with them.
-  "label-content-name-mismatch",
-  // The views sit outside a main landmark, and the Search tab outside its tablist, until
-  // #907 puts them in theirs.
-  "region",
-  "landmark-one-main",
-  "aria-required-parent",
 ];
 
 /**

@@ -56,14 +56,15 @@ jobs:
 
   # A red change merges only once the owner has used it on the beta app and labeled it phone-ok
   # (worker/red-change.mjs), which reads the pull request's timeline for who added the label, and
-  # the head commit's check suites for whether the label came after the head was pushed, so a push
-  # after phone-ok holds the pull request again. The merge commit's first parent is the base branch,
-  # whose copy of the gate's code, run on the Node and modules the base names, judges the pull
-  # request's files, so a change to the gate's code can't let the pull request's own red change
-  # through; a change to this job, the phone job, or check is the review's to weigh, as REVIEW.md
-  # says. The diff shows every file's text, whatever .gitattributes says of it. It holds the change
-  # on the phone job's status rather than by failing, and check holds it whenever main's rules
-  # don't require that status, or the pull request comes from a fork, whose token can't post it.
+  # check suites for whether the label came after the head's last tested change was pushed, so a
+  # push after phone-ok that changes what the owner tested holds the pull request again. The merge
+  # commit's first parent is the base branch, whose copy of the gate's code, run on the Node and
+  # modules the base names, judges the pull request's files, so a change to the gate's code can't
+  # let the pull request's own red change through; a change to this job, the phone job, or check is
+  # the review's to weigh, as REVIEW.md says. The diff shows every file's text, whatever
+  # .gitattributes says of it. It holds the change on the phone job's status rather than by
+  # failing, and check holds it whenever main's rules don't require that status, or the pull
+  # request comes from a fork, whose token can't post it.
   gate:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
@@ -467,7 +468,6 @@ jobs:
       tree: ${{ steps.verify.outputs.tree }}
     env:
       REVIEW_HEAD: ${{ github.event.pull_request.head.sha }}
-      REVIEW_EVENT_BASE: ${{ github.event.pull_request.base.sha }}
       REVIEW_TIMEOUT_MINUTES: *review-join-timeout
       PR: ${{ github.event.pull_request.number }}
     steps:

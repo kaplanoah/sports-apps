@@ -46,7 +46,7 @@ async function openGame(page) {
 async function openAstrosOverGame(page) {
   await page
     .locator("#gameSheet")
-    .getByRole("button", { name: "Team details: Astros" })
+    .getByRole("button", { name: /^Astros\b.*team details$/ })
     .first()
     .click();
   const teamSheet = page.locator("#teamSheet");
@@ -142,7 +142,9 @@ test("sliding between a game's sections, by a tap on its starters and by swipes,
   const matchupTab = gameSheet.getByRole("tab", { name: "Matchup" });
   const gameTab = gameSheet.getByRole("tab", { name: "Game" });
 
-  await gameSheet.getByRole("button", { name: "Pitching matchup: Blubaugh vs Springs" }).click();
+  await gameSheet
+    .getByRole("button", { name: /^Blubaugh\b.* vs .*Springs\b.*pitching matchup$/ })
+    .click();
   await expect(matchupTab).toHaveAttribute("aria-selected", "true");
   await expectAtRest(page);
 

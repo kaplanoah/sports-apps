@@ -321,7 +321,7 @@ test("with Diagnostics on, a click iOS sends after the browser took a touch on t
   expect(await sendClick(button)).toBe(false);
 
   const lines = await readLog(page, "Standings and bracket");
-  expect(lines).toContainEqual(expect.stringMatching(/^touchend on Team details: /));
+  expect(lines).toContainEqual(expect.stringMatching(/^touchend on .*team details$/));
   expect(lines).not.toContainEqual(expect.stringMatching(/^click /));
 });
 
@@ -357,7 +357,7 @@ test("with Diagnostics on, each touch on the standings logs how far it moved, wh
   await scrollSeasonPart(page, "standings", 0);
 
   const lines = await readLog(page, "Standings and bracket");
-  expect(lines).toContainEqual(expect.stringMatching(/^touchstart at \d+,\d+ on Team details: /));
+  expect(lines).toContainEqual(expect.stringMatching(/^touchstart at \d+,\d+ on .*team details$/));
   expect(lines).toContainEqual(
     expect.stringMatching(
       /^lifted after moving 30 left and 3 down; it landed on a list at rest; the page's code took the touch once it had moved \d+ left( and \d down)?; its pointer wasn't cancelled; the standings didn't scroll$/,

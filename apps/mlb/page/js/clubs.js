@@ -93,7 +93,6 @@ export function renderClub(id) {
   if (!TEAMS[id]) return renderPlainClub(id);
   return renderTeamSheetButton({
     team: id,
-    name: nameTeam(id),
     content: renderClubParts(id),
     className: "club",
   });
@@ -104,9 +103,7 @@ export const renderPlainClub = (id) => html`<span class="club">${renderClubParts
 
 /** A club's name in a line of text, that opens its sheet. */
 export const renderClubName = (id) =>
-  TEAMS[id]
-    ? renderTeamSheetButton({ team: id, name: nameTeam(id), content: nameTeam(id) })
-    : nameTeam(id);
+  TEAMS[id] ? renderTeamSheetButton({ team: id, content: nameTeam(id) }) : nameTeam(id);
 
 // A device's ranking changes only on a drag, so it can name clubs that left the field and miss ones
 // that arrived, which go by name, as every club does before the first drag.

@@ -20,7 +20,7 @@ import { renderStandings, renderStandingsLists } from "../page/js/standings-view
 import { renderTeamSheet } from "../page/js/team-view.js";
 import { placeOnRange } from "../../../shared/page/rank-curve.js";
 import { TEAMS } from "../page/js/teams.js";
-import { normalizeSpaces } from "../../../tests/text.js";
+import { dropSpokenOnly, normalizeSpaces } from "../../../tests/text.js";
 import { checkInTimeZone, EASTERN } from "../../../tests/time-zone.js";
 
 const AFTERNOON = JSON.parse(
@@ -36,7 +36,7 @@ const SEASON = buildSeasonWithLeaders(AFTERNOON.responses, { season: 2026, now: 
 
 // Each tag reads as a space, and the page's separator as a bar.
 const readText = (markup) =>
-  normalizeSpaces(markup.text)
+  dropSpokenOnly(normalizeSpaces(markup.text))
     .replace(/<[^>]+>/g, " ")
     .replace(/&bull;/g, "|")
     .replace(/\s+/g, " ")
@@ -823,15 +823,12 @@ test("each card opens its game, and shows the other team's dot, never the team's
     const cards = body.text.slice(0, body.text.indexOf("<section"));
     const buttons = [
       ...cards.matchAll(
-        /<button\s+type="button"\s+class="game-card-button press-tint"\s+data-game="(\d+)"\s+aria-label="([^"]+)"/g,
+        /<button\s+type="button"\s+class="game-card-button press-tint"\s+data-game="(\d+)"\s*>/g,
       ),
     ];
     assert.deepEqual(
-      buttons.map(([, id, label]) => [id, label]),
-      [
-        ["1022600325", "Game details: Wings at Storm, Sep 23"],
-        ["1022600400", "Game details: Storm at Sky, Sep 30"],
-      ],
+      buttons.map(([, id]) => id),
+      ["1022600325", "1022600400"],
     );
     assert.equal([...cards.matchAll(/class="dot"/g)].length, 2);
     assert.ok(cards.includes(renderDot("DAL").text) && cards.includes(renderDot("CHI").text));
@@ -1200,13 +1197,16 @@ test("each standings row and each team in the bracket opens its team's sheet", (
   for (const row of rows)
     assert.match(
       row,
-      /<button type="button" class="team-open" data-team="\w+" aria-label="Team details: /,
+      /<button type="button" class="team-open" data-team="\w+">[\s\S]*?<span class="spoken-only">, team details<\/span><\/button>/,
     );
-  assert.match(rows[0], /aria-label="Team details: Minnesota Lynx"/);
+  assert.match(
+    rows[0],
+    /<button type="button" class="team-open" data-team="MIN">(?:(?!<\/button>)[^])*?Lynx<\/span>(?:(?!<\/button>)[^])*<span class="spoken-only">, team details<\/span><\/button>/,
+  );
   const bracket = renderBracket(SEASON, NOW).text;
   assert.match(
     bracket,
-    /<div class="team-line[^"]*" data-team="LVA">[\s\S]*?aria-label="Team details: Las Vegas Aces"/,
+    /<div class="team-line[^"]*" data-team="LVA">\s*(?:<span class="seed-label">.*?<\/span><\/span>)?<button type="button" class="club team-open" data-team="LVA">(?:(?!<\/button>)[^])*?Aces<\/span><span class="spoken-only">, team details<\/span><\/button>/,
   );
   assert.doesNotMatch(bracket, /class="team-line[^"]*\btbd\b[^"]*" data-team/);
 });
@@ -1526,7 +1526,7 @@ test("the header leaves out a feed the store's status says has nothing to send",
 
 test("a score shows in scoreboard digits, and still reads as its number", () => {
   const markup = renderScoreboard(89).text;
-  assert.match(markup, /<span class="scoreboard-text">89<\/span>/);
+  assert.match(markup, /<span class="spoken-only scoreboard-text">89<\/span>/);
   assert.equal(markup.match(/<svg/g).length, 3);
   assert.deepEqual(
     readLitPlaces({ text: markup }),
@@ -1590,8 +1590,14 @@ test("between periods the league's word for the break shows in place of the cloc
 test("each game's score shows in scoreboard digits, the loser's dimmed", () =>
   inEastern(() => {
     const markup = readGameMarkup(SEASON);
-    assert.match(markup, /class="scoreboard lost"\s*><span class="scoreboard-text">71<\/span>/);
-    assert.match(markup, /class="scoreboard"\s*><span class="scoreboard-text">87<\/span>/);
+    assert.match(
+      markup,
+      /class="scoreboard lost"\s*><span class="spoken-only scoreboard-text">71<\/span>/,
+    );
+    assert.match(
+      markup,
+      /class="scoreboard"\s*><span class="spoken-only scoreboard-text">87<\/span>/,
+    );
   }));
 
 test("each appearance choice shows the home-screen icon it offers", () => {

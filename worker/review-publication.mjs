@@ -1,4 +1,4 @@
-import { readReviewRun, REVIEW_CHECK_NAME } from "./review-run.mjs";
+import { readReviewRun, REVIEW_CHECK_NAME, isPublishableReviewTarget } from "./review-run.mjs";
 import { createHash } from "node:crypto";
 import { needsCodexIntegration } from "./review-supplied.mjs";
 
@@ -41,7 +41,7 @@ export function selectPublicationPull(pulls, head, repository) {
   const pull = matching[0];
   return pull.state === "open" &&
     !pull.draft &&
-    pull.base?.ref === "main" &&
+    isPublishableReviewTarget(pull.base?.ref) &&
     pull.base.repo?.full_name === repository
     ? pull
     : null;
@@ -55,10 +55,9 @@ export function selectPublicationRun(runs, pull, repository) {
         const identity = readReviewRun(run);
         return (
           identity?.intent === "review" &&
-          identity.target === "main" &&
+          isPublishableReviewTarget(identity.target) &&
           identity.pull === pull.number &&
           identity.head === pull.head.sha &&
-          identity.base === pull.base.sha &&
           run.repository.full_name === repository.name &&
           run.repository.id === repository.id &&
           /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$/.test(run.created_at ?? "")
@@ -178,7 +177,8 @@ export function validatePublicationEvidence(pull, run, evidence, jobs) {
     evidence.repositoryId !== run.repository.id ||
     evidence.pull !== pull.number ||
     evidence.head !== pull.head.sha ||
-    evidence.base !== pull.base.sha ||
+    evidence.head !== identity.head ||
+    evidence.base !== evidence.needs?.["review-plan"]?.outputs?.base ||
     evidence.target !== pull.base.ref ||
     evidence.source !== identity.source ||
     evidence.run !== run.id ||

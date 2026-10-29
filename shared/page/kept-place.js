@@ -2,7 +2,8 @@
 // scroll moves by as much, so the rows on the screen stay where they are, as Chrome's scroll
 // anchoring does and Safari's doesn't, frame by frame as it eases. A list at its top stays there,
 // so what opens above it shows. Each list the page keeps in place opts out of the browser's own
-// anchoring (pager.css, and keepPagePlace here), so it moves once, the same in every browser.
+// anchoring (pager.css, and chrome.css for a view keepPagePlace marks), so it moves once, the same
+// in every browser.
 
 /**
  * Where a list scrolled to `top` goes when what's above it moves its rows down by `change`, or up
@@ -47,7 +48,7 @@ export function keepPagePlace(view) {
     view.classList.contains("active")
       ? view.getBoundingClientRect().top + scrollY - readPulledBy(view)
       : null;
-  view.style.overflowAnchor = "none";
+  view.dataset.keptPlace = "";
   let keptTop = readTop();
   const watcher = new ResizeObserver(() => {
     const top = readTop();

@@ -48,7 +48,7 @@ test("a game's row names its clubs plainly, and a tap anywhere on it, their name
 }) => {
   const gameButton = await showGames(page);
   const row = gameButton.locator("xpath=..");
-  await expect(row.getByRole("button", { name: /^Team details/ })).toHaveCount(0);
+  await expect(row.getByRole("button", { name: /team details$/ })).toHaveCount(0);
 
   // The row's button lies over its names, so a click on a name lands on it.
   await row.scrollIntoViewIfNeeded();
@@ -64,7 +64,10 @@ test("a club's sheet open over a game's on a reload shows again over it, with a 
 }) => {
   await (await showGames(page)).click();
   const gameSheet = page.locator("#gameSheet");
-  await gameSheet.getByRole("button", { name: "Team details: Astros" }).first().click();
+  await gameSheet
+    .getByRole("button", { name: /^Astros\b.*team details$/ })
+    .first()
+    .click();
   const teamSheet = page.locator("#teamSheet");
   await expect(teamSheet.locator("#teamTitle")).toHaveText("Houston Astros");
 
@@ -148,7 +151,7 @@ test.describe("on a phone", () => {
     page,
   }) => {
     const update = await showClinch(page);
-    await tapOn(page, update.getByRole("button", { name: "Team details: White Sox" }));
+    await tapOn(page, update.getByRole("button", { name: /^White Sox\b.*team details$/ }));
 
     await expect(page.locator("#gameBody")).toContainText(/White Sox[\s\S]*Royals/);
     await expect(page.locator("#teamSheet")).toBeHidden();
@@ -201,7 +204,10 @@ test("a club's name in a game's sheet opens its sheet over it, whose back button
 }) => {
   await (await showGames(page)).click();
   const gameSheet = page.locator("#gameSheet");
-  await gameSheet.getByRole("button", { name: "Team details: Athletics" }).first().click();
+  await gameSheet
+    .getByRole("button", { name: /^Athletics\b.*team details$/ })
+    .first()
+    .click();
   const teamSheet = page.locator("#teamSheet");
 
   await expect(teamSheet.locator("#teamTitle")).toHaveText("Athletics");
@@ -368,7 +374,7 @@ test.describe("on a phone", () => {
     await page.locator('.div-grid tr[data-team="HOU"] .team-open').click();
     const teamSheet = page.locator("#teamSheet");
     await expect(teamSheet.locator(".game-card h3")).toHaveText(["Last game", "Next game"]);
-    const card = teamSheet.getByRole("button", { name: ASTROS_AT_ATHLETICS });
+    const card = teamSheet.getByRole("button", { name: /^Today\b.*@ ATH\b.*game details$/ });
     await expect(card).toContainText("@");
 
     const box = await card.boundingBox();

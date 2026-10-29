@@ -35,7 +35,7 @@ async function openFeverFromGame(page) {
   const gameSheet = await openGame(page);
   await gameSheet
     .locator(".faceoff")
-    .getByRole("button", { name: "Team details: Indiana Fever" })
+    .getByRole("button", { name: /Fever\b.*team details$/ })
     .click();
   const teamSheet = page.locator("#teamSheet");
   await expect(teamSheet.locator("#teamTitle")).toHaveText("Indiana Fever");
@@ -49,17 +49,20 @@ async function openFeverFromGame(page) {
  * @param {import("@playwright/test").Page} page
  */
 async function openFeverFromAcesGame(page) {
-  await page.getByRole("button", { name: "Team details: Las Vegas Aces" }).first().click();
+  await page
+    .getByRole("button", { name: /Aces\b.*team details$/ })
+    .first()
+    .click();
   const teamSheet = page.locator("#teamSheet");
   await expectShown(teamSheet);
-  await teamSheet.getByRole("button", { name: "Game details: Aces at Fever, Sep 29" }).click();
+  await teamSheet.getByRole("button", { name: /^Yesterday\b.*game details$/ }).click();
   const gameSheet = page.locator("#gameSheet");
   await expect(gameSheet.locator(".line-score")).toBeVisible();
   await expectShown(gameSheet);
   return { teamSheet, gameSheet };
 }
 
-const FEVER_IN_GAME = '#gameSheet .faceoff [aria-label="Team details: Indiana Fever"]';
+const FEVER_IN_GAME = '#gameSheet .faceoff .team-open[data-team="IND"]';
 
 /**
  * Notes where a sheet is on each frame it's in the row, until the returned function stops and
@@ -367,12 +370,15 @@ test.describe("with reduced motion", () => {
   }) => {
     await page.setViewportSize(PHONE);
     await openApp(page);
-    await page.getByRole("button", { name: "Team details: Las Vegas Aces" }).first().click();
+    await page
+      .getByRole("button", { name: /Aces\b.*team details$/ })
+      .first()
+      .click();
     const teamSection = page.locator("#teamSection");
     await teamSection.evaluate((section) => (section.scrollTop = 30));
     await page
       .locator("#teamSheet")
-      .getByRole("button", { name: "Game details: Aces at Fever, Sep 29" })
+      .getByRole("button", { name: /^Yesterday\b.*game details$/ })
       .click();
     const gameSheet = page.locator("#gameSheet");
     await expectShown(gameSheet);
@@ -408,7 +414,7 @@ test.describe("with reduced motion", () => {
 
     await gameSheet
       .locator(".faceoff")
-      .getByRole("button", { name: "Team details: Las Vegas Aces" })
+      .getByRole("button", { name: /Aces\b.*team details$/ })
       .click();
 
     await expectShown(teamSheet);
