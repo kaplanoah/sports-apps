@@ -265,6 +265,42 @@ export function testContact(test, expect, { openApp, league }) {
       expect(requests[1].diagnostics).toBe(shown);
     });
 
+  test("a send pressed while a screenshot is still read waits for it and the page's diagnostics", async ({
+    page,
+  }) => {
+    const { requests, delivery } = await serveContact(page);
+    delivery.mode = "failure";
+    await openApp(page);
+    const dialog = await openContact(page, "Bug report");
+    await dialog.locator("textarea").fill("The score stopped changing");
+    await dialog.getByRole("button", { name: "Send", exact: true }).click();
+    await expect(dialog.getByRole("alert")).toContainText("Couldn't confirm your message was sent");
+    await dialog.getByRole("button", { name: "Back to Contact", exact: true }).click();
+    const viewport = page.viewportSize();
+    await page.setViewportSize({ width: viewport.width - 40, height: viewport.height - 40 });
+    await dialog.getByRole("button", { name: "Bug report", exact: true }).click();
+    await dialog.getByRole("button", { name: "View diagnostics" }).click();
+    await page.evaluate(() => {
+      const createBitmap = window.createImageBitmap;
+      const held = new Promise((resolve) => {
+        /** @type {any} */ (window).releaseScreenshot = resolve;
+      });
+      /** @type {any} */ (window).createImageBitmap = (/** @type {ImageBitmapSource} */ source) =>
+        held.then(() => createBitmap(source));
+    });
+    await dialog.locator('input[type="file"]').setInputFiles(SCREENSHOT);
+    await dialog.getByRole("button", { name: "Try again", exact: true }).click();
+    await page.evaluate(() => /** @type {any} */ (window).releaseScreenshot());
+    await expect(dialog.getByAltText("Attached screenshot")).toBeVisible();
+    await expect.poll(() => requests.length).toBe(2);
+    await expect(dialog.getByRole("alert")).toBeVisible();
+
+    expect(requests[1].id).not.toBe(requests[0].id);
+    expect(requests[1].screenshot.filename).toBe(SCREENSHOT.name);
+    expect(requests[1].diagnostics).not.toBe(requests[0].diagnostics);
+    await expect(dialog.locator("pre")).toHaveText(requests[1].diagnostics);
+  });
+
   test("trying again takes away the failed send's note while it sends", async ({ page }) => {
     const { requests, delivery } = await serveContact(page);
     delivery.mode = "failure";
