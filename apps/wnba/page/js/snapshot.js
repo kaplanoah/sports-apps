@@ -481,10 +481,13 @@ function listGamesForBackup(games, responses, season) {
   return games.filter((game) => leftLive.has(game.id));
 }
 
+const isScored = (backup) =>
+  typeof backup.away?.score === "number" && typeof backup.home?.score === "number";
+
 // Each league game a started ESPN game stands for, by the league's game ID. A game ESPN hasn't
-// started keeps the league's own word on it.
+// started, or gives no score for, keeps the league's own word on it.
 function matchBackupGames(games, backupGames) {
-  const startedGames = backupGames.filter((backup) => backup.state !== "pre");
+  const startedGames = backupGames.filter((backup) => backup.state !== "pre" && isScored(backup));
   return new Map(
     games.map((game) => [game.id, findEspnGame(game, startedGames)]).filter(([, backup]) => backup),
   );

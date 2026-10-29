@@ -194,27 +194,32 @@ function leaveOutGames(...days) {
   return espn;
 }
 
-test("ESPN's backup keeps a score it sends as a number, and takes one that isn't a number as none", async () => {
+test("ESPN's backup takes a score it sends as a number, and leaves a game it gives no score for to the league", async () => {
   const espn = structuredClone(ESPN.answers);
-  for (const event of espn[SEP_30].events) {
-    for (const competitor of event.competitions[0].competitors) {
-      competitor.score = competitor.homeAway === "away" ? Number(competitor.score) : "--";
-    }
-  }
-  const league = createLeague({ refuse: { scoreboard: "page" }, espn });
-  const loader = createSnapshotLoader({
-    fetchImpl: league.fetchImpl,
-    now: () => Date.parse(ESPN.now),
-  });
-
-  const snapshot = await loader.loadSnapshot(2026);
-
-  const readScores = (id) => {
-    const game = snapshot.games.find((candidate) => candidate.id === id);
-    return [game.away.score, game.home.score];
+  const [numbered, unscored] = espn[SEP_30].events.map((event) => event.competitions[0]);
+  for (const competitor of numbered.competitors) competitor.score = Number(competitor.score);
+  unscored.competitors.find((competitor) => competitor.homeAway === "home").score = "--";
+  const loadGames = async (answers) => {
+    const league = createLeague({ refuse: { scoreboard: "page" }, espn: answers });
+    const loader = createSnapshotLoader({
+      fetchImpl: league.fetchImpl,
+      now: () => Date.parse(ESPN.now),
+    });
+    return (await loader.loadSnapshot(2026)).games;
   };
-  assert.deepEqual(readScores("1042600132"), [93, null]);
-  assert.deepEqual(readScores("1042600112"), [100, null]);
+
+  const [games, leagueGames] = await Promise.all([
+    loadGames(espn),
+    loadGames(leaveOutGames(SEP_30)),
+  ]);
+
+  const findGame = (list, id) => list.find((game) => game.id === id);
+  const numberedGame = findGame(games, "1042600132");
+  assert.deepEqual(
+    [numberedGame.state, numberedGame.away.score, numberedGame.home.score],
+    ["final", 93, 75],
+  );
+  assert.deepEqual(findGame(games, "1042600112"), findGame(leagueGames, "1042600112"));
 });
 
 test("ESPN's backup reads only its site scoreboard of yesterday and today, which answers a Worker, not its core API, which turns one away", async () => {
