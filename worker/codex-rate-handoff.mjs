@@ -137,7 +137,7 @@ export function validateQuotaHandoff(record, producer, expected, now, { pastPoli
     record.completedAt < requireTime(job.started_at) ||
     record.completedAt > completed ||
     !Number.isSafeInteger(record.notBefore) ||
-    record.notBefore < record.completedAt + readNativeRatePolicy().windowMs ||
+    record.notBefore < record.completedAt + (pastPolicy ? 0 : readNativeRatePolicy().windowMs) ||
     !Number.isSafeInteger(record.scanSince) ||
     record.scanSince > requireTime(run.created_at) ||
     record.scanSince < 0 ||
@@ -198,6 +198,7 @@ export async function readNativeQuotaAdmission(
   const initial = await api(`/commits/${baseline}`);
   let scanSince = requireTime(initial.commit?.committer?.date);
   let activeRuns = [];
+  let seedNotBefore = 0;
 
   function readTrustedSource(run) {
     try {
@@ -279,6 +280,7 @@ export async function readNativeQuotaAdmission(
         if (!seed) continue;
         scanSince = seed.scanSince;
         activeRuns = seed.activeRuns;
+        seedNotBefore = seed.notBefore;
         seeded = true;
         break;
       }
@@ -317,7 +319,7 @@ export async function readNativeQuotaAdmission(
     for (const job of native) candidates.push({ run, source, job });
   }
   const previous = selectPreviousQuotaJob(candidates, current);
-  let notBefore = now() + readNativeRatePolicy().windowMs;
+  let notBefore = Math.max(seedNotBefore, now() + readNativeRatePolicy().windowMs);
   if (previous) {
     const artifacts = await readAllPages(
       api,
@@ -331,7 +333,7 @@ export async function readNativeQuotaAdmission(
       throw new Error("Missing or duplicate preceding native quota state.");
     if (matches.length) {
       const handoff = await readHandoff(matches[0], previous);
-      if (handoff) notBefore = handoff.notBefore;
+      if (handoff) notBefore = Math.max(seedNotBefore, handoff.notBefore);
       const refreshed = await readProducer(matches[0]);
       if (
         refreshed.job.completed_at !== previous.job.completed_at ||

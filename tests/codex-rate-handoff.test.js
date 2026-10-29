@@ -469,3 +469,39 @@ test("untrusted actor and repository runs are ignored without accepting their qu
     assert.equal(result.notBefore, start + 170000);
   }
 });
+
+test("an aged old policy with a shorter window uses current warm-up instead of permanent rejection", async () => {
+  const later = start + 800000;
+  const result = await admit(
+    createFixture((fixture) => {
+      fixture.record.policy = "b".repeat(64);
+      fixture.record.notBefore = fixture.record.completedAt + 10000;
+    }),
+    later,
+  );
+  assert.equal(result.notBefore, later + 60000);
+});
+
+test("an aged missing latest record cannot erase an earlier authenticated longer cooldown", async () => {
+  const later = start + 800000;
+  const deadline = later + 900000;
+  const result = await admit(
+    createFixture((fixture) => {
+      fixture.record.notBefore = deadline;
+      fixture.record.activeRuns.push(40);
+      fixture.carriedRun = {
+        run: createRun(40, start - 10000, "completed"),
+        job: {
+          ...fixture.previousJob,
+          id: 8,
+          run_id: 40,
+          conclusion: "failure",
+          completed_at: new Date(start + 90000).toISOString(),
+        },
+      };
+    }),
+    later,
+  );
+  assert.equal(result.predecessor, 8);
+  assert.equal(result.notBefore, deadline);
+});

@@ -503,7 +503,9 @@ export async function superviseNativeAdmission(
           completedAt,
         );
       } catch (cleanupError) {
-        throw new AggregateError([error, cleanupError], "Native startup and cleanup failed.");
+        throw new AggregateError([error, cleanupError], "Native startup and cleanup failed.", {
+          cause: error,
+        });
       }
     }
     throw error;

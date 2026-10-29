@@ -182,7 +182,7 @@ test("every native entry point authenticates admission before the only model act
     assert.equal(
       workflow
         .slice(0, workflow.indexOf("uses: openai/codex-action@"))
-        .match(/      - name: (.+)/g)
+        .match(/ {6}- name: (.+)/g)
         .at(-1)
         ?.slice("      - name: ".length),
       entry.step,
