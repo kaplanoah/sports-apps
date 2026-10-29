@@ -50,16 +50,6 @@ test("the examples sit 4.5px under the field, their words 1.5px right of where i
   expect(place).toEqual({ gap: 4.5, words: 1.5, lineLeft: 2, lineRight: 1 });
 });
 
-test("a row's words sit 1.25px over its middle, as the examples' are raised", async ({ page }) => {
-  await openSeasonGames(page);
-  await tapSearch(page);
-  await sendSearch(page, "Liberty");
-  const words = findRows(page).first().locator(".search-words");
-
-  await expect(words).toHaveCSS("padding-bottom", "2.5px");
-  await expect(words).toHaveCSS("padding-top", "0px");
-});
-
 test("the field sits 10.5px under the header's line", async ({ page }) => {
   await openSeasonGames(page);
   await tapSearch(page);

@@ -13,8 +13,6 @@
  *   --text         the rows' face
  *   --search-face  the field's face, drawn at --type-field-size as big as --text at
  *                  --type-body-size
- *   --search-words-lift  the room under a row's words that looks them centered in the row, in
- *                  the --text face
  */
 
 .search-view[hidden] {
@@ -233,11 +231,11 @@
   width: 12px;
   height: 12px;
 }
-/* A row's words sit as far over its middle as the font needs to look centered. */
+/* The row centers its words' box, so the words take their lift in room of their own. */
 .search-words {
   flex: 1;
   min-width: 0;
-  padding-bottom: var(--search-words-lift);
+  padding: calc(2px - var(--word-lift) / 2) 0 calc(2px + var(--word-lift) / 2);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

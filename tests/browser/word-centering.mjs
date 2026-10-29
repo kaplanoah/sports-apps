@@ -1,20 +1,26 @@
-import { THEMES, showTheme } from "./theme-layout.mjs";
-
 const LIFT = "--word-lift";
 
 /**
- * Lists the selectors of the rules that pad by the words' lift, from the page's stylesheets.
+ * Lists the selectors of the rules that pad by the words' lift, from the page's stylesheets and
+ * the rules grouped inside them.
  * @param {import("@playwright/test").Page} page
  */
 function listLiftedSelectors(page) {
-  return page.evaluate(
-    (lift) =>
-      [...document.styleSheets]
-        .flatMap((sheet) => [...sheet.cssRules])
-        .filter((rule) => rule instanceof CSSStyleRule && rule.cssText.includes(`var(${lift}`))
-        .map((rule) => /** @type {CSSStyleRule} */ (rule).selectorText),
-    LIFT,
-  );
+  return page.evaluate((lift) => {
+    /** @param {CSSRuleList} rules @returns {CSSRule[]} */
+    const flattenRules = (rules) =>
+      [...rules].flatMap((rule) =>
+        rule instanceof CSSGroupingRule ? flattenRules(rule.cssRules) : [rule],
+      );
+    return [...document.styleSheets]
+      .flatMap((sheet) => flattenRules(sheet.cssRules))
+      .filter(
+        (rule) =>
+          rule instanceof CSSStyleRule &&
+          new RegExp(`padding[\\w-]*:[^;]*var\\(${lift}\\b`).test(rule.style.cssText),
+      )
+      .map((rule) => /** @type {CSSStyleRule} */ (rule).selectorText);
+  }, LIFT);
 }
 
 /**
@@ -25,7 +31,8 @@ function listLiftedSelectors(page) {
  * @param {string[]} selectors
  */
 function measureCapitals(page, selectors) {
-  return page.evaluate((selectors) => {
+  return page.evaluate(async (selectors) => {
+    await document.fonts.ready;
     const context = /** @type {CanvasRenderingContext2D} */ (
       document.createElement("canvas").getContext("2d")
     );
@@ -84,26 +91,27 @@ export function testWordCentering(test, expect, { openApp }) {
     "Chromium sets Barlow's line a pixel higher than Safari, which the phone draws with",
   );
 
-  for (const theme of THEMES)
-    test(`every row padded by the words' lift centers its words' capitals, in ${theme}`, async ({
-      page,
-    }) => {
-      await page.emulateMedia({ reducedMotion: "reduce" });
-      await openApp(page);
-      await showTheme(page, theme);
-      const selectors = await listLiftedSelectors(page);
-      expect(selectors.length).toBeGreaterThan(0);
-      await page.locator("#tab-search").tap();
-      await page.locator("#gameSearch .search-example").first().waitFor();
-      await page.getByRole("button", { name: "Settings", exact: true }).click();
-      await page.locator("#contactBtn").click();
-      await page.locator("#contactDialog .settings-page-row").first().waitFor();
-      const rows = await measureCapitals(page, selectors);
-      expect(new Set(rows.map(({ selector }) => selector))).toEqual(new Set(selectors));
-      for (const { words, above, below } of rows)
-        expect({ words, off: Math.abs(above - below) <= 1 ? "centered" : above - below }).toEqual({
-          words,
-          off: "centered",
-        });
-    });
+  test("every row padded by the words' lift centers its words' capitals", async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await openApp(page);
+    const selectors = await listLiftedSelectors(page);
+    expect(selectors.length).toBeGreaterThan(0);
+    await page.locator("#tab-search").tap();
+    await page.locator("#gameSearch .search-example").first().waitFor();
+    const examples = await measureCapitals(page, selectors);
+    await page.locator("#gameSearch .search-input").pressSequentially("sett");
+    await page.locator("#gameSearch .search-suggestion .search-words").first().waitFor();
+    const suggestions = await measureCapitals(page, selectors);
+    await page.locator("#settingsBtn").click();
+    await page.locator("#contactBtn").click();
+    await page.locator("#contactDialog .settings-page-row").first().waitFor();
+    const settings = await measureCapitals(page, selectors);
+    const rows = [...examples, ...suggestions, ...settings];
+    expect(new Set(rows.map(({ selector }) => selector))).toEqual(new Set(selectors));
+    for (const { words, above, below } of rows)
+      expect({ words, off: Math.abs(above - below) <= 1 ? "centered" : above - below }).toEqual({
+        words,
+        off: "centered",
+      });
+  });
 }

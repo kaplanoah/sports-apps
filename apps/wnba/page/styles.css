@@ -262,8 +262,6 @@
   --gate-problem: var(--now);
   --text: "Barlow", system-ui, sans-serif;
   --search-face: "Barlow Search", system-ui, sans-serif;
-  /* Barlow's capitals sit low in a line, so a search row's words rise 1.25px to look centered. */
-  --search-words-lift: 2.5px;
   --select-face: "Barlow Select", system-ui, sans-serif;
   --page-gutter: 16px;
   --header-gap: 14px;
