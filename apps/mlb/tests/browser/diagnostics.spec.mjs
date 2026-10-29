@@ -1,3 +1,4 @@
+import { addTestStyles } from "../../../../tests/browser/test-styles.mjs";
 import { holdClock } from "../../../../tests/browser/harness.mjs";
 import { test, expect, openApp, openSettings } from "./harness.mjs";
 import { LAPTOP, PHONE } from "./screen-sizes.mjs";
@@ -207,7 +208,7 @@ test("with Diagnostics on, a day that changes height as it's drawn whole is logg
   page,
 }) => {
   await openSeasonGamesLogging(page);
-  await page.addStyleTag({ content: ".game-list.is-stand-in { height: 10px !important; }" });
+  await addTestStyles(page, ".game-list.is-stand-in { height: 10px !important; }");
   for (let step = 0; step < 6; step += 1) {
     await findList(page).evaluate((list) => list.scrollBy(0, -list.clientHeight));
     await page.clock.runFor(100);

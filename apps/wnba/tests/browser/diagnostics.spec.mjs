@@ -79,9 +79,9 @@ test("a part a sheet slides, whose height falls on a half pixel, is recorded at 
   await turnOnDiagnostics(page);
   await page.addInitScript(() =>
     document.addEventListener("DOMContentLoaded", () => {
-      const style = document.createElement("style");
-      style.textContent = "#stamp { height: 40.5px; overflow: hidden; }";
-      document.head.append(style);
+      const stamp = document.getElementById("stamp");
+      stamp.style.height = "40.5px";
+      stamp.style.overflow = "hidden";
     }),
   );
 
