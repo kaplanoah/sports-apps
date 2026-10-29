@@ -7,7 +7,7 @@ export const ALIGNMENT_TOLERANCE = 0.08;
 /**
  * Independent expected geometry supplied by an app's tests.
  * @typedef {object} TeamLineExpectations
- * @property {{ selector: string, name: string }} lines
+ * @property {{ selector: string, name: string, dotHeightSelector?: string }} lines
  * @property {string[]} placeholders
  * @property {Record<TeamRole, { font: string, size: number, weight: number, diameter: number, before: number, after: number }>} roles
  * @property {{ selector: string, role: TeamRole }[]} roleSelectors in priority order
@@ -67,7 +67,7 @@ export const readTeamLines = async (page, expectations) => {
       return metrics;
     };
     for (const line of document.querySelectorAll(expected.lines.selector)) {
-      if (!line.checkVisibility()) continue;
+      if (!line.checkVisibility() || line.closest("[inert]")) continue;
       const mark = line.querySelector(":scope > .dot, :scope > .all-star-mark");
       const name = line.querySelector(expected.lines.name);
       if (!mark || !name) continue;
@@ -112,6 +112,8 @@ export const readTeamLines = async (page, expectations) => {
         check(mark.getBoundingClientRect().width, diameter, `${description} dot width`);
         check(mark.getBoundingClientRect().height, diameter, `${description} dot height`);
         check(findMiddle(mark) - center, isAfter ? after : before, `${description} dot center`);
+        if (expected.lines.dotHeightSelector && line.matches(expected.lines.dotHeightSelector))
+          check(line.getBoundingClientRect().height, diameter, `${description} line height`);
       }
       const seed = line.querySelector(":scope > .seed");
       const seedOffsets = expected.seeds[role];
@@ -148,7 +150,7 @@ export const readTeamLines = async (page, expectations) => {
     for (const placeholder of expected.placeholders.flatMap((selector) => [
       ...document.querySelectorAll(selector),
     ])) {
-      if (!placeholder.checkVisibility()) continue;
+      if (!placeholder.checkVisibility() || placeholder.closest("[inert]")) continue;
       states.add(placeholder.textContent.trim());
       const style = getComputedStyle(placeholder);
       check(parseFloat(style.fontSize), expected.roles.team.size, "TBD size");
@@ -167,6 +169,7 @@ export const readTeamLines = async (page, expectations) => {
   for (const baseline of expectations.baselines) {
     for (const head of await page.locator(baseline.selector).all()) {
       if (!(await head.isVisible())) continue;
+      if (await head.evaluate((element) => Boolean(element.closest("[inert]")))) continue;
       const name = head.locator(baseline.name).first();
       if (!(await name.count())) continue;
       const note = head.locator(baseline.note).last();

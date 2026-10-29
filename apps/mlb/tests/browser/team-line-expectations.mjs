@@ -3,6 +3,7 @@ export const TEAM_LINE_EXPECTATIONS = {
   lines: {
     selector: ".club, .team-title, .game-card-opponent, .runs-half-head",
     name: ":scope > .team-name, :scope > .tbd, :scope > .game-card-name, :scope.team-title > span:not(.dot), :scope.runs-half-head > span:not(.dot)",
+    dotHeightSelector: ".game-side .club, .news-teams .club",
   },
   placeholders: [".matchup-row .tbd", ".game-side .club > .tbd", ".series-opp .tbd"],
   roles: {

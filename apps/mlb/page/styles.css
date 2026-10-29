@@ -1180,12 +1180,12 @@ table.st .seed-cell {
   max-width: 100%;
   vertical-align: baseline;
 }
-.club:has(> .dot) {
+:is(.sheet-part-head h3, .field-heads, .series-opp) .club {
   align-items: baseline;
 }
 /* The name supplies the inline baseline. An empty dot must not add ascent; its center still
    follows the name's native capital height. */
-.club > .dot {
+:is(.sheet-part-head h3, .field-heads, .series-opp) .club > .dot {
   margin-top: calc(-1 * var(--team-dot-size));
   translate: 0 calc((var(--team-dot-size) - 1cap) / 2 + var(--team-mark-shift));
 }
