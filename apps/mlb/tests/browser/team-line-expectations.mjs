@@ -4,7 +4,7 @@ export const TEAM_LINE_EXPECTATIONS = {
     selector: ".club, .team-title, .game-card-opponent, .runs-half-head",
     name: ":scope > .team-name, :scope > .tbd, :scope > .game-card-name, :scope.team-title > span:not(.dot), :scope.runs-half-head > span:not(.dot)",
   },
-  placeholders: [".matchup-row .tbd", ".game-side .club > .tbd"],
+  placeholders: [".matchup-row .tbd", ".game-side .club > .tbd", ".series-opp .tbd"],
   roles: {
     small: {
       font: "Libre Franklin",
@@ -65,6 +65,13 @@ export const TEAM_LINE_EXPECTATIONS = {
       selector: ".field-heads, .sheet-part-head:has(h3 .club):has(> span)",
       name: ".team-name",
       note: ":scope > span",
+      state: "baseline heading",
+    },
+    {
+      selector: ".series-row:has(.club)",
+      name: ".team-name",
+      note: ":scope > span",
+      state: "baseline series",
     },
   ],
   allStar: {

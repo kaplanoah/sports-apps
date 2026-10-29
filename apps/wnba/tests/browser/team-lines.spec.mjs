@@ -1,23 +1,33 @@
 import { test, expect, openApp } from "./harness.mjs";
 import { VIEW_GROUPS, openWithEverything } from "./views.mjs";
 import { checkEachView } from "../../../../tests/browser/view-walk.mjs";
-import { readTeamLines } from "../../../../tests/browser/team-lines.mjs";
+import { ALIGNMENT_TOLERANCE, readTeamLines } from "../../../../tests/browser/team-lines.mjs";
 import { TEAM_LINE_EXPECTATIONS } from "./team-line-expectations.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
 const THEMES = /** @type {const} */ (["light", "dark"]);
 
+const SEASON_VIEWS = new Set(["Bracket", "Standings", "News"]);
+const ALIGNMENT_VIEWS = {
+  ...VIEW_GROUPS,
+  "the season's views": VIEW_GROUPS["the page's tabs"].filter((view) =>
+    SEASON_VIEWS.has(view.name),
+  ),
+  "Games and Search": VIEW_GROUPS["the page's tabs"].filter((view) => !SEASON_VIEWS.has(view.name)),
+};
+
 /** @type {Record<string, string[]>} */
 const EXPECTED_ROLES = {
-  "the page's tabs": ["label", "large", "team"],
+  "the season's views": ["label", "large", "team"],
+  "Games and Search": ["team"],
   "a team's and a player's sheets": ["large", "small", "team"],
   "a game's sheets": ["large", "team"],
 };
 
 for (const width of [390, 1280]) {
   for (const colorScheme of THEMES) {
-    for (const [group, views] of Object.entries(VIEW_GROUPS)) {
+    for (const [group, views] of Object.entries(ALIGNMENT_VIEWS)) {
       if (!(group in EXPECTED_ROLES)) continue;
       test(`team lines in ${group} align marks and attachments with their names at ${width}px in ${colorScheme}`, async ({
         page,
@@ -42,19 +52,13 @@ for (const width of [390, 1280]) {
           for (const name of drawn.names) names.add(name);
         });
         expect([...roles].sort()).toEqual(EXPECTED_ROLES[group]);
-        if (group === "the page's tabs") {
-          expect(placements).toContain("team after");
+        if (group === "the season's views") {
           expect(states).toContain("winner");
           expect(states).toContain("TBD");
-          expect(attachments).toEqual(
-            new Set([
-              ".conference-tag",
-              ".seed-note",
-              "outside seed",
-              "team seed before",
-              "team seed after",
-            ]),
-          );
+          expect(attachments).toEqual(new Set([".conference-tag", ".seed-note", "outside seed"]));
+        } else if (group === "Games and Search") {
+          expect(placements).toContain("team after");
+          expect(attachments).toEqual(new Set(["team seed before", "team seed after"]));
         } else if (group === "a game's sheets") {
           expect(placements).toContain("large after");
           expect(placements).toContain("team after");
@@ -103,7 +107,7 @@ for (const colorScheme of THEMES) {
     await page.getByRole("tab", { name: "Games" }).click();
     const name = page.locator("#seasonGames .team-name").filter({ hasText: "Valkyries" }).first();
     await expect(name).toBeVisible();
-    const geometry = await name.evaluate((element) => {
+    const geometry = await name.evaluate((element, tolerance) => {
       const club = element.parentElement;
       club.style.maxWidth = "60px";
       const dot = club.querySelector(".dot").getBoundingClientRect();
@@ -111,11 +115,11 @@ for (const colorScheme of THEMES) {
       const line = club.getBoundingClientRect();
       return {
         clipped: element.scrollWidth > element.clientWidth,
-        fits: text.right <= line.right + 0.08,
+        fits: text.right <= line.right + tolerance,
         dot: dot.width,
         width: line.width,
       };
-    });
+    }, ALIGNMENT_TOLERANCE);
     expect(geometry).toEqual({ clipped: true, fits: true, dot: 14, width: 60 });
     expect((await readTeamLines(page, TEAM_LINE_EXPECTATIONS)).problems).toEqual([]);
   });

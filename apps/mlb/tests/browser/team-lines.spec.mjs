@@ -11,7 +11,7 @@ import {
 import { VIEW_GROUPS, openWithEverything } from "./views.mjs";
 import { openRanking } from "./settings-sheet.mjs";
 import { checkEachView } from "../../../../tests/browser/view-walk.mjs";
-import { readTeamLines } from "../../../../tests/browser/team-lines.mjs";
+import { ALIGNMENT_TOLERANCE, readTeamLines } from "../../../../tests/browser/team-lines.mjs";
 import { TEAM_LINE_EXPECTATIONS } from "./team-line-expectations.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
@@ -133,7 +133,7 @@ for (const colorScheme of THEMES) {
       .filter({ hasText: "Diamondbacks" })
       .first();
     await expect(name).toBeVisible();
-    const geometry = await name.evaluate((element) => {
+    const geometry = await name.evaluate((element, tolerance) => {
       const club = element.parentElement;
       club.style.maxWidth = "60px";
       const dot = club.querySelector(".dot").getBoundingClientRect();
@@ -141,11 +141,11 @@ for (const colorScheme of THEMES) {
       const line = club.getBoundingClientRect();
       return {
         clipped: element.scrollWidth > element.clientWidth,
-        fits: text.right <= line.right + 0.08,
+        fits: text.right <= line.right + tolerance,
         dot: dot.width,
         width: line.width,
       };
-    });
+    }, ALIGNMENT_TOLERANCE);
     expect(geometry).toEqual({ clipped: true, fits: true, dot: 14, width: 60 });
     expect((await readTeamLines(page, TEAM_LINE_EXPECTATIONS)).problems).toEqual([]);
   });
@@ -184,7 +184,20 @@ for (const width of [390, 1280]) {
       const team = await readTeamLines(page, TEAM_LINE_EXPECTATIONS);
       expect(team.problems).toEqual([]);
       expect(team.states).toContain("field comparison");
+      expect(team.states).toContain("baseline series");
       expect(team.states).toContain("baseline heading");
+      await page
+        .locator("#teamSheet")
+        .getByRole("button", { name: "Back to Game", exact: true })
+        .click();
+      await page
+        .locator("#gameBody .game-row")
+        .getByRole("button", { name: /^Rays\b.*team details$/ })
+        .click();
+      await expect(
+        page.locator("#teamSheet .series-opp .tbd").filter({ hasText: "Bye" }),
+      ).toBeVisible();
+      expect((await readTeamLines(page, TEAM_LINE_EXPECTATIONS)).problems).toEqual([]);
     });
   }
 }

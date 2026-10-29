@@ -1,5 +1,7 @@
 import { readCapitals } from "./capitals.mjs";
 
+export const ALIGNMENT_TOLERANCE = 0.08;
+
 /** @typedef {"small" | "team" | "large" | "label"} TeamRole */
 
 /**
@@ -11,7 +13,7 @@ import { readCapitals } from "./capitals.mjs";
  * @property {{ selector: string, role: TeamRole }[]} roleSelectors in priority order
  * @property {{ selector: string, delta: number }[]} weightChanges
  * @property {{ selector: string, state: string }[]} stateSelectors
- * @property {{ selector: string, name: string, note: string }[]} baselines
+ * @property {{ selector: string, name: string, note: string, state: string }[]} baselines
  * @property {{ width: number, offset: number }} allStar
  * @property {Partial<Record<TeamRole, { before: number, after: number }>>} seeds
  * @property {{ name: string, parents: string[], selector: string, center: "capital" | "lowercase", offset: number, gridAreas?: string }[]} attachments
@@ -23,7 +25,8 @@ import { readCapitals } from "./capitals.mjs";
  * @param {TeamLineExpectations} expectations
  */
 export const readTeamLines = async (page, expectations) => {
-  const drawn = await page.evaluate(async (expected) => {
+  const configuration = { expected: expectations, tolerance: ALIGNMENT_TOLERANCE };
+  const drawn = await page.evaluate(async ({ expected, tolerance }) => {
     await document.fonts.ready;
     const problems = [];
     const roles = new Set();
@@ -36,7 +39,7 @@ export const readTeamLines = async (page, expectations) => {
       return box.top + box.height / 2;
     };
     const check = (actual, expected, description) => {
-      if (Math.abs(actual - expected) > 0.08)
+      if (Math.abs(actual - expected) > tolerance)
         problems.push(`${description}: ${actual}, expected ${expected}`);
     };
     const fonts = new Map();
@@ -146,7 +149,7 @@ export const readTeamLines = async (page, expectations) => {
       ...document.querySelectorAll(selector),
     ])) {
       if (!placeholder.checkVisibility()) continue;
-      states.add("TBD");
+      states.add(placeholder.textContent.trim());
       const style = getComputedStyle(placeholder);
       check(parseFloat(style.fontSize), expected.roles.team.size, "TBD size");
       check(Number(style.fontWeight), expected.roles.team.weight, "TBD weight");
@@ -159,7 +162,7 @@ export const readTeamLines = async (page, expectations) => {
       names: [...names],
       attachments: [...attachments],
     };
-  }, expectations);
+  }, configuration);
 
   for (const baseline of expectations.baselines) {
     for (const head of await page.locator(baseline.selector).all()) {
@@ -171,11 +174,11 @@ export const readTeamLines = async (page, expectations) => {
         readCapitals(name),
         readCapitals(note),
       ]);
-      if (Math.abs(nameCapitals.bottom - noteCapitals.bottom) > 0.08)
+      if (Math.abs(nameCapitals.bottom - noteCapitals.bottom) > ALIGNMENT_TOLERANCE)
         drawn.problems.push(
-          `heading baseline: ${nameCapitals.bottom}, expected ${noteCapitals.bottom}`,
+          `club baseline: ${nameCapitals.bottom}, expected ${noteCapitals.bottom}`,
         );
-      drawn.states.push("baseline heading");
+      drawn.states.push(baseline.state);
     }
   }
   return drawn;
