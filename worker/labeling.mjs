@@ -4,6 +4,7 @@ import { createGitHub, createGraphQL, readAllPages } from "./github-api.mjs";
 
 export const PHONE_CONTEXT = "phone";
 export const PHONE_OK_LABEL = "phone-ok";
+const ACTIONS_APP = "github-actions";
 
 /**
  * @typedef {object} TimelineEvent
@@ -149,9 +150,10 @@ function readTimelineEvent({ __typename, ...fields }) {
  */
 
 /**
- * When a commit was pushed to `branch`, earliest first: the times of its check suites there, which
- * GitHub makes as each push that brings the commit arrives. A suite on another branch, like beta or
- * a scratch branch, says nothing of when the commit reached this one.
+ * When a commit was pushed to `branch`, earliest first: the times of its GitHub Actions check suites
+ * there, which the workflows a push starts make as it arrives. A suite on another branch, like beta
+ * or a scratch branch, says nothing of when the commit reached this one, and another App's suite,
+ * made when it posts a check, says nothing of a push.
  * @param {PushQuery} query
  * @returns {Promise<number[]>}
  */
@@ -169,7 +171,10 @@ export async function readPushTimes({
     (answer) => answer.check_suites,
   );
   return suites
-    .filter((/** @type {{ head_branch: string }} */ suite) => suite.head_branch === branch)
+    .filter(
+      (/** @type {{ head_branch: string, app: { slug: string } | null }} */ suite) =>
+        suite.head_branch === branch && suite.app?.slug === ACTIONS_APP,
+    )
     .map((/** @type {{ created_at: string }} */ suite) => Date.parse(suite.created_at))
     .toSorted((first, second) => first - second);
 }

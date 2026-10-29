@@ -1030,9 +1030,9 @@ export function decideGate(
  * Whether the gate finds the head the owner labeled, with nothing red pushed since. The labeled
  * head is the head's newest first parent off main that GitHub saw pushed to the pull request's
  * branch before the label. GitHub records only each push's head, so a commit it never saw there
- * arrived under a later one. After a force push, only the head it left or a commit pushed again
- * between it and the label counts, since a commit pushed only before it may have been dropped from
- * the branch and pushed again after the label.
+ * arrived under a later one. After a force push, only the head it left or a commit pushed to the
+ * branch between it and the label counts, since a commit pushed only before it may have been dropped
+ * from the branch and pushed again after the label.
  * @param {{ repository: string, head: string, branch: string, labeledAt: number, lastForcePush: { at: number, head: string | null }, env: NodeJS.ProcessEnv, fetchImpl: typeof fetch, cwd: string }} options
  */
 async function hasNothingRedSinceLabeledHead({

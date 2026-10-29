@@ -109,10 +109,12 @@ test("a head pushed after the phone-ok label leaves it before the last push, wha
   );
 });
 
-test("a head's push times are its check suites' on the pull request's branch, earliest first, on any page", async () => {
+const ACTIONS = { slug: "github-actions" };
+
+test("a head's push times are its GitHub Actions check suites' on the pull request's branch, earliest first, on any page", async () => {
   /** @type {string[]} */
   const urls = [];
-  /** @param {{ created_at: string, head_branch: string }[]} suites */
+  /** @param {{ created_at: string, head_branch: string, app: { slug: string } }[]} suites */
   const createFetch = (suites) => async (/** @type {string} */ url) => {
     urls.push(url);
     const page = Number(new URL(url).searchParams.get("page"));
@@ -124,9 +126,9 @@ test("a head's push times are its check suites' on the pull request's branch, ea
     await readPushTime({
       ...options,
       fetchImpl: createFetch([
-        { created_at: "2026-10-07T11:00:00Z", head_branch: "feature" },
-        { created_at: "2026-10-07T08:00:00Z", head_branch: "beta" },
-        { created_at: "2026-10-07T09:00:00Z", head_branch: "feature" },
+        { created_at: "2026-10-07T11:00:00Z", head_branch: "feature", app: ACTIONS },
+        { created_at: "2026-10-07T08:00:00Z", head_branch: "beta", app: ACTIONS },
+        { created_at: "2026-10-07T09:00:00Z", head_branch: "feature", app: ACTIONS },
       ]),
     }),
     HEAD_PUSHED_AT,
@@ -135,9 +137,9 @@ test("a head's push times are its check suites' on the pull request's branch, ea
     `https://api.github.com/repos/owner/repo/commits/${sha}/check-suites?per_page=100&page=1`,
   ]);
   const pushedTwice = createFetch([
-    { created_at: "2026-10-07T11:00:00Z", head_branch: "feature" },
-    { created_at: "2026-10-07T08:00:00Z", head_branch: "beta" },
-    { created_at: "2026-10-07T09:00:00Z", head_branch: "feature" },
+    { created_at: "2026-10-07T11:00:00Z", head_branch: "feature", app: ACTIONS },
+    { created_at: "2026-10-07T08:00:00Z", head_branch: "beta", app: ACTIONS },
+    { created_at: "2026-10-07T09:00:00Z", head_branch: "feature", app: ACTIONS },
   ]);
   assert.deepEqual(await readPushTimes({ ...options, fetchImpl: pushedTwice }), [
     HEAD_PUSHED_AT,
@@ -146,15 +148,23 @@ test("a head's push times are its check suites' on the pull request's branch, ea
   const otherBranches = Array.from({ length: 100 }, () => ({
     created_at: "2026-10-07T08:00:00Z",
     head_branch: "scratch",
+    app: ACTIONS,
   }));
   const onSecondPage = createFetch([
     ...otherBranches,
-    { created_at: "2026-10-07T09:00:00Z", head_branch: "feature" },
+    { created_at: "2026-10-07T09:00:00Z", head_branch: "feature", app: ACTIONS },
   ]);
   assert.equal(await readPushTime({ ...options, fetchImpl: onSecondPage }), HEAD_PUSHED_AT);
   assert.ok(Number.isNaN(await readPushTime({ ...options, fetchImpl: createFetch([]) })));
-  const elsewhere = createFetch([{ created_at: "2026-10-07T08:00:00Z", head_branch: "beta" }]);
+  const elsewhere = createFetch([
+    { created_at: "2026-10-07T08:00:00Z", head_branch: "beta", app: ACTIONS },
+  ]);
   assert.ok(Number.isNaN(await readPushTime({ ...options, fetchImpl: elsewhere })));
+  const anotherApp = createFetch([
+    { created_at: "2026-10-07T08:00:00Z", head_branch: "feature", app: { slug: "trusted-review" } },
+    { created_at: "2026-10-07T09:00:00Z", head_branch: "feature", app: ACTIONS },
+  ]);
+  assert.deepEqual(await readPushTimes({ ...options, fetchImpl: anotherApp }), [HEAD_PUSHED_AT]);
 });
 
 test("the GraphQL timeline is paginated with authentication and mapped for both gates", async () => {

@@ -2081,6 +2081,24 @@ test("a head pushed, force-pushed off, and pushed again before the label keeps p
   assert.equal(pushedAgainAfterLabel.isHeld, true);
 });
 
+test("another App's check on a dropped red commit between the last force push and the label isn't taken for a push", async (context) => {
+  const branch = createTestedBranch(context);
+  branch.writeFile("shared/page/sheet.js", "export const draw = 4;\n");
+  const red = branch.commit("2026-10-07T09:44:00Z");
+  branch.writeFile("tests/sheet.test.js", "test('draws', () => {});\n");
+  const tests = branch.commit("2026-10-07T11:00:00Z");
+  const held = await branch.decide(
+    tests,
+    { [red]: "2026-10-07T09:46:00Z", [tests]: PUSHED_AFTER_LABEL },
+    {
+      otherAppTimes: { [red]: "2026-10-07T09:55:00Z" },
+      forcePushes: [{ at: "2026-10-07T09:50:00Z", head: branch.tested }],
+    },
+  );
+  assert.equal(held.isHeld, true);
+  assert.match(held.message, LABEL_PROBLEM);
+});
+
 test("the gate looks for the labeled head only among the branch's own commits, and not at all without its name", async (context) => {
   const branch = createTestedBranch(context);
   branch.writeFile("tests/sheet.test.js", "test('draws', () => {});\n");
@@ -2120,11 +2138,16 @@ test("a commit pushed to another branch before the label isn't taken for the hea
   assert.match(held.message, LABEL_PROBLEM);
 });
 
+const ACTIONS = { slug: "github-actions" };
+const OTHER_APP = { slug: "trusted-review" };
+
 /**
  * @typedef {object} ApprovalTimes
  * @property {Record<string, string | string[] | null>} [pushTimes] when each commit was pushed to
  *   the pull request's branch, or null for one never pushed there as a push's head
  * @property {Record<string, string>} [betaTimes] when a commit was pushed to beta
+ * @property {Record<string, string>} [otherAppTimes] when another App posted a check on a commit
+ *   on the pull request's branch
  * @property {{ at: string, head: string }[]} [forcePushes] when the head was force-pushed, and to
  *   which commit
  */
@@ -2137,7 +2160,7 @@ function createApprovalApi(
   history,
   head,
   deployed,
-  { pushTimes = {}, betaTimes = {}, forcePushes = [] } = {},
+  { pushTimes = {}, betaTimes = {}, otherAppTimes = {}, forcePushes = [] } = {},
 ) {
   history.readGit(["update-ref", "refs/remotes/origin/main", "main"]);
   const statuses = [];
@@ -2182,9 +2205,14 @@ function createApprovalApi(
       const pushedAt = sha in pushTimes ? pushTimes[sha] : "2026-10-07T09:45:00Z";
       const pushed = [pushedAt ?? []]
         .flat()
-        .map((created_at) => ({ created_at, head_branch: env.HEAD_BRANCH }));
-      const toBeta = sha in betaTimes ? [{ created_at: betaTimes[sha], head_branch: "beta" }] : [];
-      answer = { check_suites: [...toBeta, ...pushed] };
+        .map((created_at) => ({ created_at, head_branch: env.HEAD_BRANCH, app: ACTIONS }));
+      const toBeta =
+        sha in betaTimes ? [{ created_at: betaTimes[sha], head_branch: "beta", app: ACTIONS }] : [];
+      const fromOtherApp =
+        sha in otherAppTimes
+          ? [{ created_at: otherAppTimes[sha], head_branch: env.HEAD_BRANCH, app: OTHER_APP }]
+          : [];
+      answer = { check_suites: [...toBeta, ...fromOtherApp, ...pushed] };
     } else if (url.pathname.endsWith("/deploy.yml/runs"))
       answer = {
         workflow_runs: [
