@@ -15,8 +15,6 @@ This skill holds what step 7 of "Shipping a change" in AGENTS.md and the `ship` 
 
 ## Native quota admission before a model
 
-- Inspect the fixed native-rate-setup diagnostic and the preceding authenticated producer. A failure before native execution is not a successful review. Never change the activation gate to recover it.
-- Missing, expired or old-policy state from a recent producer blocks admission. After one current quota window plus the maximum admission wait, a separately authorized new consumer performs a full-window warm-up. Available valid longer cooldowns remain enforced. Do not delete evidence, forge a handoff or rerun a completed model to manufacture state.
-- Untrusted PR-triggered artifacts and jobs are ignored; trusted-source, artifact-digest and producer checks still apply. API failures, duplicate artifacts and malformed retained evidence require diagnosis.
-- A limiter startup failure retains a not-started record only after successful restoration and cleanup. Failed restoration retains a failure marker and cannot claim finalized state. Read the original action outcome and private evidence before deciding whether any model started.
-- These quota controls authorize no workflow dispatch or model retry. Preserve the normal first-attempt and ship recovery restrictions. A model-started failure still needs fresh explicit owner continuation.
+- Inspect the fixed native-rate-setup diagnostic and the preceding authenticated producer. Follow [native request admission](../../../TRUSTED_REVIEW_SETUP.md#native-request-admission) for blocking and recovery conditions. Never change the activation gate to recover a failure.
+- Do not delete evidence, forge a handoff or rerun a completed model to manufacture state. Read the original action outcome and private evidence to determine whether a model started and whether cleanup succeeded.
+- Quota recovery authorizes no workflow dispatch or model retry. Follow the first-attempt and ship recovery restrictions. A model-started failure needs fresh explicit owner continuation.

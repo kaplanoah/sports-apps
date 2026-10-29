@@ -66,6 +66,17 @@ test("protected settings and public quota state select fields instead of persist
     { unavailable: -1 },
   ])
     assert.throws(() => validateNativeQuotaResult({ ...record, ...changed }, input));
+  const unused = {
+    ...metrics,
+    requests: 0,
+    reservedTokens: 0,
+    observedTokens: null,
+    unavailable: 0,
+  };
+  const notStarted = { ...completion, termination: "not-started" };
+  assert.equal(createNativeQuotaRecord(settings, unused, notStarted).observedTokens, null);
+  for (const changed of [{ requests: 1 }, { reservedTokens: 1 }, { observedTokens: 0 }])
+    assert.throws(() => createNativeQuotaRecord(settings, { ...unused, ...changed }, notStarted));
   assert.equal(record.observedTokens, null);
   assert.equal(JSON.stringify(record).includes("fake-private-value"), false);
   assert.throws(() =>

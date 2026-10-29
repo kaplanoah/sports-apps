@@ -5,6 +5,8 @@ import {
   readNativeRatePolicyHash,
   readRateReleaseTime,
   createBoundedNativeConfig,
+  createNativeAdmissionStepName,
+  isNativeAdmissionStepName,
 } from "../worker/codex-rate-policy.mjs";
 import { createRequestEstimator } from "../worker/codex-rate-estimate.mjs";
 
@@ -48,4 +50,18 @@ test("quota handoff waits for unknown usage and the longest provider or local de
   assert.throws(() =>
     readRateReleaseTime({ ...snapshot, local: { blockedUntil: null } }, completedAt),
   );
+});
+
+test("admission step recognition uses the exact shared portion format", () => {
+  for (const portion of ["1", "27", "integration", "proof"])
+    assert.equal(isNativeAdmissionStepName(createNativeAdmissionStepName(portion)), true);
+  for (const name of [
+    null,
+    1,
+    "Other (1)",
+    "Authenticate preceding quota state and prepare protected admission (0)",
+    "Authenticate preceding quota state and prepare protected admission (1) extra",
+    "Authenticate preceding quota state and prepare protected admission(1)",
+  ])
+    assert.equal(isNativeAdmissionStepName(name), false);
 });

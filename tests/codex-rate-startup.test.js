@@ -344,3 +344,53 @@ test("failed unstarted cleanup and a missing final state reject without retrying
     /finalize/,
   );
 });
+
+test("readiness publication failure preserves finalized runtime metrics and rejects nonzero startup usage", async (t) => {
+  for (const measured of [false, true]) {
+    const fixture = createStartupFixture(t);
+    writeFileSync(join(fixture.folder, "public/ready.json"), "{}");
+    let closed = false;
+    let reads = 0;
+    await assert.rejects(
+      superviseNativeAdmission(
+        fixture.folder,
+        { pid: 42 },
+        {
+          readConfiguration: fixture.readConfiguration,
+          restore: () => {},
+          now: () => 1000,
+          start: async () => ({
+            address: { port: fixture.config.port },
+            close: async () => {
+              closed = true;
+            },
+            readFinalState: () => {
+              reads++;
+              assert.equal(closed, true);
+              assert.equal(existsSync(join(fixture.folder, "private")), false);
+              return {
+                requests: measured ? 1 : 0,
+                reservedTokens: measured ? 10 : 0,
+                observedTokens: null,
+                unavailable: 0,
+                queuedMs: 0,
+                notBefore: 99000,
+                feedbackFailed: false,
+              };
+            },
+          }),
+        },
+      ),
+    );
+    assert.equal(reads, 1);
+    assert.equal(existsSync(join(fixture.folder, "public/failed.json")), true);
+    const result = join(fixture.folder, "public/cooldown.json");
+    assert.equal(existsSync(result), !measured);
+    if (!measured) {
+      const record = JSON.parse(readFileSync(result, "utf8"));
+      assert.equal(record.termination, "not-started");
+      assert.equal(record.notBefore, 99000);
+      assert.equal(record.observedTokens, null);
+    }
+  }
+});

@@ -116,6 +116,7 @@ function createFixture(change = () => {}) {
     missingArtifacts: false,
     extraRuns: [],
     extraArtifacts: [],
+    trailingArtifacts: [],
   };
   change(fixture);
   const archive = execFileSync(
@@ -176,7 +177,15 @@ function createFixture(change = () => {}) {
             : []
           : [current, ...(fixture.bootstrap ? [] : [previous])]
         : [];
-      return Response.json({ workflow_runs: [...fixture.extraRuns, ...runs] });
+      const threshold = query.has("created")
+        ? Date.parse(query.get("created").slice(2))
+        : -Infinity;
+      const extra = fixture.extraRuns.filter(
+        (run) =>
+          (!query.has("status") || run.status === query.get("status")) &&
+          Date.parse(run.created_at) >= threshold,
+      );
+      return Response.json({ workflow_runs: [...extra, ...runs] });
     }
     if (path.endsWith("/runs/30/artifacts")) return Response.json({ artifacts: [] });
     if (path.endsWith("/artifacts")) {
@@ -189,6 +198,7 @@ function createFixture(change = () => {}) {
             : fixture.duplicate
               ? [artifact, artifact]
               : [artifact]),
+          ...fixture.trailingArtifacts,
         ],
       });
     }
@@ -504,4 +514,102 @@ test("an aged missing latest record cannot erase an earlier authenticated longer
   );
   assert.equal(result.predecessor, 8);
   assert.equal(result.notBefore, deadline);
+});
+
+test("aged expired seeds skip redundant reads while old queued recent consumers stay discoverable", async () => {
+  const later = start + 800000;
+  const cold = createFixture((fixture) => {
+    fixture.artifact.expired = true;
+    fixture.previous.updated_at = new Date(start + 95000).toISOString();
+    fixture.trailingArtifacts.push({
+      ...fixture.artifact,
+      id: 99,
+      workflow_run: { id: 44, repository_id: 9 },
+    });
+  });
+  const result = await admit(cold, later);
+  assert.equal(result.notBefore, later + 60000);
+  assert.equal(
+    cold.calls.some((path) => path.includes("/runs/44")),
+    false,
+  );
+  assert.equal(cold.previousJobReads, 1);
+
+  const queued = createFixture((fixture) => {
+    fixture.artifact.expired = true;
+    fixture.previous.created_at = new Date(start + 10000).toISOString();
+    fixture.previous.updated_at = new Date(start + 95000).toISOString();
+    fixture.job.started_at = new Date(later - 500).toISOString();
+    const run = {
+      ...createRun(40, start + 5000, "completed"),
+      updated_at: new Date(later - 1000).toISOString(),
+    };
+    fixture.extraRuns.push(run);
+    fixture.carriedRun = {
+      run,
+      job: {
+        ...fixture.previousJob,
+        id: 8,
+        run_id: 40,
+        started_at: new Date(later - 5000).toISOString(),
+        completed_at: new Date(later - 1500).toISOString(),
+      },
+    };
+  });
+  await assert.rejects(admit(queued, later), /Missing or duplicate preceding/);
+  assert.ok(queued.calls.some((path) => path.endsWith("/runs/40/jobs")));
+});
+
+test("an expired newest record does not hide an available older long cooldown", async () => {
+  const later = start + 800000;
+  const deadline = later + 900000;
+  const fixture = createFixture((value) => {
+    value.record.notBefore = deadline;
+    value.previous.updated_at = new Date(start + 95000).toISOString();
+    const run = {
+      ...createRun(40, start + 5000, "completed"),
+      updated_at: new Date(start + 95000).toISOString(),
+    };
+    value.extraRuns.push(run);
+    value.carriedRun = {
+      run,
+      job: {
+        ...value.previousJob,
+        id: 8,
+        run_id: 40,
+        completed_at: new Date(start + 95000).toISOString(),
+      },
+    };
+    value.extraArtifacts.push({
+      ...value.artifact,
+      id: 6,
+      name: "codex-rate-handoff-8",
+      expired: true,
+      created_at: new Date(start + 90000).toISOString(),
+      workflow_run: { id: 40, repository_id: 9 },
+    });
+  });
+  assert.equal((await admit(fixture, later)).notBefore, deadline);
+});
+
+test("an active workflow with old update metadata cannot disappear from admission", async () => {
+  const later = start + 800000;
+  const fixture = createFixture((value) => {
+    value.record.activeRuns.push(40);
+    value.carriedRun = {
+      run: {
+        ...createRun(40, start + 5000, "in_progress"),
+        updated_at: new Date(start + 6000).toISOString(),
+      },
+      job: {
+        ...value.previousJob,
+        id: 8,
+        run_id: 40,
+        status: "in_progress",
+        conclusion: null,
+        steps: [{ name: "Native Codex investigation", status: "in_progress", conclusion: null }],
+      },
+    };
+  });
+  await assert.rejects(admit(fixture, later), /active or unverifiable/);
 });

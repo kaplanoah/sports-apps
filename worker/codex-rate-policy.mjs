@@ -1,13 +1,20 @@
 import { createHash } from "node:crypto";
 
-export const NATIVE_ADMISSION_STEP =
-  "Authenticate preceding quota state and prepare protected admission";
+const NATIVE_ADMISSION_STEP = "Authenticate preceding quota state and prepare protected admission";
+
+const nativePortion = /^(?:[1-9]\d*|integration|proof)$/;
 
 /** @param {string} portion */
 export function createNativeAdmissionStepName(portion) {
-  if (!/^(?:[1-9]\d*|integration|proof)$/.test(portion))
-    throw new Error("Invalid native quota portion.");
+  if (!nativePortion.test(portion)) throw new Error("Invalid native quota portion.");
   return `${NATIVE_ADMISSION_STEP} (${portion})`;
+}
+
+/** @param {unknown} name */
+export function isNativeAdmissionStepName(name) {
+  if (typeof name !== "string") return false;
+  const portion = /\(([^()]*)\)$/.exec(name)?.[1];
+  return nativePortion.test(portion ?? "") && createNativeAdmissionStepName(portion) === name;
 }
 
 const headroom = 0.2;

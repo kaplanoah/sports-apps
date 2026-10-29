@@ -9,7 +9,7 @@ import {
   readNativeRatePolicy,
   requireNativeQuotaIdentity,
   createNativeAdmissionStepName,
-  NATIVE_ADMISSION_STEP,
+  isNativeAdmissionStepName,
 } from "./codex-rate-policy.mjs";
 
 import { readNativeRateEntries } from "./codex-rate-source.mjs";
@@ -27,6 +27,15 @@ function requireTime(value) {
 function isQuotaRecoveryDue(producer, now) {
   const policy = readNativeRatePolicy();
   return now - requireTime(producer.job.completed_at) >= policy.windowMs + policy.maxWaitMs;
+}
+
+function isCompletedQuotaRunAged(run, now) {
+  return (
+    run.status === "completed" &&
+    typeof run.updated_at === "string" &&
+    Number.isSafeInteger(Date.parse(run.updated_at)) &&
+    isQuotaRecoveryDue({ job: { completed_at: run.updated_at } }, now)
+  );
 }
 
 /** @param {any} run @param {any} expected */
@@ -88,8 +97,7 @@ export function selectPreviousQuotaJob(candidates, current) {
       if (
         job.status === "in_progress" &&
         job.steps?.some(
-          (step) =>
-            step.status === "in_progress" && step.name?.startsWith(`${NATIVE_ADMISSION_STEP} (`),
+          (step) => step.status === "in_progress" && isNativeAdmissionStepName(step.name),
         )
       )
         throw new Error("Another native quota admission is active.");
@@ -268,25 +276,30 @@ export async function readNativeQuotaAdmission(
       state.notBefore = Math.max(state.notBefore, now() + readNativeRatePolicy().windowMs);
     return state;
   }
-  let seeded = false;
+  let seedSearchFinished = false;
+  let skipExpiredSeeds = false;
   for (const path of [`/actions/runs/${currentRun.id}/artifacts`, "/actions/artifacts"]) {
     for await (const artifacts of readPages(api, path, (answer) => answer.artifacts)) {
       for (const artifact of artifacts) {
         if (!/^codex-rate-handoff-[1-9]\d*$/.test(artifact.name)) continue;
+        if (skipExpiredSeeds && artifact.expired) continue;
         const run = await api(`/actions/runs/${artifact.workflow_run.id}`);
         if (readTrustedSource(run) === null) continue;
         const producer = await readProducer(artifact);
         const seed = await readHandoff(artifact, producer);
-        if (!seed) continue;
+        if (!seed) {
+          skipExpiredSeeds = true;
+          continue;
+        }
         scanSince = seed.scanSince;
         activeRuns = seed.activeRuns;
         seedNotBefore = seed.notBefore;
-        seeded = true;
+        seedSearchFinished = true;
         break;
       }
-      if (seeded) break;
+      if (seedSearchFinished) break;
     }
-    if (seeded) break;
+    if (seedSearchFinished) break;
   }
   const runs = new Map([[currentRun.id, currentRun]]);
   for (const id of activeRuns) runs.set(id, await api(`/actions/runs/${id}`));
@@ -309,7 +322,7 @@ export async function readNativeQuotaAdmission(
   const candidates = [];
   for (const run of runs.values()) {
     const source = readTrustedSource(run);
-    if (source === null) continue;
+    if (source === null || isCompletedQuotaRunAged(run, now())) continue;
     const jobs = await readAllPages(api, `/actions/runs/${run.id}/jobs?filter=all`, (a) => a.jobs);
     const native = jobs.filter((job) =>
       job.steps?.some((step) => nativeSteps.has(step.name) && step.conclusion !== "skipped"),
