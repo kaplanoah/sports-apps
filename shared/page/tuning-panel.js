@@ -10,8 +10,6 @@ import { readStoredJson, storeJson } from "./local-storage.js";
 import { SENT_MS } from "./sent-label.js";
 import {
   isSlider,
-  findOffsetNudge,
-  listGroups,
   nudgeNumber,
   readNumber,
   readRound,
@@ -47,7 +45,6 @@ const DOCK_ICON = html`<svg viewBox="0 0 256 256" fill="currentColor" aria-hidde
  * @property {import("./tuning-round.js").RoundSettings} settings
  * @property {boolean} isOpen
  * @property {"bottom" | "top"} dock
- * @property {string | undefined} group
  * @property {"idle" | "copied" | "failed"} copy
  * @property {ReturnType<typeof setTimeout> | undefined} [copyTimer]
  */
@@ -55,45 +52,30 @@ const DOCK_ICON = html`<svg viewBox="0 0 256 256" fill="currentColor" aria-hidde
 /** @param {import("./tuning-round.js").Round} round */
 const nameStorageKey = (round) => `tuningPanel:${round.name}`;
 
-/** @param {string} text */
-function resolvePixels(text) {
-  const width = `calc(${text} + 0px)`;
-  if (!text || !CSS.supports("width", width)) return text;
-  const probe = document.createElement("span");
-  Object.assign(probe.style, { position: "fixed", visibility: "hidden", width });
-  document.documentElement.append(probe);
-  const pixels = getComputedStyle(probe).width;
-  probe.remove();
-  return pixels;
-}
-
-/** @param {import("./tuning-round.js").RoundValue} value */
-function readStart(value) {
-  const text = getComputedStyle(document.documentElement).getPropertyValue(value.property).trim();
-  if (!isSlider(value) || value.unit !== "px" || readNumber(text, value) !== null) return text;
-  return resolvePixels(text);
-}
-
 /** @param {import("./tuning-round.js").Round} round */
 const readStarts = (round) =>
-  Object.fromEntries(round.values.map((value) => [value.property, readStart(value)]));
+  Object.fromEntries(
+    round.values.map(({ property }) => [
+      property,
+      getComputedStyle(document.documentElement).getPropertyValue(property).trim(),
+    ]),
+  );
 
 /**
  * @param {import("./tuning-round.js").SliderValue} slider
  * @param {PanelState} state
  */
 function drawSlider(slider, { starts, settings }) {
-  const { property, label, min, max, step, isVertical } = slider;
+  const { property, label, min, max, step } = slider;
   const value = settings[property];
   const number = readNumber(value, slider);
   if (readNumber(starts[property], slider) === null)
     return html`<p class="tuning-note">
       ${property} isn't a number in ${slider.unit || "no unit"} on :root
     </p>`;
-  return html`<div class="tuning-controls ${isVertical ? "tuning-vertical" : ""}">
-    <button type="button" data-nudge="${isVertical ? 1 : -1}" aria-label="${label} ${isVertical ? "down" : "a step down"}">
+  return html`<div class="tuning-controls">
+    <button type="button" data-nudge="-1" aria-label="${label} a step down">
       ${STEP_DOWN_ICON}
-      ${isVertical && html`<span>Down</span>`}
     </button>
     <input
       type="range"
@@ -102,12 +84,9 @@ function drawSlider(slider, { starts, settings }) {
       max="${max}"
       step="${step}"
       value="${number ?? min}"
-      dir="${isVertical ? "rtl" : "ltr"}"
       aria-label="${label}"
     />
-    <button type="button" data-nudge="${isVertical ? -1 : 1}" aria-label="${label} ${isVertical ? "up" : "a step up"}">
-      ${isVertical && html`<span>Up</span>`}${STEP_UP_ICON}
-    </button>
+    <button type="button" data-nudge="1" aria-label="${label} a step up">${STEP_UP_ICON}</button>
   </div>`;
 }
 
@@ -153,17 +132,6 @@ function drawRow(value, state) {
 const nameCopyButton = (copy) => ({ idle: "Copy", copied: "Copied", failed: "Copy below" })[copy];
 
 /** @param {PanelState} state */
-function drawGroups({ round, group }) {
-  const groups = listGroups(round);
-  if (!groups.length) return html``;
-  return html`<label class="tuning-filter">Role
-    <select data-group aria-label="Role">
-      ${groups.map((name) => html`<option value="${name}" ${name === group ? "selected" : ""}>${name}</option>`)}
-    </select>
-  </label>`;
-}
-
-/** @param {PanelState} state */
 const drawPanel = (state) =>
   html`<div class="tuning-top">
       <h2 class="tuning-name">${state.round.name}</h2>
@@ -186,10 +154,7 @@ const drawPanel = (state) =>
 ${writeCopyText(state.round, state.settings)}</textarea
     >`
     }
-    ${drawGroups(state)}
-    <div class="tuning-list">${state.round.values
-      .filter((value) => !value.group || value.group === state.group)
-      .map((value) => drawRow(value, state))}</div>`;
+    <div class="tuning-list">${state.round.values.map((value) => drawRow(value, state))}</div>`;
 
 /**
  * Sets each value on :root, or takes it off where it's back at its start, so the page's own
@@ -205,8 +170,8 @@ function applySettings({ starts, settings }) {
 }
 
 /** @param {PanelState} state */
-const keepState = ({ round, starts, settings, isOpen, dock, group }) =>
-  storeJson(nameStorageKey(round), { starts, values: settings, isOpen, dock, group });
+const keepState = ({ round, starts, settings, isOpen, dock }) =>
+  storeJson(nameStorageKey(round), { starts, values: settings, isOpen, dock });
 
 /**
  * A range input keeps the value it was dragged to over its markup's, so each takes the setting's.
@@ -315,40 +280,6 @@ function watchSliders(panel, state, redraw) {
   });
 }
 
-// WebKit's range keys ignore RTL, so offset keys follow the same Down/Up directions in both engines.
-/**
- * @param {HTMLElement} panel
- * @param {PanelState} state
- * @param {() => void} redraw
- */
-function watchSliderKeys(panel, state, redraw) {
-  panel.addEventListener("keydown", (event) => {
-    const input = event.target;
-    if (!(input instanceof HTMLInputElement) || !input.dataset.slider) return;
-    const value = findValue(state, input.dataset.slider);
-    if (!value || !isSlider(value) || !value.isVertical) return;
-    const direction = findOffsetNudge(event.key);
-    if (direction === null) return;
-    event.preventDefault();
-    state.settings[value.property] = nudgeNumber(state.settings[value.property], value, direction);
-    redraw();
-  });
-}
-
-/**
- * @param {HTMLElement} panel
- * @param {PanelState} state
- * @param {() => void} redraw
- */
-function watchGroups(panel, state, redraw) {
-  panel.addEventListener("change", (event) => {
-    const select = event.target;
-    if (!(select instanceof HTMLSelectElement) || !select.matches("[data-group]")) return;
-    state.group = select.value;
-    redraw();
-  });
-}
-
 // A modal sheet leaves everything outside it untouchable, so the panel and its button move into
 // the sheet on top while one is open, and back out once none is.
 /** @param {HTMLElement[]} parts */
@@ -378,7 +309,6 @@ export function startTuningPanel() {
   const round = readRound(source.textContent);
   const starts = readStarts(round);
   const kept = readStoredJson(nameStorageKey(round));
-  const groups = listGroups(round);
   /** @type {PanelState} */
   const state = {
     round,
@@ -386,7 +316,6 @@ export function startTuningPanel() {
     settings: restoreSettings(starts, kept),
     isOpen: Boolean(kept?.isOpen),
     dock: kept?.dock === "top" ? "top" : "bottom",
-    group: groups.includes(kept?.group) ? kept.group : groups[0],
     copy: "idle",
   };
   const panel = Object.assign(document.createElement("section"), { className: "tuning-panel" });
@@ -403,8 +332,6 @@ export function startTuningPanel() {
   });
   watchTaps(panel, state, redraw);
   watchSliders(panel, state, redraw);
-  watchSliderKeys(panel, state, redraw);
-  watchGroups(panel, state, redraw);
   for (const part of [panel, toggle]) keepTouchesInside(part);
   document.body.append(toggle, panel);
   followModalSheets([toggle, panel]);

@@ -24,11 +24,6 @@ function createPage() {
       observe() {}
     }
   );
-  globalThis.MutationObserver = /** @type {any} */ (
-    class {
-      observe() {}
-    }
-  );
   const dialog = Object.assign(new EventTarget(), {
     id: "teamSheet",
     open: false,
@@ -55,7 +50,6 @@ function createPage() {
   };
   const document = Object.assign(new EventTarget(), {
     activeElement: null,
-    documentElement: {},
     fonts: new EventTarget(),
     getElementById: (id) => elements[id],
   });
