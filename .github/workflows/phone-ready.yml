@@ -1,0 +1,38 @@
+name: Phone ready
+
+# Tells the owner on a red pull request when their phone test is all that's left. CI and the
+# trusted review each finish on their own, so whichever finishes last finds the pull request ready,
+# and a new run of either at a push takes down the comment the push outdated.
+on:
+  workflow_run:
+    workflows: [CI, Reconcile trusted review]
+    types: [requested, completed]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: read
+  checks: read
+  statuses: read
+
+concurrency:
+  group: phone-ready
+  cancel-in-progress: false
+
+jobs:
+  tell:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      # Never check out a workflow_run's head or execute any pull request's code.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: main
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version-file: .nvmrc
+      - name: Comment on red pull requests waiting only on the phone
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node worker/phone-ready.mjs
