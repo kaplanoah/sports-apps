@@ -1039,6 +1039,57 @@ test("a reminder verification that discovers an update still delivers existing a
   });
 });
 
+for (const failure of ["throws", "lists no games"]) {
+  test(`a reminder verification that ${failure} leaves the last update's season, status, and feeds as they are`, async () => {
+    const context = createDurableObjectContext();
+    const game = {
+      id: "123",
+      season: 2026,
+      away: "Away",
+      home: "Home",
+      start: NOW + 2 * 60 * 60_000,
+      networks: ["FOX"],
+    };
+    const SeasonStore = createSeasonStore({
+      ...QUIET_LEAGUE,
+      loadCurrentSnapshot: (load) => load(2026),
+      saveSnapshot: async (docs, snapshot) => docs.write("seasons/2026", { games: snapshot.games }),
+      describeSnapshotStatus: (snapshot) => ({ error: snapshot.games ? "" : "feeds_missing" }),
+      listReminderGames: (snapshot) => snapshot.games,
+    });
+    const store = new SeasonStore(
+      context.ctx,
+      {},
+      {
+        now: () => NOW,
+        createLoadSnapshot: () => async (season, settings) => {
+          if (!settings?.verify) return { season, games: [game] };
+          if (failure === "throws") throw new Error("Schedule answered HTML");
+          return { season, games: null, failures: { schedule: "Schedule answered HTML" } };
+        },
+      },
+    );
+    await store.updateSeason();
+    const saved = {
+      season: await store.docs.read("seasons/2026"),
+      status: await store.docs.read("live/status"),
+      feeds: await store.docs.read("live/feeds"),
+    };
+    await store.reminders.saveGames([game], true);
+    await store.verifyReminderGames();
+    assert.deepEqual(
+      {
+        season: await store.docs.read("seasons/2026"),
+        status: await store.docs.read("live/status"),
+        feeds: await store.docs.read("live/feeds"),
+      },
+      saved,
+    );
+    assert.equal(store.failures, 0);
+    assert.equal((await context.ctx.storage.get("push:reminder-games")).verifiedAt, null);
+  });
+}
+
 for (const failure of ["read", "write"]) {
   test(`a failed season ${failure} invalidates recently verified reminder facts instead of delivering them`, async () => {
     const context = createDurableObjectContext();

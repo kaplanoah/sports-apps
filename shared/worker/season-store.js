@@ -421,9 +421,28 @@ export function createSeasonStore(league) {
         await this.ctx.storage.setAlarm(Math.max(this.now(), dueAt));
     }
 
+    // A verifying read takes no kept answer for the feeds it verifies, so one that can't verify them
+    // knows less than the last update did, and leaves what that update saved, and its status, as
+    // they are.
     async verifyReminderGames() {
       if (!league.listReminderGames) return;
-      await this.loadAndSaveSeason({ verify: true });
+      const snapshot = await this.loadCurrentSnapshot({ verify: true }).catch((error) => {
+        console.error(`Verifying the reminders' games failed: ${describeError(error)}`);
+        return null;
+      });
+      if (!snapshot || !league.listReminderGames(snapshot)) {
+        await this.reminders.saveGames(null);
+        return;
+      }
+      await this.saveSeason(snapshot, { verify: true });
+    }
+
+    /** @param {{ verify?: boolean }} [options] */
+    loadCurrentSnapshot({ verify = false } = {}) {
+      return league.loadCurrentSnapshot(
+        (season) => this.loadSnapshot(season, { verify }),
+        this.now(),
+      );
     }
 
     // A schedule saved before it had a due time reads as due, as does one an earlier release saved,
@@ -531,13 +550,10 @@ export function createSeasonStore(league) {
       return isWatched ? delay : Math.max(delay, UNWATCHED_DELAY_MS);
     }
 
-    async loadAndSaveSeason({ verify = false } = {}) {
+    async loadAndSaveSeason() {
       let snapshot;
       try {
-        snapshot = await league.loadCurrentSnapshot(
-          (season) => this.loadSnapshot(season, { verify }),
-          this.now(),
-        );
+        snapshot = await this.loadCurrentSnapshot();
       } catch (error) {
         const detail = describeError(error);
         await this.reminders.saveGames(null);
@@ -548,6 +564,11 @@ export function createSeasonStore(league) {
         const delay = await this.recordFailure({ error: "upstream_error", detail });
         return { snapshot: null, delay };
       }
+      return this.saveSeason(snapshot);
+    }
+
+    /** @param {Snapshot} snapshot @param {{ verify?: boolean }} [options] */
+    async saveSeason(snapshot, { verify = false } = {}) {
       await this.saveFeedFailures(() => listFeedFailures(snapshot));
       let before;
       try {
