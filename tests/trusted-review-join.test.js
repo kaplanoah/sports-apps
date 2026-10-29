@@ -657,7 +657,6 @@ function createMergeFixture() {
     "-m",
     "stale",
   ]);
-  readGit(origin, ["update-ref", "refs/heads/stale", stale]);
   const checkout = join(createFolder(), "checkout");
   readGit(origin, ["init", checkout]);
   readGit(checkout, ["remote", "add", "origin", origin]);
@@ -844,7 +843,7 @@ test("real verify CLI accepts the merge CI tested, though the event's base lags,
     sealIdentity(changes);
     const rejected = invokeJoin(fixture, {}, ["verify", folder]);
     assert.notEqual(rejected.status, 0);
-    assert.match(rejected.stderr, /reviewed merge does not match/);
+    assert.match(rejected.stderr, /does not carry over/);
     assert.equal(rejected.output, "");
   }
   for (const changed of [
@@ -883,8 +882,15 @@ test("real verify CLI accepts the merge CI tested, though the event's base lags,
  * Seals a passing result for a merge of the head onto an earlier base, as a review before main
  * moved left it.
  * @param {any} fixture @param {string} folder @param {string} base @param {string} merge
+ * @param {string} [tree]
  */
-function sealEarlierReview(fixture, folder, base, merge) {
+function sealEarlierReview(
+  fixture,
+  folder,
+  base,
+  merge,
+  tree = readGit(fixture.origin, ["rev-parse", `${merge}^{tree}`]),
+) {
   const identity = readReviewIdentity({
     ...ID_ENV,
     REVIEW_HEAD: fixture.head,
@@ -892,7 +898,6 @@ function sealEarlierReview(fixture, folder, base, merge) {
     REVIEW_MERGE: merge,
     REVIEW_TRUSTED: fixture.source,
   });
-  const tree = readGit(fixture.origin, ["rev-parse", `${merge}^{tree}`]);
   sealResult(folder, { identity, tree, passed: true }, identity);
   return tree;
 }
@@ -919,9 +924,13 @@ test("real verify CLI carries a review over a main that only moved forward to CI
   assert.equal(carried.status, 0, carried.stderr);
   assert.equal(carried.output, `tree=${fixture.tree}\n`, "the join names the tree CI tested");
   assert.equal(readGit(fixture.checkout, ["rev-parse", "HEAD"]), fixture.tested);
+  assert.throws(
+    () => readGit(fixture.checkout, ["cat-file", "-e", fixture.stale]),
+    "the replaced merge is rebuilt, never fetched",
+  );
 });
 
-test("real verify CLI carries no review over a changed head, a differing merge or a moved-off base", () => {
+test("real verify CLI carries no review over a changed head, a differing merge, an unreproduced tree or a moved-off base", () => {
   const fixture = { ...createMergeFixture(), source: TREE };
   const folder = createFolder();
   const pushed = writeOriginCommit(fixture, "pushed", [fixture.tree, "-p", fixture.head]);
@@ -954,19 +963,31 @@ test("real verify CLI carries no review over a changed head, a differing merge o
   assert.equal(otherMerge.output, "");
 
   checkOutTested(fixture, fixture.tested);
+  sealEarlierReview(fixture, folder, fixture.base, fixture.stale, fixture.tree);
+  const unreproduced = invokeJoin(fixture, {}, ["verify", folder]);
+  assert.notEqual(unreproduced.status, 0);
+  assert.match(unreproduced.stderr, /does not carry over/);
+  assert.equal(unreproduced.output, "");
+
   const side = writeOriginCommit(fixture, "side", [`${fixture.base}^{tree}`, "-p", fixture.base]);
-  const sideMerge = writeOriginCommit(fixture, "side-merge", [
+  const sideMerge = readGit(fixture.origin, [
+    "commit-tree",
     `${fixture.head}^{tree}`,
     "-p",
     side,
     "-p",
     fixture.head,
+    "-m",
+    "side merge",
   ]);
   const sideTree = sealEarlierReview(fixture, folder, side, sideMerge);
-  const movedOff = invokeJoin(fixture, { REVIEW_TREE: sideTree }, ["verify", folder]);
-  assert.notEqual(movedOff.status, 0);
-  assert.match(movedOff.stderr, /does not carry over/);
-  assert.equal(movedOff.output, "");
+  for (const fetched of [false, true]) {
+    if (fetched) readGit(fixture.checkout, ["fetch", "origin", side]);
+    const movedOff = invokeJoin(fixture, { REVIEW_TREE: sideTree }, ["verify", folder]);
+    assert.notEqual(movedOff.status, 0);
+    assert.match(movedOff.stderr, /does not carry over/);
+    assert.equal(movedOff.output, "");
+  }
 });
 
 test("native title rendering preserves supplied PR and commit identities", () => {

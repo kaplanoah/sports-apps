@@ -5,7 +5,12 @@ import { join } from "node:path";
 import { createGitHub, GitHubError, readAllPages } from "./github-api.mjs";
 import { readReviewIdentity, validateReviewArtifact } from "./review-data.mjs";
 import { readJson } from "./judge-review.mjs";
-import { fetchReviewHistory, isReviewAncestor, runReviewGit } from "./review-repository.mjs";
+import {
+  fetchReviewHistory,
+  hasReviewCommit,
+  isReviewAncestor,
+  runReviewGit,
+} from "./review-repository.mjs";
 import { isGitObjectId } from "./git-object.mjs";
 import { waitFor } from "./check-timing.mjs";
 import { readReviewProvider } from "./review-provider.mjs";
@@ -253,8 +258,8 @@ async function waitForTrustedReview(env) {
 }
 
 /**
- * The base is the first parent of the merge this CI run tested, so the review must cover exactly
- * the code that merges now, whatever base.sha the pull's event carried.
+ * Returns CI's tested base, the first parent of the merge this run checked out, which can be newer
+ * than the base.sha the pull's event carried.
  * @param {NodeJS.ProcessEnv} env
  */
 function readTestedBase(env) {
@@ -268,32 +273,36 @@ function readTestedBase(env) {
   return base;
 }
 
+/** @param {string} base @param {NodeJS.ProcessEnv} env */
+function readMergedTree(base, env) {
+  return runReviewGit(env.GITHUB_WORKSPACE, ["merge-tree", "--write-tree", base, env.REVIEW_HEAD], {
+    environment: env,
+  });
+}
+
 /**
  * A review of this head on an earlier base still covers the merge CI tested when main only moved
  * forward and merging the head onto it now gives exactly CI's tree, since a review asked for again
- * would find nothing new to read.
- * @param {string} reviewedBase @param {NodeJS.ProcessEnv} env
+ * would find nothing new to read. The reviewed merge is rebuilt rather than fetched, since GitHub
+ * may no longer serve a pull's replaced merge commit.
+ * @param {string} reviewedBase @param {string} reviewedTree @param {NodeJS.ProcessEnv} env
  */
-function readCarriedTree(reviewedBase, env) {
+function readCarriedTree(reviewedBase, reviewedTree, env) {
   const options = { environment: env };
   fetchReviewHistory(env.GITHUB_WORKSPACE, env.REVIEW_BASE, options);
   const tested = runReviewGit(env.GITHUB_WORKSPACE, ["rev-parse", "HEAD^{tree}"], options);
   if (
+    !hasReviewCommit(env.GITHUB_WORKSPACE, reviewedBase, options) ||
     !isReviewAncestor(env.GITHUB_WORKSPACE, reviewedBase, env.REVIEW_BASE, options) ||
-    runReviewGit(
-      env.GITHUB_WORKSPACE,
-      ["merge-tree", "--write-tree", env.REVIEW_BASE, env.REVIEW_HEAD],
-      options,
-    ) !== tested
+    readMergedTree(reviewedBase, env) !== reviewedTree ||
+    readMergedTree(env.REVIEW_BASE, env) !== tested
   )
     throw new Error("The reviewed merge does not carry over to this base.");
   return tested;
 }
 
-/** @param {string} folder @param {NodeJS.ProcessEnv} env */
-function verifyReviewedMerge(folder, env) {
-  const reviewedBase = readJson(join(folder, "result.json"))?.identity?.base;
-  const result = verifyTrustedReviewResult(folder, { ...env, REVIEW_BASE: reviewedBase });
+/** @param {{ merge: string, tree: string }} result @param {NodeJS.ProcessEnv} env */
+function readExactTree(result, env) {
   const options = { environment: env };
   runReviewGit(env.GITHUB_WORKSPACE, ["fetch", "--no-tags", "origin", result.merge], options);
   const parents = runReviewGit(
@@ -302,9 +311,18 @@ function verifyReviewedMerge(folder, env) {
     options,
   );
   const tree = runReviewGit(env.GITHUB_WORKSPACE, ["rev-parse", `${result.merge}^{tree}`], options);
-  if (parents !== `${reviewedBase} ${env.REVIEW_HEAD}` || tree !== result.tree)
+  if (parents !== `${env.REVIEW_BASE} ${env.REVIEW_HEAD}` || tree !== result.tree)
     throw new Error("The reviewed merge does not match its head, base and tree.");
-  return reviewedBase === env.REVIEW_BASE ? tree : readCarriedTree(reviewedBase, env);
+  return tree;
+}
+
+/** @param {string} folder @param {NodeJS.ProcessEnv} env */
+function verifyReviewedMerge(folder, env) {
+  const reviewedBase = readJson(join(folder, "result.json"))?.identity?.base;
+  const result = verifyTrustedReviewResult(folder, { ...env, REVIEW_BASE: reviewedBase });
+  return reviewedBase === env.REVIEW_BASE
+    ? readExactTree(result, env)
+    : readCarriedTree(reviewedBase, result.tree, env);
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

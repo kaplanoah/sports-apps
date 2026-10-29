@@ -80,3 +80,13 @@ export function isReviewAncestor(cwd, ancestor, descendant, options = {}) {
     throw error;
   }
 }
+
+/** @param {string} cwd @param {string} revision @param {ReviewGitOptions} [options] */
+export function hasReviewCommit(cwd, revision, options = {}) {
+  try {
+    runReviewGit(cwd, ["cat-file", "-e", `${revision}^{commit}`], options);
+    return true;
+  } catch {
+    return false;
+  }
+}
