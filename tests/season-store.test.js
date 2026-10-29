@@ -514,6 +514,33 @@ test("each update reads the details of the games pages have open, and saves them
   assert.deepEqual(page.sent, ["games/1"]);
 });
 
+test("a game's details read the store's other documents, like the season's list of players", async () => {
+  const context = createDurableObjectContext();
+  const SeasonStore = createSeasonStore({ ...QUIET_LEAGUE, detailsCollection: "games" });
+  const store = new SeasonStore(
+    context.ctx,
+    {},
+    {
+      now: () => NOW,
+      loadDetails: async (id, snapshot, stored, readDoc) => ({
+        players: await readDoc("player-index/2026"),
+        missing: await readDoc("player-index/2025"),
+      }),
+    },
+  );
+  context.stored.set("player-index/2026", { players: ["Allisha Gray"] });
+  const page = createPageSocket();
+  context.ctx.acceptWebSocket(page);
+  store.webSocketMessage(page, JSON.stringify({ watching: ["games/1"] }));
+
+  await store.alarm();
+
+  assert.deepEqual(await context.ctx.storage.get("games/1"), {
+    missing: null,
+    players: { players: ["Allisha Gray"] },
+  });
+});
+
 test("a game's details that fail to load leave the saved ones and don't hold up the update", async () => {
   const context = createDurableObjectContext();
   const SeasonStore = createSeasonStore({ ...QUIET_LEAGUE, detailsCollection: "games" });

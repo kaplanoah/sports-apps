@@ -87,7 +87,7 @@ import { describeError, respondError, respondJson, respondMethodNotAllowed } fro
  * @property {(change: { before: Updates, after: Updates, snapshot: Snapshot, now: number }) => object[]} listNotifications
  * @property {(snapshot: Snapshot) => ReturnType<typeof import("../page/reminder-games.js").listTimedReminderGames>} [listReminderGames]
  * @property {string} [detailsCollection] where the details of the games pages have open are kept
- * @property {() => (id: string, snapshot: Snapshot, stored: any) => Promise<object | null>} [createLoadDetails]
+ * @property {() => (id: string, snapshot: Snapshot, stored: any, readDoc: SeasonDocuments["read"]) => Promise<object | null>} [createLoadDetails]
  *   reads a game's details, or answers null while it needs none
  * @property {Record<string, BackgroundJob>} [backgroundJobs]
  * @property {string | null} [release] the commit the Worker was built from, or null outside a
@@ -622,7 +622,7 @@ export function createSeasonStore(league) {
       const key = `${league.detailsCollection}/${id}`;
       try {
         const stored = await this.docs.read(key);
-        const details = await this.loadDetails(id, snapshot, stored);
+        const details = await this.loadDetails(id, snapshot, stored, this.docs.read);
         if (details && !isSameJson(stored, details)) await this.putDoc(key, details);
       } catch (error) {
         console.error(`Reading ${key} failed: ${describeError(error)}`);

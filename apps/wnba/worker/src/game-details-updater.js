@@ -1,5 +1,6 @@
-import { fetchBoxScore } from "./box-score.js";
-import { createLeadReader } from "./lead.js";
+import { createBoxScoreReader } from "./box-score.js";
+import { isFromEspn } from "./espn-box-score.js";
+import { createEspnGameReader, describeGameLead } from "./lead.js";
 import { nameGameDetailsKey } from "./store-docs.js";
 import { createGameDetailsJob, nameReadsKey } from "../../../../shared/worker/game-details-job.js";
 
@@ -46,15 +47,32 @@ async function listFinals(context, year) {
 const readAnswer = (result) => (result.status === "fulfilled" ? result.value : null);
 
 /**
+ * Whether a box score is the league's own final.
+ * @param {any} boxScore
+ */
+const isLeagueFinal = (boxScore) => boxScore?.state === "final" && !isFromEspn(boxScore);
+
+/**
  * Whether the league answered with a final box score, and ESPN with a lead that's over, or that it
- * has no such game.
+ * has no such game. ESPN's box score stands in only until the league's answers, so it isn't whole.
  * @param {PromiseSettledResult<any>} boxScore
  * @param {PromiseSettledResult<any>} lead
  */
 const isWhole = (boxScore, lead) =>
-  readAnswer(boxScore)?.state === "final" &&
+  isLeagueFinal(readAnswer(boxScore)) &&
   lead.status === "fulfilled" &&
   (lead.value?.isOver ?? true);
+
+/**
+ * The box score to keep: the one read, but that ESPN's never replaces the league's final.
+ * @param {any} read
+ * @param {any} kept
+ */
+const chooseBoxScore = (read, kept) =>
+  isFromEspn(read) && isLeagueFinal(kept) ? kept : (read ?? kept);
+
+/** @param {any} details */
+const isStandIn = (details) => isFromEspn(details.boxScore);
 
 /**
  * A game's box score and lead, each kept as stored when it didn't answer.
@@ -63,16 +81,24 @@ const isWhole = (boxScore, lead) =>
  * @param {any} stored
  */
 async function readDetails(context, game, stored) {
-  const readLead = createLeadReader({ fetchImpl: context.fetchImpl });
+  const { fetchImpl } = context;
+  const espnGames = createEspnGameReader({ fetchImpl });
+  const readBoxScore = createBoxScoreReader({ fetchImpl, espnGames });
+  const teams = { away: game.away.team, home: game.home.team, start: game.start };
+  const summary = espnGames.fetchSummary(teams);
   const [boxScore, lead] = await Promise.allSettled([
-    fetchBoxScore(context.fetchImpl, game.id),
-    readLead({ away: game.away.team, home: game.home.team, start: game.start }),
+    readBoxScore(
+      { id: game.id, ...teams },
+      (key) => context.docs.read(key),
+      () => summary,
+    ),
+    summary.then((read) => describeGameLead(teams, read)),
   ]);
   if (boxScore.status === "rejected" && lead.status === "rejected") throw boxScore.reason;
   const kept = stored ?? NO_DETAILS;
   return {
     details: {
-      boxScore: readAnswer(boxScore) ?? kept.boxScore,
+      boxScore: chooseBoxScore(readAnswer(boxScore), kept.boxScore),
       lead: readAnswer(lead) ?? kept.lead,
     },
     isWhole: isWhole(boxScore, lead),
@@ -94,7 +120,12 @@ async function moveOwnReads(storage) {
 
 /** @returns {import("../../../../shared/worker/season-store.js").BackgroundJob} */
 export function createWnbaGameDetailsJob() {
-  const job = createGameDetailsJob({ listFinals, readDetails, nameKey: nameGameDetailsKey });
+  const job = createGameDetailsJob({
+    listFinals,
+    readDetails,
+    nameKey: nameGameDetailsKey,
+    isStandIn,
+  });
   return {
     chooseDelay: job.chooseDelay,
     async updateStore(context) {

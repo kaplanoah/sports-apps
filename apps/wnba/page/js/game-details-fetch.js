@@ -13,13 +13,22 @@ const PREVIEW_REUSE_MS = 10 * 60 * 1000;
 // Highlights post over hours, so a sheet opened again in the next minute reuses them.
 const HIGHLIGHTS_REUSE_MS = 60 * 1000;
 
-/** @param {string} id */
-export const fetchBoxScore = (id) =>
-  fetchFromWorker(`box-score?id=${encodeURIComponent(id)}`, {
+/** @typedef {{ id: string, away: string, home: string, start: string }} GameRead */
+
+/**
+ * The query that names a game to the Worker's reads of it.
+ * @param {GameRead} game
+ */
+const nameGameQuery = ({ id, away, home, start }) => new URLSearchParams({ id, away, home, start });
+
+/** @param {GameRead} game */
+export function fetchBoxScore(game) {
+  return fetchFromWorker(`box-score?${nameGameQuery(game)}`, {
     reuseMs: BOX_SCORE_REUSE_MS,
     timeoutMs: SHEET_FETCH_TIMEOUT_MS,
-    isExpected: (body) => body.id === id,
+    isExpected: (body) => body.id === game.id,
   });
+}
 
 /** @param {{ season: number, away: string, home: string }} game */
 export function fetchPreview({ season, away, home }) {
@@ -31,22 +40,21 @@ export function fetchPreview({ season, away, home }) {
   });
 }
 
-/** @param {{ id: string, away: string, home: string, start: string }} game */
-export function fetchLead({ id, away, home, start }) {
-  const query = new URLSearchParams({ id, away, home, start });
-  return fetchFromWorker(`lead?${query}`, {
+/** @param {GameRead} game */
+export function fetchLead(game) {
+  const { away, home, start } = game;
+  return fetchFromWorker(`lead?${nameGameQuery(game)}`, {
     reuseMs: BOX_SCORE_REUSE_MS,
     timeoutMs: SHEET_FETCH_TIMEOUT_MS,
     isExpected: (body) => body.away === away && body.home === home && body.start === start,
   });
 }
 
-/** @param {{ id: string, away: string, home: string, start: string }} game */
-export function fetchHighlights({ id, away, home, start }) {
-  const query = new URLSearchParams({ id, away, home, start });
-  return fetchFromWorker(`highlights?${query}`, {
+/** @param {GameRead} game */
+export function fetchHighlights(game) {
+  return fetchFromWorker(`highlights?${nameGameQuery(game)}`, {
     reuseMs: HIGHLIGHTS_REUSE_MS,
     timeoutMs: SHEET_FETCH_TIMEOUT_MS,
-    isExpected: (body) => body.id === id && Array.isArray(body.plays),
+    isExpected: (body) => body.id === game.id && Array.isArray(body.plays),
   });
 }

@@ -1,11 +1,33 @@
 import { readFileSync } from "node:fs";
 import { buildSnapshot } from "../page/js/snapshot.js";
+import { indexRosters } from "../worker/src/player-index.js";
+import { describeRoster } from "../worker/src/roster.js";
 import { describeAverages, listLeaders } from "../worker/src/season-averages.js";
 
 // Every player's totals as the league answered the morning after the Liberty's last game.
 const PLAYERS = JSON.parse(
   readFileSync(`${import.meta.dirname}/fixtures/2026-10-06-players.json`, "utf8"),
 );
+// Every team's roster on October 13, and the league's list of every player it has had.
+const ROSTERS = JSON.parse(
+  readFileSync(`${import.meta.dirname}/fixtures/2026-10-13-every-roster.json`, "utf8"),
+);
+
+/** The list of 2026's players the store keeps (`player-index.js`), from every team's roster. */
+export const readPlayerIndex = () =>
+  indexRosters(
+    2026,
+    Object.entries(ROSTERS.rosters).map(([key, leagueRoster]) =>
+      describeRoster({
+        team: key.split(":")[0],
+        season: 2026,
+        leagueRoster,
+        playerList: ROSTERS.playerList,
+        outPlayers: [],
+        now: Date.parse(ROSTERS.recordedAt),
+      }),
+    ),
+  );
 
 /** Every player's averages in 2026, and each team's leading scorers, from the season's totals. */
 export function readSeasonAverages() {

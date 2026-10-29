@@ -45,6 +45,7 @@
     "apps/mlb/tests/update-groups.test.js",
     "apps/mlb/tests/watched-games.test.js",
     "apps/mlb/tests/worker.test.js",
+    "apps/wnba/tests/espn-box-score.test.js",
     "apps/wnba/tests/game-details-updater.test.js",
     "apps/wnba/tests/game-details.test.js",
     "apps/wnba/tests/game-ends.test.js",

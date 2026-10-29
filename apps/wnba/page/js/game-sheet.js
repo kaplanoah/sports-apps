@@ -159,14 +159,19 @@ function renderDetails(opened, game) {
     : renderPendingBoxScore(teams, opened);
 }
 
+/**
+ * The game as the Worker's reads name it, by its id, teams, and start.
+ * @param {Game} game
+ */
+const nameGameRead = (game) => ({
+  id: game.id,
+  away: /** @type {string} */ (game.away.team),
+  home: /** @type {string} */ (game.home.team),
+  start: /** @type {string} */ (game.start),
+});
+
 /** @param {Game} game */
-const loadHighlights = (game) => () =>
-  fetchHighlights({
-    id: game.id,
-    away: /** @type {string} */ (game.away.team),
-    home: /** @type {string} */ (game.home.team),
-    start: /** @type {string} */ (game.start),
-  });
+const loadHighlights = (game) => () => fetchHighlights(nameGameRead(game));
 
 // ESPN's clips don't say when in the game they came.
 const describePlay = () => [];
@@ -214,20 +219,14 @@ function renderSheet() {
 /** @param {Game} game */
 const loadDetails = (game) =>
   chooseKind(game) === "box"
-    ? fetchBoxScore(game.id)
+    ? fetchBoxScore(nameGameRead(game))
     : fetchPreview({ season: session.year, away: game.away.team, home: game.home.team });
 
 /** @param {ShownGame} opened */
 const isLiveBoxScore = (opened) => opened.kind === "box" && findGame(opened.id)?.state === "live";
 
 /** @param {Game} game */
-const loadLead = (game) =>
-  fetchLead({
-    id: game.id,
-    away: /** @type {string} */ (game.away.team),
-    home: /** @type {string} */ (game.home.team),
-    start: /** @type {string} */ (game.start),
-  });
+const loadLead = (game) => fetchLead(nameGameRead(game));
 
 /**
  * @param {Game} game

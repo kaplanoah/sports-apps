@@ -1,7 +1,6 @@
 import { OVERTIME_SECONDS, QUARTER_SECONDS, REGULATION_PERIODS } from "../../page/js/periods.js";
 import { findTeamCodeByEspnId, TEAMS } from "../../page/js/teams.js";
 import { describeError, respondError, respondJson } from "../../../../shared/worker/responses.js";
-import { GAME_ID } from "./box-score.js";
 import { nameGameDetailsKey } from "./store-docs.js";
 import { readKeptDoc } from "../../../../shared/worker/store-reads.js";
 import { ESPN_DAY_REQUEST, ESPN_SITE, formatEspnDay } from "../../page/js/snapshot.js";
@@ -16,6 +15,7 @@ import { fetchEspnDay, fetchEspnJson } from "./wnba.js";
 
 // A live game's plays change with every basket.
 const SUMMARY_CACHE_SECONDS = 15;
+const GAME_ID = /^\d{10}$/;
 
 /** @param {string} start */
 const formatGameDay = (start) => formatEspnDay(Date.parse(start));
@@ -156,22 +156,22 @@ export function createEspnGameReader({ fetchImpl = (input, init) => fetch(input,
   };
 }
 
+/** @typedef {ReturnType<typeof createEspnGameReader>} EspnGameReader */
+
 /**
- * Reads ESPN for a game's lead afresh, as null when ESPN has no such game that day.
- * @param {{ fetchImpl?: (input: string, init: object) => Promise<Response> }} [options]
+ * A game's lead from ESPN's summary of it, or null when ESPN has no such game that day.
+ * @param {{ away: string, home: string, start: string }} game
+ * @param {any} summary ESPN's game summary, or null
  */
-export function createLeadReader({ fetchImpl = (input, init) => fetch(input, init) } = {}) {
-  const espnGames = createEspnGameReader({ fetchImpl });
-  /** @param {{ away: string, home: string, start: string }} game */
-  return async function readLead(game) {
-    const summary = await espnGames.fetchSummary(game);
-    return summary ? { ...game, ...describeLead(summary) } : null;
-  };
-}
+export const describeGameLead = (game, summary) =>
+  summary ? { ...game, ...describeLead(summary) } : null;
 
 // A finished game's lead never changes, so the one the store keeps is served as it is.
 export function createLeadServer({ fetchImpl = (input, init) => fetch(input, init) } = {}) {
-  const readLead = createLeadReader({ fetchImpl });
+  const espnGames = createEspnGameReader({ fetchImpl });
+
+  /** @param {{ away: string, home: string, start: string }} game */
+  const readLead = async (game) => describeGameLead(game, await espnGames.fetchSummary(game));
 
   /**
    * @param {{ id: string, away: string, home: string, start: string }} game
