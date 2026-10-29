@@ -79,23 +79,31 @@ function readReviewWorkflowValue(pattern) {
   return value;
 }
 
+/** The review workflow's run name, concurrency group, and cancel-in-progress, unevaluated. */
+export const readReviewTemplates = () => ({
+  runName: readReviewWorkflowValue(/^run-name: &review-name (.*)$/m),
+  group: readReviewWorkflowValue(/^concurrency:\n {2}group: (.*)$/m),
+  cancelInProgress: readReviewWorkflowValue(
+    /^concurrency:\n {2}group: .*\n {2}cancel-in-progress: (.*)$/m,
+  ),
+});
+
 /** @param {Record<string,string>} env */
 export const readNativeReviewName = (env) =>
-  evaluateReviewValue(readReviewWorkflowValue(/^run-name: &review-name (.*)$/m), env);
+  evaluateReviewValue(readReviewTemplates().runName, env);
 
 /**
  * The review workflow run's concurrency group for one event, and whether it stops that group's
  * running run.
  * @param {Record<string,string>} env
  */
-export const readReviewConcurrency = (env) => ({
-  group: evaluateReviewValue(readReviewWorkflowValue(/^concurrency:\n {2}group: (.*)$/m), env),
-  cancelsRunning:
-    evaluateReviewValue(
-      readReviewWorkflowValue(/^concurrency:\n {2}group: .*\n {2}cancel-in-progress: (.*)$/m),
-      env,
-    ) === "true",
-});
+export const readReviewConcurrency = (env) => {
+  const { group, cancelInProgress } = readReviewTemplates();
+  return {
+    group: evaluateReviewValue(group, env),
+    cancelsRunning: evaluateReviewValue(cancelInProgress, env) === "true",
+  };
+};
 
 /** @param {Record<string,string>} env */
 export const createReviewDecisionEnvironment = (env) => ({

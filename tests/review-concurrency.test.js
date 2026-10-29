@@ -1,6 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readNativeReviewName, readReviewConcurrency } from "./workflow-step.js";
+import {
+  readNativeReviewName,
+  readReviewConcurrency,
+  readReviewTemplates,
+} from "./workflow-step.js";
 import { readRepoFile } from "./repo-files.js";
 
 const OWNER_PULL = { ASSOCIATION: "OWNER", HEAD_REPOSITORY: "example/repository" };
@@ -65,14 +69,31 @@ test("a push or the owner's provider choice still stops a review running or wait
   );
 });
 
+/**
+ * The provider labels one review workflow expression accepts.
+ * @param {string} template
+ */
+function readProviderLabels(template) {
+  const list = template.match(/fromJSON\('(\["review-provider:[^']*\])'\)/)?.[1];
+  if (!list) throw new Error(`No provider list in ${template}`);
+  return /** @type {string[]} */ (JSON.parse(list));
+}
+
+test("the run name, the group, and cancel-in-progress accept the same providers", () => {
+  const { runName, group, cancelInProgress } = readReviewTemplates();
+  const providers = readProviderLabels(runName);
+  assert.deepEqual(readProviderLabels(group), providers);
+  assert.deepEqual(readProviderLabels(cancelInProgress), providers);
+});
+
 /** Every label event a pull request can get: each label, sender, author and draft state. */
 function listLabelEvents() {
   const events = [];
   for (const action of ["labeled", "unlabeled"])
     for (const name of [
       "review",
-      "review-provider:claude",
-      "review-provider:other",
+      ...readProviderLabels(readReviewTemplates().runName),
+      "review-provider:unknown",
       ...OBSERVED_LABELS,
     ])
       for (const sender of ["example", "someone"])
