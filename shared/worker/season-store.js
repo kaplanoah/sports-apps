@@ -44,22 +44,45 @@ import { describeError, respondError, respondJson, respondMethodNotAllowed } fro
  */
 
 /**
- * What a league hands the store.
+ * The only snapshot field the store itself reads. Other fields belong to the league's callbacks.
+ * @typedef {{ season: number }} SeasonSnapshot
+ */
+
+/**
+ * @template {SeasonSnapshot} Snapshot
+ * @typedef {(season: number, options?: { verify?: boolean }) => Promise<Snapshot>} SnapshotLoader
+ */
+
+/**
+ * The documents a league reads and saves. Their contents belong to the league.
+ * @typedef {object} SeasonDocuments
+ * @property {(key: string) => Promise<any>} read
+ * @property {(collection: string) => Promise<any[]>} list
+ * @property {(key: string, document: object) => Promise<void>} write
+ * @property {(key: string, change: (document: any) => object | null) => Promise<void>} update
+ * @property {(key: string) => Promise<void>} remove
+ */
+
+/**
+ * What a league hands the store. A snapshot and the updates used for notifications keep their
+ * own shapes through every callback; the store never interprets their league-specific fields.
+ * @template {SeasonSnapshot} Snapshot
+ * @template Updates
  * @typedef {object} League
- * @property {(storage: import("./feed-keeper.js").FeedStorage, fetchImpl: typeof fetch) => (season: number, options?: { verify?: boolean }) => Promise<any>} createLoadSnapshot
+ * @property {(storage: import("./feed-keeper.js").FeedStorage, fetchImpl: typeof fetch) => SnapshotLoader<Snapshot>} createLoadSnapshot
  *   reads the league through `fetchImpl`, keeping what it may read again in `storage`
- * @property {(loadSnapshot: (season: number, options?: { verify?: boolean }) => Promise<any>, now: number) => Promise<any>} loadCurrentSnapshot
- * @property {(docs: any, season: number) => Promise<any>} readUpdates
- * @property {(docs: any, snapshot: any) => Promise<void>} saveSnapshot
- * @property {(snapshot: any) => Record<string, string>} describeSnapshotStatus
+ * @property {(loadSnapshot: SnapshotLoader<Snapshot>, now: number) => Promise<Snapshot>} loadCurrentSnapshot
+ * @property {(docs: SeasonDocuments, season: number) => Promise<Updates>} readUpdates
+ * @property {(docs: SeasonDocuments, snapshot: Snapshot) => Promise<void>} saveSnapshot
+ * @property {(snapshot: Snapshot) => Record<string, string>} describeSnapshotStatus
  * @property {Record<string, string>} [statusFields] the league's own fields of the saved status,
  *   each as it reads with nothing to report
- * @property {(snapshot: any, now: number) => number} choosePollDelay the wait until the next
+ * @property {(snapshot: Snapshot, now: number) => number} choosePollDelay the wait until the next
  *   update
- * @property {(change: { before: any, after: any, snapshot: any, now: number }) => object[]} listNotifications
- * @property {(snapshot: any) => any[] | null} [listReminderGames]
+ * @property {(change: { before: Updates, after: Updates, snapshot: Snapshot, now: number }) => object[]} listNotifications
+ * @property {(snapshot: Snapshot) => ReturnType<typeof import("../page/reminder-games.js").listTimedReminderGames>} [listReminderGames]
  * @property {string} [detailsCollection] where the details of the games pages have open are kept
- * @property {() => (id: string, snapshot: any, stored: any) => Promise<any>} [createLoadDetails]
+ * @property {() => (id: string, snapshot: Snapshot, stored: any) => Promise<object | null>} [createLoadDetails]
  *   reads a game's details, or answers null while it needs none
  * @property {Record<string, BackgroundJob>} [backgroundJobs]
  * @property {string | null} [release] the commit the Worker was built from, or null outside a
@@ -175,7 +198,11 @@ function sendUpdating(socket, isUpdating) {
   }
 }
 
-/** @param {League} league */
+/**
+ * @template {SeasonSnapshot} Snapshot
+ * @template Updates
+ * @param {League<Snapshot, Updates>} league
+ */
 export function createSeasonStore(league) {
   const release = league.release ?? null;
 
@@ -534,6 +561,7 @@ export function createSeasonStore(league) {
       return delay;
     }
 
+    /** @param {Snapshot} snapshot */
     async refreshWatchedDetails(snapshot) {
       if (!this.loadDetails) return;
       const prefix = `${league.detailsCollection}/`;
@@ -545,6 +573,7 @@ export function createSeasonStore(league) {
     }
 
     // A game's details that fail to load leave the ones saved, and never hold up the update.
+    /** @param {string} id @param {Snapshot} snapshot */
     async refreshDetails(id, snapshot) {
       const key = `${league.detailsCollection}/${id}`;
       try {
@@ -562,6 +591,7 @@ export function createSeasonStore(league) {
     }
 
     // A failed notification never holds up the next update.
+    /** @param {Updates} before @param {Snapshot} snapshot */
     async notifyUpdates(before, snapshot) {
       try {
         const after = await league.readUpdates(this.docs, snapshot.season);

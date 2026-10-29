@@ -7,11 +7,13 @@ import {
   describeSnapshotStatus,
   listNotifications,
   loadCurrentSnapshot,
+  nameSeasonKey,
   readSchedule,
   readUpdates,
   saveSnapshot,
 } from "../worker/src/season-updater.js";
 import { createDocs } from "../../../tests/job-context.js";
+import { testSeasonUpdater } from "../../../tests/season-updater-contract.js";
 import { settle } from "../../../tests/settle.js";
 import { readSeasonAverages } from "./player-fixtures.js";
 
@@ -25,6 +27,19 @@ const GAMES = JSON.parse(
 );
 const RESPONSES = AFTERNOON.responses;
 const SNAPSHOT = buildSnapshot(RESPONSES, { season: 2026, now: NOW });
+
+testSeasonUpdater({
+  snapshot: SNAPSHOT,
+  saveSnapshot,
+  nameSeasonKey,
+  omitStandings: (snapshot) => ({ ...snapshot, standings: [], missing: ["standings"] }),
+  advanceStandings: (snapshot) => ({
+    ...snapshot,
+    standings: snapshot.standings.map((row, index) =>
+      index === 0 ? { ...row, wins: row.wins + 1 } : row,
+    ),
+  }),
+});
 
 // The afternoon's scores, with the whole season's schedule from the next day, its regular season
 // and all.
@@ -60,10 +75,9 @@ function finishTonight(snapshot, [awayScore, homeScore]) {
   return { ...snapshot, games, series };
 }
 
-test("the season saves its version, games, series, and standings, and only when they change", async () => {
+test("the season saves its version, games, series, and standings", async () => {
   const docs = createDocs();
   await saveSnapshot(docs, SNAPSHOT);
-  await saveSnapshot(docs, { ...SNAPSHOT, asOf: "2026-09-30T22:00:00Z" });
 
   assert.deepEqual(docs.writes, ["seasons/2026", "schedules/2026"]);
   const saved = await readUpdates(docs, 2026);
@@ -415,14 +429,6 @@ test("a team's nearest game ends when it's first found final after being seen li
   const saved = await readUpdates(docs, 2026);
   const seattle = saved.nearestGames.find((game) => game.id === "1022600325");
   assert.equal(seattle.end, "2026-09-24T04:05:00Z");
-});
-
-test("a feed that didn't answer leaves its saved field as it was", async () => {
-  const docs = createDocs();
-  await saveSnapshot(docs, SNAPSHOT);
-  await saveSnapshot(docs, { ...SNAPSHOT, standings: [], missing: ["standings"] });
-
-  assert.equal((await readUpdates(docs, 2026)).standings.length, 15);
 });
 
 test("an update leaves the top scorers as the player job saved them, even one that changes the season", async () => {
