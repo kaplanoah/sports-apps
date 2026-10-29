@@ -53,7 +53,7 @@ async function runOnce() {
   await createMlbNewsJob().updateStore({
     docs,
     storage: createJobStorage(),
-    createLoadSnapshot: () => async () => ({}),
+    createLoadSnapshot: () => async () => ({ season: 2026 }),
     env: { ANTHROPIC_API_KEY: "test-key" },
     fetchImpl: async (url, init) => {
       requests += 1;

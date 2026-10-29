@@ -22,7 +22,13 @@ export {
   readStoreDoc,
 } from "../../../../shared/worker/season-store.js";
 
-export const SeasonStore = createSeasonStore({
+/**
+ * @type {import("../../../../shared/worker/season-store.js").League<
+ *   ReturnType<typeof import("../../page/js/snapshot.js").buildSnapshot>,
+ *   Awaited<ReturnType<typeof SeasonUpdater.readUpdates>>
+ * >}
+ */
+const league = {
   release: readReleaseCommit(PAGE_FILES),
   createLoadSnapshot: (storage, fetchImpl) =>
     createSnapshotLoader({ storage, fetchImpl }).loadSnapshot,
@@ -47,4 +53,6 @@ export const SeasonStore = createSeasonStore({
     rosters: createRosterJob(),
     news: createMlbNewsJob(),
   },
-});
+};
+
+export const SeasonStore = createSeasonStore(league);

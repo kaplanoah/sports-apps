@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
-import { findAppRoot, listAppsWithBrowserTests } from "../worker/apps.mjs";
+import { findAppRoot, listApps, listAppsWithBrowserTests } from "../worker/apps.mjs";
 import { REPO_ROOT } from "./repo-files.js";
 
 const SHARED_BROWSER_TESTS = new URL("tests/browser/", REPO_ROOT);
@@ -68,4 +68,12 @@ test("each suite an app hasn't reached is a shared suite its specs don't call ye
       .map((suite) => `${app}: ${suite}`);
   });
   assert.deepEqual(stale, []);
+});
+
+test("every app runs the shared season updater contract", () => {
+  const missing = listApps().filter((app) => {
+    const tests = readFilesEndingIn(new URL("tests/", findAppRoot(app)), ".test.js");
+    return !tests.some((text) => /\btestSeasonUpdater\(/.test(text));
+  });
+  assert.deepEqual(missing, []);
 });
