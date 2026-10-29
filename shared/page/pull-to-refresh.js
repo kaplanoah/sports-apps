@@ -1,6 +1,6 @@
 import { isOnHomeScreen } from "./device.js";
 import { html, setHtml } from "./html.js";
-import { DRIFT_PX } from "./press.js";
+import { DRIFT_PX, isPastDrift } from "./press.js";
 import { prefersReducedMotion } from "./reduced-motion.js";
 import { reloadIfReplaced } from "./resume.js";
 import { watchShownView } from "./shown-view.js";
@@ -229,7 +229,7 @@ export function startPullToRefresh({ store, catchUp }) {
   function decideDirection(touch) {
     const across = Math.abs(touch.clientX - startX);
     const down = touch.clientY - startY;
-    if (down <= DRIFT_PX && across <= DRIFT_PX) return;
+    if (!isPastDrift(across, down)) return;
     if (down <= across) return becomeIdle();
     state = "pulling";
     movedParts = listMovedParts(spinner);

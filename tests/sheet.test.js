@@ -879,6 +879,27 @@ test("on a phone, a swipe at the sheet's top that goes up first moves the sheet 
   dialog.close();
 });
 
+test("on a phone, a swipe down the sheet's top moves it only once the finger drifts past where a press lets go", () => {
+  const { dialog, touch } = createPhoneSheet();
+
+  touch("touchstart", 300);
+  touch("touchmove", 310);
+  assert.equal(dialog.style.transform, "");
+  touch("touchmove", 311);
+  assert.equal(dialog.style.transform, "translateY(11px)");
+  dialog.close();
+});
+
+test("on a phone, a finger that drifts up and back down within a press's reach never moves the sheet", () => {
+  const { dialog, touch } = createPhoneSheet();
+
+  touch("touchstart", 300);
+  touch("touchmove", 296);
+  touch("touchmove", 307);
+  assert.equal(dialog.style.transform, "");
+  dialog.close();
+});
+
 test("the sheets showing are listed up to the shown one, with where each is scrolled, what each shows, and what its back button calls the one before", () => {
   const { dialog, sheets } = createRowDialog(["gameSheet", "teamSheet", "playerSheet"], {
     gameSheet: { keeper: keepShown({ id: "game-1" }), name: "Game" },

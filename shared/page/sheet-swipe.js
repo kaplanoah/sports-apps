@@ -3,7 +3,7 @@
 // no animation behind once it ends.
 
 import { PHONE_WIDTH_QUERY } from "./device.js";
-import { DRIFT_PX } from "./press.js";
+import { DRIFT_PX, isPastDrift } from "./press.js";
 import { prefersReducedMotion } from "./reduced-motion.js";
 import { SHEET_EASING, SHEET_MOTION_MS, settleAfter } from "./slide-panels.js";
 
@@ -129,9 +129,7 @@ export function closeOnSwipeDown(dialog, { isOwnGesture, findScroller }) {
    */
   function startsDragging(clientX, clientY, moving) {
     if (findScroller().scrollTop > 0 || clientY < moving.startY) moving.startY = clientY;
-    if (Math.hypot(clientX - moving.originX, clientY - moving.originY) > DRIFT_PX) {
-      moving.isPastPress = true;
-    }
+    if (isPastDrift(clientX - moving.originX, clientY - moving.originY)) moving.isPastPress = true;
     return moving.isPastPress && clientY - moving.startY > DRIFT_PX;
   }
 
@@ -144,7 +142,7 @@ export function closeOnSwipeDown(dialog, { isOwnGesture, findScroller }) {
   function isSideways(clientX, clientY, moving) {
     const across = Math.abs(clientX - moving.originX);
     const down = Math.abs(clientY - moving.originY);
-    return Math.hypot(across, down) > DRIFT_PX && across > down;
+    return isPastDrift(across, down) && across > down;
   }
 
   function grabSheet() {

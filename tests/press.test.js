@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { findPressed, isPressable } from "../shared/page/press.js";
+import { DRIFT_PX, findPressed, isPastDrift, isPressable } from "../shared/page/press.js";
 
 /**
  * A stand-in for an element, with what press.js reads of one.
@@ -66,4 +66,13 @@ test("a press on a switch, or on what takes no tap, shows nowhere", () => {
 
   assert.equal(findPressed(createElement("span", { parent: notifications })), null);
   assert.equal(findPressed(createElement("div")), null);
+});
+
+test("a finger drifts past where its press lets go only once it's farther than DRIFT_PX from where it landed, in any direction", () => {
+  assert.equal(isPastDrift(0, DRIFT_PX), false);
+  assert.equal(isPastDrift(-DRIFT_PX, 0), false);
+  assert.equal(isPastDrift(7, -7), false);
+  assert.equal(isPastDrift(0, DRIFT_PX + 1), true);
+  assert.equal(isPastDrift(-(DRIFT_PX + 1), 0), true);
+  assert.equal(isPastDrift(8, -7), true);
 });

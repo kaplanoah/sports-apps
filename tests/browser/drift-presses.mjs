@@ -1,18 +1,17 @@
+import { DRIFT_PX, GLIDE_REST_MS, TAPPABLE, TOUCH_SETTLE_MS } from "../../shared/page/press.js";
 import { openFromHomeScreen } from "./touch.mjs";
 import { checkEachView } from "./view-walk.mjs";
 
 // A finger that drifts on a control keeps the control's press until it drifts past press.js's
 // distance, and no swipe of a sheet's, nor the page's pull to refresh, takes the touch before then,
-// or iOS can drop the tap while the control still shows it pressed. The walk tries a control of
-// each kind each view shows, in its top sheet or on the page, with the finger drifting a pixel at a
-// time down, up and then down, and to each side, as TouchEvents, which a browser's own touches
-// hold back within a slop of their own. A switch or a slider is left out, since a finger drags it
-// from the moment it lands.
+// or iOS can drop the tap while the control still shows it pressed. The walk lands on a control of
+// each kind each view shows, in its top sheet or on the page, and tries each one press.js shows
+// pressed, with the finger drifting a pixel at a time down, up and then down, and to each side, as
+// TouchEvents, which a browser's own touches hold back within a slop of their own. A slider is left
+// out, since a finger drags it from the moment it lands.
 
 const PHONE = { width: 390, height: 844 };
-// Past press.js's press settling, so the press shows before the finger drifts.
-const SETTLE_MS = 100;
-const DRIFT_STEPS = 16;
+const DRIFT_STEPS = DRIFT_PX + 6;
 const PATHS = {
   down: Array.from({ length: DRIFT_STEPS }, (_, step) => ({ x: 0, y: step + 1 })),
   "up, then down": [
@@ -24,27 +23,22 @@ const PATHS = {
 };
 
 /**
- * The middle of one control of each kind that shows its press in the top dialog, or on the page
- * when none is open, where a finger lands on it without scrolling, each marked so the drift finds
- * it.
+ * The middle of one control of each kind that takes a tap in the top dialog, or on the page when
+ * none is open, where a finger lands on it without scrolling, each marked so the drift finds it.
  * @param {import("@playwright/test").Page} page
  */
 const markControls = (page) =>
-  page.evaluate(() => {
+  page.evaluate((tappable) => {
     for (const marked of document.querySelectorAll("[data-drift]"))
       marked.removeAttribute("data-drift");
     const top =
       document.elementFromPoint(innerWidth / 2, innerHeight / 2)?.closest("dialog[open]") ??
       document.body;
-    const pressable = [
-      "button:not([role='switch'], [role='slider'], [disabled])",
-      "a[href]",
-      "summary",
-      "label:is(.appearance-choice, .contact-secondary)",
-    ].join(", ");
     const kinds = new Set();
     const controls = [];
-    for (const control of top.querySelectorAll(pressable)) {
+    for (const control of top.querySelectorAll(
+      `:is(${tappable}):not([role='slider'], :disabled)`,
+    )) {
       const box = control.getBoundingClientRect();
       const x = box.left + box.width / 2;
       const y = box.top + box.height / 2;
@@ -61,7 +55,7 @@ const markControls = (page) =>
       controls.push({ name: `${kind} (${words})`, x, y });
     }
     return controls;
-  });
+  }, TAPPABLE);
 
 /**
  * Lands a finger on a control, as TouchEvents and pointer events, so its press starts.
@@ -94,8 +88,9 @@ const landFinger = (page, index, at) =>
   );
 
 /**
- * Drifts the finger along `path` from where it landed, then lifts it as a scroll would, and says,
- * at each step, whether a swipe took the touch and whether the control still showed its press.
+ * Drifts the finger along `path` from where it landed, then lifts it as a scroll would, and says
+ * whether the control showed its press before the finger moved and, at each step, whether a swipe
+ * took the touch and whether the control still showed its press.
  * @param {import("@playwright/test").Page} page
  * @param {number} index
  * @param {{ x: number, y: number }} at
@@ -107,6 +102,7 @@ const driftFinger = (page, index, at, path) =>
       const control = /** @type {Element} */ (document.querySelector(`[data-drift="${index}"]`));
       const hit = document.elementFromPoint(at.x, at.y) ?? control;
       const pointer = { pointerId: 1, pointerType: "touch", isPrimary: true, button: 0 };
+      const isPressedAtLanding = control.classList.contains("is-pressed");
       const steps = path.map((by) => {
         const point = { clientX: at.x + by.x, clientY: at.y + by.y };
         const touch = new Touch({ identifier: 1, target: hit, ...point });
@@ -137,31 +133,63 @@ const driftFinger = (page, index, at, path) =>
       hit.dispatchEvent(
         new TouchEvent("touchcancel", { changedTouches: [touch], bubbles: true, cancelable: true }),
       );
-      return steps;
+      return { isPressedAtLanding, steps };
     },
     { index, at, path },
   );
 
 /**
- * Every drift on the top dialog's controls where a swipe took the touch while the press showed.
+ * What went wrong in one drift: a step where a swipe took the touch while the press showed, or one
+ * within press.js's distance where the press let go.
+ * @param {{ by: { x: number, y: number }, isTaken: boolean, isPressed: boolean }[]} steps
+ */
+function listDriftProblems(steps) {
+  const problems = [];
+  for (const { by, isTaken, isPressed } of steps) {
+    const at = `${by.x},${by.y}`;
+    if (isTaken && isPressed) problems.push(`taken at ${at} while pressed`);
+    else if (!isPressed && Math.hypot(by.x, by.y) <= DRIFT_PX)
+      problems.push(`press let go at ${at}`);
+  }
+  return problems;
+}
+
+/**
+ * Lands a finger on a control, waits for its press to show, and drifts it along `path`.
+ * @param {import("@playwright/test").Page} page
+ * @param {number} index
+ * @param {{ x: number, y: number }} at
+ * @param {{ x: number, y: number }[]} path
+ */
+async function pressAndDrift(page, index, at, path) {
+  await landFinger(page, index, at);
+  await page.clock.runFor(TOUCH_SETTLE_MS);
+  const drift = await driftFinger(page, index, at, path);
+  // So the next finger lands on a page at rest rather than stopping a glide.
+  await page.clock.runFor(GLIDE_REST_MS);
+  return drift;
+}
+
+/**
+ * Every drift on the top dialog's pressed controls that lost its press or its tap, and a view
+ * with no control that shows its press.
  * @param {import("@playwright/test").Page} page
  */
 async function listPressesLost(page) {
   const problems = [];
+  let pressedCount = 0;
   const controls = await markControls(page);
   for (const [index, control] of controls.entries()) {
+    const { isPressedAtLanding: isPressable } = await pressAndDrift(page, index, control, []);
+    if (!isPressable) continue;
+    pressedCount++;
     for (const [pathName, path] of Object.entries(PATHS)) {
-      await landFinger(page, index, control);
-      await page.clock.runFor(SETTLE_MS);
-      const steps = await driftFinger(page, index, control, path);
-      await page.clock.runFor(SETTLE_MS);
-      const lost = steps.find((step) => step.isTaken && step.isPressed);
-      if (lost)
-        problems.push(
-          `${control.name}, ${pathName}: taken at ${lost.by.x},${lost.by.y} while pressed`,
-        );
+      const { isPressedAtLanding, steps } = await pressAndDrift(page, index, control, path);
+      const drift = isPressedAtLanding ? listDriftProblems(steps) : ["no press on landing"];
+      problems.push(...drift.map((problem) => `${control.name}, ${pathName}: ${problem}`));
     }
   }
+  if (pressedCount === 0) problems.push("no control showed its press");
   return problems;
 }
 

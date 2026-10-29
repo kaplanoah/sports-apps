@@ -13,7 +13,7 @@ import { isStandIn } from "./rider-taps.js";
 // drifts on a control without scrolling anything still taps it.
 
 // How long a finger rests before its press shows, and how long a quick tap's press stays.
-const TOUCH_SETTLE_MS = 60;
+export const TOUCH_SETTLE_MS = 60;
 export const QUICK_TAP_MS = 120;
 // How far a finger may drift before its press lets go. A swipe the page's code follows takes the
 // touch only past it, or iOS can drop the tap of a press that still shows.
@@ -23,7 +23,7 @@ export const DRIFT_PX = 10;
 const LIFT_CLICK_MS = 1000;
 // A gliding list scrolls on every frame, so one that hasn't for a few frames has come to rest, and a
 // finger that lands then taps. A fling's first frame comes within as long of its finger's lift.
-const GLIDE_REST_MS = 100;
+export const GLIDE_REST_MS = 100;
 
 // The buttons of the rows every app shares: a game's, a card's, a search's, a table's, a clip's,
 // a Diagnostics record's, and a settings page's.
@@ -64,6 +64,13 @@ function letGo() {
   press.control.classList.remove("is-pressed", "is-row-press");
   press = null;
 }
+
+/**
+ * Whether a finger has drifted from where it landed past where its press lets go.
+ * @param {number} across
+ * @param {number} down
+ */
+export const isPastDrift = (across, down) => Math.hypot(across, down) > DRIFT_PX;
 
 /**
  * Whether a control shows its press: a button, a link, a details' summary, an Appearance choice,
@@ -194,7 +201,7 @@ function startTouch(event) {
 /** @param {PointerEvent} event */
 function followDrift(event) {
   if (!press || !event.isPrimary) return;
-  if (Math.hypot(event.clientX - press.x, event.clientY - press.y) > DRIFT_PX) letGo();
+  if (isPastDrift(event.clientX - press.x, event.clientY - press.y)) letGo();
 }
 
 // The browser cancels a finger's pointer once it takes the touch for a scroll, well before the

@@ -4,7 +4,7 @@
 // its own, like a roster's wide table, stays that thing's until it reaches its edge. Where one
 // surface holds another, as a sheet holds its sections, the inner one has the first say.
 
-import { DRIFT_PX } from "./press.js";
+import { isPastDrift } from "./press.js";
 
 // A swipe goes on once it has moved this share of the surface's width, or is this fast as it lifts.
 const GO_SHARE = 0.3;
@@ -53,8 +53,7 @@ function canScrollAlong(target, surface, direction) {
  * @param {number} across
  * @param {number} down
  */
-const isSideways = (across, down) =>
-  Math.hypot(across, down) > DRIFT_PX && Math.abs(across) > Math.abs(down);
+const isSideways = (across, down) => isPastDrift(across, down) && Math.abs(across) > Math.abs(down);
 
 /**
  * Follows each sideways swipe on `surface` that `swipe` has a neighbor for.
