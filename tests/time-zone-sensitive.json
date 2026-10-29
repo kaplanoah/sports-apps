@@ -177,12 +177,6 @@
     "tests/worker-fetch.test.js",
     "tests/worker-store.test.js"
   ],
-  "fixed": [
-    "apps/mlb/tests/search-typing.test.js",
-    "apps/wnba/tests/search-typing.test.js"
-  ],
-  "browserOnly": [
-    "apps/mlb/page/js/stamp-view.js",
-    "shared/page/draw-channel-tag-age.js"
-  ]
+  "fixed": ["apps/mlb/tests/search-typing.test.js", "apps/wnba/tests/search-typing.test.js"],
+  "browserOnly": ["apps/mlb/page/js/stamp-view.js", "shared/page/draw-channel-tag-age.js"]
 }
