@@ -612,13 +612,16 @@ const FINALS_GAME = {
   home: { team: "LVA" },
 };
 const UNDECIDED = new Map([["finals", { winner: null }]]);
-// Noon Eastern on the day of the game above.
+// Noon Eastern on the day of the game above, and a quarter hour after it was due to tip off.
 const GAME_DAY_NOON = Date.parse("2026-10-27T16:00:00Z");
+const GAME_DAY_TIP_OFF = Date.parse("2026-10-27T23:45:00Z");
 
-test("the scoreboard has a game to score on the league's today or yesterday, one under way or to be played", () => {
-  const isScored = (change, now = GAME_DAY_NOON, seriesById = UNDECIDED) =>
+test("the scoreboard has a game to score on the league's today or yesterday, one under way or due to be played", () => {
+  const isScored = (change, now = GAME_DAY_TIP_OFF, seriesById = UNDECIDED) =>
     WNBASnapshot.isScoreboardGame({ ...FINALS_GAME, ...change }, seriesById, now);
   assert.equal(isScored({}), true);
+  assert.equal(isScored({}, GAME_DAY_NOON), false);
+  assert.equal(isScored({ start: "2026-10-27T04:00:00Z", isTimeSet: false }, GAME_DAY_NOON), true);
   assert.equal(isScored({ start: "2026-10-29T23:30:00Z" }), false);
   assert.equal(isScored({ start: "2026-10-26T23:30:00Z" }), true);
   assert.equal(isScored({ start: "2026-10-25T23:30:00Z" }), false);
@@ -628,7 +631,7 @@ test("the scoreboard has a game to score on the league's today or yesterday, one
   );
   assert.equal(isScored({ state: "live", start: "2026-10-25T23:30:00Z" }), false);
   assert.equal(isScored({ state: "final" }), false);
-  assert.equal(isScored({}, GAME_DAY_NOON, new Map([["finals", { winner: "LVA" }]])), false);
+  assert.equal(isScored({}, GAME_DAY_TIP_OFF, new Map([["finals", { winner: "LVA" }]])), false);
   assert.equal(isScored({ status: "Postponed" }), false);
   assert.equal(isScored({ home: { team: null } }), false);
 });
@@ -639,5 +642,5 @@ test("the scoreboard's day is the league's, wherever the viewer is", () => {
       WNBASnapshot.isScoreboardGame({ ...FINALS_GAME, start }, UNDECIDED, Date.parse(now)),
     );
   assert.equal(isScored("Asia/Tokyo", "2026-10-28T13:00:00Z", "2026-10-28T03:00:00Z"), false);
-  assert.equal(isScored("Pacific/Honolulu", "2026-10-28T23:30:00Z", "2026-10-28T05:00:00Z"), true);
+  assert.equal(isScored("Pacific/Honolulu", "2026-10-28T04:30:00Z", "2026-10-29T05:00:00Z"), true);
 });

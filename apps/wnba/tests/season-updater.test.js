@@ -25,6 +25,9 @@ const GAMES = JSON.parse(
   readFileSync(`${import.meta.dirname}/fixtures/2026-10-01-games.json`, "utf8"),
 );
 const RESPONSES = AFTERNOON.responses;
+// A quarter hour after the first game of the afternoon's day, and of the next day, was due to tip off.
+const AFTERNOON_TIP_OFF = Date.parse("2026-09-30T23:15:00Z");
+const GAME_DAY_TIP_OFF = Date.parse("2026-10-02T01:15:00Z");
 const SNAPSHOT = buildSnapshot(RESPONSES, { season: 2026, now: NOW });
 
 testSeasonUpdater({
@@ -98,7 +101,7 @@ const setTonightsState = (snapshot, state) => ({
 
 const findTonight = (season) => season.games.find((game) => game.id === "1042600132");
 
-test("without the league's scoreboard, the schedule is saved only on a day with no game for it to score", async () => {
+test("without the league's scoreboard, the schedule is saved only while no game is due for it to score", async () => {
   const { scoreboard, backup, ...withoutScores } = RESPONSES;
   const responses = { ...withoutScores, schedule: GAMES.preview.schedule };
   const afterLastGame = Date.parse("2026-10-01T03:30:00Z");
@@ -110,7 +113,7 @@ test("without the league's scoreboard, the schedule is saved only on a day with 
   assert.deepEqual(idleDocs.writes, ["seasons/2026", "schedules/2026"]);
   assert.equal(findTonight(await readUpdates(idleDocs, 2026)).state, "final");
 
-  const gameDay = buildSnapshot(responses, { season: 2026, now: Date.parse(GAMES.now) });
+  const gameDay = buildSnapshot(responses, { season: 2026, now: GAME_DAY_TIP_OFF });
   assert.equal(gameDay.isScoreboardIdle, false);
   const gameDayDocs = createDocs();
   await saveSnapshot(gameDayDocs, gameDay);
@@ -118,15 +121,14 @@ test("without the league's scoreboard, the schedule is saved only on a day with 
   assert.equal((await readUpdates(gameDayDocs, 2026)).games, undefined);
 });
 
-test("the status calls a missing scoreboard idle only on a day the schedule says has no game for it to score", () => {
+test("the status calls a missing scoreboard idle only while the schedule says no game is due for it to score", () => {
   const { scoreboard, backup, ...withoutScores } = RESPONSES;
-  const gameDay = Date.parse(GAMES.now);
-  const describeOn = (schedule) =>
-    describeSnapshotStatus(
-      buildSnapshot({ ...withoutScores, schedule }, { season: 2026, now: gameDay }),
-    );
+  const describeOn = (schedule, now = GAME_DAY_TIP_OFF) =>
+    describeSnapshotStatus(buildSnapshot({ ...withoutScores, schedule }, { season: 2026, now }));
   const { detail, idle } = describeOn(GAMES.preview.schedule);
   assert.deepEqual([detail, idle], ["scoreboard", ""]);
+  const beforeTipOff = describeOn(GAMES.preview.schedule, Date.parse(GAMES.now));
+  assert.deepEqual([beforeTipOff.detail, beforeTipOff.idle], ["scoreboard", "scoreboard"]);
 
   const putOff = structuredClone(GAMES.preview.schedule);
   const tonight = putOff.leagueSchedule.gameDates
@@ -331,7 +333,7 @@ test("on a game day, the season's games stay as they were unless both the scoreb
   for (const feed of ["scoreboard", "schedule"]) {
     const without = buildSnapshot(
       { ...RESPONSES, schedule: GAMES.preview.schedule, [feed]: null },
-      { season: 2026, now: Date.parse(GAMES.now) },
+      { season: 2026, now: GAME_DAY_TIP_OFF },
     );
     await saveSnapshot(docs, without);
   }
@@ -411,7 +413,7 @@ test("each team's nearest games are saved with the season, and on a game day sta
   for (const feed of ["scoreboard", "schedule"]) {
     const without = buildSnapshot(
       { ...RESPONSES, schedule: GAMES.preview.schedule, [feed]: null },
-      { season: 2026, now: Date.parse(GAMES.now) },
+      { season: 2026, now: GAME_DAY_TIP_OFF },
     );
     await saveSnapshot(docs, without);
   }
@@ -465,11 +467,11 @@ test("an update and the player job that change the season at once each keep the 
   assert.deepEqual(saved.leaders, leaders);
 });
 
-// The afternoon's feeds, with some that didn't answer.
+// The afternoon's feeds, with some that didn't answer, once tonight's first game is due.
 const buildWithout = (feeds) =>
   buildSnapshot(
     { ...RESPONSES, ...Object.fromEntries(feeds.map((feed) => [feed, null])) },
-    { season: 2026, now: NOW },
+    { season: 2026, now: AFTERNOON_TIP_OFF },
   );
 
 test("the games stay as they were unless both the scoreboard and the schedule answered", async () => {

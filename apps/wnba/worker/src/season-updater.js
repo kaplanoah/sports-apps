@@ -215,7 +215,7 @@ export const readUpdates = (docs, year) => docs.read(nameSeasonKey(year));
 
 export const readSchedule = (docs, year) => docs.read(nameScheduleKey(year));
 
-// A feed with nothing to send is idle, like the scoreboard on a day without games, which the league
+// A feed with nothing to send is idle, like the scoreboard before a game is due, which the league
 // may not send at all, so the page doesn't warn of it. Nor does it warn of the scoreboard while ESPN
 // covers it, before ESPN's scores stand in for a game it has started.
 export function describeSnapshotStatus(snapshot) {

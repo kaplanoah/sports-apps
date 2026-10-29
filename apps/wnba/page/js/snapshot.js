@@ -535,16 +535,26 @@ function isOnScoreboardDay({ start }, now) {
   return !!date && date >= addDays(today, -1) && date <= today;
 }
 
+// The scoreboard has no score to send for a game before it's due, so a feed that refuses then
+// keeps nothing from fans. A game without a set time starts at midnight Eastern, so it's due all
+// its day.
+/**
+ * @param {{ start: string | null }} game
+ * @param {number} now
+ */
+const isDue = ({ start }, now) => Date.parse(String(start)) <= now;
+
 /**
  * Whether a game's score is the league scoreboard's to send: one on the league's today or yesterday
- * that's under way, or to be played between known teams.
+ * that's under way, or due to be played between known teams.
  * @param {import("./nearest-games.js").SeasonGame & { start: string | null }} game
  * @param {Map<string, import("./nearest-games.js").DecidedSeries>} seriesById
  * @param {number} now
  */
 export function isScoreboardGame(game, seriesById, now) {
   if (!isOnScoreboardDay(game, now)) return false;
-  return game.state === "live" || (game.state === "pre" && isPlayable(game, seriesById));
+  if (game.state === "live") return true;
+  return game.state === "pre" && isDue(game, now) && isPlayable(game, seriesById);
 }
 
 // Matched by day rather than by the nearest start, since the league's placeholder start, at midnight
