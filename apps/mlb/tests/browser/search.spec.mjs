@@ -7,6 +7,7 @@ import {
   PLAYER_DOCS,
   ROSTER_DOCS,
 } from "./harness.mjs";
+import { holdClock } from "../../../../tests/browser/harness.mjs";
 import { holdRequests } from "../../../../tests/browser/hold-requests.mjs";
 import { expectShown } from "../../../../tests/browser/sheet-row.mjs";
 import { listTapsOffButtons } from "../../../../tests/browser/tap-states.mjs";
@@ -272,7 +273,7 @@ test("while words are typed, two whole searches, then the club's pages in place 
   await expect(findLine(page)).toHaveText("Mets\u2022Next game");
 });
 
-test("a sent club shows its pages over its games from today, soonest first, or, once all are past, the latest first, and its games line opens them alone on the first from today", async ({
+test("a sent club shows its pages over its games from today, soonest first, or, once all are past, the latest first, and its games line opens them alone on its tap, on the first from today", async ({
   page,
 }) => {
   await openSeasonGames(page);
@@ -293,10 +294,12 @@ test("a sent club shows its pages over its games from today, soonest first, or, 
   await expect(findGamesLine(page)).toHaveText("Mets\u2022162 games");
   await expect(findListedDays(page).first()).toHaveAttribute("data-day", "2026-09-24");
 
+  await holdClock(page);
   await findGamesLine(page).tap();
 
   await expect(findRows(page)).toHaveCount(0);
   await expect(findLine(page)).toHaveText("Mets\u2022162 games");
+  await page.clock.resume();
   await expect.poll(() => readTopDay(page)).toBe("2026-09-24");
 });
 

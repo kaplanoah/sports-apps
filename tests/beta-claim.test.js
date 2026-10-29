@@ -351,11 +351,14 @@ test("a waiter told with no one taking beta since isn't told again while beta is
   assert.deepEqual(planQueue(pulls), { holder: null, changes: [], told: null, taken: null });
 });
 
+const ACTIONS = { slug: "github-actions" };
+
 /**
  * A fake GitHub that answers from these pull requests and records each request.
- * @param {{ open: object[], closed: { number: number, pull_request: object, labels: { name: string }[] }[], timelines: Record<number, TimelineEvent[]>, missingLabels?: string[] }} state
+ * Each open head was pushed to its own branch at minute 0, unless `suites` gives its check suites.
+ * @param {{ open: ReturnType<typeof createListedPull>[], closed: { number: number, pull_request: object, labels: { name: string }[] }[], timelines: Record<number, TimelineEvent[]>, suites?: Record<number, { created_at: string, head_branch: string, app: { slug: string } }[]>, missingLabels?: string[] }} state
  */
-function createGitHubFake({ open, closed, timelines, missingLabels = [] }) {
+function createGitHubFake({ open, closed, timelines, suites = {}, missingLabels = [] }) {
   /** @type {{ method: string, path: string, body?: unknown }[]} */
   const requests = [];
   /** @type {typeof fetch} */
@@ -376,8 +379,12 @@ function createGitHubFake({ open, closed, timelines, missingLabels = [] }) {
       const { variables } = JSON.parse(String(init?.body));
       return Response.json(createTimelineAnswer(timelines[variables.number] ?? []));
     }
-    if (path.includes("/check-suites"))
-      return Response.json({ check_suites: [{ created_at: at(0) }] });
+    if (path.includes("/check-suites")) {
+      const pull = open.find(({ head }) => path.includes(head.sha));
+      if (!pull) throw new Error(`Unexpected head: ${path}`);
+      const pushed = [{ created_at: at(0), head_branch: pull.head.ref, app: ACTIONS }];
+      return Response.json({ check_suites: suites[pull.number] ?? pushed });
+    }
     return Response.json({});
   };
   return { fetchImpl, requests };
@@ -389,7 +396,7 @@ function createGitHubFake({ open, closed, timelines, missingLabels = [] }) {
  */
 const createListedPull = (number, labels) => ({
   number,
-  head: { sha: nameHead(number) },
+  head: { sha: nameHead(number), ref: `feature-${number}` },
   labels: labels.map((name) => ({ name })),
 });
 
@@ -467,6 +474,22 @@ test("a run comments on a waiter told before another took beta that it stays fir
       },
     ],
   );
+});
+
+test("a run dates a head by its push to the pull request's branch, not an earlier one to beta", async () => {
+  const { fetchImpl } = createGitHubFake({
+    open: [createListedPull(5, [BETA_LABEL])],
+    closed: [],
+    timelines: { 5: [addLabel(BETA_LABEL, 3)] },
+    suites: {
+      5: [
+        { created_at: at(0), head_branch: "beta", app: ACTIONS },
+        { created_at: at(5), head_branch: "feature-5", app: ACTIONS },
+      ],
+    },
+  });
+  const plan = await updateQueue({ repository: "owner/repo", fetchImpl, env: { GH_TOKEN: "t" } });
+  assert.deepEqual(plan.changes, [{ number: 5, label: BETA_LABEL, isAdded: false }]);
 });
 
 test("a run's log says whom it told beta is free, whom it told another took beta first, or that it told no one", () => {

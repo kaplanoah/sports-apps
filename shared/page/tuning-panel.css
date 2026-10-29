@@ -158,30 +158,6 @@
   min-width: 0;
   accent-color: var(--accent);
 }
-.tuning-controls.tuning-vertical > button {
-  width: auto;
-  gap: 2px;
-  padding: 0 4px;
-}
-.tuning-filter {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 6px 12px;
-  font-size: var(--type-setting-size);
-  font-weight: var(--type-setting-weight);
-}
-.tuning-filter select {
-  flex: 1;
-  min-height: var(--control-height);
-  border: 1px solid var(--divider);
-  border-radius: var(--radius-control);
-  background: var(--sheet);
-  color: var(--ink);
-  font-family: var(--search-face);
-  font-size: var(--type-field-size);
-  font-weight: var(--type-body-weight);
-}
 .tuning-panel .tuning-option {
   padding: 0 12px;
   border: 1px solid var(--divider);

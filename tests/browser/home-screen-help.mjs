@@ -8,6 +8,7 @@ import { takeAwayPush } from "./devices.mjs";
 import { holdClock, matchPath } from "./harness.mjs";
 import { holdRequests } from "./hold-requests.mjs";
 import { SETTINGS } from "./settings.mjs";
+import { SLID_CLOSED, hasStartedClosing } from "./sheet-motions.mjs";
 import { listTapsOffButtons } from "./tap-states.mjs";
 import { drag } from "./touch.mjs";
 
@@ -150,10 +151,13 @@ export async function checkWelcomeRises({ page, openApp, openSettings }) {
     expect(
       await welcome.evaluate((dialog) => getComputedStyle(dialog, "::backdrop").backgroundColor),
     ).toBe("rgba(0, 0, 0, 0)");
-    const isSliding = await welcome.evaluate((dialog, selector) => {
-      /** @type {HTMLButtonElement} */ (dialog.querySelector(selector)).click();
-      return dialog.hasAttribute("open") && dialog.style.transform === "translateY(100%)";
-    }, button);
+    const isSliding = await welcome.evaluate(
+      (dialog, { selector, slidClosed }) => {
+        /** @type {HTMLButtonElement} */ (dialog.querySelector(selector)).click();
+        return dialog.hasAttribute("open") && dialog.style.transform === slidClosed;
+      },
+      { selector: button, slidClosed: SLID_CLOSED },
+    );
     expect(isSliding, button).toBe(true);
     await expect(welcome).toBeHidden();
     await expect(page.locator(SETTINGS)).toBeVisible();
@@ -161,36 +165,35 @@ export async function checkWelcomeRises({ page, openApp, openSettings }) {
 }
 
 /**
- * The welcome's Continue in browser and its caret each show their press before the welcome closes.
+ * The welcome's Continue in browser and its caret each start closing the welcome on the frame of
+ * their tap, while their press shows.
  * @param {App} app
  */
-export async function checkWelcomeWaitsForPress({ page, openApp, openSettings }) {
+export async function checkWelcomeClosesOnTap({ page, openApp, openSettings }) {
   await takeAwayPush(page);
   await openApp(page, { isShowingWelcome: true });
   const welcome = page.locator(WELCOME);
 
-  await checkPressShowsBeforeClose(
-    page,
-    welcome.getByRole("button", { name: "Continue in browser" }),
-  );
+  await checkCloseStartsOnTap(page, welcome.locator(".welcome-continue"));
   await openSettings(page);
   await findHelp(page).click();
-  await checkPressShowsBeforeClose(page, welcome.getByRole("button", { name: "Close" }));
+  await checkCloseStartsOnTap(page, welcome.locator(".welcome-close"));
 }
 
 /**
  * @param {import("@playwright/test").Page} page
  * @param {import("@playwright/test").Locator} button
  */
-async function checkPressShowsBeforeClose(page, button) {
+async function checkCloseStartsOnTap(page, button) {
   const welcome = page.locator(WELCOME);
   await expect(welcome).toBeVisible();
   await holdClock(page);
 
   await button.click();
+  await page.clock.runFor(16);
 
   await expect(button).toHaveCSS("opacity", "0.3");
-  await expect(welcome).toHaveAttribute("open");
+  expect(await hasStartedClosing(welcome)).toBe(true);
   await page.clock.runFor(1000);
   await expect(welcome).toBeHidden();
   await page.clock.resume();

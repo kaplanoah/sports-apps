@@ -34,8 +34,8 @@ export function readStepInput(workflow, step, input) {
 }
 
 /** @param {Record<string,string>} env */
-export function readNativeReviewName(env) {
-  const github = {
+function createReviewEvent(env) {
+  return {
     repository: env.REPOSITORY ?? "example/repository",
     repository_owner: (env.REPOSITORY ?? "example/repository").split("/")[0],
     sha: env.REVIEW_TRUSTED ?? "d".repeat(40),
@@ -53,11 +53,15 @@ export function readNativeReviewName(env) {
       },
     },
   };
-  const title = readRepoFile(".github/workflows/review.yml").match(
-    /^run-name: &review-name (.*)$/m,
-  )?.[1];
-  if (!title) throw new Error("Missing native review title anchor");
-  return title.replace(/\$\{\{ (.*?) \}\}/g, (_, expression) =>
+}
+
+/**
+ * The review workflow's value for one event, with each GitHub expression in it evaluated.
+ * @param {string} template @param {Record<string,string>} env
+ */
+function evaluateReviewValue(template, env) {
+  const github = createReviewEvent(env);
+  return template.replace(/\$\{\{ (.*?) \}\}/g, (_, expression) =>
     String(
       runInNewContext(
         expression,
@@ -67,6 +71,31 @@ export function readNativeReviewName(env) {
     ),
   );
 }
+
+/** @param {RegExp} pattern */
+function readReviewWorkflowValue(pattern) {
+  const value = readRepoFile(".github/workflows/review.yml").match(pattern)?.[1];
+  if (!value) throw new Error(`Missing review workflow value ${pattern}`);
+  return value;
+}
+
+/** @param {Record<string,string>} env */
+export const readNativeReviewName = (env) =>
+  evaluateReviewValue(readReviewWorkflowValue(/^run-name: &review-name (.*)$/m), env);
+
+/**
+ * The review workflow run's concurrency group for one event, and whether it stops that group's
+ * running run.
+ * @param {Record<string,string>} env
+ */
+export const readReviewConcurrency = (env) => ({
+  group: evaluateReviewValue(readReviewWorkflowValue(/^concurrency:\n {2}group: (.*)$/m), env),
+  cancelsRunning:
+    evaluateReviewValue(
+      readReviewWorkflowValue(/^concurrency:\n {2}group: .*\n {2}cancel-in-progress: (.*)$/m),
+      env,
+    ) === "true",
+});
 
 /** @param {Record<string,string>} env */
 export const createReviewDecisionEnvironment = (env) => ({

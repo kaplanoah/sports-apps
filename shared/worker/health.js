@@ -1,8 +1,10 @@
 // The Worker's health, for an uptime monitor: whether the Worker and its store answer, and, apart
-// from its own status, what each service it binds answers, since a service has no address of its
-// own and the deploy checks it through the apps. It answers without the page's key, so the monitor
+// from its own status, which of the league's feeds have been failing long enough to need a look,
+// and what each service it binds answers, since a service has no address of its own and the deploy
+// checks it through the apps. It answers without the page's key, so the monitor
 // holds no secret, and asks the store and each service once a minute at most, however often it's
 // hit, so a flood of requests costs them no more than the monitor does.
+import { listLongFailures } from "./feed-failures.js";
 import { SERVICES, nameServiceBinding } from "./services.js";
 import { abortAfter } from "./timeout.js";
 import { createReusedLoader } from "./upstream.js";
@@ -67,13 +69,23 @@ const askService = (binding) =>
   }));
 
 /**
+ * @typedef {{ answered: true, feeds: Record<string, import("./feed-failures.js").FeedFailure> } | { answered: false }} StoreHealth
+ */
+
+/**
  * @param {object} options
- * @param {(env: any) => Promise<boolean>} options.isStoreAnswering
+ * @param {(env: any) => Promise<Record<string, import("./feed-failures.js").FeedFailure>>} options.readFeedFailures
+ *   which of the league's feeds the store says are failing, throwing when the store doesn't answer
  * @param {string | null} options.release the commit the Worker was built from
  * @param {() => number} [options.now]
  */
-export function createHealthServer({ isStoreAnswering, release, now = Date.now }) {
-  const askStore = (env) => askInTime(() => isStoreAnswering(env)).catch(() => false);
+export function createHealthServer({ readFeedFailures, release, now = Date.now }) {
+  /** @returns {Promise<StoreHealth>} */
+  const askStore = (env) =>
+    askInTime(() => readFeedFailures(env)).then(
+      (feeds) => ({ answered: true, feeds }),
+      () => ({ answered: false }),
+    );
   const checkStore = createReusedLoader(askStore, HEALTH_REUSE_MS, now);
   const serviceChecks = SERVICES.map((service) => ({
     service,
@@ -91,15 +103,16 @@ export function createHealthServer({ isStoreAnswering, release, now = Date.now }
 
   /** @param {any} env the Worker's bindings */
   return async function serveHealth(env) {
-    const [isAnswering, serviceHealths] = await Promise.all([checkStore(env), checkServices(env)]);
+    const [store, serviceHealths] = await Promise.all([checkStore(env), checkServices(env)]);
     const health = {
-      ok: isAnswering,
+      ok: store.answered,
       release,
-      store: isAnswering ? "ok" : "no answer",
+      store: store.answered ? "ok" : "no answer",
+      ...(store.answered && { feeds: listLongFailures(store.feeds, now()) }),
       ...(Object.keys(serviceHealths).length && { services: serviceHealths }),
     };
     return new Response(JSON.stringify(health), {
-      status: isAnswering ? 200 : 503,
+      status: store.answered ? 200 : 503,
       headers: HEALTH_HEADERS,
     });
   };

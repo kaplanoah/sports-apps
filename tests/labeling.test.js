@@ -1,6 +1,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { findLabeling, readPushTime, readTimeline } from "../worker/labeling.mjs";
+import {
+  findLabeling,
+  findLastAdding,
+  findLastForcePushAt,
+  findLastForcePushBefore,
+  readPushTime,
+  readPushTimes,
+  readTimeline,
+} from "../worker/labeling.mjs";
 import { createTimelineAnswer } from "./timeline.js";
 
 /**
@@ -38,6 +46,14 @@ test("a label's adder and when it was added are whoever added it last and then, 
     addedAt: Number.NaN,
     isAfterLastPush: false,
   });
+  assert.deepEqual(findLastAdding(events.toReversed(), "phone-ok"), {
+    labeler: "helper",
+    addedAt: lastAdded.addedAt,
+  });
+  assert.deepEqual(findLastAdding(events.slice(3), "phone-ok"), {
+    labeler: null,
+    addedAt: Number.NaN,
+  });
 });
 
 test("a head pushed after the phone-ok label leaves it before the last push, whatever its commit's date says", () => {
@@ -58,6 +74,29 @@ test("a head pushed after the phone-ok label leaves it before the last push, wha
     false,
     "a force push back to a commit GitHub saw before the label",
   );
+  assert.equal(findLastForcePushAt([labeled, forcePush]), Date.parse("2026-10-07T11:00:00Z"));
+  assert.equal(findLastForcePushAt([labeled]), -Infinity);
+  const earlierForcePush = {
+    event: "head_ref_force_pushed",
+    created_at: "2026-10-07T09:50:00Z",
+    head: { oid: "b".repeat(40) },
+  };
+  const firstForcePush = {
+    event: "head_ref_force_pushed",
+    created_at: "2026-10-07T09:20:00Z",
+    head: { oid: "c".repeat(40) },
+  };
+  assert.deepEqual(
+    findLastForcePushBefore(
+      [forcePush, labeled, earlierForcePush, firstForcePush],
+      Date.parse(labeled.created_at),
+    ),
+    { at: Date.parse("2026-10-07T09:50:00Z"), head: "b".repeat(40) },
+  );
+  assert.deepEqual(findLastForcePushBefore([labeled, forcePush], Date.parse(labeled.created_at)), {
+    at: -Infinity,
+    head: null,
+  });
   const labeledAgain = createEvent("labeled", "phone-ok", "owner", "2026-10-07T12:00:00Z");
   assert.equal(
     findLabeling([labeled, forcePush, labeledAgain], "phone-ok", HEAD_PUSHED_AT).isAfterLastPush,
@@ -70,30 +109,62 @@ test("a head pushed after the phone-ok label leaves it before the last push, wha
   );
 });
 
-test("a head's push time is its earliest check suite's", async () => {
+const ACTIONS = { slug: "github-actions" };
+
+test("a head's push times are its GitHub Actions check suites' on the pull request's branch, earliest first, on any page", async () => {
   /** @type {string[]} */
   const urls = [];
-  /** @param {{ created_at: string }[]} suites */
+  /** @param {{ created_at: string, head_branch: string, app: { slug: string } }[]} suites */
   const createFetch = (suites) => async (/** @type {string} */ url) => {
     urls.push(url);
-    return Response.json({ total_count: suites.length, check_suites: suites });
+    const page = Number(new URL(url).searchParams.get("page"));
+    return Response.json({ check_suites: suites.slice((page - 1) * 100, page * 100) });
   };
   const sha = "a".repeat(40);
-  const options = { repository: "owner/repo", sha, env: { GH_TOKEN: "token" } };
+  const options = { repository: "owner/repo", sha, branch: "feature", env: { GH_TOKEN: "token" } };
   assert.equal(
     await readPushTime({
       ...options,
       fetchImpl: createFetch([
-        { created_at: "2026-10-07T11:00:00Z" },
-        { created_at: "2026-10-07T09:00:00Z" },
+        { created_at: "2026-10-07T11:00:00Z", head_branch: "feature", app: ACTIONS },
+        { created_at: "2026-10-07T08:00:00Z", head_branch: "beta", app: ACTIONS },
+        { created_at: "2026-10-07T09:00:00Z", head_branch: "feature", app: ACTIONS },
       ]),
     }),
     HEAD_PUSHED_AT,
   );
   assert.deepEqual(urls, [
-    `https://api.github.com/repos/owner/repo/commits/${sha}/check-suites?per_page=100`,
+    `https://api.github.com/repos/owner/repo/commits/${sha}/check-suites?per_page=100&page=1`,
   ]);
+  const pushedTwice = createFetch([
+    { created_at: "2026-10-07T11:00:00Z", head_branch: "feature", app: ACTIONS },
+    { created_at: "2026-10-07T08:00:00Z", head_branch: "beta", app: ACTIONS },
+    { created_at: "2026-10-07T09:00:00Z", head_branch: "feature", app: ACTIONS },
+  ]);
+  assert.deepEqual(await readPushTimes({ ...options, fetchImpl: pushedTwice }), [
+    HEAD_PUSHED_AT,
+    Date.parse("2026-10-07T11:00:00Z"),
+  ]);
+  const otherBranches = Array.from({ length: 100 }, () => ({
+    created_at: "2026-10-07T08:00:00Z",
+    head_branch: "scratch",
+    app: ACTIONS,
+  }));
+  const onSecondPage = createFetch([
+    ...otherBranches,
+    { created_at: "2026-10-07T09:00:00Z", head_branch: "feature", app: ACTIONS },
+  ]);
+  assert.equal(await readPushTime({ ...options, fetchImpl: onSecondPage }), HEAD_PUSHED_AT);
   assert.ok(Number.isNaN(await readPushTime({ ...options, fetchImpl: createFetch([]) })));
+  const elsewhere = createFetch([
+    { created_at: "2026-10-07T08:00:00Z", head_branch: "beta", app: ACTIONS },
+  ]);
+  assert.ok(Number.isNaN(await readPushTime({ ...options, fetchImpl: elsewhere })));
+  const anotherApp = createFetch([
+    { created_at: "2026-10-07T08:00:00Z", head_branch: "feature", app: { slug: "trusted-review" } },
+    { created_at: "2026-10-07T09:00:00Z", head_branch: "feature", app: ACTIONS },
+  ]);
+  assert.deepEqual(await readPushTimes({ ...options, fetchImpl: anotherApp }), [HEAD_PUSHED_AT]);
 });
 
 test("the GraphQL timeline is paginated with authentication and mapped for both gates", async () => {
@@ -109,6 +180,7 @@ test("the GraphQL timeline is paginated with authentication and mapped for both 
       event: "head_ref_force_pushed",
       created_at: "2026-10-07T12:00:00Z",
       actor: { login: "owner" },
+      head: { oid: "c".repeat(40) },
     },
     {
       event: "commented",
@@ -159,6 +231,7 @@ test("the GraphQL timeline is paginated with authentication and mapped for both 
     assert.ok(requests[0].query.includes(type));
   assert.match(requests[0].query, /created_at: createdAt/);
   assert.match(requests[0].query, /actor: author/);
+  assert.match(requests[0].query, /head: afterCommit \{ oid \}/);
 });
 
 test("unavailable or malformed GraphQL history fails closed", async () => {

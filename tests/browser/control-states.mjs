@@ -2,6 +2,7 @@ import { holdClock } from "./harness.mjs";
 import { SETTINGS } from "./settings.mjs";
 import { turnOnDiagnostics } from "./diagnostics-switch.mjs";
 import { checkFieldRing } from "./field-ring.mjs";
+import { hasStartedClosing } from "./sheet-motions.mjs";
 import {
   PRESSED_FILLED_BACKGROUND,
   PRESSED_OUTLINED_BACKGROUND,
@@ -51,16 +52,19 @@ export function testControlStates(test, expect, app) {
     await expect(button).toHaveCSS("transition-duration", "0s");
   });
 
-  test("a press on settings' close shows before settings close", async ({ page }) => {
+  test("a press on settings' close shows while settings start closing on the frame of its tap", async ({
+    page,
+  }) => {
     await app.openApp(page);
     await app.openSettings(page);
     const close = page.locator(`${SETTINGS} .sheet-close`);
     await holdClock(page);
 
     await close.click();
+    await page.clock.runFor(16);
 
     await expect(close).toHaveCSS("opacity", "0.3");
-    await expect(page.locator(SETTINGS)).toHaveAttribute("open");
+    expect(await hasStartedClosing(page.locator(SETTINGS))).toBe(true);
     await page.clock.runFor(1000);
     await expect(page.locator(SETTINGS)).toBeHidden();
   });

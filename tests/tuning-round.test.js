@@ -2,7 +2,6 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   isSlider,
-  findOffsetNudge,
   nudgeNumber,
   readNumber,
   readRound,
@@ -64,25 +63,6 @@ test("a round that can't be tuned says what's wrong with it", () => {
   ];
   for (const [round, message] of problems)
     assert.throws(() => readRound(JSON.stringify(round)), { message });
-});
-
-test("grouped alignment controls retain their vertical movement and reject malformed controls", () => {
-  const value = { ...DOT_LIFT, group: "Team", isVertical: true };
-  assert.deepEqual(readRound(JSON.stringify({ name: "Alignment", values: [value] })).values, [
-    value,
-  ]);
-  for (const change of [{ group: "" }, { group: 1 }, { isVertical: "true" }])
-    assert.throws(() =>
-      readRound(JSON.stringify({ name: "Alignment", values: [{ ...value, ...change }] })),
-    );
-});
-
-test("offset keys move down on the left and up on the right, with matching vertical arrows", () => {
-  assert.equal(findOffsetNudge("ArrowLeft"), 1);
-  assert.equal(findOffsetNudge("ArrowDown"), 1);
-  assert.equal(findOffsetNudge("ArrowRight"), -1);
-  assert.equal(findOffsetNudge("ArrowUp"), -1);
-  assert.equal(findOffsetNudge("Tab"), null);
 });
 
 test("a value's number reads from its CSS text in the slider's unit, a bare 0 too", () => {

@@ -1,6 +1,7 @@
 import { readEasternDay } from "#shared/days.js";
 import { createSeasonParam } from "../../../../shared/worker/seasons.js";
 import { fetchFeedJson } from "../../../../shared/worker/upstream.js";
+import { ESPN_DAY_REQUEST } from "../../page/js/snapshot.js";
 
 // Reading the league's own feeds, which every route the Worker serves shares.
 
@@ -26,7 +27,7 @@ export const FEED_HEADERS = {
   "sec-fetch-site": "same-site",
 };
 
-// ESPN answers any caller, so it needs only to be asked for JSON.
+// ESPN's site feeds answer a Worker when asked for JSON.
 export const ESPN_HEADERS = {
   accept: "application/json",
   "user-agent": FEED_HEADERS["user-agent"],
@@ -61,6 +62,18 @@ export const fetchEspnJson = (fetchImpl, url, cacheSeconds) =>
     headers: ESPN_HEADERS,
     cacheSeconds,
   });
+
+// How long the edge keeps an answer with live scores, the league's scoreboard and box score or
+// ESPN's backup for them, so each update of the snapshot and of a watched game reads fresh ones.
+export const LIVE_CACHE_SECONDS = 5;
+
+/**
+ * ESPN's scoreboard of one day.
+ * @param {(input: string, init: object) => Promise<Response>} fetchImpl
+ * @param {string} day as YYYYMMDD
+ */
+export const fetchEspnDay = (fetchImpl, day) =>
+  fetchEspnJson(fetchImpl, ESPN_DAY_REQUEST(day), LIVE_CACHE_SECONDS);
 
 /**
  * The rows of one of the stats site's tables, each keyed by its column names.

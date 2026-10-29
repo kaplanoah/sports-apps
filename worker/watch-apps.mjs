@@ -2,11 +2,14 @@
 // that isn't opening, so its owner hears of an outage before the people who use it do, and one for
 // each that opens without asking for its code. It keeps one for each service the apps reach that
 // isn't answering them, too, and one for each that answers but needs its owner. An app or service
-// that fails once is checked again a minute later, so a moment's hiccup opens nothing; each issue
-// closes once its app or service is right again.
+// that fails once is checked again a minute later, so a moment's hiccup opens nothing. It keeps one
+// for each app whose health says its league's feeds are failing, which the health says only once
+// they've failed for a while. Each issue closes once its app, service, or feeds are right again.
 import { fileURLToPath } from "node:url";
 import { listApps, listServices } from "./apps.mjs";
 import { checkAppPage } from "./check-page.mjs";
+import { FEED_FAILURE_MS } from "../shared/worker/feed-failures.js";
+import { checkFeeds } from "./check-feeds.mjs";
 import { checkService } from "./check-service.mjs";
 import { listAppWorkers, readWorkersSubdomain } from "./deploy.mjs";
 import { createGitHub, readAllPages } from "./github-api.mjs";
@@ -47,6 +50,22 @@ export const nameServiceAttentionIssue = (service) => `The ${service} service ne
 /** @param {string} attention @param {string} runUrl */
 const describeServiceAttention = (attention, runUrl) =>
   `The service answers the apps, but says: ${attention}.\n\nSee [the check's run](${runUrl}). This issue closes itself once the service no longer asks for attention.`;
+
+/** @param {string} app */
+export const nameFeedIssue = (app) => `The ${app.toUpperCase()} app's league feeds are failing`;
+
+/** @param {Record<string, import("./check-feeds.mjs").FeedFailure>} feeds */
+const listFeeds = (feeds) =>
+  Object.entries(feeds)
+    .map(([feed, { since, reason }]) => `- \`${feed}\`: ${reason} (failing since ${since})`)
+    .join("\n");
+
+/**
+ * @param {Record<string, import("./check-feeds.mjs").FeedFailure>} feeds
+ * @param {string} runUrl
+ */
+const describeFeedFailures = (feeds, runUrl) =>
+  `The app's health says these feeds have been failing for ${FEED_FAILURE_MS / 60000} minutes or more:\n\n${listFeeds(feeds)}\n\nSee [the check's run](${runUrl}). This issue closes itself once every feed answers again.`;
 
 /**
  * Keeps the app's one outage issue open while it isn't opening.
@@ -129,6 +148,32 @@ export async function reportCheck({ app, check, openIssues, github, runUrl }) {
       runUrl,
     })),
   ];
+}
+
+/**
+ * Keeps the app's one feed issue open while its health says its league's feeds are failing.
+ * @param {object} options
+ * @param {string} options.app
+ * @param {import("./check-feeds.mjs").FeedCheck} options.check
+ * @param {any[]} options.openIssues
+ * @param {ReturnType<typeof createGitHub>} options.github
+ * @param {string} options.runUrl
+ * @returns {Promise<string[]>}
+ */
+async function reportFeedCheck({ app, check, openIssues, github, runUrl }) {
+  if (check.status === "unchecked")
+    return [`::warning::${app}: feeds not checked, ${check.reason}`];
+  const issue = findOpenIssue(openIssues, nameFeedIssue(app));
+  if (check.status === "failing") {
+    const names = Object.keys(check.feeds).join(", ");
+    if (issue) return [`::warning::${app}: feeds failing: ${names}; #${issue.number} is open`];
+    const body = describeFeedFailures(check.feeds, runUrl);
+    const number = await openIssue(github, nameFeedIssue(app), body);
+    return [`::warning::${app}: feeds failing: ${names}; opened #${number}`];
+  }
+  if (!issue) return [];
+  await closeIssue(github, issue.number, `Every feed answers again, as of [this run](${runUrl}).`);
+  return [`${app}: feeds answer again, so #${issue.number} is closed`];
 }
 
 /**
@@ -220,6 +265,14 @@ async function reportServiceCheck({ service, check, openIssues, github, runUrl }
 }
 
 /**
+ * The app's production Worker.
+ * @param {string} app
+ * @param {string} subdomain
+ */
+const findWorkerUrl = (app, subdomain) =>
+  String(listAppWorkers("production", subdomain).find((worker) => worker.app === app)?.url);
+
+/**
  * @param {object} options
  * @param {string} options.repository as owner/name
  * @param {string} options.runUrl
@@ -227,6 +280,7 @@ async function reportServiceCheck({ service, check, openIssues, github, runUrl }
  * @param {(app: string) => Promise<import("./check-page.mjs").PageCheck>} [options.checkApp]
  * @param {string[]} [options.services]
  * @param {(service: string) => Promise<import("./check-service.mjs").ServiceCheck>} [options.checkServiceOf]
+ * @param {(app: string) => Promise<import("./check-feeds.mjs").FeedCheck>} [options.checkFeedsOf]
  * @param {typeof fetch} [options.fetchImpl]
  * @param {NodeJS.ProcessEnv} [options.env]
  */
@@ -247,16 +301,26 @@ export async function watchApps({
       pauseMs: RECHECK_DELAY_MS,
       fetchImpl,
     }),
+  checkFeedsOf = (app) =>
+    checkFeeds({
+      url: findWorkerUrl(app, readWorkersSubdomain(env)),
+      accessCode: env.ACCESS_CODE,
+      fetchImpl,
+    }),
 }) {
   const github = createGitHub({ repository, fetchImpl, env });
   const openIssues = await readAllPages(github, "/issues?state=open");
-  const [checks, serviceChecks] = await Promise.all([
+  const [checks, feedChecks, serviceChecks] = await Promise.all([
     Promise.all(apps.map((app) => checkApp(app))),
+    Promise.all(apps.map((app) => checkFeedsOf(app))),
     Promise.all(services.map((service) => checkServiceOf(service))),
   ]);
   const lines = [];
   for (const [index, app] of apps.entries())
-    lines.push(...(await reportCheck({ app, check: checks[index], openIssues, github, runUrl })));
+    lines.push(
+      ...(await reportCheck({ app, check: checks[index], openIssues, github, runUrl })),
+      ...(await reportFeedCheck({ app, check: feedChecks[index], openIssues, github, runUrl })),
+    );
   for (const [index, service] of services.entries())
     lines.push(
       ...(await reportServiceCheck({

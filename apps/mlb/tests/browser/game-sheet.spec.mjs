@@ -19,7 +19,7 @@ import {
   showSection,
   openMatchup,
 } from "./open-game-sheet.mjs";
-import { recordSheetMotions } from "../../../../tests/browser/sheet-motions.mjs";
+import { SLID_CLOSED, recordSheetMotions } from "../../../../tests/browser/sheet-motions.mjs";
 import { waitForTimedAnimations } from "../../../../tests/browser/animations.mjs";
 import { listLowContrastText } from "../../../../tests/browser/contrast.mjs";
 import { listTextOffRoles, readRole } from "../../../../tests/browser/type-roles.mjs";
@@ -276,7 +276,7 @@ test("on a phone, the close button and Escape slide the matchup down", async ({ 
     await close();
     await expect(sheet, way).toBeHidden();
     expect(await readMotions(), way).toEqual([
-      { id: "sheetDialog", part: "sheet", to: { transform: "translateY(100%)" } },
+      { id: "sheetDialog", part: "sheet", to: { transform: SLID_CLOSED } },
     ]);
   }
 });

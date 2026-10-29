@@ -14,7 +14,7 @@ import { isStandIn } from "./rider-taps.js";
 
 // How long a finger rests before its press shows, and how long a quick tap's press stays.
 const TOUCH_SETTLE_MS = 60;
-const QUICK_TAP_MS = 120;
+export const QUICK_TAP_MS = 120;
 // How far a finger may drift before its press lets go.
 const DRIFT_PX = 10;
 // Longer than iOS waits after a lift to tell a tap from a double tap, so its click for the lift
@@ -237,17 +237,6 @@ function endPress() {
   if (press.timer !== null) clearTimeout(press.timer);
   markPressed(press);
   press.timer = window.setTimeout(letGo, QUICK_TAP_MS);
-}
-
-/**
- * Runs what a control's tap does once its press has shown, so the press is seen before what it
- * opens, closes, or runs replaces it, and at once for a tap that isn't a press, like a key's.
- * @param {Element} control
- * @param {() => void} action
- */
-export function runAfterPress(control, action) {
-  if (control.classList.contains("is-pressed")) window.setTimeout(action, QUICK_TAP_MS);
-  else action();
 }
 
 /**
