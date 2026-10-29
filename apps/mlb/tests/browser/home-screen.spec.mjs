@@ -28,9 +28,7 @@ const readSettingsTopLine = (page) =>
 const PAGE_FOLDER = new URL("../../page/", import.meta.url);
 
 /**
- * How far below the header the Home Screen box starts, how far below it the settings do, and how
- * far it is from the ranking's heading beside it, read together, since the sheet may still be
- * rising.
+ * The gaps above and below the Home Screen box, read together while the sheet may still be rising.
  * @param {import("@playwright/test").Page} page
  */
 const measureTip = (page) =>
@@ -39,16 +37,9 @@ const measureTip = (page) =>
     const box = tip.getBoundingClientRect();
     const header = readBox(`${settingsSelector} .sheet-top`);
     const settings = readBox(".settings-controls");
-    const ranking = readBox("#rankingTitle");
-    const rankingHeading = document.querySelector(".ranking-heading");
-    const headingWordsTop =
-      rankingHeading.getBoundingClientRect().top +
-      parseFloat(getComputedStyle(rankingHeading).paddingTop);
     return {
       belowHeader: box.top - header.bottom,
       aboveSettings: settings.top - box.bottom,
-      besideRanking: ranking.left - box.right,
-      levelWithRanking: Math.round(box.top - headingWordsTop),
     };
   }, SETTINGS);
 
@@ -229,34 +220,33 @@ test.describe("on an iPhone, in the browser", () => {
 test.describe("on a computer", () => {
   test.use({ viewport: { width: 1280, height: 900 } });
 
-  test("the settings start right under the header's line, with no Home Screen box and no line of their own", async ({
+  test("the settings keep their column under the header, with no Home Screen box", async ({
     page,
   }) => {
     await openApp(page);
     await openSettings(page);
     await expect(page.locator("#homeScreenTip")).toBeHidden();
-    expect(await readSettingsTopLine(page)).toBe("none");
+    expect(await readSettingsTopLine(page)).toBe("solid");
     const underHeader = await page.locator(SETTINGS).evaluate((settings) => {
       const header = settings.querySelector(".sheet-top").getBoundingClientRect();
       const controls = settings.querySelector(".settings-main > .settings-controls");
       return controls.getBoundingClientRect().top - header.bottom;
     });
-    expect(underHeader).toBe(0);
+    expect(underHeader).toBe(14);
   });
 });
 
 test.describe("on a tablet, in the browser", () => {
   useIpad(test);
 
-  test("the Home Screen box, with Safari's steps, sits at the top of the settings, level with the ranking's heading beside it, and 14px over the settings' line, as on a phone", async ({
+  test("the Home Screen box, with Safari's steps, sits at the top of settings and 14px over their line, as on a phone", async ({
     page,
   }) => {
     await openApp(page);
     await openSettings(page);
     await expect(page.locator("#homeScreenTip")).toContainText("Tap Share then Add to Home Screen");
-    const { aboveSettings, besideRanking, levelWithRanking } = await measureTip(page);
-    expect([aboveSettings, levelWithRanking]).toEqual([14, 0]);
-    expect(besideRanking).toBeGreaterThan(0);
+    const { aboveSettings, belowHeader } = await measureTip(page);
+    expect([aboveSettings, belowHeader]).toEqual([14, 14]);
     expect(await readSettingsTopLine(page)).toBe("solid");
   });
 

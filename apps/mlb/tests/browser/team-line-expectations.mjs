@@ -54,6 +54,14 @@ export const TEAM_LINE_EXPECTATIONS = {
       delta: 150,
     },
   ],
+  stateSelectors: [{ selector: ".field-heads .club", state: "field comparison" }],
+  baselines: [
+    {
+      selector: ".field-heads, .sheet-part-head:has(h3 .club):has(> span)",
+      name: ".team-name",
+      note: ":scope > span",
+    },
+  ],
   allStar: {
     width: 19,
     offset: -3,

@@ -8,52 +8,71 @@ test.use({ contextOptions: { reducedMotion: "reduce" } });
 
 const THEMES = /** @type {const} */ (["light", "dark"]);
 
+/** @type {Record<string, string[]>} */
+const EXPECTED_ROLES = {
+  "the page's tabs": ["label", "large", "team"],
+  "a team's and a player's sheets": ["large", "small", "team"],
+  "a game's sheets": ["large", "team"],
+};
+
 for (const width of [390, 1280]) {
   for (const colorScheme of THEMES) {
-    test(`team lines use the approved font centers and attachments at ${width}px in ${colorScheme}`, async ({
-      page,
-    }, testInfo) => {
-      test.slow();
-      await page.setViewportSize({ width, height: 900 });
-      await openWithEverything(page);
-      await page.emulateMedia({ colorScheme });
-      await expect(page.locator("html")).toHaveAttribute("data-theme", colorScheme);
-      const roles = new Set();
-      const placements = new Set();
-      const states = new Set();
-      const attachments = new Set();
-      const names = new Set();
-      await checkEachView(page, Object.values(VIEW_GROUPS).flat(), async (view) => {
-        const drawn = await readTeamLines(page, TEAM_LINE_EXPECTATIONS);
-        expect(drawn.problems, view.name).toEqual([]);
-        for (const role of drawn.roles) roles.add(role);
-        for (const placement of drawn.placements) placements.add(placement);
-        for (const state of drawn.states) states.add(state);
-        for (const attachment of drawn.attachments) attachments.add(attachment);
-        for (const name of drawn.names) names.add(name);
-        if (process.env.ALIGNMENT_SCREENSHOTS)
-          await page.screenshot({
-            path: testInfo.outputPath(`${view.name.replaceAll(/[^a-z0-9]/gi, "-")}.png`),
-          });
+    for (const [group, views] of Object.entries(VIEW_GROUPS)) {
+      if (!(group in EXPECTED_ROLES)) continue;
+      test(`team lines in ${group} align marks and attachments with their names at ${width}px in ${colorScheme}`, async ({
+        page,
+      }) => {
+        test.slow();
+        await page.setViewportSize({ width, height: 900 });
+        await openWithEverything(page);
+        await page.emulateMedia({ colorScheme });
+        await expect(page.locator("html")).toHaveAttribute("data-theme", colorScheme);
+        const roles = new Set();
+        const placements = new Set();
+        const states = new Set();
+        const attachments = new Set();
+        const names = new Set();
+        await checkEachView(page, views, async (view) => {
+          const drawn = await readTeamLines(page, TEAM_LINE_EXPECTATIONS);
+          expect(drawn.problems, view.name).toEqual([]);
+          for (const role of drawn.roles) roles.add(role);
+          for (const placement of drawn.placements) placements.add(placement);
+          for (const state of drawn.states) states.add(state);
+          for (const attachment of drawn.attachments) attachments.add(attachment);
+          for (const name of drawn.names) names.add(name);
+        });
+        expect([...roles].sort()).toEqual(EXPECTED_ROLES[group]);
+        if (group === "the page's tabs") {
+          expect(placements).toContain("team after");
+          expect(states).toContain("winner");
+          expect(states).toContain("TBD");
+          expect(attachments).toEqual(
+            new Set([
+              ".conference-tag",
+              ".seed-note",
+              "outside seed",
+              "team seed before",
+              "team seed after",
+            ]),
+          );
+        } else if (group === "a game's sheets") {
+          expect(placements).toContain("large after");
+          expect(placements).toContain("team after");
+          expect(attachments).toEqual(
+            new Set([
+              "large seed before",
+              "large seed after",
+              "team seed before",
+              "team seed after",
+            ]),
+          );
+        } else {
+          expect([...names].some((name) => name.length > 14)).toBe(true);
+          expect(states).toContain("TBD");
+          expect(attachments).toEqual(new Set([".conference-tag", ".seed-note", "outside seed"]));
+        }
       });
-      expect([...roles].sort()).toEqual(["label", "large", "small", "team"]);
-      expect(placements).toContain("team after");
-      expect(states).toContain("winner");
-      expect(states).toContain("TBD");
-      expect([...names].some((name) => name.length > 14)).toBe(true);
-      expect(placements).toContain("large after");
-      expect(attachments).toEqual(
-        new Set([
-          ".conference-tag",
-          ".seed-note",
-          "outside seed",
-          "team seed before",
-          "team seed after",
-          "large seed before",
-          "large seed after",
-        ]),
-      );
-    });
+    }
   }
 }
 

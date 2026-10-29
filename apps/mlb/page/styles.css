@@ -98,6 +98,7 @@
   --type-team-small-weight: 400;
   --type-team-size: calc(13.5rem / 16);
   --type-team-weight: 400;
+  /* Team marks and attachment offsets (shared/page/team-line.css). */
   --team-dot-size: 14px;
   --team-dot-before: 0px;
   --team-dot-after: -1.5px;
@@ -111,7 +112,7 @@
   --team-label-dot-before: -0.25px;
   --team-label-dot-after: -0.25px;
   --team-league-offset: -1px;
-  --team-rank-offset: 0px;
+  /* Team rank chip offset: 0px, the native box center. */
   --type-score-size: calc(15.75rem / 16);
   --type-score-weight: 500;
   --type-stat-large-size: calc(15.5rem / 16);
@@ -137,6 +138,8 @@
   --type-notice-title-weight: 525;
   --type-notice-text-size: calc(13.75rem / 16);
   --type-notice-text-weight: 400;
+  --type-confirmation-size: calc(20.5rem / 16);
+  --type-confirmation-weight: 525;
   /* Libre Franklin sets its lines a little apart. */
   --leading: 1.01;
   --bg: #f5f1e6;
@@ -198,6 +201,8 @@
   --focus-ring: var(--now);
   --gate-code-font: var(--numbers);
   --gate-problem: var(--now);
+  --contact-menu-surface: var(--bg);
+  --contact-menu-edge: transparent;
   --radius-card: 3px;
   --radius-chip: 3px;
   /* Chivo Mono's capitals land its baseline on a whole pixel only in an even height. */
@@ -207,6 +212,9 @@
   --radius-sheet: 12px;
   /* Puts the channel tag's middle half a pixel above the middle of the name's capitals. */
   --channel-tag-lift: -0.85px;
+  --channel-tag-dot: "";
+  --channel-tag-glyph: hidden;
+  --channel-tag-dot-lift: 0.3px;
   --re-add-note-above: 8px;
   --control-height: 36px;
   --control-room: 14px;
@@ -778,10 +786,7 @@ table.st .seed-cell {
 .game-side {
   gap: 5.5px;
 }
-.game-side .club {
-  font-size: var(--type-team-size);
-  font-weight: var(--type-team-weight);
-}
+
 .game-side.home .club,
 .game-side.home .game-facts {
   flex-direction: row-reverse;
@@ -953,7 +958,6 @@ table.st .seed-cell {
   flex: none;
 }
 .team-id .rank-slot {
-  translate: 0 var(--team-rank-offset);
   margin-right: 0;
 }
 
@@ -1172,11 +1176,16 @@ table.st .seed-cell {
 }
 .club {
   display: inline-flex;
-  align-items: center;
   gap: 8px;
   min-width: 0;
   max-width: 100%;
   vertical-align: baseline;
+}
+/* These headings share their name's baseline with the adjoining note. The empty dot must not
+   supply it or add ascent; its center still follows the name's native capital height. */
+:is(.sheet-part-head h3, .field-heads) .club > .dot {
+  margin-top: calc(-1 * var(--team-dot-size));
+  translate: 0 calc((var(--team-dot-size) - 1cap) / 2 + var(--team-mark-shift));
 }
 .tbd {
   color: var(--ink-dim);
@@ -1449,127 +1458,46 @@ body.kbd .rank-item .grip:focus {
 }
 
 /* The settings and, in a phone's or tablet's browser, the box over them that says how to add the
-   page to the Home Screen. */
-.settings-main {
-  display: flex;
-  flex-direction: column;
-  gap: var(--section-gap);
+   page to the Home Screen, sit a section apart. The rows that open a page sit right on the line
+   ending the News switches, each padding its own text, so that line is as far from Ranking as the
+   line between the rows is from Contact. */
+.settings-main > :not([hidden]) ~ :not([hidden], .settings-pages) {
+  margin-top: var(--section-gap);
 }
 /* The News switches end with a line, as the settings above them do. */
 .settings-group-rows {
   border-bottom: 1px solid var(--divider);
 }
-/* Settings fill the whole sheet, so the ranking can be one sheet tall, and a scroll settles on the
-   settings, the ranking, the copyright at their end, or Diagnostics past it, each of which would
-   otherwise be close enough to the one before for the scroll to settle back on that. */
-.settings-panel {
-  container-type: size;
+#settingsDialog {
   scroll-snap-type: y proximity;
   scroll-padding-top: var(--section-gap);
   scroll-padding-bottom: var(--bottom-padding);
 }
-.settings-panel .sheet-top {
+#settingsDialog .sheet-top {
   scroll-snap-align: start;
 }
 .settings-footer,
 .diagnostics-area {
   scroll-snap-align: end;
 }
-/* The ranking section is exactly one sheet tall, less the gap above it and the bottom padding, so
-   scrolling down to it shows all twelve rows at once. */
-.settings-ranking {
-  flex: none;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  height: calc(100cqh - var(--section-gap) - var(--bottom-padding));
-  scroll-snap-align: start;
+#rankingDialog {
+  container-type: size;
 }
-.ranking-heading {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-.ranking-heading h3 {
-  font-size: var(--type-setting-size);
-  font-weight: var(--type-setting-weight);
-  letter-spacing: 0;
+.ranking-body {
+  height: 100%;
 }
 .ranking-note {
-  margin: 0;
+  margin: 6px 0 0;
   font-size: var(--type-setting-note-size);
   font-weight: var(--type-setting-note-weight);
   line-height: calc(1.4 * var(--leading));
   color: var(--ink-dim);
+  text-align: center;
 }
 /* On a short sheet the note would squeeze each row to one line, so it gives way. */
 @container (max-height: 640px) {
   .ranking-note {
     display: none;
-  }
-}
-/* Wide screens show everything at once: the settings on the left, the ranking filling the right.
-   The ranking's heading gets its own grid row so the list can fill the rest. Only Diagnostics,
-   past the sheet's end, need a scroll. */
-@media (min-width: 900px) {
-  .settings-panel {
-    width: min(920px, calc(100% - 48px));
-    max-width: none;
-    scroll-snap-type: none;
-  }
-  .settings-body {
-    --ranking-heading-top: 20px;
-    height: 100%;
-    display: grid;
-    grid-template-columns: 330px minmax(0, 1fr);
-    grid-template-rows: auto auto minmax(0, 1fr);
-    gap: 0;
-  }
-  .settings-body::before {
-    content: "";
-    grid-column: 2;
-    grid-row: 2 / 4;
-    border-left: 1px solid var(--divider);
-  }
-  .settings-body .sheet-top {
-    grid-column: 1 / -1;
-    grid-row: 1;
-    box-shadow: 0 1px 0 var(--divider);
-  }
-  .settings-main {
-    grid-column: 1;
-    grid-row: 2 / 4;
-    align-self: start;
-    margin-right: 24px;
-  }
-  /* Settings that start right under the header's line need no line of their own; under the Home
-     Screen box, they start with one, as on a phone. */
-  .settings-main > .home-screen-tip[hidden] + .settings-controls {
-    border-top: 0;
-  }
-  /* The box at the settings' top starts level with the ranking's heading. */
-  .settings-main > .home-screen-tip {
-    margin-top: var(--ranking-heading-top);
-  }
-  .settings-ranking {
-    display: contents;
-  }
-  .ranking-heading {
-    grid-column: 2;
-    grid-row: 2;
-    padding: var(--ranking-heading-top) 0 8px 24px;
-  }
-  .rank-frame {
-    grid-column: 2;
-    grid-row: 3;
-    margin-left: 18px;
-  }
-  .settings-footer {
-    grid-column: 1;
-    grid-row: 3;
-    align-self: end;
-    margin: 0 24px 0 0;
-    text-align: left;
   }
 }
 /* The Game section: the game's row, without the lines it has in a list, over its starters. */
@@ -1635,10 +1563,8 @@ body.kbd .rank-item .grip:focus {
 /* The Game section's box score: a lineup, the runs by inning, and each club's batters and pitchers. */
 .sheet-part-head h3 .club {
   display: inline-flex;
-  align-items: center;
+  align-items: baseline;
   gap: 6px;
-  font-size: var(--type-team-size);
-  font-weight: var(--type-team-weight);
   text-transform: none;
   letter-spacing: 0;
   color: var(--ink-dim);
@@ -1713,7 +1639,6 @@ table.st.line-score td.team .club {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   column-gap: 8px;
-  align-items: center;
   margin: 0;
   font-size: var(--type-label-size);
   font-weight: var(--type-label-weight);
@@ -2076,7 +2001,7 @@ table.st.line-score td.team .club {
 }
 .field-heads .club {
   display: inline-flex;
-  align-items: center;
+  align-items: baseline;
   gap: 6px;
   color: var(--ink);
 }

@@ -52,6 +52,7 @@ test("standings dots use capital centers and conference chips use lowercase cent
 }) => {
   await openApp(page);
   await openSeasonPart(page, "Standings");
+  await expect(page.locator("#standings-league .conference-tag").first()).toBeVisible();
   const drawn = await readTeamLines(page, TEAM_LINE_EXPECTATIONS);
   expect(drawn.problems).toEqual([]);
   expect(drawn.attachments).toContain(".conference-tag");
@@ -63,6 +64,7 @@ test("standings seed notes use their capital center at the name's lowercase cent
 }) => {
   await openApp(page);
   await openSeasonPart(page, "Standings");
+  await expect(page.locator("#standings-east .seed-note").first()).toBeVisible();
   const drawn = await readTeamLines(page, TEAM_LINE_EXPECTATIONS);
   expect(drawn.problems).toEqual([]);
   expect(drawn.attachments).toContain(".seed-note");

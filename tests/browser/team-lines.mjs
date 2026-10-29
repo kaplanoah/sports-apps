@@ -1,3 +1,5 @@
+import { readCapitals } from "./capitals.mjs";
+
 /** @typedef {"small" | "team" | "large" | "label"} TeamRole */
 
 /**
@@ -6,6 +8,8 @@
  * @property {Record<TeamRole, { font: string, size: number, weight: number, diameter: number, before: number, after: number }>} roles
  * @property {{ selector: string, role: TeamRole }[]} roleSelectors in priority order
  * @property {{ selector: string, delta: number }[]} weightChanges
+ * @property {{ selector: string, state: string }[]} stateSelectors
+ * @property {{ selector: string, name: string, note: string }[]} baselines
  * @property {{ width: number, offset: number }} allStar
  * @property {Partial<Record<TeamRole, { before: number, after: number }>>} seeds
  * @property {{ name: string, parents: string[], selector: string, center: "capital" | "lowercase", offset: number, gridAreas?: string }[]} attachments
@@ -16,8 +20,8 @@
  * @param {import("@playwright/test").Page} page
  * @param {TeamLineExpectations} expectations
  */
-export const readTeamLines = (page, expectations) =>
-  page.evaluate(async (expected) => {
+export const readTeamLines = async (page, expectations) => {
+  const drawn = await page.evaluate(async (expected) => {
     await document.fonts.ready;
     const problems = [];
     const roles = new Set();
@@ -25,7 +29,7 @@ export const readTeamLines = (page, expectations) =>
     const states = new Set();
     const names = new Set();
     const attachments = new Set();
-    const middle = (element) => {
+    const findMiddle = (element) => {
       const box = element.getBoundingClientRect();
       return box.top + box.height / 2;
     };
@@ -51,9 +55,9 @@ export const readTeamLines = (page, expectations) =>
         height: "1ex",
       });
       document.documentElement.append(probe);
-      const { width: cap, height: x } = probe.getBoundingClientRect();
+      const { width: cap, height: xHeight } = probe.getBoundingClientRect();
       probe.remove();
-      const metrics = { cap, x };
+      const metrics = { cap, xHeight };
       fonts.set(key, metrics);
       return metrics;
     };
@@ -75,8 +79,8 @@ export const readTeamLines = (page, expectations) =>
         baseWeight,
       );
       const isAfter = mark.getBoundingClientRect().left > name.getBoundingClientRect().left;
-      const { cap, x } = measureFont(style);
-      const center = middle(name) + (isAfter && role !== "label" ? (cap - x) / 2 : 0);
+      const { cap, xHeight } = measureFont(style);
+      const center = findMiddle(name) + (isAfter && role !== "label" ? (cap - xHeight) / 2 : 0);
       const text = name.textContent.trim();
       const description = `${role} ${isAfter ? "after" : "before"} ${text}`;
       roles.add(role);
@@ -84,6 +88,8 @@ export const readTeamLines = (page, expectations) =>
       names.add(text);
       if (line.closest(".tbd") || name.matches(".tbd") || text === "TBD") states.add("TBD");
       if (line.closest(".won, .winner")) states.add("winner");
+      for (const { selector, state } of expected.stateSelectors)
+        if (line.matches(selector)) states.add(state);
       check(parseFloat(style.fontSize), size, `${description} size`);
       check(Number(style.fontWeight), weight, `${description} weight`);
       check(name.getBoundingClientRect().height, cap, `${description} cap trim`);
@@ -96,18 +102,22 @@ export const readTeamLines = (page, expectations) =>
           expected.allStar.width,
           `${description} star scale`,
         );
-        check(middle(mark) - middle(name), expected.allStar.offset, `${description} star position`);
+        check(
+          findMiddle(mark) - findMiddle(name),
+          expected.allStar.offset,
+          `${description} star position`,
+        );
       } else {
         check(mark.getBoundingClientRect().width, diameter, `${description} dot width`);
         check(mark.getBoundingClientRect().height, diameter, `${description} dot height`);
-        check(middle(mark) - center, isAfter ? after : before, `${description} dot center`);
+        check(findMiddle(mark) - center, isAfter ? after : before, `${description} dot center`);
       }
       const seed = line.querySelector(":scope > .seed");
       const seedOffsets = expected.seeds[role];
       if (seed && seedOffsets) {
         attachments.add(`${role} seed ${isAfter ? "after" : "before"}`);
         check(
-          middle(seed) - center,
+          findMiddle(seed) - center,
           isAfter ? seedOffsets.after : seedOffsets.before,
           `${description} seed center`,
         );
@@ -125,9 +135,10 @@ export const readTeamLines = (page, expectations) =>
         )
           continue;
         attachments.add(attachment.name);
-        const reference = middle(name) + (attachment.center === "lowercase" ? (cap - x) / 2 : 0);
+        const reference =
+          findMiddle(name) + (attachment.center === "lowercase" ? (cap - xHeight) / 2 : 0);
         check(
-          middle(match.element) - reference,
+          findMiddle(match.element) - reference,
           attachment.offset,
           `${description} ${attachment.name}`,
         );
@@ -151,3 +162,23 @@ export const readTeamLines = (page, expectations) =>
       attachments: [...attachments],
     };
   }, expectations);
+
+  for (const baseline of expectations.baselines) {
+    for (const head of await page.locator(baseline.selector).all()) {
+      if (!(await head.isVisible())) continue;
+      const name = head.locator(baseline.name).first();
+      if (!(await name.count())) continue;
+      const note = head.locator(baseline.note).last();
+      const [nameCapitals, noteCapitals] = await Promise.all([
+        readCapitals(name),
+        readCapitals(note),
+      ]);
+      if (Math.abs(nameCapitals.bottom - noteCapitals.bottom) > 0.08)
+        drawn.problems.push(
+          `heading baseline: ${nameCapitals.bottom}, expected ${noteCapitals.bottom}`,
+        );
+      drawn.states.push("baseline heading");
+    }
+  }
+  return drawn;
+};

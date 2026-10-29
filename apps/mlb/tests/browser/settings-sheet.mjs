@@ -15,3 +15,9 @@ export const scrollSettingsToEnd = (page) =>
 export async function waitForSheetToRise(page) {
   await expect.poll(async () => Math.round((await page.locator(SETTINGS).boundingBox()).y)).toBe(0);
 }
+
+/** @param {import("@playwright/test").Page} page */
+export async function openRanking(page) {
+  await page.locator("#rankingBtn").click();
+  await expect(page.locator("#rankingDialog")).toBeVisible();
+}

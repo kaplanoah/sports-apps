@@ -325,8 +325,7 @@ function renderRowMark(row) {
 function renderPageRow(row, pages, context) {
   const { words, detail } = describePageRow(row, pages, context);
   const mark = renderRowMark(row);
-  const quoted = row.kind === "story" ? html` data-quoted` : html``;
-  const content = html`<span class="search-mark">${mark}</span><span class="search-words"${quoted}
+  const content = html`<span class="search-mark">${mark}</span><span class="search-words" ${row.kind === "story" ? "data-quoted" : ""}
       >${words}</span
     >${detail && html`<span class="search-detail">${detail}</span>`}${CARET}`;
   if (row.kind === "story") return renderStoryRow(row.story, content);

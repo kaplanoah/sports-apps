@@ -174,6 +174,8 @@
     0 2px 6px color-mix(in srgb, var(--shadow-ink) 10%, transparent),
     0 16px 40px -10px color-mix(in srgb, var(--shadow-ink) 32%, transparent);
   --edge: color-mix(in srgb, var(--line), var(--tile));
+  --contact-menu-surface: var(--raised);
+  --contact-menu-edge: var(--edge);
   --radius-card: 2px;
   --radius-chip: 2px;
   --radius-control: 3px;
@@ -227,6 +229,7 @@
   --type-team-small-weight: 400;
   --type-team-size: calc(15.5rem / 16);
   --type-team-weight: 500;
+  /* Team marks and attachment offsets (shared/page/team-line.css). */
   --team-dot-size: 14px;
   --team-dot-before: 0px;
   --team-dot-after: -1px;
@@ -243,7 +246,7 @@
   --team-seed-after: -0.25px;
   --team-conference-offset: -1.75px;
   --team-seed-note-offset: -0.5px;
-  --team-outside-seed-offset: 0px;
+  /* Large outside-seed offset: 0px, centered as one unit. */
   --team-large-seed-before: 0.75px;
   --team-large-seed-after: -0.25px;
   --type-score-size: calc(22rem / 16);
@@ -271,6 +274,8 @@
   --type-notice-title-weight: 600;
   --type-notice-text-size: calc(14.5rem / 16);
   --type-notice-text-weight: 400;
+  --type-confirmation-size: calc(21rem / 16);
+  --type-confirmation-weight: 500;
   --gate-code-font: var(--numbers);
   --gate-problem: var(--now);
   --text: "Barlow", system-ui, sans-serif;
@@ -531,11 +536,8 @@ header.top h1 .title-letter:nth-child(3) {
 }
 .club {
   display: inline-flex;
-  align-items: center;
   gap: 6px;
   min-width: 0;
-  font-family: var(--team-name);
-  font-weight: var(--type-team-weight);
   letter-spacing: 0.02em;
 }
 .club .team-name {
@@ -565,6 +567,10 @@ header.top h1 .title-letter:nth-child(3) {
 .team-line .club,
 .game-side .club {
   gap: 8px;
+}
+/* A Games placeholder keeps Team weight; the bracket's TBD state is lighter. */
+.game-side .club.tbd {
+  font-weight: var(--type-team-weight);
 }
 .team-line .club,
 .faceoff-side .club {
@@ -688,8 +694,6 @@ header.top h1 .title-letter:nth-child(3) {
 .game-side .club {
   min-height: 16px;
   max-width: 100%;
-  font-size: var(--type-team-size);
-  font-weight: var(--type-team-weight);
 }
 .game-side.home .club {
   flex-direction: row-reverse;
@@ -1027,10 +1031,7 @@ header.top h1 .title-letter:nth-child(3) {
   justify-content: space-between;
   gap: 10px;
 }
-.tape-teams .club {
-  font-size: var(--type-team-size);
-  font-weight: var(--type-team-weight);
-}
+
 .tape-teams .club + .club {
   flex-direction: row-reverse;
 }
@@ -1216,10 +1217,7 @@ table.line-score tbody th {
   text-transform: none;
   color: var(--ink);
 }
-table.line-score tbody th .club {
-  font-size: var(--type-team-size);
-  font-weight: var(--type-team-weight);
-}
+
 table.line-score td {
   width: 11%;
 }
@@ -1252,8 +1250,6 @@ table.players tbody + tbody .players-head th {
   padding-top: 14px;
 }
 table.players .players-head th .club {
-  font-size: var(--type-team-size);
-  font-weight: var(--type-team-weight);
   letter-spacing: 0.02em;
   text-transform: none;
   color: var(--ink);
@@ -1534,11 +1530,6 @@ th[aria-sort="ascending"] .roster-caret {
   color: var(--ink);
 }
 
-.meeting-result .club {
-  font-size: var(--type-team-size);
-  font-weight: var(--type-team-weight);
-}
-
 /* Bracket: the rounds left to right, each series beside the two it follows, every round as wide as
    the next. The first round's seed labels sit in room of their own to its left. On a phone each
    round takes most of the screen's width and the bracket swipes sideways, with the next round
@@ -1708,7 +1699,7 @@ th[aria-sort="ascending"] .roster-caret {
   position: absolute;
   top: 50%;
   right: calc(100% + 9px);
-  translate: 0 calc(-50% + var(--team-outside-seed-offset));
+  translate: 0 -50%;
   display: flex;
   align-items: flex-end;
   gap: 0.45em;
@@ -2019,10 +2010,7 @@ table.standings tr.below td {
   min-width: 0;
   vertical-align: middle;
 }
-table.standings td.team .club {
-  font-size: var(--type-team-size);
-  font-weight: var(--type-team-weight);
-}
+
 .conference-tag {
   --chip-ink: var(--ink-mid);
   --chip-line: var(--ink-mid);
@@ -2191,8 +2179,6 @@ table.standings tr.playoff-line + tr td {
    team, and --record-nudge down from the name's middle. */
 .team-numbers .tape-teams .club {
   gap: var(--record-gap);
-  font-size: var(--type-team-size);
-  font-weight: var(--type-team-weight);
 }
 .team-record {
   translate: 0 var(--record-nudge);
@@ -2240,12 +2226,13 @@ table.standings tr.playoff-line + tr td {
 .news-photo {
   background: var(--tile);
 }
+/* The teams' dots sit as far under the photo as in from the card's side. */
 .news-body {
   gap: 6px;
-  padding: 15px 13px 13px 16px;
+  padding: 16.25px 13px 13px 16px;
 }
 .news-photo-credit {
-  margin: -10px -5px 0 0;
+  margin: -11.25px -5px 0 0;
 }
 .news-teams .club {
   gap: 7px;

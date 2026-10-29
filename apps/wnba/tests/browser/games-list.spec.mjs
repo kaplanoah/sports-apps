@@ -241,6 +241,7 @@ test("a game's dots and seeds follow its name's capital center before it and low
 }) => {
   await openApp(page);
   await page.getByRole("tab", { name: "Games" }).click();
+  await expect(page.locator("#seasonGames .game-side .seed").first()).toBeVisible();
   const drawn = await readTeamLines(page, TEAM_LINE_EXPECTATIONS);
   expect(drawn.problems).toEqual([]);
   expect(drawn.placements).toEqual(expect.arrayContaining(["team before", "team after"]));

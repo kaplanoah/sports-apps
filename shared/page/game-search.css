@@ -176,7 +176,7 @@
   box-sizing: border-box;
   width: 100%;
   height: 38px;
-  padding: 0 0 3px 36.5px;
+  padding: 0 0 var(--lowercase-lift) 36.5px;
   border: 0;
   background: none;
   font-family: var(--text);

@@ -4,9 +4,12 @@ import {
   openApp,
   buildFixtureSnapshot,
   EVENING_FIXTURE,
+  BROADCASTS_FIXTURE,
+  BOX_SCORES,
   openSettings,
 } from "./harness.mjs";
 import { VIEW_GROUPS, openWithEverything } from "./views.mjs";
+import { openRanking } from "./settings-sheet.mjs";
 import { checkEachView } from "../../../../tests/browser/view-walk.mjs";
 import { readTeamLines } from "../../../../tests/browser/team-lines.mjs";
 import { TEAM_LINE_EXPECTATIONS } from "./team-line-expectations.mjs";
@@ -15,42 +18,62 @@ test.use({ contextOptions: { reducedMotion: "reduce" } });
 
 const THEMES = /** @type {const} */ (["light", "dark"]);
 
+/** @type {Record<string, string[]>} */
+const EXPECTED_ROLES = {
+  "the settings pages": ["small", "team"],
+  "the page's tabs": ["label", "team"],
+  "a game's sheets": ["label", "small", "team"],
+  "a club's and a player's sheets": ["large", "small", "team"],
+};
+
 for (const width of [390, 1280]) {
   for (const colorScheme of THEMES) {
-    test(`team lines use the approved font centers and attachments at ${width}px in ${colorScheme}`, async ({
-      page,
-    }, testInfo) => {
-      test.slow();
-      await page.setViewportSize({ width, height: 900 });
-      await openWithEverything(page);
-      await page.emulateMedia({ colorScheme });
-      await expect(page.locator("html")).toHaveAttribute("data-theme", colorScheme);
-      const roles = new Set();
-      const placements = new Set();
-      const states = new Set();
-      const attachments = new Set();
-      const names = new Set();
-      await checkEachView(page, Object.values(VIEW_GROUPS).flat(), async (view) => {
-        const drawn = await readTeamLines(page, TEAM_LINE_EXPECTATIONS);
-        expect(drawn.problems, view.name).toEqual([]);
-        for (const role of drawn.roles) roles.add(role);
-        for (const placement of drawn.placements) placements.add(placement);
-        for (const state of drawn.states) states.add(state);
-        for (const attachment of drawn.attachments) attachments.add(attachment);
-        for (const name of drawn.names) names.add(name);
-        if (process.env.ALIGNMENT_SCREENSHOTS)
-          await page.screenshot({
-            path: testInfo.outputPath(`${view.name.replaceAll(/[^a-z0-9]/gi, "-")}.png`),
-          });
+    for (const [group, allViews] of Object.entries(VIEW_GROUPS)) {
+      if (!(group in EXPECTED_ROLES)) continue;
+      const views =
+        group === "the settings pages"
+          ? allViews.filter((view) => view.name === "Ranking")
+          : allViews;
+      test(`team lines in ${group} align marks and attachments with their names at ${width}px in ${colorScheme}`, async ({
+        page,
+      }) => {
+        test.slow();
+        await page.setViewportSize({ width, height: 900 });
+        await openWithEverything(page);
+        await page.emulateMedia({ colorScheme });
+        await expect(page.locator("html")).toHaveAttribute("data-theme", colorScheme);
+        const roles = new Set();
+        const placements = new Set();
+        const states = new Set();
+        const attachments = new Set();
+        const names = new Set();
+        await checkEachView(page, views, async (view) => {
+          const drawn = await readTeamLines(page, TEAM_LINE_EXPECTATIONS);
+          expect(drawn.problems, view.name).toEqual([]);
+          for (const role of drawn.roles) roles.add(role);
+          for (const placement of drawn.placements) placements.add(placement);
+          for (const state of drawn.states) states.add(state);
+          for (const attachment of drawn.attachments) attachments.add(attachment);
+          for (const name of drawn.names) names.add(name);
+        });
+        expect([...roles].sort()).toEqual(EXPECTED_ROLES[group]);
+        if (group === "the settings pages") {
+          expect(placements).toContain("small before");
+        } else if (group === "the page's tabs") {
+          expect(placements).toContain("team after");
+          expect(states).toContain("winner");
+          expect(states).toContain("TBD");
+          expect(attachments).toEqual(new Set(["rank chip"]));
+        } else if (group === "a game's sheets") {
+          expect(placements).toContain("small after");
+          expect(placements).toContain("team after");
+        } else {
+          expect([...names].some((name) => name.length > 14)).toBe(true);
+          expect(states).toContain("TBD");
+          expect(attachments).toEqual(new Set(["rank chip"]));
+        }
       });
-      expect([...roles].sort()).toEqual(["label", "large", "small", "team"]);
-      expect(placements).toContain("team after");
-      expect(states).toContain("winner");
-      expect(states).toContain("TBD");
-      expect([...names].some((name) => name.length > 14)).toBe(true);
-      expect(placements).toContain("small after");
-      expect(attachments).toContain("rank chip");
-    });
+    }
   }
 }
 
@@ -89,9 +112,8 @@ for (const colorScheme of THEMES) {
     await page.emulateMedia({ colorScheme });
     await openApp(page);
     await openSettings(page);
-    await page
-      .locator(".settings-main")
-      .evaluate((element) => (element.scrollTop = element.scrollHeight));
+    await openRanking(page);
+    await expect(page.locator("#rankingDialog .rank-id .league-tag").first()).toBeVisible();
     const drawn = await readTeamLines(page, TEAM_LINE_EXPECTATIONS);
     expect(drawn.problems).toEqual([]);
     expect(drawn.attachments).toContain("league chip");
@@ -127,4 +149,42 @@ for (const colorScheme of THEMES) {
     expect(geometry).toEqual({ clipped: true, fits: true, dot: 14, width: 60 });
     expect((await readTeamLines(page, TEAM_LINE_EXPECTATIONS)).problems).toEqual([]);
   });
+}
+
+for (const width of [390, 1280]) {
+  for (const colorScheme of THEMES) {
+    test(`club headings share their notes' baseline at ${width}px in ${colorScheme}`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width, height: 900 });
+      await page.emulateMedia({ colorScheme });
+      await openApp(page, {
+        now: BROADCASTS_FIXTURE.now,
+        snapshots: { 2026: buildFixtureSnapshot(BROADCASTS_FIXTURE) },
+        boxScores: BOX_SCORES,
+      });
+      await page.getByRole("tab", { name: "Games", exact: true }).click();
+      await page
+        .locator("#seasonGames")
+        .getByRole("button", { name: /^Game details: Rays at Yankees, Wed, Oct 7/ })
+        .click();
+      const lineup = page
+        .locator("#gameSheet .sheet-part-head")
+        .filter({ has: page.getByText("Lineup", { exact: true }) })
+        .first();
+      await expect(lineup).toBeVisible();
+      const game = await readTeamLines(page, TEAM_LINE_EXPECTATIONS);
+      expect(game.problems).toEqual([]);
+      expect(game.states).toContain("baseline heading");
+      await page
+        .locator("#gameBody .game-row")
+        .getByRole("button", { name: /^Yankees\b.*team details$/ })
+        .click();
+      await expect(page.locator("#teamSheet .field-heads")).toBeVisible();
+      const team = await readTeamLines(page, TEAM_LINE_EXPECTATIONS);
+      expect(team.problems).toEqual([]);
+      expect(team.states).toContain("field comparison");
+      expect(team.states).toContain("baseline heading");
+    });
+  }
 }

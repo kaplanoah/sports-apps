@@ -32,3 +32,20 @@ test("only a list that asks for stand-ins gets offscreen markup, in search and t
   assert.ok(listFoundDays(options).every((day) => !Object.hasOwn(day, "farMarkup")));
   assert.ok(listSeasonDays(options).days.every((day) => !Object.hasOwn(day, "farMarkup")));
 });
+
+test("only tomorrow's calendar label carries its semantic marker, including across a year boundary", () => {
+  const today = "2026-12-31";
+  const gameDays = ["2026-12-30", today, "2027-01-01", "2027-01-02"].map((day) => ({
+    day,
+    count: 1,
+    games: html`<ul class="game-list"><li>One game</li></ul>`,
+  }));
+  for (const { day, markup, farMarkup } of listFoundDays({ gameDays, today, standsIn: true })) {
+    for (const label of [String(markup), String(farMarkup)]) {
+      if (day === "2027-01-01") {
+        assert.match(label, /<span class="day-name is-tomorrow">Tmrw<\/span>/);
+        assert.match(label, /aria-label="Tomorrow, Jan 1"/);
+      } else assert.doesNotMatch(label, /is-tomorrow/);
+    }
+  }
+});

@@ -516,6 +516,8 @@ const COVERAGE = {
   "tab:games": { leftOut: "Typing games already searches every game" },
   "tab:news": { search: "news", opens: "tab:news" },
   "tab:search": { leftOut: "It's the search itself" },
+  "dialog:contactDialog": { search: "contact", opens: "settings:contact" },
+  "dialog:rankingDialog": { search: "ranking", opens: "settings:ranking" },
   "dialog:settingsDialog": { search: "settings", opens: "settings" },
   "dialog:sheetDialog": { leftOut: "It holds the sheets, each listed on its own" },
   "dialog:homeScreenWelcome": {
@@ -542,6 +544,7 @@ const COVERAGE = {
       "Shows only in a phone's or tablet's browser, at the top of Settings, which search finds",
   },
   "settings:ranking": { search: "ranking", opens: "settings:ranking" },
+  "settings:contact": { search: "contact", opens: "settings:contact" },
   "settings:diagnostics": { search: "diagnostics", opens: "settings:diagnostics" },
 };
 

@@ -6,6 +6,7 @@ import { LEAGUE_WORDS } from "./league-words.js";
 import {
   ATHLETIC_SETTING,
   DIAGNOSTICS_SETTING,
+  CONTACT_SETTING,
   NEWS_TAB,
   describeNotificationsSetting,
   describeRemindersSetting,
@@ -78,6 +79,7 @@ const LEAGUE_PAGES = {
     describeTeamOutletsSetting("Liberty"),
     ATHLETIC_SETTING,
     describeAppearanceSetting(["walnut", "maple"]),
+    CONTACT_SETTING,
     DIAGNOSTICS_SETTING,
   ],
   gameParts: [],

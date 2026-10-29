@@ -2,7 +2,9 @@
  * The tag beside the app's name on any channel but production, in the Caption role on the raised
  * fill. Apps link it before their own styles.css, and define --raised, --ink-mid, --radius-chip,
  * and --channel-tag-lift, how far the tag moves from where its row centers it, so its middle sits
- * where the app picked against the name's capitals.
+ * where the app picked against the name's capitals. An app can replace the font's bullet with
+ * a circle by setting --channel-tag-dot to "" and --channel-tag-glyph to hidden, and raise the
+ * circle from the middle of the lowercase letters with --channel-tag-dot-lift.
  */
 
 .channel-tag {
@@ -23,5 +25,24 @@
   display: none;
 }
 .channel-tag .sep {
+  display: inline-block;
+  position: relative;
+  text-box: trim-both ex alphabetic;
   margin: 0 4px;
+  opacity: 0.7;
+  visibility: var(--channel-tag-glyph, visible);
+}
+/* The hidden glyph keeps its advance; alphabetic trimming anchors the circle to the baseline. */
+.channel-tag .sep::after {
+  --channel-tag-dot-diameter: 3px;
+  content: var(--channel-tag-dot, none);
+  position: absolute;
+  left: 50%;
+  bottom: calc(0.5ex - var(--channel-tag-dot-diameter) / 2 + var(--channel-tag-dot-lift, 0px));
+  width: var(--channel-tag-dot-diameter);
+  height: var(--channel-tag-dot-diameter);
+  border-radius: 50%;
+  background: currentColor;
+  visibility: visible;
+  transform: translateX(-50%);
 }

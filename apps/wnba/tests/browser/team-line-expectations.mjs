@@ -54,6 +54,8 @@ export const TEAM_LINE_EXPECTATIONS = {
       delta: -100,
     },
   ],
+  stateSelectors: [],
+  baselines: [],
   allStar: {
     width: 18.5,
     offset: -1,

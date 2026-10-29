@@ -6,6 +6,7 @@ testThemes(test, expect, {
   openWithEverything,
   viewGroups: VIEW_GROUPS,
   chipLooks: {
+    "the settings pages": ["filled", "outlined"],
     "the page's tabs": ["filled", "outlined"],
     "a game's sheets": [],
     "a club's and a player's sheets": ["filled", "outlined"],
