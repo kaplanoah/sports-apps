@@ -522,7 +522,7 @@ test("a series' winner's row is washed in teal, more on Walnut, and its loser's 
   await expect(out.locator(".dot")).toHaveCSS("opacity", "0.55");
 });
 
-test("a bracket's large dots and outside seeds center on their names without local optical offsets", async ({
+test("a bracket's large dots and outside seeds center on their names' capitals", async ({
   page,
 }) => {
   await openApp(page);

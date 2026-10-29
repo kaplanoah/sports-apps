@@ -1,24 +1,26 @@
+import { readCapitals } from "./capitals.mjs";
+
 /**
  * Real team-line geometry, measured against the loaded font's cap and x heights.
  * @param {import("@playwright/test").Page} page
  * @param {"mlb" | "wnba"} league
  */
-export const readTeamLines = (page, league) =>
-  page.evaluate(async (app) => {
+export const readTeamLines = async (page, league) => {
+  const drawn = await page.evaluate(async (app) => {
     await document.fonts.ready;
     const values =
       app === "mlb"
         ? {
-            small: [12.75, 400, 10, 0, -0.5],
-            team: [13.5, 400, 14, 0, -1.5],
-            large: [16, 525, 16, -0.5, -1.5],
-            label: [12, 400, 14, -0.25, -0.25],
+            small: { size: 12.75, weight: 400, dot: 10, before: 0, after: -0.5 },
+            team: { size: 13.5, weight: 400, dot: 14, before: 0, after: -1.5 },
+            large: { size: 16, weight: 525, dot: 16, before: -0.5, after: -1.5 },
+            label: { size: 12, weight: 400, dot: 14, before: -0.25, after: -0.25 },
           }
         : {
-            small: [14.5, 400, 10, 0, -1],
-            team: [15.5, 500, 14, 0, -1],
-            large: [17.75, 500, 16, -0.75, -1],
-            label: [13, 600, 14, -0.25, -0.25],
+            small: { size: 14.5, weight: 400, dot: 10, before: 0, after: -1 },
+            team: { size: 15.5, weight: 500, dot: 14, before: 0, after: -1 },
+            large: { size: 17.75, weight: 500, dot: 16, before: -0.75, after: -1 },
+            label: { size: 13, weight: 600, dot: 14, before: -0.25, after: -0.25 },
           };
     const problems = [];
     const roles = new Set();
@@ -26,7 +28,7 @@ export const readTeamLines = (page, league) =>
     const states = new Set();
     const names = new Set();
     const attachments = new Set();
-    const middle = (element) => {
+    const findMiddle = (element) => {
       const box = element.getBoundingClientRect();
       return box.top + box.height / 2;
     };
@@ -52,11 +54,33 @@ export const readTeamLines = (page, league) =>
         height: "1ex",
       });
       document.documentElement.append(probe);
-      const { width: cap, height: x } = probe.getBoundingClientRect();
+      const { width: cap, height: xHeight } = probe.getBoundingClientRect();
       probe.remove();
-      const metrics = { cap, x };
+      const metrics = { cap, xHeight };
       fonts.set(key, metrics);
       return metrics;
+    };
+    /**
+     * @param {Element} line
+     * @returns {"small" | "team" | "large" | "label"}
+     */
+    const chooseRole = (line) => {
+      if (line.closest(".news-teams, .runs-half-head")) return "label";
+      if (line.matches(".team-title")) return "large";
+      if (app === "wnba" && line.closest(".team-line, .faceoff-side")) return "large";
+      if (line.matches(".game-card-opponent")) return "small";
+      if (app === "mlb" && line.closest(".rank-id, .pitcher-id")) return "small";
+      return "team";
+    };
+    /**
+     * @param {Element} line
+     * @param {number} baseWeight
+     */
+    const findExpectedWeight = (line, baseWeight) => {
+      if (app === "mlb" && line.closest(".game-side.won")) return baseWeight + 150;
+      if (app === "wnba" && line.matches(".tbd") && line.closest(".team-line"))
+        return baseWeight - 100;
+      return baseWeight;
     };
     for (const line of document.querySelectorAll(
       ".club, .team-title, .game-card-opponent, .runs-half-head",
@@ -68,23 +92,12 @@ export const readTeamLines = (page, league) =>
       );
       if (!mark || !name) continue;
       const style = getComputedStyle(name);
-      const role = line.closest(".news-teams, .runs-half-head")
-        ? "label"
-        : line.matches(".team-title") ||
-            (app === "wnba" && line.closest(".team-line, .faceoff-side"))
-          ? "large"
-          : line.matches(".game-card-opponent") ||
-              (app === "mlb" && line.closest(".rank-id, .pitcher-id"))
-            ? "small"
-            : "team";
-      const [size, baseWeight, diameter, before, after] = values[role];
-      const weight =
-        baseWeight +
-        (app === "mlb" && line.closest(".game-side.won") ? 150 : 0) -
-        (app === "wnba" && line.matches(".tbd") && line.closest(".team-line") ? 100 : 0);
+      const role = chooseRole(line);
+      const { size, weight: baseWeight, dot: diameter, before, after } = values[role];
+      const weight = findExpectedWeight(line, baseWeight);
       const isAfter = mark.getBoundingClientRect().left > name.getBoundingClientRect().left;
-      const { cap, x } = measureFont(style);
-      const center = middle(name) + (isAfter && role !== "label" ? (cap - x) / 2 : 0);
+      const { cap, xHeight } = measureFont(style);
+      const center = findMiddle(name) + (isAfter && role !== "label" ? (cap - xHeight) / 2 : 0);
       const text = name.textContent.trim();
       const description = `${role} ${isAfter ? "after" : "before"} ${text}`;
       roles.add(role);
@@ -92,6 +105,7 @@ export const readTeamLines = (page, league) =>
       names.add(text);
       if (line.closest(".tbd") || name.matches(".tbd") || text === "TBD") states.add("TBD");
       if (line.closest(".won, .winner")) states.add("winner");
+      if (line.closest(".field-heads")) states.add("field comparison");
       check(parseFloat(style.fontSize), size, `${description} size`);
       check(Number(style.fontWeight), weight, `${description} weight`);
       check(name.getBoundingClientRect().height, cap, `${description} cap trim`);
@@ -106,17 +120,21 @@ export const readTeamLines = (page, league) =>
           app === "mlb" ? 19 : 18.5,
           `${description} star scale`,
         );
-        check(middle(mark) - middle(name), app === "mlb" ? -3 : -1, `${description} star position`);
+        check(
+          findMiddle(mark) - findMiddle(name),
+          app === "mlb" ? -3 : -1,
+          `${description} star position`,
+        );
       } else {
         check(mark.getBoundingClientRect().width, diameter, `${description} dot width`);
         check(mark.getBoundingClientRect().height, diameter, `${description} dot height`);
-        check(middle(mark) - center, isAfter ? after : before, `${description} dot center`);
+        check(findMiddle(mark) - center, isAfter ? after : before, `${description} dot center`);
       }
       const seed = line.querySelector(":scope > .seed");
       if (seed && app === "wnba") {
         attachments.add(`${role} seed ${isAfter ? "after" : "before"}`);
         const offset = isAfter ? -0.25 : role === "large" ? 0.75 : 0;
-        check(middle(seed) - center, offset, `${description} seed center`);
+        check(findMiddle(seed) - center, offset, `${description} seed center`);
       }
       const cell = line.closest(".team-cell");
       if (cell) {
@@ -128,7 +146,7 @@ export const readTeamLines = (page, league) =>
           if (!attachment) continue;
           attachments.add(selector);
           check(
-            middle(attachment) - (middle(name) + (cap - x) / 2),
+            findMiddle(attachment) - (findMiddle(name) + (cap - xHeight) / 2),
             offset,
             `${description} ${selector}`,
           );
@@ -138,20 +156,24 @@ export const readTeamLines = (page, league) =>
       const label = row?.querySelector(".seed-label");
       if (label) {
         attachments.add("outside seed");
-        check(middle(label) - middle(name), 0, `${description} outside seed`);
+        check(findMiddle(label) - findMiddle(name), 0, `${description} outside seed`);
       }
       const identity = line.closest(".team-id");
       const rank =
         identity?.querySelector(".rank-tag") ?? line.closest("tr")?.querySelector(".rank-tag");
       if (rank) {
         attachments.add("rank chip");
-        check(middle(rank) - middle(name), 0, `${description} rank chip`);
+        check(findMiddle(rank) - findMiddle(name), 0, `${description} rank chip`);
       }
       const ranking = line.closest(".rank-id");
       const chip = ranking?.querySelector(".league-tag");
       if (chip && getComputedStyle(ranking).gridTemplateAreas === '"club league drought"') {
         attachments.add("league chip");
-        check(middle(chip) - (middle(name) + (cap - x) / 2), -1, `${description} league chip`);
+        check(
+          findMiddle(chip) - (findMiddle(name) + (cap - xHeight) / 2),
+          -1,
+          `${description} league chip`,
+        );
       }
     }
     for (const placeholder of document.querySelectorAll(
@@ -160,8 +182,8 @@ export const readTeamLines = (page, league) =>
       if (!placeholder.checkVisibility()) continue;
       states.add("TBD");
       const style = getComputedStyle(placeholder);
-      check(parseFloat(style.fontSize), values.team[0], "TBD size");
-      check(Number(style.fontWeight), values.team[1], "TBD weight");
+      check(parseFloat(style.fontSize), values.team.size, "TBD size");
+      check(Number(style.fontWeight), values.team.weight, "TBD weight");
     }
     return {
       problems,
@@ -172,3 +194,24 @@ export const readTeamLines = (page, league) =>
       attachments: [...attachments],
     };
   }, league);
+
+  if (league === "mlb") {
+    const heads = page.locator(".field-heads, .sheet-part-head:has(h3 .club):has(> span)");
+    for (const head of await heads.all()) {
+      if (!(await head.isVisible())) continue;
+      const name = head.locator(".team-name").first();
+      if (!(await name.count())) continue;
+      const note = head.locator(":scope > span").last();
+      const [nameCapitals, noteCapitals] = await Promise.all([
+        readCapitals(name),
+        readCapitals(note),
+      ]);
+      if (Math.abs(nameCapitals.bottom - noteCapitals.bottom) > 0.08)
+        drawn.problems.push(
+          `heading baseline: ${nameCapitals.bottom}, expected ${noteCapitals.bottom}`,
+        );
+      drawn.states.push("baseline heading");
+    }
+  }
+  return drawn;
+};

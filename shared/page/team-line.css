@@ -1,5 +1,28 @@
-/* Team names align by their font's capitals before a name and lowercase after it.
-   The computed length inherits across attachments with a different font or size. */
+/* Team names and their marks, for the current MLB and WNBA views. Before-name marks use the
+   capital center and after-name marks use the lowercase center; uppercase Label uses capitals
+   on both sides. Computed native font lengths inherit across differently sized attachments.
+   Apps link this after type.css and the component styles, before their own stylesheets.
+   Each app supplies these :root tokens:
+   --team-name                  the team-name font
+   --type-team-size              Team name size
+   --type-team-weight            Team name weight
+   --type-team-small-size        Small name size
+   --type-team-small-weight      Small name weight
+   --team-dot-size               Team dot diameter
+   --team-dot-before             Team before-name offset
+   --team-dot-after              Team after-name offset
+   --team-small-dot-size         Small dot diameter
+   --team-small-dot-before       Small before-name offset
+   --team-small-dot-after        Small after-name offset
+   --team-large-dot-size         Large dot diameter
+   --team-large-dot-before       Large before-name offset
+   --team-large-dot-after        Large after-name offset
+   --team-label-dot-size         Label dot diameter
+   --team-label-dot-before       Label before-name offset
+   --team-label-dot-after        Label after-name offset
+   --team-seed-before            inline seed before-name offset, optional
+   --team-seed-after             inline seed after-name offset, optional
+*/
 @property --team-lower-center {
   syntax: "<length>";
   inherits: true;
@@ -37,7 +60,6 @@
 .club > .team-name,
 .club > .tbd,
 .team-title > span:not(.dot),
-.game-card-name,
 .runs-half-head > span:not(.dot),
 .club > .seed,
 .seed-note {
