@@ -223,10 +223,29 @@
   --type-heading-tracking: 0.03em;
   --type-team-large-size: calc(17.75rem / 16);
   --type-team-large-weight: 500;
+  --type-team-small-size: calc(14.5rem / 16);
+  --type-team-small-weight: 400;
   --type-team-size: calc(15.5rem / 16);
   --type-team-weight: 500;
-  --type-team-compact-size: calc(15.25rem / 16);
-  --type-team-compact-weight: 500;
+  --team-dot-size: 14px;
+  --team-dot-before: 0px;
+  --team-dot-after: -1px;
+  --team-small-dot-size: 10px;
+  --team-small-dot-before: 0px;
+  --team-small-dot-after: -1px;
+  --team-large-dot-size: 16px;
+  --team-large-dot-before: -0.75px;
+  --team-large-dot-after: -1px;
+  --team-label-dot-size: 14px;
+  --team-label-dot-before: -0.25px;
+  --team-label-dot-after: -0.25px;
+  --team-seed-before: 0px;
+  --team-seed-after: -0.25px;
+  --team-conference-offset: -1.75px;
+  --team-seed-note-offset: -0.5px;
+  --team-outside-seed-offset: 0px;
+  --team-large-seed-before: 0.75px;
+  --team-large-seed-after: -0.25px;
   --type-score-size: calc(22rem / 16);
   --type-score-weight: 500;
   --type-stat-large-size: calc(18.25rem / 16);
@@ -285,7 +304,6 @@
   --out-box-edge: #ebd9bd;
   --game-card-now: var(--now);
   --game-card-won: var(--result);
-  --game-card-team-font: var(--team-name);
   --game-row-height: 90px;
   --game-side-offset: 9.25px;
   --game-label-offset: -32px;
@@ -521,7 +539,6 @@ header.top h1 .title-letter:nth-child(3) {
   letter-spacing: 0.02em;
 }
 .club .team-name {
-  overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -529,31 +546,13 @@ header.top h1 .title-letter:nth-child(3) {
   color: var(--ink-dim);
   font-weight: calc(var(--type-team-weight) - 100);
 }
-/* A little below the name's middle, where it sits level with the name's baseline. */
 .seed {
-  translate: 0 1px;
   font-size: var(--type-caption-size);
   font-weight: var(--type-caption-weight);
   color: var(--ink-dim);
 }
-/* In a game's row, the names, seeds, and time center on their capitals, so they sit level with each
-   other and the dots, whatever room each font leaves above and below its letters. A name clips
-   only sideways, so its letters' tails still show. */
-.game-side .team-name,
-.game-side .seed,
 .game-headline .time {
   text-box: trim-both cap alphabetic;
-}
-.game-side .team-name {
-  overflow: clip visible;
-}
-.game-side .seed {
-  translate: none;
-}
-/* Matched by eye: a seed after its name looks higher beside the name's capitals than one before
-   it. */
-.game-side.home .seed {
-  translate: 0 0.5px;
 }
 
 /* A bracket's series and a day's games are one kind of card. */
@@ -567,16 +566,18 @@ header.top h1 .title-letter:nth-child(3) {
 .game-side .club {
   gap: 8px;
 }
-.team-line .club {
+.team-line .club,
+.faceoff-side .club {
+  --team-dot-size: var(--team-large-dot-size);
+  --team-dot-before: var(--team-large-dot-before);
+  --team-dot-after: var(--team-large-dot-after);
+  --team-seed-before: var(--team-large-seed-before);
+  --team-seed-after: var(--team-large-seed-after);
+  font-size: var(--type-team-large-size);
   font-weight: var(--type-team-large-weight);
 }
 .team-line .club.tbd {
   font-weight: calc(var(--type-team-large-weight) - 100);
-}
-.team-line .dot,
-.game-side .dot {
-  width: 16px;
-  height: 16px;
 }
 
 /* Games: each day's games share a card, beside its date as a wall calendar shows it, level with
@@ -674,10 +675,6 @@ header.top h1 .title-letter:nth-child(3) {
   .game-day {
     --day-inset: 4px;
   }
-  .game-day .game-side .club {
-    font-size: var(--type-team-compact-size);
-    font-weight: var(--type-team-compact-weight);
-  }
   .game-day .score {
     gap: 4px;
   }
@@ -689,6 +686,7 @@ header.top h1 .title-letter:nth-child(3) {
   gap: 4px;
 }
 .game-side .club {
+  min-height: 16px;
   max-width: 100%;
   font-size: var(--type-team-size);
   font-weight: var(--type-team-weight);
@@ -969,8 +967,6 @@ header.top h1 .title-letter:nth-child(3) {
 }
 .faceoff-side .club {
   max-width: 100%;
-  font-size: var(--type-team-large-size);
-  font-weight: var(--type-team-large-weight);
 }
 .faceoff-side.home .club {
   flex-direction: row-reverse;
@@ -1039,8 +1035,8 @@ header.top h1 .title-letter:nth-child(3) {
   gap: 10px;
 }
 .tape-teams .club {
-  font-size: var(--type-team-compact-size);
-  font-weight: var(--type-team-compact-weight);
+  font-size: var(--type-team-size);
+  font-weight: var(--type-team-weight);
 }
 .tape-teams .club + .club {
   flex-direction: row-reverse;
@@ -1228,8 +1224,8 @@ table.line-score tbody th {
   color: var(--ink);
 }
 table.line-score tbody th .club {
-  font-size: var(--type-team-compact-size);
-  font-weight: var(--type-team-compact-weight);
+  font-size: var(--type-team-size);
+  font-weight: var(--type-team-weight);
 }
 table.line-score td {
   width: 11%;
@@ -1263,8 +1259,8 @@ table.players tbody + tbody .players-head th {
   padding-top: 14px;
 }
 table.players .players-head th .club {
-  font-size: var(--type-team-compact-size);
-  font-weight: var(--type-team-compact-weight);
+  font-size: var(--type-team-size);
+  font-weight: var(--type-team-weight);
   letter-spacing: 0.02em;
   text-transform: none;
   color: var(--ink);
@@ -1546,8 +1542,8 @@ th[aria-sort="ascending"] .roster-caret {
 }
 
 .meeting-result .club {
-  font-size: var(--type-team-compact-size);
-  font-weight: var(--type-team-compact-weight);
+  font-size: var(--type-team-size);
+  font-weight: var(--type-team-weight);
 }
 
 /* Bracket: the rounds left to right, each series beside the two it follows, every round as wide as
@@ -1719,7 +1715,7 @@ th[aria-sort="ascending"] .roster-caret {
   position: absolute;
   top: 50%;
   right: calc(100% + 9px);
-  translate: 0 -50%;
+  translate: 0 calc(-50% + var(--team-outside-seed-offset));
   display: flex;
   align-items: flex-end;
   gap: 0.45em;
@@ -1818,10 +1814,6 @@ th[aria-sort="ascending"] .roster-caret {
 /* A series' winner's row takes a wash of the result's teal, so a decided card reads at a glance. */
 .team-line.won {
   background: color-mix(in srgb, var(--result) var(--won-row-wash), transparent);
-}
-/* Matched by eye: a name a pixel higher looks centered on its row beside the dot and wins. */
-.team-line .team-name {
-  translate: 0 -1px;
 }
 @media (min-width: 700px) {
   .bracket {
@@ -1973,6 +1965,7 @@ table.standings tbody tr:last-child td:last-child {
 }
 table.standings .team {
   width: 100%;
+  max-width: 0;
   padding-left: 0;
   text-align: left;
 }
@@ -2026,6 +2019,7 @@ table.standings tr.below td {
   color: var(--ink-dim);
 }
 .team-cell {
+  max-width: 100%;
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -2036,18 +2030,13 @@ table.standings td.team .club {
   font-size: var(--type-team-size);
   font-weight: var(--type-team-weight);
 }
-/* The dot, E/W, and a seed note each move down to where a phone shows them centered on the name,
-   set by eye. */
-table.standings td.team .dot {
-  translate: 0 0.75px;
-}
 .conference-tag {
   --chip-ink: var(--ink-mid);
   --chip-line: var(--ink-mid);
-  translate: 0 0.7px;
+  translate: 0 calc(var(--team-lower-center) + var(--team-conference-offset));
 }
 .seed-note {
-  translate: 0 1.15px;
+  translate: 0 calc(var(--team-lower-center) + var(--team-seed-note-offset));
   font-family: var(--display);
   font-size: var(--type-caption-size);
   font-weight: calc(var(--type-caption-weight) + 200);
@@ -2110,10 +2099,6 @@ table.standings tr.playoff-line + tr td {
 }
 .team-sheet-body > .game-cards + .sheet-part {
   margin-top: calc(16px - var(--part-space-above));
-}
-.game-card-opponent .dot {
-  width: 9.5px;
-  height: 9.5px;
 }
 .status-chip.alive {
   --chip-fill: color-mix(in srgb, var(--ink) 15%, transparent);
@@ -2262,7 +2247,6 @@ table.standings tr.playoff-line + tr td {
 .news-photo {
   background: var(--tile);
 }
-/* The teams' dots sit as far under the photo as in from the card's side. */
 .news-body {
   gap: 6px;
   padding: 15px 13px 13px 16px;
@@ -2274,10 +2258,6 @@ table.standings tr.playoff-line + tr td {
   gap: 7px;
   font-family: var(--text);
   font-weight: var(--type-label-weight);
-}
-.news-teams .dot {
-  width: 14px;
-  height: 14px;
 }
 .news-title {
   font-size: var(--type-headline-size);

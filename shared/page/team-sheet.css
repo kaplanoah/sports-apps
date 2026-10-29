@@ -65,10 +65,6 @@
   font-weight: var(--type-team-large-weight);
   text-transform: none;
 }
-.sheet-head .team-title .dot {
-  width: 14px;
-  height: 14px;
-}
 .sheet-head .team-note {
   font-weight: calc(var(--type-detail-weight) + 100);
   color: var(--ink-mid);

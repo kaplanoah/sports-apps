@@ -12,7 +12,6 @@
  *   --game-card-edge         a card's border
  *   --game-card-now          the clock of a game being played, and the day of one later today
  *   --game-card-won          a win's W
- *   --game-card-team-font    the other team's name, in the face team names take
  */
 
 .game-cards {
@@ -99,14 +98,14 @@
   display: flex;
   align-items: center;
   gap: 5px;
-  font-size: var(--type-detail-size);
-  font-weight: var(--type-detail-weight);
 }
 .game-card-at {
+  font-family: var(--text);
+  font-size: var(--type-detail-size);
+  font-weight: var(--type-detail-weight);
   color: var(--ink-dim);
 }
 .game-card-name {
-  font-family: var(--game-card-team-font);
   letter-spacing: 0.02em;
 }
 /* Each line's space is its letters' own, from the tops of its capitals to its baseline. */

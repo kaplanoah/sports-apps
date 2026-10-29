@@ -1,3 +1,4 @@
+import { readTeamLines } from "../../../../tests/browser/team-lines.mjs";
 import { test, expect, expectDayAtTop, openApp, readWholeSeasonSchedule, NOW } from "./harness.mjs";
 import { readCapitals } from "../../../../tests/browser/capitals.mjs";
 import { readRole } from "../../../../tests/browser/type-roles.mjs";
@@ -234,39 +235,17 @@ test("a date that starts with a 1 sits 0.065em left of its column's middle, so t
   ]);
 });
 
-test("a game's dots, names, and time center on their capitals, level with each other, the seed on the right half a pixel lower", async ({
+test("a game's dots and seeds follow its name's capital center before it and lowercase center after it", async ({
   page,
 }) => {
   await openApp(page);
   await page.getByRole("tab", { name: "Games" }).click();
-  const row = page
-    .locator("#seasonGames .game-row")
-    .filter({ has: page.locator(".time") })
-    .first();
-  await expect(row).toBeVisible();
-  const pieces = await row.evaluate((element) =>
-    Object.fromEntries(
-      [
-        ".game-side.away .dot",
-        ".game-side.away .seed",
-        ".game-side.away .team-name",
-        ".game-side.home .seed",
-        ".game-side.home .team-name",
-        ".time",
-      ].map((selector) => {
-        const piece = /** @type {Element} */ (element.querySelector(selector));
-        const { top, height } = piece.getBoundingClientRect();
-        const fontSize = parseFloat(getComputedStyle(piece).fontSize);
-        return [selector, { middle: top + height / 2, height, fontSize }];
-      }),
-    ),
+  const drawn = await readTeamLines(page, "wnba");
+  expect(drawn.problems).toEqual([]);
+  expect(drawn.placements).toEqual(expect.arrayContaining(["team before", "team after"]));
+  expect(drawn.attachments).toEqual(
+    expect.arrayContaining(["team seed before", "team seed after"]),
   );
-  const { ".game-side.away .dot": dot, ...letters } = pieces;
-  for (const [selector, { middle, height, fontSize }] of Object.entries(letters)) {
-    const nudge = selector === ".game-side.home .seed" ? 0.5 : 0;
-    expect(height, selector).toBeLessThan(fontSize * 0.8);
-    expect(middle - dot.middle, selector).toBeCloseTo(nudge, 1);
-  }
 });
 
 test("a game that may never happen says If necessary in a status's dim ink, a weight lighter than Final", async ({

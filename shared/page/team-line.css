@@ -1,0 +1,82 @@
+/* Team names align by their font's capitals before a name and lowercase after it.
+   The computed length inherits across attachments with a different font or size. */
+@property --team-lower-center {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 0px;
+}
+
+.club,
+.team-cell,
+.team-id {
+  font-family: var(--team-name);
+  font-size: var(--type-team-size);
+  font-weight: var(--type-team-weight);
+}
+.row-button-cell > .club,
+.rank-cell > .rank-slot {
+  display: flex;
+}
+.club,
+.team-title,
+.game-card-opponent,
+.team-cell,
+.team-id,
+.rank-id,
+.runs-half-head {
+  --team-lower-center: calc((1cap - 1ex) / 2);
+}
+.club,
+.team-title,
+.game-card-opponent,
+.runs-half-head {
+  --team-mark-shift: var(--team-dot-before);
+  --team-seed-shift: var(--team-seed-before, 0px);
+  align-items: center;
+}
+.club > .team-name,
+.club > .tbd,
+.team-title > span:not(.dot),
+.game-card-name,
+.runs-half-head > span:not(.dot),
+.club > .seed,
+.seed-note {
+  text-box: trim-both cap alphabetic;
+}
+.club > .team-name {
+  min-width: 0;
+  overflow: clip visible;
+}
+:is(.club, .team-title, .game-card-opponent, .runs-half-head) > .dot {
+  width: var(--team-dot-size);
+  height: var(--team-dot-size);
+  translate: 0 var(--team-mark-shift);
+}
+.club .seed {
+  translate: 0 var(--team-seed-shift);
+}
+:is(.game-side.home, .faceoff-side.home, .pitcher-id.home) .club,
+.tape-teams .club + .club {
+  --team-mark-shift: calc(var(--team-lower-center) + var(--team-dot-after));
+  --team-seed-shift: calc(var(--team-lower-center) + var(--team-seed-after, 0px));
+}
+.game-card-opponent {
+  font-family: var(--team-name);
+  font-size: var(--type-team-small-size);
+  font-weight: var(--type-team-small-weight);
+  --team-dot-size: var(--team-small-dot-size);
+  --team-dot-before: var(--team-small-dot-before);
+  --team-dot-after: var(--team-small-dot-after);
+}
+.sheet-head h2.team-title {
+  --team-dot-size: var(--team-large-dot-size);
+  --team-dot-before: var(--team-large-dot-before);
+  --team-dot-after: var(--team-large-dot-after);
+}
+.news-teams .club,
+.runs-half-head {
+  --team-lower-center: 0px;
+  --team-dot-size: var(--team-label-dot-size);
+  --team-dot-before: var(--team-label-dot-before);
+  --team-dot-after: var(--team-label-dot-after);
+}

@@ -94,8 +94,24 @@
   --type-heading-tracking: 0.035em;
   --type-team-large-size: calc(16rem / 16);
   --type-team-large-weight: 525;
+  --type-team-small-size: calc(12.75rem / 16);
+  --type-team-small-weight: 400;
   --type-team-size: calc(13.5rem / 16);
   --type-team-weight: 400;
+  --team-dot-size: 14px;
+  --team-dot-before: 0px;
+  --team-dot-after: -1.5px;
+  --team-small-dot-size: 10px;
+  --team-small-dot-before: 0px;
+  --team-small-dot-after: -0.5px;
+  --team-large-dot-size: 16px;
+  --team-large-dot-before: -0.5px;
+  --team-large-dot-after: -1.5px;
+  --team-label-dot-size: 14px;
+  --team-label-dot-before: -0.25px;
+  --team-label-dot-after: -0.25px;
+  --team-league-offset: -1px;
+  --team-rank-offset: 0px;
   --type-score-size: calc(15.75rem / 16);
   --type-score-weight: 500;
   --type-stat-large-size: calc(15.5rem / 16);
@@ -221,7 +237,6 @@
   --game-card-edge: var(--card-border);
   --game-card-now: var(--now);
   --game-card-won: var(--highlight);
-  --game-card-team-font: inherit;
   --game-row-height: 82.5px;
   --strip-month: var(--highlight);
   --strip-today: var(--highlight);
@@ -233,6 +248,7 @@
   --edge: var(--card-border);
   --action: var(--highlight);
   --text: "Libre Franklin", system-ui, sans-serif;
+  --team-name: var(--text);
   --numbers: "Chivo Mono", "JetBrains Mono", monospace;
   --search-face: "Libre Franklin Search", system-ui, sans-serif;
   --search-words-lift: 0px;
@@ -937,6 +953,7 @@ table.st .seed-cell {
   flex: none;
 }
 .team-id .rank-slot {
+  translate: 0 var(--team-rank-offset);
   margin-right: 0;
 }
 
@@ -1153,7 +1170,6 @@ table.st .seed-cell {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-/* Only the name aligns to the baseline, so the piece sits in running text like a word. */
 .club {
   display: inline-flex;
   align-items: center;
@@ -1161,14 +1177,6 @@ table.st .seed-cell {
   min-width: 0;
   max-width: 100%;
   vertical-align: baseline;
-}
-.club > .team-name {
-  align-self: baseline;
-}
-.matchup-row .team-name,
-table.st td.team .team-name {
-  font-size: var(--type-team-size);
-  font-weight: var(--type-team-weight);
 }
 .tbd {
   color: var(--ink-dim);
@@ -1335,9 +1343,16 @@ body.kbd .rank-item .grip:focus {
 .rank-id .club {
   grid-area: club;
 }
+.rank-id,
+.rank-id .club,
+.pitcher-id .club {
+  --team-dot-size: var(--team-small-dot-size);
+  --team-dot-before: var(--team-small-dot-before);
+  --team-dot-after: var(--team-small-dot-after);
+  font-size: var(--type-team-small-size);
+  font-weight: var(--type-team-small-weight);
+}
 .rank-id .team-name {
-  font-size: var(--type-detail-size);
-  font-weight: var(--type-detail-weight);
   line-height: 16px;
 }
 .rank-item .league-tag {
@@ -1367,8 +1382,6 @@ body.kbd .rank-item .grip:focus {
     row-gap: 2px;
   }
   .rank-id .team-name {
-    font-size: var(--type-caption-size);
-    font-weight: var(--type-caption-weight);
     line-height: 15px;
   }
   .rank-ws {
@@ -1385,12 +1398,11 @@ body.kbd .rank-item .grip:focus {
   .rank-ws {
     display: none;
   }
+  .rank-item .league-tag {
+    translate: 0 calc(var(--team-lower-center) + var(--team-league-offset));
+  }
   .rank-drought {
     display: inline;
-  }
-  .rank-id .team-name {
-    font-size: var(--type-caption-size);
-    font-weight: var(--type-caption-weight);
   }
 }
 
@@ -1701,17 +1713,13 @@ table.st.line-score td.team .club {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   column-gap: 8px;
-  align-items: baseline;
+  align-items: center;
   margin: 0;
   font-size: var(--type-label-size);
   font-weight: var(--type-label-weight);
   letter-spacing: var(--type-label-tracking);
   text-transform: uppercase;
   color: var(--ink-dim);
-}
-.runs-half-head .dot {
-  position: relative;
-  top: 1px;
 }
 .runs-changes {
   display: grid;
@@ -2110,14 +2118,8 @@ table.st.line-score td.team .club {
   line-height: calc(1.1 * var(--leading));
 }
 .pitcher-id .club {
-  font-size: var(--type-caption-size);
-  font-weight: var(--type-caption-weight);
   color: var(--ink-dim);
   gap: 6px;
-}
-.pitcher-id .dot {
-  width: 10px;
-  height: 10px;
 }
 .pitcher-id.home .club {
   flex-direction: row-reverse;
@@ -2728,10 +2730,6 @@ nav.tabs .search-tab,
    its text, so three fit on a small phone. */
 .team-sheet-body > .game-cards {
   margin: 8px -13.5px 0;
-}
-.game-card-opponent .dot {
-  width: 9.5px;
-  height: 9.5px;
 }
 .game-card-score {
   font-weight: calc(var(--type-detail-weight) + 150);

@@ -236,7 +236,7 @@ function renderAgainstField(id) {
   const seasons = listRegularSeasons();
   return html`<div class="team-numbers">
     <div class="field-heads">
-      <span class="club">${renderTeamDot(id)}<span>${nameTeam(id)}</span> <span class="team-record tabular">${club.record}</span></span>
+      <span class="club">${renderTeamDot(id)}<span class="team-name">${nameTeam(id)}</span> <span class="team-record tabular">${club.record}</span></span>
       <span class="field-name">Playoff field</span>
     </div>
     ${renderRanks(listFieldRows(MEASURES, club, field, seasons))}${renderFieldLegend(MEASURES, club, field, seasons)}

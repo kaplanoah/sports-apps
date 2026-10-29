@@ -2,7 +2,7 @@ import { test, expect, openApp } from "./harness.mjs";
 import { readTokenColor } from "./theme.mjs";
 import { openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
 import { listChipsOffCenter } from "../../../../tests/browser/chip-centering.mjs";
-import { readCapitals } from "../../../../tests/browser/capitals.mjs";
+import { readTeamLines } from "../../../../tests/browser/team-lines.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
@@ -10,11 +10,6 @@ test.use({ contextOptions: { reducedMotion: "reduce" } });
 const STANDINGS_NAME_GAP_PX = 20;
 // The least room between a standings group's name, like Playoffs, and its columns' names under it.
 const STANDINGS_HEADING_GAP_PX = 6;
-// How far above the middle of a club's name's capitals its dot and conference tag sit, and above the
-// name's baseline a seed note's sits, as this browser draws the spots set by eye on a phone.
-const DOT_LIFT_PX = 0.35;
-const CONFERENCE_TAG_LIFT_PX = 0.45;
-const SEED_NOTE_LIFT_PX = 0.85;
 
 test("the standings leave room between each team's name and the next one's", async ({ page }) => {
   await openApp(page);
@@ -51,38 +46,25 @@ test("the standings leave room between each group's name and its columns' names"
   expect(gap).toBeGreaterThanOrEqual(STANDINGS_HEADING_GAP_PX);
 });
 
-test("a standings club's dot and conference tag each sit just above the middle of its name's capitals", async ({
+test("standings dots use capital centers and conference chips use lowercase centers", async ({
   page,
 }) => {
   await openApp(page);
   await openSeasonPart(page, "Standings");
-  const cell = page
-    .locator("#standings-league .team-cell", { has: page.locator(".conference-tag") })
-    .first();
-  const tag = cell.locator(".conference-tag");
-  await expect(tag).toHaveText(/^[EW]$/);
-  const [name, tagCapitals, dot] = await Promise.all([
-    readCapitals(cell.locator(".team-name")),
-    readCapitals(tag),
-    cell.locator(".dot").boundingBox(),
-  ]);
-  expect(name.middle - tagCapitals.middle).toBeCloseTo(CONFERENCE_TAG_LIFT_PX, 1);
-  expect(name.middle - (dot?.y ?? 0) - (dot?.height ?? 0) / 2).toBeCloseTo(DOT_LIFT_PX, 1);
+  const drawn = await readTeamLines(page, "wnba");
+  expect(drawn.problems).toEqual([]);
+  expect(drawn.attachments).toContain(".conference-tag");
   expect(await listChipsOffCenter(page)).toEqual([]);
 });
 
-test("a conference's standings set each seed note's baseline just above its name's", async ({
+test("standings seed notes use their capital center at the name's lowercase center", async ({
   page,
 }) => {
   await openApp(page);
   await openSeasonPart(page, "Standings");
-  const cell = page.locator("#standings-east .team-cell", { has: page.locator(".seed-note") });
-  await expect(cell.first()).toBeAttached();
-  const [note, name] = await Promise.all([
-    readCapitals(cell.first().locator(".seed-note")),
-    readCapitals(cell.first().locator(".team-name")),
-  ]);
-  expect(name.bottom - note.bottom).toBeCloseTo(SEED_NOTE_LIFT_PX, 1);
+  const drawn = await readTeamLines(page, "wnba");
+  expect(drawn.problems).toEqual([]);
+  expect(drawn.attachments).toContain(".seed-note");
 });
 
 test("the standings' recent form reads a step below the season, in the mid ink", async ({

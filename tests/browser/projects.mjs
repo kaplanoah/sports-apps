@@ -5,6 +5,7 @@ import { listAppsWithBrowserTests } from "../../worker/apps.mjs";
 
 export const WEBKIT_TEST_MATCH = [
   "at-rest.spec.mjs",
+  "team-lines.spec.mjs",
   "notification-layout.spec.mjs",
   "notification-permission.spec.mjs",
 ];

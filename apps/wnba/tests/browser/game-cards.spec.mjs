@@ -132,7 +132,10 @@ for (const [name, viewport] of /** @type {const} */ ([
     expect(shown.isStacked).toBe(false);
     expectEvenCards(shown);
     for (const card of shown.cards) {
-      expect(card.score.top).toBeCloseTo(card.team.top, 0);
+      expect((card.score.top + card.score.bottom) / 2).toBeCloseTo(
+        (card.team.top + card.team.bottom) / 2,
+        1,
+      );
       expect((card.width - card.borders - shown.widest) / 2).toBeCloseTo(8.5, 0);
     }
     const [first, second] = shown.cards;
