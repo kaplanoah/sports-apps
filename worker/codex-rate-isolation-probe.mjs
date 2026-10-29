@@ -1,6 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { readFileSync, readlinkSync, writeFileSync } from "node:fs";
 import net from "node:net";
+import { writeRateProbeResult } from "./codex-rate-probe-output.mjs";
 
 function isDenied(operation) {
   try {
@@ -104,7 +105,7 @@ try {
   else if (process.argv[2] === "sandbox") facts = await readSandboxBoundary(settings);
   else if (process.argv[2] === "baseline") facts = await readBaseline(settings);
   else throw new Error("Unsupported probe.");
-  process.stdout.write(JSON.stringify(facts));
+  writeRateProbeResult(facts);
 } catch {
   process.stderr.write("Isolation probe could not establish its facts.\n");
   process.exitCode = 1;

@@ -15,6 +15,7 @@ import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { randomBytes } from "node:crypto";
 import { verifyWithRateNamespaces, RateNamespaceError } from "./codex-rate-namespaces.mjs";
+import { writeRateProbeResult } from "./codex-rate-probe-output.mjs";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const proofModules = [
@@ -24,6 +25,7 @@ const proofModules = [
   "gateway",
   "isolation-holder",
   "isolation-probe",
+  "probe-output",
 ];
 const privateEnvironment = [
   "OPENAI_API_KEY",
@@ -418,7 +420,7 @@ async function proveRunnerBoundary(settings) {
         createSandboxCommand(fixtures, [
           process.execPath,
           "-e",
-          'process.stdout.write("rate-proof-launcher"); process.exitCode = 19;',
+          'require("node:fs").writeFileSync(1, "rate-proof-launcher"); process.exitCode = 19;',
         ]),
       ),
     );
@@ -566,7 +568,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     else if (command === "install") await installProofCli(process.env);
     else if (command === "cleanup") removeProofInstallation(process.env);
     else if (command === "privileged")
-      process.stdout.write(JSON.stringify(await proveRootBoundary(JSON.parse(process.argv[3]))));
+      writeRateProbeResult(await proveRootBoundary(JSON.parse(process.argv[3])));
     else if (command === "prove") {
       const result = await proveHostedBoundary(process.env);
       writeFileSync(
@@ -585,7 +587,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
         ? error.commandFacts
         : summarizeIsolationCommandFailure(error);
     if (command === "privileged") {
-      process.stdout.write(JSON.stringify({ passed: false, stage, failedFacts, commandFacts }));
+      writeRateProbeResult({ passed: false, stage, failedFacts, commandFacts });
     }
     if (command === "prove")
       writeFileSync(
