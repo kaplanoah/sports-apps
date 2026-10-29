@@ -1,14 +1,12 @@
 import * as WNBASnapshot from "../../page/js/snapshot.js";
-import { readEasternDay } from "#shared/days.js";
 import { createFeedKeeper } from "../../../../shared/worker/feed-keeper.js";
 import { describeError } from "../../../../shared/worker/responses.js";
 import { createReusedLoader } from "../../../../shared/worker/upstream.js";
 import { createGameEnds } from "./game-ends.js";
 import { createEspnGameReader, readEndTime } from "./lead.js";
 import { listUpcomingMeetings } from "./preview.js";
-import { fetchEspnJson, fetchWnbaJson } from "./wnba.js";
+import { fetchEspnDay, fetchEspnJson, fetchWnbaJson, LIVE_CACHE_SECONDS } from "./wnba.js";
 
-const EDGE_CACHE_SECONDS = 5;
 // No longer than the wait between updates in a game's closing stretch, so each one reads the league.
 const SNAPSHOT_REUSE_MS = 5000;
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -40,13 +38,7 @@ const nameAveragesRequest = (season) =>
 // Broadcast listings rarely change between ordinary season polls.
 const NETWORKS_MS = 6 * 60 * 60 * 1000;
 
-const formatEspnDay = (ms) => readEasternDay(ms).date.replaceAll("-", "");
-const formatEspnMonth = (ms) => formatEspnDay(ms).slice(0, 6);
-
-// ESPN's own links are plain http, so they're read over https instead.
-const upgradeLink = (link) => String(link).replace(/^http:/, "https:");
-
-const readEventId = (link) => String(link).match(/\/events\/(\d+)/)?.[1] ?? null;
+const formatEspnMonth = (ms) => WNBASnapshot.formatEspnDay(ms).slice(0, 6);
 
 // The league's feeds, then ESPN's backup, which stands in for the scoreboard.
 const FAILURE_ORDER = [...Object.keys(FEED_DATA), "backup"];
@@ -62,23 +54,22 @@ export const describeFailures = (failures) =>
     .map((name) => `${name}: ${failures[name]}`)
     .join("; ");
 
-// ESPN can answer and still leave the scoreboard's games uncovered, so the status says why: a game
-// it didn't answer for, or, while the scoreboard is down, a listing without one of the league's
-// games while a score is due.
+// ESPN can answer and still leave the scoreboard's games uncovered, so the status says why: a day
+// it didn't answer for, or, while the scoreboard is down and a score is due, days on which it
+// neither lists one of the league's games ahead of its start nor scores one.
 /**
  * Why ESPN's backup, once it answered, fell short, or null when it didn't.
- * @param {{ scoreboard: any, backup: { days: { first: string, last: string }, games: any[], missed: unknown[] } | null }} responses
+ * @param {{ scoreboard: any, backup: { days: string[], answers: any[], missed: { day: string, error: unknown }[] } | null }} responses
  * @param {{ scoreboardCover: string | null, hasScoreDue: boolean }} snapshot
  */
 function describeBackupFailure({ scoreboard, backup }, snapshot) {
   if (!backup) return null;
-  const { days, games, missed } = backup;
-  const total = games.length + missed.length;
-  const listing = `from ${days.first} to ${days.last}`;
+  const { days, answers, missed } = backup;
   if (missed.length)
-    return `ESPN didn't answer for ${missed.length} of the ${total} it listed ${listing}: ${describeError(missed[0])}`;
+    return `ESPN didn't answer for ${missed[0].day}: ${describeError(missed[0].error)}`;
   if (scoreboard || snapshot.scoreboardCover || !snapshot.hasScoreDue) return null;
-  return `ESPN listed none of the league's games ${listing}, of ${total} in all`;
+  const total = answers.flatMap((answer) => answer.events ?? []).length;
+  return `ESPN gave a score for none of the league's games on ${days.join(" or ")}, of ${total} in all`;
 }
 
 const countFinals = (scoreboard) =>
@@ -113,7 +104,7 @@ export function createSnapshotLoader({
    * @param {string} url
    */
   const fetchFeed = (name, url) =>
-    fetchWnbaJson(fetchImpl, url, EDGE_CACHE_SECONDS, (answer) => hasFeedData(name, answer));
+    fetchWnbaJson(fetchImpl, url, LIVE_CACHE_SECONDS, (answer) => hasFeedData(name, answer));
 
   /**
    * @param {keyof typeof SLOW_FEEDS} name
@@ -124,29 +115,19 @@ export function createSnapshotLoader({
     slowFeeds.readFeed(name, url, () => fetchFeed(name, url), options);
 
   /** @param {string} url */
-  const fetchEspn = (url) => fetchEspnJson(fetchImpl, url, EDGE_CACHE_SECONDS);
+  const fetchEspn = (url) => fetchEspnJson(fetchImpl, url, LIVE_CACHE_SECONDS);
 
-  async function fetchBackupGame(eventId) {
-    const competition = await fetchEspn(WNBASnapshot.BACKUP_REQUESTS.competition(eventId));
-    const [status, ...scores] = await Promise.all([
-      fetchEspn(upgradeLink(competition.status.$ref)),
-      ...competition.competitors.map((competitor) => fetchEspn(upgradeLink(competitor.score.$ref))),
-    ]);
-    return { competition, status, scores };
-  }
-
-  // Yesterday's games too, since a late game is still being played after midnight Eastern. A game
-  // ESPN didn't answer for is left out, so it doesn't keep the others from standing in.
+  // Yesterday's games too, since a late game is still being played after midnight Eastern. A day
+  // ESPN didn't answer for is left out, so it doesn't keep the other's games from standing in.
   async function fetchBackup() {
-    const days = { first: formatEspnDay(now() - DAY_MS), last: formatEspnDay(now()) };
-    const listing = await fetchEspn(WNBASnapshot.BACKUP_REQUESTS.events(days.first, days.last));
-    const eventIds = (listing.items ?? []).map((item) => readEventId(item.$ref)).filter(Boolean);
-    const reads = await Promise.allSettled(eventIds.map(fetchBackupGame));
-    return {
-      days,
-      games: reads.flatMap((read) => (read.status === "fulfilled" ? [read.value] : [])),
-      missed: reads.flatMap((read) => (read.status === "rejected" ? [read.reason] : [])),
-    };
+    const days = [now() - DAY_MS, now()].map((ms) => WNBASnapshot.formatEspnDay(ms));
+    const reads = await Promise.allSettled(days.map((day) => fetchEspnDay(fetchImpl, day)));
+    const answers = reads.flatMap((read) => (read.status === "fulfilled" ? [read.value] : []));
+    const missed = reads.flatMap((read, index) =>
+      read.status === "rejected" ? [{ day: days[index], error: read.reason }] : [],
+    );
+    if (!answers.length) throw missed[0].error;
+    return { days, answers, missed };
   }
 
   // A month's answer from after the month ended is final, so it's kept for good. Any other month is
