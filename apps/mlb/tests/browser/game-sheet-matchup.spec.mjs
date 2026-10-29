@@ -91,7 +91,7 @@ test("a starter named after the sheet opened shows on its starters line and in i
   await page.getByRole("button", { name: ASTROS_AT_ATHLETICS }).click();
   const sheet = page.locator("#gameSheet");
   await expect(
-    sheet.getByRole("button", { name: "Pitching matchup: Blubaugh vs TBD" }),
+    sheet.getByRole("button", { name: /^Blubaugh\b.* vs .*TBD\b.*pitching matchup$/ }),
   ).toBeVisible();
 
   const season = await app.readDocument("seasons/2026");
@@ -312,7 +312,7 @@ test("a game later today without a starter says TBD, and opens to who started la
   const sheet = await openTbd(page, { LAA: ANGELS_ROTATION });
   await expect(sheet.locator(".pitcher-last")).toHaveText(["TBD", "TBD"]);
   const angels = sheet.locator(".scout").first();
-  await expect(angels.locator("h3")).toHaveText("AngelsWho's rested");
+  await expect(angels.locator("h3")).toHaveText("Angels, team detailsWho's rested");
   await expect(angels.locator(".scout-note")).toHaveText(
     "No starter named yet. Each recent starter's last start, and the rest he'd have on Sep 24.",
   );
@@ -392,7 +392,7 @@ test("while a club's last starters load, its side holds a list's shape, then fil
   await showSection(sheet, "Matchup");
   const angels = sheet.locator(".scout").first();
 
-  await expect(angels.locator("h3")).toHaveText("AngelsWho's rested");
+  await expect(angels.locator("h3")).toHaveText("Angels, team detailsWho's rested");
   await expect(angels.locator(".rotation li")).toHaveCount(5);
   await expect(angels.locator(".placeholder").first()).toBeVisible();
 

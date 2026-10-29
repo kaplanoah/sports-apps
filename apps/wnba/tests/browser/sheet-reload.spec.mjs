@@ -14,7 +14,7 @@ const SHEET_READS = ["/box-score", "/preview", "/lead", "/roster", "/player", "/
 async function openTeamRoster(page, name) {
   await openSeasonPart(page, "Standings");
   await page
-    .getByRole("button", { name: `Team details: ${name}` })
+    .getByRole("button", { name: new RegExp(`^${name}\\b.*team details$`) })
     .first()
     .click();
   await page.locator("#teamSheet").getByRole("tab", { name: "Roster" }).click();
@@ -47,7 +47,7 @@ const SHEETS = [
     name: "a team's roster sorted by points",
     read: "/roster",
     open: async (/** @type {import("@playwright/test").Page} */ page) => {
-      await openTeamRoster(page, "New York Liberty");
+      await openTeamRoster(page, "Liberty");
       const points = page.locator("#rosterSection").getByRole("columnheader", { name: "Pts" });
       await points.getByRole("button").click();
       await expect(points).toHaveAttribute("aria-sort", "descending");
@@ -58,7 +58,7 @@ const SHEETS = [
     name: "a player's numbers",
     read: "/player",
     open: async (/** @type {import("@playwright/test").Page} */ page) => {
-      await openTeamRoster(page, "New York Liberty");
+      await openTeamRoster(page, "Liberty");
       await page.locator("#rosterSection").getByRole("button", { name: "Breanna Stewart" }).click();
       await expect(page.locator("#playerSheet .player-curve b")).toHaveCount(8);
     },
@@ -68,7 +68,7 @@ const SHEETS = [
     name: "why a player is out",
     read: "/player",
     open: async (/** @type {import("@playwright/test").Page} */ page) => {
-      await openTeamRoster(page, "New York Liberty");
+      await openTeamRoster(page, "Liberty");
       await page
         .locator("#rosterSection")
         .getByRole("button", { name: "Elizabeth Balogun" })

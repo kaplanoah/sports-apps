@@ -3,7 +3,15 @@
 // travels to a day, and when it follows its start day. Runs in the page and in Node, so it uses no
 // DOM.
 
-import { addDays, readDayOfMonth } from "./days.js";
+import {
+  addDays,
+  formatMonth,
+  formatShortMonth,
+  formatShortWeekday,
+  formatWeekday,
+  readCalendarDate,
+  readDayOfMonth,
+} from "./days.js";
 
 /** @typedef {import("./day-strip.js").ListedDay} ListedDay */
 /** @typedef {import("./html.js").Markup} Markup */
@@ -36,6 +44,31 @@ export function listStripDays(days) {
 export function chooseCellLabel(day, today) {
   if (day === today) return "today";
   return readDayOfMonth(day) === 1 ? "month" : "weekday";
+}
+
+/**
+ * The word over a day's number in the strip, as its rule chooses it.
+ * @param {string} day
+ * @param {string} today
+ */
+export function readCellWord(day, today) {
+  const label = chooseCellLabel(day, today);
+  if (label === "today") return "Today";
+  const date = readCalendarDate(day);
+  return label === "month" ? formatShortMonth(date) : formatShortWeekday(date);
+}
+
+/**
+ * The words a day's cell leaves out, for a voice to say after what a finger sees, so "Sat 12"
+ * reads "Sat 12, September" and "Oct 1" reads "Oct 1, Thursday".
+ * @param {string} day
+ * @param {string} today
+ */
+export function readUnshownCellWords(day, today) {
+  const date = readCalendarDate(day);
+  const label = chooseCellLabel(day, today);
+  if (label === "today") return `${formatWeekday(date)}, ${formatMonth(date)}`;
+  return label === "month" ? formatWeekday(date) : formatMonth(date);
 }
 
 /**

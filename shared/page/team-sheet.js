@@ -131,12 +131,12 @@ export function startTeamSheet(teams) {
 }
 
 /**
- * A button around what shows a team, that opens its sheet.
- * @param {{ team: string, name: string, content: Markup | string, className?: string }} button
- *   `name` is the team's full name, for the button's label
+ * A button around what shows a team, that opens its sheet, named by what it shows and then what it
+ * opens, as "Liberty, team details".
+ * @param {{ team: string, content: Markup | string, className?: string }} button
  */
-export const renderTeamSheetButton = ({ team, name, content, className = "" }) =>
-  html`<button type="button" class="${className ? `${className} ` : ""}team-open" data-team="${team}" aria-label="Team details: ${name}">${content}</button>`;
+export const renderTeamSheetButton = ({ team, content, className = "" }) =>
+  html`<button type="button" class="${className ? `${className} ` : ""}team-open" data-team="${team}">${content}<span class="spoken-only">, team details</span></button>`;
 
 /**
  * A grid of numbers, each under its label, leaving out those it has none for, or nothing when it

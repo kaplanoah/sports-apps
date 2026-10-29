@@ -4,7 +4,7 @@ import { expect, openApp, MATCHUP_STARTERS, buildSnapshotWithStarters } from "./
 export const NEXT_DAY_GAMES = "#seasonGames .listed-day:has(.is-today) + .listed-day .game-open";
 
 export const ASTROS_AT_ATHLETICS = "Game details: Astros at Athletics, Thu, Sep 24";
-export const BLUBAUGH_VS_SPRINGS = "Pitching matchup: Blubaugh vs Springs";
+export const BLUBAUGH_VS_SPRINGS = /^Blubaugh\b.* vs .*Springs\b.*pitching matchup$/;
 
 /**
  * @param {import("@playwright/test").Page} page

@@ -12,7 +12,6 @@ import { html } from "./html.js";
 /**
  * @typedef {object} GameCard
  * @property {string} id the game's, which its sheet opens by
- * @property {string} label what the card's button says it opens, as "Sky at Storm, Aug 19"
  * @property {"final" | "live" | "pre"} state
  * @property {Date | null} day its day
  * @property {string} clock how far along it is, while it's on
@@ -73,7 +72,6 @@ const renderCard = (card, now) =>
       type="button"
       class="game-card-button press-tint"
       data-game="${card.id}"
-      aria-label="Game details: ${card.label}"
     >
       <span class="game-card-when">${renderWhen(card, now)}</span>
       <span class="game-card-line">
@@ -85,6 +83,7 @@ const renderCard = (card, now) =>
           ></span
         >
       </span>
+      <span class="spoken-only">, game details</span>
     </button>
   </div>`;
 

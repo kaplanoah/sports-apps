@@ -239,10 +239,6 @@ export const formatShortMonth = (date) => date.toLocaleDateString([], { month: "
 export const formatMonth = (date) => date.toLocaleDateString([], { month: "long" });
 
 /** @param {Date} date */
-export const formatLongDate = (date) =>
-  date.toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" });
-
-/** @param {Date} date */
 export const formatWeekday = (date) => date.toLocaleDateString([], { weekday: "long" });
 
 /** @param {Date} date */
