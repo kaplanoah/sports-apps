@@ -28,6 +28,7 @@ paths:
     - The store keeps the averages apart from the season, worked out once for the Roster, the leaders, and her sheet.
   - Each player's sheet (`worker/src/player.js`, `page/js/player-sheet.js`, and `player-view.js`):
     - A tap on her name in a roster, a box score, or a list of leaders opens it over the sheet it's in.
+    - A player ESPN's box score names whom the season's list of players doesn't has no sheet to open, so her name isn't a button.
     - It shows her facts from that roster.
     - Then, while she is out, it shows a box saying why (see Injuries below).
     - It shows her last game and her points in each playoff game, from every player's game logs.
@@ -48,6 +49,7 @@ paths:
   - Scores show in scoreboard digits (`page/js/scoreboard.js`).
   - The game sheet:
     - The Worker serves each game's box score and preview for the game sheet (`worker/src/box-score.js` and `preview.js`).
+    - While the league refuses a game's box score, the Worker reads it from ESPN's game summary, giving each player the league's id from the season's list of players (`worker/src/espn-box-score.js`). The store keeps reading a final kept from ESPN's until the league's answers.
     - The store reads a live game's box score and lead with each update while a page has its sheet open, and pushes them to that page (`worker/src/watched-games.js`).
     - The store keeps each finished game's box score and lead for good, read as it ends and once more after the league and ESPN catch up, and a few at a time back through each season it keeps (`worker/src/game-details-updater.js`).
     - The store keeps each upcoming game's meetings from the schedule each update reads, so the sheet's routes read the league only for what the store doesn't keep (the shared `store-reads.js`).

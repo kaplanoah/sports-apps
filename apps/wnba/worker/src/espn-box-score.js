@@ -166,6 +166,7 @@ export function describeEspnBoxScore(summary, id, index) {
   const leadChanges = readStat(summary.boxscore.teams?.[0]?.statistics ?? [], "leadChanges");
   return {
     id,
+    source: "espn",
     state,
     period: Math.max(away.periods.length, home.periods.length) || null,
     leadChanges: leadChanges === undefined ? null : Number(leadChanges),

@@ -165,8 +165,16 @@ export function createBoxScoreServer({ fetchImpl = (input, init) => fetch(input,
       return respondJson(await loadBoxScore(game, readDoc));
     } catch (error) {
       if (NOT_YET_STATUSES.includes(/** @type {{ status?: number }} */ (error).status))
-        return respondError(404, "not_found", "The WNBA has no box score for that game yet");
-      return respondError(502, "upstream_error", `Couldn't read the WNBA: ${describeError(error)}`);
+        return respondError(
+          404,
+          "not_found",
+          "Neither the WNBA nor ESPN has a box score for that game yet",
+        );
+      return respondError(
+        502,
+        "upstream_error",
+        `Couldn't read the WNBA or ESPN: ${describeError(error)}`,
+      );
     }
   }
 

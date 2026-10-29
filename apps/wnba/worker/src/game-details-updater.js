@@ -46,13 +46,14 @@ async function listFinals(context, year) {
 const readAnswer = (result) => (result.status === "fulfilled" ? result.value : null);
 
 /**
- * Whether the league or ESPN answered with a final box score, and ESPN with a lead that's over, or
- * that it has no such game.
+ * Whether the league answered with a final box score, and ESPN with a lead that's over, or that it
+ * has no such game. ESPN's box score stands in only until the league's answers, so it isn't whole.
  * @param {PromiseSettledResult<any>} boxScore
  * @param {PromiseSettledResult<any>} lead
  */
 const isWhole = (boxScore, lead) =>
   readAnswer(boxScore)?.state === "final" &&
+  readAnswer(boxScore).source !== "espn" &&
   lead.status === "fulfilled" &&
   (lead.value?.isOver ?? true);
 

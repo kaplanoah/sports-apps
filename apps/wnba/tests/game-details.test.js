@@ -256,7 +256,7 @@ test("a game without a box score yet is a 404, and a league that fails without E
   );
   assert.match(
     await assertErrorAnswer(notStarted, 404, "not_found"),
-    /no box score for that game yet/,
+    /^Neither the WNBA nor ESPN has a box score for that game yet$/,
   );
 
   const url = nameBoxScoreRequest(ACES_AT_FEVER);
@@ -268,7 +268,7 @@ test("a game without a box score yet is a 404, and a league that fails without E
     );
     assert.match(
       await assertErrorAnswer(response, 502, "upstream_error"),
-      /^Couldn't read the WNBA: /,
+      /^Couldn't read the WNBA or ESPN: /,
     );
   }
 });

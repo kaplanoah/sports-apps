@@ -25,7 +25,7 @@ import { formatPercentage } from "./team-view.js";
 /** @typedef {{ id: number | null, firstName: string, lastName: string, minutes: number, points: number, rebounds: number, assists: number, fouls: number }} BoxPlayer */
 /** @typedef {{ fieldGoals: number[], threePointers: number[], freeThrows: number[], rebounds: number, assists: number, turnovers: number, paintPoints: number, benchPoints: number, biggestLead: number }} TeamStats */
 /** @typedef {{ team: string, score: number, periods: number[], timeouts: number | null, stats: TeamStats, players: BoxPlayer[] }} BoxTeam */
-/** @typedef {{ id: string, state: string, period: number | null, leadChanges: number | null, timesTied: number | null, away: BoxTeam, home: BoxTeam }} BoxScore */
+/** @typedef {{ id: string, source?: "espn", state: string, period: number | null, leadChanges: number | null, timesTied: number | null, away: BoxTeam, home: BoxTeam }} BoxScore */
 
 /** @type {("away" | "home")[]} */
 const SIDES = ["away", "home"];

@@ -622,9 +622,7 @@ export function createSeasonStore(league) {
       const key = `${league.detailsCollection}/${id}`;
       try {
         const stored = await this.docs.read(key);
-        const details = await this.loadDetails(id, snapshot, stored, (path) =>
-          this.docs.read(path),
-        );
+        const details = await this.loadDetails(id, snapshot, stored, this.docs.read);
         if (details && !isSameJson(stored, details)) await this.putDoc(key, details);
       } catch (error) {
         console.error(`Reading ${key} failed: ${describeError(error)}`);

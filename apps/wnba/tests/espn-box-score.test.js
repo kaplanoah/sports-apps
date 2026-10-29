@@ -17,11 +17,11 @@ const ESPN = loadFixture("2026-10-29-espn-box-scores");
 const INDEX = readPlayerIndex();
 
 /**
- * A box score without what ESPN can't give as the league does: timeouts left, and minutes, which
- * ESPN rounds where the league cuts them off.
+ * A box score without where it came from or what ESPN can't give as the league does: timeouts
+ * left, and minutes, which ESPN rounds where the league cuts them off.
  * @param {any} box
  */
-function describeComparable(box) {
+function describeComparable({ source, ...box }) {
   const describeSide = ({ timeouts, players, ...team }) => ({
     ...team,
     players: players
@@ -44,6 +44,7 @@ test("ESPN's box score of a game reads as the league's, but for timeouts left an
     const espn = describeEspnBoxScore(summary, id, INDEX);
 
     assert.deepEqual(describeComparable(espn), describeComparable(league), id);
+    assert.equal(espn.source, "espn");
     assert.deepEqual([espn.away.timeouts, espn.home.timeouts], [null, null]);
     const leagueMinutes = mapMinutes(league);
     for (const [playerId, minutes] of mapMinutes(espn))

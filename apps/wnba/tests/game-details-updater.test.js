@@ -343,7 +343,7 @@ test("a box score the league answers is kept while ESPN doesn't answer", async (
   assert.equal(saved.lead, null);
 });
 
-test("a final's box score is kept from ESPN's while the league refuses it, with the league's ids, read with its lead from one summary", async () => {
+test("a final's box score is kept from ESPN's while the league refuses it, with the league's ids, read with its lead from one summary, until the league's replaces it", async () => {
   const { eventId, scoreboard, summary } = ESPN.games[ACES_AT_FEVER.id];
   /** @type {Record<string, any>} */
   const answers = {
@@ -372,6 +372,13 @@ test("a final's box score is kept from ESPN's while the league refuses it, with 
     ["final", fromLeague.home.score, listIds(fromLeague)],
   );
   assert.equal(saved.lead.isOver, true);
+
+  answers[nameBoxScoreRequest(ACES_AT_FEVER.id)] = GAMES.boxScores[ACES_AT_FEVER.id];
+  wait(10);
+  await runJob();
+  assert.ok(takeRequests().includes(nameBoxScoreRequest(ACES_AT_FEVER.id)));
+  assert.deepEqual((await docs.read(`games/${ACES_AT_FEVER.id}`)).boxScore, fromLeague);
+
   wait(10);
   await runJob();
   assert.deepEqual(takeRequests(), []);
