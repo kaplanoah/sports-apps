@@ -14,27 +14,30 @@ for (const width of [390, 1280]) {
     }, testInfo) => {
       test.slow();
       await page.setViewportSize({ width, height: 900 });
-      await openWithEverything(page);
-      await page.emulateMedia({ colorScheme });
-      await expect(page.locator("html")).toHaveAttribute("data-theme", colorScheme);
       const roles = new Set();
       const placements = new Set();
       const states = new Set();
       const attachments = new Set();
       const names = new Set();
-      await checkEachView(page, Object.values(VIEW_GROUPS).flat(), async (view) => {
-        const drawn = await readTeamLines(page, "wnba");
-        expect(drawn.problems, view.name).toEqual([]);
-        for (const role of drawn.roles) roles.add(role);
-        for (const placement of drawn.placements) placements.add(placement);
-        for (const state of drawn.states) states.add(state);
-        for (const attachment of drawn.attachments) attachments.add(attachment);
-        for (const name of drawn.names) names.add(name);
-        if (process.env.ALIGNMENT_SCREENSHOTS)
-          await page.screenshot({
-            path: testInfo.outputPath(`${view.name.replaceAll(/[^a-z0-9]/gi, "-")}.png`),
-          });
-      });
+      // Each existing group starts from its own page, as the theme walks do.
+      for (const views of Object.values(VIEW_GROUPS)) {
+        await openWithEverything(page);
+        await page.emulateMedia({ colorScheme });
+        await expect(page.locator("html")).toHaveAttribute("data-theme", colorScheme);
+        await checkEachView(page, views, async (view) => {
+          const drawn = await readTeamLines(page, "wnba");
+          expect(drawn.problems, view.name).toEqual([]);
+          for (const role of drawn.roles) roles.add(role);
+          for (const placement of drawn.placements) placements.add(placement);
+          for (const state of drawn.states) states.add(state);
+          for (const attachment of drawn.attachments) attachments.add(attachment);
+          for (const name of drawn.names) names.add(name);
+          if (process.env.ALIGNMENT_SCREENSHOTS)
+            await page.screenshot({
+              path: testInfo.outputPath(`${view.name.replaceAll(/[^a-z0-9]/gi, "-")}.png`),
+            });
+        });
+      }
       expect([...roles].sort()).toEqual(["label", "large", "small", "team"]);
       expect(placements).toContain("team after");
       expect(states).toContain("winner");
