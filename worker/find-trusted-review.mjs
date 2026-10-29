@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { createGitHub, GitHubError, readAllPages } from "./github-api.mjs";
 import { readReviewIdentity, validateReviewArtifact } from "./review-data.mjs";
 import { readJson } from "./judge-review.mjs";
-import { runReviewGit } from "./review-repository.mjs";
+import { fetchReviewHistory, isReviewAncestor, runReviewGit } from "./review-repository.mjs";
 import { isGitObjectId } from "./git-object.mjs";
 import { waitFor } from "./check-timing.mjs";
 import { readReviewProvider } from "./review-provider.mjs";
@@ -268,9 +268,32 @@ function readTestedBase(env) {
   return base;
 }
 
+/**
+ * A review of this head on an earlier base still covers the merge CI tested when main only moved
+ * forward and merging the head onto it now gives exactly CI's tree, since a review asked for again
+ * would find nothing new to read.
+ * @param {string} reviewedBase @param {NodeJS.ProcessEnv} env
+ */
+function readCarriedTree(reviewedBase, env) {
+  const options = { environment: env };
+  fetchReviewHistory(env.GITHUB_WORKSPACE, env.REVIEW_BASE, options);
+  const tested = runReviewGit(env.GITHUB_WORKSPACE, ["rev-parse", "HEAD^{tree}"], options);
+  if (
+    !isReviewAncestor(env.GITHUB_WORKSPACE, reviewedBase, env.REVIEW_BASE, options) ||
+    runReviewGit(
+      env.GITHUB_WORKSPACE,
+      ["merge-tree", "--write-tree", env.REVIEW_BASE, env.REVIEW_HEAD],
+      options,
+    ) !== tested
+  )
+    throw new Error("The reviewed merge does not carry over to this base.");
+  return tested;
+}
+
 /** @param {string} folder @param {NodeJS.ProcessEnv} env */
 function verifyReviewedMerge(folder, env) {
-  const result = verifyTrustedReviewResult(folder, env);
+  const reviewedBase = readJson(join(folder, "result.json"))?.identity?.base;
+  const result = verifyTrustedReviewResult(folder, { ...env, REVIEW_BASE: reviewedBase });
   const options = { environment: env };
   runReviewGit(env.GITHUB_WORKSPACE, ["fetch", "--no-tags", "origin", result.merge], options);
   const parents = runReviewGit(
@@ -279,9 +302,9 @@ function verifyReviewedMerge(folder, env) {
     options,
   );
   const tree = runReviewGit(env.GITHUB_WORKSPACE, ["rev-parse", `${result.merge}^{tree}`], options);
-  if (parents !== `${env.REVIEW_BASE} ${env.REVIEW_HEAD}` || tree !== result.tree)
+  if (parents !== `${reviewedBase} ${env.REVIEW_HEAD}` || tree !== result.tree)
     throw new Error("The reviewed merge does not match its head, base and tree.");
-  return tree;
+  return reviewedBase === env.REVIEW_BASE ? tree : readCarriedTree(reviewedBase, env);
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

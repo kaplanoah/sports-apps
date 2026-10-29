@@ -668,7 +668,7 @@ function createMergeFixture() {
     () => readGit(checkout, ["cat-file", "-e", merge]),
     "resolved merge must be fetched",
   );
-  return { base, tip, head, merge, stale, tree, tested, checkout };
+  return { origin, base, tip, head, merge, stale, tree, tested, checkout };
 }
 
 /** @param {any} fixture @param {Record<string, string>} [changes] @param {string[]} [args] */
@@ -844,7 +844,7 @@ test("real verify CLI accepts the merge CI tested, though the event's base lags,
     sealIdentity(changes);
     const rejected = invokeJoin(fixture, {}, ["verify", folder]);
     assert.notEqual(rejected.status, 0);
-    assert.match(rejected.stderr, /stale or foreign artifact/);
+    assert.match(rejected.stderr, /reviewed merge does not match/);
     assert.equal(rejected.output, "");
   }
   for (const changed of [
@@ -877,6 +877,96 @@ test("real verify CLI accepts the merge CI tested, though the event's base lags,
   assert.notEqual(foreign.status, 0);
   assert.match(foreign.stderr, /not this pull request's merge/);
   assert.equal(foreign.output, "");
+});
+
+/**
+ * Seals a passing result for a merge of the head onto an earlier base, as a review before main
+ * moved left it.
+ * @param {any} fixture @param {string} folder @param {string} base @param {string} merge
+ */
+function sealEarlierReview(fixture, folder, base, merge) {
+  const identity = readReviewIdentity({
+    ...ID_ENV,
+    REVIEW_HEAD: fixture.head,
+    REVIEW_BASE: base,
+    REVIEW_MERGE: merge,
+    REVIEW_TRUSTED: fixture.source,
+  });
+  const tree = readGit(fixture.origin, ["rev-parse", `${merge}^{tree}`]);
+  sealResult(folder, { identity, tree, passed: true }, identity);
+  return tree;
+}
+
+/** @param {any} fixture @param {string} commit */
+function checkOutTested(fixture, commit) {
+  readGit(fixture.checkout, ["fetch", "--depth=2", "origin", commit]);
+  readGit(fixture.checkout, ["checkout", "--detach", commit]);
+}
+
+/** @param {any} fixture @param {string} name @param {string[]} args */
+function writeOriginCommit(fixture, name, args) {
+  const commit = readGit(fixture.origin, ["commit-tree", ...args, "-m", name]);
+  readGit(fixture.origin, ["update-ref", `refs/heads/${name}`, commit]);
+  return commit;
+}
+
+test("real verify CLI carries a review over a main that only moved forward to CI's own merge", () => {
+  const fixture = { ...createMergeFixture(), source: TREE };
+  const folder = createFolder();
+  const reviewedTree = sealEarlierReview(fixture, folder, fixture.base, fixture.stale);
+  assert.notEqual(reviewedTree, fixture.tree);
+  const carried = invokeJoin(fixture, { REVIEW_TREE: reviewedTree }, ["verify", folder]);
+  assert.equal(carried.status, 0, carried.stderr);
+  assert.equal(carried.output, `tree=${fixture.tree}\n`, "the join names the tree CI tested");
+  assert.equal(readGit(fixture.checkout, ["rev-parse", "HEAD"]), fixture.tested);
+});
+
+test("real verify CLI carries no review over a changed head, a differing merge or a moved-off base", () => {
+  const fixture = { ...createMergeFixture(), source: TREE };
+  const folder = createFolder();
+  const pushed = writeOriginCommit(fixture, "pushed", [fixture.tree, "-p", fixture.head]);
+  checkOutTested(
+    fixture,
+    writeOriginCommit(fixture, "pushed-tested", [fixture.tree, "-p", fixture.tip, "-p", pushed]),
+  );
+  const reviewedTree = sealEarlierReview(fixture, folder, fixture.base, fixture.stale);
+  const changedHead = invokeJoin(fixture, { REVIEW_HEAD: pushed, REVIEW_TREE: reviewedTree }, [
+    "verify",
+    folder,
+  ]);
+  assert.notEqual(changedHead.status, 0);
+  assert.match(changedHead.stderr, /stale or foreign artifact/);
+  assert.equal(changedHead.output, "");
+
+  checkOutTested(
+    fixture,
+    writeOriginCommit(fixture, "other-merge", [
+      `${fixture.head}^{tree}`,
+      "-p",
+      fixture.tip,
+      "-p",
+      fixture.head,
+    ]),
+  );
+  const otherMerge = invokeJoin(fixture, { REVIEW_TREE: reviewedTree }, ["verify", folder]);
+  assert.notEqual(otherMerge.status, 0);
+  assert.match(otherMerge.stderr, /does not carry over/);
+  assert.equal(otherMerge.output, "");
+
+  checkOutTested(fixture, fixture.tested);
+  const side = writeOriginCommit(fixture, "side", [`${fixture.base}^{tree}`, "-p", fixture.base]);
+  const sideMerge = writeOriginCommit(fixture, "side-merge", [
+    `${fixture.head}^{tree}`,
+    "-p",
+    side,
+    "-p",
+    fixture.head,
+  ]);
+  const sideTree = sealEarlierReview(fixture, folder, side, sideMerge);
+  const movedOff = invokeJoin(fixture, { REVIEW_TREE: sideTree }, ["verify", folder]);
+  assert.notEqual(movedOff.status, 0);
+  assert.match(movedOff.stderr, /does not carry over/);
+  assert.equal(movedOff.output, "");
 });
 
 test("native title rendering preserves supplied PR and commit identities", () => {

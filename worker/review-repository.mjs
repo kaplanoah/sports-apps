@@ -52,3 +52,31 @@ export function runReviewGit(cwd, args, options = {}) {
     maxBuffer: options.maxBuffer ?? 1024 * 1024,
   }).trim();
 }
+
+/**
+ * Fetches a revision with all of its history, which a shallow checkout lacks for ancestry and
+ * merge bases.
+ * @param {string} cwd @param {string} revision @param {ReviewGitOptions} [options]
+ */
+export function fetchReviewHistory(cwd, revision, options = {}) {
+  const shallow = runReviewGit(cwd, ["rev-parse", "--is-shallow-repository"], options);
+  runReviewGit(
+    cwd,
+    ["fetch", "--no-tags", ...(shallow === "true" ? ["--unshallow"] : []), "origin", revision],
+    options,
+  );
+}
+
+/**
+ * @param {string} cwd @param {string} ancestor @param {string} descendant
+ * @param {ReviewGitOptions} [options]
+ */
+export function isReviewAncestor(cwd, ancestor, descendant, options = {}) {
+  try {
+    runReviewGit(cwd, ["merge-base", "--is-ancestor", ancestor, descendant], options);
+    return true;
+  } catch (error) {
+    if (/** @type {{ status?: number }} */ (error).status === 1) return false;
+    throw error;
+  }
+}
