@@ -8,7 +8,7 @@ const PUSH = { ...OWNER_PULL, ACTION: "synchronize" };
 const OBSERVED_LABELS = ["beta", "beta-wait", "phone-ok"];
 
 /** @param {Record<string,string>} event */
-const label = (event) => ({ ...OWNER_PULL, ACTION: "labeled", ...event });
+const createLabelEvent = (event) => ({ ...OWNER_PULL, ACTION: "labeled", ...event });
 
 /**
  * GitHub's rule: each group has at most one running run and one waiting run. A run that stops
@@ -43,8 +43,8 @@ const countLiveReviews = (runs) =>
 test("a review asked for in the same write as another label still runs, in either order", () => {
   for (const name of OBSERVED_LABELS)
     for (const action of ["labeled", "unlabeled"]) {
-      const review = label({ LABEL: "review" });
-      const other = label({ ACTION: action, LABEL: name });
+      const review = createLabelEvent({ LABEL: "review" });
+      const other = createLabelEvent({ ACTION: action, LABEL: name });
       for (const events of [
         [PUSH, review, other],
         [PUSH, other, review],
@@ -54,8 +54,8 @@ test("a review asked for in the same write as another label still runs, in eithe
 });
 
 test("a push or the owner's provider choice still stops a review running or waiting", () => {
-  const review = label({ LABEL: "review" });
-  const provider = label({ LABEL: "review-provider:codex" });
+  const review = createLabelEvent({ LABEL: "review" });
+  const provider = createLabelEvent({ LABEL: "review-provider:codex" });
   assert.equal(countLiveReviews(deliverReviewEvents([PUSH, review, PUSH])), 0);
   assert.equal(countLiveReviews(deliverReviewEvents([review, PUSH])), 0);
   const runs = deliverReviewEvents([PUSH, review, provider]);
@@ -65,8 +65,9 @@ test("a push or the owner's provider choice still stops a review running or wait
   );
 });
 
-test("a label event waits with the reviews exactly when it asks for one", () => {
-  const reviewGroup = readReviewConcurrency(PUSH).group;
+/** Every label event a pull request can get: each label, sender, author and draft state. */
+function listLabelEvents() {
+  const events = [];
   for (const action of ["labeled", "unlabeled"])
     for (const name of [
       "review",
@@ -75,14 +76,28 @@ test("a label event waits with the reviews exactly when it asks for one", () => 
       ...OBSERVED_LABELS,
     ])
       for (const sender of ["example", "someone"])
-        for (const draft of ["true", "false"]) {
-          const event = label({ ACTION: action, LABEL: name, SENDER: sender, IS_DRAFT: draft });
-          assert.equal(
-            readReviewConcurrency(event).group === reviewGroup,
-            readNativeReviewName(event).endsWith(" intent review"),
-            JSON.stringify(event),
-          );
-        }
+        for (const author of ["example", "dependabot[bot]"])
+          for (const draft of ["true", "false"])
+            events.push(
+              createLabelEvent({
+                ACTION: action,
+                LABEL: name,
+                SENDER: sender,
+                AUTHOR: author,
+                IS_DRAFT: draft,
+              }),
+            );
+  return events;
+}
+
+test("a label event waits with the reviews, and stops the running one, only when it asks for one", () => {
+  const reviewGroup = readReviewConcurrency(PUSH).group;
+  for (const event of listLabelEvents()) {
+    const asksForReview = readNativeReviewName(event).endsWith(" intent review");
+    const { group, cancelsRunning } = readReviewConcurrency(event);
+    assert.equal(group === reviewGroup, asksForReview, JSON.stringify(event));
+    assert.equal(cancelsRunning, asksForReview && event.LABEL !== "review", JSON.stringify(event));
+  }
 });
 
 test("runs in either group take turns writing the provider comment", () => {
