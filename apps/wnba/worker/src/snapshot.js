@@ -1,12 +1,11 @@
 import * as WNBASnapshot from "../../page/js/snapshot.js";
-import { readEasternDay } from "#shared/days.js";
 import { createFeedKeeper } from "../../../../shared/worker/feed-keeper.js";
 import { describeError } from "../../../../shared/worker/responses.js";
 import { createReusedLoader } from "../../../../shared/worker/upstream.js";
 import { createGameEnds } from "./game-ends.js";
 import { createEspnGameReader, readEndTime } from "./lead.js";
 import { listUpcomingMeetings } from "./preview.js";
-import { fetchEspnJson, fetchWnbaJson } from "./wnba.js";
+import { fetchEspnDay, fetchEspnJson, fetchWnbaJson } from "./wnba.js";
 
 const EDGE_CACHE_SECONDS = 5;
 // No longer than the wait between updates in a game's closing stretch, so each one reads the league.
@@ -40,8 +39,7 @@ const nameAveragesRequest = (season) =>
 // Broadcast listings rarely change between ordinary season polls.
 const NETWORKS_MS = 6 * 60 * 60 * 1000;
 
-const formatEspnDay = (ms) => readEasternDay(ms).date.replaceAll("-", "");
-const formatEspnMonth = (ms) => formatEspnDay(ms).slice(0, 6);
+const formatEspnMonth = (ms) => WNBASnapshot.formatEspnDay(ms).slice(0, 6);
 
 // The league's feeds, then ESPN's backup, which stands in for the scoreboard.
 const FAILURE_ORDER = [...Object.keys(FEED_DATA), "backup"];
@@ -123,10 +121,8 @@ export function createSnapshotLoader({
   // Yesterday's games too, since a late game is still being played after midnight Eastern. A day
   // ESPN didn't answer for is left out, so it doesn't keep the other's games from standing in.
   async function fetchBackup() {
-    const days = [formatEspnDay(now() - DAY_MS), formatEspnDay(now())];
-    const reads = await Promise.allSettled(
-      days.map((day) => fetchEspn(WNBASnapshot.BACKUP_REQUEST(day))),
-    );
+    const days = [now() - DAY_MS, now()].map((ms) => WNBASnapshot.formatEspnDay(ms));
+    const reads = await Promise.allSettled(days.map((day) => fetchEspnDay(fetchImpl, day)));
     const answers = reads.flatMap((read) => (read.status === "fulfilled" ? [read.value] : []));
     const missed = reads.flatMap((read, index) =>
       read.status === "rejected" ? [{ day: days[index], error: read.reason }] : [],

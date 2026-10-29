@@ -1,9 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { BACKUP_REQUEST, NETWORKS_REQUEST, REQUESTS } from "../page/js/snapshot.js";
-import { TEAMS } from "../page/js/teams.js";
-import { nameScoreboardRequest, nameSummaryRequest } from "../worker/src/lead.js";
+import { ESPN_DAY_REQUEST, NETWORKS_REQUEST, REQUESTS } from "../page/js/snapshot.js";
+import { findTeamCodeByEspnId, TEAMS } from "../page/js/teams.js";
+import {
+  createEspnGameReader,
+  nameScoreboardRequest,
+  nameSummaryRequest,
+} from "../worker/src/lead.js";
 import { describePreview } from "../worker/src/preview.js";
 import { describeSnapshotStatus } from "../worker/src/season-updater.js";
 import { createSnapshotLoader, describeFailures } from "../worker/src/snapshot.js";
@@ -37,20 +41,20 @@ const FEEDS = {
   [REQUESTS.standings(2025)]: "standings",
 };
 
-const NETWORKS_PATH = new URL(NETWORKS_REQUEST("")).pathname;
-const isNetworksRequest = (url) => new URL(url).pathname === NETWORKS_PATH;
+const isNetworksRequest = (url) =>
+  url === NETWORKS_REQUEST(new URL(url).searchParams.get("dates") ?? "");
 
 /**
  * Answers the league's feeds from the fixture, or from `answers` in its place, counting reads,
- * unless a feed is told to refuse. ESPN's scoreboard answers from the afternoon's recording
- * unless told to refuse as `networks`, and the rest of ESPN from `espn`, by URL, or not at all.
+ * unless a feed is told to refuse. ESPN's month scoreboards answer from the afternoon's recording
+ * unless told to refuse as `networks`, and the rest of ESPN from `espn`, by URL, or with a 404.
  * @param {{ refuse?: Record<string, "page" | "error">, answers?: Record<string, any>, espn?: Record<string, any> }} [options]
  */
 function createLeague({ refuse = {}, answers = {}, espn = {} } = {}) {
   const reads = [];
   const fetchImpl = async (url, init) => {
     if (url in espn) {
-      reads.push({ feed: "espn", url, headers: init.headers });
+      reads.push({ feed: "espn", url, headers: init.headers, cacheSeconds: init.cf?.cacheTtl });
       return new Response(JSON.stringify(espn[url]));
     }
     if (isNetworksRequest(url)) {
@@ -60,7 +64,7 @@ function createLeague({ refuse = {}, answers = {}, espn = {} } = {}) {
         : new Response("", { status: 503 });
     }
     if (!FEEDS[url]) {
-      reads.push({ feed: "espn", url, headers: init.headers });
+      reads.push({ feed: "espn", url, headers: init.headers, cacheSeconds: init.cf?.cacheTtl });
       return new Response("", { status: 404 });
     }
     const feed = FEEDS[url];
@@ -176,8 +180,8 @@ const readBackupReason = (snapshot) =>
     .find((reason) => reason.startsWith("backup: "))
     ?.slice("backup: ".length) ?? null;
 
-const SEP_30 = BACKUP_REQUEST("20260930");
-const OCT_1 = BACKUP_REQUEST("20261001");
+const SEP_30 = ESPN_DAY_REQUEST("20260930");
+const OCT_1 = ESPN_DAY_REQUEST("20261001");
 const BACKUP_PATH = new URL(SEP_30).pathname;
 
 /**
@@ -203,6 +207,36 @@ test("ESPN's backup reads only its site scoreboard of yesterday and today, which
   assert.deepEqual(espnReads.sort(), [SEP_30, OCT_1]);
 });
 
+test("the backup and the game sheet keep a day's ESPN scoreboard at the edge alike, so the backup never reads a copy the sheet's read left older", async () => {
+  const [game] = ESPN.answers[OCT_1].events;
+  const league = createLeague({
+    refuse: { scoreboard: "page" },
+    espn: { ...ESPN.answers, [nameSummaryRequest(game.id)]: {} },
+  });
+  const loader = createSnapshotLoader({
+    fetchImpl: league.fetchImpl,
+    now: () => Date.parse(ESPN.now),
+  });
+  await loader.loadSnapshot(2026);
+  const [home, away] = ["home", "away"].map((place) =>
+    findTeamCodeByEspnId(
+      game.competitions[0].competitors.find((competitor) => competitor.homeAway === place).id,
+    ),
+  );
+
+  await createEspnGameReader({ fetchImpl: league.fetchImpl }).fetchSummary({
+    away,
+    home,
+    start: game.date,
+  });
+
+  const cacheTimes = league.reads
+    .filter((read) => read.url === OCT_1)
+    .map((read) => read.cacheSeconds);
+  assert.equal(cacheTimes.length, 2);
+  assert.equal(new Set(cacheTimes).size, 1);
+});
+
 test("a day ESPN doesn't answer for doesn't keep the other's games from standing in", async () => {
   const espn = structuredClone(ESPN.answers);
   delete espn[OCT_1];
@@ -219,7 +253,7 @@ test("a day ESPN doesn't answer for doesn't keep the other's games from standing
   assert.deepEqual([readState("1042600132"), readState("1042600112")], ["final", "final"]);
   assert.equal(
     readBackupReason(snapshot),
-    `ESPN didn't answer for 20261001: ESPN answered 503 for ${BACKUP_PATH}`,
+    `ESPN didn't answer for 20261001: ESPN answered 404 for ${BACKUP_PATH}`,
   );
 });
 
@@ -313,7 +347,7 @@ test("while neither the scoreboard nor ESPN answers, nothing covers it", async (
     [["scoreboard"], null, null],
   );
   assert.equal(describeSnapshotStatus(snapshot).standIn, "");
-  assert.equal(readBackupReason(snapshot), `ESPN answered 503 for ${BACKUP_PATH}`);
+  assert.equal(readBackupReason(snapshot), `ESPN answered 404 for ${BACKUP_PATH}`);
 });
 
 test("while the scoreboard answers, ESPN's scores aren't read", async () => {
@@ -391,7 +425,7 @@ test("the store's status says why each feed that didn't answer failed", async ()
   const standingsPath = new URL(REQUESTS.standings(2026)).pathname;
   assert.equal(
     status.reasons,
-    `scoreboard: The WNBA answered 503 for ${scoreboardPath}; standings: The WNBA answered ${standingsPath} with a web page rather than data; backup: ESPN answered 503 for ${BACKUP_PATH}`,
+    `scoreboard: The WNBA answered 503 for ${scoreboardPath}; standings: The WNBA answered ${standingsPath} with a web page rather than data; backup: ESPN answered 404 for ${BACKUP_PATH}`,
   );
 });
 

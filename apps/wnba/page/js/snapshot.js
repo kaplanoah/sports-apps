@@ -32,7 +32,7 @@ export const nameScheduleKey = (year) => `schedules/${year}`;
 
 const WNBA_CDN = "https://cdn.wnba.com";
 const WNBA_STATS = "https://stats.wnba.com";
-const ESPN_SITE = "https://site.api.espn.com/apis/site/v2/sports/basketball/wnba";
+export const ESPN_SITE = "https://site.api.espn.com/apis/site/v2/sports/basketball/wnba";
 
 const LEAGUE_FEEDS = ["bracket", "schedule", "scoreboard", "standings"];
 
@@ -47,9 +47,13 @@ export const REQUESTS = {
     `${WNBA_STATS}/stats/leaguestandingsv3?LeagueID=10&Season=${season}&SeasonType=Regular+Season`,
 };
 
-// ESPN's scoreboard answers for one day at a time, with each game's clock and scores.
+// ESPN names each day as YYYYMMDD, by the league's Eastern day.
+/** @param {number} ms */
+export const formatEspnDay = (ms) => readEasternDay(ms).date.replaceAll("-", "");
+
+// ESPN's scoreboard of one day, with each game's clock and scores.
 /** @param {string} day as YYYYMMDD */
-export const BACKUP_REQUEST = (day) => `${ESPN_SITE}/scoreboard?dates=${day}`;
+export const ESPN_DAY_REQUEST = (day) => `${ESPN_SITE}/scoreboard?dates=${day}`;
 
 // A month's scoreboard holds every game ESPN lists that month, with room to spare.
 /** @param {string} month as YYYYMM */
@@ -394,25 +398,39 @@ const BACKUP_STATES = { pre: "pre", in: "live", post: "final" };
 /** @param {unknown} score */
 const readEspnScore = (score) => (typeof score === "string" && score !== "" ? Number(score) : null);
 
-/** @param {any} event */
-function readBackupGame(event) {
+// An ESPN scoreboard game's competition, when it starts, and its teams, home and away, each as
+// `readSide` reads it.
+/**
+ * @param {any} event
+ * @param {(competitor: any) => object} readSide
+ */
+function readEspnEvent(event, readSide) {
   const competition = event.competitions?.[0] ?? {};
-  const status = competition.status ?? event.status;
-  const state = BACKUP_STATES[status?.type?.state] ?? "pre";
   const sides = Object.fromEntries(
     (competition.competitors ?? []).map((competitor) => [
       competitor.homeAway,
-      { team: findTeamCodeByEspnId(competitor.id), score: readEspnScore(competitor.score) },
+      { team: findTeamCodeByEspnId(competitor.id), ...readSide(competitor) },
     ]),
   );
+  return { competition, start: competition.date ?? event.date, home: sides.home, away: sides.away };
+}
+
+/** @param {any} competitor */
+const readScoredSide = (competitor) => ({ score: readEspnScore(competitor.score) });
+
+/** @param {any} event */
+function readBackupGame(event) {
+  const { competition, start, home, away } = readEspnEvent(event, readScoredSide);
+  const status = competition.status ?? event.status;
+  const state = BACKUP_STATES[status?.type?.state] ?? "pre";
   return {
-    start: competition.date ?? event.date,
+    start,
     state,
     status: status?.type?.shortDetail?.trim() || "",
     period: state === "pre" ? null : (status?.period ?? null),
     clock: state === "live" ? (status?.displayClock ?? null) : null,
-    home: sides.home,
-    away: sides.away,
+    home,
+    away,
   };
 }
 
@@ -497,20 +515,14 @@ const isLocal = (broadcast) => !isNational(broadcast);
 
 // What an ESPN scoreboard game is on, its national channels first.
 function readNetworkGame(event) {
-  const competition = event.competitions?.[0] ?? {};
-  const sides = Object.fromEntries(
-    (competition.competitors ?? []).map((competitor) => [
-      competitor.homeAway,
-      { team: findTeamCodeByEspnId(competitor.id) },
-    ]),
-  );
+  const { competition, start, home, away } = readEspnEvent(event, () => ({}));
   const broadcasts = competition.broadcasts ?? [];
   const ordered = [...broadcasts.filter(isNational), ...broadcasts.filter(isLocal)];
   return {
-    start: competition.date ?? event.date,
+    start,
     isTimeSet: competition.timeValid === true,
-    home: sides.home,
-    away: sides.away,
+    home,
+    away,
     networks: [...new Set(ordered.flatMap((broadcast) => broadcast.names ?? []))],
   };
 }
