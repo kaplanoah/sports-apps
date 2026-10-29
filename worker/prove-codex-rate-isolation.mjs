@@ -237,7 +237,8 @@ function createRootFixtures(settings) {
     cpSync(settings.cliFolder, join(folder, "cli"), { recursive: true, verbatimSymlinks: true });
     const home = join(folder, "home");
     const project = join(folder, "project");
-    for (const path of [home, project]) {
+    const temporary = join(folder, "temporary");
+    for (const path of [home, project, temporary]) {
       mkdirSync(path, { mode: 0o700 });
       chownSync(path, settings.uid, settings.gid);
     }
@@ -253,6 +254,7 @@ function createRootFixtures(settings) {
       folder,
       worker,
       home,
+      temporary,
       project,
       projectFile,
       privateFile,
@@ -267,11 +269,11 @@ function createRootFixtures(settings) {
   }
 }
 
-function createProbeEnvironment(fixtures) {
+export function createProbeEnvironment(fixtures) {
   return {
     PATH: `${dirname(process.execPath)}:/usr/bin:/bin`,
     CODEX_HOME: fixtures.home,
-    TMPDIR: fixtures.home,
+    TMPDIR: fixtures.temporary,
   };
 }
 

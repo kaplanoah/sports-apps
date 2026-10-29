@@ -6,6 +6,7 @@ import {
   validateRateIsolationFacts,
   summarizeIsolationCommandFailure,
   parseIsolationCommandResult,
+  createProbeEnvironment,
 } from "../worker/prove-codex-rate-isolation.mjs";
 
 const workflow = readFileSync(new URL("../.github/workflows/ci.yml", import.meta.url), "utf8");
@@ -30,6 +31,15 @@ test("command diagnostics keep exit facts and fixed flags without publishing pri
     true,
   );
   assert.equal(summarizeIsolationCommandFailure({}).exitCode, null);
+});
+
+test("the cleared probe environment keeps CLI home outside its temporary directory", () => {
+  const fixtures = { home: "/proof/home", temporary: "/proof/temporary" };
+  const env = createProbeEnvironment(fixtures);
+  assert.equal(env.CODEX_HOME, fixtures.home);
+  assert.equal(env.TMPDIR, fixtures.temporary);
+  assert.equal(env.CODEX_HOME.startsWith(env.TMPDIR), false);
+  assert.deepEqual(Object.keys(env).sort(), ["CODEX_HOME", "PATH", "TMPDIR"]);
 });
 
 test("probe output diagnosis preserves status and fixed shape facts without accepting malformed output", () => {
