@@ -19,7 +19,7 @@ test("a stacked bracket keeps its gaps during a pull when its tab bar is in the 
   await expect(page.locator(".tree-scroll")).toHaveClass(/stacked/);
   const geometry = await readGeometry(page, ".box");
   const liftFinger = await drag(page, PULL_START, { y: 60 });
-  await expect(page.locator("header.top")).toHaveCSS("top", "26px");
+  await expect(page.locator("header.top")).toHaveCSS("top", "25px");
   await expect(page.locator(".pull-refresh")).toBeVisible();
   await page.evaluate(() => dispatchEvent(new Event("resize")));
   await page.clock.runFor(100);

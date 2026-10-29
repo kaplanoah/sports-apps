@@ -91,7 +91,7 @@ export function checkBracketPull({ test, openApp, cards, sideways }) {
       for (let refresh = 0; refresh < 2; refresh += 1) {
         const answerStore = await app.holdStore();
         const liftFinger = await drag(page, PULL_START, { y: 200 }, { durationMs: 400 });
-        await expect(header).toHaveCSS("top", "96px");
+        await expect(header).toHaveCSS("top", "95px");
         expect(await readGeometry(page, cards)).toEqual(geometry);
         await page.evaluate(() => dispatchEvent(new Event("resize")));
         await page.clock.runFor(100);

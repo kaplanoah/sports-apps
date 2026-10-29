@@ -1,5 +1,6 @@
 import { isOnHomeScreen } from "./device.js";
 import { html, setHtml } from "./html.js";
+import { DRIFT_PX } from "./press.js";
 import { prefersReducedMotion } from "./reduced-motion.js";
 import { reloadIfReplaced } from "./resume.js";
 import { watchShownView } from "./shown-view.js";
@@ -17,7 +18,6 @@ import { isPageOffTop, isPast } from "./spring-scroll.js";
 // starts whether the page may stop its scroll, so the listeners move as the page scrolls, not as a
 // pull starts.
 
-const START_PX = 8;
 const RESISTANCE = 0.5;
 const MAX_PULL_PX = 120;
 const REFRESH_PULL_PX = 64;
@@ -229,7 +229,7 @@ export function startPullToRefresh({ store, catchUp }) {
   function decideDirection(touch) {
     const across = Math.abs(touch.clientX - startX);
     const down = touch.clientY - startY;
-    if (down < START_PX && across < START_PX) return;
+    if (down <= DRIFT_PX && across <= DRIFT_PX) return;
     if (down <= across) return becomeIdle();
     state = "pulling";
     movedParts = listMovedParts(spinner);
@@ -240,7 +240,7 @@ export function startPullToRefresh({ store, catchUp }) {
     if (state === "tracking") decideDirection(event.touches[0]);
     if (state !== "pulling") return;
     if (event.cancelable) event.preventDefault();
-    const down = event.touches[0].clientY - startY - START_PX;
+    const down = event.touches[0].clientY - startY - DRIFT_PX;
     pulledPx = Math.min(MAX_PULL_PX, Math.max(0, down * RESISTANCE));
     movePage(pulledPx, false);
     showSpokes(pulledPx);

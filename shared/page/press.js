@@ -15,8 +15,9 @@ import { isStandIn } from "./rider-taps.js";
 // How long a finger rests before its press shows, and how long a quick tap's press stays.
 const TOUCH_SETTLE_MS = 60;
 export const QUICK_TAP_MS = 120;
-// How far a finger may drift before its press lets go.
-const DRIFT_PX = 10;
+// How far a finger may drift before its press lets go. A swipe the page's code follows takes the
+// touch only past it, or iOS can drop the tap of a press that still shows.
+export const DRIFT_PX = 10;
 // Longer than iOS waits after a lift to tell a tap from a double tap, so its click for the lift
 // still finds the touch, while a click long after, like a screen reader's, never does.
 const LIFT_CLICK_MS = 1000;

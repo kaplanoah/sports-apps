@@ -3,14 +3,13 @@
 // no animation behind once it ends.
 
 import { PHONE_WIDTH_QUERY } from "./device.js";
+import { DRIFT_PX } from "./press.js";
 import { prefersReducedMotion } from "./reduced-motion.js";
 import { SHEET_EASING, SHEET_MOTION_MS, settleAfter } from "./slide-panels.js";
 
 // A swipe down closes the sheet once it goes this far or this fast; anything less springs back.
 const CLOSE_DISTANCE_PX = 110;
 const CLOSE_SPEED_PX_PER_MS = 0.5;
-// A touch has to move this far before it counts as a swipe, so a tap stays a tap.
-const SWIPE_START_PX = 6;
 
 // A phone's layout, where dialogs are sheets.
 const isSheetLayout = () => matchMedia(PHONE_WIDTH_QUERY).matches;
@@ -121,13 +120,16 @@ export function closeOnSwipeDown(dialog, { isOwnGesture, findScroller }) {
 
   // Until the sheet moves, the swipe counts from the finger's highest point since the content
   // last scrolled, so a swipe that scrolls the content back to its top goes on to move the sheet.
+  // It also waits for the finger to leave where it landed by as much as a press lets it drift.
   /**
+   * @param {number} clientX
    * @param {number} clientY
-   * @param {{ startY: number }} moving
+   * @param {{ originX: number, originY: number, startY: number }} moving
    */
-  function startsDragging(clientY, moving) {
+  function startsDragging(clientX, clientY, moving) {
     if (findScroller().scrollTop > 0 || clientY < moving.startY) moving.startY = clientY;
-    return clientY - moving.startY >= SWIPE_START_PX;
+    const isPastPress = Math.hypot(clientX - moving.originX, clientY - moving.originY) > DRIFT_PX;
+    return clientY - moving.startY > DRIFT_PX && isPastPress;
   }
 
   // A swipe that sets off mostly sideways is another gesture's, like stepping between sheets.
@@ -139,7 +141,7 @@ export function closeOnSwipeDown(dialog, { isOwnGesture, findScroller }) {
   function isSideways(clientX, clientY, moving) {
     const across = Math.abs(clientX - moving.originX);
     const down = Math.abs(clientY - moving.originY);
-    return Math.hypot(across, down) >= SWIPE_START_PX && across > down;
+    return Math.hypot(across, down) > DRIFT_PX && across > down;
   }
 
   function grabSheet() {
@@ -162,7 +164,7 @@ export function closeOnSwipeDown(dialog, { isOwnGesture, findScroller }) {
       swipe = null;
       return;
     }
-    if (!swipe.isDragging && !startsDragging(clientY, swipe)) {
+    if (!swipe.isDragging && !startsDragging(clientX, clientY, swipe)) {
       trackSwipeSpeed(clientY, event.timeStamp);
       return;
     }

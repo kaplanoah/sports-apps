@@ -4,8 +4,8 @@
 // its own, like a roster's wide table, stays that thing's until it reaches its edge. Where one
 // surface holds another, as a sheet holds its sections, the inner one has the first say.
 
-// A touch has to move this far before it counts as a swipe, so a tap stays a tap.
-const SWIPE_START_PX = 6;
+import { DRIFT_PX } from "./press.js";
+
 // A swipe goes on once it has moved this share of the surface's width, or is this fast as it lifts.
 const GO_SHARE = 0.3;
 const GO_SPEED_PX_PER_MS = 0.3;
@@ -54,7 +54,7 @@ function canScrollAlong(target, surface, direction) {
  * @param {number} down
  */
 const isSideways = (across, down) =>
-  Math.hypot(across, down) >= SWIPE_START_PX && Math.abs(across) > Math.abs(down);
+  Math.hypot(across, down) > DRIFT_PX && Math.abs(across) > Math.abs(down);
 
 /**
  * Follows each sideways swipe on `surface` that `swipe` has a neighbor for.

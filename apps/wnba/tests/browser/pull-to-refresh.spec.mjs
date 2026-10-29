@@ -442,7 +442,7 @@ test("a pull whose moves the browser won't let the page stop still follows the f
   });
 
   expect(stopsTried).toBe(0);
-  await expect(header).toHaveCSS("top", "36px");
+  await expect(header).toHaveCSS("top", "35px");
 });
 
 test("a short pull settles back without refreshing", async ({ page }) => {
