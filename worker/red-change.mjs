@@ -40,7 +40,8 @@ import {
 } from "./labeling.mjs";
 import { createGitHub } from "./github-api.mjs";
 import { readDeployedMain } from "./production-coverage.mjs";
-import { MERGE_TREE_CONFLICT, isGitObjectId } from "./git-object.mjs";
+import { isGitObjectId } from "./git-object.mjs";
+import { readMergeTree } from "./review-repository.mjs";
 import {
   LAYER_PROPERTIES,
   createWatchCheck,
@@ -911,26 +912,6 @@ function listBranchFirstParents({ head, cwd = process.cwd() }) {
     .filter(Boolean);
 }
 
-/**
- * The tree git makes merging two commits, or an empty string when they conflict.
- * @param {ReturnType<typeof createGateGit>} readGit @param {string} first @param {string} second
- */
-function readCleanMergeTree(readGit, first, second) {
-  try {
-    return readGit([
-      "-c",
-      "merge.renormalize=false",
-      "merge-tree",
-      "--write-tree",
-      first,
-      second,
-    ]).trim();
-  } catch (error) {
-    if (/** @type {{ status?: number }} */ (error).status === MERGE_TREE_CONFLICT) return "";
-    throw error;
-  }
-}
-
 /** @param {string} base @param {string} head @param {string} [cwd] */
 export function readCommitChange(base, head, cwd = process.cwd()) {
   const readGit = createGateGit(cwd);
@@ -961,8 +942,8 @@ export function readMergedChange(main, head, cwd = process.cwd()) {
   const readGit = createGateGit(cwd);
   const mainSha = readGit(["rev-parse", "--verify", "--end-of-options", `${main}^{commit}`]).trim();
   const headSha = readGit(["rev-parse", "--verify", "--end-of-options", `${head}^{commit}`]).trim();
-  const tree = readCleanMergeTree(readGit, mainSha, headSha);
-  if (!tree) throw new Error(`${head} conflicts with ${main}.`);
+  const tree = readMergeTree(readGit, mainSha, headSha);
+  if (tree === null) throw new Error(`${head} conflicts with ${main}.`);
   if (!isGitObjectId(tree)) throw new Error("The current merge tree could not be read.");
   return readCommitChange(mainSha, tree, cwd);
 }

@@ -90,3 +90,28 @@ export function hasReviewCommit(cwd, revision, options = {}) {
     return false;
   }
 }
+
+// git merge-tree's exit status when the merge conflicts, having still written the merged tree;
+// any other failure is git's own error.
+export const MERGE_TREE_CONFLICT = 1;
+
+/**
+ * The tree git makes merging two commits, or null when they conflict.
+ * @param {(args: string[]) => string} readGit throws as execFileSync does where git exits with an error
+ * @param {string} first @param {string} second
+ */
+export function readMergeTree(readGit, first, second) {
+  try {
+    return readGit([
+      "-c",
+      "merge.renormalize=false",
+      "merge-tree",
+      "--write-tree",
+      first,
+      second,
+    ]).trim();
+  } catch (error) {
+    if (/** @type {{ status?: number }} */ (error).status === MERGE_TREE_CONFLICT) return null;
+    throw error;
+  }
+}

@@ -17,10 +17,9 @@ import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { escapePattern } from "../shared/page/escape-pattern.js";
 import { isTestPath } from "./deploy-scope.mjs";
-import { MERGE_TREE_CONFLICT } from "./git-object.mjs";
 import { createGitHub, readAllPages } from "./github-api.mjs";
 import { resolvePackageImport } from "./package-imports.mjs";
-import { readReviewGit } from "./review-repository.mjs";
+import { MERGE_TREE_CONFLICT, readReviewGit } from "./review-repository.mjs";
 import { findSummary, readReviewedState, matchesReviewProvider } from "./review-state.mjs";
 import { RULES_FOLDER, listRulesFor, readRuleFiles, readRulePaths } from "./rule-files.mjs";
 

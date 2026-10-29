@@ -9,9 +9,10 @@ import {
   fetchReviewHistory,
   hasReviewCommit,
   isReviewAncestor,
+  readMergeTree,
   runReviewGit,
 } from "./review-repository.mjs";
-import { MERGE_TREE_CONFLICT, isGitObjectId } from "./git-object.mjs";
+import { isGitObjectId } from "./git-object.mjs";
 import { waitFor } from "./check-timing.mjs";
 import { readReviewProvider } from "./review-provider.mjs";
 import { matchesReviewProvider } from "./review-state.mjs";
@@ -274,20 +275,6 @@ function readTestedBase(env) {
 }
 
 /**
- * Returns the tree of the head merged onto a base, or null where that merge conflicts.
- * @param {string} base @param {NodeJS.ProcessEnv} env
- */
-function readMergedTree(base, env) {
-  try {
-    const args = ["merge-tree", "--write-tree", base, env.REVIEW_HEAD];
-    return runReviewGit(env.GITHUB_WORKSPACE, args, { environment: env });
-  } catch (error) {
-    if (/** @type {{ status?: number }} */ (error).status === MERGE_TREE_CONFLICT) return null;
-    throw error;
-  }
-}
-
-/**
  * A review of this head on an earlier base still covers the merge CI tested when main only moved
  * forward and merging the head onto it now gives exactly CI's tree, since a review asked for again
  * would find nothing new to read. The reviewed merge is rebuilt rather than fetched, since GitHub
@@ -296,13 +283,15 @@ function readMergedTree(base, env) {
  */
 function readCarriedTree(reviewedBase, reviewedTree, env) {
   const options = { environment: env };
+  /** @param {string[]} args */
+  const readGit = (args) => runReviewGit(env.GITHUB_WORKSPACE, args, options);
   fetchReviewHistory(env.GITHUB_WORKSPACE, env.REVIEW_BASE, options);
-  const tested = runReviewGit(env.GITHUB_WORKSPACE, ["rev-parse", "HEAD^{tree}"], options);
+  const tested = readGit(["rev-parse", "HEAD^{tree}"]);
   if (
     !hasReviewCommit(env.GITHUB_WORKSPACE, reviewedBase, options) ||
     !isReviewAncestor(env.GITHUB_WORKSPACE, reviewedBase, env.REVIEW_BASE, options) ||
-    readMergedTree(reviewedBase, env) !== reviewedTree ||
-    readMergedTree(env.REVIEW_BASE, env) !== tested
+    readMergeTree(readGit, reviewedBase, env.REVIEW_HEAD) !== reviewedTree ||
+    readMergeTree(readGit, env.REVIEW_BASE, env.REVIEW_HEAD) !== tested
   )
     throw new Error("The reviewed merge does not carry over to this base.");
   return tested;
