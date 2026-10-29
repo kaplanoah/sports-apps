@@ -1,7 +1,8 @@
 import * as WNBASnapshot from "../../page/js/snapshot.js";
-import { createFeedKeeper } from "../../../../shared/worker/feed-keeper.js";
+import { createFeedKeeper, createMemoryStorage } from "../../../../shared/worker/feed-keeper.js";
 import { describeError } from "../../../../shared/worker/responses.js";
 import { createReusedLoader } from "../../../../shared/worker/upstream.js";
+import { createBackupReader } from "./backup-probe.js";
 import { createGameEnds } from "./game-ends.js";
 import { createEspnGameReader, readEndTime } from "./lead.js";
 import { listUpcomingMeetings } from "./preview.js";
@@ -55,22 +56,19 @@ export const describeFailures = (failures) =>
     .map((name) => `${name}: ${failures[name]}`)
     .join("; ");
 
-// ESPN can answer and still leave the scoreboard's games uncovered, so the status says why: a day
-// it didn't answer for, or, while the scoreboard is down, days without one of the league's games
-// while a score is due.
+// ESPN can answer every day and still leave the scoreboard's games uncovered, so while the
+// scoreboard is down, days without one of the league's games while a score is due count as the
+// backup failing.
 /**
- * Why ESPN's backup, once it answered, fell short, or null when it didn't.
- * @param {{ scoreboard: any, backup: { days: string[], answers: any[], missed: { day: string, error: unknown }[] } | null }} responses
+ * Why ESPN's backup, once it answered, left the scoreboard's games uncovered, or null when it
+ * didn't.
+ * @param {{ scoreboard: any, backup: import("./backup-probe.js").Backup | null }} responses
  * @param {{ scoreboardCover: string | null, hasScoreDue: boolean }} snapshot
  */
-function describeBackupFailure({ scoreboard, backup }, snapshot) {
-  if (!backup) return null;
-  const { days, answers, missed } = backup;
-  if (missed.length)
-    return `ESPN didn't answer for ${missed[0].day}: ${describeError(missed[0].error)}`;
-  if (scoreboard || snapshot.scoreboardCover || !snapshot.hasScoreDue) return null;
-  const total = answers.flatMap((answer) => answer.events ?? []).length;
-  return `ESPN listed none of the league's games on ${days.join(" or ")}, of ${total} in all`;
+function describeCoverageGap({ scoreboard, backup }, snapshot) {
+  if (!backup || scoreboard || snapshot.scoreboardCover || !snapshot.hasScoreDue) return null;
+  const total = backup.answers.flatMap((answer) => answer.events ?? []).length;
+  return `ESPN listed none of the league's games on ${backup.days.join(" or ")}, of ${total} in all`;
 }
 
 const countFinals = (scoreboard) =>
@@ -86,7 +84,7 @@ const countFinals = (scoreboard) =>
 export function createSnapshotLoader({
   fetchImpl = (input, init) => fetch(input, init),
   now = () => Date.now(),
-  storage = undefined,
+  storage = createMemoryStorage(),
 } = {}) {
   const slowFeeds = createFeedKeeper({ feeds: SLOW_FEEDS, now, storage });
   const networkMonths = new Map();
@@ -130,6 +128,8 @@ export function createSnapshotLoader({
     if (!answers.length) throw missed[0].error;
     return { days, answers, missed };
   }
+
+  const readBackup = createBackupReader({ fetchBackup, now, storage });
 
   // A month's answer from after the month ended is final, so it's kept for good. Any other month is
   // read again now and then, and a read that fails waits as long as one that answers, with the
@@ -184,7 +184,7 @@ export function createSnapshotLoader({
     await slowFeeds.forgetFeed("players", nameAveragesRequest(season));
     /** @type {Record<string, string>} */
     const failures = {};
-    /** @param {keyof typeof FEED_DATA | "backup"} name */
+    /** @param {keyof typeof FEED_DATA} name */
     const noteFailure = (name) => (/** @type {unknown} */ error) => {
       failures[name] = describeError(error);
       return null;
@@ -210,10 +210,11 @@ export function createSnapshotLoader({
     if (!scoreboard && !schedule && !bracket)
       throw new Error(`None of the WNBA's feeds answered with data: ${describeFailures(failures)}`);
     const needsBackup = !scoreboard || hasGamesLeftLive(schedule);
-    const [backup, networks] = await Promise.all([
-      needsBackup ? fetchBackup().catch(noteFailure("backup")) : null,
+    const [{ backup, failure }, networks] = await Promise.all([
+      readBackup(needsBackup),
       readNetworks(schedule, season, verify),
     ]);
+    if (failure) failures.backup = failure;
     return { responses: { scoreboard, schedule, bracket, standings, backup, networks }, failures };
   }
 
@@ -225,11 +226,11 @@ export function createSnapshotLoader({
   async function fetchSnapshot(season, requestedAt, verify = false) {
     const { responses, failures } = await fetchResponses(season, verify);
     const snapshot = WNBASnapshot.buildSnapshot(responses, { season, now: requestedAt });
-    const backupFailure = describeBackupFailure(responses, snapshot);
+    const coverageGap = describeCoverageGap(responses, snapshot);
     const ended = await addGameEnds(snapshot);
     return {
       ...ended,
-      failures: backupFailure ? { ...failures, backup: backupFailure } : failures,
+      failures: coverageGap ? { ...failures, backup: coverageGap } : failures,
       meetings: listUpcomingMeetings(responses.schedule, ended),
     };
   }

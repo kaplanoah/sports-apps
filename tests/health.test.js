@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { FEED_FAILURE_MS } from "../shared/worker/feed-failures.js";
 import { HEALTH_REUSE_MS, ANSWER_TIMEOUT_MS, createHealthServer } from "../shared/worker/health.js";
 import { SERVICES } from "../shared/worker/services.js";
 import { listServices } from "../worker/apps.mjs";
@@ -7,14 +8,14 @@ import { listServices } from "../worker/apps.mjs";
 const ENV = { STORE: "the store" };
 
 /**
- * A health server over a store check that answers as told, counting its calls.
- * @param {(env: any) => Promise<boolean>} answer
+ * A health server over a store that answers its failing feeds as told, counting its calls.
+ * @param {(env: any) => Promise<Record<string, import("../shared/worker/feed-failures.js").FeedFailure>>} answer
  * @param {{ now?: () => number }} [options]
  */
 function createCountedHealth(answer, { now = () => 0 } = {}) {
   const asked = [];
   const serveHealth = createHealthServer({
-    isStoreAnswering: (env) => (asked.push(env), answer(env)),
+    readFeedFailures: (env) => (asked.push(env), answer(env)),
     release: "abc1234",
     now,
   });
@@ -22,32 +23,36 @@ function createCountedHealth(answer, { now = () => 0 } = {}) {
 }
 
 test("a Worker whose store answers is healthy, naming its release", async () => {
-  const { asked, serveHealth } = createCountedHealth(async () => true);
+  const { asked, serveHealth } = createCountedHealth(async () => ({}));
 
   const response = await serveHealth(ENV);
 
   assert.equal(response.status, 200);
-  assert.deepEqual(await response.json(), { ok: true, release: "abc1234", store: "ok" });
+  assert.deepEqual(await response.json(), {
+    ok: true,
+    release: "abc1234",
+    store: "ok",
+    feeds: {},
+  });
   assert.equal(response.headers.get("content-type"), "application/json");
   assert.equal(response.headers.get("cache-control"), "public, max-age=60");
   assert.equal(response.headers.get("x-robots-tag"), "noindex, nofollow");
   assert.deepEqual(asked, [ENV]);
 });
 
-test("a store that doesn't answer, or fails, makes the Worker unhealthy", async () => {
-  const refused = createCountedHealth(async () => false);
-  const refusedResponse = await refused.serveHealth(ENV);
-  assert.equal(refusedResponse.status, 503);
-  assert.deepEqual(await refusedResponse.json(), {
+const refuseStore = async () => {
+  throw new Error("The store answered 500");
+};
+
+test("a store that fails makes the Worker unhealthy, saying nothing of its feeds", async () => {
+  const failed = createCountedHealth(refuseStore);
+  const failedResponse = await failed.serveHealth(ENV);
+  assert.equal(failedResponse.status, 503);
+  assert.deepEqual(await failedResponse.json(), {
     ok: false,
     release: "abc1234",
     store: "no answer",
   });
-
-  const failed = createCountedHealth(async () => {
-    throw new Error("The store answered 500");
-  });
-  assert.equal((await failed.serveHealth(ENV)).status, 503);
 
   const unbound = createCountedHealth(() => {
     throw new TypeError("Cannot read properties of undefined");
@@ -67,7 +72,7 @@ test("a store that takes too long counts as not answering", async (context) => {
 
 test("the store is asked once a minute at most, however often health is hit", async () => {
   let at = 0;
-  const { asked, serveHealth } = createCountedHealth(async () => false, { now: () => at });
+  const { asked, serveHealth } = createCountedHealth(refuseStore, { now: () => at });
 
   for (let hit = 0; hit < 5; hit += 1) assert.equal((await serveHealth(ENV)).status, 503);
   at = HEALTH_REUSE_MS - 1;
@@ -77,6 +82,29 @@ test("the store is asked once a minute at most, however often health is hit", as
   at = HEALTH_REUSE_MS;
   await serveHealth(ENV);
   assert.equal(asked.length, 2);
+});
+
+test("a feed failing past the threshold is reported, and the Worker stays healthy", async () => {
+  const at = Date.parse("2026-09-30T20:00:00Z");
+  const { serveHealth } = createCountedHealth(
+    async () => ({
+      scoreboard: { since: new Date(at - FEED_FAILURE_MS).toISOString(), reason: "404 for /x" },
+      backup: { since: new Date(at - FEED_FAILURE_MS + 1).toISOString(), reason: "timed out" },
+    }),
+    { now: () => at },
+  );
+
+  const response = await serveHealth(ENV);
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), {
+    ok: true,
+    release: "abc1234",
+    store: "ok",
+    feeds: {
+      scoreboard: { since: new Date(at - FEED_FAILURE_MS).toISOString(), reason: "404 for /x" },
+    },
+  });
 });
 
 /**
@@ -90,7 +118,7 @@ function createCountedService(answer) {
 
 test("a Worker says what each service it binds answers, apart from its own status", async () => {
   const accounts = createCountedService(async () => ({ ok: true, release: "def5678" }));
-  const { serveHealth } = createCountedHealth(async () => true);
+  const { serveHealth } = createCountedHealth(async () => ({}));
 
   const response = await serveHealth({ ...ENV, ACCOUNTS: accounts });
 
@@ -99,6 +127,7 @@ test("a Worker says what each service it binds answers, apart from its own statu
     ok: true,
     release: "abc1234",
     store: "ok",
+    feeds: {},
     services: { accounts: { ok: true, release: "def5678" } },
   });
 });
@@ -115,7 +144,7 @@ test("an app whose service is down still reports itself healthy", async (context
   ];
   const reports = [];
   for (const answer of cases) {
-    const { serveHealth } = createCountedHealth(async () => true);
+    const { serveHealth } = createCountedHealth(async () => ({}));
     const pending = serveHealth({ ...ENV, ACCOUNTS: createCountedService(answer) });
     await new Promise(setImmediate);
     context.mock.timers.tick(ANSWER_TIMEOUT_MS);
@@ -156,7 +185,7 @@ test("a service's problem is reported only while it isn't ok, its attention only
     ],
   ];
   for (const [answer, report] of cases) {
-    const { serveHealth } = createCountedHealth(async () => true);
+    const { serveHealth } = createCountedHealth(async () => ({}));
     const response = await serveHealth({
       ...ENV,
       ACCOUNTS: createCountedService(async () => answer),
@@ -168,7 +197,7 @@ test("a service's problem is reported only while it isn't ok, its attention only
 test("each service is asked once a minute at most, however often health is hit", async () => {
   let at = 0;
   const accounts = createCountedService(async () => ({ ok: true, release: "def5678" }));
-  const { serveHealth } = createCountedHealth(async () => true, { now: () => at });
+  const { serveHealth } = createCountedHealth(async () => ({}), { now: () => at });
   const env = { ...ENV, ACCOUNTS: accounts };
 
   for (let hit = 0; hit < 5; hit += 1) await serveHealth(env);

@@ -2,6 +2,7 @@ import * as MLBSnapshot from "../../page/js/snapshot.js";
 import { guessSeasonYear } from "../../page/js/session.js";
 import { fetchMlbJson, LIVE_FEED_CACHE_SECONDS } from "./mlb.js";
 import { createFeedKeeper } from "../../../../shared/worker/feed-keeper.js";
+import { describeError } from "../../../../shared/worker/responses.js";
 import { createReusedLoader } from "../../../../shared/worker/upstream.js";
 
 const EDGE_CACHE_SECONDS = 15; // under MLB's own 20-second cache
@@ -57,11 +58,22 @@ export function createSnapshotLoader({
   }
 
   /**
+   * The snapshot, with why each feed that failed did, by its name, for the store's health.
    * @param {number} season
    * @param {number} requestedAt
    */
-  const fetchSnapshot = (season, requestedAt) =>
-    MLBSnapshot.fetchSnapshot(fetchSnapshotJson, season, requestedAt);
+  async function fetchSnapshot(season, requestedAt) {
+    /** @type {Record<string, string>} */
+    const failures = {};
+    /** @param {string} path @param {string} name */
+    const fetchNotingFailure = (path, name) =>
+      fetchSnapshotJson(path, name).catch((error) => {
+        failures[name] = describeError(error);
+        throw error;
+      });
+    const snapshot = await MLBSnapshot.fetchSnapshot(fetchNotingFailure, season, requestedAt);
+    return { ...snapshot, failures };
+  }
   const loadCurrentSnapshot = createReusedLoader(fetchSnapshot, SNAPSHOT_REUSE_MS, now);
   /** @type {Map<number, any>} */
   const pastSnapshots = new Map();

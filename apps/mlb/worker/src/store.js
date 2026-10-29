@@ -18,7 +18,7 @@ import { createWatchedGameLoader } from "./watched-games.js";
 export {
   addToJobCount,
   forwardToStore,
-  isStoreAnswering,
+  readFeedFailures,
   readStoreDoc,
 } from "../../../../shared/worker/season-store.js";
 
@@ -36,6 +36,7 @@ const league = {
   readUpdates: SeasonUpdater.readUpdates,
   saveSnapshot: SeasonUpdater.saveSnapshot,
   describeSnapshotStatus: SeasonUpdater.describeSnapshotStatus,
+  listFeedFailures: SeasonUpdater.listFeedFailures,
   choosePollDelay: (snapshot, now) => choosePollDelay(snapshot, now) ?? OFF_DAY_CHECK_MS,
   listNotifications: ({ before, after, snapshot, now }) => {
     const updates = findNotableUpdates({ before, after, state: snapshot, now });

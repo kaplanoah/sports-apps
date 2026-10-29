@@ -11,6 +11,8 @@ paths:
     - the league's own feeds (`page/js/snapshot.js` says which), with the browser headers they require (`worker/src/wnba.js`)
     - ESPN's scoreboard, for where each game is on
     - ESPN's scores and clocks only while the league's scoreboard isn't answering, or for a game the league's schedule still holds as under way once its scoreboard no longer lists it, reading the schedule again every five minutes until it catches up
+    - ESPN's scoreboard once an hour even while the league's answers, so a backup that stopped answering shows in the health's `feeds` before it's needed, and again five minutes after a probe fails until one answers (`worker/src/backup-probe.js`)
+  - The health's `feeds` counts the league's scoreboard as failing only while a score is due, so an idle scoreboard never reads as one.
   - The page saves nothing to the store.
   - The settings pick any season the store keeps, once it keeps more than one.
 - A team's sheet:

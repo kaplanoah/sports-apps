@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import * as MLBSnapshot from "../page/js/snapshot.js";
 import { createMemoryStorage } from "../../../shared/worker/feed-keeper.js";
+import { listFeedFailures } from "../worker/src/season-updater.js";
 import { createSnapshotLoader } from "../worker/src/snapshot.js";
 
 const EVENING = JSON.parse(
@@ -76,7 +77,7 @@ test("the snapshot is built from MLB, with a timeout and a short edge cache", as
   const { mlb, loadSnapshot } = createTestLoader();
   const snapshot = await loadSnapshot();
   const expected = MLBSnapshot.buildSnapshot(RESPONSES, { season: 2026, now: NOW });
-  assert.deepEqual(snapshot, expected);
+  assert.deepEqual(snapshot, { ...expected, failures: {} });
   assert.equal(mlb.calls.length, 5 + LIVE_GAME_IDS.length);
   assert.equal(mlb.calls[0].init.cf.cacheTtl, 15);
   assert.ok(mlb.calls[0].init.signal);
@@ -97,9 +98,29 @@ test("each game being played is read from MLB's live feed, reused only moments, 
       ? Promise.resolve(new Response("", { status: 503 }))
       : down.fetchImpl(url, init);
   const loader = createSnapshotLoader({ fetchImpl, now: () => NOW });
-  const snapshot = await loader.loadSnapshot(2026);
+  const { failures, ...snapshot } = await loader.loadSnapshot(2026);
   const expected = MLBSnapshot.buildSnapshot(RESPONSES, { season: 2026, now: NOW });
   assert.deepEqual(snapshot, expected);
+  assert.deepEqual(Object.keys(failures), ["liveGame"]);
+  assert.match(
+    failures.liveGame,
+    /^MLB Stats API answered 503 for \/api\/v1\.1\/game\/\d+\/feed\/live$/,
+  );
+});
+
+test("each feed that fails is named with why, by its path alone, and a feed that answers isn't", async () => {
+  const mlb = createFakeMlb();
+  const fetchImpl = (/** @type {string} */ url, /** @type {any} */ init) =>
+    nameRequest(url) === "standings"
+      ? Promise.resolve(new Response("", { status: 502 }))
+      : mlb.fetchImpl(url, init);
+  const loader = createSnapshotLoader({ fetchImpl, now: () => NOW });
+
+  const snapshot = await loader.loadSnapshot(2026);
+
+  assert.deepEqual(listFeedFailures(snapshot), {
+    standings: "MLB Stats API answered 502 for /api/v1/standings",
+  });
 });
 
 test("reads moments apart share one trip to MLB", async () => {

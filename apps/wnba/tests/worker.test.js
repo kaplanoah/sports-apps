@@ -9,7 +9,7 @@ import {
   nameSummaryRequest,
 } from "../worker/src/lead.js";
 import { describePreview } from "../worker/src/preview.js";
-import { describeSnapshotStatus } from "../worker/src/season-updater.js";
+import { describeSnapshotStatus, listFeedFailures } from "../worker/src/season-updater.js";
 import { createSnapshotLoader, describeFailures } from "../worker/src/snapshot.js";
 import { nameFeedKey } from "../../../shared/worker/feed-keeper.js";
 
@@ -358,6 +358,65 @@ test("while the scoreboard answers, ESPN's scores aren't read", async () => {
 
   assert.equal(league.countReads("espn"), 0);
   assert.equal(snapshot.standIn, null);
+});
+
+const MINUTE_MS = 60 * 1000;
+
+// ESPN's scoreboard of every day around the afternoon's, with no games, which a probe reads.
+const ESPN_EMPTY_DAYS = Object.fromEntries(
+  ["20260929", "20260930", "20261001"].map((day) => [ESPN_DAY_REQUEST(day), { events: [] }]),
+);
+
+test("while the scoreboard answers, ESPN's backup is read once an hour, two days a read, and nothing more", async () => {
+  const league = createLeague({ espn: ESPN_EMPTY_DAYS });
+  let clock = NOW;
+  const loader = createSnapshotLoader({ fetchImpl: league.fetchImpl, now: () => clock });
+
+  const espnReadsByLoad = [];
+  for (let minutes = 0; minutes <= 180; minutes += 5) {
+    clock = NOW + minutes * MINUTE_MS;
+    const before = league.countReads("espn");
+    const snapshot = await loader.loadSnapshot(2026);
+    assert.equal(readBackupReason(snapshot), null);
+    if (league.countReads("espn") > before)
+      espnReadsByLoad.push([minutes, league.countReads("espn") - before]);
+  }
+
+  assert.deepEqual(espnReadsByLoad, [
+    [60, 2],
+    [120, 2],
+    [180, 2],
+  ]);
+  const urls = league.reads.filter((read) => read.feed === "espn").map((read) => read.url);
+  assert.ok(urls.every((url) => url in ESPN_EMPTY_DAYS));
+});
+
+test("while the scoreboard answers, a probe of ESPN's backup that fails says why until a read a few minutes later answers", async () => {
+  const espn = {};
+  const league = createLeague({ espn });
+  let clock = NOW;
+  const loader = createSnapshotLoader({ fetchImpl: league.fetchImpl, now: () => clock });
+  const loadAt = async (minutes) => {
+    clock = NOW + minutes * MINUTE_MS;
+    const snapshot = await loader.loadSnapshot(2026);
+    return [league.countReads("espn"), readBackupReason(snapshot)];
+  };
+  assert.deepEqual(await loadAt(0), [0, null]);
+  const reason = `ESPN answered 404 for ${BACKUP_PATH}`;
+  assert.deepEqual(await loadAt(60), [2, reason]);
+  assert.deepEqual(await loadAt(62), [2, reason]);
+  Object.assign(espn, ESPN_EMPTY_DAYS);
+  assert.deepEqual(await loadAt(65), [4, null]);
+  assert.deepEqual(await loadAt(70), [4, null]);
+});
+
+test("a feed's failure counts as one to look into, but the scoreboard's only while a score is due", () => {
+  const failures = { scoreboard: "The scoreboard answered 503", backup: "ESPN answered 404" };
+  assert.deepEqual(listFeedFailures({ failures, hasScoreDue: true }), failures);
+  assert.deepEqual(listFeedFailures({ failures, hasScoreDue: false }), {
+    backup: "ESPN answered 404",
+  });
+  assert.deepEqual(listFeedFailures({ hasScoreDue: true }), {});
 });
 
 // The next morning: the scoreboard has moved on to the new day, and the schedule still holds the
