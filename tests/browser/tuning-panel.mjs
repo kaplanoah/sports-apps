@@ -88,11 +88,13 @@ const refuseCopies = (page) =>
  * Opens the app as beta serves it while a round is open, with the panel open.
  * @param {App} app
  * @param {import("../../shared/page/tuning-round.js").Round} [round]
+ * @param {(page: import("@playwright/test").Page) => Promise<unknown>} [showView]
  */
-async function openTuning({ page, app, openApp }, round = SAMPLE_ROUND) {
+async function openTuning({ page, app, openApp }, round = SAMPLE_ROUND, showView) {
   await keepCopies(page);
   await servePageFiles(page, buildTuningServer(app, round, "beta"));
   await openApp(page);
+  if (showView) await showView(page);
   await findToggle(page).click();
   await expect(findPanel(page)).toBeVisible();
   await expect(findToggle(page)).toBeHidden();
@@ -352,7 +354,9 @@ export async function checkAlignmentControls(app, { width, colorScheme }) {
   const round = readAlignmentRound(app.app);
   await page.setViewportSize({ width, height: 900 });
   await page.emulateMedia({ colorScheme });
-  await openTuning(app, round);
+  await openTuning(app, round, (shown) =>
+    shown.getByRole("tab", { name: "Games", exact: true }).click(),
+  );
   const group = findPanel(page).getByRole("combobox", { name: "Role" });
   for (const name of ["Small", "Team", "Large", "Label"]) {
     await group.selectOption(name);
@@ -362,7 +366,6 @@ export async function checkAlignmentControls(app, { width, colorScheme }) {
     await expect(findPanel(page).locator(".tuning-note")).toHaveCount(0);
   }
   await group.selectOption("Team");
-  await page.getByRole("tab", { name: "Games", exact: true }).click();
   const club = page.locator("#seasonGames .game-side.away .club").first();
   const dot = club.locator(":scope > .dot");
   const name = club.locator(".team-name");
@@ -422,10 +425,11 @@ export async function checkAlignmentControls(app, { width, colorScheme }) {
  */
 export async function checkAlignmentAttachments(app) {
   const { page } = app;
-  await openTuning(app, readAlignmentRound(app.app));
+  await openTuning(app, readAlignmentRound(app.app), (shown) =>
+    openSeasonPart(shown, app.app === "mlb" ? "Bracket" : "Standings"),
+  );
   const group = findPanel(page).getByRole("combobox", { name: "Role" });
   await group.selectOption("Team");
-  await openSeasonPart(page, app.app === "mlb" ? "Bracket" : "Standings");
   const property = app.app === "mlb" ? "--team-rank-offset" : "--team-conference-offset";
   const selector =
     app.app === "mlb" ? "#bracketWrap .rank-tag" : "#standings-league .conference-tag";
@@ -580,6 +584,33 @@ async function checkRoleControl(page, role, line, nameSelector, round, label) {
 }
 
 /**
+ * @param {import("@playwright/test").Page} page
+ * @param {string} role
+ */
+async function showAlignmentRole(page, role) {
+  if (role === "Team" || role === "Label") {
+    await page.getByRole("tab", { name: role === "Team" ? "Games" : "News", exact: true }).click();
+    return;
+  }
+  await openSeasonPart(page, "Bracket");
+  await page.locator("#bracketWrap .team-open").first().click();
+}
+
+/**
+ * @param {import("@playwright/test").Page} page
+ * @param {string} role
+ */
+function findAlignmentRole(page, role) {
+  if (role === "Team")
+    return { line: page.locator("#seasonGames .game-side.away .club").first(), name: ".team-name" };
+  if (role === "Label")
+    return { line: page.locator(".news-teams .club").first(), name: ".team-name" };
+  if (role === "Large")
+    return { line: page.locator("#teamSheet .team-title"), name: ":scope > span:not(.dot)" };
+  return { line: page.locator("#teamSheet .game-card-opponent").first(), name: ".game-card-name" };
+}
+
+/**
  * @param {App} app
  * @param {string} role
  * @param {string} label
@@ -588,43 +619,16 @@ export async function checkAlignmentRoleControl(app, role, label) {
   const { page } = app;
   await page.setViewportSize({ width: 1280, height: 900 });
   const round = readAlignmentRound(app.app);
-  await openTuning(app, round);
-  if (role === "Team") {
-    await page.getByRole("tab", { name: "Games", exact: true }).click();
-    const club = page.locator("#seasonGames .game-side.away .club").first();
-    await checkRoleControl(page, role, club, ".team-name", round, label);
-    return;
-  }
-  if (role === "Label") {
-    await page.getByRole("tab", { name: "News", exact: true }).click();
-    await checkRoleControl(
-      page,
-      role,
-      page.locator(".news-teams .club").first(),
-      ".team-name",
-      round,
-      label,
-    );
-    return;
-  }
-  await openSeasonPart(page, "Bracket");
-  await page.locator("#bracketWrap .team-open").first().click();
-  if (role === "Large") {
-    const title = page.locator("#teamSheet .team-title");
-    await checkRoleControl(page, role, title, ":scope > span:not(.dot)", round, label);
-    return;
-  }
-  const card = page.locator("#teamSheet .game-card-opponent").first();
-  await checkRoleControl(page, role, card, ".game-card-name", round, label);
+  await openTuning(app, round, (shown) => showAlignmentRole(shown, role));
+  const { line, name } = findAlignmentRole(page, role);
+  await checkRoleControl(page, role, line, name, round, label);
 }
 
 /** @param {App} app */
 export async function checkAlignmentCardFit(app) {
   const { page } = app;
   await page.setViewportSize({ width: 1280, height: 900 });
-  await openTuning(app, readAlignmentRound(app.app));
-  await openSeasonPart(page, "Bracket");
-  await page.locator("#bracketWrap .team-open").first().click();
+  await openTuning(app, readAlignmentRound(app.app), (shown) => showAlignmentRole(shown, "Small"));
   await findPanel(page).getByRole("combobox", { name: "Role" }).selectOption("Small");
   const sizeRow = findRow(page, "--type-team-small-size");
   await sizeRow.getByRole("slider").fill("18");
