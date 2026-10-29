@@ -670,7 +670,7 @@ export function buildSnapshot(responses, { season, now = Date.now() }) {
     missing: LEAGUE_FEEDS.filter((name) => !responses[name]),
     standIn: standIns.size ? "espn" : null,
     scoreboardCover: isEspnCovering(leagueGames, responses, backupGames) ? "espn" : null,
-    isScoreboardIdle:
+    hasNoScoreboardGame:
       !!responses.schedule && !seasonGames.some((game) => isScoreboardGame(game, seriesById, now)),
     // Without the schedule, which says when each game starts, a score may be due.
     hasScoreDue:

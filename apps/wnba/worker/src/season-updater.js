@@ -165,11 +165,11 @@ async function saveSchedule(docs, snapshot) {
 
 // The league's schedule holds one season at a time, so once it lists the next season's games, the
 // season before has no games in it and keeps the ones it saved.
-/** @param {{ missing: string[], standIn?: string | null, isScoreboardIdle?: boolean, openingDay: string | null }} snapshot */
+/** @param {{ missing: string[], standIn?: string | null, hasNoScoreboardGame?: boolean, openingDay: string | null }} snapshot */
 function readGameFeeds(snapshot) {
   const missing = new Set(snapshot.missing);
   const isStandIn = missing.has("scoreboard") && !!snapshot.standIn;
-  const hasScores = !missing.has("scoreboard") || isStandIn || !!snapshot.isScoreboardIdle;
+  const hasScores = !missing.has("scoreboard") || isStandIn || !!snapshot.hasNoScoreboardGame;
   const hasSchedule = !missing.has("schedule") && !!snapshot.openingDay;
   return { missing, isStandIn, hasGames: hasScores && hasSchedule };
 }

@@ -136,8 +136,7 @@ export function createSnapshotLoader({
   }
 
   // Yesterday's games too, since a late game is still being played after midnight Eastern. A game
-  // ESPN didn't answer for is left out, so it doesn't keep the others from standing in, and its
-  // error is kept in `missed`.
+  // ESPN didn't answer for is left out, so it doesn't keep the others from standing in.
   async function fetchBackup() {
     const days = { first: formatEspnDay(now() - DAY_MS), last: formatEspnDay(now()) };
     const listing = await fetchEspn(WNBASnapshot.BACKUP_REQUESTS.events(days.first, days.last));

@@ -102,16 +102,16 @@ test("without the league's scoreboard, the schedule is saved only on a day with 
   const { scoreboard, backup, ...withoutScores } = RESPONSES;
   const responses = { ...withoutScores, schedule: GAMES.preview.schedule };
   const afterLastGame = Date.parse("2026-10-01T03:30:00Z");
-  const idle = buildSnapshot(responses, { season: 2026, now: afterLastGame });
-  assert.deepEqual(idle.missing, ["scoreboard"]);
-  assert.equal(idle.isScoreboardIdle, true);
-  const idleDocs = createDocs();
-  await saveSnapshot(idleDocs, idle);
-  assert.deepEqual(idleDocs.writes, ["seasons/2026", "schedules/2026"]);
-  assert.equal(findTonight(await readUpdates(idleDocs, 2026)).state, "final");
+  const noGame = buildSnapshot(responses, { season: 2026, now: afterLastGame });
+  assert.deepEqual(noGame.missing, ["scoreboard"]);
+  assert.equal(noGame.hasNoScoreboardGame, true);
+  const noGameDocs = createDocs();
+  await saveSnapshot(noGameDocs, noGame);
+  assert.deepEqual(noGameDocs.writes, ["seasons/2026", "schedules/2026"]);
+  assert.equal(findTonight(await readUpdates(noGameDocs, 2026)).state, "final");
 
   const gameDay = buildSnapshot(responses, { season: 2026, now: Date.parse(GAMES.now) });
-  assert.equal(gameDay.isScoreboardIdle, false);
+  assert.equal(gameDay.hasNoScoreboardGame, false);
   const gameDayDocs = createDocs();
   await saveSnapshot(gameDayDocs, gameDay);
   assert.ok(!gameDayDocs.writes.includes("schedules/2026"));
