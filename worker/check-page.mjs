@@ -193,6 +193,33 @@ export async function checkPage(
 }
 
 /**
+ * The text with each secret replaced by its mask, in order, so a secret goes before any it holds.
+ * @param {string} text
+ * @param {[string, string][]} masks each secret and its mask
+ */
+export const maskSecrets = (text, masks) =>
+  masks.reduce((masked, [secret, mask]) => masked.replaceAll(secret, mask), text);
+
+/**
+ * An address's site masked, with or without its scheme.
+ * @param {URL} address
+ * @param {string} mask
+ * @returns {[string, string][]}
+ */
+export const listSiteMasks = ({ origin, hostname }, mask) => [
+  [origin, mask],
+  [hostname, mask],
+];
+
+/**
+ * The access code masked, when there is one.
+ * @param {string} [accessCode]
+ * @returns {[string, string][]}
+ */
+export const listAccessCodeMasks = (accessCode) =>
+  accessCode ? [[accessCode, "<access code>"]] : [];
+
+/**
  * A check's reason without the page's address, since logs and issues are public: not the whole
  * address, its Worker's with or without its scheme, its folder, or its key on its own, in
  * whatever form a browser's error names them, nor the page host the address sent it on to,
@@ -206,27 +233,19 @@ export async function checkPage(
  */
 export function hideAddress(check, pageUrl, landedUrl = pageUrl, accessCode) {
   if (check.status === "drawn") return check;
-  const { origin, hostname, pathname } = new URL(pageUrl);
-  const key = pathname.split("/").filter(Boolean).at(-1) ?? "";
+  const page = new URL(pageUrl);
+  const key = page.pathname.split("/").filter(Boolean).at(-1) ?? "";
   const landed = new URL(landedUrl);
+  /** @type {[string, string][]} */
   const masks = [
     [pageUrl, "<page>/"],
-    [origin, "<worker>"],
-    [hostname, "<worker>"],
-    ...(landed.hostname
-      ? [
-          [landed.origin, "<page host>"],
-          [landed.hostname, "<page host>"],
-        ]
-      : []),
-    [pathname, "/<key>/"],
-    ...(key ? [[key, "<key>"]] : []),
-    ...(accessCode ? [[accessCode, "<access code>"]] : []),
+    ...listSiteMasks(page, "<worker>"),
+    ...(landed.hostname ? listSiteMasks(landed, "<page host>") : []),
+    [page.pathname, "/<key>/"],
+    ...(key ? /** @type {[string, string][]} */ ([[key, "<key>"]]) : []),
+    ...listAccessCodeMasks(accessCode),
   ];
-  const reason = masks.reduce(
-    (text, [secret, mask]) => text.replaceAll(secret, mask),
-    check.reason,
-  );
+  const reason = maskSecrets(check.reason, masks);
   return { ...check, reason };
 }
 

@@ -172,13 +172,21 @@ export function createFeedKeeper({ feeds, now, storage = createMemoryStorage() }
      * @param {boolean} [options.requireFresh] read again and reject failed verification
      * @param {(data: any) => boolean} [options.isBehind] whether a kept answer is behind what
      *   another feed already says
+     * @param {(reason: string) => void} [options.onFailure] told why the feed's last read failed
+     *   while no read since has answered, even when the kept answer stands in
      */
-    async readFeed(name, key, load, { isBehind = () => false, requireFresh = false } = {}) {
+    async readFeed(
+      name,
+      key,
+      load,
+      { isBehind = () => false, requireFresh = false, onFailure = () => {} } = {},
+    ) {
       const storageKey = await nameFeedKey(name, key);
       const what = `${name} ${key}`;
       const record = await readRecord(storageKey);
       const answer = record?.answer;
       if (!requireFresh && !(await isDue(name, record, isBehind))) {
+        if (record?.reason !== undefined) onFailure(record.reason);
         if (answer) return answer.data;
         throw new Error(record.reason);
       }
@@ -187,11 +195,9 @@ export function createFeedKeeper({ feeds, now, storage = createMemoryStorage() }
         await saveRecord(storageKey, { answer: { at: now(), data } }, what);
         return data;
       } catch (error) {
-        await saveRecord(
-          storageKey,
-          { answer, failedAt: now(), reason: describeError(error) },
-          what,
-        );
+        const reason = describeError(error);
+        await saveRecord(storageKey, { answer, failedAt: now(), reason }, what);
+        onFailure(reason);
         if (answer && !requireFresh) return answer.data;
         throw error;
       }

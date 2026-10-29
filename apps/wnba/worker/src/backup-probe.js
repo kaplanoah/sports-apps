@@ -53,18 +53,26 @@ const isProbeDue = (probe, now) =>
  * @param {import("../../../../shared/worker/feed-keeper.js").FeedStorage} [options.storage]
  */
 export function createBackupReader({ fetchBackup, now, storage = createMemoryStorage() }) {
+  /** The last probe, or a first one that only marks when the probes start. */
+  async function readProbe() {
+    const probe = await storage.get(STORAGE_KEY);
+    if (probe) return probe;
+    const first = { at: now(), failure: null };
+    await storage.put(STORAGE_KEY, first);
+    return first;
+  }
+
   /**
    * The backup while it's needed, and why the backup last failed, or null while it answers.
    * @param {boolean} isNeeded
    */
   return async function readBackup(isNeeded) {
-    if (isNeeded) return fetchBackupOrFailure(fetchBackup);
-    const probe = await storage.get(STORAGE_KEY);
-    if (!probe) await storage.put(STORAGE_KEY, { at: now(), failure: null });
-    if (!probe || !isProbeDue(probe, now()))
-      return { backup: null, failure: probe?.failure ?? null };
-    const { failure } = await fetchBackupOrFailure(fetchBackup);
+    if (!isNeeded) {
+      const probe = await readProbe();
+      if (!isProbeDue(probe, now())) return { backup: null, failure: probe.failure };
+    }
+    const { backup, failure } = await fetchBackupOrFailure(fetchBackup);
     await storage.put(STORAGE_KEY, { at: now(), failure });
-    return { backup: null, failure };
+    return { backup: isNeeded ? backup : null, failure };
   };
 }

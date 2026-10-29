@@ -123,6 +123,56 @@ test("each feed that fails is named with why, by its path alone, and a feed that
   });
 });
 
+const HOUR_MS = 60 * 60 * 1000;
+
+// A fake MLB whose feeds named in `down` answer 502, counting their calls too.
+function createFlakyMlb() {
+  const mlb = createFakeMlb();
+  /** @type {Set<string>} */
+  const down = new Set();
+  const fetchImpl = async (/** @type {string} */ url, /** @type {any} */ init) => {
+    if (!down.has(nameRequest(url))) return mlb.fetchImpl(url, init);
+    mlb.calls.push({ url, init });
+    return new Response("", { status: 502 });
+  };
+  return { ...mlb, down, fetchImpl };
+}
+
+const STANDINGS_FAILURE = { standings: "MLB Stats API answered 502 for /api/v1/standings" };
+
+test("a slow feed that answered and then fails is named with why, while its kept answer stands in", async () => {
+  const mlb = createFlakyMlb();
+  let now = NOW;
+  const loader = createSnapshotLoader({ fetchImpl: mlb.fetchImpl, now: () => now });
+  const answered = await loader.loadSnapshot(2026);
+
+  mlb.down.add("standings");
+  now += 24 * HOUR_MS;
+  const failed = await loader.loadSnapshot(2026);
+  now += 60 * 1000;
+  const waiting = await loader.loadSnapshot(2026);
+
+  assert.equal(mlb.countCalls("standings"), 2);
+  assert.deepEqual(
+    [listFeedFailures(failed), listFeedFailures(waiting)],
+    [STANDINGS_FAILURE, STANDINGS_FAILURE],
+  );
+  assert.deepEqual(failed.missing, answered.missing);
+});
+
+test("a verifying read between updates still names each feed that's failing", async () => {
+  const mlb = createFlakyMlb();
+  mlb.down.add("standings");
+  let now = NOW;
+  const loader = createSnapshotLoader({ fetchImpl: mlb.fetchImpl, now: () => now });
+  await loader.loadSnapshot(2026);
+
+  now += 60 * 1000;
+  const verified = await loader.loadSnapshot(2026, { verify: true });
+
+  assert.deepEqual(listFeedFailures(verified), STANDINGS_FAILURE);
+});
+
 test("reads moments apart share one trip to MLB", async () => {
   const { mlb, loadSnapshot, advanceClock } = createTestLoader();
   await Promise.all([1, 2, 3].map(() => loadSnapshot()));
@@ -133,7 +183,6 @@ test("reads moments apart share one trip to MLB", async () => {
   assert.equal(mlb.calls.length, firstTrip + 1 + LIVE_GAME_IDS.length);
 });
 
-const HOUR_MS = 60 * 60 * 1000;
 const SLOW_REQUESTS = ["season", "standings", "postseason", "seasonGames"];
 
 test("only the schedule is read every time, the postseason hourly, and the rest daily", async () => {

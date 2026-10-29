@@ -107,9 +107,9 @@ export function createSnapshotLoader({
   /**
    * @param {keyof typeof SLOW_FEEDS} name
    * @param {string} url
-   * @param {{ isBehind?: (answer: any) => boolean, requireFresh?: boolean }} [options]
+   * @param {{ isBehind?: (answer: any) => boolean, requireFresh?: boolean, onFailure: (reason: string) => void }} options
    */
-  const readSlowFeed = (name, url, options = {}) =>
+  const readSlowFeed = (name, url, options) =>
     slowFeeds.readFeed(name, url, () => fetchFeed(name, url), options);
 
   /** @param {string} url */
@@ -184,8 +184,12 @@ export function createSnapshotLoader({
     /** @type {Record<string, string>} */
     const failures = {};
     /** @param {keyof typeof FEED_DATA} name */
+    const noteReason = (name) => (/** @type {string} */ reason) => {
+      failures[name] = reason;
+    };
+    /** @param {keyof typeof FEED_DATA} name */
     const noteFailure = (name) => (/** @type {unknown} */ error) => {
-      failures[name] = describeError(error);
+      noteReason(name)(describeError(error));
       return null;
     };
     const scoreboard = await fetchFeed("scoreboard", WNBASnapshot.REQUESTS.scoreboard).catch(
@@ -198,13 +202,15 @@ export function createSnapshotLoader({
       readSlowFeed("schedule", WNBASnapshot.REQUESTS.schedule, {
         isBehind: hasGamesLeftLive,
         requireFresh: verify,
+        onFailure: noteReason("schedule"),
       }).catch(noteFailure("schedule")),
       readSlowFeed("bracket", WNBASnapshot.REQUESTS.bracket(season), {
         requireFresh: verify,
+        onFailure: noteReason("bracket"),
       }).catch(noteFailure("bracket")),
-      readSlowFeed("standings", WNBASnapshot.REQUESTS.standings(season)).catch(
-        noteFailure("standings"),
-      ),
+      readSlowFeed("standings", WNBASnapshot.REQUESTS.standings(season), {
+        onFailure: noteReason("standings"),
+      }).catch(noteFailure("standings")),
     ]);
     if (!scoreboard && !schedule && !bracket)
       throw new Error(`None of the WNBA's feeds answered with data: ${describeFailures(failures)}`);

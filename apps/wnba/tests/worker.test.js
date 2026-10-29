@@ -433,6 +433,27 @@ test("while the scoreboard answers, a probe of ESPN's backup that fails says why
   assert.deepEqual(await loadAt(70), [4, null]);
 });
 
+test("a backup that failed while it was needed says why after the scoreboard is back, until a read a few minutes later answers", async () => {
+  const espn = {};
+  /** @type {Record<string, "page" | "error">} */
+  const refuse = { scoreboard: "error" };
+  const league = createLeague({ refuse, espn });
+  let clock = NOW;
+  const loader = createSnapshotLoader({ fetchImpl: league.fetchImpl, now: () => clock });
+  const loadAt = async (minutes) => {
+    clock = NOW + minutes * MINUTE_MS;
+    const snapshot = await loader.loadSnapshot(2026);
+    return [league.countReads("espn"), readBackupReason(snapshot)];
+  };
+  const reason = `ESPN answered 404 for ${BACKUP_PATH}`;
+  assert.deepEqual(await loadAt(0), [2, reason]);
+  delete refuse.scoreboard;
+  assert.deepEqual(await loadAt(1), [2, reason]);
+  Object.assign(espn, ESPN_EMPTY_DAYS);
+  assert.deepEqual(await loadAt(4), [2, reason]);
+  assert.deepEqual(await loadAt(5), [4, null]);
+});
+
 test("a feed's failure counts as one to look into, but the scoreboard's only while a score is due", () => {
   const failures = { scoreboard: "The scoreboard answered 503", backup: "ESPN answered 404" };
   assert.deepEqual(listFeedFailures({ failures, hasScoreDue: true }), failures);
@@ -822,6 +843,26 @@ test("a slow feed that stops answering keeps its last good answer", async () => 
 
   assert.deepEqual(snapshot.missing, []);
   assert.equal(snapshot.series.find((series) => series.id === "1-0").winner, "NYL");
+});
+
+test("a slow feed that answered and then fails is named with why, while its kept answer stands in", async () => {
+  /** @type {Record<string, "page" | "error">} */
+  const refuse = {};
+  const league = createLeague({ refuse });
+  let now = NOW;
+  const loader = createSnapshotLoader({ fetchImpl: league.fetchImpl, now: () => now });
+  await loader.loadSnapshot(2026);
+
+  refuse.bracket = "error";
+  now += 24 * HOUR_MS;
+  const failed = await loader.loadSnapshot(2026);
+  now += MINUTE_MS;
+  const waiting = await loader.loadSnapshot(2026);
+
+  const reason = `The WNBA answered 503 for ${new URL(REQUESTS.bracket(2026)).pathname}`;
+  assert.deepEqual([failed.failures.bracket, waiting.failures.bracket], [reason, reason]);
+  assert.equal(league.countReads("bracket"), 2);
+  assert.deepEqual(failed.missing, []);
 });
 
 test("a slow feed that didn't answer waits five minutes before it's asked again", async () => {
