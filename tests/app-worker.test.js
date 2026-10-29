@@ -796,3 +796,19 @@ test("forwarded immutable responses receive headers while WebSocket upgrades ret
   answer = upgrade;
   assert.equal(await worker.fetch(request, { APP_KEY: "key" }), upgrade);
 });
+
+test("public HTTP requests redirect to HTTPS before page access, without affecting local development", async () => {
+  const worker = createLockedWorker();
+  for (const path of ["/robots.txt", "/health", "/key/?theme=dark", "/missing"]) {
+    const response = await worker.fetch(new Request(`http://worker.example${path}`), LOCKED_ENV);
+    assert.equal(response.status, 308);
+    assert.equal(response.headers.get("location"), `https://worker.example${path}`);
+    assert.equal(response.headers.get("strict-transport-security"), null);
+    assert.equal(response.headers.get("set-cookie"), null);
+  }
+  for (const host of ["localhost", "127.0.0.1", "[::1]"]) {
+    const response = await worker.fetch(new Request(`http://${host}/key/`), LOCKED_ENV);
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get("location"), null);
+  }
+});

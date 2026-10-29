@@ -58,6 +58,14 @@ function isUntrustedRequest(request, url) {
   return needsOrigin && request.headers.get("origin") !== url.origin;
 }
 
+/** @param {URL} url */
+function redirectToHttps(url) {
+  if (url.protocol !== "http:" || ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname))
+    return null;
+  url.protocol = "https:";
+  return new Response(null, { status: 308, headers: { location: url.href } });
+}
+
 /** @param {Response} response @param {Request} request */
 function addSecurityHeaders(response, request) {
   if (response.status === 101) return response;
@@ -333,6 +341,8 @@ export function createAppWorker({ name, pageFiles, forwardToStore, readFeedFailu
   const worker = {
     async fetch(request, env = {}) {
       const url = new URL(request.url);
+      const redirect = redirectToHttps(url);
+      if (redirect) return redirect;
       if (url.pathname === "/robots.txt") return serveRobots(releaseCommit);
       if (url.pathname === "/health") return serveHealth(env);
       const prefix = findAppPrefix(url, env);
