@@ -7,6 +7,9 @@
  * also take their letter spacing from their role, --type-heading-tracking and --type-label-tracking,
  * so each looks as open everywhere it shows. The date strip's TODAY and the calendar sidebar's
  * TMRW keep the label's size and weight but use --type-relative-label-tracking for tighter spacing.
+ * A row that centers its words, as a search example or a settings page's name does, centers their
+ * capitals: it pads --word-lift more under them than over them, which each app's :root sets in em
+ * for its words' font, negative where the font draws its capitals high.
  *
  *   title         the app's name at the top
  *   headline      a news story's title
@@ -40,10 +43,6 @@
   --type-field-size: 1rem;
   /* How far apart a font's lines sit, as a share of every line height set by its text's size. */
   --leading: 1;
-  /* Words mostly in lowercase carry their weight low, so they look low centered in a row, as a
-     search example or a settings page's name does. A row holding them pads this much more under
-     them than over them. */
-  --lowercase-lift: 3px;
   /* Safari on an iPhone otherwise enlarges some text on a turn to landscape and can keep it big
      on the turn back. */
   -webkit-text-size-adjust: 100%;

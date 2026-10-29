@@ -256,6 +256,8 @@
   --type-notice-text-weight: 400;
   --type-confirmation-size: calc(21rem / 16);
   --type-confirmation-weight: 500;
+  /* Barlow's capitals sit low in its line, so a row lifts its words to center them. */
+  --word-lift: 0.13em;
   --gate-code-font: var(--numbers);
   --gate-problem: var(--now);
   --text: "Barlow", system-ui, sans-serif;

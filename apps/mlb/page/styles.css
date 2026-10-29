@@ -123,6 +123,8 @@
   --type-notice-text-weight: 400;
   --type-confirmation-size: calc(20.5rem / 16);
   --type-confirmation-weight: 525;
+  /* Libre Franklin's capitals sit high in its line, so a row drops its words to center them. */
+  --word-lift: -0.04em;
   /* Libre Franklin sets its lines a little apart. */
   --leading: 1.01;
   --bg: #f5f1e6;

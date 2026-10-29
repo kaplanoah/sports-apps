@@ -2,8 +2,9 @@
  * A season's search, as game-search-view.js draws it in a .search-view, in a view of its own,
  * sharing a .day-view's layout. Apps link it after day-strip.css, before their own styles.css.
  *
- * Beside type.css's roles, chrome.css's --ink, --ink-dim, --divider, and --radius-control, and
- * day-strip.css's --reach-left and --reach-right, an app's :root defines these tokens:
+ * Beside type.css's roles and --word-lift, chrome.css's --ink, --ink-dim, --divider, and
+ * --radius-control, and day-strip.css's --reach-left and --reach-right, an app's :root defines
+ * these tokens:
  *   --raised       the field's fill, as a card's
  *   --edge         the line inside the field's edge
  *   --action       Cancel and the field's caret, where to tap
@@ -141,9 +142,9 @@
 }
 
 /* Before anything is typed, the examples sit 4.5px under the field and inside its width, as room
-   as wide as Cancel keeps them from it: their words 1.5px right of where its text starts, a step
-   above the middle of their rows, and their lines from 2px right of where its text starts to 1px
-   short of its right edge. */
+   as wide as Cancel keeps them from it: their words 1.5px right of where its text starts, with
+   their capitals centered in their rows, and their lines from 2px right of where its text starts
+   to 1px short of its right edge. */
 .search-bar.is-empty + .search-list {
   padding-top: 0;
 }
@@ -176,7 +177,7 @@
   box-sizing: border-box;
   width: 100%;
   height: 38px;
-  padding: 0 0 var(--lowercase-lift) 36.5px;
+  padding: calc(6px - var(--word-lift) / 2) 0 calc(6px + var(--word-lift) / 2) 36.5px;
   border: 0;
   background: none;
   font-family: var(--text);
