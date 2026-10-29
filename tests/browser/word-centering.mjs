@@ -1,6 +1,16 @@
 import { readCapitals } from "./capitals.mjs";
+import { countTextLines } from "./text-lines.mjs";
 
 const LIFT = "--word-lift";
+
+/** Every rule that lifts its part's words by the words' lift; a new one joins this list. */
+const CENTERED_PARTS = [
+  ".search-example",
+  ".search-words",
+  ".search-detail",
+  ".settings-page-row",
+  ".control-row:not(.appearance-row) > .control-label",
+];
 
 /**
  * Lists the rules that lift words by the words' lift, from the page's stylesheets and the rules
@@ -29,7 +39,7 @@ function listLiftedRules(page) {
 
 /**
  * Measures where the row around a part starts and ends, inside its borders and over a line drawn
- * across its foot, and whether the part's words sit on one line.
+ * across its foot.
  * @param {import("@playwright/test").Locator} part
  * @param {boolean} isPadded whether the part is its own row, or sits in its parent's
  */
@@ -53,19 +63,10 @@ function measureRow(part, isPadded) {
         ? readFootLine(row.parentElement)
         : 0,
     );
-    const texts = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
-    const lineTops = new Set();
-    for (let text = texts.nextNode(); text; text = texts.nextNode()) {
-      const range = document.createRange();
-      range.selectNodeContents(text);
-      for (const rect of range.getClientRects())
-        if (rect.height) lineTops.add(Math.round(rect.top));
-    }
     return {
       words: element.textContent?.trim(),
       top: box.top + Number.parseFloat(style.borderTopWidth),
       bottom: box.bottom - Math.max(Number.parseFloat(style.borderBottomWidth), footLine),
-      isOneLine: lineTops.size === 1,
     };
   }, isPadded);
 }
@@ -81,24 +82,26 @@ async function measureCapitals(page, rules) {
   const measured = await Promise.all(
     rules.map(async ({ selector, isPadded }) => {
       const parts = await page.locator(selector).filter({ visible: true }).all();
+      const lineCounts = await Promise.all(parts.map(countTextLines));
       return Promise.all(
-        parts.map(async (part) => {
-          const [capitals, row] = await Promise.all([
-            readCapitals(part),
-            measureRow(part, isPadded),
-          ]);
-          return {
-            selector,
-            words: row.words,
-            isOneLine: row.isOneLine,
-            above: capitals.top - row.top,
-            below: row.bottom - capitals.bottom,
-          };
-        }),
+        parts
+          .filter((_, index) => lineCounts[index][0] === 1)
+          .map(async (part) => {
+            const [capitals, row] = await Promise.all([
+              readCapitals(part),
+              measureRow(part, isPadded),
+            ]);
+            return {
+              selector,
+              words: row.words,
+              above: capitals.top - row.top,
+              below: row.bottom - capitals.bottom,
+            };
+          }),
       );
     }),
   );
-  return measured.flat().filter(({ isOneLine }) => isOneLine);
+  return measured.flat();
 }
 
 /**
@@ -117,27 +120,27 @@ export function testWordCentering(test, expect, { openApp }) {
     await page.emulateMedia({ reducedMotion: "reduce" });
     await openApp(page);
     const rules = await listLiftedRules(page);
-    expect(rules.length).toBeGreaterThan(0);
+    expect(new Set(rules.map(({ selector }) => selector))).toEqual(new Set(CENTERED_PARTS));
     await page.locator("#tab-search").tap();
-    await page.locator("#gameSearch .search-example").first().waitFor();
+    await expect(page.locator("#gameSearch .search-example").first()).toBeVisible();
     const examples = await measureCapitals(page, rules);
     await page.locator("#gameSearch .search-input").pressSequentially("sett");
-    await page.locator("#gameSearch .search-suggestion .search-words").first().waitFor();
+    await expect(
+      page.locator("#gameSearch .search-suggestion .search-words").first(),
+    ).toBeVisible();
     const pageRows = await measureCapitals(page, rules);
     await page.locator("#gameSearch .search-input").fill("");
     await page.locator("#gameSearch .search-example").last().tap();
-    await page.locator("#gameSearch .search-detail").first().waitFor();
+    await expect(page.locator("#gameSearch .search-detail").first()).toBeVisible();
     const suggestions = await measureCapitals(page, rules);
     await page.locator("#settingsBtn").click();
-    await page.locator("#diagnosticsSwitch").waitFor();
+    await expect(page.locator("#diagnosticsSwitch")).toBeVisible();
     const settings = await measureCapitals(page, rules);
     await page.locator("#contactBtn").click();
-    await page.locator("#contactDialog .settings-page-row").first().waitFor();
+    await expect(page.locator("#contactDialog .settings-page-row").first()).toBeVisible();
     const contact = await measureCapitals(page, rules);
     const rows = [...examples, ...pageRows, ...suggestions, ...settings, ...contact];
-    expect(new Set(rows.map(({ selector }) => selector))).toEqual(
-      new Set(rules.map(({ selector }) => selector)),
-    );
+    expect(new Set(rows.map(({ selector }) => selector))).toEqual(new Set(CENTERED_PARTS));
     for (const { words, above, below } of rows)
       expect({ words, off: Math.abs(above - below) <= 1 ? "centered" : above - below }).toEqual({
         words,

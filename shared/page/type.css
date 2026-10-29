@@ -9,8 +9,8 @@
  * TMRW keep the label's size and weight but use --type-relative-label-tracking for tighter spacing.
  * A row that centers its words, as a search example or a settings page's name does, centers their
  * capitals: it pads --word-lift more under them than over them, which each app's :root sets in em
- * for its words' font, negative where the font draws its capitals high. A part beside others in a
- * centered row takes that lift in margins of its own instead.
+ * for its words' font, negative where the font draws its capitals high. A setting's name beside its
+ * control, and a search row's detail, take that lift in margins of their own instead.
  *
  *   title         the app's name at the top
  *   headline      a news story's title
