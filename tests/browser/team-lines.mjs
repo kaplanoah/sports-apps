@@ -25,8 +25,8 @@ export const ALIGNMENT_TOLERANCE = 0.08;
  * @param {TeamLineExpectations} expectations
  */
 export const readTeamLines = async (page, expectations) => {
-  const configuration = { expected: expectations, tolerance: ALIGNMENT_TOLERANCE };
-  const drawn = await page.evaluate(async ({ expected, tolerance }) => {
+  const configuration = { expectations, tolerance: ALIGNMENT_TOLERANCE };
+  const drawn = await page.evaluate(async ({ expectations, tolerance }) => {
     await document.fonts.ready;
     const problems = [];
     const roles = new Set();
@@ -66,16 +66,16 @@ export const readTeamLines = async (page, expectations) => {
       fonts.set(key, metrics);
       return metrics;
     };
-    for (const line of document.querySelectorAll(expected.lines.selector)) {
+    for (const line of document.querySelectorAll(expectations.lines.selector)) {
       if (!line.checkVisibility() || line.closest("[inert]")) continue;
       const mark = line.querySelector(":scope > .dot, :scope > .all-star-mark");
-      const name = line.querySelector(expected.lines.name);
+      const name = line.querySelector(expectations.lines.name);
       if (!mark || !name) continue;
       const style = getComputedStyle(name);
       const role =
-        expected.roleSelectors.find(({ selector }) => line.matches(selector))?.role ?? "team";
-      const { size, weight: baseWeight, diameter, before, after, font } = expected.roles[role];
-      const weight = expected.weightChanges.reduce(
+        expectations.roleSelectors.find(({ selector }) => line.matches(selector))?.role ?? "team";
+      const { size, weight: baseWeight, diameter, before, after, font } = expectations.roles[role];
+      const weight = expectations.weightChanges.reduce(
         (weight, { selector, delta }) => weight + (line.matches(selector) ? delta : 0),
         baseWeight,
       );
@@ -89,7 +89,7 @@ export const readTeamLines = async (page, expectations) => {
       names.add(text);
       if (line.closest(".tbd") || name.matches(".tbd") || text === "TBD") states.add("TBD");
       if (line.closest(".won, .winner")) states.add("winner");
-      for (const { selector, state } of expected.stateSelectors)
+      for (const { selector, state } of expectations.stateSelectors)
         if (line.matches(selector)) states.add(state);
       check(parseFloat(style.fontSize), size, `${description} size`);
       check(Number(style.fontWeight), weight, `${description} weight`);
@@ -100,23 +100,26 @@ export const readTeamLines = async (page, expectations) => {
         states.add("All-Star");
         check(
           mark.getBoundingClientRect().width,
-          expected.allStar.width,
+          expectations.allStar.width,
           `${description} star scale`,
         );
         check(
           findMiddle(mark) - findMiddle(name),
-          expected.allStar.offset,
+          expectations.allStar.offset,
           `${description} star position`,
         );
       } else {
         check(mark.getBoundingClientRect().width, diameter, `${description} dot width`);
         check(mark.getBoundingClientRect().height, diameter, `${description} dot height`);
         check(findMiddle(mark) - center, isAfter ? after : before, `${description} dot center`);
-        if (expected.lines.dotHeightSelector && line.matches(expected.lines.dotHeightSelector))
+        if (
+          expectations.lines.dotHeightSelector &&
+          line.matches(expectations.lines.dotHeightSelector)
+        )
           check(line.getBoundingClientRect().height, diameter, `${description} line height`);
       }
       const seed = line.querySelector(":scope > .seed");
-      const seedOffsets = expected.seeds[role];
+      const seedOffsets = expectations.seeds[role];
       if (seed && seedOffsets) {
         attachments.add(`${role} seed ${isAfter ? "after" : "before"}`);
         check(
@@ -125,7 +128,7 @@ export const readTeamLines = async (page, expectations) => {
           `${description} seed center`,
         );
       }
-      for (const attachment of expected.attachments) {
+      for (const attachment of expectations.attachments) {
         const match = attachment.parents
           .map((selector) => line.closest(selector))
           .filter(Boolean)
@@ -147,14 +150,14 @@ export const readTeamLines = async (page, expectations) => {
         );
       }
     }
-    for (const placeholder of expected.placeholders.flatMap((selector) => [
+    for (const placeholder of expectations.placeholders.flatMap((selector) => [
       ...document.querySelectorAll(selector),
     ])) {
       if (!placeholder.checkVisibility() || placeholder.closest("[inert]")) continue;
       states.add(placeholder.textContent.trim());
       const style = getComputedStyle(placeholder);
-      check(parseFloat(style.fontSize), expected.roles.team.size, "TBD size");
-      check(Number(style.fontWeight), expected.roles.team.weight, "TBD weight");
+      check(parseFloat(style.fontSize), expectations.roles.team.size, "TBD size");
+      check(Number(style.fontWeight), expectations.roles.team.weight, "TBD weight");
     }
     return {
       problems,
