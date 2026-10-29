@@ -25,6 +25,27 @@ export const PHONE_OK_LABEL = "phone-ok";
 export const readEventTime = (event) => Date.parse(event.created_at ?? "");
 
 /**
+ * The event that last added `label` to a pull request, if any.
+ * @param {TimelineEvent[]} events
+ * @param {string} label
+ */
+const findLastAdded = (events, label) =>
+  events
+    .filter((event) => event.event === "labeled" && event.label?.name === label)
+    .toSorted((first, second) => readEventTime(first) - readEventTime(second))
+    .at(-1);
+
+/**
+ * When `label` was last added to a pull request, or NaN when it never was.
+ * @param {TimelineEvent[]} events
+ * @param {string} label
+ */
+export function findAddedAt(events, label) {
+  const lastAdded = findLastAdded(events, label);
+  return lastAdded ? readEventTime(lastAdded) : Number.NaN;
+}
+
+/**
  * Who last added `label` to a pull request, when, and whether they added it after a push and after
  * its last force push, from its timeline. A commit's own date is when it was made, which can be long
  * before it was pushed, so the push time comes from GitHub.
@@ -34,10 +55,7 @@ export const readEventTime = (event) => Date.parse(event.created_at ?? "");
  * @returns {Labeling}
  */
 export function findLabeling(events, label, pushedAt) {
-  const lastAdded = events
-    .filter((event) => event.event === "labeled" && event.label?.name === label)
-    .toSorted((first, second) => readEventTime(first) - readEventTime(second))
-    .at(-1);
+  const lastAdded = findLastAdded(events, label);
   if (!lastAdded) return { labeler: null, addedAt: Number.NaN, isAfterLastPush: false };
   const forcePushes = events.filter((event) => event.event === "head_ref_force_pushed");
   const lastPush = Math.max(pushedAt, ...forcePushes.map(readEventTime));

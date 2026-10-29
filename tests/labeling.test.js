@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { findLabeling, readPushTime, readTimeline } from "../worker/labeling.mjs";
+import { findAddedAt, findLabeling, readPushTime, readTimeline } from "../worker/labeling.mjs";
 import { createTimelineAnswer } from "./timeline.js";
 
 /**
@@ -38,6 +38,8 @@ test("a label's adder and when it was added are whoever added it last and then, 
     addedAt: Number.NaN,
     isAfterLastPush: false,
   });
+  assert.equal(findAddedAt(events.toReversed(), "phone-ok"), lastAdded.addedAt);
+  assert.equal(findAddedAt(events.slice(3), "phone-ok"), Number.NaN);
 });
 
 test("a head pushed after the phone-ok label leaves it before the last push, whatever its commit's date says", () => {

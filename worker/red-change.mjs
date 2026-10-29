@@ -13,11 +13,10 @@
 // manifest opens its Home Screen app, or to a manifest the gate can't read; and a diff the gate
 // can't read. A red change merges only once the owner has used it on the beta app and labeled it
 // phone-ok. Anyone who can label a pull request could add the label, so the gate reads who last
-// added it and lets the change through only from the repository's owner, and only when the label
-// came after the head's last tested change reached GitHub, which the owner hasn't used on the
-// phone otherwise. An empty commit is no new change, and neither is a clean merge of main that
-// brings in no red commit. It also requires the tested head to contain every red main commit and
-// preceding red changes to have verified production coverage. Red approvals refreshes the phone
+// added it and lets the change through only from the repository's owner, and only when nothing
+// pushed since the head the owner labeled is red, since the owner hasn't used that on the phone.
+// It also requires the tested head to contain every red main commit and preceding red changes to
+// have verified production coverage. Red approvals refreshes the phone
 // status as main or its deployment changes; this remains asynchronous.
 // Usage: git diff --text --no-textconv --no-ext-diff --no-renames <base> |
 //   node worker/red-change.mjs '<labels as JSON>'
@@ -31,7 +30,13 @@ import { execFileSync } from "node:child_process";
 import { appendFileSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { findChannel } from "./channels.mjs";
-import { PHONE_OK_LABEL, findLabeling, readPushTime, readTimeline } from "./labeling.mjs";
+import {
+  PHONE_OK_LABEL,
+  findAddedAt,
+  findLabeling,
+  readPushTime,
+  readTimeline,
+} from "./labeling.mjs";
 import { createGitHub } from "./github-api.mjs";
 import { readDeployedMain } from "./production-coverage.mjs";
 import { isGitObjectId } from "./git-object.mjs";
@@ -837,8 +842,8 @@ function findLabelProblem({ labeler, isAfterLastPush }, owner) {
     );
   if (!isAfterLastPush)
     return (
-      `A red change labeled ${PHONE_OK_LABEL} before the push of its last change, which the owner hasn't ` +
-      `used on the phone. ${TO_BETA} The owner takes the label off and adds it again after using it on ` +
+      `A red change labeled ${PHONE_OK_LABEL} before a push that changed what the owner used on the phone, ` +
+      `or on a head the gate can't find. ${TO_BETA} The owner takes the label off and adds it again after using it on ` +
       "the beta app."
     );
   return null;
@@ -874,72 +879,26 @@ export function findMissingRedCommits({ main = "origin/main", head, cwd = proces
     .trim()
     .split("\n")
     .filter(Boolean);
-  return commits.filter((commit) => {
-    const { diff, readPageFile, listStylesheets } = readCommitChange(`${commit}^1`, commit, cwd);
-    return (
-      Boolean(findDiffProblem(diff)) ||
-      findRedReasons(readDiff(diff), readPageFile, listStylesheets).length > 0
-    );
-  });
+  return commits.filter((commit) => isRedChange(readCommitChange(`${commit}^1`, commit, cwd)));
 }
 
-/**
- * The head's last tested change and each commit after it, oldest first. A phone-ok label has to come
- * after that change reached GitHub. An empty commit changes nothing the owner tests, and neither
- * does a clean merge of main that brings in no red commit, since main merging the commit before it
- * makes the same code.
- * @param {{ main?: string, head: string, cwd?: string }} options
- */
-export function listCommitsFromTestedChange({ main = "origin/main", head, cwd = process.cwd() }) {
-  const readGit = createGateGit(cwd);
-  const mainSha = readGit(["rev-parse", "--verify", "--end-of-options", `${main}^{commit}`]).trim();
-  const commits = [
-    readGit(["rev-parse", "--verify", "--end-of-options", `${head}^{commit}`]).trim(),
-  ];
-  for (;;) {
-    const commit = commits[0];
-    const [, ...parents] = readGit(["rev-list", "--parents", "-n", "1", commit]).trim().split(" ");
-    if (!changesNothingTested({ readGit, commit, parents, mainSha, cwd })) return commits;
-    commits.unshift(parents[0]);
-  }
-}
-
-/**
- * @param {{ readGit: ReturnType<typeof createGateGit>, commit: string, parents: string[], mainSha: string, cwd: string }} options
- */
-function changesNothingTested({ readGit, commit, parents, mainSha, cwd }) {
-  const tree = readGit(["rev-parse", `${commit}^{tree}`]).trim();
-  if (parents.length === 1) return readGit(["rev-parse", `${parents[0]}^{tree}`]).trim() === tree;
-  if (parents.length !== 2) return false;
-  const [branch, merged] = parents;
+/** @param {ReturnType<typeof readCommitChange>} change */
+function isRedChange({ diff, readPageFile, listStylesheets }) {
   return (
-    isAncestor(readGit, merged, mainSha) &&
-    isCleanMerge(readGit, branch, merged, tree) &&
-    !findMissingRedCommits({ main: merged, head: branch, cwd }).length
+    Boolean(findDiffProblem(diff)) ||
+    findRedReasons(readDiff(diff), readPageFile, listStylesheets).length > 0
   );
 }
 
 /**
- * Whether git merging the two commits makes the tree. A merge git can't redo, like one of unrelated
- * histories, is a change the owner tests.
- * @param {ReturnType<typeof createGateGit>} readGit @param {string} first @param {string} second @param {string} tree
+ * The head and the commits before it, newest first, along its first parents, which a push to the
+ * branch keeps in the order it made them.
+ * @param {{ head: string, cwd?: string }} options
  */
-function isCleanMerge(readGit, first, second, tree) {
-  try {
-    return readCleanMergeTree(readGit, first, second) === tree;
-  } catch {
-    return false;
-  }
-}
-
-/** @param {ReturnType<typeof createGateGit>} readGit @param {string} commit @param {string} descendant */
-function isAncestor(readGit, commit, descendant) {
-  try {
-    readGit(["merge-base", "--is-ancestor", commit, descendant]);
-    return true;
-  } catch {
-    return false;
-  }
+function listFirstParents({ head, cwd = process.cwd() }) {
+  const readGit = createGateGit(cwd);
+  const headSha = readGit(["rev-parse", "--verify", "--end-of-options", `${head}^{commit}`]).trim();
+  return readGit(["rev-list", "--first-parent", headSha, "--"]).trim().split("\n").filter(Boolean);
 }
 
 /**
@@ -1000,7 +959,7 @@ export function readMergedChange(main, head, cwd = process.cwd()) {
 
 /**
  * The gate's verdict on a pull request, given its diff, its labels, who last added the phone-ok
- * label and whether that came after the push of its last tested change, and the repository's owner.
+ * label and whether nothing red was pushed after it, and the repository's owner.
  * @param {string} diff
  * @param {{ labels: string[], labeling?: Labeling, owner?: string, missingRedCommits?: string[], pendingRedCommits?: string[] }} pullRequest
  * @param {ReadPageFile} [readPageFile]
@@ -1056,14 +1015,17 @@ export function decideGate(
 }
 
 /**
- * When GitHub first saw the head's last tested change. GitHub records only each push's head, so a
- * change pushed under later commits arrived with the first of them it records.
- * @param {{ repository: string, head: string, env: NodeJS.ProcessEnv, fetchImpl: typeof fetch, cwd: string }} options
+ * When GitHub first saw the head the owner labeled, or NaN when that head can't be found or a red
+ * change came after it. The labeled head is the head's newest first parent GitHub saw before the
+ * label. GitHub records only each push's head, so a commit it never saw arrived under a later one.
+ * @param {{ repository: string, head: string, labeledAt: number, env: NodeJS.ProcessEnv, fetchImpl: typeof fetch, cwd: string }} options
  */
-async function readTestedPushTime({ repository, head, env, fetchImpl, cwd }) {
-  for (const sha of listCommitsFromTestedChange({ head, cwd })) {
+async function readLabeledPushTime({ repository, head, labeledAt, env, fetchImpl, cwd }) {
+  if (Number.isNaN(labeledAt)) return Number.NaN;
+  for (const sha of listFirstParents({ head, cwd })) {
     const pushedAt = await readPushTime({ repository, sha, env, fetchImpl });
-    if (!Number.isNaN(pushedAt)) return pushedAt;
+    if (pushedAt < labeledAt)
+      return isRedChange(readCommitChange(sha, head, cwd)) ? Number.NaN : pushedAt;
   }
   return Number.NaN;
 }
@@ -1094,11 +1056,17 @@ export async function readRedApproval({
   const repository = env.GITHUB_REPOSITORY ?? "";
   const head = env.HEAD_SHA ?? "";
   try {
-    const [events, testedPushedAt] = await Promise.all([
-      readTimeline({ repository, pullNumber: env.PR ?? "", env, fetchImpl }),
-      readTestedPushTime({ repository, head, env, fetchImpl, cwd }),
-    ]);
-    const labeling = findLabeling(events, PHONE_OK_LABEL, testedPushedAt);
+    const events = await readTimeline({ repository, pullNumber: env.PR ?? "", env, fetchImpl });
+    const labeledAt = findAddedAt(events, PHONE_OK_LABEL);
+    const labeledPushedAt = await readLabeledPushTime({
+      repository,
+      head,
+      labeledAt,
+      env,
+      fetchImpl,
+      cwd,
+    });
+    const labeling = findLabeling(events, PHONE_OK_LABEL, labeledPushedAt);
     const labeled = decide({ labels, owner, labeling });
     if (labeled.isHeld) return labeled;
     const missingRedCommits = findMissingRedCommits({ head, cwd });
