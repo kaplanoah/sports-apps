@@ -9,10 +9,33 @@ import {
   isPtraceDenial,
   isSudoDenial,
   readSocketConnection,
+  verifyControlFileDenials,
 } from "../worker/codex-rate-isolation-access.mjs";
 
 const status =
   "NoNewPrivs:\t1\nGroups:\t\nCapInh:\t00000000\nCapPrm:\t00000000\nCapEff:\t00000000\nCapBnd:\t00000000\nCapAmb:\t00000000\n";
+
+test("every private holder and public native control must deny writes with a real permission error", () => {
+  const paths = ["/example/private.mjs", "/example/public.mjs"];
+  const denied = () => {
+    throw Object.assign(new Error("denied"), { code: "EACCES" });
+  };
+  assert.equal(verifyControlFileDenials(paths, denied), true);
+  assert.equal(
+    verifyControlFileDenials(paths, (path) => {
+      if (path.includes("private")) denied();
+    }),
+    false,
+  );
+  assert.equal(
+    verifyControlFileDenials(paths, () => {
+      throw Object.assign(new Error("missing"), { code: "ENOENT" });
+    }),
+    false,
+  );
+  for (const invalid of [[], null, "one-file", [1]])
+    assert.equal(verifyControlFileDenials(invalid, denied), false);
+});
 
 test("permission and network denial classifiers reject missing resources and timeouts", () => {
   for (const code of ["EACCES", "EPERM", "EROFS"])

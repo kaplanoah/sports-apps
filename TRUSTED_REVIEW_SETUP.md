@@ -135,11 +135,29 @@ Native Codex model jobs share one queued GitHub concurrency slot per repository 
 
 This conservative slot reduces simultaneous pressure on the provider's token-per-minute limit. It cannot reserve capacity against other repositories or external consumers of the same API project, or guarantee that a single native session never reaches that limit. Record the full Actions wall time, including queue time, separately from each session's elapsed time.
 
-CI's scoped `codex-rate-control-isolation` job tests request admission and the runner process boundary with fake credentials and no native model. It is required by `tested` and `check` when tests run. The request controller is not connected to any secret-bearing workflow. Its token reservation is an explicit encoding estimate with headroom, not verified model tokenization or observed usage. Real credential routing and hosted native validation remain separate activation steps.
+## Native request admission
+
+CI's scoped `codex-rate-control-isolation` job tests request admission and the runner process boundary with fake credentials and no native model. It is required by `tested` and `check` when tests run. The native live, historical and runner-proof jobs connect the same controller through the official credential proxy to a root-protected loopback endpoint. That endpoint forwards only to OpenAI Responses. Native sandbox processes cannot modify its code, state or private configuration. A guardian observes the original invocation's kernel process identity, closes and drains requests when it exits, restores the two approved runner namespace settings, and writes immutable numeric cooldown evidence. No headers or credential values enter that artifact.
+
+The policy reserves estimated input plus 32,768 output tokens and 1,024 overhead tokens, with 20 percent headroom against the observed 1,000,000-token window. It also spaces requests by two seconds and caps local admission at 30 requests per minute; that cap is conservative policy, not a claim about the provider's RPM allowance. Reservations without observed usage remain reserved. Provider headers and HTTP or streamed throttle advice extend cooldowns. The gateway never replays requests; the pinned native client owns its bounded request retries, with unbounded connection retries disabled.
+
+Before paid execution, jobs authenticate the preceding consumer and its original cooldown ZIP against GitHub run, job, source ancestry and SHA-256 metadata. Failed or interrupted consumers retain their cooldowns without becoming successful reviews. Hosted CI separately checks whether the existing read-only token can retrieve another run's original artifact. An unsuccessful access diagnostic must be resolved before a new native trial. No additional token permission is granted implicitly.
+
+Quota discovery ignores untrusted PR-triggered or foreign runs before reading their artifacts or native-looking jobs. Stacked-PR reviews are eligible for admission; only the protected publisher restricts its head check to a main-targeted PR. Native request, model and validation jobs use the publisher's required stage names. A single source catalog ties native step names, entry points and bundled controls to isolation scope tests.
+
+The first consumer waits a full quota window. Recent missing, expired or old-policy quota evidence blocks admission. Once its authenticated producer has completed at least one current window plus the maximum admission wait ago, an independently authorized new consumer may recover through a fresh full-window warm-up. An available old-policy record is checked for provenance, cleanup and numeric validity, and any known longer cooldown is preserved. Duplicate or tampered artifacts and API verification errors fail closed. No original failure becomes successful, unknown usage stays unavailable, and this recovery never dispatches or retries a model. See the review-failures skill before a separate pre-model recovery.
+
+Startup failure produces a `not-started` record after successful restoration and private-control removal. A failure marker without finalized quota means cleanup or accounting was not verified.
+
+Token estimates are not verified model tokenization, and unrelated account traffic can still cause throttling. Shared feedback responds conservatively; no zero-throttle guarantee is made. Live Codex activation requires hosted isolation, native validation and the remaining activation evidence, followed by an explicit owner decision.
+
+## Review join recovery
 
 CI's read-only review join keeps its bounded wait even when queued model work takes longer. The trusted lifecycle workflow listens for both review completion and failed PR CI completion, so either completion order can recover a timed-out join. It requests one rerun of the latest matching first-attempt CI join and its downstream check after the latest requested review succeeds. No model job is rerun, and the join still verifies sealed current-code/provider evidence before check can pass.
 
 Recovery uses an Actions-write token only in its separate trusted-main job, without model or publisher credentials. It requires an open ready PR at the same head and main target, a successful current review result, completed CI jobs and no failure outside the join/check. Ambiguous or fork CI metadata, another CI failure, API errors or an already retried CI run require inspection and the manual join recovery in the `review-failures` skill. A recovery failure never approves the PR.
+
+## Native usage, coverage and publishing
 
 Native usage retains only validated numeric input, cached-input, cache-write-input, output and reasoning-output counters. [Evaluation measurements](TRUSTED_REVIEW_EVALUATION.md#measurements) define how those counters are counted and how missing usage is reported.
 

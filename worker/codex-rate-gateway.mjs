@@ -34,7 +34,7 @@ function requireSafeAmount(value) {
   return Number.isSafeInteger(value) && value >= 0;
 }
 
-function readUsage(frame) {
+function readStreamEvent(frame) {
   if (!frame.startsWith("data:")) return null;
   let event;
   try {
@@ -42,7 +42,11 @@ function readUsage(frame) {
   } catch {
     return null;
   }
-  if (event.type !== "response.completed") return null;
+  return event;
+}
+
+function readUsage(event) {
+  if (event?.type !== "response.completed") return null;
   const usage = event.response?.usage;
   if (!requireSafeAmount(usage?.input_tokens) || !requireSafeAmount(usage?.output_tokens))
     return null;
@@ -50,11 +54,17 @@ function readUsage(frame) {
   return requireSafeAmount(total) ? total : null;
 }
 
-function createUsageReader(maxFrameBytes) {
+function createUsageReader(maxFrameBytes, observeError) {
   const decoder = new TextDecoder();
   let buffered = "";
   let observed = null;
   let disabled = false;
+  function inspect(frame) {
+    const event = readStreamEvent(frame);
+    if (event?.type === "response.failed") observeError(event.response?.error);
+    else if (event?.type === "error") observeError(event.error ?? event);
+    return readUsage(event);
+  }
   return {
     append(chunk) {
       if (disabled) return;
@@ -62,7 +72,7 @@ function createUsageReader(maxFrameBytes) {
       for (;;) {
         const split = buffered.indexOf("\n");
         if (split < 0) break;
-        observed = readUsage(buffered.slice(0, split).replace(/\r$/, "")) ?? observed;
+        observed = inspect(buffered.slice(0, split).replace(/\r$/, "")) ?? observed;
         buffered = buffered.slice(split + 1);
       }
       if (Buffer.byteLength(buffered) > maxFrameBytes) {
@@ -74,7 +84,7 @@ function createUsageReader(maxFrameBytes) {
     complete() {
       if (disabled) return null;
       buffered += decoder.decode();
-      return readUsage(buffered.replace(/\r$/, "")) ?? observed;
+      return inspect(buffered.replace(/\r$/, "")) ?? observed;
     },
   };
 }
@@ -109,6 +119,8 @@ export function createAdmissionRequestHandler({
   timeoutMs = 300000,
 }) {
   const active = new Set();
+  const pending = new Set();
+  let failed = false;
   async function serveRequest(request, response) {
     if (
       request.method !== "POST" ||
@@ -166,10 +178,11 @@ export function createAdmissionRequestHandler({
         throw new Error("Upstream redirect rejected.");
       budget.observeHeaders?.(upstream.headers);
       const headers = filterProxyHeaders(upstream.headers);
-      if (upstream.status === 429) {
+      const retryAfter = parseRetryAfter(upstream.headers, now());
+      if (upstream.status === 429 || (upstream.status >= 500 && retryAfter !== null)) {
         const deadline = Math.max(
           now() + fallbackCooldownMs,
-          parseRetryAfter(upstream.headers, now()) ?? 0,
+          retryAfter ?? 0,
           parseReset(upstream.headers.get("x-ratelimit-reset-tokens"), now()) ?? 0,
           parseReset(upstream.headers.get("x-ratelimit-reset-requests"), now()) ?? 0,
         );
@@ -180,7 +193,13 @@ export function createAdmissionRequestHandler({
         if (advice !== null) headers["retry-after"] = advice;
       }
       response.writeHead(upstream.status, headers);
-      const usage = createUsageReader(maxFrameBytes);
+      const usage = createUsageReader(maxFrameBytes, (error) => {
+        if (!["rate_limit_exceeded", "slow_down"].includes(error?.code)) return;
+        const match = /try again in\s+(\S+(?:\s+seconds?)?)/i.exec(error.message ?? "");
+        const duration = match?.[1].replace(/[.,;!?]+$/, "").replace(/\s*seconds?$/i, "s");
+        const advised = duration ? parseReset(duration, now()) : null;
+        budget.defer(Math.max(now() + fallbackCooldownMs, retryAfter ?? 0, advised ?? 0));
+      });
       for await (const chunk of upstream.body ?? []) {
         restartInactivityTimeout();
         usage.append(chunk);
@@ -203,9 +222,23 @@ export function createAdmissionRequestHandler({
     }
   }
   return {
-    serveRequest,
-    abortRequests() {
+    serveRequest(request, response) {
+      const task = serveRequest(request, response);
+      pending.add(task);
+      task.then(
+        () => pending.delete(task),
+        () => {
+          failed = true;
+          pending.delete(task);
+          if (!response.writableEnded) response.destroy();
+        },
+      );
+      return task;
+    },
+    async abortRequests() {
       for (const controller of active) controller.abort();
+      await Promise.allSettled([...pending]);
+      if (failed) throw new Error("A native admission request could not finalize.");
     },
   };
 }
@@ -214,7 +247,7 @@ export function createAdmissionRequestHandler({
 export async function startAdmissionGateway(options) {
   const requests = createAdmissionRequestHandler(options);
   const server = (options.createServer ?? http.createServer)(requests.serveRequest);
-  server.listen(0, "127.0.0.1");
+  server.listen(options.port ?? 0, "127.0.0.1");
   await once(server, "listening");
   const address = server.address();
   if (!address || typeof address === "string") throw new Error("Loopback address unavailable.");
@@ -224,11 +257,16 @@ export async function startAdmissionGateway(options) {
     async close() {
       if (closed) return;
       closed = true;
-      requests.abortRequests();
+      const drained = requests.abortRequests().then(
+        () => null,
+        (error) => error,
+      );
       server.closeAllConnections();
       await new Promise((resolve, reject) =>
         server.close((error) => (error ? reject(error) : resolve(undefined))),
       );
+      const failure = await drained;
+      if (failure) throw failure;
     },
   };
 }

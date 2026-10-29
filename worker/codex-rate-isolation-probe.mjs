@@ -9,6 +9,7 @@ import {
   isPtraceDenial,
   isSudoDenial,
   readSocketConnection,
+  verifyControlFileDenials,
 } from "./codex-rate-isolation-access.mjs";
 
 function isDenied(operation) {
@@ -54,7 +55,7 @@ async function readProcessBoundary(settings) {
     rootEnvironmentDenied: isDenied(() => readFileSync(`/proc/${settings.pid}/environ`)),
     rootDescriptorsDenied: isDenied(() => readlinkSync(`/proc/${settings.pid}/fd/0`)),
     rootFileDenied: isDenied(() => readFileSync(settings.privateFile)),
-    controlsWriteDenied: isDenied(() => writeFileSync(settings.controls, "unwanted change")),
+    controlsWriteDenied: verifyControlFileDenials(settings.controls),
     rootSignalDenied: isDenied(() => process.kill(settings.pid, 0)),
     ptraceDenied: isPtraceDenied(settings.pid),
     sudoDenied: isSudoDenial(readPrivilegeCommand("/usr/bin/sudo", ["-n", "/usr/bin/true"])),

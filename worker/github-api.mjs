@@ -115,7 +115,7 @@ export async function findInPages(readJson, path, isMatch) {
  * @param {string} path
  * @param {(answer: any) => any[]} pickItems
  */
-async function* readPages(readJson, path, pickItems) {
+export async function* readPages(readJson, path, pickItems) {
   for (let page = 1; ; page += 1) {
     const batch = pickItems(
       await readJson(`${path}${path.includes("?") ? "&" : "?"}per_page=${PAGE_SIZE}&page=${page}`),

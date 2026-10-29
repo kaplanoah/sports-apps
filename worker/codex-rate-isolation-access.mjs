@@ -1,5 +1,6 @@
 import net from "node:net";
 import { constants } from "node:os";
+import { writeFileSync } from "node:fs";
 
 const rootServiceSockets = [
   "/var/run/docker.sock",
@@ -24,6 +25,23 @@ export function isPermissionDenial(error) {
     error instanceof Error &&
     "code" in error &&
     ["EACCES", "EPERM", "EROFS"].includes(String(error.code))
+  );
+}
+
+/** @param {any} paths @param {(path:string,value:string)=>void} [write] */
+export function verifyControlFileDenials(paths, write = writeFileSync) {
+  return (
+    Array.isArray(paths) &&
+    paths.length > 0 &&
+    paths.every((path) => {
+      if (typeof path !== "string") return false;
+      try {
+        write(path, "unwanted change");
+        return false;
+      } catch (error) {
+        return isPermissionDenial(error);
+      }
+    })
   );
 }
 

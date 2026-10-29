@@ -181,6 +181,9 @@ test("Retry-After seconds, dates, milliseconds and token-reset durations preserv
   assert.equal(parseReset("1m2.5s", now), now + 62500);
   assert.equal(parseReset("-1s", now), null);
   assert.equal(parseReset("garbage", now), null);
+  assert.equal(parseRetryAfter(new Headers({ "retry-after": "9".repeat(400) }), now), null);
+  assert.equal(parseRetryAfter(new Headers({ "retry-after-ms": "9007199254740991" }), now), null);
+  assert.equal(parseReset("9007199254740s", now), null);
 });
 
 test("oversized request reservations reject before admission", async () => {

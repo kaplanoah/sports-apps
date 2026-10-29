@@ -4,6 +4,8 @@ import {
   prepareRateProofNamespaces,
   verifyWithRateNamespaces,
   RateNamespaceError,
+  snapshotRateNamespaces,
+  restoreRateNamespaces,
 } from "../worker/codex-rate-namespaces.mjs";
 
 const clone = "/proc/sys/kernel/unprivileged_userns_clone";
@@ -26,6 +28,34 @@ function createPolicy(values) {
     },
   };
 }
+
+test("native startup snapshots without writes and cleanup restores only the original two settings", () => {
+  const policy = createPolicy({ [clone]: "0", [apparmor]: "1" });
+  const originals = snapshotRateNamespaces(policy);
+  assert.deepEqual(originals, ["0", "1"]);
+  assert.deepEqual(policy.writes, []);
+  policy.state.set(clone, "1");
+  policy.state.set(apparmor, "0");
+  restoreRateNamespaces(originals, policy);
+  assert.equal(policy.state.get(clone).trim(), "0");
+  assert.equal(policy.state.get(apparmor).trim(), "1");
+  assert.equal(policy.writes.length, 2);
+  policy.writes.length = 0;
+  restoreRateNamespaces(originals, policy);
+  assert.deepEqual(policy.writes, []);
+});
+
+test("native restoration rejects forged originals, missing settings and ignored writes", () => {
+  for (const invalid of [[], ["0"], ["0", "bad"], [0, 1], ["0", "9007199254740992"]])
+    assert.throws(() => restoreRateNamespaces(invalid), /namespace/);
+  const missing = createPolicy({ [clone]: "1" });
+  assert.throws(
+    () => restoreRateNamespaces([null, null], missing),
+    (error) => error instanceof RateNamespaceError && error.phase === "namespace-restoration",
+  );
+  const ignored = createPolicy({ [clone]: "1", [apparmor]: "0" });
+  assert.throws(() => restoreRateNamespaces(["0", "1"], { ...ignored, write() {} }), /namespace/);
+});
 
 test("only the two official namespace settings change and exact originals are restored", () => {
   const policy = createPolicy({ [clone]: "0", [apparmor]: "1" });

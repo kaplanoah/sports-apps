@@ -5,6 +5,85 @@ const settings = [
   { path: "/proc/sys/kernel/apparmor_restrict_unprivileged_userns", target: 0 },
 ];
 
+function readNamespaceValue(path, read) {
+  let value;
+  try {
+    value = read(path).trim();
+  } catch (error) {
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") return null;
+    throw new Error("Could not read namespace policy.", { cause: error });
+  }
+  if (!/^\d+$/.test(value) || !Number.isSafeInteger(Number(value)))
+    throw new Error("Invalid namespace policy.");
+  return value;
+}
+
+function verifyNamespaceValue(path, expected, read) {
+  const value = read(path).trim();
+  if (!/^\d+$/.test(value) || Number(value) !== expected)
+    throw new Error("Namespace policy did not match the requested value.");
+}
+
+function restoreNamespaceValues(changed, read, write) {
+  let failed = false;
+  for (const setting of [...changed].reverse()) {
+    try {
+      write(setting.path, setting.value + "\n");
+    } catch {
+      failed = true;
+    }
+  }
+  for (const setting of changed) {
+    try {
+      verifyNamespaceValue(setting.path, Number(setting.value), read);
+    } catch {
+      failed = true;
+    }
+  }
+  if (failed) throw new Error("Could not restore namespace policy.");
+}
+
+/** @param {any} [options] */
+export function snapshotRateNamespaces({ read = (path) => readFileSync(path, "utf8") } = {}) {
+  return settings.map(({ path }) => readNamespaceValue(path, read));
+}
+
+/** @param {any} original @param {any} [options] */
+export function restoreRateNamespaces(
+  original,
+  { read = (path) => readFileSync(path, "utf8"), write = writeFileSync } = {},
+) {
+  if (
+    !Array.isArray(original) ||
+    original.length !== settings.length ||
+    original.some(
+      (value) =>
+        value !== null &&
+        (typeof value !== "string" || !/^\d+$/.test(value) || !Number.isSafeInteger(Number(value))),
+    )
+  )
+    throw new RateNamespaceError("namespace-restoration");
+  const changed = [];
+  let failed = false;
+  for (let index = 0; index < settings.length; index++) {
+    try {
+      const current = readNamespaceValue(settings[index].path, read);
+      if (current === original[index]) continue;
+      if (current === null || original[index] === null)
+        throw new Error("Namespace availability changed.");
+      changed.push({ ...settings[index], value: original[index] });
+    } catch {
+      failed = true;
+    }
+  }
+  try {
+    restoreNamespaceValues(changed, read, write);
+  } catch {
+    failed = true;
+  }
+  if (failed) throw new RateNamespaceError("namespace-restoration");
+}
+
 export class RateNamespaceError extends Error {
   constructor(phase, options = {}) {
     super("Could not establish the hosted namespace lifecycle.", options);
@@ -49,49 +128,20 @@ export function prepareRateProofNamespaces({
   read = (path) => readFileSync(path, "utf8"),
   write = (path, value) => writeFileSync(path, value),
 } = {}) {
-  const original = settings.map((setting) => {
-    let value;
-    try {
-      value = read(setting.path).trim();
-    } catch (error) {
-      if (error instanceof Error && "code" in error && error.code === "ENOENT")
-        return { ...setting, value: null };
-      throw new Error("Could not read namespace policy.", { cause: error });
-    }
-    if (!/^\d+$/.test(value) || !Number.isSafeInteger(Number(value)))
-      throw new Error("Invalid namespace policy.");
-    return { ...setting, value };
-  });
+  const original = settings.map((setting) => ({
+    ...setting,
+    value: readNamespaceValue(setting.path, read),
+  }));
   const changed = [];
-  function verifyNamespaceValue(path, expected) {
-    const value = read(path).trim();
-    if (!/^\d+$/.test(value) || Number(value) !== expected)
-      throw new Error("Namespace policy did not match the requested value.");
-  }
   function restoreNamespaces() {
-    let failed = false;
-    for (const setting of [...changed].reverse()) {
-      try {
-        write(setting.path, setting.value + "\n");
-      } catch {
-        failed = true;
-      }
-    }
-    for (const setting of changed) {
-      try {
-        verifyNamespaceValue(setting.path, Number(setting.value));
-      } catch {
-        failed = true;
-      }
-    }
-    if (failed) throw new Error("Could not restore namespace policy.");
+    restoreNamespaceValues(changed, read, write);
   }
   try {
     for (const setting of original) {
       if (setting.value === null || Number(setting.value) === setting.target) continue;
       changed.push(setting);
       write(setting.path, String(setting.target) + "\n");
-      verifyNamespaceValue(setting.path, setting.target);
+      verifyNamespaceValue(setting.path, setting.target, read);
     }
   } catch (error) {
     try {

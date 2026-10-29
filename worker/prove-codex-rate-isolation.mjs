@@ -15,14 +15,12 @@ import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { randomBytes } from "node:crypto";
 import { verifyWithRateNamespaces, RateNamespaceError } from "./codex-rate-namespaces.mjs";
+import { listNativeRateControls, readNativeRateEntries } from "./codex-rate-source.mjs";
 import { writeRateProbeResult } from "./codex-rate-probe-output.mjs";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const proofModules = [
-  "budget",
-  "estimate",
-  "controller",
-  "gateway",
+  "policy",
   "isolation-holder",
   "isolation-probe",
   "isolation-access",
@@ -38,6 +36,7 @@ const privateEnvironment = [
 ];
 const proofStages = new Set([
   "holder-startup",
+  "holder-shutdown",
   "unsandboxed-baseline",
   "root-process-boundary",
   "pinned-read-only-sandbox",
@@ -175,10 +174,15 @@ export function requiresRateIsolation(paths) {
       path.startsWith("worker/codex-rate-") ||
       path.startsWith("tests/codex-rate-") ||
       [
+        ...listNativeRateControls(),
+        ...readNativeRateEntries().flatMap(({ workflow, entry }) => [
+          `.github/workflows/${workflow}`,
+          `.github/workflows/${entry}`,
+        ]),
         "worker/prove-codex-rate-isolation.mjs",
         "worker/prove-codex-runner.mjs",
+        "worker/prepare-codex-rate.mjs",
         ".github/workflows/ci.yml",
-        ".github/workflows/codex-runner-proof.yml",
         "package.json",
         "package-lock.json",
         ".nvmrc",
@@ -263,11 +267,8 @@ function createRootFixtures(settings) {
       cpSync(join(root, "worker", `codex-rate-${name}.mjs`), target);
       chmodSync(target, 0o444);
     }
-    mkdirSync(join(folder, "node_modules"), { mode: 0o755 });
-    for (const name of ["js-tiktoken", "base64-js"])
-      cpSync(join(root, "node_modules", name), join(folder, "node_modules", name), {
-        recursive: true,
-      });
+    cpSync(settings.runtimeBundle, join(worker, "codex-rate-runtime.mjs"));
+    chmodSync(join(worker, "codex-rate-runtime.mjs"), 0o444);
     cpSync(settings.cliFolder, join(folder, "cli"), { recursive: true, verbatimSymlinks: true });
     const home = join(folder, "home");
     const project = join(folder, "project");
@@ -293,7 +294,10 @@ function createRootFixtures(settings) {
       projectFile,
       privateFile,
       canary,
-      controls: join(worker, "codex-rate-isolation-holder.mjs"),
+      controls: [
+        join(worker, "codex-rate-isolation-holder.mjs"),
+        join(worker, "codex-rate-runtime.mjs"),
+      ],
       probe: join(worker, "codex-rate-isolation-probe.mjs"),
       cli: join(folder, "cli/node_modules/.bin/codex"),
     };
@@ -371,7 +375,11 @@ function waitForHolder(holder) {
 }
 
 async function stopHolder(holder) {
-  if (holder.exitCode !== null || holder.signalCode) return;
+  if (holder.exitCode !== null || holder.signalCode) {
+    if (holder.exitCode !== 0 || holder.signalCode)
+      throw new IsolationProofError("holder-shutdown");
+    return;
+  }
   await new Promise((resolve) => {
     const timeout = setTimeout(() => holder.kill("SIGKILL"), 5000);
     holder.once("exit", () => {
@@ -381,14 +389,19 @@ async function stopHolder(holder) {
     if (holder.connected) holder.send("close");
     else holder.kill("SIGTERM");
   });
+  if (holder.exitCode !== 0 || holder.signalCode) throw new IsolationProofError("holder-shutdown");
 }
 
 async function proveRunnerBoundary(settings) {
   const fixtures = createRootFixtures(settings);
-  const holder = fork(join(fixtures.worker, "codex-rate-isolation-holder.mjs"), [], {
-    env: { ...createProbeEnvironment(fixtures), ISOLATION_FAKE_CANARY: fixtures.canary },
-    stdio: ["ignore", "pipe", "pipe", "ipc"],
-  });
+  const holder = fork(
+    join(fixtures.worker, "codex-rate-isolation-holder.mjs"),
+    [JSON.stringify({ uid: settings.uid, gid: settings.gid })],
+    {
+      env: { ...createProbeEnvironment(fixtures), ISOLATION_FAKE_CANARY: fixtures.canary },
+      stdio: ["ignore", "pipe", "pipe", "ipc"],
+    },
+  );
   let captured = "";
   holder.stdout.on("data", (chunk) => {
     captured += chunk;
@@ -398,13 +411,20 @@ async function proveRunnerBoundary(settings) {
   });
   let stage = "holder-startup";
   let facts;
+  let nativeRoot;
   try {
     const ports = await waitForHolder(holder);
+    if (
+      !/^\/tmp\/codex-native-rate-[A-Za-z0-9]+$/.test(ports.nativeRoot) ||
+      !Array.isArray(ports.controls)
+    )
+      throw new Error("Invalid protected proof runtime.");
+    nativeRoot = ports.nativeRoot;
     const input = JSON.stringify({
       ...ports,
       pid: holder.pid,
       privateFile: fixtures.privateFile,
-      controls: fixtures.controls,
+      controls: [...fixtures.controls, ...ports.controls],
       projectFile: fixtures.projectFile,
     });
     stage = "unsandboxed-baseline";
@@ -470,14 +490,17 @@ async function proveRunnerBoundary(settings) {
       },
     );
   } finally {
-    await stopHolder(holder);
-    rmSync(fixtures.folder, { recursive: true, force: true });
+    try {
+      await stopHolder(holder);
+    } finally {
+      rmSync(fixtures.folder, { recursive: true, force: true });
+    }
   }
   const closed = !holder.connected && (holder.exitCode !== null || holder.signalCode !== null);
   validateRateIsolationFacts(
     {
       ...facts,
-      rootRuntimeRemoved: !existsSync(fixtures.folder),
+      rootRuntimeRemoved: !existsSync(fixtures.folder) && nativeRoot && !existsSync(nativeRoot),
       listenersClosed: closed,
       noCapturedCanary: !captured.includes(fixtures.canary),
     },
@@ -512,10 +535,14 @@ async function proveHostedBoundary(env) {
   const profile = JSON.parse(
     readFileSync(join(env.RUNNER_TEMP, "codex-rate-proof-cli.json"), "utf8"),
   );
+  const { bundleNativeRateControls } = await import("./prepare-codex-rate.mjs");
+  const runtimeBundle = join(env.RUNNER_TEMP, "codex-rate-runtime-bundle.mjs");
+  bundleNativeRateControls(runtimeBundle);
   const settings = {
     uid: process.getuid(),
     gid: process.getgid(),
     cliFolder: profile.folder,
+    runtimeBundle,
     githubHosted: true,
   };
   const output = spawnSync(
@@ -548,7 +575,11 @@ async function proveHostedBoundary(env) {
 }
 
 function removeProofInstallation(env) {
-  for (const name of ["codex-rate-proof-cli", "codex-rate-proof-cli.json"])
+  for (const name of [
+    "codex-rate-proof-cli",
+    "codex-rate-proof-cli.json",
+    "codex-rate-runtime-bundle.mjs",
+  ])
     rmSync(join(env.RUNNER_TEMP, name), { recursive: true, force: true });
   const path = join(env.RUNNER_TEMP, "codex-rate-isolation-proof.json");
   const result = existsSync(path)
