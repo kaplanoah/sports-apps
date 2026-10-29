@@ -1,11 +1,20 @@
 import { test, expect, openApp, openGameSheet, matchPath } from "./harness.mjs";
 import { holdRequests } from "../../../../tests/browser/hold-requests.mjs";
 import { openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
+import { openContact, serveContact } from "../../../../tests/browser/contact-views.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
 // What a sheet reads from the Worker beside the season, which a reload reads again.
-const SHEET_READS = ["/box-score", "/preview", "/lead", "/roster", "/player", "/store/averages/"];
+const SHEET_READS = [
+  "/box-score",
+  "/preview",
+  "/lead",
+  "/roster",
+  "/player",
+  "/store/averages/",
+  "/contact",
+];
 
 /**
  * @param {import("@playwright/test").Page} page
@@ -21,8 +30,8 @@ async function openTeamRoster(page, name) {
   await expect(page.locator("#rosterSection .roster-coach")).toBeVisible();
 }
 
-// Each sheet, opened on what it reads from the Worker, and the read a reload starts again. A sheet
-// the page holds joins this list, or the test that checks the list fails.
+// Each sheet, opened on what it reads from the Worker, and the read a reload starts again, if it
+// reads any. A sheet the page holds joins this list, or the test that checks the list fails.
 const SHEETS = [
   {
     id: "gameSheet",
@@ -76,6 +85,15 @@ const SHEETS = [
       await expect(page.locator("#playerSheet .out-sentence")).toBeVisible();
     },
   },
+  {
+    id: "contactDialog",
+    name: "Contact's menu",
+    open: async (/** @type {import("@playwright/test").Page} */ page) => {
+      await serveContact(page);
+      const dialog = await openContact(page);
+      await expect(dialog.locator(".contact-domain")).toBeVisible();
+    },
+  },
 ];
 
 /**
@@ -89,13 +107,13 @@ const readSheetText = (page, id) =>
 test("every sheet is on the list of sheets a reload draws again", async ({ page }) => {
   await openApp(page);
   const ids = await page
-    .locator(".sheet-page")
+    .locator(".sheet-page, .settings-panel:not(#settingsDialog)")
     .evaluateAll((sheets) => sheets.map((sheet) => sheet.id));
   expect(ids.toSorted()).toEqual([...new Set(SHEETS.map(({ id }) => id))].toSorted());
 });
 
 for (const { id, name, read, open } of SHEETS)
-  test(`a reload draws ${name} as it was while it reads it again, never placeholders`, async ({
+  test(`a reload draws ${name} as it was while its reads wait, never placeholders`, async ({
     page,
   }) => {
     await openApp(page);
@@ -104,10 +122,11 @@ for (const { id, name, read, open } of SHEETS)
     const releases = await Promise.all(
       SHEET_READS.map((path) => holdRequests(page, matchPath(path))),
     );
-    const reread = page.waitForRequest(matchPath(read));
+    const reread = read && page.waitForRequest(matchPath(read));
 
     await page.reload();
-    await reread;
+    if (reread) await reread;
+    else await expect(page.locator(`#${id}`)).toBeVisible();
 
     await expect(page.locator(`#${id} .placeholder`)).toHaveCount(0);
     expect(await readSheetText(page, id)).toBe(before);

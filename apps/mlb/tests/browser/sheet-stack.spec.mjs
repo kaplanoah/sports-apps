@@ -9,7 +9,8 @@ import {
   ROSTER_DOCS,
 } from "./harness.mjs";
 import { expectShown } from "../../../../tests/browser/sheet-row.mjs";
-import { readTopSpacing } from "../../../../tests/browser/sheet-top.mjs";
+import { readTopSpacing, testSettingsPageTops } from "../../../../tests/browser/sheet-top.mjs";
+import { SETTINGS_PAGES } from "./views.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
@@ -106,6 +107,8 @@ test("every sheet's top is a band in the band's color, ending in its line and ed
       buttonTop: BUTTON_TOP_PX,
     });
 });
+
+testSettingsPageTops(test, expect, { openApp, settingsPages: SETTINGS_PAGES });
 
 test("a title that runs to more lines leaves its close or back button where it was", async ({
   page,

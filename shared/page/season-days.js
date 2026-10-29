@@ -34,10 +34,10 @@ const nameListDay = (day, today) =>
 /**
  * nameListDay's short form, for the narrow column beside a day's games.
  * @param {Date} day
- * @param {Date} today
+ * @param {number} daysFromToday
  */
-const abbreviateDay = (day, today) =>
-  NEAR_DAY_ABBREVIATIONS.get(countDaysBetween(today, day)) ?? formatShortWeekday(day);
+const abbreviateDay = (day, daysFromToday) =>
+  NEAR_DAY_ABBREVIATIONS.get(daysFromToday) ?? formatShortWeekday(day);
 
 /** @typedef {(day: string, today: string) => Markup} RenderLabel */
 
@@ -49,10 +49,12 @@ function renderCalendarLabel(day, today) {
   const date = readCalendarDate(day);
   const todayDate = readCalendarDate(today);
   const month = formatShortMonth(date);
+  const daysFromToday = countDaysBetween(todayDate, date);
+  const isTomorrow = daysFromToday === 1;
   return html`<h2 class="day-label" aria-label="${nameListDay(date, todayDate)}, ${month} ${readDayOfMonth(day)}">
     <span class="day-month">${month}</span
     ><span class="day-number${isLedByOne(day) ? " leads-with-one" : ""}">${readDayOfMonth(day)}</span
-    ><span class="day-name">${abbreviateDay(date, todayDate)}</span>
+    ><span class="day-name${isTomorrow ? " is-tomorrow" : ""}">${abbreviateDay(date, daysFromToday)}</span>
   </h2>`;
 }
 

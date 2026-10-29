@@ -51,6 +51,9 @@
  *   --re-add-note-above                        the room between the Appearance choices' names and
  *                                              the note on updating the icon under them
  * and this sets:
+ *   --label-note-gap                           the room from a label to the note under it
+ *   --label-field-gap                          the room from a label, or the note under it, to its
+ *                                              field
  *   --sheet-side                               a sheet's sides, and settings' on a phone
  *   --caret-reach                              how far a sheet's caret reaches out past its sides
  *   --view-end-room                            the room at the end of the page, or of a view that
@@ -73,6 +76,12 @@
    flicker. It's inherited, so this reaches the whole page. */
 :root {
   -webkit-tap-highlight-color: transparent;
+}
+
+/* A label, the note under it, and its field are spaced alike wherever they show. */
+:root {
+  --label-note-gap: 3px;
+  --label-field-gap: 7px;
 }
 
 /* A sheet's sides, and how far its caret reaches out past them into the side, so a caret's spot
@@ -418,6 +427,33 @@ section.view.active:not([data-follows]):has(> :is(.day-view, .season-parts)) {
     box-shadow: var(--sheet-shadow);
   }
 }
+.settings-page-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  min-height: 56px;
+  padding: 12px 0 calc(12px + var(--lowercase-lift));
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font-family: inherit;
+  font-size: var(--type-setting-size);
+  font-weight: var(--type-setting-weight);
+  text-align: left;
+  cursor: pointer;
+}
+.settings-page-row svg {
+  width: 18px;
+  height: 18px;
+  flex: none;
+  color: var(--ink-dim);
+}
+@media (hover: hover) {
+  :is(.settings-page-row, .settings-back):hover {
+    color: var(--ink-hover);
+  }
+}
 /* Sheets and settings leave the page behind them as it is. */
 :is(.settings-panel, .sheet-panel)::backdrop {
   background: none;
@@ -454,7 +490,7 @@ section.view.active:not([data-follows]):has(> :is(.day-view, .season-parts)) {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 3px;
+  gap: var(--label-note-gap);
   min-width: 0;
   padding-inline: 44px;
   text-align: center;
@@ -491,10 +527,11 @@ section.view.active:not([data-follows]):has(> :is(.day-view, .season-parts)) {
   white-space: normal;
 }
 /* A sheet's close button, a caret down, or its back button, an arrow, in place of it on a sheet
-   opened from another, and the welcome's caret: just the icon, in --accent, its words only for
-   screen readers. */
+   opened from another or a settings page, and the welcome's caret: just the icon, in --accent,
+   its words only for screen readers. */
 .sheet-close,
 .sheet-back,
+.settings-back,
 .welcome-close {
   display: grid;
   place-items: center;
@@ -508,13 +545,15 @@ section.view.active:not([data-follows]):has(> :is(.day-view, .season-parts)) {
 }
 /* A sheet's holds the head's top 44px, whatever the title under it holds. */
 .sheet-close,
-.sheet-back {
+.sheet-back,
+.settings-back {
   position: absolute;
   left: calc(-1 * var(--caret-reach));
   top: 0;
 }
 .sheet-close svg,
 .sheet-back svg,
+.settings-back svg,
 .welcome-close svg {
   width: 26px;
   height: 26px;
@@ -545,28 +584,37 @@ section.view.active:not([data-follows]):has(> :is(.day-view, .season-parts)) {
   font-size: var(--type-setting-size);
   font-weight: var(--type-setting-weight);
 }
-.control-row:not([hidden]) ~ .control-row {
-  border-top: 1px solid var(--divider);
-}
 .control-row[hidden] {
   display: none;
 }
-/* Settings in titled groups have a line only between groups, not around them or between a group's
-   rows. */
+/* A line parts each setting or group of settings from the next, never a group's own rows. Settings
+   in titled groups have no line around them. Each group's heading sits as far below the line above
+   it as sections sit apart, whether that line ends a group or tops settings with a line between
+   each row. */
+.settings-controls > :not([hidden]) ~ :not([hidden]) {
+  border-top: 1px solid var(--divider);
+}
 .settings-controls.grouped {
   border-block: 0;
 }
 .settings-controls.grouped > :not([hidden]) ~ :not([hidden]) {
-  margin-top: 10px;
-  padding-top: 10px;
+  margin-top: var(--section-gap);
+  padding-top: var(--section-gap);
+}
+.settings-controls:not(.grouped) > .settings-group {
+  padding-top: var(--section-gap);
+}
+/* Rows that open a page of settings stand together, a line between each, each row padding its own
+   text, so a line sits as far from the text above it as from the text below. */
+.settings-pages > .settings-page-row + .settings-page-row {
   border-top: 1px solid var(--divider);
+}
+.settings-controls.grouped > :not([hidden]) ~ .settings-pages {
+  padding-top: 0;
 }
 .settings-group {
   display: grid;
   gap: 6px;
-}
-.settings-group .control-row:not([hidden]) ~ .control-row {
-  border-top: 0;
 }
 .control-row:has(> .select-field) {
   position: relative;
@@ -706,7 +754,7 @@ body.kbd .appearance-choice:has(input:focus) .appearance-icon {
 .control-label {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: var(--label-note-gap);
   min-width: 0;
 }
 .control-note {
@@ -927,7 +975,7 @@ body.kbd .notify-help:focus {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 3px;
+  gap: var(--label-note-gap);
   min-width: 0;
 }
 .home-screen-title {

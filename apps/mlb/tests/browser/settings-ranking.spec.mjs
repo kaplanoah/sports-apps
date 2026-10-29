@@ -1,5 +1,9 @@
+import { holdRequests } from "../../../../tests/browser/hold-requests.mjs";
+import { showTheme } from "../../../../tests/browser/theme-layout.mjs";
+import { listTextOffRoles } from "../../../../tests/browser/type-roles.mjs";
+import { comeBackTo, setHidden } from "../../../../tests/browser/visibility.mjs";
 import { test, expect, openApp, openSettings, chooseSeason, SEASON_2025 } from "./harness.mjs";
-import { scrollSettingsToEnd, waitForSheetToRise, WITH_A_PAST_SEASON } from "./settings-sheet.mjs";
+import { openRanking, waitForSheetToRise, WITH_A_PAST_SEASON } from "./settings-sheet.mjs";
 import { LAPTOP, PHONE } from "./screen-sizes.mjs";
 import { listLowContrastText } from "../../../../tests/browser/contrast.mjs";
 import { SETTINGS } from "../../../../tests/browser/settings.mjs";
@@ -11,7 +15,7 @@ const SHORT_SCREEN = { width: 375, height: 600 };
 
 /** @param {import("@playwright/test").Page} page */
 async function expectWholeRankingInView(page) {
-  const sheet = await page.locator(SETTINGS).boundingBox();
+  const sheet = await page.locator("#rankingDialog").boundingBox();
   const first = await page.locator("#rankList .rank-item").first().boundingBox();
   const last = await page.locator("#rankList .rank-item").last().boundingBox();
   expect(first.y).toBeGreaterThanOrEqual(sheet.y - 1);
@@ -27,7 +31,9 @@ const readCenters = (locator) =>
     }),
   );
 
-test("the ranking has no tab of its own; settings hold it, numbered 1 to 12", async ({ page }) => {
+test("a Settings caret opens Ranking, numbered 1 to 12, without another main tab", async ({
+  page,
+}) => {
   await openApp(page);
   const tabs = page.getByRole("tablist", { name: "Views" }).getByRole("tab");
   await expect(tabs).toHaveCount(4);
@@ -35,34 +41,28 @@ test("the ranking has no tab of its own; settings hold it, numbered 1 to 12", as
     await expect(tabs.nth(index)).toHaveAccessibleName(name);
 
   await openSettings(page);
-  const settings = page.getByRole("dialog", { name: "Settings" });
-  await expect(settings.getByRole("heading", { name: "Ranking" })).toBeVisible();
-  await expect(settings.locator(".ranking-note")).toHaveText(
-    "Who you want to win the World Series",
-  );
-  await expect(settings.locator("#rankList .rank-item")).toHaveCount(12);
-  await expect(settings.locator("#rankNumbers li")).toHaveText(
+  await openRanking(page);
+  const ranking = page.getByRole("dialog", { name: "Ranking", exact: true });
+  await expect(ranking.getByRole("heading", { name: "Ranking" })).toBeVisible();
+  await expect(ranking.locator(".ranking-note")).toHaveText("Who you want to win the World Series");
+  await expect(ranking.locator("#rankList .rank-item")).toHaveCount(12);
+  await expect(ranking.locator("#rankNumbers li")).toHaveText(
     Array.from({ length: 12 }, (_, index) => String(index + 1)),
   );
-  await expect(settings.locator("#rankList .status-chip").first()).toHaveText("Alive");
+  await expect(ranking.locator("#rankList .status-chip").first()).toHaveText("Alive");
 });
 
-test("on a phone, scrolling settings down shows the whole ranking, and the header scrolls away", async ({
-  page,
-}) => {
+test("on a phone, the Ranking page shows its header and the whole ranking", async ({ page }) => {
   await page.setViewportSize(PHONE);
   await openApp(page, WITH_A_PAST_SEASON);
   await openSettings(page);
+  await openRanking(page);
   await waitForSheetToRise(page);
-  const settings = page.getByRole("dialog", { name: "Settings" });
-  await expect(settings.getByRole("combobox", { name: "Season" })).toBeInViewport();
-
-  await scrollSettingsToEnd(page);
-
+  const ranking = page.getByRole("dialog", { name: "Ranking", exact: true });
+  await expect(ranking.getByRole("heading", { name: "Ranking" })).toBeInViewport();
   await expectWholeRankingInView(page);
-  await expect(settings.getByRole("heading", { name: "Settings" })).not.toBeInViewport();
-  await expect(settings.locator(".ranking-note")).toBeVisible();
-  await expect(settings.locator("#rankList .rank-ws").first()).toBeVisible();
+  await expect(ranking.locator(".ranking-note")).toBeVisible();
+  await expect(ranking.locator("#rankList .rank-ws").first()).toBeVisible();
 });
 
 test("on a short screen, the ranking's note gives way so each row keeps both lines", async ({
@@ -71,9 +71,8 @@ test("on a short screen, the ranking's note gives way so each row keeps both lin
   await page.setViewportSize(SHORT_SCREEN);
   await openApp(page);
   await openSettings(page);
+  await openRanking(page);
   await waitForSheetToRise(page);
-
-  await scrollSettingsToEnd(page);
 
   await expectWholeRankingInView(page);
   await expect(page.locator(".ranking-note")).toBeHidden();
@@ -84,8 +83,8 @@ test("each rank number stays level with its row", async ({ page }) => {
   await page.setViewportSize(PHONE);
   await openApp(page);
   await openSettings(page);
+  await openRanking(page);
   await waitForSheetToRise(page);
-  await scrollSettingsToEnd(page);
 
   const numbers = await readCenters(page.locator("#rankNumbers li"));
   const rows = await readCenters(page.locator("#rankList .rank-item"));
@@ -94,48 +93,35 @@ test("each rank number stays level with its row", async ({ page }) => {
   numbers.forEach((center, index) => expect(Math.abs(center - rows[index])).toBeLessThan(1));
 });
 
-test("on a wide screen, the settings and the whole ranking show side by side without scrolling", async ({
-  page,
-}) => {
+test("on a wide screen, Ranking has its own modal and all twelve rows fit", async ({ page }) => {
   await page.setViewportSize(LAPTOP);
   await openApp(page);
   await openSettings(page);
-
-  const dialog = page.locator(SETTINGS);
-  expect(
-    await dialog.evaluate(
-      (element) =>
-        /** @type {HTMLElement} */ (element.querySelector(".settings-body")).offsetHeight <=
-        element.clientHeight,
-    ),
-  ).toBe(true);
+  await expect(page.locator(`${SETTINGS} #rankList`)).toHaveCount(0);
+  await expect(page.locator("#rankingBtn svg")).toBeVisible();
+  const settings = await page.locator(SETTINGS).boundingBox();
+  expect(settings.width).toBeLessThanOrEqual(420);
+  await openRanking(page);
   await expectWholeRankingInView(page);
-  const controls = await page.locator(".settings-main > .settings-controls").boundingBox();
-  const list = await page.locator("#rankList").boundingBox();
-  expect(controls.x + controls.width).toBeLessThan(list.x);
+  expect((await page.locator("#rankingDialog").boundingBox()).width).toBeLessThanOrEqual(420);
 });
 
-test("on a wide screen, the settings start right under the header, level with the ranking's heading", async ({
-  page,
-}) => {
-  await page.setViewportSize(LAPTOP);
+test("Back returns to Settings and focuses the Ranking caret", async ({ page }) => {
   await openApp(page, WITH_A_PAST_SEASON);
   await openSettings(page);
-
-  const header = await page.locator(`${SETTINGS} .sheet-top`).boundingBox();
-  const controls = await page.locator(".settings-main > .settings-controls").boundingBox();
-  const [season] = await readCenters(page.locator(".control-row > span").first());
-  const [ranking] = await readCenters(page.locator("#rankingTitle"));
-  expect(Math.abs(controls.y - (header.y + header.height))).toBeLessThan(1);
-  expect(Math.abs(season - ranking)).toBeLessThan(2);
+  await openRanking(page);
+  await page.locator("#rankingDialog").getByRole("button", { name: "Back to Settings" }).click();
+  await expect(page.locator("#rankingDialog")).toBeHidden();
+  await expect(page.locator(SETTINGS)).toBeVisible();
+  await expect(page.locator("#rankingBtn")).toBeFocused();
 });
 
 test("each ranked club shows its league at the start of its second line", async ({ page }) => {
   await page.setViewportSize(PHONE);
   await openApp(page);
   await openSettings(page);
+  await openRanking(page);
   await waitForSheetToRise(page);
-  await scrollSettingsToEnd(page);
 
   const rows = page.locator("#rankList .rank-item");
   const leagues = await rows.evaluateAll((items) =>
@@ -157,8 +143,8 @@ test("the AL and NL chips are one width, so the lines after them start level", a
   await page.setViewportSize(PHONE);
   await openApp(page);
   await openSettings(page);
+  await openRanking(page);
   await waitForSheetToRise(page);
-  await scrollSettingsToEnd(page);
 
   const widths = await page
     .locator("#rankList .league-tag")
@@ -171,7 +157,7 @@ test("a row too short for two lines keeps its league beside the club", async ({ 
   await page.setViewportSize({ width: 844, height: 390 });
   await openApp(page);
   await openSettings(page);
-  await scrollSettingsToEnd(page);
+  await openRanking(page);
 
   const first = page.locator("#rankList .rank-item").first();
   await expect(first.locator(".rank-ws")).toBeHidden();
@@ -185,6 +171,7 @@ test("a club that's out looks like the rest, and its chip just says Out", async 
   await openApp(page, { store: { "seasons/2025": SEASON_2025 } });
   await chooseSeason(page, "2025");
   await openSettings(page);
+  await openRanking(page);
 
   const chips = await page.locator("#rankList .status-chip").allTextContents();
   expect(chips).toHaveLength(12);
@@ -196,3 +183,50 @@ test("a club that's out looks like the rest, and its chip just says Out", async 
   expect(new Set(nameColors).size).toBe(1);
   expect(await listLowContrastText(page)).toEqual([]);
 });
+
+test("Ranking and Settings restore on reload before the app module arrives", async ({ page }) => {
+  await openApp(page);
+  await openSettings(page);
+  await openRanking(page);
+  const ranking = page.locator("#rankingDialog");
+  const names = await ranking.locator(".team-name").allTextContents();
+  const release = await holdRequests(page, /\/js\/app\.js/);
+  await page.reload({ waitUntil: "commit" });
+  await expect(ranking).toBeVisible();
+  await expect(ranking.locator(".team-name")).toHaveText(names);
+  await expect(ranking.getByRole("button", { name: "Back to Settings" })).toBeVisible();
+  await expect(ranking.locator(".settings-back svg")).toBeVisible();
+  release();
+  await page.waitForLoadState("domcontentloaded");
+  await ranking.getByRole("button", { name: "Back to Settings" }).click();
+  await expect(page.locator(SETTINGS)).toBeVisible();
+  await expect(page.locator("#rankingBtn")).toBeFocused();
+});
+
+test("Ranking closes after two minutes away, like Settings", async ({ page }) => {
+  await openApp(page);
+  await openSettings(page);
+  await openRanking(page);
+  await setHidden(page, true);
+  await page.clock.runFor(2 * 60_000);
+  expect(await comeBackTo(page, "#rankingDialog")).toBe(false);
+  await expect(page.locator("#rankingDialog")).toBeHidden();
+});
+
+for (const width of [390, 1280])
+  for (const theme of /** @type {const} */ (["light", "dark"]))
+    test(`Ranking fits ${width}px in ${theme}`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 900 });
+      await openApp(page);
+      await showTheme(page, theme);
+      await openSettings(page);
+      await openRanking(page);
+      await expectWholeRankingInView(page);
+      expect(await listTextOffRoles(page)).toEqual([]);
+      expect(await listLowContrastText(page)).toEqual([]);
+      expect(
+        await page
+          .locator("#rankingDialog")
+          .evaluate((dialog) => dialog.scrollWidth <= dialog.clientWidth),
+      ).toBe(true);
+    });

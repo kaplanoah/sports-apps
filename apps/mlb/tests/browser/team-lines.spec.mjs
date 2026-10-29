@@ -9,6 +9,7 @@ import {
   openSettings,
 } from "./harness.mjs";
 import { VIEW_GROUPS, openWithEverything } from "./views.mjs";
+import { openRanking } from "./settings-sheet.mjs";
 import { checkEachView } from "../../../../tests/browser/view-walk.mjs";
 import { readTeamLines } from "../../../../tests/browser/team-lines.mjs";
 
@@ -18,14 +19,20 @@ const THEMES = /** @type {const} */ (["light", "dark"]);
 
 /** @type {Record<string, string[]>} */
 const EXPECTED_ROLES = {
-  "the page's tabs": ["label", "small", "team"],
+  "the settings pages": ["small", "team"],
+  "the page's tabs": ["label", "team"],
   "a game's sheets": ["label", "small", "team"],
   "a club's and a player's sheets": ["large", "small", "team"],
 };
 
 for (const width of [390, 1280]) {
   for (const colorScheme of THEMES) {
-    for (const [group, views] of Object.entries(VIEW_GROUPS)) {
+    for (const [group, allViews] of Object.entries(VIEW_GROUPS)) {
+      if (!(group in EXPECTED_ROLES)) continue;
+      const views =
+        group === "the settings pages"
+          ? allViews.filter((view) => view.name === "Ranking")
+          : allViews;
       test(`team lines in ${group} align marks and attachments with their names at ${width}px in ${colorScheme}`, async ({
         page,
       }) => {
@@ -49,7 +56,9 @@ for (const width of [390, 1280]) {
           for (const name of drawn.names) names.add(name);
         });
         expect([...roles].sort()).toEqual(EXPECTED_ROLES[group]);
-        if (group === "the page's tabs") {
+        if (group === "the settings pages") {
+          expect(placements).toContain("small before");
+        } else if (group === "the page's tabs") {
           expect(placements).toContain("team after");
           expect(states).toContain("winner");
           expect(states).toContain("TBD");
@@ -102,7 +111,8 @@ for (const colorScheme of THEMES) {
     await page.emulateMedia({ colorScheme });
     await openApp(page);
     await openSettings(page);
-    await expect(page.locator(".rank-id .league-tag").first()).toBeVisible();
+    await openRanking(page);
+    await expect(page.locator("#rankingDialog .rank-id .league-tag").first()).toBeVisible();
     const drawn = await readTeamLines(page, "mlb");
     expect(drawn.problems).toEqual([]);
     expect(drawn.attachments).toContain("league chip");

@@ -17,6 +17,7 @@ const EXPECTED_ROLES = {
 for (const width of [390, 1280]) {
   for (const colorScheme of THEMES) {
     for (const [group, views] of Object.entries(VIEW_GROUPS)) {
+      if (!(group in EXPECTED_ROLES)) continue;
       test(`team lines in ${group} align marks and attachments with their names at ${width}px in ${colorScheme}`, async ({
         page,
       }) => {

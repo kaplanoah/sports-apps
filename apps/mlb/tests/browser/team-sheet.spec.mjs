@@ -1,3 +1,4 @@
+import { openRanking } from "./settings-sheet.mjs";
 import {
   test,
   expect,
@@ -297,6 +298,7 @@ test.describe("on a phone's touchscreen", () => {
 test("a club in the ranking stays a handle to drag, not a way to its sheet", async ({ page }) => {
   await openApp(page);
   await openSettings(page);
+  await openRanking(page);
   const firstClub = page.locator("#rankList .rank-item .club").first();
   await expect(firstClub).toBeVisible();
 

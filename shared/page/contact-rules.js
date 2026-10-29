@@ -5,8 +5,8 @@
 export const CONTACT_ROUTE = "contact";
 
 export const CONTACT_CATEGORIES = [
-  { key: "bug", name: "Bug report", label: "What happened?" },
-  { key: "feature", name: "Feature request", label: "What would you like to add?" },
+  { key: "bug", name: "Bug report", label: "What happened, and what did you expect to happen?" },
+  { key: "feature", name: "Feature request", label: "What would make the app better?" },
   { key: "other", name: "Something else", label: "Message" },
 ];
 
@@ -39,6 +39,41 @@ export function validateContactFields({ message, email }) {
   if (email.trim() && !isContactEmail(email.trim()))
     return { field: "email", text: "Enter an email address like name@example.com" };
   return null;
+}
+
+/** @param {number[]} sizes */
+const findLargest = (sizes) => sizes.indexOf(Math.max(...sizes));
+
+// A record's steps start with their signed time from its start, while a log's lines start with
+// a clock time.
+/** @param {string[]} lines */
+const isRecordBlock = (lines) => /^[+-]\d/.test(lines[1] ?? "");
+
+// A report is its header, then blocks apart by a blank line: records, each listing its steps oldest
+// first, and logs, each listing its lines newest first. One too long to send loses the oldest lines
+// of whichever block is largest, so each keeps its newest, and a block left with only its title goes.
+/** @param {string} report */
+export function fitContactDiagnostics(report) {
+  if (report.length <= CONTACT_LIMITS.diagnostics) return report;
+  const [header, ...blocks] = report.split("\n\n");
+  const blockLines = blocks.map((block) => block.split("\n"));
+  const sizes = blocks.map((block) => block.length);
+  let excess = report.length - CONTACT_LIMITS.diagnostics;
+  while (excess > 0 && blockLines.length) {
+    const largest = findLargest(sizes);
+    const lines = blockLines[largest];
+    if (lines.length > 2) {
+      const oldest = isRecordBlock(lines) ? lines.splice(1, 1)[0] : lines.pop();
+      const cut = /** @type {string} */ (oldest).length + 1;
+      sizes[largest] -= cut;
+      excess -= cut;
+    } else {
+      excess -= sizes[largest] + 2;
+      blockLines.splice(largest, 1);
+      sizes.splice(largest, 1);
+    }
+  }
+  return [header, ...blockLines.map((lines) => lines.join("\n"))].join("\n\n");
 }
 
 /** @param {{ type: string, size: number }} file */

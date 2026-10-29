@@ -64,6 +64,7 @@ test("Playwright and browser installation share WebKit's test match", () => {
     "team-lines.spec.mjs",
     "notification-layout.spec.mjs",
     "notification-permission.spec.mjs",
+    "settings-contact.spec.mjs",
   ]);
 });
 

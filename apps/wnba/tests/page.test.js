@@ -379,7 +379,7 @@ test("each day's games share a box beside its date, named for yesterday, tomorro
     assert.equal(readGameMarkup(SEASON).match(/is-today/g).length, 1);
   }));
 
-test("a day's date reads in full to a screen reader, and every day's name looks alike", () =>
+test("a day's date reads in full to a screen reader, and only tomorrow's name has its marker", () =>
   inEastern(() => {
     assert.deepEqual(
       readDayLabels(SEASON, /<h2 class="day-label" aria-label="([^"]*)"/g).slice(0, 5),
@@ -391,10 +391,12 @@ test("a day's date reads in full to a screen reader, and every day's name looks 
         "Friday, Oct 2",
       ],
     );
-    const classes = [...readGameMarkup(SEASON).matchAll(/<span class="(day-name[^"]*)">/g)].map(
-      ([, name]) => name,
-    );
-    assert.deepEqual(new Set(classes), new Set(["day-name"]));
+    const names = [
+      ...readGameMarkup(SEASON).matchAll(/<span class="(day-name[^"]*)">([^<]+)<\/span>/g),
+    ];
+    assert.equal(names.length, listDays(SEASON).days.length);
+    for (const [, className, name] of names)
+      assert.equal(className, name === "Tmrw" ? "day-name is-tomorrow" : "day-name");
   }));
 
 test("a game whose teams aren't both known yet names its number instead of a series count", () =>

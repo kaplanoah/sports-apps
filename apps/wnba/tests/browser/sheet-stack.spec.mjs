@@ -2,6 +2,9 @@ import { test, expect, openApp } from "./harness.mjs";
 import { waitForTimedAnimations } from "../../../../tests/browser/animations.mjs";
 import { recordSheetMotions } from "../../../../tests/browser/sheet-motions.mjs";
 import { expectShown, readLeft } from "../../../../tests/browser/sheet-row.mjs";
+import { openSettings, SETTINGS } from "../../../../tests/browser/settings.mjs";
+import { testSettingsPageTops } from "../../../../tests/browser/sheet-top.mjs";
+import { SETTINGS_PAGES } from "./views.mjs";
 import { drag } from "../../../../tests/browser/touch.mjs";
 import { THEMES } from "../../../../tests/browser/theme-layout.mjs";
 
@@ -163,6 +166,17 @@ function hasStopOnTheWay(lefts) {
   return lefts.some((left) => left > low && left < high);
 }
 
+/**
+ * Checks a settings panel is the floor's color, its top too, with no line under it.
+ * @param {import("@playwright/test").Locator} dialog
+ * @param {string} floor
+ */
+async function expectFloorTop(dialog, floor) {
+  await expect(dialog).toHaveCSS("background-color", floor);
+  await expect(dialog.locator(".sheet-top")).toHaveCSS("background-color", floor);
+  await expect(dialog.locator(".sheet-top")).toHaveCSS("box-shadow", "none");
+}
+
 test.describe("with reduced motion", () => {
   test.use({ contextOptions: { reducedMotion: "reduce" } });
 
@@ -214,8 +228,10 @@ test.describe("with reduced motion", () => {
       });
   });
 
+  testSettingsPageTops(test, expect, { openApp, settingsPages: SETTINGS_PAGES });
+
   for (const theme of THEMES)
-    test(`in ${theme}, every sheet and its roster's pinned cells are the card's color, and settings stay the page's own`, async ({
+    test(`in ${theme}, every sheet and its roster's pinned cells are the card's color, and settings and their pages stay the page's own`, async ({
       page,
     }) => {
       await openApp(page);
@@ -238,21 +254,25 @@ test.describe("with reduced motion", () => {
       expect(new Set(pinnedColors)).toEqual(new Set([card]));
 
       await page.keyboard.press("Escape");
-      await page.getByRole("button", { name: "Settings", exact: true }).click();
-      await expect(page.locator(".settings-panel")).toHaveCSS("background-color", floor);
-      await expect(page.locator(".settings-panel .sheet-top")).toHaveCSS("background-color", floor);
-      await expect(page.locator(".settings-panel .sheet-top")).toHaveCSS("box-shadow", "none");
+      await openSettings(page);
+      await expectFloorTop(page.locator(SETTINGS), floor);
+      await page.locator("#contactBtn").click();
+      await expectFloorTop(page.locator("#contactDialog"), floor);
     });
 
-  test("on a wide screen, a sheet and settings lift off the page by a shadow", async ({ page }) => {
+  test("on a wide screen, a sheet, settings, and their pages lift off the page by a shadow", async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 1280, height: 860 });
     await openApp(page);
     await openGame(page);
     await expect(page.locator("#sheetDialog")).not.toHaveCSS("box-shadow", "none");
 
     await page.keyboard.press("Escape");
-    await page.getByRole("button", { name: "Settings", exact: true }).click();
-    await expect(page.locator(".settings-panel")).not.toHaveCSS("box-shadow", "none");
+    await openSettings(page);
+    await expect(page.locator(SETTINGS)).not.toHaveCSS("box-shadow", "none");
+    await page.locator("#contactBtn").click();
+    await expect(page.locator("#contactDialog")).not.toHaveCSS("box-shadow", "none");
   });
 
   test("on a phone, every sheet fills the screen, whatever it holds", async ({ page }) => {
