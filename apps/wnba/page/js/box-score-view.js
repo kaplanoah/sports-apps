@@ -22,7 +22,7 @@ import { formatPercentage } from "./team-view.js";
 // game, the teams' stats side by side, and each team's top scorers. Until each loads, it holds its
 // shape with placeholders.
 
-/** @typedef {{ id: number, firstName: string, lastName: string, minutes: number, points: number, rebounds: number, assists: number, fouls: number }} BoxPlayer */
+/** @typedef {{ id: number | null, firstName: string, lastName: string, minutes: number, points: number, rebounds: number, assists: number, fouls: number }} BoxPlayer */
 /** @typedef {{ fieldGoals: number[], threePointers: number[], freeThrows: number[], rebounds: number, assists: number, turnovers: number, paintPoints: number, benchPoints: number, biggestLead: number }} TeamStats */
 /** @typedef {{ team: string, score: number, periods: number[], timeouts: number | null, stats: TeamStats, players: BoxPlayer[] }} BoxTeam */
 /** @typedef {{ id: string, state: string, period: number | null, leadChanges: number | null, timesTied: number | null, away: BoxTeam, home: BoxTeam }} BoxScore */
@@ -221,6 +221,19 @@ function renderFouls({ fouls }, isLive) {
   return false;
 }
 
+/**
+ * A player's name, which opens her sheet when the season's list of players names her, as one ESPN
+ * names while the league isn't answering may not be.
+ * @param {BoxPlayer} player
+ * @param {string} team
+ * @param {boolean} isPlayingNow
+ */
+function renderPlayerName(player, team, isPlayingNow) {
+  const name = html`<span class="first-name">${player.firstName}</span> ${player.lastName}`;
+  if (player.id === null) return name;
+  return renderPlayerButton({ ...player, id: player.id, team }, name, { isPlayingNow });
+}
+
 /** @param {BoxPlayer[]} players */
 const pickTopScorers = (players) =>
   [...players]
@@ -237,11 +250,10 @@ function renderTopScorers(side, isLive, isPlaying) {
   const rows = pickTopScorers(side.players).map(
     (player) => html`<tr>
       <th scope="row">
-        ${renderPlayerButton(
-          { ...player, team: side.team },
-          html`<span class="first-name">${player.firstName}</span> ${player.lastName}`,
-          { isPlayingNow: isPlaying && player.minutes > 0 },
-        )}${renderFouls(player, isLive)}
+        ${renderPlayerName(player, side.team, isPlaying && player.minutes > 0)}${renderFouls(
+          player,
+          isLive,
+        )}
       </th>
       <td>${player.points}</td>
       <td>${player.rebounds}</td>

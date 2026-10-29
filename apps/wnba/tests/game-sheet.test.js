@@ -222,6 +222,21 @@ test("a box score of a game under way or ended today marks each top scorer who h
   assert.equal(countPlaying(renderBoxScore(final)), 0);
 });
 
+test("a top scorer without the league's id, as ESPN's box score may have, shows her name with no button to a sheet", () => {
+  const box = readBoxScore("1042600112");
+  const [leader] = [...box.home.players].sort((first, second) => second.points - first.points);
+  const buttons = (markup) => (markup.text.match(/data-player="/g) ?? []).length;
+  const before = buttons(renderBoxScore(box));
+  leader.id = null;
+
+  const markup = renderBoxScore(box);
+
+  assert.equal(buttons(markup), before - 1);
+  assert.doesNotMatch(markup.text, /data-player="null"/);
+  const [, wings] = listPlayerGroups(markup);
+  assert.ok(wings.some((row) => row.startsWith(`${leader.firstName} ${leader.lastName} `)));
+});
+
 /**
  * The preview of the Fever at the Aces in the playoffs, with the season and meetings it would have.
  * @param {Partial<Parameters<typeof renderPreview>[0]>} [parts]

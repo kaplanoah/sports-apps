@@ -1,12 +1,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { namePlayerIndexKey } from "#shared/page-search.js";
 import {
   createBoxScoreServer,
   describeBoxScore,
   nameBoxScoreRequest,
 } from "../worker/src/box-score.js";
 import { REQUESTS } from "../page/js/snapshot.js";
+import { nameScoreboardRequest, nameSummaryRequest } from "../worker/src/lead.js";
 import {
   createPreviewServer,
   describePreview,
@@ -14,25 +16,57 @@ import {
   nameMeetingsKey,
 } from "../worker/src/preview.js";
 import { assertErrorAnswer } from "../../../tests/error-answer.js";
+import { readPlayerIndex } from "./player-fixtures.js";
 
 const GAMES = JSON.parse(
   readFileSync(`${import.meta.dirname}/fixtures/2026-10-01-games.json`, "utf8"),
 );
 const NOW = Date.parse(GAMES.now);
+// What ESPN answered for the same finals.
+const ESPN = JSON.parse(
+  readFileSync(`${import.meta.dirname}/fixtures/2026-10-29-espn-box-scores.json`, "utf8"),
+);
 // Aces at Fever, Game 2, and Valkyries at Wings, Game 2, which went to overtime.
 const ACES_AT_FEVER = "1042600122";
 const VALKYRIES_AT_WINGS = "1042600112";
+// Aces at Fever, Game 3, which hadn't started.
+const NEXT_ACES_AT_FEVER = "1042600123";
+/** @type {Record<string, { away: string, home: string, start: string }>} */
+const TEAMS = {
+  [ACES_AT_FEVER]: { away: "LVA", home: "IND", start: "2026-09-29T22:30:00Z" },
+  [VALKYRIES_AT_WINGS]: { away: "GSV", home: "DAL", start: "2026-10-01T01:00:00Z" },
+  [NEXT_ACES_AT_FEVER]: { away: "IND", home: "LVA", start: "2026-10-03T00:00:00Z" },
+};
 
 /**
- * Answers the league's feeds from the fixture, recording each read, with any feed refused.
- * @param {{ refuse?: Record<string, number | "page" | "empty"> }} [options] a refused feed's status, by URL
+ * The query a game sheet reads a game's box score with.
+ * @param {string} id
  */
-function createLeague({ refuse = {} } = {}) {
+const nameGameQuery = (id) => new URLSearchParams({ id, ...TEAMS[id] });
+
+/**
+ * ESPN's scoreboards and summaries of the finals, with each summary as `changeSummary` leaves it.
+ * @param {(summary: any) => any} [changeSummary]
+ * @returns {[string, any][]}
+ */
+const listEspnAnswers = (changeSummary = (summary) => summary) =>
+  Object.values(ESPN.games).flatMap(({ game, eventId, scoreboard, summary }) => [
+    [nameScoreboardRequest(game.start), scoreboard],
+    [nameSummaryRequest(eventId), changeSummary(structuredClone(summary))],
+  ]);
+
+/**
+ * Answers the league's feeds from the fixture, and ESPN's with any answers given, recording each
+ * read, with any feed refused.
+ * @param {{ refuse?: Record<string, number | "page" | "empty">, espn?: [string, any][] }} [options] a refused feed's status, by URL
+ */
+function createLeague({ refuse = {}, espn = [] } = {}) {
   const answers = new Map([
     ...Object.entries(GAMES.boxScores).map(
       ([id, box]) => /** @type {[string, any]} */ ([nameBoxScoreRequest(id), box]),
     ),
     [REQUESTS.schedule, GAMES.preview.schedule],
+    ...espn,
   ]);
   const reads = [];
   const fetchImpl = async (url, init) => {
@@ -90,7 +124,7 @@ test("the box score route reads the league's CDN as its own site would, briefly 
   const league = createLeague();
   const server = createBoxScoreServer({ fetchImpl: league.fetchImpl });
 
-  const response = await askBoxScore(server, `id=${ACES_AT_FEVER}`);
+  const response = await askBoxScore(server, nameGameQuery(ACES_AT_FEVER));
 
   assert.equal(response.status, 200);
   assert.equal((await response.json()).home.team, "IND");
@@ -111,11 +145,11 @@ const keepDetails = (id, details) => async (/** @type {string} */ key) =>
 test("a finished game's box score comes from the store, and from the league while the store keeps none or the game isn't over", async () => {
   const league = createLeague();
   const server = createBoxScoreServer({ fetchImpl: league.fetchImpl });
-  const fromLeague = await (await askBoxScore(server, `id=${ACES_AT_FEVER}`)).json();
+  const fromLeague = await (await askBoxScore(server, nameGameQuery(ACES_AT_FEVER))).json();
   const askWithKept = async (/** @type {any} */ boxScore) =>
     (
       await server.serveBoxScore(
-        new URL(`https://app.example/k3y/box-score?id=${ACES_AT_FEVER}`),
+        new URL(`https://app.example/k3y/box-score?${nameGameQuery(ACES_AT_FEVER)}`),
         keepDetails(ACES_AT_FEVER, { boxScore, lead: null }),
       )
     ).json();
@@ -139,15 +173,15 @@ test("a live game's box score is read from the league every time", async () => {
       return new Response(JSON.stringify(live));
     },
   });
-  await askBoxScore(liveServer, `id=${VALKYRIES_AT_WINGS}`);
-  await askBoxScore(liveServer, `id=${VALKYRIES_AT_WINGS}`);
+  await askBoxScore(liveServer, nameGameQuery(VALKYRIES_AT_WINGS));
+  await askBoxScore(liveServer, nameGameQuery(VALKYRIES_AT_WINGS));
   assert.equal(liveReads, 2);
 });
 
 test("a store that can't be read leaves the box score to the league", async () => {
   const server = createBoxScoreServer({ fetchImpl: createLeague().fetchImpl });
   const response = await server.serveBoxScore(
-    new URL(`https://app.example/k3y/box-score?id=${ACES_AT_FEVER}`),
+    new URL(`https://app.example/k3y/box-score?${nameGameQuery(ACES_AT_FEVER)}`),
     async () => {
       throw new Error("The store answered 500");
     },
@@ -156,10 +190,69 @@ test("a store that can't be read leaves the box score to the league", async () =
   assert.equal((await response.json()).home.team, "IND");
 });
 
-test("a game without a box score yet is a 404, and a league that fails is a 502", async () => {
+/**
+ * A store that keeps the season's list of players.
+ * @param {string} key
+ */
+const keepPlayerIndex = async (key) =>
+  key === namePlayerIndexKey(2026) ? readPlayerIndex() : null;
+
+test("while the league refuses a game's box score, it comes from ESPN's, with the league's ids for each player the store's list names", async () => {
+  const url = nameBoxScoreRequest(VALKYRIES_AT_WINGS);
+  const fromLeague = describeBoxScore(GAMES.boxScores[VALKYRIES_AT_WINGS]);
+  const leagueIds = [...fromLeague.away.players, ...fromLeague.home.players]
+    .map((player) => player.id)
+    .sort();
+  for (const refusal of /** @type {(number | "page" | "empty")[]} */ ([
+    403,
+    503,
+    "page",
+    "empty",
+  ])) {
+    const league = createLeague({ refuse: { [url]: refusal }, espn: listEspnAnswers() });
+    const server = createBoxScoreServer({ fetchImpl: league.fetchImpl });
+
+    const response = await server.serveBoxScore(
+      new URL(`https://app.example/k3y/box-score?${nameGameQuery(VALKYRIES_AT_WINGS)}`),
+      keepPlayerIndex,
+    );
+
+    assert.equal(response.status, 200, String(refusal));
+    const box = await response.json();
+    assert.deepEqual(
+      [box.id, box.state, box.away.score, box.home.score, box.away.periods],
+      [
+        VALKYRIES_AT_WINGS,
+        "final",
+        fromLeague.away.score,
+        fromLeague.home.score,
+        fromLeague.away.periods,
+      ],
+    );
+    const ids = [...box.away.players, ...box.home.players].map((player) => player.id).sort();
+    assert.deepEqual(ids, leagueIds);
+  }
+});
+
+test("while the league refuses a game's box score, one ESPN hasn't started is a 404", async () => {
+  const league = createLeague({
+    refuse: { [nameBoxScoreRequest(ACES_AT_FEVER)]: 403 },
+    espn: listEspnAnswers((summary) => {
+      summary.header.competitions[0].status.type = { state: "pre", completed: false };
+      return summary;
+    }),
+  });
+  const response = await askBoxScore(
+    createBoxScoreServer({ fetchImpl: league.fetchImpl }),
+    nameGameQuery(ACES_AT_FEVER),
+  );
+  await assertErrorAnswer(response, 404, "not_found");
+});
+
+test("a game without a box score yet is a 404, and a league that fails without ESPN's is a 502", async () => {
   const notStarted = await askBoxScore(
     createBoxScoreServer({ fetchImpl: createLeague().fetchImpl }),
-    "id=1042600123",
+    nameGameQuery(NEXT_ACES_AT_FEVER),
   );
   assert.match(
     await assertErrorAnswer(notStarted, 404, "not_found"),
@@ -171,7 +264,7 @@ test("a game without a box score yet is a 404, and a league that fails is a 502"
     const league = createLeague({ refuse: { [url]: refusal } });
     const response = await askBoxScore(
       createBoxScoreServer({ fetchImpl: league.fetchImpl }),
-      `id=${ACES_AT_FEVER}`,
+      nameGameQuery(ACES_AT_FEVER),
     );
     assert.match(
       await assertErrorAnswer(response, 502, "upstream_error"),
@@ -180,11 +273,21 @@ test("a game without a box score yet is a 404, and a league that fails is a 502"
   }
 });
 
-test("a box score id that isn't a game's is refused before reading the league", async () => {
+test("a box score read that doesn't name a game by its id, teams, and start is refused before reading the league", async () => {
   const league = createLeague();
   const server = createBoxScoreServer({ fetchImpl: league.fetchImpl });
-  for (const query of ["", "id=12", "id=../../x", "id=1042600122x"]) {
-    await assertErrorAnswer(await askBoxScore(server, query), 400, "invalid_argument");
+  const game = Object.fromEntries(nameGameQuery(ACES_AT_FEVER));
+  const queries = [
+    {},
+    ...["12", "../../x", "1042600122x"].map((id) => ({ ...game, id })),
+    ...["away", "home", "start"].map((field) => ({ ...game, [field]: "" })),
+    { ...game, away: "XYZ" },
+    { ...game, home: game.away },
+    { ...game, start: "tonight" },
+  ];
+  for (const query of queries) {
+    const response = await askBoxScore(server, new URLSearchParams(query));
+    await assertErrorAnswer(response, 400, "invalid_argument");
   }
   assert.equal(league.reads.length, 0);
 });

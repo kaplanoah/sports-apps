@@ -19,8 +19,7 @@ import { listSeasonGames } from "../page/js/games-view.js";
 import { listSearchPages } from "../page/js/search-pages.js";
 import { createSearchTerms, readSearchGame } from "../page/js/search-terms.js";
 import { buildSnapshot } from "../page/js/snapshot.js";
-import { indexRosters } from "../worker/src/player-index.js";
-import { describeRoster } from "../worker/src/roster.js";
+import { readPlayerIndex } from "./player-fixtures.js";
 
 /** @param {string} name */
 const loadFixture = (name) =>
@@ -43,21 +42,7 @@ const CONTEXT = createSearchContext({
   games: listSearchGames(GAMES, (game) => readSearchGame(game, null)),
   now: NOW,
 });
-const ROSTERS = loadFixture("2026-10-13-every-roster");
-const INDEX = indexRosters(
-  2026,
-  Object.entries(ROSTERS.rosters).map(([key, leagueRoster]) =>
-    describeRoster({
-      team: key.split(":")[0],
-      season: 2026,
-      leagueRoster,
-      playerList: ROSTERS.playerList,
-      outPlayers: [],
-      now: NOW,
-    }),
-  ),
-);
-const PAGES = listSearchPages({ index: INDEX, isSettingShown: () => true });
+const PAGES = listSearchPages({ index: readPlayerIndex(), isSettingShown: () => true });
 
 test("typing each team's and place's name a key at a time, alone or in a search, finds no games from under three letters, names each team alone, finds what the whole search does once it reads it whole, and starts no player past its first word", () => {
   const phrasings = listPhrasings(CONTEXT, "liberty");

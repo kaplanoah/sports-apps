@@ -119,7 +119,7 @@ function readGameSeason(id) {
 const PRESEASON_GAME_ID = /^101(\d{2})\d{5}$/;
 
 /** @param {string} id */
-function readAnyGameSeason(id) {
+export function readAnyGameSeason(id) {
   const [, preseason] = String(id).match(PRESEASON_GAME_ID) ?? [];
   return preseason ? 2000 + Number(preseason) : readGameSeason(id);
 }
@@ -394,6 +394,12 @@ function combineSeries(bracketSeries, countedSeries, games) {
 
 const BACKUP_STATES = { pre: "pre", in: "live", post: "final" };
 
+/**
+ * A game's state as ESPN's status names it.
+ * @param {any} status ESPN's status of a game
+ */
+export const readEspnGameState = (status) => BACKUP_STATES[status?.type?.state] ?? "pre";
+
 // ESPN's scoreboard gives each score as text, and a stand-in game takes one only as a number.
 /** @param {unknown} score */
 function readEspnScore(score) {
@@ -425,7 +431,7 @@ const readScoredSide = (competitor) => ({ score: readEspnScore(competitor.score)
 function readBackupGame(event) {
   const { competition, start, home, away } = readEspnEvent(event, readScoredSide);
   const status = competition.status ?? event.status;
-  const state = BACKUP_STATES[status?.type?.state] ?? "pre";
+  const state = readEspnGameState(status);
   return {
     start,
     state,

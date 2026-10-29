@@ -13,13 +13,15 @@ const PREVIEW_REUSE_MS = 10 * 60 * 1000;
 // Highlights post over hours, so a sheet opened again in the next minute reuses them.
 const HIGHLIGHTS_REUSE_MS = 60 * 1000;
 
-/** @param {string} id */
-export const fetchBoxScore = (id) =>
-  fetchFromWorker(`box-score?id=${encodeURIComponent(id)}`, {
+/** @param {{ id: string, away: string, home: string, start: string }} game */
+export function fetchBoxScore({ id, away, home, start }) {
+  const query = new URLSearchParams({ id, away, home, start });
+  return fetchFromWorker(`box-score?${query}`, {
     reuseMs: BOX_SCORE_REUSE_MS,
     timeoutMs: SHEET_FETCH_TIMEOUT_MS,
     isExpected: (body) => body.id === id,
   });
+}
 
 /** @param {{ season: number, away: string, home: string }} game */
 export function fetchPreview({ season, away, home }) {

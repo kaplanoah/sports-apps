@@ -1,5 +1,5 @@
-import { fetchBoxScore } from "./box-score.js";
-import { createLeadReader } from "./lead.js";
+import { createBoxScoreReader } from "./box-score.js";
+import { createEspnGameReader, describeGameLead } from "./lead.js";
 import { nameGameDetailsKey } from "./store-docs.js";
 import { createGameDetailsJob, nameReadsKey } from "../../../../shared/worker/game-details-job.js";
 
@@ -46,8 +46,8 @@ async function listFinals(context, year) {
 const readAnswer = (result) => (result.status === "fulfilled" ? result.value : null);
 
 /**
- * Whether the league answered with a final box score, and ESPN with a lead that's over, or that it
- * has no such game.
+ * Whether the league or ESPN answered with a final box score, and ESPN with a lead that's over, or
+ * that it has no such game.
  * @param {PromiseSettledResult<any>} boxScore
  * @param {PromiseSettledResult<any>} lead
  */
@@ -63,10 +63,18 @@ const isWhole = (boxScore, lead) =>
  * @param {any} stored
  */
 async function readDetails(context, game, stored) {
-  const readLead = createLeadReader({ fetchImpl: context.fetchImpl });
+  const { fetchImpl } = context;
+  const espnGames = createEspnGameReader({ fetchImpl });
+  const readBoxScore = createBoxScoreReader({ fetchImpl, espnGames });
+  const teams = { away: game.away.team, home: game.home.team, start: game.start };
+  const summary = espnGames.fetchSummary(teams);
   const [boxScore, lead] = await Promise.allSettled([
-    fetchBoxScore(context.fetchImpl, game.id),
-    readLead({ away: game.away.team, home: game.home.team, start: game.start }),
+    readBoxScore(
+      { id: game.id, ...teams },
+      (key) => context.docs.read(key),
+      () => summary,
+    ),
+    summary.then((read) => describeGameLead(teams, read)),
   ]);
   if (boxScore.status === "rejected" && lead.status === "rejected") throw boxScore.reason;
   const kept = stored ?? NO_DETAILS;
