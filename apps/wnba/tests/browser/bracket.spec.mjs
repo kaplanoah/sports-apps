@@ -1,4 +1,5 @@
 import { readTeamLines } from "../../../../tests/browser/team-lines.mjs";
+import { TEAM_LINE_EXPECTATIONS } from "./team-line-expectations.mjs";
 import { TEAMS } from "../../page/js/teams.js";
 import { finishFirstRound, finishSemifinals, showFirstRoundFinished } from "./bracket-rounds.mjs";
 import { test, expect, openApp, formatRgb } from "./harness.mjs";
@@ -527,7 +528,7 @@ test("a bracket's large dots and outside seeds center on their names' capitals",
 }) => {
   await openApp(page);
   await expect(page.locator(".team-line .club").first()).toBeVisible();
-  const drawn = await readTeamLines(page, "wnba");
+  const drawn = await readTeamLines(page, TEAM_LINE_EXPECTATIONS);
   expect(drawn.problems).toEqual([]);
   expect(drawn.roles).toContain("large");
   expect(drawn.attachments).toContain("outside seed");

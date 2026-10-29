@@ -2,6 +2,7 @@ import { test, expect, openApp } from "./harness.mjs";
 import { VIEW_GROUPS, openWithEverything } from "./views.mjs";
 import { TABS_GROUP, checkEachView } from "../../../../tests/browser/view-walk.mjs";
 import { ALIGNMENT_TOLERANCE, readTeamLines } from "../../../../tests/browser/team-lines.mjs";
+import { TEAM_LINE_EXPECTATIONS } from "./team-line-expectations.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
@@ -49,7 +50,7 @@ for (const width of [390, 1280]) {
         const attachments = new Set();
         const names = new Set();
         await checkEachView(page, views, async (view) => {
-          const drawn = await readTeamLines(page, "wnba");
+          const drawn = await readTeamLines(page, TEAM_LINE_EXPECTATIONS);
           expect(drawn.problems, view.name).toEqual([]);
           for (const role of drawn.roles) roles.add(role);
           for (const placement of drawn.placements) placements.add(placement);
@@ -100,7 +101,7 @@ for (const colorScheme of THEMES) {
     await page.getByRole("tab", { name: "Games" }).click();
     await page.locator('#seasonGames .day-cell[data-day="2026-07-25"]').click();
     await expect(page.locator(".all-star-mark")).toHaveCount(2);
-    const drawn = await readTeamLines(page, "wnba");
+    const drawn = await readTeamLines(page, TEAM_LINE_EXPECTATIONS);
     expect(drawn.problems).toEqual([]);
     expect(drawn.states).toContain("All-Star");
     expect(drawn.names).toEqual(expect.arrayContaining(["Spoon", "Coop"]));
@@ -131,6 +132,6 @@ for (const colorScheme of THEMES) {
       };
     }, ALIGNMENT_TOLERANCE);
     expect(geometry).toEqual({ clipped: true, fits: true, dot: 14, width: 60 });
-    expect((await readTeamLines(page, "wnba")).problems).toEqual([]);
+    expect((await readTeamLines(page, TEAM_LINE_EXPECTATIONS)).problems).toEqual([]);
   });
 }

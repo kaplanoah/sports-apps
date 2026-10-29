@@ -12,6 +12,7 @@ import { VIEW_GROUPS, openWithEverything } from "./views.mjs";
 import { openRanking } from "./settings-sheet.mjs";
 import { TABS_GROUP, checkEachView } from "../../../../tests/browser/view-walk.mjs";
 import { ALIGNMENT_TOLERANCE, readTeamLines } from "../../../../tests/browser/team-lines.mjs";
+import { TEAM_LINE_EXPECTATIONS } from "./team-line-expectations.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
@@ -47,7 +48,7 @@ for (const width of [390, 1280]) {
         const attachments = new Set();
         const names = new Set();
         await checkEachView(page, views, async (view) => {
-          const drawn = await readTeamLines(page, "mlb");
+          const drawn = await readTeamLines(page, TEAM_LINE_EXPECTATIONS);
           expect(drawn.problems, view.name).toEqual([]);
           for (const role of drawn.roles) roles.add(role);
           for (const placement of drawn.placements) placements.add(placement);
@@ -95,7 +96,7 @@ for (const colorScheme of THEMES) {
     await openApp(page, { snapshots: { 2026: snapshot } });
     await page.getByRole("tab", { name: "Games" }).click();
     await expect(page.locator(".all-star-mark")).toHaveCount(2);
-    const drawn = await readTeamLines(page, "mlb");
+    const drawn = await readTeamLines(page, TEAM_LINE_EXPECTATIONS);
     expect(drawn.problems).toEqual([]);
     expect(drawn.states).toContain("All-Star");
     expect(drawn.names).toEqual(expect.arrayContaining(["American League", "National League"]));
@@ -112,7 +113,7 @@ for (const colorScheme of THEMES) {
     await openSettings(page);
     await openRanking(page);
     await expect(page.locator("#rankingDialog .rank-id .league-tag").first()).toBeVisible();
-    const drawn = await readTeamLines(page, "mlb");
+    const drawn = await readTeamLines(page, TEAM_LINE_EXPECTATIONS);
     expect(drawn.problems).toEqual([]);
     expect(drawn.attachments).toContain("league chip");
   });
@@ -145,7 +146,7 @@ for (const colorScheme of THEMES) {
       };
     }, ALIGNMENT_TOLERANCE);
     expect(geometry).toEqual({ clipped: true, fits: true, dot: 14, width: 60 });
-    expect((await readTeamLines(page, "mlb")).problems).toEqual([]);
+    expect((await readTeamLines(page, TEAM_LINE_EXPECTATIONS)).problems).toEqual([]);
   });
 }
 
@@ -171,7 +172,7 @@ for (const width of [390, 1280]) {
         .filter({ has: page.getByText("Lineup", { exact: true }) })
         .first();
       await expect(lineup).toBeVisible();
-      const game = await readTeamLines(page, "mlb");
+      const game = await readTeamLines(page, TEAM_LINE_EXPECTATIONS);
       expect(game.problems).toEqual([]);
       expect(game.states).toContain("baseline heading");
       await page
@@ -179,7 +180,7 @@ for (const width of [390, 1280]) {
         .getByRole("button", { name: /^Yankees\b.*team details$/ })
         .click();
       await expect(page.locator("#teamSheet .field-heads")).toBeVisible();
-      const team = await readTeamLines(page, "mlb");
+      const team = await readTeamLines(page, TEAM_LINE_EXPECTATIONS);
       expect(team.problems).toEqual([]);
       expect(team.states).toContain("field comparison");
       expect(team.states).toContain("baseline series");
@@ -195,7 +196,7 @@ for (const width of [390, 1280]) {
       await expect(
         page.locator("#teamSheet .series-opp .tbd").filter({ hasText: "Bye" }),
       ).toBeVisible();
-      expect((await readTeamLines(page, "mlb")).problems).toEqual([]);
+      expect((await readTeamLines(page, TEAM_LINE_EXPECTATIONS)).problems).toEqual([]);
     });
   }
 }
