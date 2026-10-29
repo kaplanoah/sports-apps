@@ -25,18 +25,7 @@ export function findShortfall(wanted, landed) {
   return Math.abs(shortfall) < 1 ? shortfall : 0;
 }
 
-/**
- * How far a pull to refresh holds `element` down, by the relative offset it gives the page's parts
- * (pull-to-refresh.js), which isn't where it sits on the page. The offset is read as drawn, partway
- * through an ease back.
- * @param {HTMLElement} element
- */
-function readPulledBy(element) {
-  let pulled = 0;
-  for (let part = /** @type {HTMLElement | null} */ (element); part; part = part.parentElement)
-    if (part.style.top) pulled += parseFloat(getComputedStyle(part).top) || 0;
-  return pulled;
-}
+/* global readPulledBy -- from season-header.js */
 
 /**
  * Keeps the rows of `view`, a tab the page scrolls, where they are on the screen as what's above

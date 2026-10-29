@@ -13,7 +13,7 @@ import { createSlidePanels } from "./slide-panels.js";
 import { isAsFarAs, isAwayFrom, scrollWithSpring } from "./spring-scroll.js";
 import { readSelectedTab, wireTabList } from "./tabs.js";
 
-/* global followSeasonPart, listAboveSeasonView -- from season-header.js */
+/* global followSeasonPart, listAboveSeasonView, readPulledBy -- from season-header.js */
 /* global isAwayLong -- from long-away.js */
 
 // One tab holds a season's standings and its bracket, side by side under a pill, one shown at a
@@ -174,13 +174,14 @@ export function scrollUnderPill(element) {
 
 /**
  * Where `element`, in a part of the tab, starts down the screen with its part and the page at their
- * tops, so what a bracket sizes from it holds however far either is scrolled.
+ * tops, without the pull-to-refresh offset, including while it eases back into place.
  * @param {Element} element
  */
 export const measureTopAtRest = (element) =>
   element.getBoundingClientRect().top +
   /** @type {HTMLElement} */ (findPartHolding(element)).scrollTop +
-  scrollY;
+  scrollY -
+  readPulledBy(/** @type {HTMLElement} */ (element));
 
 /**
  * Has `observer` watch what sets the room for `element`'s part: the part itself, and what stands
