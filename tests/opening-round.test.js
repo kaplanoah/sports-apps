@@ -40,7 +40,7 @@ function prepareBracket(t) {
     });
   }
   class Scroller {
-    dataset = {};
+    dataset = { startLeft: "300" };
     scrollLeft = 0;
     scrollTop = 0;
     clientWidth = 300;
@@ -59,17 +59,17 @@ function prepareBracket(t) {
   const context = createContext({ HTMLElement: Scroller });
   for (const file of ["long-away.js", "show-last-drawn.js"])
     runInContext(readRepoFile(`shared/page/${file}`), context);
-  const restore = (left, awayMs) => {
+  const restore = (left, awayMs, top = 0, partId = "bracketWrap") => {
     const saved = {
       savedAt: 1_000_000 - awayMs,
-      scrolls: [{ path: [0], left, top: 0, startLeft: 300 }],
+      scrolls: [{ path: [0], left, top, startLeft: 300 }],
     };
     const place = runInContext("findPlaceToShow", context)(
       saved,
       { isInSheet: false, isStartHidden: false },
       1_000_000,
     );
-    runInContext("restoreScrolls", context)({ children: [scroller] }, place.scrolls);
+    runInContext("restoreScrolls", context)({ id: partId, children: [scroller] }, place.scrolls);
   };
   const target = /** @type {HTMLElement} */ ({
     getBoundingClientRect: () => ({
@@ -105,6 +105,19 @@ for (const left of [0, 240]) {
     redraw();
     redraw();
     assert.equal(scroller.scrollLeft, 120);
+  });
+}
+
+for (const isSideways of [false, true]) {
+  test(`a restored ${isSideways ? "date strip" : "vertical list"} keeps its position without a bracket restoration marker`, (t) => {
+    const { scroller, restore } = prepareBracket(t);
+    if (!isSideways) delete scroller.dataset.startLeft;
+    const left = isSideways ? 240 : 0;
+    restore(left, 60_000, 160, "seasonGames");
+    assert.equal(scroller.scrollLeft, left);
+    assert.equal(scroller.scrollTop, 160);
+    assert.equal(scroller.dataset.putBackTop, "160");
+    assert.equal(scroller.dataset.putBackLeft, undefined);
   });
 }
 

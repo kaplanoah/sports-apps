@@ -18,6 +18,10 @@ export const SHORT_PHONE = { width: 390, height: 480 };
 
 export const MINUTE_MS = 60 * 1000;
 
+/** @param {import("@playwright/test").Page} page @param {string} sideways */
+const readBracketLeft = (page, sideways) =>
+  page.locator(sideways).evaluate((element) => Math.round(element.scrollLeft));
+
 /**
  * Where the season tab is: the part its pill shows, how far each part and the bracket sideways are
  * scrolled, whether the pill holds at the top, and where the header starts on the page.
@@ -31,7 +35,7 @@ export async function readSeasonPlace(page, sideways) {
       .getAttribute("data-tab"),
     standingsScroll: await readSeasonPartScroll(page, "standings"),
     bracketScroll: await readSeasonPartScroll(page, "bracket"),
-    bracketLeft: await page.locator(sideways).evaluate((element) => Math.round(element.scrollLeft)),
+    bracketLeft: await readBracketLeft(page, sideways),
     isPillHeld: await page
       .locator("#bracketStandingsPill")
       .evaluate((pill) => pill.classList.contains("held")),
@@ -215,7 +219,7 @@ export async function expectSeasonTabAfterReload(page, { sideways, awayMs }) {
  */
 export async function expectOpeningRoundAfterReload(page, { sideways, changeWhileAway }) {
   const bracket = page.locator(sideways);
-  const readLeft = () => bracket.evaluate((element) => Math.round(element.scrollLeft));
+  const readLeft = () => readBracketLeft(page, sideways);
   const { start } = await moveSeasonTabOffStart(page, sideways);
 
   const release = await reloadAfter(page, 2 * MINUTE_MS);
@@ -303,7 +307,7 @@ export async function expectBracketZeroAfterReload(page, sideways) {
         element.scrollTo({ left: 0, behavior: "instant" });
       }),
   );
-  const readLeft = () => bracket.evaluate((element) => Math.round(element.scrollLeft));
+  const readLeft = () => readBracketLeft(page, sideways);
   expect(await readLeft()).toBe(0);
 
   const release = await reloadAfter(page, MINUTE_MS);
