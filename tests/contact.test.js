@@ -154,7 +154,7 @@ test("Contact routes stay behind the app path and access gate", async () => {
     name: "mlb",
     pageFiles: {},
     forwardToStore: () => new Response(),
-    isStoreAnswering: async () => true,
+    readFeedFailures: async () => ({}),
   });
   const env = { APP_KEY: "test-key", ACCESS_CODE: "secret", ACCESS_SIGNING_KEY: "test-signing" };
   assert.equal((await worker.fetch(new Request("https://example.com/contact"), env)).status, 404);
@@ -165,7 +165,7 @@ test("Contact routes stay behind the app path and access gate", async () => {
 });
 
 test("email service health is reported without exposing report content or affecting sports health", async () => {
-  const serveHealth = createHealthServer({ isStoreAnswering: async () => true, release: "abc" });
+  const serveHealth = createHealthServer({ readFeedFailures: async () => ({}), release: "abc" });
   const response = await serveHealth({
     EMAIL: {
       readHealth: async () => ({ ok: false, release: "def", private: "message", pending: 2 }),
@@ -176,6 +176,7 @@ test("email service health is reported without exposing report content or affect
     ok: true,
     release: "abc",
     store: "ok",
+    feeds: {},
     services: { email: { ok: false, release: "def" } },
   });
 });

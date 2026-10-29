@@ -5,12 +5,13 @@ import { describeError } from "./responses.js";
 // end reaches a league's stats a little after its scoreboard, so a feed is read as a game ends
 // and once more a few minutes later, and again every few minutes while another feed shows its
 // answer is still behind. Each keeps its last good answer to stand in when a read fails, and one
-// that didn't answer isn't asked again for a while, since a hung read holds up each update until
-// it times out, and meanwhile fails for the same reason its last read did. What it keeps goes in
+// that didn't answer is asked again every few minutes, however young its kept answer, until one
+// answers: not sooner, since a hung read holds up each update until it times out, and meanwhile it
+// fails for the same reason its last read did. What it keeps goes in
 // `storage`, since a Durable Object leaves memory between updates.
 
 const SETTLE_MS = 10 * 60 * 1000;
-const FAILED_FEED_WAIT_MS = 5 * 60 * 1000;
+export const FAILED_FEED_WAIT_MS = 5 * 60 * 1000;
 const BEHIND_FEED_WAIT_MS = 5 * 60 * 1000;
 const FINALS_KEY = "finals";
 
@@ -124,8 +125,7 @@ export function createFeedKeeper({ feeds, now, storage = createMemoryStorage() }
    * @param {(data: any) => boolean} isBehind
    */
   async function isDue(name, record, isBehind) {
-    if (record?.failedAt !== undefined && now() - record.failedAt < FAILED_FEED_WAIT_MS)
-      return false;
+    if (record?.failedAt !== undefined) return now() - record.failedAt >= FAILED_FEED_WAIT_MS;
     const { maxAgeMs, changesWithGames } = feeds[name];
     if (!record?.answer || now() - record.answer.at >= maxAgeMs) return true;
     if (isBehindLong(record.answer, isBehind)) return true;
@@ -172,13 +172,21 @@ export function createFeedKeeper({ feeds, now, storage = createMemoryStorage() }
      * @param {boolean} [options.requireFresh] read again and reject failed verification
      * @param {(data: any) => boolean} [options.isBehind] whether a kept answer is behind what
      *   another feed already says
+     * @param {(reason: string) => void} [options.onFailure] told why the feed's last read failed
+     *   while no read since has answered, even when the kept answer stands in
      */
-    async readFeed(name, key, load, { isBehind = () => false, requireFresh = false } = {}) {
+    async readFeed(
+      name,
+      key,
+      load,
+      { isBehind = () => false, requireFresh = false, onFailure = () => {} } = {},
+    ) {
       const storageKey = await nameFeedKey(name, key);
       const what = `${name} ${key}`;
       const record = await readRecord(storageKey);
       const answer = record?.answer;
       if (!requireFresh && !(await isDue(name, record, isBehind))) {
+        if (record?.reason !== undefined) onFailure(record.reason);
         if (answer) return answer.data;
         throw new Error(record.reason);
       }
@@ -187,11 +195,9 @@ export function createFeedKeeper({ feeds, now, storage = createMemoryStorage() }
         await saveRecord(storageKey, { answer: { at: now(), data } }, what);
         return data;
       } catch (error) {
-        await saveRecord(
-          storageKey,
-          { answer, failedAt: now(), reason: describeError(error) },
-          what,
-        );
+        const reason = describeError(error);
+        await saveRecord(storageKey, { answer, failedAt: now(), reason }, what);
+        onFailure(reason);
         if (answer && !requireFresh) return answer.data;
         throw error;
       }

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import {
   addToJobCount,
   createSeasonStore,
-  isStoreAnswering,
+  readFeedFailures,
   readStoreDoc,
 } from "../shared/worker/season-store.js";
 import { createDurableObjectContext, fireNextAlarm } from "./durable-object-context.js";
@@ -59,7 +59,7 @@ test("the Worker reads a document the store keeps, and null for one it doesn't",
   await assert.rejects(readStoreDoc(env, "rosters/2026/NYL"), /The store answered 404/);
 });
 
-test("the Worker can ask whether its store answers, before the store has saved anything", async () => {
+test("the Worker reads which feeds are failing, as none before the store has saved anything, and throws when the store doesn't answer", async () => {
   const context = createDurableObjectContext();
   const SeasonStore = createSeasonStore(QUIET_LEAGUE);
   const store = new SeasonStore(context.ctx, {}, { now: () => NOW });
@@ -73,8 +73,104 @@ test("the Worker can ask whether its store answers, before the store has saved a
     STORE: { idFromName: () => "store", get: () => ({ fetch: async () => Response.error() }) },
   };
 
-  assert.equal(await isStoreAnswering(env), true);
-  assert.equal(await isStoreAnswering(broken), false);
+  assert.deepEqual(await readFeedFailures(env), {});
+  await assert.rejects(readFeedFailures(broken));
+});
+
+test("a store keeps each failing feed from its first failure in a row, and drops it once it answers", async () => {
+  const context = createDurableObjectContext();
+  let now = NOW;
+  /** @type {Record<string, string>} */
+  let failures = { scoreboard: "404 for /scoreboard" };
+  const SeasonStore = createSeasonStore({ ...QUIET_LEAGUE, listFeedFailures: () => failures });
+  const store = new SeasonStore(context.ctx, {}, { now: () => now });
+
+  await store.loadAndSaveSeason();
+  now += 60_000;
+  failures = { scoreboard: "timed out", backup: "500 for /backup" };
+  await store.loadAndSaveSeason();
+
+  assert.deepEqual(await context.ctx.storage.get("live/feeds"), {
+    failing: {
+      backup: { reason: "500 for /backup", since: new Date(now).toISOString() },
+      scoreboard: { reason: "timed out", since: new Date(NOW).toISOString() },
+    },
+  });
+
+  failures = { backup: "500 for /backup" };
+  await store.loadAndSaveSeason();
+  assert.deepEqual(Object.keys((await context.ctx.storage.get("live/feeds")).failing), ["backup"]);
+});
+
+test("a store keeps the snapshot's own failures for a league that hands it no list of them", async () => {
+  const context = createDurableObjectContext();
+  const SeasonStore = createSeasonStore({
+    ...QUIET_LEAGUE,
+    loadCurrentSnapshot: async () => ({
+      season: 2026,
+      failures: { standings: "502 for /standings" },
+    }),
+  });
+  const store = new SeasonStore(context.ctx, {}, { now: () => NOW });
+
+  await store.loadAndSaveSeason();
+
+  assert.deepEqual(await context.ctx.storage.get("live/feeds"), {
+    failing: { standings: { reason: "502 for /standings", since: new Date(NOW).toISOString() } },
+  });
+});
+
+test("a store notes a loaded snapshot's feed failures even when saving it fails", async () => {
+  const context = createDurableObjectContext();
+  let now = NOW;
+  let isLoading = false;
+  const SeasonStore = createSeasonStore({
+    ...QUIET_LEAGUE,
+    loadCurrentSnapshot: async () => {
+      if (!isLoading) throw new Error("The league answered 503");
+      return { season: 2026, failures: { standings: "502 for /standings" } };
+    },
+    saveSnapshot: async () => {
+      throw new Error("The document is too big");
+    },
+  });
+  const store = new SeasonStore(context.ctx, {}, { now: () => now });
+
+  await store.loadAndSaveSeason();
+  isLoading = true;
+  now += 60_000;
+  await store.loadAndSaveSeason();
+
+  assert.deepEqual(await context.ctx.storage.get("live/feeds"), {
+    failing: { standings: { reason: "502 for /standings", since: new Date(now).toISOString() } },
+  });
+});
+
+test("a league that fails to load counts as a failing feed, keeping the feeds failing before", async () => {
+  const context = createDurableObjectContext();
+  let now = NOW;
+  let isLoading = true;
+  const SeasonStore = createSeasonStore({
+    ...QUIET_LEAGUE,
+    listFeedFailures: () => ({ scoreboard: "404 for /scoreboard" }),
+    loadCurrentSnapshot: async () => {
+      if (!isLoading) throw new Error("The league answered 503");
+      return { season: 2026 };
+    },
+  });
+  const store = new SeasonStore(context.ctx, {}, { now: () => now });
+
+  await store.loadAndSaveSeason();
+  isLoading = false;
+  now += 60_000;
+  await store.loadAndSaveSeason();
+
+  assert.deepEqual(await context.ctx.storage.get("live/feeds"), {
+    failing: {
+      league: { reason: "The league answered 503", since: new Date(now).toISOString() },
+      scoreboard: { reason: "404 for /scoreboard", since: new Date(NOW).toISOString() },
+    },
+  });
 });
 
 test("a store takes no changes from the page", async () => {

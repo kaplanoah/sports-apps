@@ -14,7 +14,7 @@ import { createWatchedGameLoader } from "./watched-games.js";
 export {
   addToJobCount,
   forwardToStore,
-  isStoreAnswering,
+  readFeedFailures,
   readStoreDoc,
 } from "../../../../shared/worker/season-store.js";
 
@@ -32,6 +32,7 @@ const league = {
   readUpdates: SeasonUpdater.readUpdates,
   saveSnapshot: SeasonUpdater.saveSnapshot,
   describeSnapshotStatus: SeasonUpdater.describeSnapshotStatus,
+  listFeedFailures: SeasonUpdater.listFeedFailures,
   statusFields: SeasonUpdater.STATUS_FIELDS,
   choosePollDelay,
   listNotifications: SeasonUpdater.listNotifications,

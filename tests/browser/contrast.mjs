@@ -1,5 +1,5 @@
 import { expect } from "@playwright/test";
-import { waitForPressesToEnd } from "./tap-states.mjs";
+import { letPressesGo } from "./tap-states.mjs";
 import { THEMES, showTheme } from "./theme-layout.mjs";
 
 /**
@@ -8,7 +8,7 @@ import { THEMES, showTheme } from "./theme-layout.mjs";
  * @param {import("@playwright/test").Page} page
  */
 async function waitForSettledColors(page) {
-  await waitForPressesToEnd(page);
+  await letPressesGo(page);
   await expect
     .poll(() =>
       page.evaluate(

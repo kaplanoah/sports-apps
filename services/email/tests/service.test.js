@@ -187,7 +187,7 @@ test("both apps reach the same service through their gated endpoint and fix thei
       name,
       pageFiles: {},
       forwardToStore: () => new Response(),
-      isStoreAnswering: async () => true,
+      readFeedFailures: async () => ({}),
     });
     const env = { APP_KEY: "k3y", EMAIL: service };
     const config = await app.fetch(new Request("https://example.com/k3y/contact"), env);

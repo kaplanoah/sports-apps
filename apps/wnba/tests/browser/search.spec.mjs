@@ -1,4 +1,5 @@
 import { test, expect } from "./harness.mjs";
+import { holdClock } from "../../../../tests/browser/harness.mjs";
 import {
   ON_A_PHONE,
   PLAYER_INDEX,
@@ -158,7 +159,7 @@ test("while words are typed, two whole searches, then the team's pages in place 
   await expect(findLine(page)).toHaveText("Liberty•Next game");
 });
 
-test("a sent team shows its pages over its games line, which opens its games alone on the first from today, and a tap on the field brings back what typing showed", async ({
+test("a sent team shows its pages over its games line, which opens its games alone on its tap, on the first from today, and a tap on the field brings back what typing showed", async ({
   page,
 }) => {
   await openSeasonGames(page);
@@ -170,10 +171,12 @@ test("a sent team shows its pages over its games line, which opens its games alo
   await expect(findRows(page)).toHaveText(["New York Liberty26-18", "RosterNew York Liberty"]);
   await expect(findGamesLine(page)).toHaveText("Liberty•52 games");
 
+  await holdClock(page);
   await findGamesLine(page).tap();
 
   await expect(findRows(page)).toHaveCount(0);
   await expect(findLine(page)).toHaveText("Liberty•52 games");
+  await page.clock.resume();
   await expect.poll(() => readTopDay(page)).toBe("2026-10-04");
   await expect(page.locator("#gameSearch .search-bar")).toHaveClass(/stuck/);
 

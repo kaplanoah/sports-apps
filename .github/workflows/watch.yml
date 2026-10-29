@@ -1,8 +1,9 @@
 name: Watch apps
 
 # Every 15 minutes, opens each app's live page as a phone does, and asks each app's health of each
-# service the apps reach. It keeps one open issue for each app that isn't opening, and one for each
-# service that isn't answering, which closes once it's right again (worker/watch-apps.mjs).
+# service the apps reach and of its league's feeds. It keeps one open issue for each app that isn't
+# opening, one for each service that isn't answering, and one for each app whose feeds are failing,
+# which closes once it's right again (worker/watch-apps.mjs).
 on:
   schedule:
     - cron: "7,22,37,52 * * * *"

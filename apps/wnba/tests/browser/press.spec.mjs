@@ -494,9 +494,7 @@ test("a still tap on a team's row in the standings opens the team, and Enter aft
   await expect(sheet).toBeVisible();
 });
 
-test("a quick tap on a suggestion tints it before its search replaces the list", async ({
-  page,
-}) => {
+test("a quick tap on a suggestion tints it and searches on its tap", async ({ page }) => {
   await openApp(page, { isWholeSeason: true });
   await page.locator("#tab-search").click();
   const input = page.locator("#gameSearch .search-input");
@@ -506,26 +504,13 @@ test("a quick tap on a suggestion tints it before its search replaces the list",
   });
   await expect(suggestion).toBeVisible();
   await notePresses(page);
-  const searched = page.evaluate(
-    () =>
-      new Promise((done) => {
-        const field = /** @type {HTMLInputElement} */ (
-          document.querySelector("#gameSearch .search-input")
-        );
-        const watch = () =>
-          field.value === "Liberty next game"
-            ? done(performance.now())
-            : requestAnimationFrame(watch);
-        watch();
-      }),
-  );
+  await holdClock(page);
 
   await suggestion.tap();
-  const searchedAt = /** @type {number} */ (await searched);
 
-  const [pressedAt] = await readPresses(page);
-  expect(pressedAt).toBeLessThan(searchedAt);
-  expect(searchedAt - pressedAt).toBeGreaterThanOrEqual(100);
+  await expect(input).toHaveValue("Liberty next game");
+  expect(await readPresses(page)).not.toEqual([]);
+  await page.clock.resume();
 });
 
 test.describe("under a mouse", () => {

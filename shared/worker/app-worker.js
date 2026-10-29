@@ -244,17 +244,17 @@ const GATE_PATH = "/gate.html";
  *   supplies it, never a visitor
  * @param {Parameters<typeof decodePageFiles>[0]} app.pageFiles
  * @param {(request: Request, env: any, storePath: string) => Response | Promise<Response>} app.forwardToStore
- * @param {(env: any) => Promise<boolean>} app.isStoreAnswering
+ * @param {(env: any) => Promise<Record<string, import("./feed-failures.js").FeedFailure>>} app.readFeedFailures
  * @param {Record<string, (url: URL, env: any) => Response | Promise<Response>>} [app.reads] more GET
  *   paths, each handed the Worker's bindings, so it can read the store
  */
-export function createAppWorker({ name, pageFiles, forwardToStore, isStoreAnswering, reads = {} }) {
+export function createAppWorker({ name, pageFiles, forwardToStore, readFeedFailures, reads = {} }) {
   const releaseCommit = readReleaseCommit(pageFiles);
   const releaseFolder = releaseCommit && nameReleaseFolder(releaseCommit);
   const servePageFile = createPageServer(pageFiles, releaseFolder);
   // Decided by the file a path names, since the release's folder names the page too.
   const isIndexPath = (appPath) => findPageFile(appPath, releaseFolder).path === "index.html";
-  const serveHealth = createHealthServer({ isStoreAnswering, release: releaseCommit });
+  const serveHealth = createHealthServer({ readFeedFailures, release: releaseCommit });
   const isDataPath = (appPath) =>
     appPath === CONTACT_PATH ||
     isStorePath(appPath) ||

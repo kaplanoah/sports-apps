@@ -240,13 +240,14 @@ Pages link these before their own stylesheet, and theme them with the tokens the
 - `contact-request.js`: bounded Contact requests behind the app's access gate
 - `access-gate.js`: asking for the access code before the page opens
 - `daily-count.js`: writing each browser's or Home Screen app's daily count to Analytics Engine, with the address it came from
-- `health.js`: the Worker's health, for an uptime monitor, and what each service it binds answers
+- `health.js`: the Worker's health, for an uptime monitor, what each service it binds answers, and which league feeds are failing
 - `services.js`: the services an app may bind, and each one's binding name
 - `season-store.js`: the store's Durable Object, which each app's store hands its league
 - `background-job.js`: what a league's background jobs share
 - `job-status.js`: what each job's status says of its last run
 - `upstream.js`: reading a league's feeds and reusing a recent load
 - `feed-keeper.js`: reading slower feeds again only when they may have changed
+- `feed-failures.js`: which of a league's feeds have been failing, since when, and why
 - `timeout.js`: giving up on a call that doesn't answer in time
 - `highlights-job.js`: keeping each final's highlights
 - `game-details-job.js`: keeping each finished game's details

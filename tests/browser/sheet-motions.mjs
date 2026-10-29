@@ -31,3 +31,17 @@ export async function recordSheetMotions(page) {
   });
   return () => page.evaluate(() => /** @type {any} */ (window).sheetMotions.splice(0));
 }
+
+/** Where a sheet's closing slide takes it, which it holds until it closes. */
+export const SLID_CLOSED = "translateY(100%)";
+
+/**
+ * Says whether a sheet has started closing: it has closed, or its closing slide has begun.
+ * @param {import("@playwright/test").Locator} sheet
+ */
+export const hasStartedClosing = (sheet) =>
+  sheet.evaluate(
+    (/** @type {HTMLDialogElement} */ dialog, slidClosed) =>
+      !dialog.open || dialog.style.transform === slidClosed,
+    SLID_CLOSED,
+  );

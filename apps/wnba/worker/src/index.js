@@ -11,7 +11,7 @@ import {
   SeasonStore,
   addToJobCount,
   forwardToStore,
-  isStoreAnswering,
+  readFeedFailures,
   readStoreDoc,
 } from "./store.js";
 
@@ -26,7 +26,7 @@ export default createAppWorker({
   name: "wnba",
   pageFiles: PAGE_FILES,
   forwardToStore,
-  isStoreAnswering,
+  readFeedFailures,
   reads: {
     "/box-score": (url, env) => boxScores.serveBoxScore(url, (key) => readStoreDoc(env, key)),
     "/highlights": (url, env) => highlights.serveHighlights(url, (key) => readStoreDoc(env, key)),
