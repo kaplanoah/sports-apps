@@ -65,14 +65,22 @@ test("a push or the owner's provider choice still stops a review running or wait
   );
 });
 
+/** The provider labels the run name's intent accepts, so `group` and `cancel-in-progress` must too. */
+function readProviderLabels() {
+  const runName = readRepoFile(".github/workflows/review.yml").match(/^run-name: (.*)$/m)?.[1];
+  const list = runName?.match(/fromJSON\('(\["review-provider:[^']*\])'\)/)?.[1];
+  if (!list) throw new Error("No provider list in the review workflow's run name");
+  return /** @type {string[]} */ (JSON.parse(list));
+}
+
 /** Every label event a pull request can get: each label, sender, author and draft state. */
 function listLabelEvents() {
   const events = [];
   for (const action of ["labeled", "unlabeled"])
     for (const name of [
       "review",
-      "review-provider:claude",
-      "review-provider:other",
+      ...readProviderLabels(),
+      "review-provider:unknown",
       ...OBSERVED_LABELS,
     ])
       for (const sender of ["example", "someone"])
