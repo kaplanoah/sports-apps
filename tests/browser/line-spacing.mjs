@@ -1,7 +1,6 @@
 import { checkEachView } from "./view-walk.mjs";
 import { THEMES, showTheme } from "./theme-layout.mjs";
-
-const SCREENS = { phone: { width: 390, height: 844 }, wide: { width: 1280, height: 900 } };
+import { SCREENS } from "./themes.mjs";
 
 /**
  * Every spot in the sheets and settings on screen where a line's spacing breaks sheet.css's
@@ -19,6 +18,9 @@ function findLineSpacingProblems() {
   const rootStyle = getComputedStyle(document.documentElement);
   const headingBelowLine = parseFloat(rootStyle.getPropertyValue("--heading-below-line"));
   const rowLineRoom = parseFloat(rootStyle.getPropertyValue("--row-line-room"));
+  if (!Number.isFinite(headingBelowLine) || !Number.isFinite(rowLineRoom)) {
+    return ["--heading-below-line or --row-line-room is not set on :root"];
+  }
 
   /** @param {Element} element */
   const describe = (element) =>
@@ -28,7 +30,7 @@ function findLineSpacingProblems() {
     element.checkVisibility({ visibilityProperty: true }) &&
     element.getBoundingClientRect().width > 0;
   /** @param {string} color */
-  const isClear = (color) => color === "transparent" || /[,/ ]0\)$/.test(color);
+  const isClear = (color) => color === "transparent" || /^rgba\(.*,\s*0\)$|\/\s*0\)$/.test(color);
   /** @param {Element} element */
   const hasSideEdge = (element) => {
     const style = getComputedStyle(element);
@@ -247,6 +249,7 @@ function findLineSpacingProblems() {
   const panels = [...document.querySelectorAll(".sheet-page, dialog.settings-panel")].filter(
     isShown,
   );
+  if (!panels.length) return ["no sheet or settings shows"];
   return panels.flatMap((panel) => {
     const lines = [...panel.querySelectorAll("*")].filter(isShown).flatMap(readLines);
     const marks = readMarks(panel);
@@ -277,7 +280,7 @@ export function testLineSpacing(test, expect, app) {
   for (const [screen, viewport] of Object.entries(SCREENS)) {
     for (const theme of THEMES) {
       for (const [group, views] of Object.entries(app.viewGroups)) {
-        test(`lines in ${group} keep their spacing, ${theme}, on a ${screen}`, async ({ page }) => {
+        test(`lines in ${group} keep their spacing, ${theme}, on ${screen}`, async ({ page }) => {
           await page.setViewportSize(viewport);
           await app.openWithEverything(page);
           await showTheme(page, theme);

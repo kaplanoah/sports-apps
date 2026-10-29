@@ -22,6 +22,8 @@ paths:
   - "tests/browser/never-shown-words.mjs"
   - "tests/browser/word-centering.mjs"
   - "apps/*/tests/browser/word-centering.spec.mjs"
+  - "tests/browser/line-spacing.mjs"
+  - "apps/*/tests/browser/line-spacing.spec.mjs"
 ---
 
 # How the pages look

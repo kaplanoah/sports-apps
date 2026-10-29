@@ -237,24 +237,24 @@ export function testSettingsContactInteractions(test, expect, { openApp, setting
       );
   });
 
-  test("every group in Settings sits a section's gap below the line above it, a line after it", async ({
+  test("every group in Settings sits a heading's room below the line above it, a line after it", async ({
     page,
   }) => {
     await page.emulateMedia({ reducedMotion: "reduce" });
     await openApp(page);
     await page.getByRole("button", { name: "Settings", exact: true }).click();
     await expect(page.locator("#notificationsGroup")).toBeVisible();
-    const sectionGap = await page
+    const headingBelowLine = await page
       .locator("#settingsDialog")
       .evaluate((settings) =>
-        Number.parseFloat(getComputedStyle(settings).getPropertyValue("--section-gap")),
+        Number.parseFloat(getComputedStyle(settings).getPropertyValue("--heading-below-line")),
       );
     const headings = await findLinesAbove(page, ".settings-group-label");
     expect(headings.map(({ name }) => name)).toEqual(["Notifications", "News"]);
     for (const { name, top, lineAbove } of headings)
       expect({ name, spaceUnderLine: top - lineAbove }).toEqual({
         name,
-        spaceUnderLine: sectionGap,
+        spaceUnderLine: headingBelowLine,
       });
     expect(await findLinesAfterGroups(page)).toEqual([
       { name: "Notifications", isLineAfter: true },
