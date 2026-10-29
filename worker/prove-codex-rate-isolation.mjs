@@ -15,6 +15,7 @@ import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { randomBytes } from "node:crypto";
 import { verifyWithRateNamespaces, RateNamespaceError } from "./codex-rate-namespaces.mjs";
+import { listNativeRateControls, readNativeRateEntries } from "./codex-rate-source.mjs";
 import { writeRateProbeResult } from "./codex-rate-probe-output.mjs";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
@@ -173,17 +174,15 @@ export function requiresRateIsolation(paths) {
       path.startsWith("worker/codex-rate-") ||
       path.startsWith("tests/codex-rate-") ||
       [
+        ...listNativeRateControls(),
+        ...readNativeRateEntries().flatMap(({ workflow, entry }) => [
+          `.github/workflows/${workflow}`,
+          `.github/workflows/${entry}`,
+        ]),
         "worker/prove-codex-rate-isolation.mjs",
         "worker/prove-codex-runner.mjs",
         "worker/prepare-codex-rate.mjs",
-        "worker/github-api.mjs",
-        "worker/review-artifact.mjs",
-        "worker/review-run.mjs",
-        ".github/workflows/trusted-codex-review.yml",
-        ".github/workflows/provider-review-session.yml",
-        ".github/workflows/provider-review-trial.yml",
         ".github/workflows/ci.yml",
-        ".github/workflows/codex-runner-proof.yml",
         "package.json",
         "package-lock.json",
         ".nvmrc",

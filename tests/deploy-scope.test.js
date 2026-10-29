@@ -24,6 +24,7 @@ const DEPLOY_REPORT = "worker/report-deploy.mjs";
 test("rate-control tooling changes do not deploy Workers while unknown root code still does", () => {
   for (const name of [
     "access",
+    "source",
     "handoff",
     "lifecycle",
     "policy",

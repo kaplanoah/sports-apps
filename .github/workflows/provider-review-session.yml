@@ -86,7 +86,6 @@ jobs:
   model:
     needs: request
     if: *trial-authority
-    name: ${{ inputs.provider == 'codex' && format('native-codex-{0}', inputs.portion) || 'model' }}
     concurrency:
       group: ${{ needs.request.outputs.model-queue }}
       cancel-in-progress: false
@@ -122,7 +121,7 @@ jobs:
           path: ${{ runner.temp }}/native-rate-download
       - if: inputs.provider == 'codex'
         run: tar -xzf "$RUNNER_TEMP/native-rate-download/native-rate-input.tgz" -C "$RUNNER_TEMP"
-      - name: Authenticate preceding quota state and prepare protected admission
+      - name: Authenticate preceding quota state and prepare protected admission (${{ inputs.portion }})
         id: rate
         if: inputs.provider == 'codex'
         env:

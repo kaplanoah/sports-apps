@@ -216,6 +216,10 @@ export function createNativeQuotaRecord(
     !restored ||
     !removed ||
     !["parent-exited", "deadline", "not-started"].includes(termination) ||
+    (termination === "not-started" &&
+      (metrics.requests !== 0 ||
+        metrics.reservedTokens !== 0 ||
+        metrics.observedTokens !== null)) ||
     !Number.isSafeInteger(completedAt) ||
     completedAt < 0 ||
     [
@@ -274,7 +278,18 @@ export function readNativeRateInput(inputFolder, expected) {
   return manifest;
 }
 
-async function prepareNativeAdmission(inputFolder, env) {
+/** @param {string} inputFolder @param {any} env @param {any} [options] */
+export async function prepareNativeAdmission(
+  inputFolder,
+  env,
+  {
+    readAdmission = readNativeQuotaAdmission,
+    now = Date.now,
+    wait = delay,
+    selectPort = selectLoopbackPort,
+    spawnRoot = spawnSync,
+  } = {},
+) {
   requireHosted(env);
   const source = env.REVIEW_TRUSTED ?? env.GITHUB_SHA;
   const portion = env.PORTION ?? "proof";
@@ -284,7 +299,7 @@ async function prepareNativeAdmission(inputFolder, env) {
     run: Number(env.GITHUB_RUN_ID),
     repository: env.GITHUB_REPOSITORY,
   });
-  const admission = await readNativeQuotaAdmission({
+  const admission = await readAdmission({
     source,
     portion,
     repository: env.GITHUB_REPOSITORY,
@@ -293,12 +308,12 @@ async function prepareNativeAdmission(inputFolder, env) {
     run: Number(env.GITHUB_RUN_ID),
     token: env.GH_TOKEN,
   });
-  const remaining = admission.notBefore - Date.now();
+  const remaining = admission.notBefore - now();
   if (remaining > readNativeRatePolicy().maxWaitMs)
     throw new Error("Preceding native quota cooldown exceeds pre-model wait budget.");
-  if (remaining > 0) await delay(remaining);
-  const input = { ...admission, hosted: true, port: await selectLoopbackPort() };
-  const result = spawnSync(
+  if (remaining > 0) await wait(remaining);
+  const input = { ...admission, hosted: true, port: await selectPort() };
+  const result = spawnRoot(
     "sudo",
     [
       "-n",
@@ -339,10 +354,15 @@ async function prepareNativeAdmission(inputFolder, env) {
   );
 }
 
-async function launchNativeAdmission(folder, parentPid) {
-  const parent = inspectProcessLifetime(Number(parentPid));
+/** @param {string} folder @param {string} parentPid @param {any} [options] */
+export async function launchNativeAdmission(
+  folder,
+  parentPid,
+  { inspect = inspectProcessLifetime, spawnRoot = spawn, now = Date.now, wait = delay } = {},
+) {
+  const parent = inspect(Number(parentPid));
   if (!parent) throw new Error("Native invocation parent is unavailable.");
-  const child = spawn(
+  const child = spawnRoot(
     "sudo",
     [
       "-n",
@@ -364,12 +384,12 @@ async function launchNativeAdmission(folder, parentPid) {
   child.once("error", () => {
     failed = true;
   });
-  const until = Date.now() + 10000;
+  const until = now() + 10000;
   const path = join(folder, "public/ready.json");
   while (!existsSync(path)) {
-    if (failed || existsSync(join(folder, "public/failed.json")) || Date.now() >= until)
+    if (failed || existsSync(join(folder, "public/failed.json")) || now() >= until)
       throw new Error("Native admission did not become ready.");
-    await delay(50);
+    await wait(50);
   }
   const ready = JSON.parse(readFileSync(path, "utf8"));
   const identity = JSON.parse(readFileSync(join(folder, "public/identity.json"), "utf8"));
@@ -382,15 +402,44 @@ async function launchNativeAdmission(folder, parentPid) {
     throw new Error("Native admission readiness mismatch.");
 }
 
+function restoreNativeControls(folder, config, restore) {
+  try {
+    restore(config.namespaces);
+  } finally {
+    rmSync(join(folder, "private"), { recursive: true, force: true });
+    rmSync(join(folder, "public/hook.sh"), { force: true });
+  }
+}
+
+function createUnusedQuotaMetrics(completedAt) {
+  return {
+    requests: 0,
+    reservedTokens: 0,
+    observedTokens: null,
+    unavailable: 0,
+    queuedMs: 0,
+    feedbackFailed: false,
+    notBefore: completedAt + readNativeRatePolicy().windowMs,
+  };
+}
+
+/** @param {string} folder @param {any} parent @param {any} [options] */
 export async function superviseNativeAdmission(
   folder,
   parent,
-  { start = startNativeRateRuntime } = {},
+  {
+    start = startNativeRateRuntime,
+    readConfiguration = readRootConfiguration,
+    restore = restoreRateNamespaces,
+    now = Date.now,
+    monitor = monitorNativeLifetime,
+  } = {},
 ) {
-  const config = readRootConfiguration(folder);
+  const config = readConfiguration(folder);
   let runtime;
   let restored = false;
   let finalized = false;
+  let ready = false;
   let closed = false;
   async function closeRuntime() {
     if (closed) return;
@@ -402,15 +451,25 @@ export async function superviseNativeAdmission(
       errors.push(error);
     }
     try {
-      restoreRateNamespaces(config.namespaces);
+      restoreNativeControls(folder, config, restore);
       restored = true;
     } catch (error) {
       errors.push(error);
-    } finally {
-      rmSync(join(folder, "private"), { recursive: true, force: true });
-      rmSync(join(folder, "public/hook.sh"), { force: true });
     }
     if (errors.length) throw new AggregateError(errors, "Native runtime could not close safely.");
+  }
+  function publishQuota(metrics, termination, completedAt) {
+    const record = createNativeQuotaRecord(config, metrics, {
+      termination,
+      completedAt,
+      restored,
+      removed: !existsSync(join(folder, "private")),
+    });
+    writeFileSync(join(folder, "public/cooldown.json"), JSON.stringify(record), {
+      mode: 0o444,
+      flag: "wx",
+    });
+    finalized = true;
   }
   try {
     runtime = await start(config);
@@ -424,66 +483,81 @@ export async function superviseNativeAdmission(
       }),
       { mode: 0o444, flag: "wx" },
     );
-    await monitorNativeLifetime({
+    ready = true;
+    await monitor({
       parent,
-      deadline: Date.now() + readNativeRatePolicy().runtimeMs,
+      deadline: now() + readNativeRatePolicy().runtimeMs,
       stop: closeRuntime,
       finalize({ termination, completedAt }) {
-        const metrics = runtime.readFinalState(completedAt);
-        writeFileSync(
-          join(folder, "public/cooldown.json"),
-          JSON.stringify(
-            createNativeQuotaRecord(config, metrics, {
-              termination,
-              completedAt,
-              restored,
-              removed: !existsSync(join(folder, "private")),
-            }),
-          ),
-          { mode: 0o444, flag: "wx" },
-        );
-        finalized = true;
+        publishQuota(runtime.readFinalState(completedAt), termination, completedAt);
       },
     });
+  } catch (error) {
+    if (!ready) {
+      try {
+        await closeRuntime();
+        const completedAt = now();
+        publishQuota(
+          runtime?.readFinalState(completedAt) ?? createUnusedQuotaMetrics(completedAt),
+          "not-started",
+          completedAt,
+        );
+      } catch (cleanupError) {
+        throw new AggregateError([error, cleanupError], "Native startup and cleanup failed.");
+      }
+    }
+    throw error;
   } finally {
-    if (!closed) await closeRuntime();
-    if (!finalized)
-      writeFileSync(join(folder, "public/failed.json"), '{"passed":false}', { mode: 0o444 });
+    try {
+      if (!closed) await closeRuntime();
+    } finally {
+      if (!finalized || !ready)
+        writeFileSync(join(folder, "public/failed.json"), '{"passed":false}', { mode: 0o444 });
+    }
   }
 }
 
-function finishUnstartedAdmission(folder) {
-  const config = readRootConfiguration(folder);
+/** @param {string} folder @param {any} [options] */
+export function finishUnstartedAdmission(
+  folder,
+  {
+    readConfiguration = readRootConfiguration,
+    restore = restoreRateNamespaces,
+    now = Date.now,
+  } = {},
+) {
+  const config = readConfiguration(folder);
   if (existsSync(join(folder, "public/ready.json")))
     throw new Error("An active native runtime owns its cleanup.");
-  restoreRateNamespaces(config.namespaces);
-  rmSync(join(folder, "private"), { recursive: true, force: true });
-  rmSync(join(folder, "public/hook.sh"), { force: true });
-  const completedAt = Date.now();
-  const record = createNativeQuotaRecord(
-    config,
-    {
-      requests: 0,
-      reservedTokens: 0,
-      observedTokens: null,
-      unavailable: 0,
-      queuedMs: 0,
-      feedbackFailed: false,
-      notBefore: completedAt + readNativeRatePolicy().windowMs,
-    },
-    { termination: "not-started", completedAt, restored: true, removed: true },
-  );
-  writeFileSync(join(folder, "public/cooldown.json"), JSON.stringify(record), {
-    flag: "wx",
-    mode: 0o444,
-  });
+  try {
+    restoreNativeControls(folder, config, restore);
+    const completedAt = now();
+    const record = createNativeQuotaRecord(config, createUnusedQuotaMetrics(completedAt), {
+      termination: "not-started",
+      completedAt,
+      restored: true,
+      removed: !existsSync(join(folder, "private")),
+    });
+    writeFileSync(join(folder, "public/cooldown.json"), JSON.stringify(record), {
+      flag: "wx",
+      mode: 0o444,
+    });
+  } catch (error) {
+    writeFileSync(join(folder, "public/failed.json"), '{"passed":false}', { mode: 0o444 });
+    throw error;
+  }
 }
 
-async function collectNativeAdmission(folder, env) {
+/** @param {string} folder @param {any} env @param {any} [options] */
+export async function collectNativeAdmission(
+  folder,
+  env,
+  { spawnRoot = spawnSync, now = Date.now, wait = delay, stat = lstatSync } = {},
+) {
   requireHosted(env);
   const path = join(folder, "public/cooldown.json");
   if (!existsSync(path) && !existsSync(join(folder, "public/ready.json"))) {
-    spawnSync(
+    const cleanup = spawnRoot(
       "sudo",
       [
         "-n",
@@ -499,12 +573,13 @@ async function collectNativeAdmission(folder, env) {
       ],
       { stdio: "ignore", timeout: 10000 },
     );
+    if (cleanup.status !== 0) throw new Error("Native startup cleanup failed.");
   }
-  const deadline = Date.now() + 10000;
+  const deadline = now() + 10000;
   while (!existsSync(path)) {
-    if (existsSync(join(folder, "public/failed.json")) || Date.now() >= deadline)
+    if (existsSync(join(folder, "public/failed.json")) || now() >= deadline)
       throw new Error("Native quota state could not finalize.");
-    await delay(50);
+    await wait(50);
   }
   const result = JSON.parse(readFileSync(path, "utf8"));
   validateNativeQuotaResult(result, {
@@ -512,7 +587,7 @@ async function collectNativeAdmission(folder, env) {
     repository: env.GITHUB_REPOSITORY,
     source: env.REVIEW_TRUSTED ?? env.GITHUB_SHA,
   });
-  const info = lstatSync(path);
+  const info = stat(path);
   if (info.uid !== 0 || info.isSymbolicLink() || (info.mode & 0o222) !== 0)
     throw new Error("Native quota state did not preserve its trusted boundary.");
 }

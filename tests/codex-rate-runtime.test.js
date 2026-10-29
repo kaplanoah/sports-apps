@@ -1,4 +1,5 @@
 import test from "node:test";
+import { readNativeRateEntries } from "../worker/codex-rate-source.mjs";
 import { readFileSync } from "node:fs";
 import assert from "node:assert/strict";
 import {
@@ -8,7 +9,10 @@ import {
   createNativeQuotaRecord,
   validateNativeQuotaResult,
 } from "../worker/codex-rate-runtime.mjs";
-import { readNativeRatePolicyHash } from "../worker/codex-rate-policy.mjs";
+import {
+  readNativeRatePolicyHash,
+  createNativeAdmissionStepName,
+} from "../worker/codex-rate-policy.mjs";
 import { createRateHttpFixture } from "./codex-rate-http.js";
 
 const admission = { policy: readNativeRatePolicyHash(), notBefore: 0, port: 12345 };
@@ -166,6 +170,22 @@ test("every native entry point authenticates admission before the only model act
     const workflow = readFileSync(
       new URL(`../.github/workflows/${name}.yml`, import.meta.url),
       "utf8",
+    );
+    const admissionName = /^ {6}- name: (Authenticate preceding quota state.*)$/m.exec(
+      workflow,
+    )?.[1];
+    assert.equal(
+      admissionName?.replace("${{ inputs.portion }}", "1"),
+      createNativeAdmissionStepName(name === "codex-runner-proof" ? "proof" : "1"),
+    );
+    const entry = readNativeRateEntries().find((item) => item.workflow === `${name}.yml`);
+    assert.equal(
+      workflow
+        .slice(0, workflow.indexOf("uses: openai/codex-action@"))
+        .match(/      - name: (.+)/g)
+        .at(-1)
+        ?.slice("      - name: ".length),
+      entry.step,
     );
     const model = workflow.indexOf("uses: openai/codex-action@");
     const prepare = workflow.indexOf('runtime.mjs" prepare');

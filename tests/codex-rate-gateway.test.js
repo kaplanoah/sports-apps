@@ -135,6 +135,8 @@ test("streamed rate advice and retryable server advice carry shared cooldown wit
   for (const [code, message, milliseconds] of [
     ["rate_limit_exceeded", "Please try again in 180s.", 180000],
     ["slow_down", "Try again in 1.5 seconds.", 1500],
+    ["slow_down", "Please try again in 1m30s.", 90000],
+    ["slow_down", "Please try again in 6m0s.", 360000],
     ["rate_limit_exceeded", "Try again in 2500ms.", 2500],
     ["invalid_prompt", "Try again in 180s.", null],
   ]) {

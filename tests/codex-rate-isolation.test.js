@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { listNativeRateControls, readNativeRateEntries } from "../worker/codex-rate-source.mjs";
 import { readFileSync } from "node:fs";
 import {
   requiresRateIsolation,
@@ -154,6 +155,12 @@ const readJob = (name) =>
 
 test("native code, dependencies and runner controls request isolation while app-only changes do not", () => {
   for (const path of [
+    ...listNativeRateControls(),
+    ...readNativeRateEntries().flatMap(({ workflow, entry }) => [
+      `.github/workflows/${workflow}`,
+      `.github/workflows/${entry}`,
+    ]),
+    "worker/prepare-codex-rate.mjs",
     "worker/codex-rate-budget.mjs",
     "worker/codex-rate-gateway.mjs",
     "worker/codex-rate-isolation-probe.mjs",

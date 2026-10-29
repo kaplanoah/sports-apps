@@ -11,25 +11,11 @@ import {
 } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { readNativeRatePolicyHash } from "./codex-rate-policy.mjs";
+import { readNativeRatePolicyHash, createNativeAdmissionStepName } from "./codex-rate-policy.mjs";
 
-const controls = new Set(
-  [
-    "codex-rate-runtime",
-    "codex-rate-policy",
-    "codex-rate-lifecycle",
-    "codex-rate-handoff",
-    "codex-rate-budget",
-    "codex-rate-controller",
-    "codex-rate-estimate",
-    "codex-rate-gateway",
-    "codex-rate-namespaces",
-    "github-api",
-    "review-artifact",
-    "review-run",
-    "git-object",
-  ].map((name) => `worker/${name}.mjs`),
-);
+import { listNativeRateControls } from "./codex-rate-source.mjs";
+
+const controls = new Set(listNativeRateControls());
 
 /** @param {string} destination @param {{entryPoint?:string}} [options] */
 export function bundleNativeRateControls(
@@ -61,12 +47,12 @@ export function bundleNativeRateControls(
 
 /** @param {string} destination @param {any} identity */
 export function packageNativeRateControls(destination, identity) {
+  createNativeAdmissionStepName(identity.portion);
   if (
     !/^[a-f0-9]{40}$/.test(identity.source ?? "") ||
     !Number.isSafeInteger(identity.run) ||
     identity.run <= 0 ||
-    !/^[\w.-]+\/[\w.-]+$/.test(identity.repository ?? "") ||
-    !/^(?:[1-9]\d*|integration|proof)$/.test(identity.portion ?? "")
+    !/^[\w.-]+\/[\w.-]+$/.test(identity.repository ?? "")
   )
     throw new Error("Invalid native rate input identity.");
   mkdirSync(dirname(destination), { recursive: true });

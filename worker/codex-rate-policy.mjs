@@ -1,5 +1,15 @@
 import { createHash } from "node:crypto";
 
+export const NATIVE_ADMISSION_STEP =
+  "Authenticate preceding quota state and prepare protected admission";
+
+/** @param {string} portion */
+export function createNativeAdmissionStepName(portion) {
+  if (!/^(?:[1-9]\d*|integration|proof)$/.test(portion))
+    throw new Error("Invalid native quota portion.");
+  return `${NATIVE_ADMISSION_STEP} (${portion})`;
+}
+
 const headroom = 0.2;
 const policy = Object.freeze({
   tokens: 1000000,
@@ -28,12 +38,13 @@ export function createBoundedNativeConfig() {
 }
 
 /** @param {any} value */
-export function requireNativeQuotaIdentity(value) {
+export function requireNativeQuotaIdentity(value, expectedPolicy = readNativeRatePolicyHash()) {
   if (
     value?.version !== 1 ||
     !/^[\w.-]+\/[\w.-]+$/.test(value.repository ?? "") ||
     !/^[a-f0-9]{40}$/.test(value.source ?? "") ||
-    value.policy !== readNativeRatePolicyHash() ||
+    !/^[a-f0-9]{64}$/.test(expectedPolicy) ||
+    value.policy !== expectedPolicy ||
     [value.run, value.job].some((number) => !Number.isSafeInteger(number) || number <= 0) ||
     [value.notBefore, value.scanSince].some(
       (number) => !Number.isSafeInteger(number) || number < 0,

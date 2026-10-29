@@ -291,15 +291,22 @@ test("Codex publication requires every fresh request, model and validation stage
     "review-codex (mlb Worker)",
     "review-codex-across",
   ])
-    for (const stage of ["request", "model", "validate"])
+    for (const stage of ["request", "model", "validate"]) {
+      const nativeWorkflow = readFileSync(
+        new URL("../.github/workflows/trusted-codex-review.yml", import.meta.url),
+        "utf8",
+      );
+      const modelJob = nativeWorkflow.split("\n  model:\n")[1].split("\n  validate:\n")[0];
+      const displayedModel = /^ {4}name: (.+)$/m.exec(modelJob)?.[1] ?? "model";
       state.jobs.push({
         id: next++,
         run_id: 7,
-        name: `${prefix} / ${stage}`,
+        name: `${prefix} / ${stage === "model" ? displayedModel : stage}`,
         run_attempt: 2,
         status: "completed",
         conclusion: "success",
       });
+    }
   assert.ok(validatePublicationJobs(state.jobs, 2, state.needs).length > 0);
   for (const name of ["review-codex (shared page) / model", "review-codex-across / validate"])
     assert.throws(

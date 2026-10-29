@@ -8,20 +8,25 @@ import {
   readNativeRatePolicyHash,
   readNativeRatePolicy,
   requireNativeQuotaIdentity,
+  createNativeAdmissionStepName,
+  NATIVE_ADMISSION_STEP,
 } from "./codex-rate-policy.mjs";
 
-const workflows = ["review.yml", "provider-review-trial.yml", "codex-runner-proof.yml"];
+import { readNativeRateEntries } from "./codex-rate-source.mjs";
+
+const workflows = readNativeRateEntries().map(({ entry }) => entry);
 const baseline = "3f81595241c7fc53c994ca4534398cec14357c89";
-const nativeSteps = new Set([
-  "Native Codex investigation",
-  "Investigate with native Codex",
-  "Run one native Codex proof",
-]);
+const nativeSteps = new Set(readNativeRateEntries().map(({ step }) => step));
 
 function requireTime(value) {
   const time = Date.parse(value);
   if (!Number.isSafeInteger(time) || time < 0) throw new Error("Unavailable quota producer time.");
   return time;
+}
+
+function isQuotaRecoveryDue(producer, now) {
+  const policy = readNativeRatePolicy();
+  return now - requireTime(producer.job.completed_at) >= policy.windowMs + policy.maxWaitMs;
 }
 
 /** @param {any} run @param {any} expected */
@@ -37,7 +42,7 @@ export function readNativeQuotaSource(run, expected) {
     throw new Error("Untrusted native quota workflow.");
   if (run.path === ".github/workflows/review.yml") {
     const review = readReviewRun(run);
-    if (!review || review.target !== "main" || review.intent !== "review")
+    if (!review || review.intent !== "review")
       throw new Error("Untrusted native review quota source.");
     return review.source;
   }
@@ -54,10 +59,10 @@ export function readNativeQuotaSource(run, expected) {
 
 /** @param {any[]} jobs @param {number} run @param {string} portion */
 export function selectCurrentQuotaJob(jobs, run, portion) {
-  if (!/^(?:[1-9]\d*|integration|proof)$/.test(portion))
-    throw new Error("Invalid native quota portion.");
-  const name = `native-codex-${portion}`;
-  const matches = jobs.filter((job) => job.name === name || job.name?.endsWith(` / ${name}`));
+  const name = createNativeAdmissionStepName(portion);
+  const matches = jobs.filter((job) =>
+    job.steps?.some((step) => step.name === name && step.status === "in_progress"),
+  );
   if (
     matches.length !== 1 ||
     !Number.isSafeInteger(matches[0].id) ||
@@ -80,7 +85,13 @@ export function selectPreviousQuotaJob(candidates, current) {
     const native = job.steps?.find((step) => nativeSteps.has(step.name));
     if (!native || native.conclusion === "skipped") continue;
     if (native.status === "queued") {
-      if (job.status === "in_progress" && /(?:^| \/ )native-codex-/.test(job.name))
+      if (
+        job.status === "in_progress" &&
+        job.steps?.some(
+          (step) =>
+            step.status === "in_progress" && step.name?.startsWith(`${NATIVE_ADMISSION_STEP} (`),
+        )
+      )
         throw new Error("Another native quota admission is active.");
       continue;
     }
@@ -102,8 +113,10 @@ export function selectPreviousQuotaJob(candidates, current) {
 }
 
 /** @param {any} record @param {any} producer @param {any} expected @param {number} now */
-export function validateQuotaHandoff(record, producer, expected, now) {
-  requireNativeQuotaIdentity(record);
+export function validateQuotaHandoff(record, producer, expected, now, { pastPolicy = false } = {}) {
+  if (pastPolicy && !isQuotaRecoveryDue(producer, now))
+    throw new Error("Recent native quota policy cannot be replaced.");
+  requireNativeQuotaIdentity(record, pastPolicy ? record.policy : readNativeRatePolicyHash());
   const { job, run, source } = producer;
   const completed = requireTime(job.completed_at);
   if (
@@ -112,7 +125,7 @@ export function validateQuotaHandoff(record, producer, expected, now) {
     record.run !== run.id ||
     record.job !== job.id ||
     record.source !== source ||
-    record.policy !== readNativeRatePolicyHash() ||
+    (!pastPolicy && record.policy !== readNativeRatePolicyHash()) ||
     record.finalized !== true ||
     record.feedbackFailed !== false ||
     record.namespacesRestored !== true ||
@@ -186,6 +199,18 @@ export async function readNativeQuotaAdmission(
   let scanSince = requireTime(initial.commit?.committer?.date);
   let activeRuns = [];
 
+  function readTrustedSource(run) {
+    try {
+      return readNativeQuotaSource(run, expected);
+    } catch {
+      return null;
+    }
+  }
+
+  function isRecoveryDue(producer) {
+    return isQuotaRecoveryDue(producer, now());
+  }
+
   async function readProducer(artifact) {
     const run = await api(`/actions/runs/${artifact.workflow_run.id}`);
     const source = readNativeQuotaSource(run, expected);
@@ -230,20 +255,28 @@ export async function readNativeQuotaAdmission(
       rmSync(folder, { recursive: true, force: true });
     }
   }
+  async function readHandoff(artifact, producer) {
+    if (artifact.expired) {
+      if (!isRecoveryDue(producer)) throw new Error("Recent native quota evidence expired.");
+      return null;
+    }
+    const record = await readRecord(artifact, producer);
+    const pastPolicy = record.policy !== readNativeRatePolicyHash() && isRecoveryDue(producer);
+    const state = validateQuotaHandoff(record, producer, expected, now(), { pastPolicy });
+    if (pastPolicy)
+      state.notBefore = Math.max(state.notBefore, now() + readNativeRatePolicy().windowMs);
+    return state;
+  }
   let seeded = false;
   for (const path of [`/actions/runs/${currentRun.id}/artifacts`, "/actions/artifacts"]) {
     for await (const artifacts of readPages(api, path, (answer) => answer.artifacts)) {
       for (const artifact of artifacts) {
         if (!/^codex-rate-handoff-[1-9]\d*$/.test(artifact.name)) continue;
         const run = await api(`/actions/runs/${artifact.workflow_run.id}`);
-        if (!workflows.some((name) => run.path === `.github/workflows/${name}`)) continue;
+        if (readTrustedSource(run) === null) continue;
         const producer = await readProducer(artifact);
-        const seed = validateQuotaHandoff(
-          await readRecord(artifact, producer),
-          producer,
-          expected,
-          now(),
-        );
+        const seed = await readHandoff(artifact, producer);
+        if (!seed) continue;
         scanSince = seed.scanSince;
         activeRuns = seed.activeRuns;
         seeded = true;
@@ -273,12 +306,13 @@ export async function readNativeQuotaAdmission(
   }
   const candidates = [];
   for (const run of runs.values()) {
+    const source = readTrustedSource(run);
+    if (source === null) continue;
     const jobs = await readAllPages(api, `/actions/runs/${run.id}/jobs?filter=all`, (a) => a.jobs);
     const native = jobs.filter((job) =>
       job.steps?.some((step) => nativeSteps.has(step.name) && step.conclusion !== "skipped"),
     );
     if (!native.length) continue;
-    const source = readNativeQuotaSource(run, expected);
     await verifySource(source);
     for (const job of native) candidates.push({ run, source, job });
   }
@@ -293,23 +327,23 @@ export async function readNativeQuotaAdmission(
     const matches = artifacts.filter(
       (artifact) => artifact.name === `codex-rate-handoff-${previous.job.id}`,
     );
-    if (matches.length !== 1) throw new Error("Missing or duplicate preceding native quota state.");
-    const handoff = validateQuotaHandoff(
-      await readRecord(matches[0], previous),
-      previous,
-      expected,
-      now(),
-    );
-    notBefore = handoff.notBefore;
-    const refreshed = await readProducer(matches[0]);
-    if (
-      refreshed.job.completed_at !== previous.job.completed_at ||
-      refreshed.job.conclusion !== previous.job.conclusion ||
-      refreshed.source !== previous.source
-    )
-      throw new Error("Native quota producer changed during verification.");
+    if (matches.length > 1 || (!matches.length && !isRecoveryDue(previous)))
+      throw new Error("Missing or duplicate preceding native quota state.");
+    if (matches.length) {
+      const handoff = await readHandoff(matches[0], previous);
+      if (handoff) notBefore = handoff.notBefore;
+      const refreshed = await readProducer(matches[0]);
+      if (
+        refreshed.job.completed_at !== previous.job.completed_at ||
+        refreshed.job.conclusion !== previous.job.conclusion ||
+        refreshed.source !== previous.source
+      )
+        throw new Error("Native quota producer changed during verification.");
+    }
   }
-  const unfinished = [...runs.values()].filter((run) => run.status !== "completed");
+  const unfinished = [...runs.values()].filter(
+    (run) => run.status !== "completed" && readTrustedSource(run) !== null,
+  );
   if (unfinished.length > 256 || !unfinished.some((run) => run.id === currentRun.id))
     throw new Error("Unverifiable active native quota workflows.");
   const refreshedRun = await api(`/actions/runs/${expected.run}`);

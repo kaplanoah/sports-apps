@@ -9,7 +9,10 @@ import {
   validateQuotaHandoff,
   readNativeQuotaAdmission,
 } from "../worker/codex-rate-handoff.mjs";
-import { readNativeRatePolicyHash } from "../worker/codex-rate-policy.mjs";
+import {
+  readNativeRatePolicyHash,
+  createNativeAdmissionStepName,
+} from "../worker/codex-rate-policy.mjs";
 
 const source = "a".repeat(40);
 const start = Date.parse("2026-10-29T04:00:00Z");
@@ -47,17 +50,20 @@ function createFixture(change = () => {}) {
     id: 7,
     run_id: 30,
     run_attempt: 1,
-    name: "investigate (1) / native-codex-1",
+    name: "investigate (1) / model",
     status: "in_progress",
     conclusion: null,
     started_at: new Date(start + 100000).toISOString(),
-    steps: [{ name: "Native Codex investigation", status: "queued", conclusion: null }],
+    steps: [
+      { name: createNativeAdmissionStepName("1"), status: "in_progress", conclusion: null },
+      { name: "Native Codex investigation", status: "queued", conclusion: null },
+    ],
   };
   const previousJob = {
     id: 4,
     run_id: 12,
     run_attempt: 1,
-    name: "investigate (2) / native-codex-2",
+    name: "investigate (2) / model",
     status: "completed",
     conclusion: "success",
     started_at: new Date(start + 10000).toISOString(),
@@ -107,6 +113,9 @@ function createFixture(change = () => {}) {
     bootstrap: false,
     carriedRun: null,
     denied: false,
+    missingArtifacts: false,
+    extraRuns: [],
+    extraArtifacts: [],
   };
   change(fixture);
   const archive = execFileSync(
@@ -142,6 +151,8 @@ function createFixture(change = () => {}) {
     }
     if (path.includes("/commits/"))
       return Response.json({ commit: { committer: { date: new Date(start).toISOString() } } });
+    const extra = fixture.extraRuns.find((run) => path.endsWith(`/runs/${run.id}`));
+    if (extra) return Response.json(extra);
     if (path.endsWith("/runs/30")) return Response.json(current);
     if (path.endsWith("/runs/12")) return Response.json(previous);
     if (path.endsWith("/runs/40")) return Response.json(fixture.carriedRun.run);
@@ -165,13 +176,20 @@ function createFixture(change = () => {}) {
             : []
           : [current, ...(fixture.bootstrap ? [] : [previous])]
         : [];
-      return Response.json({ workflow_runs: runs });
+      return Response.json({ workflow_runs: [...fixture.extraRuns, ...runs] });
     }
     if (path.endsWith("/runs/30/artifacts")) return Response.json({ artifacts: [] });
     if (path.endsWith("/artifacts")) {
       if (fixture.denied) return new Response("denied", { status: 403 });
       return Response.json({
-        artifacts: fixture.bootstrap ? [] : fixture.duplicate ? [artifact, artifact] : [artifact],
+        artifacts: [
+          ...fixture.extraArtifacts,
+          ...(fixture.bootstrap || fixture.missingArtifacts
+            ? []
+            : fixture.duplicate
+              ? [artifact, artifact]
+              : [artifact]),
+        ],
       });
     }
     if (path.endsWith("/artifacts/5/zip"))
@@ -181,10 +199,10 @@ function createFixture(change = () => {}) {
   return fixture;
 }
 
-const admit = (fixture) =>
+const admit = (fixture, now = start + 110000) =>
   readNativeQuotaAdmission(expected, {
     fetchImpl: fixture.fetchImpl,
-    now: () => start + 110000,
+    now: () => now,
   });
 
 test("quota handoff authenticates original ZIP, producer, policy, source and server completion time", async () => {
@@ -295,12 +313,6 @@ test("foreign, expired, duplicate, tampered and unsafe quota artifacts reject", 
     (f) => {
       f.sourceTrusted = false;
     },
-    (f) => {
-      f.previous.actor.login = "other";
-    },
-    (f) => {
-      f.previous.repository.id = 10;
-    },
   ])
     await assert.rejects(admit(createFixture(change)));
 });
@@ -326,6 +338,8 @@ test("live quota source comes from the authenticated review marker rather than t
   });
   assert.equal(readNativeQuotaSource(run, expected), source);
   run.display_title = run.display_title.replace("target main", "target other");
+  assert.equal(readNativeQuotaSource(run, expected), source);
+  run.display_title = run.display_title.replace("intent review", "intent observe");
   assert.throws(() => readNativeQuotaSource(run, expected));
 });
 
@@ -333,6 +347,17 @@ test("ambiguous current jobs, overlap and a skipped Claude native step cannot co
   const fixture = createFixture();
   assert.throws(() => selectCurrentQuotaJob([fixture.job, fixture.job], 30, "1"));
   assert.throws(() => selectCurrentQuotaJob([fixture.job], 30, "unknown"));
+  for (const steps of [
+    [],
+    [{ name: createNativeAdmissionStepName("2"), status: "in_progress" }],
+    [{ name: createNativeAdmissionStepName("1"), status: "completed" }],
+  ])
+    assert.throws(() => selectCurrentQuotaJob([{ ...fixture.job, steps }], 30, "1"));
+  assert.equal(
+    selectCurrentQuotaJob([{ ...fixture.job, name: "review-codex (shared page) / model" }], 30, "1")
+      .id,
+    fixture.job.id,
+  );
   const candidate = { job: { ...fixture.previousJob, status: "in_progress" } };
   assert.throws(() => selectPreviousQuotaJob([candidate], fixture.job), /active/);
   candidate.job = { ...fixture.previousJob, completed_at: new Date(start + 120000).toISOString() };
@@ -370,4 +395,77 @@ test("incomplete, future, wrong-policy or forged quota records reject", () => {
     assert.throws(() =>
       validateQuotaHandoff({ ...fixture.record, ...change }, producer, expected, start + 110000),
     );
+});
+
+test("aged policy changes, expired evidence and missing evidence recover through a full warm-up", async () => {
+  const later = start + 800000;
+  for (const change of [
+    (fixture) => {
+      fixture.record.policy = "b".repeat(64);
+    },
+    (fixture) => {
+      fixture.artifact.expired = true;
+    },
+    (fixture) => {
+      fixture.missingArtifacts = true;
+    },
+  ]) {
+    await assert.rejects(admit(createFixture(change)));
+    const result = await admit(createFixture(change), later);
+    assert.equal(result.predecessor, 4);
+    assert.equal(result.notBefore, later + 60000);
+  }
+  const retained = await admit(
+    createFixture((fixture) => {
+      fixture.record.policy = "b".repeat(64);
+      fixture.record.notBefore = later + 900000;
+    }),
+    later,
+  );
+  assert.equal(retained.notBefore, later + 900000);
+  await assert.rejects(
+    admit(
+      createFixture((fixture) => {
+        fixture.duplicate = true;
+      }),
+      later,
+    ),
+    /duplicate/,
+  );
+});
+
+test("untrusted PR-triggered artifacts and native-looking runs cannot poison global quota discovery", async () => {
+  const fixture = createFixture((value) => {
+    const forged = createRun(44, start + 500, "in_progress");
+    forged.event = "pull_request";
+    value.extraRuns.push(forged);
+    value.extraArtifacts.push({
+      ...value.artifact,
+      id: 99,
+      name: "codex-rate-handoff-99",
+      workflow_run: { id: 44, repository_id: 9 },
+    });
+  });
+  const result = await admit(fixture);
+  assert.equal(result.predecessor, 4);
+  assert.deepEqual(result.activeRuns, [30]);
+  assert.equal(
+    fixture.calls.some((path) => /runs\/44\/jobs|artifacts\/99\/zip/.test(path)),
+    false,
+  );
+});
+
+test("untrusted actor and repository runs are ignored without accepting their quota records", async () => {
+  for (const change of [
+    (fixture) => {
+      fixture.previous.actor.login = "other";
+    },
+    (fixture) => {
+      fixture.previous.repository.id = 10;
+    },
+  ]) {
+    const result = await admit(createFixture(change));
+    assert.equal(result.predecessor, null);
+    assert.equal(result.notBefore, start + 170000);
+  }
 });

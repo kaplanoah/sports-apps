@@ -55,6 +55,7 @@ const SKIPPED_FILES = new Set([
   "worker/burn-in-specs.mjs",
   "worker/check-pr-title.mjs",
   "worker/codex-rate-access.mjs",
+  "worker/codex-rate-source.mjs",
   "worker/codex-rate-handoff.mjs",
   "worker/codex-rate-lifecycle.mjs",
   "worker/codex-rate-policy.mjs",

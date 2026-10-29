@@ -195,11 +195,9 @@ export function createAdmissionRequestHandler({
       response.writeHead(upstream.status, headers);
       const usage = createUsageReader(maxFrameBytes, (error) => {
         if (!["rate_limit_exceeded", "slow_down"].includes(error?.code)) return;
-        const match = /try again in\s*(\d+(?:\.\d+)?)\s*(ms|seconds?|s)\b/i.exec(
-          error.message ?? "",
-        );
-        const unit = match?.[2].toLowerCase() === "ms" ? "ms" : "s";
-        const advised = match ? parseReset(`${match[1]}${unit}`, now()) : null;
+        const match = /try again in\s+(\S+(?:\s+seconds?)?)/i.exec(error.message ?? "");
+        const duration = match?.[1].replace(/[.,;!?]+$/, "").replace(/\s*seconds?$/i, "s");
+        const advised = duration ? parseReset(duration, now()) : null;
         budget.defer(Math.max(now() + fallbackCooldownMs, retryAfter ?? 0, advised ?? 0));
       });
       for await (const chunk of upstream.body ?? []) {
