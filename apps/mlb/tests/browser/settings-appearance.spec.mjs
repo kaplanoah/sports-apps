@@ -300,7 +300,7 @@ test.describe("on an iPhone's Home Screen app, which has no Home Screen box", ()
       return { underLastRow: rows.bottom - lastRow.bottom, overRanking: ranking.top - rows.bottom };
     });
     expect(lineToRanking.underLastRow).toBe(1);
-    expect(lineToRanking.overRanking).toBeGreaterThan(0);
+    expect(lineToRanking.overRanking).toBe(0);
     const rowEdges = await news.locator(".control-row").evaluateAll((rows) =>
       rows.map((row) => {
         const box = row.getBoundingClientRect();

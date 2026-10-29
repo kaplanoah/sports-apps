@@ -41,7 +41,7 @@ export function testSettingsContactInteractions(test, expect, { openApp, setting
     }
   });
 
-  test("Settings page rows are one height, with each line between them as far from the text above as below", async ({
+  test("Settings page rows are one height, with each line between them as far from the text above as below, and the line above the first as far from its text as those lines are", async ({
     page,
   }) => {
     await page.emulateMedia({ reducedMotion: "reduce" });
@@ -77,6 +77,25 @@ export function testSettingsContactInteractions(test, expect, { openApp, setting
       const spaceBelow = below.textTop - (below.top + below.line);
       expect(Math.abs(spaceAbove - spaceBelow)).toBeLessThanOrEqual(1);
     }
+    const lineAboveFirst = await page.locator("#settingsDialog").evaluate((settings) => {
+      const firstTop = settings.querySelector(".settings-page-row").getBoundingClientRect().top;
+      const lineBottoms = [...settings.querySelectorAll("*")].flatMap((part) => {
+        const style = getComputedStyle(part);
+        const box = part.getBoundingClientRect();
+        if (!box.width) return [];
+        const bottoms = [];
+        if (style.borderTopStyle !== "none" && Number.parseFloat(style.borderTopWidth))
+          bottoms.push(box.top + Number.parseFloat(style.borderTopWidth));
+        if (style.borderBottomStyle !== "none" && Number.parseFloat(style.borderBottomWidth))
+          bottoms.push(box.bottom);
+        return bottoms;
+      });
+      return Math.max(...lineBottoms.filter((bottom) => bottom <= firstTop + 0.5));
+    });
+    const [first] = rows;
+    const spaceUnderLine = first.textTop - lineAboveFirst;
+    const spaceUnderLineBetween = first.textTop - (first.top + first.line);
+    expect(Math.abs(spaceUnderLine - spaceUnderLineBetween)).toBeLessThanOrEqual(1);
   });
 
   test("search opens each page of settings itself, with no click on its row", async ({ page }) => {

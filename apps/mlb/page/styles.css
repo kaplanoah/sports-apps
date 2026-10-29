@@ -1445,7 +1445,11 @@ body.kbd .rank-item .grip:focus {
 .settings-main {
   display: flex;
   flex-direction: column;
-  gap: var(--section-gap);
+}
+/* The rows that open a page sit right on the line ending the News switches, each padding its own
+   text, so that line is as far from Ranking as the line between the rows is from Contact. */
+.settings-main > :not([hidden]) ~ :not([hidden], .settings-pages) {
+  margin-top: var(--section-gap);
 }
 /* The News switches end with a line, as the settings above them do. */
 .settings-group-rows {
