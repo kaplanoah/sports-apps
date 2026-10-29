@@ -90,6 +90,7 @@
     "tests/codex-rate-handoff.test.js",
     "tests/codex-rate-isolation.test.js",
     "tests/codex-rate-lifecycle.test.js",
+    "tests/codex-rate-policy.test.js",
     "tests/codex-rate-probe-output.test.js",
     "tests/codex-rate-runtime.test.js",
     "tests/context-limit.test.js",

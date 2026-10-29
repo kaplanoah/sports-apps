@@ -191,7 +191,7 @@ test("every native entry point authenticates admission before the only model act
 test("the hosted access diagnostic uses current read-only permissions in a separate non-model step", () => {
   const workflow = readFileSync(new URL("../.github/workflows/ci.yml", import.meta.url), "utf8");
   const job = workflow.split("  codex-rate-control-isolation:\n")[1].split("\n  review-join:")[0];
-  assert.match(job, /permissions:\n      contents: read/);
+  assert.match(job, /permissions:\n {6}contents: read/);
   assert.doesNotMatch(job, /actions:|secrets\.|openai\/codex-action/);
   assert.ok(job.indexOf("prove-codex-rate-isolation.mjs prove") < job.indexOf("GH_TOKEN:"));
   assert.match(job, /node worker\/codex-rate-access.mjs/);
