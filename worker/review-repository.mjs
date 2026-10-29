@@ -1,4 +1,5 @@
-// Runs Git against reviewed data without inheriting credentials or executable Git configuration.
+// Makes the Git environment and runner CI's review uses, which inherit no credentials or executable
+// Git configuration, and Git helpers that use that runner or one the caller passes.
 import { execFileSync } from "node:child_process";
 import { isGitObjectId } from "./git-object.mjs";
 
