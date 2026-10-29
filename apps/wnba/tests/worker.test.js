@@ -246,10 +246,13 @@ test("while the scoreboard doesn't answer and no score is due, ESPN's listing wi
   espn[ESPN_LISTING].items = [];
   const { schedule } = readNextMorning();
   const games = schedule.leagueSchedule.gameDates.flatMap((day) => day.games);
-  Object.assign(games.find((game) => game.gameId === "1042600112"), {
-    gameStatus: 3,
-    gameStatusText: "Final/OT",
-  });
+  Object.assign(
+    games.find((game) => game.gameId === "1042600112"),
+    {
+      gameStatus: 3,
+      gameStatusText: "Final/OT",
+    },
+  );
   const league = createLeague({ refuse: { scoreboard: "page" }, answers: { schedule }, espn });
   const loader = createSnapshotLoader({
     fetchImpl: league.fetchImpl,
