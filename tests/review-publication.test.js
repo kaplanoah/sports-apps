@@ -203,6 +203,22 @@ function createHarness() {
       return state.changeWriteAnswer(structuredClone(check));
     },
     async fetchImpl(url) {
+      if (url === "https://api.github.com/graphql")
+        return Response.json({
+          data: {
+            repository: {
+              pullRequest: {
+                timelineItems: {
+                  nodes: state.providerEvents.map((event) => ({
+                    ...event,
+                    __typename: "LabeledEvent",
+                  })),
+                  pageInfo: { hasNextPage: false, endCursor: null },
+                },
+              },
+            },
+          },
+        });
       const id = Number(String(url).match(/artifacts\/(\d+)\/zip$/)?.[1]);
       assert.ok(state.archives.has(id));
       return new Response(state.archives.get(id));
@@ -329,7 +345,7 @@ test("a live owner provider switch invalidates a sealed legacy success on unchan
   const state = createHarness();
   state.providerEvents = [
     {
-      id: 88,
+      id: "LE_88",
       event: "labeled",
       actor: { login: "example" },
       label: { name: "review-provider:codex" },
@@ -472,7 +488,7 @@ test("a context change inside the success write is invalidated rather than retur
     },
     (state) => {
       state.providerEvents.push({
-        id: 81,
+        id: "LE_81",
         event: "labeled",
         label: { name: "review-provider:codex" },
         actor: { login: "example" },
@@ -934,7 +950,7 @@ test("freshness binds the latest attempt, head, target, provider and exemption w
     },
     (state) => {
       state.providerEvents.push({
-        id: 81,
+        id: "LE_81",
         event: "labeled",
         label: { name: "review-provider:codex" },
         actor: { login: "example", type: "User" },

@@ -10,6 +10,7 @@ const ACTIONS_APP = "github-actions";
 /**
  * @typedef {object} TimelineEvent
  * @property {string} event
+ * @property {string} [id]
  * @property {string} [created_at] when GitHub recorded it
  * @property {{ name: string }} [label]
  * @property {{ login: string } | null} [actor]
@@ -112,7 +113,7 @@ const READ_TIMELINE = `query ReadTimeline($owner: String!, $name: String!, $numb
       timelineItems(first: 100, after: $after, itemTypes: [LABELED_EVENT, UNLABELED_EVENT, HEAD_REF_FORCE_PUSHED_EVENT, ISSUE_COMMENT]) {
         nodes {
           __typename
-          ... on LabeledEvent { created_at: createdAt label { name } actor { login } }
+          ... on LabeledEvent { id created_at: createdAt label { name } actor { login } }
           ... on UnlabeledEvent { created_at: createdAt label { name } actor { login } }
           ... on HeadRefForcePushedEvent { created_at: createdAt actor { login } head: afterCommit { oid } }
           ... on IssueComment { created_at: createdAt body actor: author { login } }

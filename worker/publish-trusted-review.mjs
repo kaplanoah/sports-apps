@@ -86,6 +86,7 @@ async function validateResultArtifact(options, run, needs, identity) {
     const { choice } = await readReviewProvider(
       { ...options.env, PR: String(identity.pull) },
       options.readGitHub,
+      options.fetchImpl,
     );
     const result = verifyTrustedReviewResult(folder, {
       GITHUB_REPOSITORY: options.env.GITHUB_REPOSITORY,
@@ -172,6 +173,7 @@ async function readPublicationContext(options, head, repository) {
   const { choice } = await readReviewProvider(
     { ...options.env, PR: String(pull.number) },
     options.readGitHub,
+    options.fetchImpl,
   );
   return { pull, run, choice };
 }

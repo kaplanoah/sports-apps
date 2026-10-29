@@ -1,6 +1,13 @@
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { copyFileSync, cpSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  appendFileSync,
+  copyFileSync,
+  cpSync,
+  mkdirSync,
+  readFileSync,
+  writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { measureReviewTokens, retainCodexUsage, readCodexEvents } from "./review-evaluation.mjs";
@@ -12,6 +19,11 @@ import {
 
 import { requireOwnerTrialAuthority, TrialAuthorityError } from "./review-trial-authority.mjs";
 import { writeReviewModelQueue } from "./review-provider.mjs";
+import {
+  prepareEmptyCodexIntegration,
+  readCodexProofScenario,
+  verifyEmptyCodexIntegration,
+} from "./codex-acceptance.mjs";
 
 class CodexProofError extends Error {}
 
@@ -30,8 +42,8 @@ function writeCodexProofFixture(folder) {
   copyFileSync(new URL("./codex-runner-probe.mjs", import.meta.url), join(folder, "probe.mjs"));
 }
 
-/** @param {string} folder */
-function writeCodexProofRequest(folder) {
+/** @param {string} folder @param {string} scenario */
+function writeCodexProofRequest(folder, scenario) {
   writeFileSync(
     join(folder, "prompt.txt"),
     [
@@ -40,7 +52,14 @@ function writeCodexProofRequest(folder) {
       `Use your native command tool to run exactly: node ${join(folder, "probe.mjs")}`,
       "The trusted probe checks non-root execution, removed sudo, absent credentials in shell commands and blocked checkout writes. It prints fixed non-secret proof markers on stdout and stderr only after its assertions pass.",
       "Do not access credential values, the network or any other files. Do not retry a failed probe.",
-      "Return complete=true only when that command exits zero. Otherwise return complete=false.",
+      ...(scenario === "interruption"
+        ? [
+            "After the probe succeeds, use your native command tool to run exactly: sleep 3600",
+            "Keep waiting for that command. Do not return a final answer, stop the command, access other data or start another model. The trusted workflow will interrupt this deliberately unfinished proof.",
+          ]
+        : [
+            "Return complete=true only when that command exits zero. Otherwise return complete=false.",
+          ]),
       "",
     ].join("\n"),
   );
@@ -58,9 +77,11 @@ function writeCodexProofRequest(folder) {
 /** @param {NodeJS.ProcessEnv} env */
 function prepareCodexProof(env) {
   requireOwnerTrialAuthority(env);
+  const scenario = readCodexProofScenario(env.CODEX_PROOF_SCENARIO);
   const folder = join(env.RUNNER_TEMP, "codex-proof");
   writeCodexProofFixture(folder);
-  writeCodexProofRequest(folder);
+  if (scenario === "integration") prepareEmptyCodexIntegration(folder, env);
+  else writeCodexProofRequest(folder, scenario);
   prepareTrialEvidenceCertificate(folder, env.CODEX_EVIDENCE_CERTIFICATE);
   execFileSync(
     process.execPath,
@@ -69,6 +90,10 @@ function prepareCodexProof(env) {
       env: { ...env, REVIEW_CHECKOUT: join(folder, "checkout") },
     },
   );
+  if (scenario === "integration") {
+    const config = join(env.RUNNER_TEMP, "codex-home/config.toml");
+    writeFileSync(config, 'web_search = "disabled"\n' + readFileSync(config, "utf8"));
+  }
   execFileSync("tar", [
     "-czf",
     join(env.RUNNER_TEMP, "codex-proof-input.tgz"),
@@ -78,6 +103,10 @@ function prepareCodexProof(env) {
     "codex-home",
   ]);
   writeReviewModelQueue(env, "codex", "proof");
+  appendFileSync(
+    env.GITHUB_OUTPUT,
+    `model-timeout=${{ runner: 60, interruption: 5, integration: 20 }[scenario]}\n`,
+  );
 }
 
 /** @param {string} transcript @param {string} output @param {string} probePath */
@@ -97,6 +126,18 @@ export function verifyCodexProof(transcript, output, probePath) {
     answer.complete !== true
   )
     throw new CodexProofError("Codex proof has no complete structured answer.");
+  verifyCodexProbe(events, probePath);
+  const usage = retainCodexUsage(transcript);
+  return {
+    nativeToolProof: true,
+    structuredAnswer: true,
+    tokens: measureReviewTokens(usage, "codex"),
+    transcriptSha256: createHash("sha256").update(transcript).digest("hex"),
+  };
+}
+
+/** @param {any[]} events @param {string} probePath */
+function verifyCodexProbe(events, probePath) {
   const commands = events
     .filter((event) => event.type === "item.completed" && event.item?.type === "command_execution")
     .map((event) => event.item);
@@ -118,11 +159,36 @@ export function verifyCodexProof(transcript, output, probePath) {
     )
   )
     throw new CodexProofError("Native tool results do not establish the runner proof.");
-  const usage = retainCodexUsage(transcript);
+}
+
+/** @param {string} transcript @param {string} probePath @param {string | undefined} outcome */
+export function inspectCodexInterruption(transcript, probePath, outcome) {
+  const events = readCodexEvents(transcript);
+  if (
+    outcome !== "failure" ||
+    events.some((event) => ["error", "turn.failed", "turn.completed"].includes(event.type))
+  )
+    throw new CodexProofError(
+      "The native session did not establish an unfinished interruption candidate.",
+    );
+  verifyCodexProbe(events, probePath);
+  const waiting = events.filter(
+    (event) =>
+      event.type === "item.started" &&
+      event.item?.type === "command_execution" &&
+      /^(sleep 3600|\/(bin|usr\/bin)\/(bash|sh) -l?c 'sleep 3600')$/.test(event.item.command),
+  );
+  if (
+    waiting.length !== 1 ||
+    typeof waiting[0].item.id !== "string" ||
+    events.some((event) => event.type === "item.completed" && event.item?.id === waiting[0].item.id)
+  )
+    throw new CodexProofError("The native waiting command was not observed unfinished.");
   return {
     nativeToolProof: true,
-    structuredAnswer: true,
-    tokens: measureReviewTokens(usage, "codex"),
+    interruptionCandidate: true,
+    workflowTimeoutVerificationRequired: true,
+    nativeOutcome: outcome,
     transcriptSha256: createHash("sha256").update(transcript).digest("hex"),
   };
 }
@@ -154,14 +220,16 @@ function readAvailableProofUsage(env) {
 /** @param {NodeJS.ProcessEnv} env */
 function collectCodexProof(env) {
   requireOwnerTrialAuthority(env);
+  const scenario = readCodexProofScenario(env.CODEX_PROOF_SCENARIO);
   const configuration = readCodexProofConfiguration(
     readFileSync(new URL("../.github/workflows/codex-runner-proof.yml", import.meta.url), "utf8"),
   );
   const root = join(env.RUNNER_TEMP, "codex-proof");
-  writeFileSync(
-    join(root, "identity.json"),
-    JSON.stringify({ source: env.GITHUB_SHA, run: env.GITHUB_RUN_ID, kind: "hosted-proof" }),
-  );
+  if (scenario !== "integration")
+    writeFileSync(
+      join(root, "identity.json"),
+      JSON.stringify({ source: env.GITHUB_SHA, run: env.GITHUB_RUN_ID, kind: "hosted-proof" }),
+    );
   writeFileSync(join(root, "configuration.json"), JSON.stringify(configuration));
   cpSync(join(root, "checkout"), join(root, "data/checkout"), { recursive: true });
   copyFileSync(join(root, "probe.mjs"), join(root, "data/probe.mjs"));
@@ -178,35 +246,67 @@ function collectCodexProof(env) {
   let proof;
   let observedCli;
   try {
+    if (scenario === "interruption") {
+      const candidate = inspectCodexInterruption(
+        readFileSync(join(env.RUNNER_TEMP, "codex-events.jsonl"), "utf8"),
+        join(root, "probe.mjs"),
+        env.MODEL_OUTCOME,
+      );
+      proof = candidate;
+      writeFileSync(
+        join(folder, "proof.json"),
+        JSON.stringify({
+          ...candidate,
+          ...configuration,
+          ...readAvailableProofUsage(env),
+          scenario,
+          source: env.GITHUB_SHA,
+          run: env.GITHUB_RUN_ID,
+        }),
+      );
+      throw new CodexProofError(
+        "Interruption candidate retained. Verify the actual GitHub step timeout and finalized quota cleanup before counting this proof; the native failure remains failed.",
+      );
+    }
     if (env.MODEL_OUTCOME !== "success")
       throw new CodexProofError(
         "Native Codex execution failed; inspect encrypted evidence without rerunning the model.",
       );
-    proof = verifyCodexProof(
-      readFileSync(join(env.RUNNER_TEMP, "codex-events.jsonl"), "utf8"),
-      readFileSync(join(env.RUNNER_TEMP, "codex-answer/answer.json"), "utf8"),
-      join(root, "probe.mjs"),
-    );
+    const transcript = readFileSync(join(env.RUNNER_TEMP, "codex-events.jsonl"), "utf8");
+    const output = readFileSync(join(env.RUNNER_TEMP, "codex-answer/answer.json"), "utf8");
+    proof =
+      scenario === "integration"
+        ? verifyEmptyCodexIntegration(root, env, transcript, output)
+        : verifyCodexProof(transcript, output, join(root, "probe.mjs"));
     observedCli = execFileSync("codex", ["--version"], { encoding: "utf8" }).trim();
     if (observedCli !== `codex-cli ${configuration.cli}`)
       throw new CodexProofError("Unexpected installed Codex CLI.");
   } catch (error) {
-    writeFileSync(
-      join(folder, "proof.json"),
-      JSON.stringify({
-        source: env.GITHUB_SHA,
-        run: env.GITHUB_RUN_ID,
-        nativeToolProof: false,
-        ...readAvailableProofUsage(env),
-        failureStage: env.MODEL_OUTCOME === "success" ? "validation" : "provider-action",
-      }),
-    );
+    if (scenario !== "interruption" || !proof)
+      writeFileSync(
+        join(folder, "proof.json"),
+        JSON.stringify({
+          source: env.GITHUB_SHA,
+          run: env.GITHUB_RUN_ID,
+          scenario,
+          nativeToolProof: false,
+          ...readAvailableProofUsage(env),
+          failureStage: env.MODEL_OUTCOME === "success" ? "validation" : "provider-action",
+        }),
+      );
     throw error;
   }
   writeFileSync(
     join(folder, "proof.json"),
     JSON.stringify(
-      { ...proof, ...configuration, observedCli, source: env.GITHUB_SHA, run: env.GITHUB_RUN_ID },
+      {
+        ...proof,
+        ...configuration,
+        observedCli,
+        scenario,
+        source: env.GITHUB_SHA,
+        run: env.GITHUB_RUN_ID,
+      },
       null,
       2,
     ),

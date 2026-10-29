@@ -15,6 +15,7 @@ import { findUnreadParts, gatherCandidates, readAnswer } from "./judge-review.mj
 import { verifyCodexCoverage } from "./review-supplied.mjs";
 import { isObject } from "./review-json.mjs";
 import { isRepositoryName, isRunId } from "./review-run.mjs";
+import { isReviewSelection } from "./review-selection.mjs";
 
 /** @param {unknown} path */
 export const isReviewPath = (path) =>
@@ -212,8 +213,7 @@ export function readReviewIdentity(env) {
   );
   if (identity.provider !== undefined)
     requireData(
-      ["claude", "codex"].includes(identity.provider) &&
-        /^(initial|\d+)$/.test(identity.selection ?? ""),
+      ["claude", "codex"].includes(identity.provider) && isReviewSelection(identity.selection),
       "provider identity",
     );
   return identity;
