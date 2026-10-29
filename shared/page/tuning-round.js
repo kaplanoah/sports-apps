@@ -4,8 +4,8 @@
 // page and in Node, so it uses no DOM.
 
 /**
- * @typedef {{ property: string, label: string, min: number, max: number, step: number, unit: string }} SliderValue
- * @typedef {{ property: string, label: string, options: string[] }} OptionValue
+ * @typedef {{ property: string, label: string, group?: string, min: number, max: number, step: number, unit: string, isVertical?: boolean }} SliderValue
+ * @typedef {{ property: string, label: string, group?: string, options: string[] }} OptionValue
  * @typedef {SliderValue | OptionValue} RoundValue
  * @typedef {{ name: string, values: RoundValue[] }} Round
  * @typedef {Record<string, string>} RoundSettings each property's value, as CSS text
@@ -25,6 +25,8 @@ function findValueProblem(value) {
   if (typeof value?.property !== "string" || !value.property.startsWith("--"))
     return "names no custom property, like --dot-lift";
   if (typeof value.label !== "string" || !value.label) return "has no label";
+  if (value.group !== undefined && (typeof value.group !== "string" || !value.group))
+    return "has an empty group or one that isn't text";
   if ("options" in value) {
     const isList =
       Array.isArray(value.options) &&
@@ -37,6 +39,8 @@ function findValueProblem(value) {
   if (value.min >= value.max) return "has a min that isn't below its max";
   if (value.step <= 0) return "has a step that isn't above 0";
   if (typeof value.unit !== "string") return 'needs a unit, like "px", or "" for none';
+  if (value.isVertical !== undefined && typeof value.isVertical !== "boolean")
+    return "needs isVertical to be a boolean";
   return null;
 }
 
@@ -66,6 +70,16 @@ export function readRound(text) {
  * @returns {value is SliderValue}
  */
 export const isSlider = (value) => !("options" in value);
+
+/** @param {Round} round */
+export const listGroups = (round) => [...new Set(round.values.flatMap(({ group }) => group ?? []))];
+
+/** The CSS offset step matching an arrow's physical direction. @param {string} key */
+export function findOffsetNudge(key) {
+  if (["ArrowLeft", "ArrowDown"].includes(key)) return 1;
+  if (["ArrowRight", "ArrowUp"].includes(key)) return -1;
+  return null;
+}
 
 /** @param {number} number */
 const countDecimals = (number) => String(number).split(".")[1]?.length ?? 0;

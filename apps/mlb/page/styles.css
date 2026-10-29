@@ -112,6 +112,7 @@
   --team-label-dot-before: -0.25px;
   --team-label-dot-after: -0.25px;
   --team-league-offset: -1px;
+  --team-rank-offset: 0px;
   --type-score-size: calc(15.75rem / 16);
   --type-score-weight: 500;
   --type-stat-large-size: calc(15.5rem / 16);
@@ -967,6 +968,7 @@ table.st .seed-cell {
   --chip-fill: var(--now-line);
   --chip-line: var(--now-line);
   flex: none;
+  translate: 0 var(--team-rank-offset);
 }
 .rank-tag.filled {
   --chip-ink: var(--now-ink);
