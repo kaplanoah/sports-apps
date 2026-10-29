@@ -167,6 +167,7 @@
     "tests/set-page-host.test.js",
     "tests/set-rp-id.test.js",
     "tests/settings-sheet.test.js",
+    "tests/settings-touch-log.test.js",
     "tests/sheet-reads.test.js",
     "tests/sheet.test.js",
     "tests/stamp.test.js",
