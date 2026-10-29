@@ -1,4 +1,5 @@
 import { readTeamLines } from "../../../../tests/browser/team-lines.mjs";
+import { TEAM_LINE_EXPECTATIONS } from "./team-line-expectations.mjs";
 import { test, expect, expectDayAtTop, openApp, readWholeSeasonSchedule, NOW } from "./harness.mjs";
 import { readCapitals } from "../../../../tests/browser/capitals.mjs";
 import { readRole } from "../../../../tests/browser/type-roles.mjs";
@@ -240,7 +241,7 @@ test("a game's dots and seeds follow its name's capital center before it and low
 }) => {
   await openApp(page);
   await page.getByRole("tab", { name: "Games" }).click();
-  const drawn = await readTeamLines(page, "wnba");
+  const drawn = await readTeamLines(page, TEAM_LINE_EXPECTATIONS);
   expect(drawn.problems).toEqual([]);
   expect(drawn.placements).toEqual(expect.arrayContaining(["team before", "team after"]));
   expect(drawn.attachments).toEqual(
