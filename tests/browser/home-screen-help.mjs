@@ -8,6 +8,7 @@ import { takeAwayPush } from "./devices.mjs";
 import { holdClock, matchPath } from "./harness.mjs";
 import { holdRequests } from "./hold-requests.mjs";
 import { SETTINGS } from "./settings.mjs";
+import { SLID_CLOSED, hasStartedClosing } from "./sheet-motions.mjs";
 import { listTapsOffButtons } from "./tap-states.mjs";
 import { drag } from "./touch.mjs";
 
@@ -150,10 +151,13 @@ export async function checkWelcomeRises({ page, openApp, openSettings }) {
     expect(
       await welcome.evaluate((dialog) => getComputedStyle(dialog, "::backdrop").backgroundColor),
     ).toBe("rgba(0, 0, 0, 0)");
-    const isSliding = await welcome.evaluate((dialog, selector) => {
-      /** @type {HTMLButtonElement} */ (dialog.querySelector(selector)).click();
-      return dialog.hasAttribute("open") && dialog.style.transform === "translateY(100%)";
-    }, button);
+    const isSliding = await welcome.evaluate(
+      (dialog, { selector, slidClosed }) => {
+        /** @type {HTMLButtonElement} */ (dialog.querySelector(selector)).click();
+        return dialog.hasAttribute("open") && dialog.style.transform === slidClosed;
+      },
+      { selector: button, slidClosed: SLID_CLOSED },
+    );
     expect(isSliding, button).toBe(true);
     await expect(welcome).toBeHidden();
     await expect(page.locator(SETTINGS)).toBeVisible();
@@ -189,12 +193,7 @@ async function checkCloseStartsOnTap(page, button) {
   await page.clock.runFor(16);
 
   await expect(button).toHaveCSS("opacity", "0.3");
-  expect(
-    await welcome.evaluate(
-      (/** @type {HTMLDialogElement} */ dialog) =>
-        !dialog.open || dialog.style.transform === "translateY(100%)",
-    ),
-  ).toBe(true);
+  expect(await hasStartedClosing(welcome)).toBe(true);
   await page.clock.runFor(1000);
   await expect(welcome).toBeHidden();
   await page.clock.resume();

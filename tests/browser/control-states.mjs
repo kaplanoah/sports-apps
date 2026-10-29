@@ -2,6 +2,7 @@ import { holdClock } from "./harness.mjs";
 import { SETTINGS } from "./settings.mjs";
 import { turnOnDiagnostics } from "./diagnostics-switch.mjs";
 import { checkFieldRing } from "./field-ring.mjs";
+import { hasStartedClosing } from "./sheet-motions.mjs";
 import {
   PRESSED_FILLED_BACKGROUND,
   PRESSED_OUTLINED_BACKGROUND,
@@ -63,14 +64,7 @@ export function testControlStates(test, expect, app) {
     await page.clock.runFor(16);
 
     await expect(close).toHaveCSS("opacity", "0.3");
-    expect(
-      await page
-        .locator(SETTINGS)
-        .evaluate(
-          (/** @type {HTMLDialogElement} */ dialog) =>
-            !dialog.open || dialog.style.transform === "translateY(100%)",
-        ),
-    ).toBe(true);
+    expect(await hasStartedClosing(page.locator(SETTINGS))).toBe(true);
     await page.clock.runFor(1000);
     await expect(page.locator(SETTINGS)).toBeHidden();
   });
