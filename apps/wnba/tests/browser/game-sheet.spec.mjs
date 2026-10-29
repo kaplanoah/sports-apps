@@ -8,7 +8,7 @@ import {
   matchPath,
 } from "./harness.mjs";
 import { holdRequests } from "../../../../tests/browser/hold-requests.mjs";
-import { recordSheetMotions } from "../../../../tests/browser/sheet-motions.mjs";
+import { SLID_CLOSED, recordSheetMotions } from "../../../../tests/browser/sheet-motions.mjs";
 import { waitForTimedAnimations } from "../../../../tests/browser/animations.mjs";
 import { expectShown, expectSteppedAway } from "../../../../tests/browser/sheet-row.mjs";
 import { comeBackTo, passTime, setHidden } from "../../../../tests/browser/visibility.mjs";
@@ -353,7 +353,7 @@ test.describe("on a phone", () => {
       await close();
       await expect(sheet, way).toBeHidden();
       expect(await readMotions(), way).toEqual([
-        { id: "sheetDialog", part: "sheet", to: { transform: "translateY(100%)" } },
+        { id: "sheetDialog", part: "sheet", to: { transform: SLID_CLOSED } },
       ]);
     }
   });

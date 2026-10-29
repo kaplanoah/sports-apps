@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readRepoFile } from "./repo-files.js";
 import { checkAppPage } from "../worker/check-page.mjs";
 import {
+  nameFeedIssue,
   nameNoCodeIssue,
   nameOutageIssue,
   nameServiceAttentionIssue,
@@ -35,8 +36,10 @@ function createFakeGitHub(openIssues) {
  * @param {Record<string, import("../worker/check-page.mjs").PageCheck>} checks by app
  * @param {any[]} [openIssues]
  * @param {Record<string, import("../worker/check-service.mjs").ServiceCheck>} [serviceChecks] by service
+ * @param {Record<string, import("../worker/check-feeds.mjs").FeedCheck>} [feedChecks] by app, each
+ *   answering unless named
  */
-async function watch(checks, openIssues = [], serviceChecks = {}) {
+async function watch(checks, openIssues = [], serviceChecks = {}, feedChecks = {}) {
   const github = createFakeGitHub(openIssues);
   const lines = await watchApps({
     repository: REPOSITORY,
@@ -45,6 +48,7 @@ async function watch(checks, openIssues = [], serviceChecks = {}) {
     checkApp: async (app) => checks[app],
     services: Object.keys(serviceChecks),
     checkServiceOf: async (service) => serviceChecks[service],
+    checkFeedsOf: async (app) => feedChecks[app] ?? { status: "answering" },
     fetchImpl: github.fetchImpl,
     env: { GH_TOKEN: "token" },
   });
@@ -178,6 +182,7 @@ test("a check that can't open a browser fails the watch's run, rather than passi
         throw new Error("browserType.launch: Executable doesn't exist");
       },
       services: [],
+      checkFeedsOf: async () => ({ status: "answering" }),
       fetchImpl: github.fetchImpl,
       env: { GH_TOKEN: "token" },
     }),
@@ -343,6 +348,7 @@ test("page navigation and direct certificate failures retry and open the watch's
       services: [],
       fetchImpl: github.fetchImpl,
       env: { GH_TOKEN: "token" },
+      checkFeedsOf: async () => ({ status: "answering" }),
       checkApp: (app) =>
         checkAppPage({
           app,
@@ -358,4 +364,143 @@ test("page navigation and direct certificate failures retry and open the watch's
     assert.match(lines[0], /not opening/);
     assert.equal(github.writes[0].body.title, "The MLB app isn't opening");
   }
+});
+
+const FEED_ISSUE = { number: 12, title: nameFeedIssue("wnba") };
+const SCOREBOARD_FAILING = {
+  scoreboard: {
+    since: "2026-07-01T18:00:00.000Z",
+    reason: "WNBA answered 503 for /scoreboard",
+  },
+};
+/** @type {import("../worker/check-feeds.mjs").FeedCheck} */
+const FEEDS_FAILING = { status: "failing", feeds: SCOREBOARD_FAILING };
+
+test("an app whose feeds are failing gets one issue, naming each feed and why, and warns in the run", async () => {
+  const { lines, writes } = await watch(
+    { wnba: { status: "drawn" } },
+    [],
+    {},
+    {
+      wnba: FEEDS_FAILING,
+    },
+  );
+
+  assert.deepEqual(writes, [
+    {
+      method: "POST",
+      path: "/issues",
+      body: {
+        title: "The WNBA app's league feeds are failing",
+        body: `The app's health says these feeds have been failing for 15 minutes or more:\n\n- \`scoreboard\`: WNBA answered 503 for /scoreboard (failing since 2026-07-01T18:00:00.000Z)\n\nSee [the check's run](${RUN_URL}). This issue closes itself once every feed answers again.`,
+      },
+    },
+  ]);
+  assert.deepEqual(lines, ["wnba: opens", "::warning::wnba: feeds failing: scoreboard; opened #7"]);
+});
+
+test("an app whose feeds still fail leaves its open issue as it is", async () => {
+  const { lines, writes } = await watch(
+    { wnba: { status: "drawn" } },
+    [FEED_ISSUE],
+    {},
+    {
+      wnba: FEEDS_FAILING,
+    },
+  );
+
+  assert.deepEqual(writes, []);
+  assert.deepEqual(lines, [
+    "wnba: opens",
+    "::warning::wnba: feeds failing: scoreboard; #12 is open",
+  ]);
+});
+
+test("an app whose feeds answer again says so on its issue and closes it, and one whose health doesn't say leaves it", async () => {
+  const { lines, writes } = await watch({ wnba: { status: "drawn" } }, [FEED_ISSUE]);
+
+  assert.deepEqual(writes, [
+    {
+      method: "POST",
+      path: "/issues/12/comments",
+      body: { body: `Every feed answers again, as of [this run](${RUN_URL}).` },
+    },
+    { method: "PATCH", path: "/issues/12", body: { state: "closed", state_reason: "completed" } },
+  ]);
+  assert.deepEqual(lines, ["wnba: opens", "wnba: feeds answer again, so #12 is closed"]);
+
+  const unchecked = await watch(
+    { wnba: BROKEN },
+    [FEED_ISSUE],
+    {},
+    {
+      wnba: { status: "unchecked", reason: "its health doesn't answer" },
+    },
+  );
+  assert.deepEqual(
+    unchecked.writes.map((write) => write.path),
+    ["/issues"],
+  );
+  assert.equal(unchecked.lines[1], "::warning::wnba: feeds not checked, its health doesn't answer");
+});
+
+test("the watch reads each production app's feeds from its health, masking its address", async () => {
+  const github = createFakeGitHub([]);
+  const workerUrl = "https://wnba-app.example-subdomain.workers.dev";
+  const asked = [];
+  /** @type {typeof fetch} */
+  const fetchImpl = async (url, init) => {
+    if (String(url).startsWith(API)) return github.fetchImpl(url, init);
+    asked.push(String(url));
+    return Response.json({
+      ok: true,
+      feeds: {
+        scoreboard: {
+          since: "2026-07-01T18:00:00.000Z",
+          reason: `fetch to ${workerUrl}/scoreboard with c0de failed`,
+        },
+      },
+    });
+  };
+  const lines = await watchApps({
+    repository: REPOSITORY,
+    runUrl: RUN_URL,
+    apps: ["wnba"],
+    checkApp: async () => ({ status: "drawn" }),
+    services: [],
+    fetchImpl,
+    env: {
+      GH_TOKEN: "token",
+      CLOUDFLARE_WORKERS_SUBDOMAIN: "example-subdomain",
+      ACCESS_CODE: "c0de",
+    },
+  });
+
+  assert.deepEqual(asked, [`${workerUrl}/health`]);
+  assert.deepEqual(lines, ["wnba: opens", "::warning::wnba: feeds failing: scoreboard; opened #7"]);
+  const { body } = github.writes[0].body;
+  assert.match(body, /fetch to <worker>\/scoreboard with <access code> failed/);
+  assert.doesNotMatch(body, /example-subdomain|c0de/);
+});
+
+test("the watch finds nothing to check in an app's health that says nothing of its feeds", async () => {
+  const github = createFakeGitHub([FEED_ISSUE]);
+  /** @type {typeof fetch} */
+  const fetchImpl = async (url, init) =>
+    String(url).startsWith(API) ? github.fetchImpl(url, init) : Response.json({ ok: true });
+  const lines = await watchApps({
+    repository: REPOSITORY,
+    runUrl: RUN_URL,
+    apps: ["wnba"],
+    checkApp: async () => ({ status: "drawn" }),
+    services: [],
+    fetchImpl,
+    env: { GH_TOKEN: "token", CLOUDFLARE_WORKERS_SUBDOMAIN: "example-subdomain" },
+  });
+
+  assert.deepEqual(github.writes, []);
+  assert.deepEqual(lines, [
+    "wnba: opens",
+    "::warning::wnba: feeds not checked, its health says nothing of its feeds",
+  ]);
 });

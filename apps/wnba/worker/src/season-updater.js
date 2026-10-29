@@ -232,6 +232,17 @@ export function describeSnapshotStatus(snapshot) {
 
 export const STATUS_FIELDS = { idle: "", standIn: "", reasons: "" };
 
+// An idle feed's failure, like the scoreboard's in the offseason, is no reason to look.
+/**
+ * Why each feed that failed while a snapshot was read did, but for an idle one.
+ * @param {{ failures?: Record<string, string>, hasScoreDue: boolean }} snapshot
+ * @returns {Record<string, string>}
+ */
+export const listFeedFailures = ({ failures = {}, hasScoreDue }) =>
+  Object.fromEntries(
+    Object.entries(failures).filter(([feed]) => feed !== "scoreboard" || hasScoreDue),
+  );
+
 // A playoff final reads as the Updates box says it, and any other final as its result.
 function describeFinal(game, games) {
   const markup = isPlayoffFinal(game)

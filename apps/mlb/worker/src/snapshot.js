@@ -2,6 +2,7 @@ import * as MLBSnapshot from "../../page/js/snapshot.js";
 import { guessSeasonYear } from "../../page/js/session.js";
 import { fetchMlbJson, LIVE_FEED_CACHE_SECONDS } from "./mlb.js";
 import { createFeedKeeper } from "../../../../shared/worker/feed-keeper.js";
+import { describeError } from "../../../../shared/worker/responses.js";
 import { createReusedLoader } from "../../../../shared/worker/upstream.js";
 
 const EDGE_CACHE_SECONDS = 15; // under MLB's own 20-second cache
@@ -47,21 +48,41 @@ export function createSnapshotLoader({
   /**
    * @param {string} path
    * @param {string} name
+   * @param {{ requireFresh: boolean, onFailure: (reason: string) => void }} options
    */
-  function fetchSnapshotJson(path, name) {
+  function fetchSnapshotJson(path, name, options) {
     if (name === "schedule") return fetchSchedule(path);
     if (name === "liveGame") return fetchMlbJson(fetchImpl, path, LIVE_FEED_CACHE_SECONDS);
     if (Object.hasOwn(SLOW_FEEDS, name))
-      return slowFeeds.readFeed(name, path, () => fetchFeed(path));
+      return slowFeeds.readFeed(name, path, () => fetchFeed(path), options);
     return fetchFeed(path);
   }
 
   /**
+   * The snapshot, with why each feed that failed did, by its name, for the store's health. A
+   * verifying read reads the postseason again rather than trust a kept answer.
    * @param {number} season
    * @param {number} requestedAt
+   * @param {boolean} [verify]
    */
-  const fetchSnapshot = (season, requestedAt) =>
-    MLBSnapshot.fetchSnapshot(fetchSnapshotJson, season, requestedAt);
+  async function fetchSnapshot(season, requestedAt, verify = false) {
+    /** @type {Record<string, string>} */
+    const failures = {};
+    /** @param {string} path @param {string} name */
+    function fetchNotingFailure(path, name) {
+      /** @param {string} reason */
+      const onFailure = (reason) => {
+        failures[name] = reason;
+      };
+      const requireFresh = verify && name === "postseason";
+      return fetchSnapshotJson(path, name, { requireFresh, onFailure }).catch((error) => {
+        onFailure(describeError(error));
+        throw error;
+      });
+    }
+    const snapshot = await MLBSnapshot.fetchSnapshot(fetchNotingFailure, season, requestedAt);
+    return { ...snapshot, failures };
+  }
   const loadCurrentSnapshot = createReusedLoader(fetchSnapshot, SNAPSHOT_REUSE_MS, now);
   /** @type {Map<number, any>} */
   const pastSnapshots = new Map();
@@ -76,15 +97,7 @@ export function createSnapshotLoader({
 
   /** @param {number} season @param {{ verify?: boolean }} [options] */
   const loadSnapshot = (season, { verify = false } = {}) => {
-    if (verify)
-      return MLBSnapshot.fetchSnapshot(
-        (path, name) =>
-          name === "postseason"
-            ? slowFeeds.readFeed(name, path, () => fetchFeed(path), { requireFresh: true })
-            : fetchSnapshotJson(path, name),
-        season,
-        now(),
-      );
+    if (verify) return fetchSnapshot(season, now(), true);
     return season < guessSeasonYear(now()) ? loadPastSnapshot(season) : loadCurrentSnapshot(season);
   };
 

@@ -17,7 +17,6 @@ import { html, isWebAddress, joinWithSeparator, setHtml } from "./html.js";
 import { chooseDayMarkup, hasStandIns, listDaysAround, measureNearDays } from "./near-days.js";
 import { nameStoryDay } from "./news-view.js";
 import { openPageTab, readShownTab, readTabBefore, setTabEnter, setTabStart } from "./page-tabs.js";
-import { runAfterPress } from "./press.js";
 import { watchTimeAway } from "./resume.js";
 import {
   findListPlace,
@@ -643,9 +642,9 @@ function followTap(event) {
   const chosen = /** @type {HTMLElement | null} */ (target.closest("[data-search]"));
   const place = /** @type {HTMLElement | null} */ (target.closest("[data-place]"));
   const gamesLine = /** @type {HTMLElement | null} */ (target.closest(".search-games-line"));
-  if (chosen) runAfterPress(chosen, () => runSearch(chosen.dataset.search ?? ""));
-  else if (place) runAfterPress(place, () => league?.openPlace(place.dataset.place ?? ""));
-  else if (gamesLine) runAfterPress(gamesLine, () => showGamesOnly(gamesLine.dataset.games ?? ""));
+  if (chosen) runSearch(chosen.dataset.search ?? "");
+  else if (place) league?.openPlace(place.dataset.place ?? "");
+  else if (gamesLine) showGamesOnly(gamesLine.dataset.games ?? "");
   else if (target.closest(".search-cancel")) closeGameSearch();
   else if (target.closest(".search-clear")) startGameSearchOver();
 }

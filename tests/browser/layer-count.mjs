@@ -3,7 +3,7 @@
 
 import { expect } from "@playwright/test";
 import { waitForTimedAnimations } from "./animations.mjs";
-import { waitForPressesToEnd } from "./tap-states.mjs";
+import { letPressesGo } from "./tap-states.mjs";
 
 /**
  * Counts the layers in the page's next layer tree, once a frame has drawn it. A change to the page
@@ -44,7 +44,7 @@ export async function expectWithinBudgets(page, views, budgets) {
   for (const { view, show } of views) {
     await show();
     await expect(page.locator(".placeholder:visible")).toHaveCount(0);
-    await waitForPressesToEnd(page);
+    await letPressesGo(page);
     await waitForTimedAnimations(page);
     counts[view] = await countLayers(page);
   }

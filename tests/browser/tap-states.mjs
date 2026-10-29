@@ -1,13 +1,19 @@
 import { expect } from "@playwright/test";
-import { TAPPABLE } from "../../shared/page/press.js";
+import { QUICK_TAP_MS, TAPPABLE } from "../../shared/page/press.js";
+
+/** @param {import("@playwright/test").Page} page */
+const isAnyPressed = (page) => page.evaluate(() => !!document.querySelector(".is-pressed"));
 
 /**
- * Waits until no row is pressed, so the tint a test's own tap leaves for a moment after it lets go
- * is never taken for the page as it rests.
+ * Lets go of the press a test's own tap still shows, which press.js lets go on the page's clock,
+ * and waits until no row is pressed, so its tint, and the ease back that starts as it lets go, are
+ * never taken for the page as it rests. A page showing no press keeps its clock where it is.
  * @param {import("@playwright/test").Page} page
  */
-export const waitForPressesToEnd = (page) =>
-  expect.poll(() => page.evaluate(() => !document.querySelector(".is-pressed"))).toBe(true);
+export async function letPressesGo(page) {
+  if (await isAnyPressed(page)) await page.clock.runFor(QUICK_TAP_MS);
+  await expect.poll(() => isAnyPressed(page)).toBe(false);
+}
 
 /**
  * The buttons and disclosures on the page that a phone would flash gray when tapped.

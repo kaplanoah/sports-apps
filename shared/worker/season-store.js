@@ -1,3 +1,4 @@
+import { listFailureReasons, noteFeedFailures } from "./feed-failures.js";
 import { createGameReminders } from "./game-reminders.js";
 import { isSameJson } from "../page/compare.js";
 import { isStoreDocumentPath, isStoreName } from "../page/store-path.js";
@@ -18,7 +19,8 @@ import { describeError, respondError, respondJson, respondMethodNotAllowed } fro
 // it, and run work of its own beside the season's updates, like reading the news. The Worker, and
 // never the page, can add to a count a job keeps, like how often a sheet had to read the league.
 // Each update's status goes in `live/status`, and an update that fails is tried again after a wait
-// that grows with each failure in a row.
+// that grows with each failure in a row. Which of the league's feeds are failing, since when and
+// why, goes in `live/feeds`, for the Worker's health.
 
 /**
  * What a league's own work gets from the store: its documents, storage of its own under keys the
@@ -44,8 +46,8 @@ import { describeError, respondError, respondJson, respondMethodNotAllowed } fro
  */
 
 /**
- * The only snapshot field the store itself reads. Other fields belong to the league's callbacks.
- * @typedef {{ season: number }} SeasonSnapshot
+ * The snapshot fields the store itself reads. Other fields belong to the league's callbacks.
+ * @typedef {{ season: number, failures?: Record<string, string> }} SeasonSnapshot
  */
 
 /**
@@ -75,6 +77,9 @@ import { describeError, respondError, respondJson, respondMethodNotAllowed } fro
  * @property {(docs: SeasonDocuments, season: number) => Promise<Updates>} readUpdates
  * @property {(docs: SeasonDocuments, snapshot: Snapshot) => Promise<void>} saveSnapshot
  * @property {(snapshot: Snapshot) => Record<string, string>} describeSnapshotStatus
+ * @property {(snapshot: Snapshot) => Record<string, string>} [listFeedFailures] why each of the
+ *   league's feeds that failed while a snapshot was read did, by the feed's name, when that isn't
+ *   all of the snapshot's `failures`
  * @property {Record<string, string>} [statusFields] the league's own fields of the saved status,
  *   each as it reads with nothing to report
  * @property {(snapshot: Snapshot, now: number) => number} choosePollDelay the wait until the next
@@ -93,6 +98,9 @@ const MAX_LISTED = 100;
 const STATUS_KEY = "live/status";
 // Which season the league's updates are for, so pages never go by their own clocks.
 const CURRENT_SEASON_KEY = "live/current";
+const FEEDS_KEY = "live/feeds";
+// The whole league failing to load counts as a feed of its own beside the ones a snapshot names.
+const LEAGUE_FEED = "league";
 const BLANK_STATUS = { error: "", detail: "", write: "" };
 const RETRY_MS = [30e3, 60e3, 2 * 60e3, 5 * 60e3, 10 * 60e3];
 const UNWATCHED_DELAY_MS = 50e3;
@@ -205,6 +213,8 @@ function sendUpdating(socket, isUpdating) {
  */
 export function createSeasonStore(league) {
   const release = league.release ?? null;
+  const listFeedFailures =
+    league.listFeedFailures ?? ((/** @type {Snapshot} */ snapshot) => snapshot.failures ?? {});
 
   /** @param {{ release?: string | null } | undefined} schedule */
   const isFromEarlierRelease = (schedule) => !!schedule && (schedule.release ?? null) !== release;
@@ -411,9 +421,28 @@ export function createSeasonStore(league) {
         await this.ctx.storage.setAlarm(Math.max(this.now(), dueAt));
     }
 
+    // A verifying read takes no kept answer for the feeds it verifies, so one that can't verify them
+    // knows less than the last update did, and leaves what that update saved, and its status, as
+    // they are.
     async verifyReminderGames() {
       if (!league.listReminderGames) return;
-      await this.loadAndSaveSeason({ verify: true });
+      const snapshot = await this.loadCurrentSnapshot({ verify: true }).catch((error) => {
+        console.error(`Verifying the reminders' games failed: ${describeError(error)}`);
+        return null;
+      });
+      if (!snapshot || !league.listReminderGames(snapshot)) {
+        await this.reminders.saveGames(null);
+        return;
+      }
+      await this.saveSeason(snapshot, { verify: true });
+    }
+
+    /** @param {{ verify?: boolean }} [options] */
+    loadCurrentSnapshot({ verify = false } = {}) {
+      return league.loadCurrentSnapshot(
+        (season) => this.loadSnapshot(season, { verify }),
+        this.now(),
+      );
     }
 
     // A schedule saved before it had a due time reads as due, as does one an earlier release saved,
@@ -521,21 +550,26 @@ export function createSeasonStore(league) {
       return isWatched ? delay : Math.max(delay, UNWATCHED_DELAY_MS);
     }
 
-    async loadAndSaveSeason({ verify = false } = {}) {
+    async loadAndSaveSeason() {
       let snapshot;
       try {
-        snapshot = await league.loadCurrentSnapshot(
-          (season) => this.loadSnapshot(season, { verify }),
-          this.now(),
-        );
+        snapshot = await this.loadCurrentSnapshot();
       } catch (error) {
+        const detail = describeError(error);
         await this.reminders.saveGames(null);
-        const delay = await this.recordFailure({
-          error: "upstream_error",
-          detail: describeError(error),
-        });
+        await this.saveFeedFailures((failing) => ({
+          ...listFailureReasons(failing),
+          [LEAGUE_FEED]: detail,
+        }));
+        const delay = await this.recordFailure({ error: "upstream_error", detail });
         return { snapshot: null, delay };
       }
+      return this.saveSeason(snapshot);
+    }
+
+    /** @param {Snapshot} snapshot @param {{ verify?: boolean }} [options] */
+    async saveSeason(snapshot, { verify = false } = {}) {
+      await this.saveFeedFailures(() => listFeedFailures(snapshot));
       let before;
       try {
         before = await league.readUpdates(this.docs, snapshot.season);
@@ -553,6 +587,15 @@ export function createSeasonStore(league) {
         await this.reminders.saveGames(league.listReminderGames(snapshot), verify);
       await this.saveStatus(league.describeSnapshotStatus(snapshot));
       return { snapshot, delay: league.choosePollDelay(snapshot, this.now()) };
+    }
+
+    // `listFailures` answers why each feed failing now does, from the feeds failing before.
+    /** @param {(failing: Record<string, import("./feed-failures.js").FeedFailure>) => Record<string, string>} listFailures */
+    async saveFeedFailures(listFailures) {
+      const stored = await this.docs.read(FEEDS_KEY);
+      const failing = stored?.failing ?? {};
+      const current = noteFeedFailures(failing, listFailures(failing), this.now());
+      if (!isSameJson(failing, current)) await this.docs.write(FEEDS_KEY, { failing: current });
     }
 
     // Returns how long to wait before the next update.
@@ -649,13 +692,12 @@ export function forwardToStore(request, env, storePath) {
 }
 
 /**
- * Whether the store answers, for the Worker's health.
+ * Which of the league's feeds are failing, since when and why, for the Worker's health, which
+ * learns from this read too whether the store answers. Throws when it doesn't.
  * @param {any} env the Worker's bindings
+ * @returns {Promise<Record<string, import("./feed-failures.js").FeedFailure>>}
  */
-export async function isStoreAnswering(env) {
-  const response = await findStore(env).fetch(`https://store/store/${STATUS_KEY}`);
-  return response.ok;
-}
+export const readFeedFailures = async (env) => (await readStoreDoc(env, FEEDS_KEY))?.failing ?? {};
 
 /**
  * A document the store keeps, as null when it has none, for the Worker's own reads.

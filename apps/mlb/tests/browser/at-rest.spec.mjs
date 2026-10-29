@@ -1,4 +1,5 @@
 import { test, expect, openApp, ON_A_PHONE } from "./harness.mjs";
+import { holdClock } from "../../../../tests/browser/harness.mjs";
 import {
   expectAtRest,
   forgetResizeLoops,
@@ -68,6 +69,19 @@ test("a tap on the pill from far down the standings brings the bracket in with t
   expect(await readSeasonRide(page)).toMatchObject({ pillTop: await readPillHoldTop(page) });
   expect(await isPillBandShown(page)).toBe(true);
   expect(await readResizeLoops()).toEqual([]);
+});
+
+test("the check that the page is at rest lets a tap's press go and ease back first", async ({
+  page,
+}) => {
+  await openApp(page);
+  await waitForLoadToSettle(page);
+  await page.addStyleTag({ content: ":root { --press-ease-back: 1s }" });
+  await holdClock(page);
+
+  await openSeasonPart(page, "Standings");
+
+  await expectAtRest(page);
 });
 
 test("a shown list that grows loops no ResizeObserver", async ({ page }) => {

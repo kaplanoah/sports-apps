@@ -1,11 +1,11 @@
-import { readEasternDay } from "#shared/days.js";
 import { OVERTIME_SECONDS, QUARTER_SECONDS, REGULATION_PERIODS } from "../../page/js/periods.js";
 import { findTeamCodeByEspnId, TEAMS } from "../../page/js/teams.js";
 import { describeError, respondError, respondJson } from "../../../../shared/worker/responses.js";
 import { GAME_ID } from "./box-score.js";
 import { nameGameDetailsKey } from "./store-docs.js";
 import { readKeptDoc } from "../../../../shared/worker/store-reads.js";
-import { fetchEspnJson } from "./wnba.js";
+import { ESPN_DAY_REQUEST, ESPN_SITE, formatEspnDay } from "../../page/js/snapshot.js";
+import { fetchEspnDay, fetchEspnJson } from "./wnba.js";
 
 // Reads ESPN for the score through one game, for the game sheet's chart of the lead: the score
 // after each basket, and when in the game it came, from the scoring plays in ESPN's game summary.
@@ -14,14 +14,14 @@ import { fetchEspnJson } from "./wnba.js";
 
 /** @typedef {import("../../../../shared/worker/store-reads.js").ReadDoc} ReadDoc */
 
-const ESPN_SITE = "https://site.api.espn.com/apis/site/v2/sports/basketball/wnba";
-// A day's games change only as they start and end, and a live game's plays with every basket.
-const SCOREBOARD_CACHE_SECONDS = 60;
+// A live game's plays change with every basket.
 const SUMMARY_CACHE_SECONDS = 15;
 
 /** @param {string} start */
-export const nameScoreboardRequest = (start) =>
-  `${ESPN_SITE}/scoreboard?dates=${readEasternDay(Date.parse(start)).date.replaceAll("-", "")}`;
+const formatGameDay = (start) => formatEspnDay(Date.parse(start));
+
+/** @param {string} start */
+export const nameScoreboardRequest = (start) => ESPN_DAY_REQUEST(formatGameDay(start));
 
 /** @param {string} eventId */
 export const nameSummaryRequest = (eventId) => `${ESPN_SITE}/summary?event=${eventId}`;
@@ -136,11 +136,7 @@ export function createEspnGameReader({ fetchImpl = (input, init) => fetch(input,
   async function findGameEventId(game) {
     const key = nameGameKey(game);
     if (eventIds.has(key)) return eventIds.get(key);
-    const scoreboard = await fetchEspnJson(
-      fetchImpl,
-      nameScoreboardRequest(game.start),
-      SCOREBOARD_CACHE_SECONDS,
-    );
+    const scoreboard = await fetchEspnDay(fetchImpl, formatGameDay(game.start));
     const eventId = findEventId(scoreboard, game);
     if (eventId) eventIds.set(key, eventId);
     return eventId;

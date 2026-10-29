@@ -1,9 +1,11 @@
 // Reads when a pull request's labels were added and when a commit was pushed, from its timeline
 // and the commit's check suites.
-import { createGitHub, createGraphQL } from "./github-api.mjs";
+import { createGitHub, createGraphQL, readAllNodes, readAllPages } from "./github-api.mjs";
 
 export const PHONE_CONTEXT = "phone";
 export const PHONE_OK_LABEL = "phone-ok";
+export const REVIEW_LABEL = "review";
+const ACTIONS_APP = "github-actions";
 
 /**
  * @typedef {object} TimelineEvent
@@ -12,6 +14,7 @@ export const PHONE_OK_LABEL = "phone-ok";
  * @property {{ name: string }} [label]
  * @property {{ login: string } | null} [actor]
  * @property {string} [body] a comment's text
+ * @property {{ oid: string } | null} [head] the commit a force push left as the head
  */
 
 /**
@@ -25,28 +28,55 @@ export const PHONE_OK_LABEL = "phone-ok";
 export const readEventTime = (event) => Date.parse(event.created_at ?? "");
 
 /**
+ * Who last added `label` to a pull request and when, or null and NaN when no one ever did.
+ * @param {TimelineEvent[]} events
+ * @param {string} label
+ * @returns {{ labeler: string | null, addedAt: number }}
+ */
+export function findLastAdding(events, label) {
+  const lastAdded = events
+    .filter((event) => event.event === "labeled" && event.label?.name === label)
+    .toSorted((first, second) => readEventTime(first) - readEventTime(second))
+    .at(-1);
+  if (!lastAdded) return { labeler: null, addedAt: Number.NaN };
+  return { labeler: lastAdded.actor?.login ?? null, addedAt: readEventTime(lastAdded) };
+}
+
+/**
+ * When a pull request's head was last force-pushed, or -Infinity when it never was.
+ * @param {TimelineEvent[]} events
+ */
+export const findLastForcePushAt = (events) => findLastForcePushBefore(events, Infinity).at;
+
+/**
+ * The last force push before `time`, when it was and the head it left, or -Infinity and null when
+ * there was none.
+ * @param {TimelineEvent[]} events
+ * @param {number} time
+ */
+export function findLastForcePushBefore(events, time) {
+  const lastForcePush = events
+    .filter((event) => event.event === "head_ref_force_pushed" && readEventTime(event) < time)
+    .toSorted((first, second) => readEventTime(first) - readEventTime(second))
+    .at(-1);
+  if (!lastForcePush) return { at: -Infinity, head: null };
+  return { at: readEventTime(lastForcePush), head: lastForcePush.head?.oid ?? null };
+}
+
+/**
  * Who last added `label` to a pull request, when, and whether they added it after a push and after
  * its last force push, from its timeline. A commit's own date is when it was made, which can be long
  * before it was pushed, so the push time comes from GitHub.
  * @param {TimelineEvent[]} events
  * @param {string} label
- * @param {number} pushedAt when GitHub first saw the pushed commit, or NaN when it can't say
+ * @param {number} pushedAt when its head was first pushed to the pull request's branch, or NaN when
+ *   it wasn't read
  * @returns {Labeling}
  */
 export function findLabeling(events, label, pushedAt) {
-  const lastAdded = events
-    .filter((event) => event.event === "labeled" && event.label?.name === label)
-    .toSorted((first, second) => readEventTime(first) - readEventTime(second))
-    .at(-1);
-  if (!lastAdded) return { labeler: null, addedAt: Number.NaN, isAfterLastPush: false };
-  const forcePushes = events.filter((event) => event.event === "head_ref_force_pushed");
-  const lastPush = Math.max(pushedAt, ...forcePushes.map(readEventTime));
-  const addedAt = readEventTime(lastAdded);
-  return {
-    labeler: lastAdded.actor?.login ?? null,
-    addedAt,
-    isAfterLastPush: addedAt > lastPush,
-  };
+  const { labeler, addedAt } = findLastAdding(events, label);
+  const lastPush = Math.max(pushedAt, findLastForcePushAt(events));
+  return { labeler, addedAt, isAfterLastPush: addedAt > lastPush };
 }
 
 /**
@@ -66,18 +96,14 @@ export async function readTimeline({
 }) {
   const graphql = createGraphQL({ fetchImpl, env });
   const [owner, name] = repository.split("/");
-  const events = [];
-  let after = null;
-  for (;;) {
-    const data = await graphql(READ_TIMELINE, { owner, name, number: Number(pullNumber), after });
-    const timeline = data.repository?.pullRequest?.timelineItems;
-    if (!timeline) throw new Error("GitHub didn't return the pull request's timeline");
-    events.push(...timeline.nodes.map(readTimelineEvent));
-    if (!timeline.pageInfo.hasNextPage) return events;
-    const next = timeline.pageInfo.endCursor;
-    if (!next || next === after) throw new Error("GitHub didn't advance the timeline cursor");
-    after = next;
-  }
+  const nodes = await readAllNodes(
+    graphql,
+    READ_TIMELINE,
+    { owner, name, number: Number(pullNumber) },
+    (data) => data.repository?.pullRequest?.timelineItems,
+    "the pull request's timeline",
+  );
+  return nodes.map(readTimelineEvent);
 }
 
 const READ_TIMELINE = `query ReadTimeline($owner: String!, $name: String!, $number: Int!, $after: String) {
@@ -88,7 +114,7 @@ const READ_TIMELINE = `query ReadTimeline($owner: String!, $name: String!, $numb
           __typename
           ... on LabeledEvent { created_at: createdAt label { name } actor { login } }
           ... on UnlabeledEvent { created_at: createdAt label { name } actor { login } }
-          ... on HeadRefForcePushedEvent { created_at: createdAt actor { login } }
+          ... on HeadRefForcePushedEvent { created_at: createdAt actor { login } head: afterCommit { oid } }
           ... on IssueComment { created_at: createdAt body actor: author { login } }
         }
         pageInfo { hasNextPage endCursor }
@@ -112,19 +138,49 @@ function readTimelineEvent({ __typename, ...fields }) {
 }
 
 /**
- * When GitHub first saw a commit: its earliest check suite, which GitHub makes as the push that
- * brings the commit arrives, or NaN when it has none.
- * @param {object} options
- * @param {string} options.repository as owner/name
- * @param {string} options.sha
- * @param {typeof fetch} [options.fetchImpl]
- * @param {NodeJS.ProcessEnv} [options.env] holds GH_TOKEN
+ * @typedef {object} PushQuery
+ * @property {string} repository as owner/name
+ * @property {string} sha
+ * @property {string} branch
+ * @property {typeof fetch} [fetchImpl]
+ * @property {NodeJS.ProcessEnv} [env] holds GH_TOKEN
  */
-export async function readPushTime({ repository, sha, fetchImpl = fetch, env = process.env }) {
+
+/**
+ * When a commit was pushed to `branch`, earliest first: the times of its GitHub Actions check suites
+ * there, which the workflows a push starts make as it arrives. A suite on another branch, like beta
+ * or a scratch branch, says nothing of when the commit reached this one, and another App's suite,
+ * made when it posts a check, says nothing of a push.
+ * @param {PushQuery} query
+ * @returns {Promise<number[]>}
+ */
+export async function readPushTimes({
+  repository,
+  sha,
+  branch,
+  fetchImpl = fetch,
+  env = process.env,
+}) {
   const github = createGitHub({ repository, fetchImpl, env });
-  const { check_suites: suites } = await github(`/commits/${sha}/check-suites?per_page=100`);
-  const times = suites.map((/** @type {{ created_at: string }} */ suite) =>
-    Date.parse(suite.created_at),
+  const suites = await readAllPages(
+    github,
+    `/commits/${sha}/check-suites`,
+    (answer) => answer.check_suites,
   );
-  return times.length ? Math.min(...times) : Number.NaN;
+  return suites
+    .filter(
+      (/** @type {{ head_branch: string, app: { slug: string } | null }} */ suite) =>
+        suite.head_branch === branch && suite.app?.slug === ACTIONS_APP,
+    )
+    .map((/** @type {{ created_at: string }} */ suite) => Date.parse(suite.created_at))
+    .toSorted((first, second) => first - second);
+}
+
+/**
+ * When a commit was first pushed to `branch`, or NaN when it has no GitHub Actions check suite there.
+ * @param {PushQuery} query
+ */
+export async function readPushTime(query) {
+  const [firstPushedAt = Number.NaN] = await readPushTimes(query);
+  return firstPushedAt;
 }

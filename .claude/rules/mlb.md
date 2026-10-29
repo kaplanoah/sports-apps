@@ -9,6 +9,7 @@ paths:
 - The record and the live feed (`page/js/snapshot.js`):
   - The page reads each season's one record from the store, which the Worker saves as it reads MLB, as the WNBA's does.
   - The Worker reads each game being played from MLB's live feed with each update, since the schedule's copy of it runs half a minute or more behind, so every part shows the same inning, outs, and score.
+  - Each update names each MLB feed that failed, with why, for the health's `feeds`. MLB has no backup feed, so there's none to probe as the WNBA's ESPN is.
 - A club's sheet, which the page opens from the club's name or dot (`page/js/team-view.js` and the shared `team-numbers.js`):
   - cards of its nearest games from the slate
   - its season's runs, runs allowed, and records at home and on the road, ranked among every club's on curves
