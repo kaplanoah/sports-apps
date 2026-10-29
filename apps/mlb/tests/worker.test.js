@@ -4,7 +4,6 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import * as MLBSnapshot from "../page/js/snapshot.js";
 import { createMemoryStorage } from "../../../shared/worker/feed-keeper.js";
-import { listFeedFailures } from "../worker/src/season-updater.js";
 import { createSnapshotLoader } from "../worker/src/snapshot.js";
 
 const EVENING = JSON.parse(
@@ -118,7 +117,7 @@ test("each feed that fails is named with why, by its path alone, and a feed that
 
   const snapshot = await loader.loadSnapshot(2026);
 
-  assert.deepEqual(listFeedFailures(snapshot), {
+  assert.deepEqual(snapshot.failures, {
     standings: "MLB Stats API answered 502 for /api/v1/standings",
   });
 });
@@ -153,10 +152,7 @@ test("a slow feed that answered and then fails is named with why, while its kept
   const waiting = await loader.loadSnapshot(2026);
 
   assert.equal(mlb.countCalls("standings"), 2);
-  assert.deepEqual(
-    [listFeedFailures(failed), listFeedFailures(waiting)],
-    [STANDINGS_FAILURE, STANDINGS_FAILURE],
-  );
+  assert.deepEqual([failed.failures, waiting.failures], [STANDINGS_FAILURE, STANDINGS_FAILURE]);
   assert.deepEqual(failed.missing, answered.missing);
 });
 
@@ -170,7 +166,7 @@ test("a verifying read between updates still names each feed that's failing", as
   now += 60 * 1000;
   const verified = await loader.loadSnapshot(2026, { verify: true });
 
-  assert.deepEqual(listFeedFailures(verified), STANDINGS_FAILURE);
+  assert.deepEqual(verified.failures, STANDINGS_FAILURE);
 });
 
 test("reads moments apart share one trip to MLB", async () => {

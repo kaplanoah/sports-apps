@@ -102,6 +102,50 @@ test("a store keeps each failing feed from its first failure in a row, and drops
   assert.deepEqual(Object.keys((await context.ctx.storage.get("live/feeds")).failing), ["backup"]);
 });
 
+test("a store keeps the snapshot's own failures for a league that hands it no list of them", async () => {
+  const context = createDurableObjectContext();
+  const SeasonStore = createSeasonStore({
+    ...QUIET_LEAGUE,
+    loadCurrentSnapshot: async () => ({
+      season: 2026,
+      failures: { standings: "502 for /standings" },
+    }),
+  });
+  const store = new SeasonStore(context.ctx, {}, { now: () => NOW });
+
+  await store.loadAndSaveSeason();
+
+  assert.deepEqual(await context.ctx.storage.get("live/feeds"), {
+    failing: { standings: { reason: "502 for /standings", since: new Date(NOW).toISOString() } },
+  });
+});
+
+test("a store notes a loaded snapshot's feed failures even when saving it fails", async () => {
+  const context = createDurableObjectContext();
+  let now = NOW;
+  let isLoading = false;
+  const SeasonStore = createSeasonStore({
+    ...QUIET_LEAGUE,
+    loadCurrentSnapshot: async () => {
+      if (!isLoading) throw new Error("The league answered 503");
+      return { season: 2026, failures: { standings: "502 for /standings" } };
+    },
+    saveSnapshot: async () => {
+      throw new Error("The document is too big");
+    },
+  });
+  const store = new SeasonStore(context.ctx, {}, { now: () => now });
+
+  await store.loadAndSaveSeason();
+  isLoading = true;
+  now += 60_000;
+  await store.loadAndSaveSeason();
+
+  assert.deepEqual(await context.ctx.storage.get("live/feeds"), {
+    failing: { standings: { reason: "502 for /standings", since: new Date(now).toISOString() } },
+  });
+});
+
 test("a league that fails to load counts as a failing feed, keeping the feeds failing before", async () => {
   const context = createDurableObjectContext();
   let now = NOW;

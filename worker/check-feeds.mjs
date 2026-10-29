@@ -2,7 +2,7 @@
 // look into, and why, apart from its own status, so a feed that fails never reads as a failing app.
 // What it says goes into a public issue, so the Worker's address is masked out of every reason.
 import { listAccessCodeMasks, listSiteMasks, maskSecrets } from "./check-page.mjs";
-import { CHECK_TIMEOUT_MS } from "./check-timing.mjs";
+import { readHealth } from "./check-service.mjs";
 
 /** @typedef {import("../shared/worker/feed-failures.js").FeedFailure} FeedFailure */
 /**
@@ -48,16 +48,9 @@ const hideFeedSecrets = (feeds, url, accessCode) =>
  * @returns {Promise<FeedCheck>}
  */
 export async function checkFeeds({ url, accessCode, fetchImpl = fetch }) {
-  let feeds;
-  try {
-    const response = await fetchImpl(new URL("health", url).href, {
-      method: "GET",
-      signal: AbortSignal.timeout(CHECK_TIMEOUT_MS),
-    });
-    feeds = (await response.json())?.feeds;
-  } catch {
-    return { status: "unchecked", reason: "its health doesn't answer" };
-  }
+  const health = await readHealth(url, fetchImpl);
+  if (!health.answered) return { status: "unchecked", reason: "its health doesn't answer" };
+  const feeds = health.body?.feeds;
   if (!feeds || typeof feeds !== "object")
     return { status: "unchecked", reason: "its health says nothing of its feeds" };
   if (!Object.keys(feeds).length) return { status: "answering" };

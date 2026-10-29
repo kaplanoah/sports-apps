@@ -258,13 +258,6 @@ export async function readUpdates(docs, year) {
   return doc?.log ?? [];
 }
 
-/**
- * Why each MLB feed that failed in the snapshot's read did, by its name.
- * @param {any} snapshot
- * @returns {Record<string, string>}
- */
-export const listFeedFailures = (snapshot) => snapshot.failures ?? {};
-
 export function describeSnapshotStatus(snapshot) {
   const missing = snapshot.missing || [];
   return { error: missing.length ? "mlb_fields_missing" : "", detail: missing.join(", ") };

@@ -1,4 +1,3 @@
-import { createMemoryStorage } from "../../../../shared/worker/feed-keeper.js";
 import { describeError } from "../../../../shared/worker/responses.js";
 
 // ESPN's backup is read only while the league's scoreboard falls short, so a backup that broke
@@ -50,9 +49,9 @@ const isProbeDue = (probe, now) =>
  * @param {object} options
  * @param {() => Promise<Backup>} options.fetchBackup
  * @param {() => number} options.now
- * @param {import("../../../../shared/worker/feed-keeper.js").FeedStorage} [options.storage]
+ * @param {import("../../../../shared/worker/feed-keeper.js").FeedStorage} options.storage
  */
-export function createBackupReader({ fetchBackup, now, storage = createMemoryStorage() }) {
+export function createBackupReader({ fetchBackup, now, storage }) {
   /** The last probe, or a first one that only marks when the probes start. */
   async function readProbe() {
     const probe = await storage.get(STORAGE_KEY);

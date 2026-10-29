@@ -47,7 +47,7 @@ import { describeError, respondError, respondJson, respondMethodNotAllowed } fro
 
 /**
  * The only snapshot field the store itself reads. Other fields belong to the league's callbacks.
- * @typedef {{ season: number }} SeasonSnapshot
+ * @typedef {{ season: number, failures?: Record<string, string> }} SeasonSnapshot
  */
 
 /**
@@ -78,7 +78,8 @@ import { describeError, respondError, respondJson, respondMethodNotAllowed } fro
  * @property {(docs: SeasonDocuments, snapshot: Snapshot) => Promise<void>} saveSnapshot
  * @property {(snapshot: Snapshot) => Record<string, string>} describeSnapshotStatus
  * @property {(snapshot: Snapshot) => Record<string, string>} [listFeedFailures] why each of the
- *   league's feeds that failed while a snapshot was read did, by the feed's name
+ *   league's feeds that failed while a snapshot was read did, by the feed's name, when that isn't
+ *   all of the snapshot's `failures`
  * @property {Record<string, string>} [statusFields] the league's own fields of the saved status,
  *   each as it reads with nothing to report
  * @property {(snapshot: Snapshot, now: number) => number} choosePollDelay the wait until the next
@@ -212,6 +213,8 @@ function sendUpdating(socket, isUpdating) {
  */
 export function createSeasonStore(league) {
   const release = league.release ?? null;
+  const listFeedFailures =
+    league.listFeedFailures ?? ((/** @type {Snapshot} */ snapshot) => snapshot.failures ?? {});
 
   /** @param {{ release?: string | null } | undefined} schedule */
   const isFromEarlierRelease = (schedule) => !!schedule && (schedule.release ?? null) !== release;
@@ -545,6 +548,7 @@ export function createSeasonStore(league) {
         const delay = await this.recordFailure({ error: "upstream_error", detail });
         return { snapshot: null, delay };
       }
+      await this.saveFeedFailures(() => listFeedFailures(snapshot));
       let before;
       try {
         before = await league.readUpdates(this.docs, snapshot.season);
@@ -561,7 +565,6 @@ export function createSeasonStore(league) {
       if (league.listReminderGames)
         await this.reminders.saveGames(league.listReminderGames(snapshot), verify);
       await this.saveStatus(league.describeSnapshotStatus(snapshot));
-      await this.saveFeedFailures(() => league.listFeedFailures?.(snapshot) ?? {});
       return { snapshot, delay: league.choosePollDelay(snapshot, this.now()) };
     }
 
