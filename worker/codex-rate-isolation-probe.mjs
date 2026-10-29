@@ -2,6 +2,10 @@ import { execFileSync } from "node:child_process";
 import { readFileSync, readlinkSync, writeFileSync } from "node:fs";
 import net from "node:net";
 import { writeRateProbeResult } from "./codex-rate-probe-output.mjs";
+import {
+  readRatePrivilegeFacts,
+  verifyRootServiceSocketDenial,
+} from "./codex-rate-isolation-access.mjs";
 
 function isDenied(operation) {
   try {
@@ -16,13 +20,11 @@ function isDenied(operation) {
   }
 }
 
-function readPrivilegeFacts() {
+async function readPrivilegeFacts() {
   const status = readFileSync("/proc/self/status", "utf8");
-  const capabilities = ["CapInh", "CapPrm", "CapEff", "CapBnd", "CapAmb"];
   return {
-    unprivileged: process.getuid() !== 0,
-    noNewPrivileges: /^NoNewPrivs:\s+1$/m.test(status),
-    noCapabilities: capabilities.every((name) => new RegExp(`^${name}:\\s+0+$`, "m").test(status)),
+    ...readRatePrivilegeFacts(status, process.getuid()),
+    rootServiceSocketsDenied: await verifyRootServiceSocketDenial(),
   };
 }
 
@@ -44,7 +46,7 @@ function isPtraceDenied(pid) {
   );
 }
 
-function readProcessBoundary(settings) {
+async function readProcessBoundary(settings) {
   let sudoDenied = false;
   try {
     execFileSync("/usr/bin/sudo", ["-n", "/usr/bin/true"], {
@@ -55,7 +57,7 @@ function readProcessBoundary(settings) {
     sudoDenied = true;
   }
   return {
-    ...readPrivilegeFacts(),
+    ...(await readPrivilegeFacts()),
     rootEnvironmentDenied: isDenied(() => readFileSync(`/proc/${settings.pid}/environ`)),
     rootDescriptorsDenied: isDenied(() => readlinkSync(`/proc/${settings.pid}/fd/0`)),
     rootFileDenied: isDenied(() => readFileSync(settings.privateFile)),
@@ -82,7 +84,7 @@ function readConnection(port) {
 async function readSandboxBoundary(settings) {
   const denied = new Set(["EPERM", "EACCES", "ECONNREFUSED", "ENETUNREACH", "EHOSTUNREACH"]);
   return {
-    ...readPrivilegeFacts(),
+    ...(await readPrivilegeFacts()),
     gatewayNetworkDenied: denied.has(await readConnection(settings.gateway)),
     upstreamNetworkDenied: denied.has(await readConnection(settings.upstream)),
     checkoutWriteDenied: isDenied(() => writeFileSync(settings.projectFile, "unwanted change")),
@@ -101,7 +103,7 @@ async function readBaseline(settings) {
 try {
   const settings = JSON.parse(process.argv[3]);
   let facts;
-  if (process.argv[2] === "process") facts = readProcessBoundary(settings);
+  if (process.argv[2] === "process") facts = await readProcessBoundary(settings);
   else if (process.argv[2] === "sandbox") facts = await readSandboxBoundary(settings);
   else if (process.argv[2] === "baseline") facts = await readBaseline(settings);
   else throw new Error("Unsupported probe.");

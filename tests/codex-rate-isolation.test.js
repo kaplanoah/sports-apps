@@ -161,6 +161,8 @@ test("the hosted harness invokes only pinned CLI sandbox and never a native eval
   assert.match(harness, /"-n", "\/usr\/bin\/env", "-i"/);
   assert.doesNotMatch(harness, /\["exec"|systemctl|useradd|sudoers|setcap|iptables/);
   assert.match(harness, /env.RUNNER_ENVIRONMENT !== "github-hosted"/);
+  assert.match(harness, /"--clear-groups"/);
+  assert.doesNotMatch(harness, /--groups=/);
   assert.match(harness, /verifyWithRateNamespaces\(/);
   assert.match(harness, /validateSandboxLauncherResult\( launchBoundaryCommand\(/);
   assert.match(harness, /nativeModelStarted: false, realCredentialUsed: false/);
@@ -174,6 +176,8 @@ test("missing, false or invented isolation facts cannot pass the proof", () => {
     unprivileged: true,
     noNewPrivileges: true,
     noCapabilities: true,
+    supplementaryGroupsCleared: true,
+    rootServiceSocketsDenied: true,
     rootEnvironmentDenied: true,
     rootDescriptorsDenied: true,
     rootFileDenied: true,

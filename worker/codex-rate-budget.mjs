@@ -35,7 +35,11 @@ export function parseReset(value, now) {
 /** @param {any} policy @param {any} [options] */
 export function createRateBudget(
   policy,
-  { now = Date.now, wait = (ms, signal) => delay(ms, undefined, { signal }) } = {},
+  {
+    now = Date.now,
+    wait = (ms, signal) => delay(ms, undefined, { signal }),
+    admit = () => ({ admitted: true }),
+  } = {},
 ) {
   const tokenLimit = requireCount(policy.tokens, "token limit");
   const requestLimit = requireCount(policy.requests, "request limit");
@@ -79,39 +83,45 @@ export function createRateBudget(
       signal?.removeEventListener("abort", abort);
     }
   }
-  async function reserveNow(tokens, signal) {
+  async function reserveNow(tokens, signal, deadline) {
     requireCount(tokens, "reservation");
     if (tokens > tokenLimit)
       throw new Error("Request reservation exceeds the configured token limit.");
-    const deadline = now() + maxWait;
     for (;;) {
       if (signal?.aborted) throw new Error("Rate admission aborted.");
       const time = now();
+      if (time > deadline) throw new Error("Rate admission wait budget exhausted.");
       prune(time);
       const used = events.reduce((sum, event) => sum + event.charge, 0);
       const slots = events.length;
+      let providerUntil = 0;
       if (
         time >= blockedUntil &&
         time >= nextStart &&
         used + tokens <= tokenLimit &&
         slots < requestLimit
       ) {
-        const event = {
-          id: ++sequence,
-          charge: tokens,
-          estimated: tokens,
-          observed: null,
-          settled: false,
-          expires: time + window,
-        };
-        events.push(event);
-        nextStart = time + spacing;
-        return event.id;
+        const provider = admit(tokens);
+        if (provider.admitted === true) {
+          const event = {
+            id: ++sequence,
+            charge: tokens,
+            estimated: tokens,
+            observed: null,
+            settled: false,
+            expires: time + window,
+          };
+          events.push(event);
+          nextStart = time + spacing;
+          return event.id;
+        }
+        providerUntil = requireCount(provider.notBefore, "provider admission deadline");
       }
       const expires = events.filter((event) => event.settled).map((event) => event.expires);
       const due = Math.max(
         time + 1,
         blockedUntil,
+        providerUntil,
         nextStart,
         used + tokens > tokenLimit || slots >= requestLimit ? Math.min(...expires, deadline) : time,
       );
@@ -121,13 +131,30 @@ export function createRateBudget(
     }
   }
   return {
-    reserve(tokens, signal) {
-      const admission = pending.then(() => reserveNow(tokens, signal));
+    async reserve(tokens, signal) {
+      if (signal?.aborted) throw new Error("Rate admission aborted.");
+      const deadline = now() + maxWait;
+      const controller = new AbortController();
+      const abort = () => controller.abort();
+      signal?.addEventListener("abort", abort, { once: true });
+      const cancellation = new Promise((resolve, reject) => {
+        controller.signal.addEventListener(
+          "abort",
+          () => reject(new Error("Rate admission aborted.")),
+          { once: true },
+        );
+      });
+      const admission = pending.then(() => reserveNow(tokens, controller.signal, deadline));
       pending = admission.then(
         () => undefined,
         () => undefined,
       );
-      return admission;
+      try {
+        return await Promise.race([admission, cancellation]);
+      } finally {
+        controller.abort();
+        signal?.removeEventListener("abort", abort);
+      }
     },
     settle(id, observedTokens) {
       const event = events.find((event) => event.id === id);

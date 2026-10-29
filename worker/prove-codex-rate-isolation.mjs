@@ -25,6 +25,7 @@ const proofModules = [
   "gateway",
   "isolation-holder",
   "isolation-probe",
+  "isolation-access",
   "probe-output",
 ];
 const privateEnvironment = [
@@ -134,6 +135,8 @@ const processFacts = [
   "unprivileged",
   "noNewPrivileges",
   "noCapabilities",
+  "supplementaryGroupsCleared",
+  "rootServiceSocketsDenied",
   "rootEnvironmentDenied",
   "rootDescriptorsDenied",
   "rootFileDenied",
@@ -146,6 +149,8 @@ const sandboxFacts = [
   "unprivileged",
   "noNewPrivileges",
   "noCapabilities",
+  "supplementaryGroupsCleared",
+  "rootServiceSocketsDenied",
   "gatewayNetworkDenied",
   "upstreamNetworkDenied",
   "checkoutWriteDenied",
@@ -298,15 +303,12 @@ export function createProbeEnvironment(fixtures) {
 }
 
 function launchBoundaryCommand(settings, fixtures, command) {
-  const groups = settings.groups.length
-    ? [`--groups=${settings.groups.join(",")}`]
-    : ["--clear-groups"];
   return spawnSync(
     "/usr/bin/setpriv",
     [
       `--reuid=${settings.uid}`,
       `--regid=${settings.gid}`,
-      ...groups,
+      "--clear-groups",
       "--no-new-privs",
       "--bounding-set=-all",
       "--inh-caps=-all",
@@ -504,7 +506,6 @@ async function proveHostedBoundary(env) {
   const settings = {
     uid: process.getuid(),
     gid: process.getgid(),
-    groups: process.getgroups(),
     cliFolder: profile.folder,
     githubHosted: true,
   };

@@ -4,6 +4,7 @@ import { OPENAI_RESPONSES_URL } from "../worker/codex-rate-gateway.mjs";
 import { createAdmissionController } from "../worker/codex-rate-controller.mjs";
 
 import { createRateHttpFixture } from "./codex-rate-http.js";
+import { createRateClock } from "./codex-rate-clock.js";
 
 const tick = () => new Promise((resolve) => setImmediate(resolve));
 function createBudget() {
@@ -193,23 +194,18 @@ test("429 feedback sets one shared deadline and is returned once for native retr
 });
 
 test("request handling waits for provider budget feedback before the next fake upstream send", async (t) => {
-  let time = 0;
+  const clock = createRateClock();
   const calls = [];
   const control = createAdmissionController(
     { tokens: 100, requests: 10, windowMs: 60000, feedbackHeadroom: 0 },
-    {
-      now: () => time,
-      wait: async (ms) => {
-        time += ms;
-      },
-    },
+    clock,
   );
   const fixture = await createRateHttpFixture({
     budget: control,
     estimate: () => 10,
-    now: () => time,
+    now: clock.now,
     send: async () => {
-      calls.push(time);
+      calls.push(clock.now());
       return new Response(
         'data: {"type":"response.completed","response":{"usage":{"input_tokens":1,"output_tokens":1}}}\n\n',
         {
@@ -224,11 +220,16 @@ test("request handling waits for provider budget feedback before the next fake u
   });
   t.after(() => fixture.gateway.close());
   for (let i = 0; i < 2; i++) {
-    const response = await fixture.request({
+    const pending = fixture.request({
       method: "POST",
       headers: { authorization: "Bearer fake-test", "content-type": "application/json" },
       body: JSON.stringify({ stream: true, input: "example" }),
     });
+    if (i === 1) {
+      await tick();
+      await clock.advance(2000);
+    }
+    const response = await pending;
     assert.equal(response.status, 200);
     await response.arrayBuffer();
   }

@@ -1,42 +1,52 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createRateBudget, parseRetryAfter, parseReset } from "../worker/codex-rate-budget.mjs";
+import { createRateClock } from "./codex-rate-clock.js";
 
 const tick = () => new Promise((resolve) => setImmediate(resolve));
-function createClock() {
-  let time = 0;
-  const timers = new Set();
-  return {
-    now: () => time,
-    wait(ms, signal) {
-      return new Promise((resolve, reject) => {
-        const timer = { at: time + ms, resolve };
-        timers.add(timer);
-        signal.addEventListener(
-          "abort",
-          () => {
-            timers.delete(timer);
-            reject(new Error("aborted"));
-          },
-          { once: true },
-        );
-      });
-    },
-    async advance(to) {
-      time = to;
-      for (const timer of [...timers])
-        if (timer.at <= time) {
-          timers.delete(timer);
-          timer.resolve();
-        }
-      await tick();
-    },
-  };
-}
 const policy = { tokens: 100, requests: 100, windowMs: 60000, spacingMs: 0 };
 
+test("FIFO queue time belongs to each caller's admission deadline", async () => {
+  const clock = createRateClock();
+  const budget = createRateBudget({ ...policy, requests: 1, maxWaitMs: 100 }, clock);
+  await budget.reserve(1);
+  const outcomes = [];
+  const queued = [1, 2].map(() =>
+    budget.reserve(1).then(
+      () => outcomes.push("admitted"),
+      (error) => outcomes.push(/wait budget/.test(error.message) ? "expired" : "other"),
+    ),
+  );
+  await tick();
+  await clock.advance(100);
+  const atDeadline = [...outcomes];
+  await clock.advance(200);
+  await Promise.all(queued);
+  assert.deepEqual(atDeadline, ["expired", "expired"]);
+});
+
+test("a caller cancelled behind another waiter rejects before its predecessor", async () => {
+  const clock = createRateClock();
+  const budget = createRateBudget({ ...policy, requests: 1, maxWaitMs: 100 }, clock);
+  await budget.reserve(1);
+  const first = budget.reserve(1).catch(() => {});
+  const controller = new AbortController();
+  let cancelled = false;
+  const second = budget.reserve(1, controller.signal).catch(() => {
+    cancelled = true;
+  });
+  await tick();
+  controller.abort();
+  await tick();
+  const immediatelyCancelled = cancelled;
+  await clock.advance(100);
+  await clock.advance(200);
+  await Promise.all([first, second]);
+  assert.equal(immediatelyCancelled, true);
+});
+
 test("cancelled queued admission makes no reservation and releases its timer", async () => {
-  const clock = createClock();
+  const clock = createRateClock();
   const budget = createRateBudget({ ...policy, requests: 1 }, clock);
   budget.settle(await budget.reserve(1), 1);
   const controller = new AbortController();
@@ -48,7 +58,7 @@ test("cancelled queued admission makes no reservation and releases its timer", a
 });
 
 test("request count blocks a low-token burst until the window expires", async () => {
-  const clock = createClock();
+  const clock = createRateClock();
   const budget = createRateBudget({ ...policy, requests: 1 }, clock);
   budget.settle(await budget.reserve(1), 1);
   let admitted = false;
@@ -65,7 +75,7 @@ test("request count blocks a low-token burst until the window expires", async ()
 });
 
 test("request spacing prevents a burst even when both budgets have capacity", async () => {
-  const clock = createClock();
+  const clock = createRateClock();
   const budget = createRateBudget({ ...policy, spacingMs: 250 }, clock);
   budget.settle(await budget.reserve(1), 1);
   let admitted = false;
@@ -82,7 +92,7 @@ test("request spacing prevents a burst even when both budgets have capacity", as
 });
 
 test("an unresolved request exhausts admission wait instead of freeing unknown usage", async () => {
-  const clock = createClock();
+  const clock = createRateClock();
   const budget = createRateBudget({ ...policy, requests: 1, maxWaitMs: 100 }, clock);
   await budget.reserve(1);
   const next = assert.rejects(budget.reserve(1), /wait budget exhausted/);
@@ -94,7 +104,7 @@ test("an unresolved request exhausts admission wait instead of freeing unknown u
 });
 
 test("bursts and rolling-window expiry cannot oversubscribe token capacity", async () => {
-  const clock = createClock();
+  const clock = createRateClock();
   const budget = createRateBudget(policy, clock);
   const first = await budget.reserve(80);
   budget.settle(first, 80);
@@ -112,7 +122,7 @@ test("bursts and rolling-window expiry cannot oversubscribe token capacity", asy
 });
 
 test("concurrent admission reserves atomically and actual lower usage wakes the next waiter", async () => {
-  const clock = createClock();
+  const clock = createRateClock();
   const budget = createRateBudget(policy, clock);
   const first = await budget.reserve(70);
   let admitted = false;
@@ -132,7 +142,7 @@ test("concurrent admission reserves atomically and actual lower usage wakes the 
 });
 
 test("unknown usage retains its reservation and is never exported as observed zero", async () => {
-  const clock = createClock();
+  const clock = createRateClock();
   const budget = createRateBudget(policy, clock);
   const first = await budget.reserve(100);
   budget.settle(first, null);
@@ -150,7 +160,7 @@ test("unknown usage retains its reservation and is never exported as observed ze
 });
 
 test("observed overshoot becomes debt rather than being truncated to an estimate", async () => {
-  const clock = createClock();
+  const clock = createRateClock();
   const budget = createRateBudget(policy, clock);
   budget.settle(await budget.reserve(10), 120);
   assert.equal(budget.readSnapshot().events[0].charge, 120);
