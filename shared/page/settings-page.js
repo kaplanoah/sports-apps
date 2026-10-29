@@ -29,7 +29,7 @@ export function showSettingsPage(dialog) {
  */
 export function wireSettingsPage(dialog, { button, open, ...sheet }) {
   setHtml(button, html`${button.textContent.trim()}${SETTINGS_CARET}`);
-  button.addEventListener("click", () => runAfterPress(button, open));
+  button.addEventListener("click", open);
   dialog.addEventListener("close", () => button.focus());
   wireSheet(dialog, sheet);
   keepDialogFor(dialog, START_AFTER_AWAY_MS);

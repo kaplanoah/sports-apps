@@ -2,6 +2,74 @@ import { holdClock } from "./harness.mjs";
 import { openContact, serveContact } from "./contact-views.mjs";
 
 /**
+ * Measures each Settings page row, its words, and its caret, and how far the rows lift their words
+ * over their middles.
+ * @param {import("@playwright/test").Page} page
+ */
+async function measurePageRows(page) {
+  const rows = await page.locator("#settingsDialog .settings-page-row").evaluateAll((buttons) =>
+    buttons.map((button) => {
+      const words = document.createRange();
+      words.selectNodeContents(
+        [...button.childNodes].find(
+          (node) => node.nodeType === Node.TEXT_NODE && node.textContent.trim(),
+        ),
+      );
+      const text = words.getBoundingClientRect();
+      const box = button.getBoundingClientRect();
+      const caret = button.querySelector("svg").getBoundingClientRect();
+      return {
+        top: box.top,
+        bottom: box.bottom,
+        line: Number.parseFloat(getComputedStyle(button).borderTopWidth),
+        textTop: text.top,
+        textBottom: text.bottom,
+        caretMiddle: (caret.top + caret.bottom) / 2,
+      };
+    }),
+  );
+  const lift = await page.evaluate(
+    () =>
+      Number.parseFloat(
+        getComputedStyle(document.documentElement).getPropertyValue("--lowercase-lift"),
+      ) / 2,
+  );
+  return { rows, lift };
+}
+
+/**
+ * Finds, for each shown part of settings the selector matches, the bottom of the nearest line above
+ * its top, from any border drawn there.
+ * @param {import("@playwright/test").Page} page
+ * @param {string} selector
+ */
+function findLinesAbove(page, selector) {
+  return page.locator("#settingsDialog").evaluate((settings, partSelector) => {
+    const lineBottoms = [...settings.querySelectorAll("*")].flatMap((part) => {
+      const style = getComputedStyle(part);
+      const box = part.getBoundingClientRect();
+      if (!box.width) return [];
+      const bottoms = [];
+      if (style.borderTopStyle !== "none" && Number.parseFloat(style.borderTopWidth))
+        bottoms.push(box.top + Number.parseFloat(style.borderTopWidth));
+      if (style.borderBottomStyle !== "none" && Number.parseFloat(style.borderBottomWidth))
+        bottoms.push(box.bottom);
+      return bottoms;
+    });
+    return [...settings.querySelectorAll(partSelector)]
+      .filter((part) => part.getClientRects().length)
+      .map((part) => {
+        const { top } = part.getBoundingClientRect();
+        return {
+          name: part.textContent.trim(),
+          top,
+          lineAbove: Math.max(...lineBottoms.filter((bottom) => bottom <= top + 0.5)),
+        };
+      });
+  }, selector);
+}
+
+/**
  * @param {any} test
  * @param {any} expect
  * @param {{ openApp: (page: import("@playwright/test").Page) => Promise<unknown>, settingsPages: string[] }} options
@@ -41,6 +109,25 @@ export function testSettingsContactInteractions(test, expect, { openApp, setting
     }
   });
 
+  test("a tap on a Settings page row opens its page at once, with no wait for the row's press", async ({
+    page,
+  }) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await openApp(page);
+    await page.getByRole("button", { name: "Settings", exact: true }).click();
+    await holdClock(page);
+    for (const name of settingsPages) {
+      const opener = page.locator(`#${name.toLowerCase()}Btn`);
+      const dialog = page.locator(`#${name.toLowerCase()}Dialog`);
+      await opener.tap();
+      await expect(opener).toHaveClass(/\bis-pressed\b/);
+      await expect.poll(() => dialog.evaluate((sheet) => sheet.open)).toBe(true);
+      await page.keyboard.press("Escape");
+      await page.clock.runFor(1000);
+      await expect(dialog).toBeHidden();
+    }
+  });
+
   test("Settings page rows are one height, with each line between them as far from the text above as below, and the line above the first as far from its text as those lines are", async ({
     page,
   }) => {
@@ -48,54 +135,70 @@ export function testSettingsContactInteractions(test, expect, { openApp, setting
     await openApp(page);
     await page.getByRole("button", { name: "Settings", exact: true }).click();
     await expect(page.locator("#contactBtn")).toBeVisible();
-    const rows = await page.locator("#settingsDialog .settings-page-row").evaluateAll((buttons) =>
-      buttons.map((button) => {
-        const words = document.createRange();
-        words.selectNodeContents(
-          [...button.childNodes].find(
-            (node) => node.nodeType === Node.TEXT_NODE && node.textContent.trim(),
-          ),
-        );
-        const text = words.getBoundingClientRect();
-        const box = button.getBoundingClientRect();
-        const line = Number.parseFloat(getComputedStyle(button).borderTopWidth);
-        return {
-          top: box.top,
-          bottom: box.bottom,
-          line,
-          textTop: text.top,
-          textBottom: text.bottom,
-        };
-      }),
-    );
+    const { rows, lift } = await measurePageRows(page);
     expect(rows).toHaveLength(settingsPages.length);
     for (const row of rows) expect(row.bottom - row.top).toBe(rows[0].bottom - rows[0].top);
     for (const [above, below] of rows.slice(1).map((row, index) => [rows[index], row])) {
       expect(below.line).toBe(1);
       expect(below.top).toBe(above.bottom);
-      const spaceAbove = below.top - above.textBottom;
-      const spaceBelow = below.textTop - (below.top + below.line);
+      const spaceAbove = below.top - (above.textBottom + lift);
+      const spaceBelow = below.textTop + lift - (below.top + below.line);
       expect(Math.abs(spaceAbove - spaceBelow)).toBeLessThanOrEqual(1);
     }
-    const lineAboveFirst = await page.locator("#settingsDialog").evaluate((settings) => {
-      const firstTop = settings.querySelector(".settings-page-row").getBoundingClientRect().top;
-      const lineBottoms = [...settings.querySelectorAll("*")].flatMap((part) => {
-        const style = getComputedStyle(part);
-        const box = part.getBoundingClientRect();
-        if (!box.width) return [];
-        const bottoms = [];
-        if (style.borderTopStyle !== "none" && Number.parseFloat(style.borderTopWidth))
-          bottoms.push(box.top + Number.parseFloat(style.borderTopWidth));
-        if (style.borderBottomStyle !== "none" && Number.parseFloat(style.borderBottomWidth))
-          bottoms.push(box.bottom);
-        return bottoms;
-      });
-      return Math.max(...lineBottoms.filter((bottom) => bottom <= firstTop + 0.5));
-    });
+    const [{ lineAbove }] = await findLinesAbove(page, ".settings-page-row");
     const [first] = rows;
-    const spaceUnderLine = first.textTop - lineAboveFirst;
+    const spaceUnderLine = first.textTop - lineAbove;
     const spaceUnderLineBetween = first.textTop - (first.top + first.line);
     expect(Math.abs(spaceUnderLine - spaceUnderLineBetween)).toBeLessThanOrEqual(1);
+  });
+
+  test("a Settings page row lifts its words as search lifts its examples, its caret beside them", async ({
+    page,
+  }) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await openApp(page);
+    await page.getByRole("button", { name: "Settings", exact: true }).click();
+    await expect(page.locator("#contactBtn")).toBeVisible();
+    const { rows, lift } = await measurePageRows(page);
+    expect(lift).toBeGreaterThan(0);
+    for (const row of rows) {
+      const rowMiddle = (row.top + row.line + row.bottom) / 2;
+      const wordsMiddle = (row.textTop + row.textBottom) / 2;
+      expect(rowMiddle - wordsMiddle).toBeCloseTo(lift, 1);
+      expect(Math.abs(row.caretMiddle - wordsMiddle)).toBeLessThanOrEqual(0.5);
+    }
+    await page.keyboard.press("Escape");
+    await expect(page.locator("#settingsDialog")).toBeHidden();
+    await page.locator("#tab-search").tap();
+    const examplePadding = await page
+      .locator(".search-example")
+      .first()
+      .evaluate((example) => {
+        const style = getComputedStyle(example);
+        return Number.parseFloat(style.paddingBottom) - Number.parseFloat(style.paddingTop);
+      });
+    expect(examplePadding / 2).toBe(lift);
+  });
+
+  test("every group's heading in Settings sits a section's gap below the line above it", async ({
+    page,
+  }) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await openApp(page);
+    await page.getByRole("button", { name: "Settings", exact: true }).click();
+    await expect(page.locator("#notificationsGroup")).toBeVisible();
+    const sectionGap = await page
+      .locator("#settingsDialog")
+      .evaluate((settings) =>
+        Number.parseFloat(getComputedStyle(settings).getPropertyValue("--section-gap")),
+      );
+    const headings = await findLinesAbove(page, ".settings-group-label");
+    expect(headings.map(({ name }) => name)).toEqual(["Notifications", "News"]);
+    for (const { name, top, lineAbove } of headings)
+      expect({ name, spaceUnderLine: top - lineAbove }).toEqual({
+        name,
+        spaceUnderLine: sectionGap,
+      });
   });
 
   test("search opens each page of settings itself, with no click on its row", async ({ page }) => {

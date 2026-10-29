@@ -38,6 +38,10 @@
   --type-field-size: 1rem;
   /* How far apart a font's lines sit, as a share of every line height set by its text's size. */
   --leading: 1;
+  /* Words mostly in lowercase carry their weight low, so they look low centered in a row, as a
+     search example or a settings page's name does. A row holding them pads this much more under
+     them than over them. */
+  --lowercase-lift: 3px;
   /* Safari on an iPhone otherwise enlarges some text on a turn to landscape and can keep it big
      on the turn back. */
   -webkit-text-size-adjust: 100%;
