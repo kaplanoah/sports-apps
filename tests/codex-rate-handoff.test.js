@@ -42,6 +42,21 @@ function createRun(id, created, status) {
   };
 }
 
+function packageQuotaRecord(record, name) {
+  return execFileSync(
+    "python3",
+    [
+      "-I",
+      "-c",
+      'import io,json,sys,zipfile\na=json.load(sys.stdin)\nb=io.BytesIO()\nwith zipfile.ZipFile(b,"w",zipfile.ZIP_DEFLATED) as z: z.writestr(a["name"],json.dumps(a["record"]))\nsys.stdout.buffer.write(b.getvalue())',
+    ],
+    {
+      input: JSON.stringify({ name: name, record }),
+      stdio: ["pipe", "pipe", "ignore"],
+    },
+  );
+}
+
 /** @param {(fixture:any)=>void} [change] */
 function createFixture(change = () => {}) {
   const current = createRun(30, start + 1000, "in_progress");
@@ -117,20 +132,17 @@ function createFixture(change = () => {}) {
     extraRuns: [],
     extraArtifacts: [],
     trailingArtifacts: [],
+    ownProducer: null,
   };
   change(fixture);
-  const archive = execFileSync(
-    "python3",
-    [
-      "-I",
-      "-c",
-      'import io,json,sys,zipfile\na=json.load(sys.stdin)\nb=io.BytesIO()\nwith zipfile.ZipFile(b,"w",zipfile.ZIP_DEFLATED) as z: z.writestr(a["name"],json.dumps(a["record"]))\nsys.stdout.buffer.write(b.getvalue())',
-    ],
-    {
-      input: JSON.stringify({ name: fixture.archiveName, record }),
-      stdio: ["pipe", "pipe", "ignore"],
-    },
-  );
+  const archive = packageQuotaRecord(record, fixture.archiveName);
+  const ownArchive = fixture.ownProducer
+    ? packageQuotaRecord(fixture.ownProducer.record, "cooldown.json")
+    : null;
+  if (fixture.ownProducer) {
+    fixture.ownProducer.artifact.digest = `sha256:${createHash("sha256").update(ownArchive).digest("hex")}`;
+    fixture.ownProducer.artifact.size_in_bytes = ownArchive.length;
+  }
   artifact.digest = `sha256:${createHash("sha256").update(archive).digest("hex")}`;
   artifact.size_in_bytes = archive.length;
   fixture.fetchImpl = async (url, options) => {
@@ -158,7 +170,10 @@ function createFixture(change = () => {}) {
     if (path.endsWith("/runs/12")) return Response.json(previous);
     if (path.endsWith("/runs/40")) return Response.json(fixture.carriedRun.run);
     if (path.endsWith("/runs/40/jobs")) return Response.json({ jobs: [fixture.carriedRun.job] });
-    if (path.endsWith("/runs/30/jobs")) return Response.json({ jobs: [job] });
+    if (path.endsWith("/runs/30/jobs"))
+      return Response.json({
+        jobs: [...(fixture.ownProducer ? [fixture.ownProducer.job] : []), job],
+      });
     if (path.endsWith("/runs/12/jobs")) {
       fixture.previousJobReads++;
       return Response.json({
@@ -187,7 +202,10 @@ function createFixture(change = () => {}) {
       );
       return Response.json({ workflow_runs: [...extra, ...runs] });
     }
-    if (path.endsWith("/runs/30/artifacts")) return Response.json({ artifacts: [] });
+    if (path.endsWith("/runs/30/artifacts"))
+      return Response.json({
+        artifacts: fixture.ownProducer ? [fixture.ownProducer.artifact] : [],
+      });
     if (path.endsWith("/artifacts")) {
       if (fixture.denied) return new Response("denied", { status: 403 });
       return Response.json({
@@ -198,10 +216,13 @@ function createFixture(change = () => {}) {
             : fixture.duplicate
               ? [artifact, artifact]
               : [artifact]),
+          ...(fixture.ownProducer ? [fixture.ownProducer.artifact] : []),
           ...fixture.trailingArtifacts,
         ],
       });
     }
+    if (fixture.ownProducer && path.endsWith(`/artifacts/${fixture.ownProducer.artifact.id}/zip`))
+      return new Response(ownArchive);
     if (path.endsWith("/artifacts/5/zip"))
       return new Response(fixture.tampered ? Buffer.from("wrong archive") : archive);
     throw new Error(`Unexpected mocked quota read: ${path}`);
@@ -612,4 +633,38 @@ test("an active workflow with old update metadata cannot disappear from admissio
     };
   });
   await assert.rejects(admit(fixture, later), /active or unverifiable/);
+});
+
+test("an older current-workflow seed cannot hide a later aged global consumer's future cooldown", async () => {
+  const later = start + 800000;
+  const deadline = later + 900000;
+  const fixture = createFixture((value) => {
+    value.record.notBefore = deadline;
+    value.previous.updated_at = new Date(start + 95000).toISOString();
+    value.job.started_at = new Date(later - 500).toISOString();
+    value.ownProducer = {
+      job: {
+        ...value.previousJob,
+        id: 3,
+        run_id: 30,
+        name: "investigate (old) / model",
+        completed_at: new Date(start + 60000).toISOString(),
+      },
+      artifact: {
+        ...value.artifact,
+        id: 6,
+        name: "codex-rate-handoff-3",
+        created_at: new Date(start + 55000).toISOString(),
+        workflow_run: { id: 30, repository_id: 9 },
+      },
+      record: {
+        ...value.record,
+        run: 30,
+        job: 3,
+        completedAt: start + 50000,
+        notBefore: start + 110000,
+      },
+    };
+  });
+  assert.equal((await admit(fixture, later)).notBefore, deadline);
 });

@@ -278,7 +278,7 @@ export async function readNativeQuotaAdmission(
   }
   let seedSearchFinished = false;
   let skipExpiredSeeds = false;
-  for (const path of [`/actions/runs/${currentRun.id}/artifacts`, "/actions/artifacts"]) {
+  for (const path of ["/actions/artifacts", `/actions/runs/${currentRun.id}/artifacts`]) {
     for await (const artifacts of readPages(api, path, (answer) => answer.artifacts)) {
       for (const artifact of artifacts) {
         if (!/^codex-rate-handoff-[1-9]\d*$/.test(artifact.name)) continue;
