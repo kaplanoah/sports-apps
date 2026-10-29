@@ -9,7 +9,7 @@ import { waitForLoadToSettle } from "./at-rest.mjs";
 import { matchPath } from "./harness.mjs";
 import { holdRequests } from "./hold-requests.mjs";
 import { readSeasonPartScroll, readSeasonRide, scrollSeasonPartToEnd } from "./season-scroll.mjs";
-import { findSeasonPill, findSeasonTab } from "./season-tab.mjs";
+import { findSeasonPill, findSeasonTab, openSeasonPart } from "./season-tab.mjs";
 import { writeUnreadableLastSeen } from "./unreadable-last-seen.mjs";
 import { passTime, setHidden } from "./visibility.mjs";
 
@@ -17,6 +17,10 @@ import { passTime, setHidden } from "./visibility.mjs";
 export const SHORT_PHONE = { width: 390, height: 480 };
 
 export const MINUTE_MS = 60 * 1000;
+
+/** @param {import("@playwright/test").Page} page @param {string} selector */
+const readScrollLeft = (page, selector) =>
+  page.locator(selector).evaluate((element) => Math.round(element.scrollLeft));
 
 /**
  * Where the season tab is: the part its pill shows, how far each part and the bracket sideways are
@@ -31,7 +35,7 @@ export async function readSeasonPlace(page, sideways) {
       .getAttribute("data-tab"),
     standingsScroll: await readSeasonPartScroll(page, "standings"),
     bracketScroll: await readSeasonPartScroll(page, "bracket"),
-    bracketLeft: await page.locator(sideways).evaluate((element) => Math.round(element.scrollLeft)),
+    bracketLeft: await readScrollLeft(page, sideways),
     isPillHeld: await page
       .locator("#bracketStandingsPill")
       .evaluate((pill) => pill.classList.contains("held")),
@@ -215,7 +219,7 @@ export async function expectSeasonTabAfterReload(page, { sideways, awayMs }) {
  */
 export async function expectOpeningRoundAfterReload(page, { sideways, changeWhileAway }) {
   const bracket = page.locator(sideways);
-  const readLeft = () => bracket.evaluate((element) => Math.round(element.scrollLeft));
+  const readLeft = () => readScrollLeft(page, sideways);
   const { start } = await moveSeasonTabOffStart(page, sideways);
 
   const release = await reloadAfter(page, 2 * MINUTE_MS);
@@ -238,7 +242,7 @@ export async function expectOpeningRoundAfterReload(page, { sideways, changeWhil
  */
 export async function expectDayStripAfterReload(page, otherDay) {
   const strip = page.locator("#seasonGames .day-strip");
-  const readLeft = () => strip.evaluate((element) => Math.round(element.scrollLeft));
+  const readLeft = () => readScrollLeft(page, "#seasonGames .day-strip");
   const isTodayInStrip = () =>
     strip.locator(".is-today").evaluate((cell) => {
       const shown = /** @type {Element} */ (cell.parentElement?.closest(".day-strip"));
@@ -281,4 +285,34 @@ export async function expectNewsAfterReloads(page, writeDocument) {
   expect(await readPageScroll(page)).toBe(0);
   await runPageCode(page, release);
   expect(await readPageScroll(page)).toBe(0);
+}
+
+/**
+ * Checks a later-round bracket left at zero before a short reload, both before modules arrive
+ * and after their first draw.
+ * @param {import("@playwright/test").Page} page
+ * @param {string} sideways
+ */
+export async function expectBracketZeroAfterReload(page, sideways) {
+  await openSeasonPart(page, "Bracket");
+  const bracket = page.locator(sideways);
+  await page.waitForFunction((selector) => {
+    const element = document.querySelector(selector);
+    return element && Number(element.getAttribute("data-start-left")) > 0;
+  }, sideways);
+  await bracket.evaluate(
+    (element) =>
+      new Promise((resolve) => {
+        element.addEventListener("scroll", () => resolve(null), { once: true });
+        element.scrollTo({ left: 0, behavior: "instant" });
+      }),
+  );
+  const readLeft = () => readScrollLeft(page, sideways);
+  expect(await readLeft()).toBe(0);
+
+  const release = await reloadAfter(page, MINUTE_MS);
+  await expect(bracket).toBeVisible();
+  expect(await readLeft()).toBe(0);
+  await runPageCode(page, release);
+  expect(await readLeft()).toBe(0);
 }
