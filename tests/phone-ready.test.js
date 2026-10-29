@@ -15,6 +15,11 @@ const passedRuns = () => [
   { id: 2, name: "trusted-review", conclusion: "success", app: REVIEW_APP },
 ];
 const heldStatuses = () => [{ context: "phone", state: "pending" }];
+const REQUIRED_CHECKS = [
+  { context: "check", integration_id: ACTIONS_APP.id },
+  { context: "phone", integration_id: ACTIONS_APP.id },
+  { context: "trusted-review", integration_id: REVIEW_APP.id },
+];
 
 /**
  * A red pull request whose phone test is all that's left, with what a test changes of it.
@@ -39,8 +44,9 @@ const createPull = (changes = {}) => ({
  * and comments, recording each request and the comments posted, edited, and deleted. Each head
  * was pushed before any label.
  * @param {ReturnType<typeof createPull>[]} pulls
+ * @param {{ context: string, integration_id?: number }[]} [required] the checks main's rules require
  */
-function createFakeGitHub(pulls) {
+function createFakeGitHub(pulls, required = REQUIRED_CHECKS) {
   const requests = [];
   const posted = [];
   const edited = [];
@@ -58,11 +64,7 @@ function createFakeGitHub(pulls) {
       const { query, variables } = JSON.parse(String(init?.body));
       if (query.includes("timelineItems"))
         return Response.json(createTimelineAnswer(findPull(variables.number).timeline));
-      const threads = findPull(variables.number).threads.map((thread) => ({
-        ...thread,
-        first: { nodes: [] },
-        comments: { totalCount: 0, nodes: [] },
-      }));
+      const { threads } = findPull(variables.number);
       return Response.json({
         data: {
           repository: {
@@ -87,16 +89,7 @@ function createFakeGitHub(pulls) {
       );
     if (path === "/rules/branches/main")
       return Response.json([
-        {
-          type: "required_status_checks",
-          parameters: {
-            required_status_checks: [
-              { context: "check", integration_id: ACTIONS_APP.id },
-              { context: "phone", integration_id: ACTIONS_APP.id },
-              { context: "trusted-review", integration_id: REVIEW_APP.id },
-            ],
-          },
-        },
+        { type: "required_status_checks", parameters: { required_status_checks: required } },
       ]);
     const checkRunsHead = path.match(/^\/commits\/(\w+)\/check-runs$/)?.[1];
     if (checkRunsHead)
@@ -219,17 +212,37 @@ test("no comment while another required check failed", async () => {
   assert.deepEqual(await tell(github), []);
 });
 
-test("a required check reported as a status counts once it succeeds", async () => {
-  const statusOf = (state) =>
-    createFakeGitHub([
-      createPull({
-        checkRuns: [passedRuns()[0]],
-        statuses: [...heldStatuses(), { context: "trusted-review", state }],
-      }),
-    ]);
+test("a required check reported as a status counts once it succeeds, when its rule names no App", async () => {
+  const anyApp = REQUIRED_CHECKS.map(({ context }) => ({ context }));
+  const statusOf = (state, required = anyApp) =>
+    createFakeGitHub(
+      [
+        createPull({
+          checkRuns: [passedRuns()[0]],
+          statuses: [...heldStatuses(), { context: "trusted-review", state }],
+        }),
+      ],
+      required,
+    );
 
   assert.deepEqual(await tell(statusOf("success")), [7]);
   assert.deepEqual(await tell(statusOf("pending")), []);
+  assert.deepEqual(await tell(statusOf("success", REQUIRED_CHECKS)), []);
+});
+
+test("a told comment stays as it is while a required check runs again at its head", async () => {
+  const github = createFakeGitHub([
+    createPull({
+      checkRuns: [...passedRuns(), { id: 3, name: "check", conclusion: null, app: ACTIONS_APP }],
+      comments: [await createToldComment(11)],
+    }),
+  ]);
+
+  assert.deepEqual(await tell(github), []);
+
+  assert.deepEqual(github.deleted, []);
+  assert.deepEqual(github.edited, []);
+  assert.equal(github.posted.length, 0);
 });
 
 test("each check's newest run decides it", async () => {
@@ -345,9 +358,16 @@ test("checks and threads are read only for a pull request the phone status holds
   const github = createFakeGitHub([
     createPull({ statuses: [{ context: "phone", state: "success" }] }),
   ]);
+  const unread = createFakeGitHub([
+    createPull({ number: 1, head: "1".repeat(40), draft: true }),
+    createPull({ number: 2, head: "2".repeat(40), labels: ["review"] }),
+    createPull({ number: 3, head: "3".repeat(40), labels: ["phone-ok"] }),
+  ]);
 
   await tell(github);
+  await tell(unread);
 
+  assert.ok(!unread.requests.some((request) => request.includes("/commits/")));
   assert.ok(github.requests.some((request) => request.endsWith("/status")));
   assert.ok(!github.requests.some((request) => request.includes("/check-runs")));
   assert.ok(!github.requests.includes("POST /graphql"));

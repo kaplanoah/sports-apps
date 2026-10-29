@@ -1,15 +1,16 @@
 name: Phone ready
 
 # Tells the owner on a red pull request when their phone test is all that's left. CI and the
-# trusted review each finish on their own, and a thread can be resolved after both, so whichever
-# comes last finds the pull request ready. CI starting at a push takes down the comment the push
-# outdated, and the review's reconcile, which runs on a label, keeps its beta line current.
+# trusted review each finish on their own, so whichever comes last finds the pull request ready.
+# CI starting at a push takes down the comment the push outdated, and the review's reconcile, which
+# runs on a label, keeps its beta line current. Resolving a thread starts no workflow, so a run on
+# the quarter hour finds a pull request whose last open thread was resolved after both.
 on:
   workflow_run:
     workflows: [CI, Reconcile trusted review]
     types: [requested, completed]
-  pull_request_review_thread:
-    types: [resolved, unresolved]
+  schedule:
+    - cron: "2,17,32,47 * * * *"
 
 permissions:
   contents: read
@@ -24,11 +25,10 @@ concurrency:
 
 jobs:
   tell:
-    # A reconcile starting changes nothing yet, and a fork's thread event has a read-only token.
+    # A reconcile starting changes nothing yet.
     if: >-
-      (github.event_name == 'workflow_run' && (github.event.workflow_run.name == 'CI' ||
-      github.event.action == 'completed')) || (github.event_name == 'pull_request_review_thread' &&
-      github.event.pull_request.head.repo.full_name == github.repository)
+      github.event_name == 'schedule' || github.event.workflow_run.name == 'CI' ||
+      github.event.action == 'completed'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:

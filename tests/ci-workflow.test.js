@@ -21,7 +21,10 @@ import {
   readStepInput,
   readStepScript,
 } from "./workflow-step.js";
-import { PHONE_CONTEXT as EXPECTED_PHONE_CONTEXT } from "../worker/labeling.mjs";
+import {
+  PHONE_CONTEXT as EXPECTED_PHONE_CONTEXT,
+  REVIEW_LABEL as EXPECTED_REVIEW_LABEL,
+} from "../worker/labeling.mjs";
 import { MUTATION_TARGETS } from "../worker/mutation-targets.mjs";
 import { WEBKIT_TEST_MATCH } from "./browser/projects.mjs";
 
@@ -47,6 +50,52 @@ test("every workflow's actions are pinned to a commit", () => {
         /^[\w.-]+\/[\w./-]+@[0-9a-f]{40}$|^\.\/\.github\/workflows\/[\w-]+\.yml$/,
         `${workflow}: ${action}`,
       );
+  }
+});
+
+// GitHub refuses a whole workflow over one event it can't start a run on, so the workflow's other
+// events silently start nothing either.
+test("every workflow starts only on events Actions has", () => {
+  const actionsEvents = new Set([
+    "branch_protection_rule",
+    "check_run",
+    "check_suite",
+    "create",
+    "delete",
+    "deployment",
+    "deployment_status",
+    "discussion",
+    "discussion_comment",
+    "fork",
+    "gollum",
+    "issue_comment",
+    "issues",
+    "label",
+    "merge_group",
+    "milestone",
+    "page_build",
+    "public",
+    "pull_request",
+    "pull_request_review",
+    "pull_request_review_comment",
+    "pull_request_target",
+    "push",
+    "registry_package",
+    "release",
+    "repository_dispatch",
+    "schedule",
+    "status",
+    "watch",
+    "workflow_call",
+    "workflow_dispatch",
+    "workflow_run",
+  ]);
+  for (const workflow of WORKFLOWS) {
+    const triggers = readRepoFile(`.github/workflows/${workflow}`).match(/^on:\n((?: .*\n|\n)+)/m);
+    assert.ok(triggers, `${workflow} names its events in a block`);
+    const events = [...triggers[1].matchAll(/^ {2}(\w+):/gm)].map(([, event]) => event);
+    assert.ok(events.length > 0, workflow);
+    for (const event of events) assert.ok(actionsEvents.has(event), `${workflow}: ${event}`);
   }
 });
 
@@ -737,6 +786,7 @@ test("CI's recovery message names the label Trusted review actually consumes", (
     readRepoFile(`.github/workflows/${workflow}`).match(/^ {2}REVIEW_LABEL: (\S+)$/m)?.[1];
   assert.ok(label(REVIEW_WORKFLOW));
   assert.equal(label("ci.yml"), label(REVIEW_WORKFLOW));
+  assert.equal(label(REVIEW_WORKFLOW), EXPECTED_REVIEW_LABEL, "Phone ready reads the same label");
 });
 
 test("check rejects a joined tree different from its recorded code before publishing passing evidence", () => {

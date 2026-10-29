@@ -4,6 +4,7 @@ import { createGitHub, createGraphQL, readAllPages } from "./github-api.mjs";
 
 export const PHONE_CONTEXT = "phone";
 export const PHONE_OK_LABEL = "phone-ok";
+export const REVIEW_LABEL = "review";
 const ACTIONS_APP = "github-actions";
 
 /**
