@@ -6,7 +6,7 @@
  * and settings box that ask a phone's browser to add the page to the Home Screen, with the title
  * and button the access code's page takes from gate.css, which apps link too, the note a slow load
  * shows, the header's line while the page catches up and the sweep through its lines once it has,
- * the spokes a pull to refresh shows. Diagnostics, at the very end of settings, are diagnostics.css's. Apps link it
+ * the spokes a pull to refresh shows, and the words only a voice reads. Diagnostics, at the very end of settings, are diagnostics.css's. Apps link it
  * before their own styles.css, which lays out the rest of the page and may refine these rules.
  *
  * An app's :root defines these tokens:
@@ -112,6 +112,8 @@ nav.tabs {
   display: flex;
   margin-bottom: 28px;
 }
+/* The tabs and search, one tablist inside the nav landmark, lay out as the nav's own children. */
+.tab-row,
 .tab-bar {
   display: contents;
 }
@@ -204,6 +206,21 @@ section.view.active {
   flex-direction: column;
   height: 100%;
   padding-bottom: 0;
+}
+/* The main landmark holds the views, so it takes the room the header leaves and lays them out as
+   the body would, what's taller than it overflowing it as it would the body. */
+:root:has(.view.active > :is(.day-view, .season-parts)) main {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  min-height: 0;
+}
+/* A view that keeps its own place (kept-place.js) opts out of the browser's scroll anchoring, and so
+   does the main landmark while it shows, since Chrome anchors on the landmark when nothing in it
+   is left to anchor on. */
+.view[data-kept-place],
+main:has(> .view.active[data-kept-place]) {
+  overflow-anchor: none;
 }
 @media (max-width: 779px) {
   :root {
@@ -506,7 +523,8 @@ section.view.active:not([data-follows]):has(> :is(.day-view, .season-parts)) {
 .sheet-head:has(> .sheet-back:not([hidden])) > .sheet-close {
   display: none;
 }
-:is(.sheet-close-label, .sheet-back-label) {
+/* Words a voice reads that the eye can do without, like what a button opens after what it shows. */
+:is(.sheet-close-label, .sheet-back-label, .spoken-only) {
   position: absolute;
   width: 1px;
   height: 1px;

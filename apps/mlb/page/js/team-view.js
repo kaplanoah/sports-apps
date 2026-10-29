@@ -27,7 +27,7 @@ import {
   renderTeamDot,
 } from "./clubs.js";
 import { readSlateGameDay } from "./dates.js";
-import { describeGameLabel, describeInning, describeStart } from "./games-view.js";
+import { describeInning, describeStart } from "./games-view.js";
 import { renderLeaders } from "./leaders-view.js";
 import {
   DIVISION_ELIMINATION_TITLE,
@@ -283,7 +283,6 @@ function describeGameCard(game, id) {
   const other = isHome ? game.away : game.home;
   return {
     id: nameGameKey(game),
-    label: describeGameLabel(game),
     state: game.state,
     day: readSlateGameDay(game),
     clock: game.state === "live" ? describeInning(game) : "",

@@ -38,7 +38,7 @@ async function openDodgersFromGame(page) {
   await expectShown(gameSheet);
   await gameSheet
     .locator("#gameBody .game-row")
-    .getByRole("button", { name: "Team details: Dodgers" })
+    .getByRole("button", { name: /^Dodgers\b.*team details$/ })
     .click();
   const teamSheet = page.locator("#teamSheet");
   await expect(teamSheet.locator("#teamTitle")).toContainText("Dodgers");

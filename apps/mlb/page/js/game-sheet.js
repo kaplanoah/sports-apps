@@ -110,9 +110,8 @@ function renderStarter(side) {
 /** @param {any[]} sides */
 function renderStarters(sides) {
   if (!sides.some((side) => side.starter?.name)) return html``;
-  const label = `Pitching matchup: ${sides.map(nameStarter).join(" vs ")}`;
-  return html`<button type="button" class="starters-open press-tint" aria-label="${label}">
-    ${renderStarter(sides[0])}<span class="starters-versus">vs</span>${renderStarter(sides[1])}${STARTERS_CARET}
+  return html`<button type="button" class="starters-open press-tint">
+    ${renderStarter(sides[0])}<span class="starters-versus">vs</span>${renderStarter(sides[1])}${STARTERS_CARET}<span class="spoken-only">, pitching matchup</span>
   </button>`;
 }
 

@@ -1,4 +1,4 @@
-import { describeDay, formatClockTime, formatShortDate, isStillToComeToday } from "#shared/days.js";
+import { describeDay, formatClockTime, isStillToComeToday } from "#shared/days.js";
 import { renderGameCards } from "#shared/game-cards.js";
 import { html, joinWithSeparator } from "#shared/html.js";
 import { renderSheetPart } from "#shared/sheet-part.js";
@@ -434,12 +434,6 @@ const readNearestGames = (season, team) =>
     mapSeriesById(season.series),
   );
 
-/** @param {Game} game */
-function describeCardDay(game) {
-  const day = readGameDay(game);
-  return day ? formatShortDate(day) : "";
-}
-
 /**
  * @param {Game} game
  * @param {string} team
@@ -451,7 +445,6 @@ function describeGameCard(game, team) {
   const own = game[place].score;
   return {
     id: game.id,
-    label: `${nameTeam(game.away.team)} at ${nameTeam(game.home.team)}, ${describeCardDay(game)}`,
     state: /** @type {"final" | "live" | "pre"} */ (game.state),
     day: readGameDay(game),
     clock: game.state === "live" ? describeLiveClock(game) : "",

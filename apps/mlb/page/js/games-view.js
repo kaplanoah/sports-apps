@@ -202,7 +202,7 @@ const nameSide = (id) => (id ? nameTeam(id) : "TBD");
 export const nameGame = (game) => `${nameSide(game.away)} @ ${nameSide(game.home)}`;
 
 /** @param {{ date: string, away?: string, home?: string, series?: string, number?: number }} game */
-export function describeGameLabel(game) {
+function describeGameLabel(game) {
   const clubs = `${nameSide(game.away)} at ${nameSide(game.home)}`;
   const day = formatGameDay(game.date);
   return isSeriesGame(game) ? `${clubs}, ${nameSeriesGame(game)}, ${day}` : `${clubs}, ${day}`;

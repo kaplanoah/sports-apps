@@ -49,7 +49,7 @@ test.describe("with reduced motion", () => {
     await expect(page.locator("#seasonGames .strip-month")).toHaveText("September");
     const today = findCell(page, "2026-09-30");
     await expect(today).toHaveAttribute("aria-current", "date");
-    await expect(today).toHaveAttribute("aria-label", "Wednesday, September 30");
+    await expect(today).toHaveAccessibleName(/^Today\b.*\b30\b.*Wednesday, September$/);
 
     const listed = await page
       .locator("#seasonGames .listed-day")
@@ -205,13 +205,13 @@ test.describe("with reduced motion", () => {
   }) => {
     await openSeasonGames(page);
     await expectDayAtTop(page, "2026-09-30");
-    await expect(findCell(page, "2026-09-30")).toHaveText(/^Today\s*30$/);
-    await expect(findCell(page, "2026-09-29")).toHaveText(/^Tue\s*29$/);
+    await expect(findCell(page, "2026-09-30")).toHaveText(/^Today\s*30\b/);
+    await expect(findCell(page, "2026-09-29")).toHaveText(/^Tue\s*29\b/);
 
     await findCell(page, "2026-09-20").click();
     await expectDayAtTop(page, "2026-09-20");
 
-    await expect(findCell(page, "2026-09-30")).toHaveText(/^Today\s*30$/);
+    await expect(findCell(page, "2026-09-30")).toHaveText(/^Today\s*30\b/);
   });
 
   test("a tap on a date without games brings in its No games row, which leaves once it's out of sight, without moving the list", async ({

@@ -120,7 +120,7 @@ function readLastTwoPlaces(score) {
  */
 export function renderScoreboard(score, { isLoser = false } = {}) {
   return html`<span class="scoreboard${isLoser ? " lost" : ""}"
-    ><span class="scoreboard-text">${score}</span>${HUNDREDS.get((score ?? 0) >= 100)}${readLastTwoPlaces(
+    ><span class="spoken-only scoreboard-text">${score}</span>${HUNDREDS.get((score ?? 0) >= 100)}${readLastTwoPlaces(
       score,
     ).map(renderDigit)}</span
   >`;
