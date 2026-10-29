@@ -214,6 +214,7 @@ Pages link these before their own stylesheet, and theme them with the tokens the
 - `game-row.css`: a game row and an All-Star team's star
 - `sheet.css`: a sheet a tap opens and its parts
 - `chip.css`: every chip, like Bonus, a status beside a title, or a rank tag
+- `team-line.css`: font-based positions of team names, marks, and their attachments
 - `team-sheet.css`: a team's sheet and the buttons that open one
 - `row-button.css`: a table's row that opens wherever it's tapped
 - `game-cards.css`: the cards of a team's nearest games
