@@ -72,6 +72,7 @@ declare const KEPT_SWITCHES: string;
 declare function followSeasonPart(part?: HTMLElement): void;
 declare function listAboveSeasonView(): HTMLElement[];
 declare function listPageParts(): HTMLElement[];
+declare function readPulledBy(element: HTMLElement): number;
 declare function isInFlow(element: Element): boolean;
 declare function drawChannelTagAge(): void;
 
