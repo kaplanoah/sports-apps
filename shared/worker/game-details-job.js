@@ -6,19 +6,21 @@ import { noteFailure, runWithStatus } from "./job-status.js";
 // Keeps each finished game's details, like its box score, so a sheet opened on a final reads only
 // the store. A game is read as the store finds it final, and again until a read comes long enough
 // after its end for the league to have caught up on its last plays, and then never again, since a
-// finished game doesn't change, or once it has gone a couple of hours without settling. Each run
-// reads a few games: the current season's first, in the order the league lists them, then each
-// season's the store keeps from before, newest first. A season before the current one whose every
-// final is read is never looked through again, and only a season's finals' reads are kept, so the
-// reads never outgrow the season. A league that keeps more of a game raises its version, and each
-// final kept before is read once more. A game still to start or being played is left to the pages
-// watching it. Each run saves how it went in `games/status`.
+// finished game doesn't change, or once it has gone a couple of hours without settling. A game
+// whose details stand in for the league's own is read every hour after that, until they don't.
+// Each run reads a few games: the current season's first, in the order the league lists them, then
+// each season's the store keeps from before, newest first. A season before the current one whose
+// every final is read is never looked through again, and only a season's finals' reads are kept, so
+// the reads never outgrow the season. A league that keeps more of a game raises its version, and
+// each final kept before is read once more. A game still to start or being played is left to the
+// pages watching it. Each run saves how it went in `games/status`.
 
 const MINUTE_MS = 60 * 1000;
 const RUN_DELAY_MS = 2 * MINUTE_MS;
 const GAMES_PER_RUN = 4;
 const RETRY_MS = 10 * MINUTE_MS;
 const GIVE_UP_MS = 2 * 60 * MINUTE_MS;
+const STAND_IN_RETRY_MS = 60 * MINUTE_MS;
 const STATUS_KEY = "games/status";
 
 /** @typedef {import("./season-store.js").JobContext} JobContext */
@@ -34,6 +36,8 @@ const STATUS_KEY = "games/status";
  *   a game's details, with what's stored standing in for any part that didn't answer, and whether
  *   every part answered as it will stay; throws when none answered
  * @property {(id: string) => string} nameKey where the store keeps a game's details
+ * @property {(details: any) => boolean} [isStandIn] whether details kept stand in for the league's
+ *   own, so the game is read again past giving up, less often, until they don't
  * @property {number} [version] how much of a game the league keeps, raised when that grows
  */
 
@@ -59,7 +63,9 @@ const findCurrentRead = (read, version) => ((read?.version ?? 0) === version ? r
  */
 function isDue(read, { now, version }) {
   const current = findCurrentRead(read, version);
-  return !current || (!current.isDone && now - current.readAt >= RETRY_MS);
+  if (!current) return true;
+  const retryMs = current.readAt - current.firstReadAt >= GIVE_UP_MS ? STAND_IN_RETRY_MS : RETRY_MS;
+  return !current.isDone && now - current.readAt >= retryMs;
 }
 
 /**
@@ -75,10 +81,12 @@ async function keepGame(context, league, game, read) {
   const version = league.version ?? 0;
   const key = league.nameKey(game.id);
   const stored = await context.docs.read(key);
+  let kept = stored;
   let isWhole = false;
   try {
     const answer = await league.readDetails(context, game, stored);
     if (!isSameJson(stored, answer.details)) await context.docs.write(key, answer.details);
+    kept = answer.details;
     isWhole = answer.isWhole;
   } catch (error) {
     noteFailure(context.failures, `Reading game ${game.id}'s details`, error);
@@ -86,10 +94,11 @@ async function keepGame(context, league, game, read) {
   const now = context.now();
   const firstReadAt = findCurrentRead(read, version)?.firstReadAt ?? now;
   const isSettled = isWhole && now >= findSettledTime(game);
+  const isStandIn = !!kept && (league.isStandIn?.(kept) ?? false);
   return {
     firstReadAt,
     readAt: now,
-    isDone: isSettled || now - firstReadAt >= GIVE_UP_MS,
+    isDone: isSettled || (!isStandIn && now - firstReadAt >= GIVE_UP_MS),
     version,
   };
 }

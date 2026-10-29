@@ -49,7 +49,7 @@ paths:
   - Scores show in scoreboard digits (`page/js/scoreboard.js`).
   - The game sheet:
     - The Worker serves each game's box score and preview for the game sheet (`worker/src/box-score.js` and `preview.js`).
-    - While the league refuses a game's box score, the Worker reads it from ESPN's game summary, giving each player the league's id from the season's list of players (`worker/src/espn-box-score.js`). The store keeps reading a final kept from ESPN's until the league's answers.
+    - While the league refuses a game's box score, the Worker reads it from ESPN's game summary, giving each player the league's id from the season's list of players (`worker/src/espn-box-score.js`). The store reads a final kept from ESPN's again, every ten minutes for two hours and every hour after, until the league's answers, and never replaces the league's with ESPN's.
     - The store reads a live game's box score and lead with each update while a page has its sheet open, and pushes them to that page (`worker/src/watched-games.js`).
     - The store keeps each finished game's box score and lead for good, read as it ends and once more after the league and ESPN catch up, and a few at a time back through each season it keeps (`worker/src/game-details-updater.js`).
     - The store keeps each upcoming game's meetings from the schedule each update reads, so the sheet's routes read the league only for what the store doesn't keep (the shared `store-reads.js`).

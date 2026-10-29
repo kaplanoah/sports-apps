@@ -13,7 +13,7 @@ import { fetchWnbaJson, LIVE_CACHE_SECONDS } from "./wnba.js";
 // game still being played, or one the store hasn't kept yet.
 
 /** @typedef {import("../../../../shared/worker/store-reads.js").ReadDoc} ReadDoc */
-/** @typedef {{ id: string, away: string, home: string, start: string }} Game */
+/** @typedef {NonNullable<ReturnType<typeof readGame>>} Game */
 
 // The league's CDN has no box score for a game that hasn't started, and says so with a 403.
 const NOT_YET_STATUSES = [403, 404];

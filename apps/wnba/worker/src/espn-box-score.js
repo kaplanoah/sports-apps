@@ -1,22 +1,11 @@
 import { readEspnGameState } from "../../page/js/snapshot.js";
 import { findTeamCodeByEspnId } from "../../page/js/teams.js";
+import { readNameLetters } from "../../../../shared/worker/injury-report.js";
 
 // ESPN's game summary read as the league's box score (box-score.js), for while the league's CDN
 // doesn't answer. ESPN numbers its players its own way, so each takes the league's id, which opens
 // her sheet, from the season's list of players by her name on her team; one the list doesn't name
 // has none.
-
-/**
- * A name as both ESPN and the league write it, without accents, punctuation, or case.
- * @param {string} name
- */
-const normalizeName = (name) =>
-  name
-    .normalize("NFD")
-    .replace(/[^A-Za-z ]/g, "")
-    .replace(/\s+/g, " ")
-    .trim()
-    .toLowerCase();
 
 /**
  * A team's players on the season's list, by name.
@@ -28,7 +17,7 @@ const mapPlayersByName = (index, team) =>
     (index?.players ?? [])
       .filter((/** @type {any} */ player) => player.team === team)
       .map((/** @type {any} */ player) => [
-        normalizeName(`${player.firstName} ${player.lastName}`),
+        readNameLetters(`${player.firstName} ${player.lastName}`),
         player,
       ]),
   );
@@ -75,7 +64,7 @@ const countRebounds = (summary, espnId) =>
 function describeEspnPlayer({ athlete, stats }, keys, named) {
   /** @param {string} key */
   const read = (key) => Number(stats[keys.indexOf(key)] ?? 0);
-  const listed = named.get(normalizeName(athlete.displayName));
+  const listed = named.get(readNameLetters(athlete.displayName));
   const [firstName, ...lastNames] = athlete.displayName.split(" ");
   return {
     id: listed ? Number(listed.id) : null,

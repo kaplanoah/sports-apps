@@ -87,7 +87,7 @@ import { describeError, respondError, respondJson, respondMethodNotAllowed } fro
  * @property {(change: { before: Updates, after: Updates, snapshot: Snapshot, now: number }) => object[]} listNotifications
  * @property {(snapshot: Snapshot) => ReturnType<typeof import("../page/reminder-games.js").listTimedReminderGames>} [listReminderGames]
  * @property {string} [detailsCollection] where the details of the games pages have open are kept
- * @property {() => (id: string, snapshot: Snapshot, stored: any, readDoc: (key: string) => Promise<any>) => Promise<object | null>} [createLoadDetails]
+ * @property {() => (id: string, snapshot: Snapshot, stored: any, readDoc: SeasonDocuments["read"]) => Promise<object | null>} [createLoadDetails]
  *   reads a game's details, or answers null while it needs none
  * @property {Record<string, BackgroundJob>} [backgroundJobs]
  * @property {string | null} [release] the commit the Worker was built from, or null outside a

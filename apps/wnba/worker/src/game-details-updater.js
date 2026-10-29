@@ -46,16 +46,35 @@ async function listFinals(context, year) {
 const readAnswer = (result) => (result.status === "fulfilled" ? result.value : null);
 
 /**
+ * Whether a box score is the league's own final.
+ * @param {any} boxScore
+ */
+const isLeagueFinal = (boxScore) => boxScore?.state === "final" && boxScore.source !== "espn";
+
+/**
  * Whether the league answered with a final box score, and ESPN with a lead that's over, or that it
  * has no such game. ESPN's box score stands in only until the league's answers, so it isn't whole.
  * @param {PromiseSettledResult<any>} boxScore
  * @param {PromiseSettledResult<any>} lead
  */
 const isWhole = (boxScore, lead) =>
-  readAnswer(boxScore)?.state === "final" &&
-  readAnswer(boxScore).source !== "espn" &&
+  isLeagueFinal(readAnswer(boxScore)) &&
   lead.status === "fulfilled" &&
   (lead.value?.isOver ?? true);
+
+/**
+ * The box score to keep: the one read, but that ESPN's never replaces the league's final.
+ * @param {any} read
+ * @param {any} kept
+ */
+const chooseBoxScore = (read, kept) =>
+  read?.source === "espn" && isLeagueFinal(kept) ? kept : (read ?? kept);
+
+/**
+ * Whether the box score kept is ESPN's, standing in for the league's.
+ * @param {any} details
+ */
+const isStandIn = (details) => details.boxScore?.source === "espn";
 
 /**
  * A game's box score and lead, each kept as stored when it didn't answer.
@@ -81,7 +100,7 @@ async function readDetails(context, game, stored) {
   const kept = stored ?? NO_DETAILS;
   return {
     details: {
-      boxScore: readAnswer(boxScore) ?? kept.boxScore,
+      boxScore: chooseBoxScore(readAnswer(boxScore), kept.boxScore),
       lead: readAnswer(lead) ?? kept.lead,
     },
     isWhole: isWhole(boxScore, lead),
@@ -103,7 +122,12 @@ async function moveOwnReads(storage) {
 
 /** @returns {import("../../../../shared/worker/season-store.js").BackgroundJob} */
 export function createWnbaGameDetailsJob() {
-  const job = createGameDetailsJob({ listFinals, readDetails, nameKey: nameGameDetailsKey });
+  const job = createGameDetailsJob({
+    listFinals,
+    readDetails,
+    nameKey: nameGameDetailsKey,
+    isStandIn,
+  });
   return {
     chooseDelay: job.chooseDelay,
     async updateStore(context) {

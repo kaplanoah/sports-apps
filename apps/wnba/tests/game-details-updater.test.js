@@ -384,6 +384,71 @@ test("a final's box score is kept from ESPN's while the league refuses it, with 
   assert.deepEqual(takeRequests(), []);
 });
 
+test("a final kept from ESPN's is read every ten minutes for two hours and then every hour while the league refuses it, until the league's replaces it", async () => {
+  const { eventId, scoreboard, summary } = ESPN.games[ACES_AT_FEVER.id];
+  /** @type {Record<string, any>} */
+  const answers = {
+    [nameScoreboardRequest(ACES_AT_FEVER.start)]: scoreboard,
+    [nameSummaryRequest(eventId)]: summary,
+  };
+  const { docs, runJob, wait, takeRequests } = createRun({
+    seasons: { 2026: [ACES_AT_FEVER] },
+    kept: { [namePlayerIndexKey(2026)]: readPlayerIndex() },
+    answer: (url) => answers[url],
+  });
+  await runJob();
+  takeRequests();
+
+  /** @type {number[]} */
+  const readAt = [];
+  for (let minutes = 5; minutes <= 4 * 60; minutes += 5) {
+    wait(5);
+    await runJob();
+    if (takeRequests().length) readAt.push(minutes);
+  }
+
+  const everyTenMinutes = Array.from({ length: 12 }, (_, index) => (index + 1) * 10);
+  assert.deepEqual(readAt, [...everyTenMinutes, 180, 240]);
+  assert.equal((await docs.read(`games/${ACES_AT_FEVER.id}`)).boxScore.source, "espn");
+
+  answers[nameBoxScoreRequest(ACES_AT_FEVER.id)] = GAMES.boxScores[ACES_AT_FEVER.id];
+  wait(60);
+  await runJob();
+  assert.ok(takeRequests().includes(nameBoxScoreRequest(ACES_AT_FEVER.id)));
+  assert.deepEqual(
+    (await docs.read(`games/${ACES_AT_FEVER.id}`)).boxScore,
+    describeBoxScore(GAMES.boxScores[ACES_AT_FEVER.id]),
+  );
+  wait(60);
+  await runJob();
+  assert.deepEqual(takeRequests(), []);
+});
+
+test("a final's box score kept from the league stays when the league refuses a later read and ESPN answers", async () => {
+  const { eventId, scoreboard, summary } = ESPN.games[VALKYRIES_AT_WINGS.id];
+  /** @type {Record<string, any>} */
+  const answers = {
+    [nameScoreboardRequest(VALKYRIES_AT_WINGS.start)]: scoreboard,
+    [nameSummaryRequest(eventId)]: summary,
+    [nameBoxScoreRequest(VALKYRIES_AT_WINGS.id)]: GAMES.boxScores[VALKYRIES_AT_WINGS.id],
+  };
+  const { docs, runJob, wait, takeRequests } = createRun({
+    seasons: { 2026: [{ ...VALKYRIES_AT_WINGS, end: new Date(END).toISOString() }] },
+    kept: { [namePlayerIndexKey(2026)]: readPlayerIndex() },
+    answer: (url) => answers[url],
+  });
+  await runJob();
+  const fromLeague = describeBoxScore(GAMES.boxScores[VALKYRIES_AT_WINGS.id]);
+  assert.deepEqual((await docs.read(`games/${VALKYRIES_AT_WINGS.id}`)).boxScore, fromLeague);
+
+  delete answers[nameBoxScoreRequest(VALKYRIES_AT_WINGS.id)];
+  wait(10);
+  await runJob();
+
+  assert.ok(takeRequests().includes(nameSummaryRequest(eventId)));
+  assert.deepEqual((await docs.read(`games/${VALKYRIES_AT_WINGS.id}`)).boxScore, fromLeague);
+});
+
 test("only a season's finals keep their reads, so a team's game no longer among its nearest leaves them", async () => {
   const seattlesLast = { ...ACES_AT_FEVER, id: "1022600325", start: "2026-09-24T02:00:00Z" };
   const { docs, storage, runJob, wait } = createRun({
