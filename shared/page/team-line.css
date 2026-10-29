@@ -69,6 +69,7 @@
   --team-dot-after: var(--team-small-dot-after);
 }
 .sheet-head h2.team-title {
+  min-height: 1lh;
   --team-dot-size: var(--team-large-dot-size);
   --team-dot-before: var(--team-large-dot-before);
   --team-dot-after: var(--team-large-dot-after);

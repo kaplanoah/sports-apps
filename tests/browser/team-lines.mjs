@@ -40,14 +40,18 @@ export const readTeamLines = (page, league) =>
       if (fonts.has(key)) return fonts.get(key);
       const probe = document.createElement("span");
       Object.assign(probe.style, {
-        position: "absolute",
+        position: "fixed",
+        top: "0",
+        left: "0",
+        visibility: "hidden",
+        contain: "strict",
         fontFamily: style.fontFamily,
         fontSize: style.fontSize,
         fontWeight: style.fontWeight,
         width: "1cap",
         height: "1ex",
       });
-      document.body.append(probe);
+      document.documentElement.append(probe);
       const { width: cap, height: x } = probe.getBoundingClientRect();
       probe.remove();
       const metrics = { cap, x };

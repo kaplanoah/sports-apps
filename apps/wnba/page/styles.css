@@ -958,6 +958,7 @@ header.top h1 .title-letter:nth-child(3) {
   align-items: flex-end;
 }
 .faceoff-side .club {
+  min-height: 1lh;
   max-width: 100%;
 }
 .faceoff-side.home .club {
