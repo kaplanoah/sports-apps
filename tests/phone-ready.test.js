@@ -65,13 +65,10 @@ function createFakeGitHub(pulls, required = REQUIRED_CHECKS) {
       if (query.includes("timelineItems"))
         return Response.json(createTimelineAnswer(findPull(variables.number).timeline));
       const { threads } = findPull(variables.number);
-      return Response.json({
-        data: {
-          repository: {
-            pullRequest: { reviewThreads: { pageInfo: { hasNextPage: false }, nodes: threads } },
-          },
-        },
-      });
+      const index = Number(variables.after ?? 0);
+      const pageInfo = { hasNextPage: index + 1 < threads.length, endCursor: String(index + 1) };
+      const page = { pageInfo, nodes: threads.slice(index, index + 1) };
+      return Response.json({ data: { repository: { pullRequest: { reviewThreads: page } } } });
     }
     const path = pathname.replace(`/repos/${REPOSITORY}`, "");
     if (path === "/pulls")
@@ -191,12 +188,13 @@ test("no comment while a review is pending", async () => {
   assert.deepEqual(await tell(unreviewed), []);
 });
 
-test("no comment while a review thread is open", async () => {
+test("no comment while a review thread is open, on any page of threads", async () => {
   const github = createFakeGitHub([
-    createPull({ threads: [{ isResolved: true }, { isResolved: false }] }),
+    createPull({ threads: [{ isResolved: true }, { isResolved: true }, { isResolved: false }] }),
   ]);
 
   assert.deepEqual(await tell(github), []);
+  assert.equal(github.requests.filter((request) => request === "POST /graphql").length, 3);
 });
 
 test("no comment while another required check failed", async () => {

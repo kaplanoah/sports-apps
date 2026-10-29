@@ -127,3 +127,26 @@ export async function* readPages(readJson, path, pickItems) {
     if (batch.length < PAGE_SIZE) return;
   }
 }
+
+/**
+ * Every node of a GraphQL connection, page by page until GitHub says there are no more.
+ * @param {(query: string, variables: Record<string, unknown>) => Promise<any>} callGraphQL
+ * @param {string} query takes `$after` and asks for the connection's `pageInfo`
+ * @param {Record<string, unknown>} variables
+ * @param {(data: any) => { nodes: any[], pageInfo: { hasNextPage: boolean, endCursor: string | null } } | undefined} pickConnection
+ * @param {string} name what the connection lists, for its errors
+ */
+export async function readAllNodes(callGraphQL, query, variables, pickConnection, name) {
+  const nodes = [];
+  /** @type {string | null} */
+  let after = null;
+  for (;;) {
+    const connection = pickConnection(await callGraphQL(query, { ...variables, after }));
+    if (!connection) throw new Error(`GitHub didn't return ${name}`);
+    nodes.push(...connection.nodes);
+    if (!connection.pageInfo.hasNextPage) return nodes;
+    const next = connection.pageInfo.endCursor;
+    if (!next || next === after) throw new Error(`GitHub didn't advance the cursor of ${name}`);
+    after = next;
+  }
+}

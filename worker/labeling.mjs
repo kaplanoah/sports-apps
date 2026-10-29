@@ -1,6 +1,6 @@
 // Reads when a pull request's labels were added and when a commit was pushed, from its timeline
 // and the commit's check suites.
-import { createGitHub, createGraphQL, readAllPages } from "./github-api.mjs";
+import { createGitHub, createGraphQL, readAllNodes, readAllPages } from "./github-api.mjs";
 
 export const PHONE_CONTEXT = "phone";
 export const PHONE_OK_LABEL = "phone-ok";
@@ -96,18 +96,14 @@ export async function readTimeline({
 }) {
   const graphql = createGraphQL({ fetchImpl, env });
   const [owner, name] = repository.split("/");
-  const events = [];
-  let after = null;
-  for (;;) {
-    const data = await graphql(READ_TIMELINE, { owner, name, number: Number(pullNumber), after });
-    const timeline = data.repository?.pullRequest?.timelineItems;
-    if (!timeline) throw new Error("GitHub didn't return the pull request's timeline");
-    events.push(...timeline.nodes.map(readTimelineEvent));
-    if (!timeline.pageInfo.hasNextPage) return events;
-    const next = timeline.pageInfo.endCursor;
-    if (!next || next === after) throw new Error("GitHub didn't advance the timeline cursor");
-    after = next;
-  }
+  const nodes = await readAllNodes(
+    graphql,
+    READ_TIMELINE,
+    { owner, name, number: Number(pullNumber) },
+    (data) => data.repository?.pullRequest?.timelineItems,
+    "the pull request's timeline",
+  );
+  return nodes.map(readTimelineEvent);
 }
 
 const READ_TIMELINE = `query ReadTimeline($owner: String!, $name: String!, $number: Int!, $after: String) {

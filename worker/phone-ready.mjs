@@ -1,14 +1,21 @@
 // Tells the owner on a red pull request when all that's left is their phone test: every other
 // check main requires passed, its review passed and isn't asked again, and no review thread is
-// open. One comment speaks for each head while that holds, edited as beta changes hands, and is
-// taken down once it doesn't, so the comment on a pull request is always true of the head it has.
+// open. One comment speaks for each head while that holds, edited as beta changes hands, kept as it
+// is while a required check runs again, and taken down once it doesn't hold, which for a reopened
+// thread is the next run on the quarter hour.
 // Each run reads every open pull request into main, since GitHub keeps one waiting run and cancels
 // the one before it.
 // Usage: node worker/phone-ready.mjs, with GH_TOKEN and GITHUB_REPOSITORY set, as Actions sets
 // the last.
 import { fileURLToPath } from "node:url";
 import { BETA_LABEL, WAIT_LABEL, findHolder, readOpenPulls } from "./beta-claim.mjs";
-import { ACTIONS_LOGIN, createGitHub, createGraphQL, readAllPages } from "./github-api.mjs";
+import {
+  ACTIONS_LOGIN,
+  createGitHub,
+  createGraphQL,
+  readAllNodes,
+  readAllPages,
+} from "./github-api.mjs";
 import { PHONE_CONTEXT, PHONE_OK_LABEL, REVIEW_LABEL } from "./labeling.mjs";
 
 const MARKER_PATTERN = /<!-- phone-ready:([0-9a-f]{40}) -->/;
@@ -176,18 +183,14 @@ async function readRequiredChecks(github) {
  * @param {{ owner: string, name: string, number: number }} pull
  */
 async function countOpenThreads(callGraphQL, pull) {
-  let open = 0;
-  let after = null;
-  for (;;) {
-    const data = await callGraphQL(THREAD_STATES_QUERY, { ...pull, after });
-    const threads = data.repository?.pullRequest?.reviewThreads;
-    if (!threads) throw new Error("GitHub didn't return the pull request's review threads");
-    open += threads.nodes.filter((/** @type {any} */ thread) => !thread.isResolved).length;
-    if (!threads.pageInfo.hasNextPage) return open;
-    const next = threads.pageInfo.endCursor;
-    if (!next || next === after) throw new Error("GitHub didn't advance the review thread cursor");
-    after = next;
-  }
+  const threads = await readAllNodes(
+    callGraphQL,
+    THREAD_STATES_QUERY,
+    pull,
+    (data) => data.repository?.pullRequest?.reviewThreads,
+    "the pull request's review threads",
+  );
+  return threads.filter((thread) => !thread.isResolved).length;
 }
 
 /**

@@ -56,6 +56,7 @@ test("every workflow's actions are pinned to a commit", () => {
 // GitHub refuses a whole workflow over one event it can't start a run on, so the workflow's other
 // events silently start nothing either.
 test("every workflow starts only on events Actions has", () => {
+  // From GitHub's "Events that trigger workflows" page.
   const actionsEvents = new Set([
     "branch_protection_rule",
     "check_run",
@@ -68,6 +69,7 @@ test("every workflow starts only on events Actions has", () => {
     "discussion_comment",
     "fork",
     "gollum",
+    "image_version",
     "issue_comment",
     "issues",
     "label",
@@ -97,6 +99,43 @@ test("every workflow starts only on events Actions has", () => {
     assert.ok(events.length > 0, workflow);
     for (const event of events) assert.ok(actionsEvents.has(event), `${workflow}: ${event}`);
   }
+});
+
+/**
+ * Whether a job's `if`, a disjunction of equalities, runs for the event's context.
+ * @param {string} condition
+ * @param {Record<string, string>} context each context path the condition reads, with its value
+ */
+const isAllowedBy = (condition, context) =>
+  condition.split("||").some((clause) => {
+    const equality = clause.trim().match(/^([\w.]+) == '([^']*)'$/);
+    assert.ok(equality, `an equality: ${clause}`);
+    return context[equality[1]] === equality[2];
+  });
+
+test("the phone-ready comment is read on the quarter hour, as CI starts and finishes, and as the review's reconcile finishes", () => {
+  const workflow = readRepoFile(".github/workflows/phone-ready.yml");
+  assert.match(workflow, /^ {2}schedule:\n {4}- cron: "2,17,32,47 \* \* \* \*"$/m);
+  assert.match(workflow, /^ {4}workflows: \[CI, Reconcile trusted review\]$/m);
+  assert.match(workflow, /^ {4}types: \[requested, completed\]$/m);
+  const job = readJob("tell", "phone-ready.yml");
+  assert.ok(job);
+  const condition = job
+    .match(/^ {4}if: >-\n((?: {6}.*\n)+)/m)?.[1]
+    .replace(/\s+/g, " ")
+    .trim();
+  assert.ok(condition, "the job names when it runs");
+  /** @param {string} name @param {string} action */
+  const runEnded = (name, action) => ({
+    "github.event_name": "workflow_run",
+    "github.event.workflow_run.name": name,
+    "github.event.action": action,
+  });
+  assert.ok(isAllowedBy(condition, { "github.event_name": "schedule" }));
+  assert.ok(isAllowedBy(condition, runEnded("CI", "requested")));
+  assert.ok(isAllowedBy(condition, runEnded("CI", "completed")));
+  assert.ok(isAllowedBy(condition, runEnded("Reconcile trusted review", "completed")));
+  assert.ok(!isAllowedBy(condition, runEnded("Reconcile trusted review", "requested")));
 });
 
 test("every install skips npm's audit", () => {

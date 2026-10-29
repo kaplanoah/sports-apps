@@ -8,7 +8,13 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { ACTIONS_LOGIN, createGitHub, createGraphQL, readAllPages } from "./github-api.mjs";
+import {
+  ACTIONS_LOGIN,
+  createGitHub,
+  createGraphQL,
+  readAllNodes,
+  readAllPages,
+} from "./github-api.mjs";
 import { OFF_DIFF_HEADING } from "./review-state.mjs";
 
 // A thread's first comment, which holds what it raised, as every item of a checklist of Nits, and
@@ -55,16 +61,14 @@ const joinComments = ({ first, comments, ...thread }) => ({
  * @param {{ owner: string, name: string, number: number }} pullRequest
  */
 export async function readThreads(callGraphQL, pullRequest) {
-  const threads = [];
-  /** @type {string | null} */
-  let after = null;
-  for (;;) {
-    const data = await callGraphQL(THREADS_QUERY, { ...pullRequest, after });
-    const page = data.repository.pullRequest.reviewThreads;
-    threads.push(...page.nodes.map(joinComments));
-    if (!page.pageInfo.hasNextPage) return threads;
-    after = page.pageInfo.endCursor;
-  }
+  const threads = await readAllNodes(
+    callGraphQL,
+    THREADS_QUERY,
+    pullRequest,
+    (data) => data.repository?.pullRequest?.reviewThreads,
+    "the pull request's review threads",
+  );
+  return threads.map(joinComments);
 }
 
 /**
