@@ -10,7 +10,7 @@ import {
 } from "./harness.mjs";
 import { VIEW_GROUPS, openWithEverything } from "./views.mjs";
 import { openRanking } from "./settings-sheet.mjs";
-import { checkEachView } from "../../../../tests/browser/view-walk.mjs";
+import { TABS_GROUP, checkEachView } from "../../../../tests/browser/view-walk.mjs";
 import { ALIGNMENT_TOLERANCE, readTeamLines } from "../../../../tests/browser/team-lines.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
@@ -20,7 +20,7 @@ const THEMES = /** @type {const} */ (["light", "dark"]);
 /** @type {Record<string, string[]>} */
 const EXPECTED_ROLES = {
   "the settings pages": ["small", "team"],
-  "the page's tabs": ["label", "team"],
+  [TABS_GROUP]: ["label", "team"],
   "a game's sheets": ["label", "small", "team"],
   "a club's and a player's sheets": ["large", "small", "team"],
 };
@@ -58,7 +58,7 @@ for (const width of [390, 1280]) {
         expect([...roles].sort()).toEqual(EXPECTED_ROLES[group]);
         if (group === "the settings pages") {
           expect(placements).toContain("small before");
-        } else if (group === "the page's tabs") {
+        } else if (group === TABS_GROUP) {
           expect(placements).toContain("team after");
           expect(states).toContain("winner");
           expect(states).toContain("TBD");
