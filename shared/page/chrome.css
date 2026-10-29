@@ -584,22 +584,22 @@ section.view.active:not([data-follows]):has(> :is(.day-view, .season-parts)) {
   font-size: var(--type-setting-size);
   font-weight: var(--type-setting-weight);
 }
-.control-row:not([hidden]) ~ .control-row {
-  border-top: 1px solid var(--divider);
-}
 .control-row[hidden] {
   display: none;
 }
-/* Settings in titled groups have a line only between groups, not around them or between a group's
-   rows. Each group's heading sits as far below the line above it as sections sit apart, whether
-   that line ends a group or tops settings with a line between each row. */
+/* A line parts each setting or group of settings from the next, never a group's own rows. Settings
+   in titled groups have no line around them. Each group's heading sits as far below the line above
+   it as sections sit apart, whether that line ends a group or tops settings with a line between
+   each row. */
+.settings-controls > :not([hidden]) ~ :not([hidden]) {
+  border-top: 1px solid var(--divider);
+}
 .settings-controls.grouped {
   border-block: 0;
 }
 .settings-controls.grouped > :not([hidden]) ~ :not([hidden]) {
   margin-top: var(--section-gap);
   padding-top: var(--section-gap);
-  border-top: 1px solid var(--divider);
 }
 .settings-controls:not(.grouped) > .settings-group {
   padding-top: var(--section-gap);
@@ -615,9 +615,6 @@ section.view.active:not([data-follows]):has(> :is(.day-view, .season-parts)) {
 .settings-group {
   display: grid;
   gap: 6px;
-}
-.settings-group .control-row:not([hidden]) ~ .control-row {
-  border-top: 0;
 }
 .control-row:has(> .select-field) {
   position: relative;

@@ -38,14 +38,12 @@ async function measurePageRows(page) {
 }
 
 /**
- * Finds, for each shown part of settings the selector matches, the bottom of the nearest line above
- * its top, from any border drawn there.
+ * Reads the bottom of each line drawn in settings, from any border.
  * @param {import("@playwright/test").Page} page
- * @param {string} selector
  */
-function findLinesAbove(page, selector) {
-  return page.locator("#settingsDialog").evaluate((settings, partSelector) => {
-    const lineBottoms = [...settings.querySelectorAll("*")].flatMap((part) => {
+function readLineBottoms(page) {
+  return page.locator("#settingsDialog").evaluate((settings) =>
+    [...settings.querySelectorAll("*")].flatMap((part) => {
       const style = getComputedStyle(part);
       const box = part.getBoundingClientRect();
       if (!box.width) return [];
@@ -55,18 +53,62 @@ function findLinesAbove(page, selector) {
       if (style.borderBottomStyle !== "none" && Number.parseFloat(style.borderBottomWidth))
         bottoms.push(box.bottom);
       return bottoms;
-    });
-    return [...settings.querySelectorAll(partSelector)]
-      .filter((part) => part.getClientRects().length)
-      .map((part) => {
-        const { top } = part.getBoundingClientRect();
+    }),
+  );
+}
+
+/**
+ * Finds, for each shown part of settings the selector matches, the bottom of the nearest line above
+ * its top.
+ * @param {import("@playwright/test").Page} page
+ * @param {string} selector
+ */
+async function findLinesAbove(page, selector) {
+  const lineBottoms = await readLineBottoms(page);
+  const parts = await page
+    .locator(`#settingsDialog ${selector}`)
+    .evaluateAll((shown) =>
+      shown
+        .filter((part) => part.getClientRects().length)
+        .map((part) => ({ name: part.textContent.trim(), top: part.getBoundingClientRect().top })),
+    );
+  return parts.map(({ name, top }) => ({
+    name,
+    top,
+    lineAbove: Math.max(...lineBottoms.filter((bottom) => bottom <= top + 0.5)),
+  }));
+}
+
+/**
+ * Finds, for each shown group of settings, whether a line sits between its end and the top of what
+ * comes next.
+ * @param {import("@playwright/test").Page} page
+ */
+async function findLinesAfterGroups(page) {
+  const lineBottoms = await readLineBottoms(page);
+  const groups = await page.locator("#settingsDialog").evaluate((settings) => {
+    const shown = [...settings.querySelectorAll("*")].filter(
+      (part) => part.getClientRects().length,
+    );
+    return shown
+      .filter((part) => part.matches(".settings-group"))
+      .map((group) => {
+        const next = shown.find(
+          (part) =>
+            !group.contains(part) &&
+            group.compareDocumentPosition(part) & Node.DOCUMENT_POSITION_FOLLOWING,
+        );
         return {
-          name: part.textContent.trim(),
-          top,
-          lineAbove: Math.max(...lineBottoms.filter((bottom) => bottom <= top + 0.5)),
+          name: group.querySelector(".settings-group-label")?.textContent.trim(),
+          bottom: group.getBoundingClientRect().bottom,
+          nextTop: next?.getBoundingClientRect().top ?? Number.NaN,
         };
       });
-  }, selector);
+  });
+  return groups.map(({ name, bottom, nextTop }) => ({
+    name,
+    isLineAfter: lineBottoms.some((line) => line >= bottom - 0.5 && line <= nextTop + 1.5),
+  }));
 }
 
 /**
@@ -106,6 +148,7 @@ export function testSettingsContactInteractions(test, expect, { openApp, setting
         await dialog.getByRole("button", { name: "Back to Contact" }).click();
       }
       await dialog.getByRole("button", { name: "Back to Settings" }).click();
+      await expect(opener).toBeFocused();
     }
   });
 
@@ -180,7 +223,7 @@ export function testSettingsContactInteractions(test, expect, { openApp, setting
     expect(examplePadding / 2).toBe(lift);
   });
 
-  test("every group's heading in Settings sits a section's gap below the line above it", async ({
+  test("every group in Settings sits a section's gap below the line above it, a line after it", async ({
     page,
   }) => {
     await page.emulateMedia({ reducedMotion: "reduce" });
@@ -199,6 +242,10 @@ export function testSettingsContactInteractions(test, expect, { openApp, setting
         name,
         spaceUnderLine: sectionGap,
       });
+    expect(await findLinesAfterGroups(page)).toEqual([
+      { name: "Notifications", isLineAfter: true },
+      { name: "News", isLineAfter: true },
+    ]);
   });
 
   test("search opens each page of settings itself, with no click on its row", async ({ page }) => {
