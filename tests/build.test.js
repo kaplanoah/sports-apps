@@ -70,6 +70,8 @@ test("labeling leaves every other file as it was", () => {
   assert.equal(labeled["icon.png"], files["icon.png"]);
 });
 
+const COMMIT = "b102733d4e5f60718293a4b5c6d7e8f901234567";
+
 /** @param {Record<string, string>} answers git's answer to each command, by its arguments */
 const createGit = (answers) => (args) => {
   const answer = answers[args.join(" ")];
@@ -80,7 +82,7 @@ const createGit = (answers) => (args) => {
 test("a beta release counts main's version where its branch left it, and says beta", () => {
   const base = "f".repeat(40);
   const git = createGit({
-    "log -1 --format=%h --abbrev=7": "b102733\n",
+    "log -1 --format=%H": `${COMMIT}\n`,
     "merge-base HEAD origin/main": `${base}\n`,
     [`merge-base --is-ancestor 3cf716ccf7c056c3e598a7e4ce82c0c591ac210c ${base}`]: "",
     [`log --first-parent --reverse --format=\x1e%s --name-only --diff-merges=first-parent --no-renames 3cf716ccf7c056c3e598a7e4ce82c0c591ac210c..${base}`]:
@@ -96,7 +98,7 @@ test("a beta release counts main's version where its branch left it, and says be
 
 test("a production release has no label, so its page shows no channel tag", () => {
   const git = createGit({
-    "log -1 --format=%h --abbrev=7": "b102733\n",
+    "log -1 --format=%H": `${COMMIT}\n`,
     "merge-base --is-ancestor 3cf716ccf7c056c3e598a7e4ce82c0c591ac210c HEAD": "",
     "log --first-parent --reverse --format=\x1e%s --name-only --diff-merges=first-parent --no-renames 3cf716ccf7c056c3e598a7e4ce82c0c591ac210c..HEAD":
       "\x1efeat: something new\napps/mlb/page/js/app.js\n",
@@ -225,6 +227,6 @@ test("a service's Worker loads its packages as a Worker resolves them, importing
 });
 
 test("a beta release with no version to count from still says beta", () => {
-  const git = createGit({ "log -1 --format=%h --abbrev=7": "b102733\n" });
+  const git = createGit({ "log -1 --format=%H": `${COMMIT}\n` });
   assert.equal(readRelease("mlb", git, BUILT_AT, "beta")?.version, "b102733-beta");
 });
