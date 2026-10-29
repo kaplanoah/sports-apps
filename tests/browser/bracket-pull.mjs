@@ -10,7 +10,7 @@ import {
 } from "./season-scroll.mjs";
 import { findSeasonPill, openSeasonPart } from "./season-tab.mjs";
 import { setHidden } from "./visibility.mjs";
-import { drag, openFromHomeScreen, PULL_START } from "./touch.mjs";
+import { drag, openFromHomeScreen, pullDown, PULL_START } from "./touch.mjs";
 
 /** @param {import("@playwright/test").Page} page @param {string} cards */
 export const readGeometry = (page, cards) =>
@@ -161,24 +161,24 @@ export function checkBracketPull({ test, openApp, cards, sideways }) {
         padding,
       );
       await page.setViewportSize({ width: 390, height });
-      await page.clock.runFor(100);
+      await waitForLoadToSettle(page);
     };
     await resizeRoom(40, 820);
+    await expect.poll(() => readGeometry(page, cards)).not.toEqual(original);
     const resized = await readGeometry(page, cards);
     const resizedReach = await readHeaderReach(page);
-    expect(resized).not.toEqual(original);
     await resizeRoom(0, 900);
-    expect(await readGeometry(page, cards)).toEqual(original);
+    await expect.poll(() => readGeometry(page, cards)).toEqual(original);
 
     const liftFinger = await drag(page, PULL_START, { y: 60 });
     await resizeRoom(40, 820);
-    expect(await readGeometry(page, cards)).toEqual(resized);
-    expect(await readHeaderReach(page)).toBe(resizedReach);
+    await expect.poll(() => readGeometry(page, cards)).toEqual(resized);
+    await expect.poll(() => readHeaderReach(page)).toBe(resizedReach);
     await liftFinger();
     await expect(page.locator(".pull-refresh")).toBeHidden();
-    expect(await readGeometry(page, cards)).toEqual(resized);
+    await expect.poll(() => readGeometry(page, cards)).toEqual(resized);
     await resizeRoom(0, 900);
-    expect(await readGeometry(page, cards)).toEqual(original);
+    await expect.poll(() => readGeometry(page, cards)).toEqual(original);
   });
 
   test("a failed refresh settles without keeping a pull offset and a later refresh recovers", async ({
@@ -198,9 +198,7 @@ export function checkBracketPull({ test, openApp, cards, sideways }) {
       return route.fulfill({ status: 503, body: "" });
     };
     await page.route(matchPath("/store/"), failStore);
-    await (
-      await drag(page, PULL_START, { y: 200 })
-    )();
+    await pullDown(page, 200);
     await expect.poll(() => failures).toBeGreaterThan(0);
     await page.evaluate(() => dispatchEvent(new Event("resize")));
     await page.clock.runFor(900);
@@ -215,9 +213,7 @@ export function checkBracketPull({ test, openApp, cards, sideways }) {
     expect(await readGeometry(page, cards)).toEqual(failed);
 
     await page.unroute(matchPath("/store/"), failStore);
-    await (
-      await drag(page, PULL_START, { y: 200 })
-    )();
+    await pullDown(page, 200);
     await page.clock.runFor(1000);
     await expect(page.locator(".pull-refresh")).toBeHidden();
     await expect(page.locator(".catch-up-line")).toHaveCount(0);
