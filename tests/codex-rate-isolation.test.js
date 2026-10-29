@@ -5,6 +5,7 @@ import {
   requiresRateIsolation,
   validateRateIsolationFacts,
   summarizeIsolationCommandFailure,
+  parseIsolationCommandResult,
 } from "../worker/prove-codex-rate-isolation.mjs";
 
 const workflow = readFileSync(new URL("../.github/workflows/ci.yml", import.meta.url), "utf8");
@@ -29,6 +30,45 @@ test("command diagnostics keep exit facts and fixed flags without publishing pri
     true,
   );
   assert.equal(summarizeIsolationCommandFailure({}).exitCode, null);
+});
+
+test("probe output diagnosis preserves status and fixed shape facts without accepting malformed output", () => {
+  assert.deepEqual(parseIsolationCommandResult({ status: 0, stdout: '{"boundary":true}' }), {
+    boundary: true,
+  });
+  for (const stdout of [
+    "",
+    "fake-private-output",
+    '{"boundary":true}{"boundary":true}',
+    '\u001b[31m{"boundary":true}',
+  ]) {
+    let failure;
+    try {
+      parseIsolationCommandResult({ status: 0, stdout, stderr: "fake-private-stderr" });
+    } catch (error) {
+      failure = error;
+    }
+    assert.ok(failure instanceof SyntaxError);
+    const facts = summarizeIsolationCommandFailure(failure);
+    assert.equal(facts.exitCode, 0);
+    assert.equal(facts.stdoutBytes, Buffer.byteLength(stdout));
+    assert.equal(facts.stderrBytes, Buffer.byteLength("fake-private-stderr"));
+    assert.equal(facts.stdoutEmpty, stdout === "");
+    assert.equal(facts.stdoutStartsWithObject, stdout.startsWith("{"));
+    assert.equal(facts.stdoutEndsWithObject, stdout.endsWith("}"));
+    assert.equal(facts.stdoutAdjacentObjects, stdout.includes("}{"));
+    assert.equal(facts.stdoutContainsAnsi, stdout.includes("\u001b["));
+    assert.equal(JSON.stringify(facts).includes("fake-private"), false);
+  }
+});
+
+test("nonzero or timed-out commands cannot pass even with valid-looking JSON", () => {
+  for (const result of [
+    { status: 1, stdout: '{"boundary":true}' },
+    { status: null, stdout: '{"boundary":true}', error: { code: "ETIMEDOUT" } },
+  ]) {
+    assert.throws(() => parseIsolationCommandResult(result));
+  }
 });
 const readJob = (name) =>
   workflow.match(new RegExp(`^  ${name}:\\n(?:(?:    .*|)\\n)*`, "m"))?.[0] ?? "";

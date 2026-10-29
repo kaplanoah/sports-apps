@@ -1,4 +1,4 @@
-import { fork, execFileSync } from "node:child_process";
+import { fork, execFileSync, spawnSync } from "node:child_process";
 import {
   chmodSync,
   chownSync,
@@ -55,6 +55,11 @@ class IsolationProofError extends Error {
 
 /** @param {any} error */
 export function summarizeIsolationCommandFailure(error) {
+  const stdout = Buffer.isBuffer(error?.stdout)
+    ? error.stdout.toString("utf8")
+    : typeof error?.stdout === "string"
+      ? error.stdout
+      : "";
   const stderr = Buffer.isBuffer(error?.stderr)
     ? error.stderr.toString("utf8")
     : typeof error?.stderr === "string"
@@ -65,6 +70,13 @@ export function summarizeIsolationCommandFailure(error) {
     terminated: typeof error?.signal === "string",
     timedOut: error?.code === "ETIMEDOUT",
     malformedProbeOutput: error instanceof SyntaxError,
+    stdoutBytes: Buffer.byteLength(stdout),
+    stderrBytes: Buffer.byteLength(stderr),
+    stdoutEmpty: stdout.length === 0,
+    stdoutStartsWithObject: /^\s*\{/.test(stdout),
+    stdoutEndsWithObject: /\}\s*$/.test(stdout),
+    stdoutAdjacentObjects: /\}\s*\{/.test(stdout),
+    stdoutContainsAnsi: stdout.includes("\u001b["),
     mentionsPermissionDenial: /permission denied|operation not permitted/i.test(stderr),
     mentionsUserNamespace: /user namespace|userns|bubblewrap|bwrap/i.test(stderr),
     mentionsMissingFile: /no such file|not found/i.test(stderr),
@@ -75,6 +87,27 @@ export function summarizeIsolationCommandFailure(error) {
       stderr,
     ),
   };
+}
+
+/** @param {any} result */
+export function parseIsolationCommandResult(result) {
+  const details = {
+    status: result.status,
+    signal: result.signal,
+    code: result.error?.code,
+    stdout: result.stdout,
+    stderr: result.stderr,
+  };
+  if (result.error || result.status !== 0)
+    throw Object.assign(new Error("Probe command failed.", { cause: result.error }), details);
+  try {
+    return JSON.parse(result.stdout);
+  } catch (error) {
+    throw Object.assign(
+      new SyntaxError("Probe output is not one JSON value.", { cause: error }),
+      details,
+    );
+  }
 }
 
 const baselineFacts = ["gatewayReachable", "upstreamReachable", "checkoutWritable"];
@@ -246,7 +279,7 @@ function probeBoundary(settings, fixtures, command) {
   const groups = settings.groups.length
     ? [`--groups=${settings.groups.join(",")}`]
     : ["--clear-groups"];
-  const result = execFileSync(
+  const result = spawnSync(
     "/usr/bin/setpriv",
     [
       `--reuid=${settings.uid}`,
@@ -266,7 +299,7 @@ function probeBoundary(settings, fixtures, command) {
       stdio: ["ignore", "pipe", "pipe"],
     },
   );
-  return JSON.parse(result);
+  return parseIsolationCommandResult(result);
 }
 
 /** @returns {Promise<any>} */
