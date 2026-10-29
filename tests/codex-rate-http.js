@@ -96,7 +96,7 @@ export async function createRateHttpFixture(options) {
             authorization: "Bearer fake-test",
             "content-type": "application/json",
           },
-          socket: { remoteAddress: "127.0.0.1" },
+          socket: { remoteAddress: overrides.remoteAddress ?? "127.0.0.1" },
         });
         const response = new ResponseFixture(resolve, reject, () => responses.delete(response));
         responses.add(response);

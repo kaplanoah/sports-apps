@@ -130,8 +130,13 @@ export function createAdmissionRequestHandler({
     const abort = () => {
       if (!completed) controller.abort();
     };
-    const timeout = setTimeout(abort, timeoutMs);
-    timeout.unref();
+    let timeout;
+    function restartInactivityTimeout() {
+      clearTimeout(timeout);
+      timeout = setTimeout(abort, timeoutMs);
+      timeout.unref();
+    }
+    restartInactivityTimeout();
     controller.signal.addEventListener(
       "abort",
       () => {
@@ -147,8 +152,9 @@ export function createAdmissionRequestHandler({
       const body = await readRequestBody(request, maxBodyBytes);
       const payload = JSON.parse(body.toString("utf8"));
       if (payload.stream !== true) throw new Error("Streaming response required.");
-      ticket = await budget.reserve(estimate(payload), controller.signal);
+      ticket = await budget.reserve(estimate(payload).reservation, controller.signal);
       if (controller.signal.aborted) throw new Error("Client disconnected.");
+      restartInactivityTimeout();
       const upstream = await send(OPENAI_RESPONSES_URL, {
         method: "POST",
         redirect: "manual",
@@ -176,6 +182,7 @@ export function createAdmissionRequestHandler({
       response.writeHead(upstream.status, headers);
       const usage = createUsageReader(maxFrameBytes);
       for await (const chunk of upstream.body ?? []) {
+        restartInactivityTimeout();
         usage.append(chunk);
         if (!response.write(chunk)) await once(response, "drain", { signal: controller.signal });
       }

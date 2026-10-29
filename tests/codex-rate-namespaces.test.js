@@ -30,7 +30,6 @@ function createPolicy(values) {
 test("only the two official namespace settings change and exact originals are restored", () => {
   const policy = createPolicy({ [clone]: "0", [apparmor]: "1" });
   const prepared = prepareRateProofNamespaces(policy);
-  assert.equal(prepared.changed, 2);
   assert.deepEqual(prepared.facts, {
     originalUsernsClone: 0,
     originalAppArmorRestriction: 1,
@@ -50,14 +49,18 @@ test("only the two official namespace settings change and exact originals are re
 test("already-supported policies are read without changing host configuration", () => {
   const policy = createPolicy({ [clone]: "1", [apparmor]: "0" });
   const prepared = prepareRateProofNamespaces(policy);
-  assert.equal(prepared.changed, 0);
+  assert.equal(prepared.facts.namespaceSettingsChanged, 0);
   prepared.restoreNamespaces();
   assert.deepEqual(policy.writes, []);
 });
 
 test("absent optional kernel settings are skipped while malformed or denied reads fail before writes", () => {
   const missing = createPolicy({});
-  assert.equal(prepareRateProofNamespaces(missing).present, 0);
+  assert.deepEqual(prepareRateProofNamespaces(missing).facts, {
+    originalUsernsClone: null,
+    originalAppArmorRestriction: null,
+    namespaceSettingsChanged: 0,
+  });
   for (const value of ["bad", "1; unwanted", "-1", "9007199254740992"]) {
     const policy = createPolicy({ [clone]: value, [apparmor]: "1" });
     assert.throws(() => prepareRateProofNamespaces(policy));
@@ -207,6 +210,33 @@ test("simultaneous probe and restoration failures retain both causes", async () 
       error.cause.errors[0] === probeError &&
       error.cause.errors.length === 2,
   );
+});
+
+test("rollback failure during setup is classified as restoration failure and retains both causes", async () => {
+  const policy = createPolicy({ [clone]: "0", [apparmor]: "1" });
+  const preparation = new Error("preparation failed");
+  let reachedProbe = false;
+  await assert.rejects(
+    verifyWithRateNamespaces(
+      async () => {
+        reachedProbe = true;
+      },
+      {
+        read: policy.read,
+        write(path, value) {
+          policy.write(path, value);
+          if (path === clone && value === "1\n") throw preparation;
+          if (path === clone && value === "0\n") throw new Error("restoration failed");
+        },
+      },
+    ),
+    (error) =>
+      error instanceof RateNamespaceError &&
+      error.phase === "namespace-restoration" &&
+      error.cause instanceof AggregateError &&
+      error.cause.errors[0] === preparation,
+  );
+  assert.equal(reachedProbe, false);
 });
 
 test("a successful proof records original policy only after verified restoration", async () => {

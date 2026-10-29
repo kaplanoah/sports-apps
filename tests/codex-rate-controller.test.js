@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createAdmissionController } from "../worker/codex-rate-controller.mjs";
 import { createRateClock } from "./codex-rate-clock.js";
+import { createProviderFeedback } from "../worker/codex-rate-estimate.mjs";
 
 const policy = {
   tokens: 100,
@@ -10,6 +11,23 @@ const policy = {
   maxWaitMs: 120000,
   feedbackHeadroom: 0,
 };
+
+test("controller feedback inherits the shared default and forwards explicit headroom", () => {
+  for (const headroom of [undefined, 0.4]) {
+    const control = createAdmissionController(
+      { ...policy, feedbackHeadroom: headroom },
+      { now: () => 0 },
+    );
+    const direct = createProviderFeedback({ ...policy, headroom }, () => 0);
+    const headers = new Headers({
+      "x-ratelimit-remaining-tokens": "100",
+      "x-ratelimit-reset-tokens": "1s",
+    });
+    control.observeHeaders(headers);
+    direct.observe(headers);
+    assert.deepEqual(control.readSnapshot().provider, direct.readSnapshot());
+  }
+});
 
 test("provider waiters obey cooldown learned after they started waiting", async () => {
   const clock = createRateClock();

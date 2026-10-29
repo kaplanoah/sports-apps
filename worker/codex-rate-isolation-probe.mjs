@@ -1,10 +1,14 @@
-import { execFileSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import { readFileSync, readlinkSync, writeFileSync } from "node:fs";
-import net from "node:net";
 import { writeRateProbeResult } from "./codex-rate-probe-output.mjs";
 import {
   readRatePrivilegeFacts,
   verifyRootServiceSocketDenial,
+  isPermissionDenial,
+  isSandboxNetworkDenial,
+  isPtraceDenial,
+  isSudoDenial,
+  readSocketConnection,
 } from "./codex-rate-isolation-access.mjs";
 
 function isDenied(operation) {
@@ -12,11 +16,7 @@ function isDenied(operation) {
     operation();
     return false;
   } catch (error) {
-    return (
-      error instanceof Error &&
-      "code" in error &&
-      ["EACCES", "EPERM", "EROFS"].includes(String(error.code))
-    );
+    return isPermissionDenial(error);
   }
 }
 
@@ -30,32 +30,25 @@ async function readPrivilegeFacts() {
 
 function isPtraceDenied(pid) {
   const code = [
-    "import ctypes,errno,sys",
+    "import ctypes,json,sys",
     "libc=ctypes.CDLL(None,use_errno=True)",
     "result=libc.ptrace(16,int(sys.argv[1]),None,None)",
-    "denied=result==-1 and ctypes.get_errno() in (errno.EPERM,errno.EACCES)",
+    "error_number=ctypes.get_errno()",
     "if result==0: libc.ptrace(17,int(sys.argv[1]),None,None)",
-    "print('denied' if denied else 'allowed')",
+    "print(json.dumps({'result':result,'errno':error_number}))",
   ].join("\n");
-  return (
-    execFileSync("/usr/bin/python3", ["-I", "-c", code, String(pid)], {
-      encoding: "utf8",
-      timeout: 5000,
-      stdio: ["ignore", "pipe", "pipe"],
-    }).trim() === "denied"
-  );
+  return isPtraceDenial(readPrivilegeCommand("/usr/bin/python3", ["-I", "-c", code, String(pid)]));
+}
+
+function readPrivilegeCommand(program, args) {
+  return spawnSync(program, args, {
+    encoding: "utf8",
+    timeout: 5000,
+    stdio: ["ignore", "pipe", "pipe"],
+  });
 }
 
 async function readProcessBoundary(settings) {
-  let sudoDenied = false;
-  try {
-    execFileSync("/usr/bin/sudo", ["-n", "/usr/bin/true"], {
-      timeout: 5000,
-      stdio: "ignore",
-    });
-  } catch {
-    sudoDenied = true;
-  }
   return {
     ...(await readPrivilegeFacts()),
     rootEnvironmentDenied: isDenied(() => readFileSync(`/proc/${settings.pid}/environ`)),
@@ -64,29 +57,19 @@ async function readProcessBoundary(settings) {
     controlsWriteDenied: isDenied(() => writeFileSync(settings.controls, "unwanted change")),
     rootSignalDenied: isDenied(() => process.kill(settings.pid, 0)),
     ptraceDenied: isPtraceDenied(settings.pid),
-    sudoDenied,
+    sudoDenied: isSudoDenial(readPrivilegeCommand("/usr/bin/sudo", ["-n", "/usr/bin/true"])),
   };
 }
 
 function readConnection(port) {
-  return new Promise((resolve) => {
-    const socket = net.connect({ host: "127.0.0.1", port });
-    const finish = (value) => {
-      socket.destroy();
-      resolve(value);
-    };
-    socket.once("connect", () => finish("connected"));
-    socket.once("error", (error) => finish("code" in error ? String(error.code) : "unknown"));
-    socket.setTimeout(2000, () => finish("timeout"));
-  });
+  return readSocketConnection({ host: "127.0.0.1", port }, 2000);
 }
 
 async function readSandboxBoundary(settings) {
-  const denied = new Set(["EPERM", "EACCES", "ECONNREFUSED", "ENETUNREACH", "EHOSTUNREACH"]);
   return {
     ...(await readPrivilegeFacts()),
-    gatewayNetworkDenied: denied.has(await readConnection(settings.gateway)),
-    upstreamNetworkDenied: denied.has(await readConnection(settings.upstream)),
+    gatewayNetworkDenied: isSandboxNetworkDenial(await readConnection(settings.gateway)),
+    upstreamNetworkDenied: isSandboxNetworkDenial(await readConnection(settings.upstream)),
     checkoutWriteDenied: isDenied(() => writeFileSync(settings.projectFile, "unwanted change")),
   };
 }

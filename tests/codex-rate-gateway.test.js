@@ -5,6 +5,7 @@ import { createAdmissionController } from "../worker/codex-rate-controller.mjs";
 
 import { createRateHttpFixture } from "./codex-rate-http.js";
 import { createRateClock } from "./codex-rate-clock.js";
+import { createRequestEstimator } from "../worker/codex-rate-estimate.mjs";
 
 const tick = () => new Promise((resolve) => setImmediate(resolve));
 function createBudget() {
@@ -27,7 +28,12 @@ function createBudget() {
 /** @param {any} t @param {any} send @param {any} [options] */
 async function createGateway(t, send, options = {}) {
   const budget = options.budget ?? createBudget();
-  const fixture = await createRateHttpFixture({ budget, estimate: () => 30, send, ...options });
+  const fixture = await createRateHttpFixture({
+    budget,
+    estimate: () => ({ reservation: 30 }),
+    send,
+    ...options,
+  });
   t.after(() => fixture.gateway.close());
   return { ...fixture, budget };
 }
@@ -148,6 +154,67 @@ test("bad paths, methods, browser origins and missing authorization never reach 
   assert.deepEqual(budget.reservations, []);
 });
 
+test("loopback, encoding, JSON, streaming and byte limits reject before admission", async (t) => {
+  for (const options of [
+    { request: { remoteAddress: "192.0.2.1" } },
+    {
+      request: {
+        headers: {
+          authorization: "Bearer fake-test",
+          "content-type": "application/json",
+          "content-encoding": "gzip",
+        },
+      },
+    },
+    { request: { headers: { authorization: "Bearer fake-test", "content-type": "text/plain" } } },
+    { request: { body: JSON.stringify({ stream: false, input: "example" }) } },
+    { request: { body: "{" } },
+    { request: {}, maxBodyBytes: 4 },
+  ]) {
+    let calls = 0;
+    const fixture = await createGateway(
+      t,
+      async () => {
+        calls++;
+        return new Response("unexpected");
+      },
+      options.maxBodyBytes ? { maxBodyBytes: options.maxBodyBytes } : {},
+    );
+    const result = await fixture.request(options.request);
+    assert.ok(result.status >= 400);
+    await result.arrayBuffer();
+    assert.equal(calls, 0);
+    assert.deepEqual(fixture.budget.reservations, []);
+  }
+});
+
+test("the real estimator supplies the numeric reservation used by the admission controller", async (t) => {
+  const control = createAdmissionController({ tokens: 10000, requests: 10, windowMs: 60000 });
+  const estimate = createRequestEstimator({
+    encodingName: "o200k_base",
+    outputReserveTokens: 100,
+    overheadTokens: 10,
+    headroom: 0.2,
+  });
+  let calls = 0;
+  const fixture = await createGateway(
+    t,
+    async () => {
+      calls++;
+      return new Response(
+        'data: {"type":"response.completed","response":{"usage":{"input_tokens":4,"output_tokens":2}}}\n\n',
+      );
+    },
+    { budget: control, estimate },
+  );
+  const result = await fixture.request();
+  assert.equal(result.status, 200);
+  await result.arrayBuffer();
+  await tick();
+  assert.equal(calls, 1);
+  assert.equal(control.readSnapshot().local.events[0].observed, 6);
+});
+
 test("upstream redirects are rejected without following or exposing their location", async (t) => {
   let calls = 0;
   const { request, budget } = await createGateway(t, async (url) => {
@@ -202,7 +269,7 @@ test("request handling waits for provider budget feedback before the next fake u
   );
   const fixture = await createRateHttpFixture({
     budget: control,
-    estimate: () => 10,
+    estimate: () => ({ reservation: 10 }),
     now: clock.now,
     send: async () => {
       calls.push(clock.now());
@@ -294,6 +361,73 @@ test("gateway shutdown aborts an active upstream and closes its server", async (
   assert.equal(observedSignal.aborted, true);
   assert.deepEqual(budget.settled, [{ id: 1, observed: null }]);
   await assert.rejects(request());
+});
+
+test("queue time does not consume the upstream timeout after admission", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  let admit;
+  let stream;
+  const budget = createBudget();
+  budget.reserve = () =>
+    new Promise((resolve) => {
+      admit = resolve;
+    });
+  const fixture = await createGateway(
+    t,
+    async () =>
+      new Response(
+        new ReadableStream({
+          start(controller) {
+            stream = controller;
+          },
+        }),
+      ),
+    { budget, timeoutMs: 20 },
+  );
+  const pending = fixture.request();
+  pending.catch(() => {});
+  await tick();
+  t.mock.timers.tick(10);
+  admit(1);
+  const response = await pending;
+  const body = response.text();
+  body.catch(() => {});
+  t.mock.timers.tick(19);
+  await tick();
+  stream.enqueue(Buffer.from("data: example\n\n"));
+  stream.close();
+  assert.equal(await body, "data: example\n\n");
+});
+
+test("active streamed progress refreshes the inactivity timeout without replay", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  let stream;
+  let calls = 0;
+  const fixture = await createGateway(
+    t,
+    async () => {
+      calls++;
+      return new Response(
+        new ReadableStream({
+          start(controller) {
+            stream = controller;
+          },
+        }),
+      );
+    },
+    { timeoutMs: 20 },
+  );
+  const response = await fixture.request();
+  const body = response.text();
+  body.catch(() => {});
+  t.mock.timers.tick(19);
+  stream.enqueue(Buffer.from("data: first\n\n"));
+  await tick();
+  t.mock.timers.tick(19);
+  stream.enqueue(Buffer.from("data: second\n\n"));
+  stream.close();
+  assert.equal(await body, "data: first\n\ndata: second\n\n");
+  assert.equal(calls, 1);
 });
 
 test("timeout aborts a hung upstream without retry and keeps usage unavailable", async (t) => {

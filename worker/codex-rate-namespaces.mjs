@@ -18,6 +18,7 @@ export async function verifyWithRateNamespaces(verify, options) {
   try {
     namespaces = prepareRateProofNamespaces(options);
   } catch (error) {
+    if (error instanceof RateNamespaceError) throw error;
     throw new RateNamespaceError("namespace-preparation", { cause: error });
   }
   let result;
@@ -92,13 +93,20 @@ export function prepareRateProofNamespaces({
       write(setting.path, String(setting.target) + "\n");
       verifyNamespaceValue(setting.path, setting.target);
     }
-  } catch {
-    restoreNamespaces();
-    throw new Error("Could not prepare namespace policy.");
+  } catch (error) {
+    try {
+      restoreNamespaces();
+    } catch (restoration) {
+      throw new RateNamespaceError("namespace-restoration", {
+        cause: new AggregateError(
+          [error, restoration],
+          "Namespace preparation and restoration failed.",
+        ),
+      });
+    }
+    throw new Error("Could not prepare namespace policy.", { cause: error });
   }
   return {
-    changed: changed.length,
-    present: original.filter((setting) => setting.value !== null).length,
     facts: {
       originalUsernsClone: original[0].value === null ? null : Number(original[0].value),
       originalAppArmorRestriction: original[1].value === null ? null : Number(original[1].value),

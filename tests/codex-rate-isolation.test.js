@@ -8,6 +8,7 @@ import {
   parseIsolationCommandResult,
   createProbeEnvironment,
   validateSandboxLauncherResult,
+  parsePrivilegedProofResult,
 } from "../worker/prove-codex-rate-isolation.mjs";
 
 const workflow = readFileSync(new URL("../.github/workflows/ci.yml", import.meta.url), "utf8");
@@ -105,6 +106,28 @@ test("nonzero or timed-out commands cannot pass even with valid-looking JSON", (
     assert.throws(() => parseIsolationCommandResult(result));
   }
 });
+test("privileged proof parsing retains real command metadata on malformed or failed output", () => {
+  for (const result of [
+    { status: 0, stdout: "malformed-private-output" },
+    { status: 1, stdout: "{}" },
+  ]) {
+    let failure;
+    try {
+      parsePrivilegedProofResult(result);
+    } catch (error) {
+      failure = error;
+    }
+    assert.ok(failure instanceof Error);
+    const facts = summarizeIsolationCommandFailure(failure);
+    assert.equal(facts.exitCode, result.status);
+    assert.equal(facts.stdoutBytes, Buffer.byteLength(result.stdout));
+    assert.equal(JSON.stringify(facts).includes("private-output"), false);
+  }
+  assert.throws(() =>
+    parsePrivilegedProofResult({ status: 0, stdout: JSON.stringify({ facts: {} }) }),
+  );
+});
+
 const readJob = (name) =>
   workflow.match(new RegExp(`^  ${name}:\\n(?:(?:    .*|)\\n)*`, "m"))?.[0] ?? "";
 
@@ -114,6 +137,7 @@ test("native code, dependencies and runner controls request isolation while app-
     "worker/codex-rate-gateway.mjs",
     "worker/codex-rate-isolation-probe.mjs",
     "worker/prove-codex-rate-isolation.mjs",
+    "worker/prove-codex-runner.mjs",
     "tests/codex-rate-controller.test.js",
     ".github/workflows/ci.yml",
     ".github/workflows/codex-runner-proof.yml",

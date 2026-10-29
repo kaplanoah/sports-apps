@@ -7,10 +7,7 @@ export function createAdmissionController(
   policy,
   { now = Date.now, wait = (ms, signal) => delay(ms, undefined, { signal }), notBefore = 0 } = {},
 ) {
-  const feedback = createProviderFeedback(
-    { ...policy, headroom: policy.feedbackHeadroom ?? 0.2 },
-    now,
-  );
+  const feedback = createProviderFeedback({ ...policy, headroom: policy.feedbackHeadroom }, now);
   const reservations = new Map();
   let failure = false;
   const budget = createRateBudget(policy, {

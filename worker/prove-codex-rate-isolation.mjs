@@ -176,6 +176,7 @@ export function requiresRateIsolation(paths) {
       path.startsWith("tests/codex-rate-") ||
       [
         "worker/prove-codex-rate-isolation.mjs",
+        "worker/prove-codex-runner.mjs",
         ".github/workflows/ci.yml",
         ".github/workflows/codex-runner-proof.yml",
         "package.json",
@@ -200,6 +201,14 @@ export function validateRateIsolationFacts(facts, stage = "complete") {
     !expected.every((name) => facts[name] === true)
   )
     throw new IsolationProofError(stage, expected?.filter((name) => facts?.[name] !== true) ?? []);
+}
+
+export function parsePrivilegedProofResult(command) {
+  const result = parseIsolationCommandResult(command);
+  if (result?.passed === false)
+    throw new IsolationProofError(result.stage, result.failedFacts, result.commandFacts);
+  validateRateIsolationFacts(result?.facts);
+  return result;
 }
 
 function writeScope(env) {
@@ -509,7 +518,7 @@ async function proveHostedBoundary(env) {
     cliFolder: profile.folder,
     githubHosted: true,
   };
-  const output = execFileSync(
+  const output = spawnSync(
     "sudo",
     [
       "-n",
@@ -523,10 +532,7 @@ async function proveHostedBoundary(env) {
     ],
     { encoding: "utf8", timeout: 120000, maxBuffer: 65536, stdio: ["ignore", "pipe", "pipe"] },
   );
-  const result = JSON.parse(output);
-  if (result.passed === false)
-    throw new IsolationProofError(result.stage, result.failedFacts, result.commandFacts);
-  validateRateIsolationFacts(result.facts);
+  const result = parsePrivilegedProofResult(output);
   return {
     version: 1,
     passed: true,

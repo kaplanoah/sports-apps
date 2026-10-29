@@ -19,7 +19,7 @@ if (typeof address === "string" || !address) throw new Error("Loopback listener 
 const controller = createAdmissionController({ tokens: 10000, requests: 100, windowMs: 1000 });
 const gateway = await startAdmissionGateway({
   budget: controller,
-  estimate: () => 50,
+  estimate: () => ({ reservation: 50 }),
   send: async (_url, options) => fetch(`http://127.0.0.1:${address.port}/v1/responses`, options),
 });
 let closed = false;

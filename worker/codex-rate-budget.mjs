@@ -106,7 +106,6 @@ export function createRateBudget(
           const event = {
             id: ++sequence,
             charge: tokens,
-            estimated: tokens,
             observed: null,
             settled: false,
             expires: time + window,

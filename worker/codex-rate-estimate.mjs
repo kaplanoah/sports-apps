@@ -7,7 +7,6 @@ export function createRequestEstimator(policy) {
   const encoder = getEncoding(policy.encodingName);
   return (payload) => ({
     ...estimateRequestTokens(payload, policy, (text) => encoder.encode(text).length),
-    method: "explicit-encoding-estimate-with-headroom",
     encoding: policy.encodingName,
     modelTokenizerVerified: false,
   });
@@ -39,7 +38,6 @@ export function estimateRequestTokens(payload, policy, tokenize) {
     estimatedInputTokens: input,
     outputReserveTokens: policy.outputReserveTokens,
     observedTokens: null,
-    method: "configured-tokenizer-with-headroom",
   };
 }
 

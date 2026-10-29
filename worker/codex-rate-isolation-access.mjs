@@ -1,4 +1,5 @@
 import net from "node:net";
+import { constants } from "node:os";
 
 const rootServiceSockets = [
   "/var/run/docker.sock",
@@ -18,22 +19,63 @@ export function readRatePrivilegeFacts(status, uid) {
   };
 }
 
-/** @returns {Promise<string>} */
-function readSocketAccess(path) {
+export function isPermissionDenial(error) {
+  return (
+    error instanceof Error &&
+    "code" in error &&
+    ["EACCES", "EPERM", "EROFS"].includes(String(error.code))
+  );
+}
+
+export function isSandboxNetworkDenial(result) {
+  return ["EPERM", "EACCES", "ECONNREFUSED", "ENETUNREACH", "EHOSTUNREACH"].includes(result);
+}
+
+export function isPtraceDenial(result) {
+  if (result.error || result.signal || result.status !== 0 || typeof result.stdout !== "string")
+    return false;
+  try {
+    const outcome = JSON.parse(result.stdout);
+    return (
+      outcome?.result === -1 &&
+      Object.keys(outcome).length === 2 &&
+      [constants.errno.EPERM, constants.errno.EACCES].includes(outcome.errno)
+    );
+  } catch {
+    return false;
+  }
+}
+
+export function isSudoDenial(result) {
+  return (
+    !result.error &&
+    !result.signal &&
+    result.status === 1 &&
+    typeof result.stderr === "string" &&
+    /no new privileges|must be setuid root|effective uid is not 0|a password is required|not allowed to execute|not in the sudoers/i.test(
+      result.stderr,
+    )
+  );
+}
+
+/** @param {any} options @param {number} timeoutMs @param {(options:any)=>any} [connect] @returns {Promise<string>} */
+export function readSocketConnection(options, timeoutMs, connect = net.connect) {
   return new Promise((resolve) => {
-    const socket = net.connect({ path });
+    const socket = connect(options);
     const finish = (result) => {
       socket.destroy();
       resolve(result);
     };
     socket.once("connect", () => finish("connected"));
     socket.once("error", (error) => finish("code" in error ? String(error.code) : "unknown"));
-    socket.setTimeout(500, () => finish("timeout"));
+    socket.setTimeout(timeoutMs, () => finish("timeout"));
   });
 }
 
 /** @param {(path:string)=>Promise<string>|string} [connect] */
-export async function verifyRootServiceSocketDenial(connect = readSocketAccess) {
+export async function verifyRootServiceSocketDenial(
+  connect = (path) => readSocketConnection({ path }, 500),
+) {
   try {
     const results = await Promise.all(rootServiceSockets.map((path) => connect(path)));
     return results.every((result) => ["ENOENT", "EACCES", "EPERM"].includes(result));
