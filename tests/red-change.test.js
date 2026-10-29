@@ -1914,7 +1914,7 @@ function createTestedBranch(context) {
     history.readGit(["merge", "--no-ff", "-m", "merge main", "main"], date);
     return history.readGit(["rev-parse", "HEAD"]);
   };
-  /** @param {string} head @param {Record<string, string | null>} pushTimes @param {Omit<ApprovalTimes, "pushTimes">} [times] */
+  /** @param {string} head @param {Record<string, string | string[] | null>} pushTimes @param {Omit<ApprovalTimes, "pushTimes">} [times] */
   const decide = (head, pushTimes, times) =>
     readRedApproval({
       diff: RED_DIFF,
@@ -2037,6 +2037,50 @@ test("a red commit force-pushed off the branch before the label and pushed again
   assert.match(held.message, LABEL_PROBLEM);
 });
 
+test("a red commit pushed between two force pushes before the label holds phone-ok", async (context) => {
+  const branch = createTestedBranch(context);
+  branch.writeFile("shared/page/sheet.js", "export const draw = 4;\n");
+  const red = branch.commit("2026-10-07T09:44:00Z");
+  branch.writeFile("tests/sheet.test.js", "test('draws', () => {});\n");
+  const tests = branch.commit("2026-10-07T11:00:00Z");
+  const held = await branch.decide(
+    tests,
+    { [red]: "2026-10-07T09:46:00Z", [tests]: PUSHED_AFTER_LABEL },
+    {
+      forcePushes: [
+        { at: "2026-10-07T09:50:00Z", head: branch.tested },
+        { at: "2026-10-07T09:42:00Z", head: branch.tested },
+      ],
+    },
+  );
+  assert.equal(held.isHeld, true);
+  assert.match(held.message, LABEL_PROBLEM);
+});
+
+test("a head pushed, force-pushed off, and pushed again before the label keeps phone-ok, but not pushed again only after it", async (context) => {
+  const branch = createTestedBranch(context);
+  branch.writeFile("tests/sheet.test.js", "test('draws', () => {});\n");
+  const tests = branch.commit("2026-10-07T11:00:00Z");
+  const decision = await branch.decide(
+    tests,
+    {
+      [branch.tested]: ["2026-10-07T09:45:00Z", "2026-10-07T09:30:00Z"],
+      [tests]: PUSHED_AFTER_LABEL,
+    },
+    { forcePushes: [{ at: "2026-10-07T09:40:00Z", head: branch.base }] },
+  );
+  assert.equal(decision.isHeld, false);
+  const pushedAgainAfterLabel = await branch.decide(
+    tests,
+    {
+      [branch.tested]: ["2026-10-07T09:30:00Z", PUSHED_AFTER_LABEL],
+      [tests]: "2026-10-07T11:15:00Z",
+    },
+    { forcePushes: [{ at: "2026-10-07T09:40:00Z", head: branch.base }] },
+  );
+  assert.equal(pushedAgainAfterLabel.isHeld, true);
+});
+
 test("the gate looks for the labeled head only among the branch's own commits, and not at all without its name", async (context) => {
   const branch = createTestedBranch(context);
   branch.writeFile("tests/sheet.test.js", "test('draws', () => {});\n");
@@ -2078,8 +2122,8 @@ test("a commit pushed to another branch before the label isn't taken for the hea
 
 /**
  * @typedef {object} ApprovalTimes
- * @property {Record<string, string | null>} [pushTimes] when each commit was first pushed to the
- *   pull request's branch, or null for one never pushed there as a push's head
+ * @property {Record<string, string | string[] | null>} [pushTimes] when each commit was pushed to
+ *   the pull request's branch, or null for one never pushed there as a push's head
  * @property {Record<string, string>} [betaTimes] when a commit was pushed to beta
  * @property {{ at: string, head: string }[]} [forcePushes] when the head was force-pushed, and to
  *   which commit
@@ -2136,7 +2180,9 @@ function createApprovalApi(
     else if (url.pathname.endsWith("/check-suites")) {
       const sha = url.pathname.split("/").at(-2) ?? "";
       const pushedAt = sha in pushTimes ? pushTimes[sha] : "2026-10-07T09:45:00Z";
-      const pushed = pushedAt ? [{ created_at: pushedAt, head_branch: env.HEAD_BRANCH }] : [];
+      const pushed = [pushedAt ?? []]
+        .flat()
+        .map((created_at) => ({ created_at, head_branch: env.HEAD_BRANCH }));
       const toBeta = sha in betaTimes ? [{ created_at: betaTimes[sha], head_branch: "beta" }] : [];
       answer = { check_suites: [...toBeta, ...pushed] };
     } else if (url.pathname.endsWith("/deploy.yml/runs"))

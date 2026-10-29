@@ -35,7 +35,7 @@ import {
   findLastAdding,
   findLastForcePushAt,
   findLastForcePushBefore,
-  readPushTime,
+  readPushTimes,
   readTimeline,
 } from "./labeling.mjs";
 import { createGitHub } from "./github-api.mjs";
@@ -1030,9 +1030,9 @@ export function decideGate(
  * Whether the gate finds the head the owner labeled, with nothing red pushed since. The labeled
  * head is the head's newest first parent off main that GitHub saw pushed to the pull request's
  * branch before the label. GitHub records only each push's head, so a commit it never saw there
- * arrived under a later one. After a force push, only the head it left or a commit pushed since
- * counts, since a commit pushed before it may have been dropped from the branch and pushed again
- * after the label.
+ * arrived under a later one. After a force push, only the head it left or a commit pushed again
+ * between it and the label counts, since a commit pushed only before it may have been dropped from
+ * the branch and pushed again after the label.
  * @param {{ repository: string, head: string, branch: string, labeledAt: number, lastForcePush: { at: number, head: string | null }, env: NodeJS.ProcessEnv, fetchImpl: typeof fetch, cwd: string }} options
  */
 async function hasNothingRedSinceLabeledHead({
@@ -1047,9 +1047,11 @@ async function hasNothingRedSinceLabeledHead({
 }) {
   if (!branch) return false;
   for (const sha of listBranchFirstParents({ head, cwd })) {
-    const pushedAt = await readPushTime({ repository, sha, branch, env, fetchImpl });
-    if (pushedAt < labeledAt) {
-      const isOnLabeledBranch = sha === lastForcePush.head || pushedAt > lastForcePush.at;
+    const pushTimes = await readPushTimes({ repository, sha, branch, env, fetchImpl });
+    if (pushTimes[0] < labeledAt) {
+      const isOnLabeledBranch =
+        sha === lastForcePush.head ||
+        pushTimes.some((pushedAt) => pushedAt > lastForcePush.at && pushedAt < labeledAt);
       return isOnLabeledBranch && !isRedChange(readCommitChange(sha, head, cwd));
     }
   }

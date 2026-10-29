@@ -44,8 +44,7 @@ export function findLastAdding(events, label) {
  * When a pull request's head was last force-pushed, or -Infinity when it never was.
  * @param {TimelineEvent[]} events
  */
-export const findLastForcePushAt = (events) =>
-  Math.max(...events.filter((event) => event.event === "head_ref_force_pushed").map(readEventTime));
+export const findLastForcePushAt = (events) => findLastForcePushBefore(events, Infinity).at;
 
 /**
  * The last force push before `time`, when it was and the head it left, or -Infinity and null when
@@ -141,17 +140,22 @@ function readTimelineEvent({ __typename, ...fields }) {
 }
 
 /**
- * When a commit was first pushed to `branch`: its earliest check suite there, which GitHub makes as
- * the push that brings the commit arrives, or NaN when it has none. A suite on another branch, like
- * beta or a scratch branch, says nothing of when the commit reached this one.
- * @param {object} options
- * @param {string} options.repository as owner/name
- * @param {string} options.sha
- * @param {string} options.branch
- * @param {typeof fetch} [options.fetchImpl]
- * @param {NodeJS.ProcessEnv} [options.env] holds GH_TOKEN
+ * @typedef {object} PushQuery
+ * @property {string} repository as owner/name
+ * @property {string} sha
+ * @property {string} branch
+ * @property {typeof fetch} [fetchImpl]
+ * @property {NodeJS.ProcessEnv} [env] holds GH_TOKEN
  */
-export async function readPushTime({
+
+/**
+ * When a commit was pushed to `branch`, earliest first: the times of its check suites there, which
+ * GitHub makes as each push that brings the commit arrives. A suite on another branch, like beta or
+ * a scratch branch, says nothing of when the commit reached this one.
+ * @param {PushQuery} query
+ * @returns {Promise<number[]>}
+ */
+export async function readPushTimes({
   repository,
   sha,
   branch,
@@ -164,8 +168,17 @@ export async function readPushTime({
     `/commits/${sha}/check-suites`,
     (answer) => answer.check_suites,
   );
-  const times = suites
+  return suites
     .filter((/** @type {{ head_branch: string }} */ suite) => suite.head_branch === branch)
-    .map((/** @type {{ created_at: string }} */ suite) => Date.parse(suite.created_at));
-  return times.length ? Math.min(...times) : Number.NaN;
+    .map((/** @type {{ created_at: string }} */ suite) => Date.parse(suite.created_at))
+    .toSorted((first, second) => first - second);
+}
+
+/**
+ * When a commit was first pushed to `branch`, or NaN when it has no check suite there.
+ * @param {PushQuery} query
+ */
+export async function readPushTime(query) {
+  const [firstPushedAt = Number.NaN] = await readPushTimes(query);
+  return firstPushedAt;
 }

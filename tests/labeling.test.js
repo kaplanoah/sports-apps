@@ -6,6 +6,7 @@ import {
   findLastForcePushAt,
   findLastForcePushBefore,
   readPushTime,
+  readPushTimes,
   readTimeline,
 } from "../worker/labeling.mjs";
 import { createTimelineAnswer } from "./timeline.js";
@@ -80,8 +81,16 @@ test("a head pushed after the phone-ok label leaves it before the last push, wha
     created_at: "2026-10-07T09:50:00Z",
     head: { oid: "b".repeat(40) },
   };
+  const firstForcePush = {
+    event: "head_ref_force_pushed",
+    created_at: "2026-10-07T09:20:00Z",
+    head: { oid: "c".repeat(40) },
+  };
   assert.deepEqual(
-    findLastForcePushBefore([forcePush, labeled, earlierForcePush], Date.parse(labeled.created_at)),
+    findLastForcePushBefore(
+      [forcePush, labeled, earlierForcePush, firstForcePush],
+      Date.parse(labeled.created_at),
+    ),
     { at: Date.parse("2026-10-07T09:50:00Z"), head: "b".repeat(40) },
   );
   assert.deepEqual(findLastForcePushBefore([labeled, forcePush], Date.parse(labeled.created_at)), {
@@ -100,7 +109,7 @@ test("a head pushed after the phone-ok label leaves it before the last push, wha
   );
 });
 
-test("a head's push time is its earliest check suite's on the pull request's branch, on any page", async () => {
+test("a head's push times are its check suites' on the pull request's branch, earliest first, on any page", async () => {
   /** @type {string[]} */
   const urls = [];
   /** @param {{ created_at: string, head_branch: string }[]} suites */
@@ -124,6 +133,15 @@ test("a head's push time is its earliest check suite's on the pull request's bra
   );
   assert.deepEqual(urls, [
     `https://api.github.com/repos/owner/repo/commits/${sha}/check-suites?per_page=100&page=1`,
+  ]);
+  const pushedTwice = createFetch([
+    { created_at: "2026-10-07T11:00:00Z", head_branch: "feature" },
+    { created_at: "2026-10-07T08:00:00Z", head_branch: "beta" },
+    { created_at: "2026-10-07T09:00:00Z", head_branch: "feature" },
+  ]);
+  assert.deepEqual(await readPushTimes({ ...options, fetchImpl: pushedTwice }), [
+    HEAD_PUSHED_AT,
+    Date.parse("2026-10-07T11:00:00Z"),
   ]);
   const otherBranches = Array.from({ length: 100 }, () => ({
     created_at: "2026-10-07T08:00:00Z",
