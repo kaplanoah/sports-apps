@@ -87,10 +87,8 @@ try {
       "--bounding-set=-all",
       "--inh-caps=-all",
       "--ambient-caps=-all",
-      process.execPath,
-      "--disable-sigusr1",
-      "-e",
-      "setInterval(() => {}, 1000)",
+      "/usr/bin/sleep",
+      "120",
     ],
     { env: { PATH: `${dirname(process.execPath)}:/usr/bin:/bin` }, stdio: "ignore" },
   );
