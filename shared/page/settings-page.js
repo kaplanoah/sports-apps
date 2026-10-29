@@ -22,15 +22,26 @@ export function showSettingsPage(dialog) {
 }
 
 /**
+ * Whether focus has moved on to another sheet, as when a page opens while the last one closes.
+ * @param {HTMLElement} button
+ */
+function isFocusOnAnotherSheet(button) {
+  const focusedDialog = document.activeElement?.closest("dialog");
+  return Boolean(focusedDialog?.open) && focusedDialog !== button.closest("dialog");
+}
+
+/**
  * Wires the row that opens a page of settings, with its caret, and the page's sheet, which hands
- * focus back to the row as it closes.
+ * focus back to the row as it closes, unless another sheet has taken it.
  * @param {HTMLDialogElement} dialog
  * @param {{ button: HTMLElement, open: () => void } & import("./sheet.js").SheetParts} options
  */
 export function wireSettingsPage(dialog, { button, open, ...sheet }) {
   setHtml(button, html`${button.textContent.trim()}${SETTINGS_CARET}`);
   button.addEventListener("click", open);
-  dialog.addEventListener("close", () => button.focus());
+  dialog.addEventListener("close", () => {
+    if (!isFocusOnAnotherSheet(button)) button.focus();
+  });
   wireSheet(dialog, sheet);
   keepDialogFor(dialog, START_AFTER_AWAY_MS);
 }

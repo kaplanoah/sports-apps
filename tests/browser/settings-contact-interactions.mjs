@@ -152,6 +152,34 @@ export function testSettingsContactInteractions(test, expect, { openApp, setting
     }
   });
 
+  test("a Settings page that opens as another closes keeps focus on its title", async ({
+    page,
+  }) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await openApp(page);
+    await page.getByRole("button", { name: "Settings", exact: true }).click();
+    const [closing, opening] = [settingsPages[0], settingsPages.at(-1)].map((name) =>
+      name.toLowerCase(),
+    );
+    await page.locator(`#${closing}Btn`).click();
+    await expect(page.locator(`#${closing}Dialog h2`)).toBeFocused();
+
+    await page.evaluate(
+      ({ closing, opening }) =>
+        new Promise((resolve) => {
+          const closingDialog = /** @type {HTMLDialogElement} */ (
+            document.getElementById(`${closing}Dialog`)
+          );
+          closingDialog.addEventListener("close", resolve, { once: true });
+          closingDialog.close();
+          document.getElementById(`${opening}Btn`)?.click();
+        }),
+      { closing, opening },
+    );
+
+    await expect(page.locator(`#${opening}Dialog h2`)).toBeFocused();
+  });
+
   test("a tap on a Settings page row opens its page at once, with no wait for the row's press", async ({
     page,
   }) => {
