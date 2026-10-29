@@ -15,14 +15,21 @@ env:
   REVIEW_TRUSTED: ${{ github.sha }}
   PR: ${{ github.event.pull_request.number }}
 
+# GitHub keeps one waiting run per group, so a label change that asks for no review waits in a
+# group of its own, where it can't take the place of a review waiting its turn.
 concurrency:
-  group: trusted-review-${{ github.event.pull_request.number }}
-  cancel-in-progress: ${{ (github.event.action != 'labeled' && github.event.action != 'unlabeled') || (github.event.action == 'labeled' && github.event.sender.login == github.repository_owner && startsWith(github.event.label.name, 'review-provider:')) }}
+  group: trusted-review-${{ github.event.pull_request.number }}${{ (github.event.action == 'labeled' || github.event.action == 'unlabeled') && !(!github.event.pull_request.draft && github.event.action == 'labeled' && (github.event.label.name == 'review' || (github.event.sender.login == github.repository_owner && contains(fromJSON('["review-provider:claude","review-provider:codex"]'), github.event.label.name)))) && '-observe' || '' }}
+  cancel-in-progress: ${{ (github.event.action != 'labeled' && github.event.action != 'unlabeled') || (github.event.action == 'labeled' && github.event.sender.login == github.repository_owner && contains(fromJSON('["review-provider:claude","review-provider:codex"]'), github.event.label.name)) }}
 
 jobs:
+  # Runs in both groups read and write the one provider comment, so they take turns.
   review-select:
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    concurrency:
+      group: trusted-review-provider-${{ github.event.pull_request.number }}
+      cancel-in-progress: false
+      queue: max
     permissions:
       contents: read
       pull-requests: write
