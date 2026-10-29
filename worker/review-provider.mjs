@@ -1,6 +1,6 @@
 import { appendFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { createGitHub, readAllPages } from "./github-api.mjs";
+import { ACTIONS_LOGIN, createGitHub, readAllPages } from "./github-api.mjs";
 import { isRepositoryName, isRunId } from "./review-run.mjs";
 
 export const PROVIDER_MARKER = "<!-- trusted-review-provider ";
@@ -25,8 +25,7 @@ export function writeReviewModelQueue(env, provider, portion) {
 /** @param {any[]} comments */
 function findProviderComment(comments) {
   const matching = comments.filter(
-    (comment) =>
-      comment.user?.login === "github-actions[bot]" && comment.body?.startsWith(PROVIDER_MARKER),
+    (comment) => comment.user?.login === ACTIONS_LOGIN && comment.body?.startsWith(PROVIDER_MARKER),
   );
   if (matching.length > 1) throw new Error("Ambiguous review provider state.");
   return matching[0] ?? null;

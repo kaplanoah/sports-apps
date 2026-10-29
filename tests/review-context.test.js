@@ -57,6 +57,22 @@ test("every thread is read, page after page, until GitHub says there are no more
   );
 });
 
+test("threads GitHub doesn't return, or a cursor it doesn't advance, stop the read", async () => {
+  const pullRequest = { owner: "o", name: "n", number: 7 };
+  const stuck = { nodes: [thread({})], pageInfo: { hasNextPage: true, endCursor: "one" } };
+  await assert.rejects(
+    readThreads(async () => ({ repository: { pullRequest: null } }), pullRequest),
+    /didn't return the pull request's review threads/,
+  );
+  await assert.rejects(
+    readThreads(
+      async () => ({ repository: { pullRequest: { reviewThreads: stuck } } }),
+      pullRequest,
+    ),
+    /didn't advance the cursor of the pull request's review threads/,
+  );
+});
+
 test("a thread past the comments read keeps its first, which holds what it raised, and a short one holds each once", async () => {
   const comment = (/** @type {string} */ body) => ({ author: { login: "kaplanoah" }, body });
   const root = comment("the checklist");

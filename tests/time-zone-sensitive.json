@@ -133,6 +133,7 @@
     "tests/page-move.test.js",
     "tests/page-search.test.js",
     "tests/phone-look-log.test.js",
+    "tests/phone-ready.test.js",
     "tests/pick-theme.test.js",
     "tests/plan-review.test.js",
     "tests/playwright-config.test.js",

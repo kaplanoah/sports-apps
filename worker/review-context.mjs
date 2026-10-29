@@ -8,8 +8,14 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { createGitHub, createGraphQL, readAllPages } from "./github-api.mjs";
-import { OFF_DIFF_HEADING, REVIEWER } from "./review-state.mjs";
+import {
+  ACTIONS_LOGIN,
+  createGitHub,
+  createGraphQL,
+  readAllNodes,
+  readAllPages,
+} from "./github-api.mjs";
+import { OFF_DIFF_HEADING } from "./review-state.mjs";
 
 // A thread's first comment, which holds what it raised, as every item of a checklist of Nits, and
 // its last ones, since its newest replies hold its answer.
@@ -55,16 +61,14 @@ const joinComments = ({ first, comments, ...thread }) => ({
  * @param {{ owner: string, name: string, number: number }} pullRequest
  */
 export async function readThreads(callGraphQL, pullRequest) {
-  const threads = [];
-  /** @type {string | null} */
-  let after = null;
-  for (;;) {
-    const data = await callGraphQL(THREADS_QUERY, { ...pullRequest, after });
-    const page = data.repository.pullRequest.reviewThreads;
-    threads.push(...page.nodes.map(joinComments));
-    if (!page.pageInfo.hasNextPage) return threads;
-    after = page.pageInfo.endCursor;
-  }
+  const threads = await readAllNodes(
+    callGraphQL,
+    THREADS_QUERY,
+    pullRequest,
+    (data) => data.repository?.pullRequest?.reviewThreads,
+    "the pull request's review threads",
+  );
+  return threads.map(joinComments);
 }
 
 /**
@@ -73,7 +77,8 @@ export async function readThreads(callGraphQL, pullRequest) {
  */
 export const listOffDiffFindings = (comments) =>
   comments.filter(
-    (comment) => comment.user?.login === REVIEWER && comment.body?.startsWith(OFF_DIFF_HEADING),
+    (comment) =>
+      comment.user?.login === ACTIONS_LOGIN && comment.body?.startsWith(OFF_DIFF_HEADING),
   );
 
 /**
@@ -94,7 +99,7 @@ export async function readConversation({ callGraphQL, callGitHub, pullRequest })
 // say in the repo wrote, and the review's own findings, whose bot has no say of its own.
 const REPO_ASSOCIATIONS = new Set(["OWNER", "MEMBER", "COLLABORATOR"]);
 // GraphQL names a bot without the "[bot]" the REST API adds to its login.
-const REVIEWER_BOT = REVIEWER.replace(/\[bot\]$/, "");
+const REVIEWER_BOT = ACTIONS_LOGIN.replace(/\[bot\]$/, "");
 const LEFT_OUT_COMMENT = "*A comment from someone outside the repo was left out.*";
 
 /**
