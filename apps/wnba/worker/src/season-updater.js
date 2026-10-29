@@ -220,7 +220,7 @@ export const readSchedule = (docs, year) => docs.read(nameScheduleKey(year));
 // covers it, before ESPN's scores stand in for a game it has started.
 export function describeSnapshotStatus(snapshot) {
   const missing = snapshot.missing || [];
-  const isIdle = (feed) => feed === "scoreboard" && !!snapshot.isScoreboardIdle;
+  const isIdle = (feed) => feed === "scoreboard" && !snapshot.hasScoreDue;
   return {
     error: missing.length ? "wnba_feeds_missing" : "",
     detail: missing.join(", "),

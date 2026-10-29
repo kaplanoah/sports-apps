@@ -241,6 +241,42 @@ test("while the scoreboard doesn't answer, ESPN's listing without the league's g
   );
 });
 
+test("while the scoreboard doesn't answer and no score is due, ESPN's listing without the league's games gives no backup reason", async () => {
+  const espn = structuredClone(ESPN.answers);
+  espn[ESPN_LISTING].items = [];
+  const { schedule } = readNextMorning();
+  const games = schedule.leagueSchedule.gameDates.flatMap((day) => day.games);
+  Object.assign(games.find((game) => game.gameId === "1042600112"), {
+    gameStatus: 3,
+    gameStatusText: "Final/OT",
+  });
+  const league = createLeague({ refuse: { scoreboard: "page" }, answers: { schedule }, espn });
+  const loader = createSnapshotLoader({
+    fetchImpl: league.fetchImpl,
+    now: () => Date.parse(ESPN.now),
+  });
+
+  const snapshot = await loader.loadSnapshot(2026);
+
+  assert.deepEqual([snapshot.missing, snapshot.hasScoreDue], [["scoreboard"], false]);
+  assert.equal(readBackupReason(snapshot), null);
+});
+
+test("while the scoreboard answers, ESPN's listing without a game the schedule holds as under way gives no backup reason", async () => {
+  const espn = structuredClone(ESPN.answers);
+  espn[ESPN_LISTING].items = [];
+  const league = createLeague({ answers: readNextMorning(), espn });
+  const loader = createSnapshotLoader({
+    fetchImpl: league.fetchImpl,
+    now: () => Date.parse(ESPN.now),
+  });
+
+  const snapshot = await loader.loadSnapshot(2026);
+
+  assert.deepEqual([snapshot.missing, snapshot.standIn], [[], null]);
+  assert.equal(readBackupReason(snapshot), null);
+});
+
 test("while neither the scoreboard nor ESPN answers, nothing covers it", async () => {
   const league = createLeague({ refuse: { scoreboard: "page" } });
   const loader = createSnapshotLoader({

@@ -63,11 +63,12 @@ export const describeFailures = (failures) =>
     .join("; ");
 
 // ESPN can answer and still leave the scoreboard's games uncovered, so the status says why: a game
-// it didn't answer for, or a listing without one of the league's games while one is due.
+// it didn't answer for, or, while the scoreboard is down, a listing without one of the league's
+// games while a score is due.
 /**
  * Why ESPN's backup, once it answered, fell short, or null when it didn't.
  * @param {{ scoreboard: any, backup: { days: { first: string, last: string }, games: any[], missed: unknown[] } | null }} responses
- * @param {{ scoreboardCover: string | null, isScoreboardIdle: boolean }} snapshot
+ * @param {{ scoreboardCover: string | null, hasScoreDue: boolean }} snapshot
  */
 function describeBackupFailure({ scoreboard, backup }, snapshot) {
   if (!backup) return null;
@@ -76,7 +77,7 @@ function describeBackupFailure({ scoreboard, backup }, snapshot) {
   const listing = `from ${days.first} to ${days.last}`;
   if (missed.length)
     return `ESPN didn't answer for ${missed.length} of the ${total} it listed ${listing}: ${describeError(missed[0])}`;
-  if (scoreboard || snapshot.scoreboardCover || snapshot.isScoreboardIdle) return null;
+  if (scoreboard || snapshot.scoreboardCover || !snapshot.hasScoreDue) return null;
   return `ESPN listed none of the league's games ${listing}, of ${total} in all`;
 }
 
