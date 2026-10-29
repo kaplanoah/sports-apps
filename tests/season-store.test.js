@@ -12,7 +12,7 @@ const ORIGIN = "https://app.example";
 
 // A league with nothing to update.
 const QUIET_LEAGUE = {
-  createLoadSnapshot: () => async () => ({}),
+  createLoadSnapshot: () => async () => ({ season: 2026 }),
   loadCurrentSnapshot: async () => ({ season: 2026 }),
   readUpdates: async () => null,
   saveSnapshot: /** @type {(docs: any, snapshot: any) => Promise<void>} */ (async () => {}),

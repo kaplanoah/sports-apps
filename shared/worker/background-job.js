@@ -34,7 +34,7 @@ export function createSavedDocs() {
   const saved = new Map();
 
   /**
-   * @param {JobContext["docs"]} docs
+   * @param {Pick<JobContext["docs"], "read">} docs
    * @param {string} key
    */
   async function readDoc(docs, key) {
@@ -44,7 +44,7 @@ export function createSavedDocs() {
 
   /**
    * Saves the document unless it's what the store already has, and says whether it saved it.
-   * @param {JobContext["docs"]} docs
+   * @param {Pick<JobContext["docs"], "read" | "write">} docs
    * @param {string} key
    * @param {any} doc
    */
@@ -91,7 +91,7 @@ export function createVersionForgetter() {
 
 /**
  * The seasons the store keeps from before the current one, newest first.
- * @param {JobContext["docs"]} docs
+ * @param {Pick<JobContext["docs"], "list">} docs
  * @param {number} current
  */
 export async function listPastSeasons(docs, current) {
