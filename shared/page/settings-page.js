@@ -3,7 +3,6 @@ import { openSheet, wireSheet } from "./sheet.js";
 import { closeSheet } from "./sheet-swipe.js";
 import { keepDialogFor } from "./sheet-memory.js";
 import { SETTINGS_CARET } from "./settings-icons.js";
-import { runAfterPress } from "./press.js";
 
 /* global START_AFTER_AWAY_MS -- from long-away.js */
 
@@ -55,7 +54,7 @@ export function wireSettingsPage(dialog, { button, open, ...sheet }) {
 export function startSettingsPage(dialog, { button, isOwnGesture }) {
   const back = /** @type {HTMLButtonElement} */ (dialog.querySelector(".settings-back"));
   const open = () => showSettingsPage(dialog);
-  back.addEventListener("click", () => runAfterPress(back, () => closeSheet(dialog)));
+  back.addEventListener("click", () => closeSheet(dialog));
   wireSettingsPage(dialog, {
     button,
     open,
