@@ -180,7 +180,7 @@ export async function readPushTimes({
 }
 
 /**
- * When a commit was first pushed to `branch`, or NaN when it has no check suite there.
+ * When a commit was first pushed to `branch`, or NaN when it has no GitHub Actions check suite there.
  * @param {PushQuery} query
  */
 export async function readPushTime(query) {
