@@ -429,10 +429,8 @@ export function prepareTrialSession(env, portion, snapshot) {
     writeJson(join(root, "schema.json"), request.schema);
   } else writeClaudeTrialRequest(plan, portion, root, { ...env, TRIAL_HEAD: identity.head });
   execFileSync(process.execPath, [join(SOURCE, "worker/review-codex.mjs"), "config"], {
-    env: { ...env, REVIEW_CHECKOUT: env.GITHUB_WORKSPACE },
+    env: { ...env, REVIEW_CHECKOUT: env.GITHUB_WORKSPACE, REVIEW_OFFLINE: "true" },
   });
-  const config = join(env.RUNNER_TEMP, "codex-home/config.toml");
-  writeFileSync(config, 'web_search = "disabled"\n' + readFileSync(config, "utf8"));
   execFileSync("tar", [
     "-czf",
     join(env.RUNNER_TEMP, "trial-session-input.tgz"),

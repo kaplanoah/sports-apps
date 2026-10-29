@@ -2,6 +2,8 @@ import { appendFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { ACTIONS_LOGIN, createGitHub, readAllPages } from "./github-api.mjs";
 import { isRepositoryName, isRunId } from "./review-run.mjs";
+import { readTimeline } from "./labeling.mjs";
+import { isLegacyReviewSelection, isReviewSelection } from "./review-selection.mjs";
 
 export const PROVIDER_MARKER = "<!-- trusted-review-provider ";
 const PROVIDERS = ["claude", "codex"];
@@ -39,15 +41,21 @@ function readProviderComment(body) {
   if (
     !state ||
     !PROVIDERS.includes(state.provider) ||
-    !/^(initial|\d+)$/.test(state.selection) ||
+    !isReviewSelection(state.selection) ||
     Object.keys(state).sort().join(",") !== "provider,selection"
   )
     throw new Error("Malformed review provider state.");
   return state;
 }
 
-/** @param {{ comments: any[], events: any[], owner: string, defaultProvider?: string }} context */
-export function selectReviewProvider({ comments, events, owner, defaultProvider = "claude" }) {
+/** @param {{ comments: any[], events: any[], owner: string, defaultProvider?: string, legacySelectionNode?: string }} context */
+export function selectReviewProvider({
+  comments,
+  events,
+  owner,
+  defaultProvider = "claude",
+  legacySelectionNode,
+}) {
   const previous = readProviderComment(findProviderComment(comments)?.body);
   if (!PROVIDERS.includes(defaultProvider)) throw new Error("Unknown default review provider.");
   const overrides = events.filter(
@@ -56,33 +64,79 @@ export function selectReviewProvider({ comments, events, owner, defaultProvider 
       event.actor?.login === owner &&
       /^review-provider:(claude|codex)$/.test(event.label?.name ?? ""),
   );
-  overrides.sort((first, second) => second.id - first.id);
-  const latest = overrides[0];
+  const identifiers = overrides.map((event) => event.id);
+  if (
+    identifiers.some((id) => typeof id !== "string" || !isReviewSelection(`node:${id}`)) ||
+    new Set(identifiers).size !== identifiers.length
+  )
+    throw new Error("Invalid provider selection history.");
+  const anchor =
+    previous?.selection === "initial" || !previous
+      ? null
+      : isLegacyReviewSelection(previous.selection)
+        ? legacySelectionNode
+        : previous.selection.slice("node:".length);
+  if (
+    previous &&
+    previous.selection !== "initial" &&
+    !overrides.some(
+      (event) => event.id === anchor && event.label.name === `review-provider:${previous.provider}`,
+    )
+  )
+    throw new Error("The persisted provider selection is missing from authoritative history.");
+  const latest = overrides.at(-1);
   if (latest) {
-    if (!Number.isSafeInteger(latest.id) || latest.id <= 0)
-      throw new Error("Invalid provider selection event.");
-    return { provider: latest.label.name.split(":")[1], selection: String(latest.id) };
+    if (latest.id === anchor) return previous;
+    return { provider: latest.label.name.split(":")[1], selection: `node:${latest.id}` };
   }
   return previous ?? { provider: defaultProvider, selection: "initial" };
 }
 
-/** @param {NodeJS.ProcessEnv} env @param {(path:string, request?:any)=>Promise<any>} readGitHub */
-export async function readReviewProvider(env, readGitHub) {
+/** @param {NodeJS.ProcessEnv} env @param {(path:string, request?:any)=>Promise<any>} readGitHub @param {typeof fetch} [fetchImpl] */
+export async function readReviewProvider(env, readGitHub, fetchImpl = fetch) {
   const comments = await readAllPages(readGitHub, `/issues/${env.PR}/comments`);
-  const events = await readAllPages(readGitHub, `/issues/${env.PR}/timeline`);
+  const previous = readProviderComment(findProviderComment(comments)?.body);
+  const events = await readTimeline({
+    repository: env.GITHUB_REPOSITORY,
+    pullNumber: env.PR,
+    env,
+    fetchImpl,
+  });
+  const legacySelectionNode =
+    previous && isLegacyReviewSelection(previous.selection)
+      ? await readLegacySelectionNode(env, readGitHub, previous)
+      : undefined;
   const choice = selectReviewProvider({
     comments,
     events,
     owner: env.GITHUB_REPOSITORY.split("/")[0],
     defaultProvider: env.REVIEW_DEFAULT_PROVIDER || undefined,
+    legacySelectionNode,
   });
   return { choice, comment: findProviderComment(comments) };
 }
 
-/** @param {NodeJS.ProcessEnv} env @param {(path:string, request?:any)=>Promise<any>} readGitHub */
-export async function verifyReviewProvider(env, readGitHub) {
+/** @param {NodeJS.ProcessEnv} env @param {(path:string, request?:any)=>Promise<any>} readGitHub @param {{provider:string,selection:string}} previous */
+async function readLegacySelectionNode(env, readGitHub, previous) {
+  const event = await readGitHub(`/issues/events/${previous.selection}`);
+  if (
+    String(event.id) !== previous.selection ||
+    typeof event.node_id !== "string" ||
+    !isReviewSelection(`node:${event.node_id}`) ||
+    event.event !== "labeled" ||
+    event.actor?.login !== env.GITHUB_REPOSITORY.split("/")[0] ||
+    event.label?.name !== `review-provider:${previous.provider}` ||
+    event.issue?.number !== Number(env.PR) ||
+    event.issue?.url !== `https://api.github.com/repos/${env.GITHUB_REPOSITORY}/issues/${env.PR}`
+  )
+    throw new Error("The legacy provider selection could not be authenticated.");
+  return event.node_id;
+}
+
+/** @param {NodeJS.ProcessEnv} env @param {(path:string, request?:any)=>Promise<any>} readGitHub @param {typeof fetch} [fetchImpl] */
+export async function verifyReviewProvider(env, readGitHub, fetchImpl = fetch) {
   if (!env.REVIEW_PROVIDER) return;
-  const { choice } = await readReviewProvider(env, readGitHub);
+  const { choice } = await readReviewProvider(env, readGitHub, fetchImpl);
   if (choice.provider !== env.REVIEW_PROVIDER || choice.selection !== env.REVIEW_SELECTION)
     throw new Error("The owner changed the review provider; a complete new review is required.");
 }

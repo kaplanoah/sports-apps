@@ -78,6 +78,8 @@ The owner selects a provider by adding `review-provider:claude` or `review-provi
 
 The trusted bot comment records the PR's current choice, which only an owner's provider label changes. Timeline events retain explicit choices through failed or interrupted runs. Artifacts bind the provider and selection alongside the repository, run, head, base, merge and trusted source. Publishing and CI's join recheck the live choice. A switch away and back cannot reuse an older result. Unfinished work is never shared between providers.
 
+Selection reads the complete GraphQL label history in connection order. Each new selection uses its opaque event ID, without sorting IDs or relying on timestamps. An existing numeric selection keeps its identity only after the single-event REST response authenticates its owner, provider and PR and matches the GraphQL event. Missing or inconsistent saved events block review instead of restoring an older choice.
+
 ## Codex activation gate
 
 Codex stays disabled until both of these exist:
@@ -88,6 +90,21 @@ Codex stays disabled until both of these exist:
 The API credential is separate from Claude credentials and subscription usage. Never paste its value into a chat, issue, PR, command argument or log. The owner can enter it directly in GitHub's Actions secrets settings or use the secure prompt from `gh secret set TRUSTED_REVIEW_OPENAI_API_KEY` in a local clone. Do not enable the variable merely because the secret exists. A gated Codex selection fails visibly without starting Claude or silently switching providers.
 
 Before activation, record the separate provider measurements described in `TRUSTED_REVIEW_EVALUATION.md`. Include large historical changes, cross-app interactions, an empty-candidate integration pass, and interruption recovery. Demonstrate that malformed answers, missing coverage, stale head/base/provider identities and missing integration evidence cannot publish success. Keep the protected publisher and unresolved-thread and phone requirements.
+
+### Bounded native acceptance checks
+
+The owner-only `Prove Codex hosted runner` dispatch accepts one scenario per first-attempt run. The default `runner` keeps the security smoke proof with a twenty-minute native step limit, leaving time for collection within the sixty-minute job. Neither preparation nor a successful proof enables live reviews. Each native action uses the existing shared queue, protected admission, credential isolation, encrypted evidence and cleanup. There is no automatic workflow or model retry.
+
+| Scenario | Bound and evidence | What it does not prove |
+| --- | --- | --- |
+| `interruption` | Five-minute native action limit. The native probe must succeed before an observed unfinished `sleep 3600`. The collector keeps a failed outcome and a timeout-verification requirement. Independently verify GitHub's actual step-timeout log, encrypted transcript, finalized quota state and restored namespaces. | A generic action failure, missing native start, provider error or completed session does not establish intentional interruption. Missing completed-turn usage stays unavailable. |
+| `integration` | Twenty-minute native action limit. One real native integration over two actual small Git diffs and explicitly synthetic empty portion seeds; production request binding, supplied-content and answer validation apply. Inspect the actual transcript and usage after completion. | Synthetic portions are not native investigations. This fixture cannot approve a PR or exercise the protected App's positive publishing path. |
+
+Recovery uses a separately authorized first-attempt `integration` run after authenticated cooldown; it does not restart the interrupted session. Preserve both original outcomes. A real contained PR reviewed by Codex is still required to establish protected publishing and current head/base/provider reconciliation. That needs explicit controlled activation authorization and all ordinary PR checks; offline artifacts cannot replace it.
+
+Reuse verified historical, cross-app and malformed/stale-evidence checks. Do not require another broad historical trial merely to exercise these small remaining paths. Functional acceptance is separate from finding quality; record missed targets, uncertain findings and trial-profile limits without claiming provider equivalence.
+
+Timeouts and one-run scope bound work, not dollars. The native client does not expose a strict per-response output cap, request reservations are conservative estimates, and interrupted turns can lack numeric usage. Before paid acceptance, agree a spending ceiling using verified current pricing and a provider-enforced allowance where available. Do not describe budget alerts, queue serialization or workflow timeouts as a hard monetary cap.
 
 ### Hosted runner proof
 

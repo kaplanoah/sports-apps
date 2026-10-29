@@ -3,6 +3,7 @@
 // posted so retries do not duplicate it.
 import { isGitObjectId } from "./git-object.mjs";
 import { ACTIONS_LOGIN, readAllPages } from "./github-api.mjs";
+import { isReviewSelection } from "./review-selection.mjs";
 
 export const SUMMARY_MARKER = process.env.REVIEW_TRUSTED
   ? "<!-- trusted-review-summary -->"
@@ -47,7 +48,7 @@ export function readReviewedState(body) {
     if (!["head", "head,base", "head,base,provider,selection"].includes(keys)) return null;
     if (
       keys === "head,base,provider,selection" &&
-      (!["claude", "codex"].includes(state.provider) || !/^(initial|\d+)$/.test(state.selection))
+      (!["claude", "codex"].includes(state.provider) || !isReviewSelection(state.selection))
     )
       return null;
     if (state.head !== null && !isGitObjectId(state.head)) return null;

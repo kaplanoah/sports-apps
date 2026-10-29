@@ -22,6 +22,7 @@ import {
   reconcileReviewPublication,
 } from "../worker/publish-trusted-review.mjs";
 import { readRepoFile } from "./repo-files.js";
+import { createTimelineAnswer } from "./timeline.js";
 
 const HEAD = "a".repeat(40);
 const BASE = "b".repeat(40);
@@ -167,7 +168,6 @@ function createHarness() {
     suites: null,
     changeWriteAnswer: (answer) => answer,
     async readGitHub(path) {
-      if (path.startsWith("/issues/1/timeline?")) return state.providerEvents;
       if (path.startsWith("/issues/1/comments?")) return state.providerComments;
       if (path === "") return { full_name: REPOSITORY, id: 1 };
       if (path.startsWith("/pulls?")) return state.pulls;
@@ -203,6 +203,8 @@ function createHarness() {
       return state.changeWriteAnswer(structuredClone(check));
     },
     async fetchImpl(url) {
+      if (url === "https://api.github.com/graphql")
+        return Response.json(createTimelineAnswer(state.providerEvents));
       const id = Number(String(url).match(/artifacts\/(\d+)\/zip$/)?.[1]);
       assert.ok(state.archives.has(id));
       return new Response(state.archives.get(id));
@@ -329,7 +331,7 @@ test("a live owner provider switch invalidates a sealed legacy success on unchan
   const state = createHarness();
   state.providerEvents = [
     {
-      id: 88,
+      id: "LE_88",
       event: "labeled",
       actor: { login: "example" },
       label: { name: "review-provider:codex" },
@@ -472,7 +474,7 @@ test("a context change inside the success write is invalidated rather than retur
     },
     (state) => {
       state.providerEvents.push({
-        id: 81,
+        id: "LE_81",
         event: "labeled",
         label: { name: "review-provider:codex" },
         actor: { login: "example" },
@@ -934,7 +936,7 @@ test("freshness binds the latest attempt, head, target, provider and exemption w
     },
     (state) => {
       state.providerEvents.push({
-        id: 81,
+        id: "LE_81",
         event: "labeled",
         label: { name: "review-provider:codex" },
         actor: { login: "example", type: "User" },

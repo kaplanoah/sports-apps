@@ -158,6 +158,20 @@ jobs:
         if: steps.modules.outputs.cache-hit != 'true'
         run: npm ci
       # Each check runs even when one before it failed, so one run reports them all.
+      - name: Verify provider history with the PR-scoped token
+        if: ${{ !cancelled() && github.event_name == 'pull_request' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          node --input-type=module <<'NODE'
+          import { createGitHub } from './worker/github-api.mjs';
+          import { readReviewProvider } from './worker/review-provider.mjs';
+          const env = process.env;
+          const readGitHub = createGitHub({ repository: env.GITHUB_REPOSITORY, env, fetchImpl: fetch });
+          await readReviewProvider(env, readGitHub);
+          console.log('Provider history is readable with the PR-scoped token.');
+          NODE
       - name: Lint
         if: ${{ !cancelled() }}
         run: npm run lint
