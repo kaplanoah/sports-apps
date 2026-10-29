@@ -73,7 +73,7 @@ const readControlWords = (control) =>
  * @param {Element} target
  * @returns {string}
  */
-function describeTarget(target) {
+export function describeTarget(target) {
   const control = target.closest("button, a");
   const name = control && (control.getAttribute("aria-label") || readControlWords(control));
   if (name) return name;

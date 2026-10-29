@@ -1,5 +1,7 @@
 import { holdClock } from "./harness.mjs";
 import { openContact, serveContact } from "./contact-views.mjs";
+import { SCREENSHOT } from "./contact.mjs";
+import { turnOnDiagnostics } from "./diagnostics-switch.mjs";
 
 /**
  * Measures each page row in a dialog, its words, how far it lifts them over its middle, and its
@@ -388,6 +390,52 @@ export function testSettingsContactInteractions(test, expect, { openApp, setting
     await page.keyboard.press("Escape");
     await page.clock.runFor(1000);
     await expect(dialog).toBeHidden();
+  });
+
+  test("with Diagnostics on, a tap on Add screenshot logs its touch, its clicks, and that a file came back, never the file's name", async ({
+    page,
+  }) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await serveContact(page);
+    await openApp(page);
+    await turnOnDiagnostics(page);
+    const dialog = await openContact(page);
+    await dialog.getByRole("button", { name: "Bug report", exact: true }).tap();
+    const chooser = page.waitForEvent("filechooser");
+    await dialog.locator('label[for="contactScreenshot"]').tap();
+    await (await chooser).setFiles(SCREENSHOT);
+    await page.clock.runFor(1000);
+    for (const name of ["Back to Contact", "Back to Settings"]) {
+      await dialog.getByRole("button", { name }).tap();
+      await page.clock.runFor(1000);
+    }
+
+    const log = page.locator("#diagnostics .diagnostics-record", {
+      hasText: "Settings and Contact",
+    });
+    await expect(log).toHaveCount(1);
+    const lines = (await log.locator("li").allTextContents()).map((line) =>
+      line
+        .replace(/\s+/g, " ")
+        .trim()
+        .replace(/^\d{1,2}:\d\d:\d\d ?[AP]M ?/, ""),
+    );
+    expect(lines).toContainEqual(
+      expect.stringMatching(/^touchstart at \d+,\d+ on label\.contact-secondary$/),
+    );
+    expect(lines).toContainEqual(
+      expect.stringMatching(
+        /^lifted without moving; neither the page's code nor the browser took the touch; the page's code left its end; its pointer wasn't cancelled; nothing scrolled; it ended over label\.contact-secondary(\.is-pressed)?$/,
+      ),
+    );
+    expect(lines).toContainEqual(
+      expect.stringMatching(
+        /^the click on label\.contact-secondary(\.is-pressed)? reached the window untaken$/,
+      ),
+    );
+    expect(lines).toContain("the click on #contactScreenshot reached the window untaken");
+    expect(lines).toContain("the screenshot field changed with a file chosen");
+    expect(lines.filter((line) => line.includes(SCREENSHOT.name))).toEqual([]);
   });
 
   test("Add screenshot's field stays reachable by Tab and VoiceOver, ringing its label", async ({

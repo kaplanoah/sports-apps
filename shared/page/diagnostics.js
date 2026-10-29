@@ -8,7 +8,8 @@
 // since a load it never let reach the page is what they're for, and the logs of the viewport's
 // changes (viewport-log.js), of what each dialog's row of sheets does (sheet-log.js), of what a
 // season's list of days does (day-strip-log.js), of what became of each touch on a season's
-// standings and bracket (bracket-standings-log.js), of each change of the phone's look
+// standings and bracket (bracket-standings-log.js), of what became of each touch and click on
+// settings and Contact (settings-touch-log.js), of each change of the phone's look
 // (phone-look-log.js), and of each error the page's code doesn't catch (error-log.js). It records
 // nothing while it's off, which it starts as.
 
@@ -39,6 +40,7 @@ import { bracketStandingsLog, watchTouches } from "./bracket-standings-log.js";
 import { dayStripLog } from "./day-strip-log.js";
 import { errorLog, watchErrors } from "./error-log.js";
 import { phoneLookLog, watchPhoneLook } from "./phone-look-log.js";
+import { settingsTouchLog, watchSettingsTouches } from "./settings-touch-log.js";
 import { sheetLog } from "./sheet-log.js";
 import { writeStepsAsText } from "./step-log.js";
 import { hideAddresses } from "./report-addresses.js";
@@ -57,7 +59,14 @@ const KEPT_RECORDS = 5;
 const DIP_SHARE = 0.25;
 const MINUTE_MS = 60 * 1000;
 const ON_REQUEST = "On request";
-const STEP_LOGS = [errorLog, sheetLog, dayStripLog, bracketStandingsLog, phoneLookLog];
+const STEP_LOGS = [
+  errorLog,
+  sheetLog,
+  dayStripLog,
+  bracketStandingsLog,
+  settingsTouchLog,
+  phoneLookLog,
+];
 const SERVICE_WORKER_TITLE = "Service worker";
 
 /** @typedef {{ ms: number, text: string, isDip?: boolean }} RecordLine */
@@ -787,10 +796,10 @@ function noteReturn(awayMs) {
  * Wires the settings switch (#diagnosticsSwitch) and the records under it (#diagnostics), and,
  * while the switch is on, records this load, each return to the page, each change to the
  * viewport, each step of a dialog's row of sheets, what became of each touch on the standings
- * and bracket, and each change of the phone's look. A page that leaves the screen keeps
- * what it recorded so far, as when it reloads for a new release or the phone drops it. The page
- * starts it before drawing anything, so a load's first reading is what show-last-drawn.js put
- * back.
+ * and bracket and on settings and Contact, and each change of the phone's look. A page that
+ * leaves the screen keeps what it recorded so far, as when it reloads for a new release or the
+ * phone drops it. The page starts it before drawing anything, so a load's first reading is what
+ * show-last-drawn.js put back.
  */
 export function startDiagnostics() {
   findElement("diagnosticsSwitch").addEventListener("click", toggleRecording);
@@ -812,4 +821,5 @@ export function startDiagnostics() {
   for (const log of STEP_LOGS) log.watchSteps(isRecording, drawRecords);
   watchErrors();
   watchTouches();
+  watchSettingsTouches();
 }

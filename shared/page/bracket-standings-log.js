@@ -1,6 +1,13 @@
 import { isOnGlide } from "./press.js";
 import { findPartHolding } from "./season-part.js";
 import { createStepLog } from "./step-log.js";
+import {
+  describeDistance,
+  describeLift,
+  describePointer,
+  describeTaking,
+  measureMove,
+} from "./touch-words.js";
 
 /** @param {Element} target */
 const isOnParts = (target) => !!findPartHolding(target);
@@ -17,44 +24,7 @@ export const bracketStandingsLog = createStepLog({
   isWatched: isOnParts,
 });
 
-/** @typedef {{ x: number, y: number }} Move */
-
-/**
- * A distance in whole pixels and its way, or nothing for one that rounds to none.
- * @param {number} distance
- * @param {[string, string]} ways the way a negative distance goes, then a positive one
- * @param {string} [unit] written after the number, as "px"
- */
-function describeDistance(distance, [back, on], unit = "") {
-  const pixels = Math.round(distance);
-  return pixels ? `${Math.abs(pixels)}${unit} ${pixels < 0 ? back : on}` : "";
-}
-
-/**
- * How far a finger moved each way it went, or nothing for a finger that didn't.
- * @param {Move} move
- */
-const describeMove = (move) =>
-  [describeDistance(move.x, ["left", "right"]), describeDistance(move.y, ["up", "down"])]
-    .filter(Boolean)
-    .join(" and ");
-
-/**
- * @param {Move} moved
- * @param {boolean} isCancelled
- */
-function describeLift(moved, isCancelled) {
-  const end = isCancelled ? "cancelled" : "lifted";
-  const distance = describeMove(moved);
-  return distance ? `${end} after moving ${distance}` : `${end} without moving`;
-}
-
-/** @param {Move} takenAt */
-function describeTaking(takenAt) {
-  const distance = describeMove(takenAt);
-  const when = distance ? `once it had moved ${distance}` : "before it moved";
-  return `the page's code took the touch ${when}`;
-}
+/** @typedef {import("./touch-words.js").Move} Move */
 
 /**
  * @param {string} part
@@ -87,19 +57,8 @@ export function describeTouchEnd({
     ? "it landed on a list still gliding"
     : "it landed on a list at rest";
   const taken = takenAt ? describeTaking(takenAt) : "the browser kept the touch";
-  const pointer = isPointerCancelled ? "its pointer was cancelled" : "its pointer wasn't cancelled";
-  return `${describeLift(moved, isCancelled)}; ${landing}; ${taken}; ${pointer}; ${describeScroll(part, scrolled)}`;
+  return `${describeLift(moved, isCancelled)}; ${landing}; ${taken}; ${describePointer(isPointerCancelled)}; ${describeScroll(part, scrolled)}`;
 }
-
-/**
- * @param {Touch} point
- * @param {{ x: number, y: number }} origin
- * @returns {Move}
- */
-const measureMove = (point, origin) => ({
-  x: point.clientX - origin.x,
-  y: point.clientY - origin.y,
-});
 
 /**
  * Logs, while Diagnostics is on, what became of each one-finger touch on the parts. It listens on
