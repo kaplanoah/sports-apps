@@ -184,8 +184,8 @@ export function fitGameCards(holder) {
 }
 
 /**
- * Fits the cards in `holder` again whenever its width changes, and whenever a font loads, since a
- * font loads only once a line first needs it, after the cards were measured in a stand-in.
+ * Fits the cards again when the holder's width or root styles change, and whenever a font loads,
+ * since a font loads only once a line first needs it, after measurement in a stand-in.
  * @param {HTMLElement} holder
  */
 export function watchGameCards(holder) {
@@ -195,5 +195,9 @@ export function watchGameCards(holder) {
     width = entry.contentRect.width;
     fitGameCards(holder);
   }).observe(holder);
+  new MutationObserver(() => fitGameCards(holder)).observe(document.documentElement, {
+    attributes: true,
+    attributeFilter: ["style"],
+  });
   document.fonts.addEventListener("loadingdone", () => fitGameCards(holder));
 }

@@ -10,6 +10,9 @@ import { SETTINGS, openSettings } from "./settings.mjs";
 import { THEMES, showTheme } from "./theme-layout.mjs";
 import { listTextOffRoles, measureFieldFace, readRole } from "./type-roles.mjs";
 import { SENT_MS } from "../../shared/page/sent-label.js";
+import { readRound } from "../../shared/page/tuning-round.js";
+import { readRepoFile } from "../repo-files.js";
+import { openSeasonPart } from "./season-tab.mjs";
 
 const CORNERS = "--radius-control";
 const ALIGN = "--sample-align";
@@ -326,4 +329,281 @@ export async function checkNoPanelInProduction({ page, app, openApp }) {
   await expect(findToggle(page)).toHaveCount(0);
   await expect(page.locator(".tuning-panel")).toHaveCount(0);
   expect(asked).toEqual([]);
+}
+
+/** @param {string} app */
+const readAlignmentRound = (app) => readRound(readRepoFile(`apps/${app}/page/tuning-round.json`));
+
+/**
+ * @param {import("@playwright/test").Locator} element
+ */
+const readMiddle = (element) =>
+  element.evaluate((part) => {
+    const box = part.getBoundingClientRect();
+    return box.top + box.height / 2;
+  });
+
+/**
+ * @param {App} app
+ * @param {{ width: number, colorScheme: "light" | "dark" }} look
+ */
+export async function checkAlignmentControls(app, { width, colorScheme }) {
+  const { page } = app;
+  const round = readAlignmentRound(app.app);
+  await page.setViewportSize({ width, height: 900 });
+  await page.emulateMedia({ colorScheme });
+  await openTuning(app, round);
+  const group = findPanel(page).getByRole("combobox", { name: "Role" });
+  for (const name of ["Small", "Team", "Large", "Label"]) {
+    await group.selectOption(name);
+    await expect(findPanel(page).locator(".tuning-row")).toHaveCount(
+      round.values.filter((value) => value.group === name).length,
+    );
+    await expect(findPanel(page).locator(".tuning-note")).toHaveCount(0);
+  }
+  await group.selectOption("Team");
+  await page.getByRole("tab", { name: "Games", exact: true }).click();
+  const club = page.locator("#seasonGames .game-side.away .club").first();
+  const dot = club.locator(":scope > .dot");
+  const name = club.locator(".team-name");
+  await expect(dot).toBeVisible();
+  await page.evaluate(() => document.fonts.ready);
+  const size = parseFloat(await name.evaluate((part) => getComputedStyle(part).fontSize));
+  const sizeRow = findRow(page, "--type-team-size");
+  await expect(sizeRow.locator("output")).toHaveText(`${size}px`);
+  await sizeRow.getByRole("slider").fill(String(size + 0.25));
+  await expect(name).toHaveCSS("font-size", `${size + 0.25}px`);
+  await sizeRow.getByRole("button", { name: "Reset Name size" }).click();
+  await expect(name).toHaveCSS("font-size", `${size}px`);
+  expect(await readSetOnRoot(page, "--type-team-size")).toBe("");
+
+  const offsetRow = findRow(page, "--team-dot-before");
+  const start = parseFloat(await offsetRow.locator("output").textContent());
+  const before = (await readMiddle(dot)) - (await readMiddle(name));
+  await offsetRow.getByRole("button", { name: "Dot before name down", exact: true }).click();
+  await expect(offsetRow.locator("output")).toHaveText(`${start + 0.25}px`);
+  expect((await readMiddle(dot)) - (await readMiddle(name))).toBeCloseTo(before + 0.25, 2);
+  const slider = offsetRow.getByRole("slider");
+  await slider.focus();
+  await page.keyboard.press("ArrowRight");
+  await expect(offsetRow.locator("output")).toHaveText(`${start}px`);
+  await page.keyboard.press("ArrowLeft");
+  await expect(offsetRow.locator("output")).toHaveText(`${start + 0.25}px`);
+  await page.keyboard.press("ArrowUp");
+  await expect(offsetRow.locator("output")).toHaveText(`${start}px`);
+  await page.keyboard.press("ArrowDown");
+  await expect(offsetRow.locator("output")).toHaveText(`${start + 0.25}px`);
+  await offsetRow.getByRole("button", { name: "Reset Dot before name" }).click();
+  const box = await slider.boundingBox();
+  await slider.tap({ position: { x: box.width * 0.25, y: box.height / 2 } });
+  expect(parseFloat(await offsetRow.locator("output").textContent())).toBeGreaterThan(start);
+  expect((await readMiddle(dot)) - (await readMiddle(name))).toBeGreaterThan(before);
+  await offsetRow.getByRole("button", { name: "Reset Dot before name" }).click();
+  expect((await readMiddle(dot)) - (await readMiddle(name))).toBeCloseTo(before, 2);
+  const home = page.locator("#seasonGames .game-side.home .club").first();
+  const homeDot = home.locator(":scope > .dot");
+  const homeName = home.locator(".team-name");
+  const homeBefore = (await readMiddle(homeDot)) - (await readMiddle(homeName));
+  const afterRow = findRow(page, "--team-dot-after");
+  const afterStart = parseFloat(await afterRow.locator("output").textContent());
+  await afterRow.getByRole("button", { name: "Dot after name down" }).click();
+  await expect(afterRow.locator("output")).toHaveText(`${afterStart + 0.25}px`);
+  expect((await readMiddle(homeDot)) - (await readMiddle(homeName))).toBeCloseTo(
+    homeBefore + 0.25,
+    2,
+  );
+  await afterRow.getByRole("button", { name: "Reset Dot after name" }).click();
+  expect((await readMiddle(homeDot)) - (await readMiddle(homeName))).toBeCloseTo(homeBefore, 2);
+  await expect(page.locator("#seasonGames")).toBeVisible();
+}
+
+/**
+ * @param {App} app
+ */
+export async function checkAlignmentAttachments(app) {
+  const { page } = app;
+  await openTuning(app, readAlignmentRound(app.app));
+  const group = findPanel(page).getByRole("combobox", { name: "Role" });
+  await group.selectOption("Team");
+  await openSeasonPart(page, app.app === "mlb" ? "Bracket" : "Standings");
+  const property = app.app === "mlb" ? "--team-rank-offset" : "--team-conference-offset";
+  const selector =
+    app.app === "mlb" ? "#bracketWrap .rank-tag" : "#standings-league .conference-tag";
+  const attachment = page.locator(selector).first();
+  await expect(attachment).toBeVisible();
+  const before = await readMiddle(attachment);
+  const row = findRow(page, property);
+  const start = parseFloat(await row.locator("output").textContent());
+  await row.getByRole("button", { name: / down$/ }).click();
+  await expect(row.locator("output")).toHaveText(`${start + 0.25}px`);
+  expect(await readMiddle(attachment)).toBeCloseTo(before + 0.25, 2);
+  await row.getByRole("button", { name: /^Reset / }).click();
+  expect(await readMiddle(attachment)).toBeCloseTo(before, 2);
+  if (app.app !== "wnba") return;
+
+  await openSeasonPart(page, "Bracket");
+  await group.selectOption("Large");
+  const outside = page.locator(".seed-label").first();
+  await expect(outside).toBeVisible();
+  const pieces = [outside, outside.locator(".seed-number"), outside.locator(".seed-word")];
+  const starts = await Promise.all(pieces.map(readMiddle));
+  const outsideRow = findRow(page, "--team-outside-seed-offset");
+  await outsideRow.getByRole("button", { name: "Outside seed label down" }).click();
+  for (const [index, piece] of pieces.entries())
+    expect(await readMiddle(piece)).toBeCloseTo(starts[index] + 0.25, 2);
+  await outsideRow.getByRole("button", { name: "Reset Outside seed label" }).click();
+  expect(await readMiddle(outside)).toBeCloseTo(starts[0], 2);
+}
+
+/** @param {App} app */
+export async function checkAlignmentCopyAndReload(app) {
+  const { page } = app;
+  const round = readAlignmentRound(app.app);
+  await openTuning(app, round);
+  const group = findPanel(page).getByRole("combobox", { name: "Role" });
+  await group.selectOption("Small");
+  const small = findRow(page, "--type-team-small-size");
+  const start = parseFloat(await small.locator("output").textContent());
+  await small.getByRole("slider").fill(String(start + 0.25));
+  await group.selectOption("Large");
+  const large = findRow(page, "--team-large-dot-size");
+  await large.getByRole("slider").fill("16.5");
+  await findPanel(page).getByRole("button", { name: "Copy", exact: true }).click();
+  const copies = await page.evaluate(() => /** @type {any} */ (window).copies);
+  const lines = copies[0].split("\n");
+  expect(lines).toHaveLength(round.values.length + 1);
+  expect(lines[0]).toBe(round.name);
+  for (const value of round.values)
+    expect(lines.some((line) => line.startsWith(`${value.property}: `))).toBe(true);
+  expect(lines).toContain(`--type-team-small-size: ${start + 0.25}px`);
+  expect(lines).toContain("--team-large-dot-size: 16.5px");
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await expect(group).toHaveValue("Large");
+  await expect(large.locator("output")).toHaveText("16.5px");
+  await large.getByRole("button", { name: "Reset Dot size" }).click();
+  await expect(large.locator("output")).toHaveText("16px");
+  await group.selectOption("Small");
+  await expect(small.locator("output")).toHaveText(`${start + 0.25}px`);
+  await small.getByRole("button", { name: "Reset Name size" }).click();
+  expect(await readSetOnRoot(page, "--type-team-small-size")).toBe("");
+}
+
+/** @param {App} app */
+export async function checkAlignmentStaysOutOfProduction(app) {
+  const { page } = app;
+  const round = readAlignmentRound(app.app);
+  await openTuning(app, round);
+  await findPanel(page).getByRole("combobox", { name: "Role" }).selectOption("Team");
+  const row = findRow(page, "--type-team-size");
+  const start = parseFloat(await row.locator("output").textContent());
+  await row.getByRole("slider").fill(String(start + 1));
+  const production = await page.context().newPage();
+  const requests = [];
+  production.on("request", (request) => {
+    if (request.url().includes("tuning")) requests.push(request.url());
+  });
+  await servePageFiles(production, buildTuningServer(app.app, round, null));
+  await app.openApp(production);
+  await production.getByRole("tab", { name: "Games", exact: true }).click();
+  const name = production.locator("#seasonGames .team-name").first();
+  await expect(name).toBeVisible();
+  await expect(name).toHaveCSS("font-size", `${start}px`);
+  await expect(findToggle(production)).toHaveCount(0);
+  expect(await readSetOnRoot(production, "--type-team-size")).toBe("");
+  expect(requests).toEqual([]);
+  await production.close();
+}
+
+/**
+ * @param {import("@playwright/test").Page} page
+ * @param {string} role
+ * @param {import("@playwright/test").Locator} line
+ * @param {string} nameSelector
+ */
+async function checkRoleTypography(page, role, line, nameSelector) {
+  await expect(line).toBeVisible();
+  await findPanel(page).getByRole("combobox", { name: "Role" }).selectOption(role);
+  const name = line.locator(nameSelector);
+  const dot = line.locator(":scope > .dot");
+  const checks = [
+    { label: "Name size", element: name, css: "font-size" },
+    { label: "Name weight", element: name, css: "font-weight" },
+    { label: "Dot size", element: dot, css: "width" },
+  ];
+  for (const { label, element, css } of checks) {
+    const row = findPanel(page)
+      .locator(".tuning-row")
+      .filter({ has: page.getByRole("button", { name: `Reset ${label}`, exact: true }) });
+    const slider = row.getByRole("slider");
+    const step = Number(await slider.getAttribute("step"));
+    const before = await element.evaluate(
+      (part, property) => getComputedStyle(part).getPropertyValue(property),
+      css,
+    );
+    await row.getByRole("button", { name: `${label} a step up`, exact: true }).click();
+    await expect(element).toHaveCSS(
+      css,
+      `${parseFloat(before) + step}${css === "font-weight" ? "" : "px"}`,
+    );
+    await row.getByRole("button", { name: `Reset ${label}`, exact: true }).click();
+    await expect(element).toHaveCSS(css, before);
+  }
+  const offset = findPanel(page)
+    .locator(".tuning-row")
+    .filter({ has: page.getByRole("button", { name: "Reset Dot before name", exact: true }) });
+  const before = (await readMiddle(dot)) - (await readMiddle(name));
+  await offset.getByRole("button", { name: "Dot before name down", exact: true }).click();
+  expect((await readMiddle(dot)) - (await readMiddle(name))).toBeCloseTo(before + 0.25, 2);
+  await offset.getByRole("button", { name: "Reset Dot before name", exact: true }).click();
+  expect((await readMiddle(dot)) - (await readMiddle(name))).toBeCloseTo(before, 2);
+}
+
+/**
+ * @param {App} app
+ * @param {string} role
+ */
+export async function checkAlignmentRoleTypography(app, role) {
+  const { page } = app;
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await openTuning(app, readAlignmentRound(app.app));
+  if (role === "Team") {
+    await page.getByRole("tab", { name: "Games", exact: true }).click();
+    const club = page.locator("#seasonGames .game-side.away .club").first();
+    await checkRoleTypography(page, role, club, ".team-name");
+    return;
+  }
+  if (role === "Label") {
+    await page.getByRole("tab", { name: "News", exact: true }).click();
+    await checkRoleTypography(page, role, page.locator(".news-teams .club").first(), ".team-name");
+    return;
+  }
+  await openSeasonPart(page, "Bracket");
+  await page.locator("#bracketWrap .team-open").first().click();
+  if (role === "Large") {
+    const title = page.locator("#teamSheet .team-title");
+    await checkRoleTypography(page, role, title, ":scope > span:not(.dot)");
+    return;
+  }
+  const card = page.locator("#teamSheet .game-card-opponent").first();
+  await checkRoleTypography(page, role, card, ".game-card-name");
+  const sizeRow = findRow(page, "--type-team-small-size");
+  await sizeRow.getByRole("slider").fill("18");
+  await expect(sizeRow.locator("output")).toHaveText("18px");
+  const cards = page.locator("#teamSheet .game-cards");
+  const leastPadding = await cards.evaluate((row) =>
+    parseFloat(getComputedStyle(row).getPropertyValue("--game-card-padding-least")),
+  );
+  const readLeastInset = () =>
+    cards.locator(".game-card-button").evaluateAll((buttons) =>
+      Math.min(
+        ...buttons.map((button) => {
+          const box = button.getBoundingClientRect();
+          const border = parseFloat(getComputedStyle(button).borderRightWidth);
+          const opponent = button.querySelector(".game-card-opponent").getBoundingClientRect();
+          return box.right - border - opponent.right;
+        }),
+      ),
+    );
+  await expect.poll(readLeastInset).toBeGreaterThanOrEqual(leastPadding - 0.1);
+  await sizeRow.getByRole("button", { name: "Reset Name size" }).click();
 }

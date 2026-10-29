@@ -248,6 +248,7 @@
   --team-seed-note-offset: -0.5px;
   --team-large-seed-before: 0.75px;
   --team-large-seed-after: -0.25px;
+  --team-outside-seed-offset: 0px;
   --type-score-size: calc(22rem / 16);
   --type-score-weight: 500;
   --type-stat-large-size: calc(18.25rem / 16);
@@ -1693,7 +1694,7 @@ th[aria-sort="ascending"] .roster-caret {
   position: absolute;
   top: 50%;
   right: calc(100% + 9px);
-  translate: 0 -50%;
+  translate: 0 calc(-50% + var(--team-outside-seed-offset));
   display: flex;
   align-items: flex-end;
   gap: 0.45em;

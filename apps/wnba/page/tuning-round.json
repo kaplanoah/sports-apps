@@ -1,0 +1,243 @@
+{
+  "name": "WNBA team alignment",
+  "values": [
+    {
+      "property": "--type-team-small-size",
+      "label": "Name size",
+      "group": "Small",
+      "min": 10,
+      "max": 24,
+      "step": 0.25,
+      "unit": "px"
+    },
+    {
+      "property": "--type-team-small-weight",
+      "label": "Name weight",
+      "group": "Small",
+      "min": 300,
+      "max": 600,
+      "step": 100,
+      "unit": ""
+    },
+    {
+      "property": "--team-small-dot-size",
+      "label": "Dot size",
+      "group": "Small",
+      "min": 6,
+      "max": 22,
+      "step": 0.25,
+      "unit": "px"
+    },
+    {
+      "property": "--team-small-dot-before",
+      "label": "Dot before name",
+      "group": "Small",
+      "min": -6,
+      "max": 6,
+      "step": 0.25,
+      "unit": "px",
+      "isVertical": true
+    },
+    {
+      "property": "--type-team-size",
+      "label": "Name size",
+      "group": "Team",
+      "min": 10,
+      "max": 24,
+      "step": 0.25,
+      "unit": "px"
+    },
+    {
+      "property": "--type-team-weight",
+      "label": "Name weight",
+      "group": "Team",
+      "min": 300,
+      "max": 600,
+      "step": 100,
+      "unit": ""
+    },
+    {
+      "property": "--team-dot-size",
+      "label": "Dot size",
+      "group": "Team",
+      "min": 6,
+      "max": 22,
+      "step": 0.25,
+      "unit": "px"
+    },
+    {
+      "property": "--team-dot-before",
+      "label": "Dot before name",
+      "group": "Team",
+      "min": -6,
+      "max": 6,
+      "step": 0.25,
+      "unit": "px",
+      "isVertical": true
+    },
+    {
+      "property": "--team-dot-after",
+      "label": "Dot after name",
+      "group": "Team",
+      "min": -6,
+      "max": 6,
+      "step": 0.25,
+      "unit": "px",
+      "isVertical": true
+    },
+    {
+      "property": "--team-conference-offset",
+      "label": "Conference chip",
+      "group": "Team",
+      "min": -6,
+      "max": 6,
+      "step": 0.25,
+      "unit": "px",
+      "isVertical": true
+    },
+    {
+      "property": "--team-seed-note-offset",
+      "label": "Seed note",
+      "group": "Team",
+      "min": -6,
+      "max": 6,
+      "step": 0.25,
+      "unit": "px",
+      "isVertical": true
+    },
+    {
+      "property": "--team-seed-before",
+      "label": "Seed before name",
+      "group": "Team",
+      "min": -6,
+      "max": 6,
+      "step": 0.25,
+      "unit": "px",
+      "isVertical": true
+    },
+    {
+      "property": "--team-seed-after",
+      "label": "Seed after name",
+      "group": "Team",
+      "min": -6,
+      "max": 6,
+      "step": 0.25,
+      "unit": "px",
+      "isVertical": true
+    },
+    {
+      "property": "--type-team-large-size",
+      "label": "Name size",
+      "group": "Large",
+      "min": 10,
+      "max": 24,
+      "step": 0.25,
+      "unit": "px"
+    },
+    {
+      "property": "--type-team-large-weight",
+      "label": "Name weight",
+      "group": "Large",
+      "min": 400,
+      "max": 600,
+      "step": 100,
+      "unit": ""
+    },
+    {
+      "property": "--team-large-dot-size",
+      "label": "Dot size",
+      "group": "Large",
+      "min": 6,
+      "max": 22,
+      "step": 0.25,
+      "unit": "px"
+    },
+    {
+      "property": "--team-large-dot-before",
+      "label": "Dot before name",
+      "group": "Large",
+      "min": -6,
+      "max": 6,
+      "step": 0.25,
+      "unit": "px",
+      "isVertical": true
+    },
+    {
+      "property": "--team-large-dot-after",
+      "label": "Dot after name",
+      "group": "Large",
+      "min": -6,
+      "max": 6,
+      "step": 0.25,
+      "unit": "px",
+      "isVertical": true
+    },
+    {
+      "property": "--team-outside-seed-offset",
+      "label": "Outside seed label",
+      "group": "Large",
+      "min": -6,
+      "max": 6,
+      "step": 0.25,
+      "unit": "px",
+      "isVertical": true
+    },
+    {
+      "property": "--team-large-seed-before",
+      "label": "Seed before name",
+      "group": "Large",
+      "min": -6,
+      "max": 6,
+      "step": 0.25,
+      "unit": "px",
+      "isVertical": true
+    },
+    {
+      "property": "--team-large-seed-after",
+      "label": "Seed after name",
+      "group": "Large",
+      "min": -6,
+      "max": 6,
+      "step": 0.25,
+      "unit": "px",
+      "isVertical": true
+    },
+    {
+      "property": "--type-label-size",
+      "label": "Name size",
+      "group": "Label",
+      "min": 10,
+      "max": 24,
+      "step": 0.25,
+      "unit": "px"
+    },
+    {
+      "property": "--type-label-weight",
+      "label": "Name weight",
+      "group": "Label",
+      "min": 400,
+      "max": 700,
+      "step": 100,
+      "unit": ""
+    },
+    {
+      "property": "--team-label-dot-size",
+      "label": "Dot size",
+      "group": "Label",
+      "min": 6,
+      "max": 22,
+      "step": 0.25,
+      "unit": "px"
+    },
+    {
+      "property": "--team-label-dot-before",
+      "label": "Dot before name",
+      "group": "Label",
+      "min": -6,
+      "max": 6,
+      "step": 0.25,
+      "unit": "px",
+      "isVertical": true
+    }
+  ]
+}
