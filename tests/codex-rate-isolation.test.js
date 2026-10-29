@@ -128,6 +128,27 @@ test("privileged proof parsing retains real command metadata on malformed or fai
   );
 });
 
+test("a privileged proof failure retains its original stage, failed facts and command facts", () => {
+  const result = {
+    passed: false,
+    stage: "pinned-read-only-sandbox",
+    failedFacts: ["checkoutWriteDenied"],
+    commandFacts: { exitCode: 0 },
+  };
+  assert.throws(
+    () => parsePrivilegedProofResult({ status: 0, stdout: JSON.stringify(result) }),
+    (error) => {
+      assert.ok(error instanceof Error);
+      assert.equal(error.constructor.name, "IsolationProofError");
+      assert.ok("stage" in error && "failedFacts" in error && "commandFacts" in error);
+      assert.equal(error.stage, result.stage);
+      assert.deepEqual(error.failedFacts, result.failedFacts);
+      assert.deepEqual(error.commandFacts, result.commandFacts);
+      return true;
+    },
+  );
+});
+
 const readJob = (name) =>
   workflow.match(new RegExp(`^  ${name}:\\n(?:(?:    .*|)\\n)*`, "m"))?.[0] ?? "";
 
