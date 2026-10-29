@@ -103,9 +103,9 @@ function renderTitleYear() {
 function renderAll() {
   const now = Date.now();
   showSeasonPhase(isFieldSet(session.season?.series ?? []));
-  const keptLeft = takeBracketScroll();
+  const keptScroll = takeBracketScroll();
   setHtml(findElement("bracketWrap"), renderBracket(session.season, now));
-  placeBracket(keptLeft);
+  placeBracket(keptScroll);
   fillDayStrip(listSeasonDays(session.season, session.schedule, now));
   refreshGameSearch();
   drawStandings(session.season);

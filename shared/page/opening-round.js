@@ -65,10 +65,15 @@ function noteStartLeft(scroller, target) {
  * of the reader's to keep, so its first draw opens it on the round still playing now.
  * @param {HTMLElement | null} scroller
  */
-export function takeKeptLeft(scroller) {
-  if (scroller?.dataset.putBackStart !== "true") return scroller?.scrollLeft ?? 0;
-  delete scroller.dataset.putBackStart;
-  return 0;
+export function takeKeptScroll(scroller) {
+  const isOnStart = scroller?.dataset.putBackStart === "true";
+  const isRestored = !isOnStart && scroller?.dataset.putBackLeft !== undefined;
+  const left = isOnStart ? 0 : (scroller?.scrollLeft ?? 0);
+  if (scroller) {
+    delete scroller.dataset.putBackStart;
+    delete scroller.dataset.putBackLeft;
+  }
+  return { left, isRestored };
 }
 
 /** @type {Set<(behavior: ScrollBehavior) => void>} */
@@ -104,13 +109,13 @@ export function watchOpeningRound(wrap) {
     if (drawn) scrollToTarget(drawn.scroller, drawn.target, behavior);
   });
 
-  /** @param {{ scroller: HTMLElement, target: HTMLElement, round: number, keptLeft: number }} draw */
-  return ({ scroller, target, round, keptLeft }) => {
-    const isPutBack = !drawn && keptLeft > 0;
+  /** @param {{ scroller: HTMLElement, target: HTMLElement, round: number, keptScroll: ReturnType<typeof takeKeptScroll> }} draw */
+  return ({ scroller, target, round, keptScroll }) => {
+    const isPutBack = !drawn && keptScroll.isRestored;
     const isNewRound = round !== drawn?.round;
     drawn = { scroller, target, round };
     if (isNewRound && !isPutBack) scrollToTarget(scroller, target);
-    else scroller.scrollLeft = keptLeft;
+    else scroller.scrollLeft = keptScroll.left;
     noteStartLeft(scroller, target);
   };
 }

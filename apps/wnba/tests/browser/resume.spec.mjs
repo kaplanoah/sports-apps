@@ -1,3 +1,4 @@
+import { showFirstRoundFinished } from "./bracket-rounds.mjs";
 import { writeUnreadableLastSeen } from "../../../../tests/browser/unreadable-last-seen.mjs";
 import { buildReleaseServer, servePageFiles } from "../../../../tests/browser/release-worker.mjs";
 import { NEXT_RELEASE, serveReleases } from "../../../../tests/browser/serve-releases.mjs";
@@ -6,6 +7,7 @@ import { waitForCatchUp } from "../../../../tests/browser/at-rest.mjs";
 import { wakeAsStoreUpdates } from "../../../../tests/browser/wake-as-store-updates.mjs";
 import {
   SHORT_PHONE,
+  expectBracketZeroAfterReload,
   leaveScrolledFor,
   readNewsPlace,
   readPageScroll,
@@ -517,6 +519,15 @@ test.describe("on a short phone", () => {
     const app = await openApp(page);
     return leaveScrolledFor(page, { sideways: SIDEWAYS, writeDocument: app.writeDocument, awayMs });
   }
+
+  test("a short reload keeps a later-round bracket at zero before and after its first draw", async ({
+    page,
+  }) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    const app = await openApp(page);
+    await showFirstRoundFinished(page, app);
+    await expectBracketZeroAfterReload(page, SIDEWAYS);
+  });
 
   test("after two minutes away, the season tab starts over on the part it's named for, each part at its top with the header back and the bracket on its opening round, and News at its top", async ({
     page,

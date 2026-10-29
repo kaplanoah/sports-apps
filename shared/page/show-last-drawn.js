@@ -64,9 +64,13 @@ function restoreScrolls(part, scrolls) {
     // A list put back on its start, like the Games list's start day or a bracket's opening round,
     // goes to the start its code finds, which can have moved.
     if (isOnStart) element.dataset.putBackStart = "true";
-    // The page around a list can settle a little shorter or taller once its code draws it, which
-    // can stop a scroll near the list's end short, so the list's code can take it again.
-    else if (top > 0) element.dataset.putBackTop = String(top);
+    else {
+      if (part.id === "bracketWrap" && element.dataset.startLeft !== undefined)
+        element.dataset.putBackLeft = "true";
+      // The page around a list can settle a little shorter or taller once its code draws it, which
+      // can stop a scroll near the list's end short, so the list's code can take it again.
+      if (top > 0) element.dataset.putBackTop = String(top);
+    }
   }
 }
 
