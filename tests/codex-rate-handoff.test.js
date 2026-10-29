@@ -668,3 +668,14 @@ test("an older current-workflow seed cannot hide a later aged global consumer's 
   });
   assert.equal((await admit(fixture, later)).notBefore, deadline);
 });
+
+test("a cold repository discovery does not repeat the same artifact search in the current run", async () => {
+  const fixture = createFixture((value) => {
+    value.bootstrap = true;
+  });
+  await admit(fixture);
+  assert.equal(
+    fixture.calls.some((path) => path.endsWith("/runs/30/artifacts")),
+    false,
+  );
+});

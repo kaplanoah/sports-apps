@@ -278,26 +278,27 @@ export async function readNativeQuotaAdmission(
   }
   let seedSearchFinished = false;
   let skipExpiredSeeds = false;
-  for (const path of ["/actions/artifacts", `/actions/runs/${currentRun.id}/artifacts`]) {
-    for await (const artifacts of readPages(api, path, (answer) => answer.artifacts)) {
-      for (const artifact of artifacts) {
-        if (!/^codex-rate-handoff-[1-9]\d*$/.test(artifact.name)) continue;
-        if (skipExpiredSeeds && artifact.expired) continue;
-        const run = await api(`/actions/runs/${artifact.workflow_run.id}`);
-        if (readTrustedSource(run) === null) continue;
-        const producer = await readProducer(artifact);
-        const seed = await readHandoff(artifact, producer);
-        if (!seed) {
-          skipExpiredSeeds = true;
-          continue;
-        }
-        scanSince = seed.scanSince;
-        activeRuns = seed.activeRuns;
-        seedNotBefore = seed.notBefore;
-        seedSearchFinished = true;
-        break;
+  for await (const artifacts of readPages(
+    api,
+    "/actions/artifacts",
+    (answer) => answer.artifacts,
+  )) {
+    for (const artifact of artifacts) {
+      if (!/^codex-rate-handoff-[1-9]\d*$/.test(artifact.name)) continue;
+      if (skipExpiredSeeds && artifact.expired) continue;
+      const run = await api(`/actions/runs/${artifact.workflow_run.id}`);
+      if (readTrustedSource(run) === null) continue;
+      const producer = await readProducer(artifact);
+      const seed = await readHandoff(artifact, producer);
+      if (!seed) {
+        skipExpiredSeeds = true;
+        continue;
       }
-      if (seedSearchFinished) break;
+      scanSince = seed.scanSince;
+      activeRuns = seed.activeRuns;
+      seedNotBefore = seed.notBefore;
+      seedSearchFinished = true;
+      break;
     }
     if (seedSearchFinished) break;
   }

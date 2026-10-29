@@ -147,11 +147,17 @@ Quota discovery ignores untrusted PR-triggered or foreign runs before reading th
 
 The first consumer waits a full quota window. Recent missing, expired or old-policy quota evidence blocks admission. Once its authenticated producer has completed at least one current window plus the maximum admission wait ago, an independently authorized new consumer may recover through a fresh full-window warm-up. An available old-policy record is checked for provenance, cleanup and numeric validity, and any known longer cooldown is preserved. Duplicate or tampered artifacts and API verification errors fail closed. No original failure becomes successful, unknown usage stays unavailable, and this recovery never dispatches or retries a model. See the review-failures skill before a separate pre-model recovery.
 
-Token estimates are not verified model tokenization, and unrelated account traffic can still cause throttling. Shared feedback responds conservatively; no zero-throttle guarantee is made. This wiring leaves live Codex disabled. Its hosted isolation, actual native validation and remaining activation evidence must pass before the separate activation decision.
+Startup failure produces a `not-started` record after successful restoration and private-control removal. A failure marker without finalized quota means cleanup or accounting was not verified.
+
+Token estimates are not verified model tokenization, and unrelated account traffic can still cause throttling. Shared feedback responds conservatively; no zero-throttle guarantee is made. Live Codex activation requires hosted isolation, native validation and the remaining activation evidence, followed by an explicit owner decision.
+
+## Review join recovery
 
 CI's read-only review join keeps its bounded wait even when queued model work takes longer. The trusted lifecycle workflow listens for both review completion and failed PR CI completion, so either completion order can recover a timed-out join. It requests one rerun of the latest matching first-attempt CI join and its downstream check after the latest requested review succeeds. No model job is rerun, and the join still verifies sealed current-code/provider evidence before check can pass.
 
 Recovery uses an Actions-write token only in its separate trusted-main job, without model or publisher credentials. It requires an open ready PR at the same head and main target, a successful current review result, completed CI jobs and no failure outside the join/check. Ambiguous or fork CI metadata, another CI failure, API errors or an already retried CI run require inspection and the manual join recovery in the `review-failures` skill. A recovery failure never approves the PR.
+
+## Native usage, coverage and publishing
 
 Native usage retains only validated numeric input, cached-input, cache-write-input, output and reasoning-output counters. [Evaluation measurements](TRUSTED_REVIEW_EVALUATION.md#measurements) define how those counters are counted and how missing usage is reported.
 
