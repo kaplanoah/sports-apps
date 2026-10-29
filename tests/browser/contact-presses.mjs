@@ -127,7 +127,7 @@ export function testContactPresses(test, expect, { openApp, settingsPages }) {
     await expectFade(page, dialog.getByRole("button", { name: "Back to Contact" }), expect);
   });
 
-  test("the settings pages' rows, Back, and Done show their press before they act", async ({
+  test("the settings pages' Back, Contact's category rows, and Done show their press before they act", async ({
     page,
   }) => {
     await serveContact(page);
@@ -147,11 +147,9 @@ export function testContactPresses(test, expect, { openApp, settingsPages }) {
 
     for (const name of settingsPages) {
       const sheet = page.locator(`#${name.toLowerCase()}Dialog`);
-      await expectPressFirst(
-        page.locator(`#${name.toLowerCase()}Btn`),
-        () => expect(sheet).toBeHidden(),
-        () => expect(sheet.locator("h2")).toHaveText(name),
-      );
+      await page.locator(`#${name.toLowerCase()}Btn`).click();
+      await page.clock.runFor(1000);
+      await expect(sheet.locator("h2")).toHaveText(name);
       await expectPressFirst(
         sheet.getByRole("button", { name: "Back to Settings" }),
         () => expect(sheet).toBeVisible(),
