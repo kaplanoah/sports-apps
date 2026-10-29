@@ -5,6 +5,8 @@ import { readCapitals } from "./capitals.mjs";
 /**
  * Independent expected geometry supplied by an app's tests.
  * @typedef {object} TeamLineExpectations
+ * @property {{ selector: string, name: string }} lines
+ * @property {string[]} placeholders
  * @property {Record<TeamRole, { font: string, size: number, weight: number, diameter: number, before: number, after: number }>} roles
  * @property {{ selector: string, role: TeamRole }[]} roleSelectors in priority order
  * @property {{ selector: string, delta: number }[]} weightChanges
@@ -61,14 +63,10 @@ export const readTeamLines = async (page, expectations) => {
       fonts.set(key, metrics);
       return metrics;
     };
-    for (const line of document.querySelectorAll(
-      ".club, .team-title, .game-card-opponent, .runs-half-head",
-    )) {
+    for (const line of document.querySelectorAll(expected.lines.selector)) {
       if (!line.checkVisibility()) continue;
       const mark = line.querySelector(":scope > .dot, :scope > .all-star-mark");
-      const name = line.querySelector(
-        ":scope > .team-name, :scope > .tbd, :scope > .game-card-name, :scope.team-title > span:not(.dot), :scope.runs-half-head > span:not(.dot)",
-      );
+      const name = line.querySelector(expected.lines.name);
       if (!mark || !name) continue;
       const style = getComputedStyle(name);
       const role =
@@ -144,9 +142,9 @@ export const readTeamLines = async (page, expectations) => {
         );
       }
     }
-    for (const placeholder of document.querySelectorAll(
-      ".matchup-row .tbd, .game-side .club > .tbd",
-    )) {
+    for (const placeholder of expected.placeholders.flatMap((selector) => [
+      ...document.querySelectorAll(selector),
+    ])) {
       if (!placeholder.checkVisibility()) continue;
       states.add("TBD");
       const style = getComputedStyle(placeholder);

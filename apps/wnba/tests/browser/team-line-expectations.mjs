@@ -1,5 +1,10 @@
 /** @type {import("../../../../tests/browser/team-lines.mjs").TeamLineExpectations} */
 export const TEAM_LINE_EXPECTATIONS = {
+  lines: {
+    selector: ".club, .team-title, .game-card-opponent",
+    name: ":scope > .team-name, :scope > .game-card-name, :scope.team-title > span:not(.dot)",
+  },
+  placeholders: [],
   roles: {
     small: {
       font: "Barlow Condensed",
