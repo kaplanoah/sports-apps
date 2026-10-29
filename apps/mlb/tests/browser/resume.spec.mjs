@@ -1,4 +1,5 @@
 import { openRanking } from "./settings-sheet.mjs";
+import { finishSeries, WILD_CARD_SERIES } from "./bracket-rounds.mjs";
 import { NEXT_RELEASE, serveReleases } from "../../../../tests/browser/serve-releases.mjs";
 import { wakeAsStoreUpdates } from "../../../../tests/browser/wake-as-store-updates.mjs";
 import { waitForCatchUp } from "../../../../tests/browser/at-rest.mjs";
@@ -16,6 +17,7 @@ import {
 } from "./harness.mjs";
 import {
   SHORT_PHONE,
+  expectBracketZeroAfterReload,
   leaveScrolledFor,
   readNewsPlace,
   readPageScroll,
@@ -369,6 +371,17 @@ test.describe("on a short phone", () => {
       awayMs,
     });
   }
+
+  test("a short reload keeps a later-round bracket at zero before and after its first draw", async ({
+    page,
+  }) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    const app = await openApp(page);
+    const season = await app.readDocument("seasons/2026");
+    await app.writeFromWorker("seasons/2026", finishSeries(season, WILD_CARD_SERIES, 2));
+    await expect(page.locator("#bracketWrap .nscore", { hasText: "2" })).toHaveCount(4);
+    await expectBracketZeroAfterReload(page, SIDEWAYS);
+  });
 
   test("after two minutes away, the season tab starts over on the part it's named for, each part at its top with the header back and the bracket on its opening round, and News at its top", async ({
     page,

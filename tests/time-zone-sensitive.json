@@ -112,6 +112,7 @@
     "tests/mutation-testing.test.js",
     "tests/no-network.test.js",
     "tests/notifications-view.test.js",
+    "tests/opening-round.test.js",
     "tests/page-files.test.js",
     "tests/page-move-handoff.test.js",
     "tests/page-move.test.js",

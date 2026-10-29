@@ -1,6 +1,6 @@
 import { measureTopAtRest, observeRoomForPart } from "#shared/bracket-standings.js";
 import { html, setHtml } from "#shared/html.js";
-import { takeKeptLeft, watchOpeningRound } from "#shared/opening-round.js";
+import { takeKeptScroll, watchOpeningRound } from "#shared/opening-round.js";
 import { markScrolledRound } from "#shared/round-dots.js";
 import { BRACKET_FEEDERS } from "./series.js";
 
@@ -195,21 +195,21 @@ function watchTree(tree) {
 }
 
 /** Where the reader has scrolled the bracket, to keep across a redraw. */
-export const takeBracketScroll = () => takeKeptLeft(findTree());
+export const takeBracketScroll = () => takeKeptScroll(findTree());
 
 /**
  * After each draw: opens the bracket on its opening round or keeps the reader's place, spaces
  * its cards, and draws its lines.
- * @param {number} keptLeft
+ * @param {ReturnType<typeof takeKeptScroll>} keptScroll
  */
-export function placeBracket(keptLeft) {
+export function placeBracket(keptScroll) {
   const tree = findTree();
   if (!tree) return;
   const round = Number(tree.dataset.openingRound);
   const target = /** @type {HTMLElement} */ (
     tree.querySelector(`.round-name[data-round="${round}"]`)
   );
-  placeOpeningRound?.({ scroller: tree, target, round, keptLeft });
+  placeOpeningRound?.({ scroller: tree, target, round, keptScroll });
   watchTree(tree);
   layOutBracket();
   markVisibleRound();
