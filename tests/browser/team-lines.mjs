@@ -88,7 +88,7 @@ export const readTeamLines = async (page, league) => {
     for (const line of document.querySelectorAll(
       ".club, .team-title, .game-card-opponent, .runs-half-head",
     )) {
-      if (!line.checkVisibility()) continue;
+      if (!line.checkVisibility() || line.closest("[inert]")) continue;
       const mark = line.querySelector(":scope > .dot, :scope > .all-star-mark");
       const name = line.querySelector(
         ":scope > .team-name, :scope > .tbd, :scope > .game-card-name, :scope.team-title > span:not(.dot), :scope.runs-half-head > span:not(.dot)",
@@ -132,6 +132,8 @@ export const readTeamLines = async (page, league) => {
         check(mark.getBoundingClientRect().width, diameter, `${description} dot width`);
         check(mark.getBoundingClientRect().height, diameter, `${description} dot height`);
         check(findMiddle(mark) - center, isAfter ? after : before, `${description} dot center`);
+        if (app === "mlb" && line.closest(".game-side, .news-teams"))
+          check(line.getBoundingClientRect().height, diameter, `${description} line height`);
       }
       const seed = line.querySelector(":scope > .seed");
       if (seed && app === "wnba") {
@@ -182,7 +184,7 @@ export const readTeamLines = async (page, league) => {
     for (const placeholder of document.querySelectorAll(
       ".matchup-row .tbd, .game-side .club > .tbd, .series-opp .tbd",
     )) {
-      if (!placeholder.checkVisibility()) continue;
+      if (!placeholder.checkVisibility() || placeholder.closest("[inert]")) continue;
       states.add(placeholder.textContent.trim());
       const style = getComputedStyle(placeholder);
       check(parseFloat(style.fontSize), values.team.size, "TBD size");
@@ -204,6 +206,7 @@ export const readTeamLines = async (page, league) => {
     );
     for (const head of await heads.all()) {
       if (!(await head.isVisible())) continue;
+      if (await head.evaluate((element) => Boolean(element.closest("[inert]")))) continue;
       const name = head.locator(".team-name").first();
       if (!(await name.count())) continue;
       const note = head.locator(":scope > span").last();

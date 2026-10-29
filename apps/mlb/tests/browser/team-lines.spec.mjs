@@ -68,7 +68,6 @@ for (const width of [390, 1280]) {
           expect(placements).toContain("team after");
         } else {
           expect([...names].some((name) => name.length > 14)).toBe(true);
-          expect(states).toContain("TBD");
           expect(attachments).toEqual(new Set(["rank chip"]));
         }
       });

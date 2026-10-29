@@ -8,17 +8,20 @@ test.use({ contextOptions: { reducedMotion: "reduce" } });
 const THEMES = /** @type {const} */ (["light", "dark"]);
 
 const SEASON_VIEWS = new Set(["Bracket", "Standings", "News"]);
+const TAB_VIEWS = VIEW_GROUPS["the page's tabs"];
 const ALIGNMENT_VIEWS = {
   ...VIEW_GROUPS,
-  "the season's views": VIEW_GROUPS["the page's tabs"].filter((view) =>
-    SEASON_VIEWS.has(view.name),
-  ),
-  "Games and Search": VIEW_GROUPS["the page's tabs"].filter((view) => !SEASON_VIEWS.has(view.name)),
+  Bracket: TAB_VIEWS.filter((view) => view.name === "Bracket"),
+  Standings: TAB_VIEWS.filter((view) => view.name === "Standings"),
+  News: TAB_VIEWS.filter((view) => view.name === "News"),
+  "Games and Search": TAB_VIEWS.filter((view) => !SEASON_VIEWS.has(view.name)),
 };
 
 /** @type {Record<string, string[]>} */
 const EXPECTED_ROLES = {
-  "the season's views": ["label", "large", "team"],
+  Bracket: ["large"],
+  Standings: ["team"],
+  News: ["label"],
   "Games and Search": ["team"],
   "a team's and a player's sheets": ["large", "small", "team"],
   "a game's sheets": ["large", "team"],
@@ -33,8 +36,12 @@ for (const width of [390, 1280]) {
       }) => {
         test.slow();
         await page.setViewportSize({ width, height: 900 });
-        await openWithEverything(page);
         await page.emulateMedia({ colorScheme });
+        if (group === "Bracket" || group === "Standings") await openApp(page);
+        else {
+          await openWithEverything(page);
+          await page.emulateMedia({ colorScheme });
+        }
         await expect(page.locator("html")).toHaveAttribute("data-theme", colorScheme);
         const roles = new Set();
         const placements = new Set();
@@ -51,10 +58,15 @@ for (const width of [390, 1280]) {
           for (const name of drawn.names) names.add(name);
         });
         expect([...roles].sort()).toEqual(EXPECTED_ROLES[group]);
-        if (group === "the season's views") {
+        if (group === "Bracket") {
           expect(states).toContain("winner");
           expect(states).toContain("TBD");
-          expect(attachments).toEqual(new Set([".conference-tag", ".seed-note", "outside seed"]));
+          expect(attachments).toEqual(new Set(["outside seed"]));
+        } else if (group === "Standings") {
+          expect(attachments).toEqual(new Set([".conference-tag", ".seed-note"]));
+        } else if (group === "News") {
+          expect(placements).toContain("label before");
+          expect(attachments).toEqual(new Set());
         } else if (group === "Games and Search") {
           expect(placements).toContain("team after");
           expect(attachments).toEqual(new Set(["team seed before", "team seed after"]));
@@ -71,8 +83,7 @@ for (const width of [390, 1280]) {
           );
         } else {
           expect([...names].some((name) => name.length > 14)).toBe(true);
-          expect(states).toContain("TBD");
-          expect(attachments).toEqual(new Set([".conference-tag", ".seed-note", "outside seed"]));
+          expect(attachments).toEqual(new Set([".conference-tag", ".seed-note"]));
         }
       });
     }
