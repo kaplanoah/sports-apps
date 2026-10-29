@@ -113,7 +113,7 @@ for (const isSideways of [false, true]) {
     const { scroller, restore } = prepareBracket(t);
     if (!isSideways) delete scroller.dataset.startLeft;
     const left = isSideways ? 240 : 0;
-    restore(left, 60_000, 160, "seasonGames");
+    restore(left, 60_000, 160, isSideways ? "seasonGames" : "bracketWrap");
     assert.equal(scroller.scrollLeft, left);
     assert.equal(scroller.scrollTop, 160);
     assert.equal(scroller.dataset.putBackTop, "160");

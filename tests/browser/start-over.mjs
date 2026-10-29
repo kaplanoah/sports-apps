@@ -18,9 +18,9 @@ export const SHORT_PHONE = { width: 390, height: 480 };
 
 export const MINUTE_MS = 60 * 1000;
 
-/** @param {import("@playwright/test").Page} page @param {string} sideways */
-const readBracketLeft = (page, sideways) =>
-  page.locator(sideways).evaluate((element) => Math.round(element.scrollLeft));
+/** @param {import("@playwright/test").Page} page @param {string} selector */
+const readScrollLeft = (page, selector) =>
+  page.locator(selector).evaluate((element) => Math.round(element.scrollLeft));
 
 /**
  * Where the season tab is: the part its pill shows, how far each part and the bracket sideways are
@@ -35,7 +35,7 @@ export async function readSeasonPlace(page, sideways) {
       .getAttribute("data-tab"),
     standingsScroll: await readSeasonPartScroll(page, "standings"),
     bracketScroll: await readSeasonPartScroll(page, "bracket"),
-    bracketLeft: await readBracketLeft(page, sideways),
+    bracketLeft: await readScrollLeft(page, sideways),
     isPillHeld: await page
       .locator("#bracketStandingsPill")
       .evaluate((pill) => pill.classList.contains("held")),
@@ -219,7 +219,7 @@ export async function expectSeasonTabAfterReload(page, { sideways, awayMs }) {
  */
 export async function expectOpeningRoundAfterReload(page, { sideways, changeWhileAway }) {
   const bracket = page.locator(sideways);
-  const readLeft = () => readBracketLeft(page, sideways);
+  const readLeft = () => readScrollLeft(page, sideways);
   const { start } = await moveSeasonTabOffStart(page, sideways);
 
   const release = await reloadAfter(page, 2 * MINUTE_MS);
@@ -242,7 +242,7 @@ export async function expectOpeningRoundAfterReload(page, { sideways, changeWhil
  */
 export async function expectDayStripAfterReload(page, otherDay) {
   const strip = page.locator("#seasonGames .day-strip");
-  const readLeft = () => strip.evaluate((element) => Math.round(element.scrollLeft));
+  const readLeft = () => readScrollLeft(page, "#seasonGames .day-strip");
   const isTodayInStrip = () =>
     strip.locator(".is-today").evaluate((cell) => {
       const shown = /** @type {Element} */ (cell.parentElement?.closest(".day-strip"));
@@ -307,7 +307,7 @@ export async function expectBracketZeroAfterReload(page, sideways) {
         element.scrollTo({ left: 0, behavior: "instant" });
       }),
   );
-  const readLeft = () => readBracketLeft(page, sideways);
+  const readLeft = () => readScrollLeft(page, sideways);
   expect(await readLeft()).toBe(0);
 
   const release = await reloadAfter(page, MINUTE_MS);
