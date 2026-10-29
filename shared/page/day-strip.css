@@ -132,6 +132,10 @@
 .cell-month {
   color: var(--strip-month);
 }
+.day-cell.is-today .cell-name,
+.day-name.is-tomorrow {
+  --type-label-tracking: 0.02em;
+}
 .cell-number {
   font-size: var(--type-body-size);
   font-weight: calc(var(--type-body-weight) + 200);
