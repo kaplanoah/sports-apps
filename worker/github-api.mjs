@@ -4,6 +4,9 @@ const API = "https://api.github.com";
 const REQUEST_TIMEOUT_MS = 10000;
 const PAGE_SIZE = 100;
 
+/** The account a workflow's GITHUB_TOKEN comments and reviews as. */
+export const ACTIONS_LOGIN = "github-actions[bot]";
+
 /** An answer GitHub refused, with the status it answered. */
 export class GitHubError extends Error {
   /**

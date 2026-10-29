@@ -1,102 +1,104 @@
 // Tells the owner on a red pull request when all that's left is their phone test: every other
 // check main requires passed, its review passed and isn't asked again, and no review thread is
-// open. One comment for each head is enough, and a later head takes down the comments it outdated,
-// so the comment on a pull request always speaks of the head it has. Each run reads every open
-// pull request into main, since GitHub keeps one waiting run and cancels the one before it.
+// open. One comment speaks for each head while that holds, edited as beta changes hands, and is
+// taken down once it doesn't, so the comment on a pull request is always true of the head it has.
+// Each run reads every open pull request into main, since GitHub keeps one waiting run and cancels
+// the one before it.
 // Usage: node worker/phone-ready.mjs, with GH_TOKEN and GITHUB_REPOSITORY set, as Actions sets
 // the last.
 import { fileURLToPath } from "node:url";
 import { BETA_LABEL, WAIT_LABEL, findHolder, readOpenPulls } from "./beta-claim.mjs";
-import { createGitHub, createGraphQL, readAllPages } from "./github-api.mjs";
+import { ACTIONS_LOGIN, createGitHub, createGraphQL, readAllPages } from "./github-api.mjs";
 import { PHONE_CONTEXT, PHONE_OK_LABEL } from "./labeling.mjs";
 import { readThreads } from "./review-context.mjs";
 
 const REVIEW_LABEL = "review";
-const COMMENTER = "github-actions[bot]";
 const MARKER_PATTERN = /<!-- phone-ready:([0-9a-f]{40}) -->/;
 
 /** @param {string} head */
 export const nameReadyMarker = (head) => `<!-- phone-ready:${head} -->`;
 
 /**
- * @typedef {object} PullState
- * @property {boolean} isDraft
- * @property {string[]} labels
- * @property {string[]} required the checks main's rules require
- * @property {{ id: number, name: string, conclusion: string | null }[]} checkRuns
- *   every check run on the head
- * @property {{ context: string, state: string }[]} statuses each context's latest status on the
- *   head
- * @property {number} openThreads review threads not yet resolved
+ * A check main's rules require, with the App that must post it when they name one.
+ * @typedef {{ context: string, integrationId?: number }} RequiredCheck
  */
 
-/**
- * The newest check run with each name.
- * @param {PullState["checkRuns"]} checkRuns
- */
-const pickNewestRuns = (checkRuns) =>
-  new Map(
-    checkRuns.toSorted((first, second) => first.id - second.id).map((run) => [run.name, run]),
-  );
+/** @typedef {{ id: number, name: string, conclusion: string | null, app?: { id: number } | null }} CheckRun */
+
+/** @typedef {{ context: string, state: string }} Status each context's latest status on the head */
+
+/** @typedef {{ id: number, head: string, body: string }} ReadyComment */
 
 /**
- * Whether a required check passed on the head, as a check run or a status.
- * @param {string} context
- * @param {Map<string, PullState["checkRuns"][number]>} newestRuns
- * @param {PullState["statuses"]} statuses
+ * Whether a pull request is the kind that waits on the phone test: the gate holds it on the phone
+ * status before anyone labeled it phone-ok, and it isn't a draft or asking for a review. A pull
+ * request labeled phone-ok and still held needs a label again or main's deploy, which the gate's
+ * own message says.
+ * @param {{ isDraft: boolean, labels: string[], statuses: Status[] }} pull
  */
-function hasPassed(context, newestRuns, statuses) {
-  const run = newestRuns.get(context);
-  if (run) return run.conclusion === "success";
+function isHeldForPhone({ isDraft, labels, statuses }) {
+  if (isDraft || labels.includes(PHONE_OK_LABEL) || labels.includes(REVIEW_LABEL)) return false;
+  return statuses.some((status) => status.context === PHONE_CONTEXT && status.state === "pending");
+}
+
+/**
+ * Whether a required check passed on the head: its newest check run from the App the rule names,
+ * or, without one, its status.
+ * @param {RequiredCheck} check
+ * @param {CheckRun[]} checkRuns
+ * @param {Status[]} statuses
+ */
+function hasPassed({ context, integrationId }, checkRuns, statuses) {
+  const newest = checkRuns
+    .filter((run) => run.name === context)
+    .filter((run) => integrationId === undefined || run.app?.id === integrationId)
+    .toSorted((first, second) => second.id - first.id)
+    .at(0);
+  if (newest) return newest.conclusion === "success";
   return statuses.some((status) => status.context === context && status.state === "success");
 }
 
 /**
- * Whether the owner's phone test is all a pull request waits on: the gate holds it on the phone
- * status before anyone labeled it phone-ok, every other required check passed, no review is asked
- * for, and no thread is open. A pull request labeled phone-ok and still held needs a label again
- * or main's deploy, which the gate's own message says.
- * @param {PullState} pull
+ * Whether everything but the phone is done: every other required check passed and no thread is
+ * open.
+ * @param {{ required: RequiredCheck[], checkRuns: CheckRun[], statuses: Status[], openThreads: number }} pull
  */
-function isReadyForPhone({ isDraft, labels, required, checkRuns, statuses, openThreads }) {
-  if (isDraft || labels.includes(PHONE_OK_LABEL) || labels.includes(REVIEW_LABEL)) return false;
+function hasPassedAllButPhone({ required, checkRuns, statuses, openThreads }) {
   if (openThreads > 0) return false;
-  const isPhoneHeld = statuses.some(
-    (status) => status.context === PHONE_CONTEXT && status.state === "pending",
-  );
-  const newestRuns = pickNewestRuns(checkRuns);
-  return (
-    isPhoneHeld &&
-    required
-      .filter((context) => context !== PHONE_CONTEXT)
-      .every((context) => hasPassed(context, newestRuns, statuses))
-  );
+  return required
+    .filter((check) => check.context !== PHONE_CONTEXT)
+    .every((check) => hasPassed(check, checkRuns, statuses));
 }
 
 /**
  * The comments this workflow posted that say a pull request is ready for the phone, each with the
  * head it speaks of.
  * @param {{ id: number, body?: string, user?: { login?: string } }[]} comments
+ * @returns {ReadyComment[]}
  */
 const listReadyComments = (comments) =>
   comments.flatMap((comment) => {
-    const head = comment.user?.login === COMMENTER && comment.body?.match(MARKER_PATTERN)?.[1];
-    return head ? [{ id: comment.id, head }] : [];
+    const head = comment.user?.login === ACTIONS_LOGIN && comment.body?.match(MARKER_PATTERN)?.[1];
+    return head ? [{ id: comment.id, head, body: String(comment.body) }] : [];
   });
 
 /**
- * Which ready comments a later head outdated, and whether to post one for the head.
- * @param {{ isReady: boolean, head: string, comments: { id: number, head: string }[] }} options
+ * What to do with a pull request's ready comments: keep the one for its head while it's ready,
+ * edited to `body` when that changed, or post one, and take down every other.
+ * @param {{ head: string, body: string | null, comments: ReadyComment[] }} options `body` is null
+ *   when the pull request isn't ready
  */
-function planReadyComment({ isReady, head, comments }) {
+function planReadyComment({ head, body, comments }) {
+  const kept = body === null ? undefined : comments.find((comment) => comment.head === head);
   return {
-    outdated: comments.filter((comment) => comment.head !== head).map((comment) => comment.id),
-    isPosted: isReady && !comments.some((comment) => comment.head === head),
+    removed: comments.filter((comment) => comment !== kept).map((comment) => comment.id),
+    edited: kept && kept.body !== body ? kept.id : null,
+    isPosted: body !== null && !kept,
   };
 }
 
 /**
- * Where a pull request stands with beta.
+ * Where a pull request stands with beta, and what that asks before the test.
  * @param {number} number
  * @param {string[]} labels
  * @param {number | null} holder the pull request that holds beta, or null when beta is free
@@ -104,9 +106,10 @@ function planReadyComment({ isReady, head, comments }) {
 export function describeBeta(number, labels, holder) {
   if (holder === number) return "It holds beta now, so the beta apps run it.";
   if (holder !== null && (labels.includes(BETA_LABEL) || labels.includes(WAIT_LABEL)))
-    return `It waits for beta, which #${holder} holds, so try it once it's on beta.`;
-  if (holder !== null) return `It isn't on beta yet, and #${holder} holds beta.`;
-  return "It isn't on beta yet, and beta is free.";
+    return `It waits for beta, which #${holder} holds, so start once it holds beta.`;
+  if (holder !== null)
+    return `It isn't on beta yet, and #${holder} holds beta, so ask its session to put it on beta first.`;
+  return "It isn't on beta yet, so ask its session to put it on beta first.";
 }
 
 /**
@@ -129,7 +132,7 @@ const renderReadyComment = (head, beta) =>
 /**
  * The checks main's rules require.
  * @param {(path: string) => Promise<any>} github
- * @returns {Promise<string[]>}
+ * @returns {Promise<RequiredCheck[]>}
  */
 async function readRequiredChecks(github) {
   const rules = await github("/rules/branches/main");
@@ -137,36 +140,36 @@ async function readRequiredChecks(github) {
     .filter((/** @type {any} */ rule) => rule.type === "required_status_checks")
     .flatMap((/** @type {any} */ rule) =>
       rule.parameters.required_status_checks.map(
-        (/** @type {{ context: string }} */ check) => check.context,
+        (/** @type {{ context: string, integration_id?: number }} */ check) => ({
+          context: check.context,
+          integrationId: check.integration_id,
+        }),
       ),
     );
 }
 
 /**
+ * Whether a pull request waits only on the phone, reading its checks and threads only once the
+ * phone status holds it, so a run's requests grow with the red pull requests alone.
  * @param {object} options
  * @param {(path: string) => Promise<any>} options.github
  * @param {(query: string, variables: Record<string, unknown>) => Promise<any>} options.callGraphQL
  * @param {string} options.repository as owner/name
  * @param {any} options.pull as GitHub lists an open pull request
- * @param {string[]} options.required
- * @returns {Promise<PullState>}
+ * @param {string[]} options.labels
+ * @param {RequiredCheck[]} options.required
  */
-async function readPullState({ github, callGraphQL, repository, pull, required }) {
+async function isReadyForPhone({ github, callGraphQL, repository, pull, labels, required }) {
   const head = pull.head.sha;
+  const { statuses } = await github(`/commits/${head}/status`);
+  if (!isHeldForPhone({ isDraft: Boolean(pull.draft), labels, statuses })) return false;
   const [owner, name] = repository.split("/");
-  const [checkRuns, status, threads] = await Promise.all([
+  const [checkRuns, threads] = await Promise.all([
     readAllPages(github, `/commits/${head}/check-runs?filter=all`, (answer) => answer.check_runs),
-    github(`/commits/${head}/status`),
     readThreads(callGraphQL, { owner, name, number: pull.number }),
   ]);
-  return {
-    isDraft: Boolean(pull.draft),
-    labels: pull.labels.map((/** @type {{ name: string }} */ label) => label.name),
-    required,
-    checkRuns,
-    statuses: status.statuses,
-    openThreads: threads.filter((/** @type {any} */ thread) => !thread.isResolved).length,
-  };
+  const openThreads = threads.filter((/** @type {any} */ thread) => !thread.isResolved).length;
+  return hasPassedAllButPhone({ required, checkRuns, statuses, openThreads });
 }
 
 /**
@@ -178,10 +181,10 @@ async function readPullState({ github, callGraphQL, repository, pull, required }
  */
 
 /**
- * Comments on each red pull request into main whose head waits only on the owner's phone, and
- * takes down the comments earlier heads left.
+ * Comments on each red pull request into main whose head waits only on the owner's phone, keeps
+ * that comment's beta line current, and takes down the comments no longer true.
  * @param {TellOptions} options
- * @returns {Promise<number[]>} the pull requests it commented on
+ * @returns {Promise<number[]>} the pull requests it newly told
  */
 export async function tellPhoneReady({
   repository,
@@ -194,23 +197,35 @@ export async function tellPhoneReady({
   const callGraphQL = createGraphQL({ fetchImpl, env });
   const pulls = await readAllPages(github, "/pulls?state=open&base=main");
   const required = await readRequiredChecks(github);
+  /** @type {Promise<number | null> | undefined} */
+  let holder;
+  const readHolderOnce = () => (holder ??= readHolder());
   const told = [];
   for (const pull of pulls) {
     if (pull.head?.repo?.full_name !== repository) continue;
     const head = pull.head.sha;
-    const state = await readPullState({ github, callGraphQL, repository, pull, required });
+    const labels = pull.labels.map((/** @type {{ name: string }} */ label) => label.name);
     const comments = listReadyComments(
       await readAllPages(github, `/issues/${pull.number}/comments`),
     );
-    const plan = planReadyComment({ isReady: isReadyForPhone(state), head, comments });
-    for (const id of plan.outdated)
-      await github(`/issues/comments/${id}`, { method: "DELETE", readBody: false });
-    if (!plan.isPosted) continue;
-    const beta = describeBeta(pull.number, state.labels, await readHolder());
-    await github(`/issues/${pull.number}/comments`, {
-      method: "POST",
-      body: { body: renderReadyComment(head, beta) },
+    const isReady = await isReadyForPhone({
+      github,
+      callGraphQL,
+      repository,
+      pull,
+      labels,
+      required,
     });
+    const body = isReady
+      ? renderReadyComment(head, describeBeta(pull.number, labels, await readHolderOnce()))
+      : null;
+    const plan = planReadyComment({ head, body, comments });
+    for (const id of plan.removed)
+      await github(`/issues/comments/${id}`, { method: "DELETE", readBody: false });
+    if (plan.edited !== null)
+      await github(`/issues/comments/${plan.edited}`, { method: "PATCH", body: { body } });
+    if (!plan.isPosted) continue;
+    await github(`/issues/${pull.number}/comments`, { method: "POST", body: { body } });
     told.push(pull.number);
   }
   return told;

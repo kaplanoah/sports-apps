@@ -2,13 +2,11 @@
 // completed head and, for trusted review, its base. Finding marks identify what each review
 // posted so retries do not duplicate it.
 import { isGitObjectId } from "./git-object.mjs";
-import { readAllPages } from "./github-api.mjs";
+import { ACTIONS_LOGIN, readAllPages } from "./github-api.mjs";
 
 export const SUMMARY_MARKER = process.env.REVIEW_TRUSTED
   ? "<!-- trusted-review-summary -->"
   : "<!-- claude-review-summary -->";
-// The posting and summary steps post with the run's own token.
-export const REVIEWER = "github-actions[bot]";
 // What a finding the check across areas couldn't settle is posted as, in place of its weight.
 export const UNSURE = "Unsure";
 // What a posted finding is marked, each weight and UNSURE, in the order the review posts and
@@ -32,7 +30,7 @@ export const matchesReviewProvider = (recorded, provider, selection) =>
  */
 export const findSummary = (comments) =>
   comments.find(
-    (comment) => comment.user?.login === REVIEWER && comment.body?.startsWith(SUMMARY_MARKER),
+    (comment) => comment.user?.login === ACTIONS_LOGIN && comment.body?.startsWith(SUMMARY_MARKER),
   ) ?? null;
 
 /**
@@ -93,5 +91,5 @@ export async function readReviewComments(readGitHub, pullNumber) {
     ...(await readAllPages(readGitHub, `/pulls/${pullNumber}/comments`)),
     ...(await readAllPages(readGitHub, `/issues/${pullNumber}/comments`)),
   ];
-  return comments.filter((comment) => comment.user?.login === REVIEWER);
+  return comments.filter((comment) => comment.user?.login === ACTIONS_LOGIN);
 }
