@@ -6,6 +6,10 @@ import { html } from "#shared/html.js";
 /** @type {import("#shared/updates.js").ReleaseNote[]} */
 export const RELEASE_NOTES = [
   {
+    at: "2026-10-29T04:00:00Z",
+    text: html`Send a feature request, bug report, or anything else. From settings in the top right, tap <b>Contact</b>.`,
+  },
+  {
     at: "2026-10-28T01:02:00Z",
     text: html`Get a notification before each playoff game. In settings at the top right, turn on <b>Game starts</b> under Notifications, and pick how long before tipoff.`,
   },
