@@ -225,24 +225,22 @@ test("the real league store saves confirmed playoff reminder facts from its snap
   );
 });
 
-test("the real league store keeps what its last update saved when a reminder verification can't read the postseason", async () => {
+test("the real league store keeps what its last update saved when a reminder verification's postseason read fails", async () => {
   const fixture = JSON.parse(
     readFileSync(new URL("./fixtures/2026-10-07-evening.json", import.meta.url), "utf8"),
   );
   const now = Date.parse(fixture.now);
   const snapshot = buildSnapshot(fixture.responses, { season: fixture.season, now });
-  const unverified = buildSnapshot(
-    { ...fixture.responses, postseason: null },
-    { season: fixture.season, now },
-  );
   const { ctx, stored } = createDurableObjectContext();
   const store = new SeasonStore(
     ctx,
     {},
     {
       now: () => now,
-      createLoadSnapshot: () => async (season, settings) =>
-        settings?.verify ? unverified : snapshot,
+      createLoadSnapshot: () => async (season, settings) => {
+        if (settings?.verify) throw new Error("MLB answered 503");
+        return snapshot;
+      },
     },
   );
   await store.updateSeason();
