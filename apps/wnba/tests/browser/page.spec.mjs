@@ -119,7 +119,10 @@ test("every piece of text keeps to its type role, in every view", async ({ page 
   expect(await listLowContrastText(page)).toEqual([]);
   expect(await listStrayPeriods(page)).toEqual([]);
   expect(await listNeverShownWords(page, LEAGUE_WORDS.neverShown)).toEqual([]);
-  await page.getByRole("button", { name: "Team details: Minnesota Lynx" }).first().click();
+  await page
+    .getByRole("button", { name: /^Lynx\b.*team details$/ })
+    .first()
+    .click();
   await expect(page.locator("#teamSheet table.players")).toBeVisible();
   expect(await listTextOffRoles(page)).toEqual([]);
   expect(await listChipsOffCenter(page)).toEqual([]);

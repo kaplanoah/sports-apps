@@ -61,12 +61,21 @@ function openTwoTabs(key, isOn) {
 const readStoredTexts = (key) =>
   JSON.parse(stored.get(key) ?? "[]").map((/** @type {{ text: string }} */ line) => line.text);
 
-/** A stand-in for an element, inside the part when `isInPart`. */
+globalThis.Node = /** @type {any} */ ({ TEXT_NODE: 3 });
+
+/**
+ * A stand-in for a span holding one text.
+ * @param {string} text
+ */
+const createSpan = (text) => ({ nodeType: 1, childNodes: [{ nodeType: 3, nodeValue: text }] });
+
+/** A stand-in for an element, inside the part when `isInPart`, in a control holding `spans`. */
 class FakeElement {
-  /** @param {{ isInPart: boolean, label?: string }} element */
-  constructor({ isInPart, label }) {
+  /** @param {{ isInPart: boolean, label?: string, spans?: string[] }} element */
+  constructor({ isInPart, label, spans = [] }) {
     this.isInPart = isInPart;
     this.label = label;
+    this.spans = spans;
     this.id = "";
     this.localName = "span";
     this.classList = ["cell-name"];
@@ -74,7 +83,9 @@ class FakeElement {
   /** @param {string} selector */
   closest(selector) {
     if (selector === "button, a")
-      return this.label ? { getAttribute: () => this.label, textContent: this.label } : null;
+      return this.label || this.spans.length
+        ? { getAttribute: () => this.label ?? null, childNodes: this.spans.map(createSpan) }
+        : null;
     return this.isInPart ? this : null;
   }
 }
@@ -314,6 +325,51 @@ test("a touch or click on the log's part is logged with where it landed and on w
   assert.deepEqual(
     log.readLines().map((line) => line.text),
     ["click at 340,121 on Today", "click at 20,30 on span.cell-name"],
+  );
+});
+
+test("a tap on a button named by its words, set over several lines, logs them as one line", () => {
+  const log = createLog();
+  log.watchSteps(
+    () => true,
+    () => {},
+  );
+  const noteClick = /** @type {(event: any) => void} */ (listeners.get("click"));
+
+  noteClick({
+    type: "click",
+    target: new FakeElement({
+      isInPart: true,
+      spans: ["\n  Yesterday\n      ", "\n        W\n    85-70\n  ", ", game details\n"],
+    }),
+    clientX: 10,
+    clientY: 20,
+  });
+
+  assert.deepEqual(
+    log.readLines().map((line) => line.text),
+    ["click at 10,20 on Yesterday W 85-70, game details"],
+  );
+});
+
+test("a tap on a button whose words sit in parts side by side, like a seed beside a name, logs them apart", () => {
+  const log = createLog();
+  log.watchSteps(
+    () => true,
+    () => {},
+  );
+  const noteClick = /** @type {(event: any) => void} */ (listeners.get("click"));
+
+  noteClick({
+    type: "click",
+    target: new FakeElement({ isInPart: true, spans: ["3", "Fever", ", team details"] }),
+    clientX: 10,
+    clientY: 20,
+  });
+
+  assert.deepEqual(
+    log.readLines().map((line) => line.text),
+    ["click at 10,20 on 3 Fever, team details"],
   );
 });
 

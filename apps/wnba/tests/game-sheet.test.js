@@ -9,7 +9,7 @@ import { buildSeasonWithLeaders } from "./player-fixtures.js";
 import { describeBoxScore } from "../worker/src/box-score.js";
 import { describePreview } from "../worker/src/preview.js";
 import { checkInTimeZone, EASTERN } from "../../../tests/time-zone.js";
-import { normalizeSpaces } from "../../../tests/text.js";
+import { dropSpokenOnly, normalizeSpaces } from "../../../tests/text.js";
 
 const AFTERNOON = JSON.parse(
   readFileSync(`${import.meta.dirname}/fixtures/2026-09-30-afternoon.json`, "utf8"),
@@ -24,7 +24,7 @@ const FEVER_AT_ACES = { away: "IND", home: "LVA" };
 
 // Each tag reads as a space, and the page's separator as a bar.
 const readText = (markup) =>
-  normalizeSpaces(markup.text)
+  dropSpokenOnly(normalizeSpaces(markup.text))
     .replace(/<[^>]+>/g, " ")
     .replace(/&bull;/g, "|")
     .replace(/&#39;/g, "'")

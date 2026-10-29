@@ -131,7 +131,10 @@ test("the News tab shows a card for each story the Worker saves", async ({ page 
     "The Liberty's defense held the Dream to 30 percent",
   ]);
   const athletic = findCard(page, "The Liberty's defense");
-  await expect(athletic.locator(".news-teams")).toHaveText("LibertyDream");
+  const athleticTeams = athletic.locator(".news-teams").getByRole("button");
+  await expect(athleticTeams).toHaveCount(2);
+  await expect(athleticTeams.nth(0)).toHaveAccessibleName(/^Liberty\b/);
+  await expect(athleticTeams.nth(1)).toHaveAccessibleName(/^Dream\b/);
   await expect(
     findCard(page, "Film review").getByRole("link", { name: /^Read on ESPN/ }),
   ).toHaveAttribute("href", "https://example.com/espn");

@@ -55,6 +55,17 @@ test("a game still to come with no channels listed yet says to check back", () =
   assert.match(markup, /Check back for where to watch/);
 });
 
+test("the starters' line is named by its starters, then what it opens, for a screen reader", () => {
+  const markup = renderSlateGame((game) => game.away === "MIL" && game.home === "SD");
+  const button =
+    markup.match(/<button type="button" class="starters-open[^]*?<\/button>/)?.[0] ?? "";
+  assert.doesNotMatch(button, /aria-label/);
+  assert.match(
+    button,
+    /Gasser[^]*Buehler[^]*<span class="spoken-only">, pitching matchup<\/span>\s*<\/button>$/,
+  );
+});
+
 /** @param {string} id */
 const describeGame = (id) => describeBoxScore(id, GAMES.feeds[id]);
 

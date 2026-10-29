@@ -22,7 +22,10 @@ const GAP_PX = 15;
 /** @param {import("@playwright/test").Page} page */
 async function openLibertySheet(page) {
   await openSeasonPart(page, "Standings");
-  await page.getByRole("button", { name: "Team details: New York Liberty" }).first().click();
+  await page
+    .getByRole("button", { name: /^Liberty\b.*team details$/ })
+    .first()
+    .click();
   const sheet = page.locator("#teamSheet");
   await expect(sheet.locator("#teamTitle")).toHaveText("New York Liberty");
   return sheet;
@@ -156,7 +159,10 @@ test("another team's sheet opens on its stats, scrolled to its top", async ({ pa
   await scrollSection(section, { top: 300 });
   await page.keyboard.press("Escape");
 
-  await page.getByRole("button", { name: "Team details: Minnesota Lynx" }).first().click();
+  await page
+    .getByRole("button", { name: /^Lynx\b.*team details$/ })
+    .first()
+    .click();
 
   await expect(page.locator("#teamTitle")).toHaveText("Minnesota Lynx");
   await expectShown(page.locator("#teamSection"));
@@ -460,7 +466,10 @@ test.describe("in full motion", () => {
     const tabList = page.locator("#teamSheet [role=tablist]");
     const readFades = await noteNameFades(tabList);
 
-    await page.getByRole("button", { name: "Team details: Minnesota Lynx" }).first().click();
+    await page
+      .getByRole("button", { name: /^Lynx\b.*team details$/ })
+      .first()
+      .click();
 
     await expect(page.locator("#teamTitle")).toHaveText("Minnesota Lynx");
     expect(await readFilledNames(tabList)).toEqual(["Team"]);

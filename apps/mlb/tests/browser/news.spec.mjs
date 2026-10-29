@@ -96,7 +96,9 @@ test("the News tab shows a card for each piece of news the Worker saves, newest 
     "MLB proposes a 154-game season",
   ]);
   const mets = page.locator(".news-card").first();
-  await expect(mets.locator(".news-teams")).toHaveText("Mets");
+  const metsTeams = mets.locator(".news-teams").getByRole("button");
+  await expect(metsTeams).toHaveCount(1);
+  await expect(metsTeams).toHaveAccessibleName(/^Mets\b/);
   await expect(mets.getByRole("link", { name: /^Read on NY Post/ })).toHaveAttribute(
     "href",
     "https://example.com/post",
