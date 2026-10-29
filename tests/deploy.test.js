@@ -797,7 +797,21 @@ test("a thrown page check leaves the upload live but unverified and masks its ac
 function createCleanupFailureBrowser(cleanup, result) {
   const page = {
     on: () => {},
-    goto: async () => ({ ok: () => result !== "broken response", status: () => 500 }),
+    goto: async () => ({
+      ok: () => result !== "broken response",
+      status: () => 500,
+      headers: () => ({
+        "content-security-policy": "script-src 'self'; frame-ancestors 'none'",
+        "x-frame-options": "DENY",
+        "strict-transport-security": "max-age=31536000",
+      }),
+    }),
+    request: {
+      get: async (address) => ({
+        status: () => 301,
+        headers: () => ({ location: address.replace("http:", "https:") }),
+      }),
+    },
     url: () => ENV.MLB_PAGE_URL,
     evaluate: async () => 204,
     locator: () => ({

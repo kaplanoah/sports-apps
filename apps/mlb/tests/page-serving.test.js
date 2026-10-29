@@ -9,7 +9,7 @@ const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47];
 
 /** @param {string} path @param {{ env?: { APP_KEY?: string }, method?: string }} [options] */
 const requestPage = (path, { env = ENV, method = "GET" } = {}) =>
-  worker.fetch(new Request(`${ORIGIN}${path}`, { method }), env);
+  worker.fetch(new Request(`${ORIGIN}${path}`, { method, headers: { origin: ORIGIN } }), env);
 
 test("the page is a whole document with what an iPhone needs to save it as an app", async () => {
   const response = await requestPage("/k3y/");
