@@ -394,22 +394,25 @@ function combineSeries(bracketSeries, countedSeries, games) {
 
 const BACKUP_STATES = { pre: "pre", in: "live", post: "final" };
 
-// ESPN's scoreboard gives each score as text.
+// ESPN's scoreboard gives each score as text, and a stand-in game takes one only as a number.
 /** @param {unknown} score */
-const readEspnScore = (score) => (typeof score === "string" && score !== "" ? Number(score) : null);
+function readEspnScore(score) {
+  const value = typeof score === "string" && score.trim() !== "" ? Number(score) : score;
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
 
 // An ESPN scoreboard game's competition, when it starts, and its teams, home and away, each as
-// `readSide` reads it.
+// `readCompetitorDetails` reads it.
 /**
  * @param {any} event
- * @param {(competitor: any) => object} readSide
+ * @param {(competitor: any) => object} readCompetitorDetails
  */
-function readEspnEvent(event, readSide) {
+function readEspnEvent(event, readCompetitorDetails) {
   const competition = event.competitions?.[0] ?? {};
   const sides = Object.fromEntries(
     (competition.competitors ?? []).map((competitor) => [
       competitor.homeAway,
-      { team: findTeamCodeByEspnId(competitor.id), ...readSide(competitor) },
+      { team: findTeamCodeByEspnId(competitor.id), ...readCompetitorDetails(competitor) },
     ]),
   );
   return { competition, start: competition.date ?? event.date, home: sides.home, away: sides.away };
