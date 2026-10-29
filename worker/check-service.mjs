@@ -14,6 +14,24 @@ import { CHECK_INTERVAL_MS, CHECK_TIMEOUT_MS, waitFor } from "./check-timing.mjs
 /** @typedef {{ answered: false } | { answered: true, report: ServiceReport | null }} AppHealth */
 
 /**
+ * What an app's health answers, or that it didn't.
+ * @param {string} url the app's Worker
+ * @param {typeof fetch} fetchImpl
+ * @returns {Promise<{ answered: false } | { answered: true, body: any }>}
+ */
+export async function readHealth(url, fetchImpl) {
+  try {
+    const response = await fetchImpl(new URL("health", url).href, {
+      method: "GET",
+      signal: AbortSignal.timeout(CHECK_TIMEOUT_MS),
+    });
+    return { answered: true, body: await response.json() };
+  } catch {
+    return { answered: false };
+  }
+}
+
+/**
  * What one app's health says of the service, and whether it answered at all.
  * @param {string} url the app's Worker
  * @param {string} service
@@ -21,15 +39,9 @@ import { CHECK_INTERVAL_MS, CHECK_TIMEOUT_MS, waitFor } from "./check-timing.mjs
  * @returns {Promise<AppHealth>}
  */
 async function readAppHealth(url, service, fetchImpl) {
-  try {
-    const response = await fetchImpl(new URL("health", url).href, {
-      method: "GET",
-      signal: AbortSignal.timeout(CHECK_TIMEOUT_MS),
-    });
-    return { answered: true, report: (await response.json())?.services?.[service] ?? null };
-  } catch {
-    return { answered: false };
-  }
+  const health = await readHealth(url, fetchImpl);
+  if (!health.answered) return { answered: false };
+  return { answered: true, report: health.body?.services?.[service] ?? null };
 }
 
 /**

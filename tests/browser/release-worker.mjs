@@ -7,6 +7,9 @@ import { TEST_SERVER } from "./harness.mjs";
 
 const APP_KEY = "test-key";
 const answerNothing = () => new Response(null, { status: 500 });
+const refuseStore = async () => {
+  throw new Error("The store answered 500");
+};
 
 /**
  * Page files as the Worker serves them, from an address without the key.
@@ -18,7 +21,7 @@ function serveBundledFiles(pageFiles) {
     name: "mlb",
     pageFiles,
     forwardToStore: answerNothing,
-    isStoreAnswering: async () => false,
+    readFeedFailures: refuseStore,
   });
   return async (url) =>
     worker.fetch(new Request(new URL(`/${APP_KEY}${url.pathname}${url.search}`, url)), {

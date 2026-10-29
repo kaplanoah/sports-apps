@@ -5,7 +5,10 @@ import { createAppWorker } from "../shared/worker/app-worker.js";
 import { ANDROID_AGENT, IPAD_AGENT, IPHONE_AGENT } from "./browser/devices.mjs";
 
 const answerNothing = () => new Response(null, { status: 500 });
-const storeAnswers = async () => true;
+const storeAnswers = async () => ({});
+const refuseStore = async () => {
+  throw new Error("The store answered 500");
+};
 const RELEASE = {
   version: "1.2.3",
   commit: "abc1234",
@@ -19,7 +22,7 @@ const createPageWorker = (pageFiles) =>
     name: "mlb",
     pageFiles,
     forwardToStore: answerNothing,
-    isStoreAnswering: storeAnswers,
+    readFeedFailures: storeAnswers,
   });
 
 /** @param {Record<string, { contentType: string, text?: string }>} pageFiles */
@@ -48,14 +51,19 @@ test("health answers without the key, saying whether the store answers and which
     env,
   );
   assert.equal(healthy.status, 200);
-  assert.deepEqual(await healthy.json(), { ok: true, release: "abc1234", store: "ok" });
+  assert.deepEqual(await healthy.json(), {
+    ok: true,
+    release: "abc1234",
+    store: "ok",
+    feeds: {},
+  });
   assert.equal(healthy.headers.get("x-robots-tag"), "noindex, nofollow");
 
   const unhealthy = await createAppWorker({
     name: "mlb",
     pageFiles,
     forwardToStore: answerNothing,
-    isStoreAnswering: async () => false,
+    readFeedFailures: refuseStore,
   }).fetch(new Request("https://worker.example/health"), env);
   assert.equal(unhealthy.status, 503);
   assert.deepEqual(await unhealthy.json(), { ok: false, release: "abc1234", store: "no answer" });
@@ -128,7 +136,7 @@ function createLockedWorker() {
     name: "mlb",
     pageFiles: PAGE_FILES,
     forwardToStore: answerOk,
-    isStoreAnswering: storeAnswers,
+    readFeedFailures: storeAnswers,
     reads: { "/box-score": answerOk },
   });
 }
@@ -166,7 +174,7 @@ test("an app's own read gets the Worker's bindings, so it can read the store", a
     name: "mlb",
     pageFiles: PAGE_FILES,
     forwardToStore: answerNothing,
-    isStoreAnswering: storeAnswers,
+    readFeedFailures: storeAnswers,
     reads: {
       "/roster": (url, env) => {
         handed.push([url.searchParams.get("team"), env.STORE]);
@@ -220,7 +228,7 @@ test("the page's address in its release's folder shows the gate too, until the c
       "version.json": { contentType: "application/json", text: JSON.stringify(RELEASE) },
     },
     forwardToStore: answerOk,
-    isStoreAnswering: storeAnswers,
+    readFeedFailures: storeAnswers,
   });
   const request = () =>
     new Request("https://worker.example/key/release/abc1234/index.html", {
