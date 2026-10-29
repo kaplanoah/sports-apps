@@ -51,16 +51,26 @@ export function testControlStates(test, expect, app) {
     await expect(button).toHaveCSS("transition-duration", "0s");
   });
 
-  test("a press on settings' close shows before settings close", async ({ page }) => {
+  test("a press on settings' close shows while settings start closing on the frame of its tap", async ({
+    page,
+  }) => {
     await app.openApp(page);
     await app.openSettings(page);
     const close = page.locator(`${SETTINGS} .sheet-close`);
     await holdClock(page);
 
     await close.click();
+    await page.clock.runFor(16);
 
     await expect(close).toHaveCSS("opacity", "0.3");
-    await expect(page.locator(SETTINGS)).toHaveAttribute("open");
+    expect(
+      await page
+        .locator(SETTINGS)
+        .evaluate(
+          (/** @type {HTMLDialogElement} */ dialog) =>
+            !dialog.open || dialog.style.transform === "translateY(100%)",
+        ),
+    ).toBe(true);
     await page.clock.runFor(1000);
     await expect(page.locator(SETTINGS)).toBeHidden();
   });
