@@ -5,6 +5,7 @@ import { startAdmissionGateway } from "../worker/codex-rate-gateway.mjs";
 class ResponseFixture extends EventEmitter {
   headersSent = false;
   destroyed = false;
+  writableEnded = false;
   /** @type {ReadableStreamDefaultController<Uint8Array>} */
   controller;
 
@@ -31,6 +32,7 @@ class ResponseFixture extends EventEmitter {
   }
 
   end(chunk) {
+    this.writableEnded = true;
     if (chunk) this.write(chunk);
     this.controller.close();
     this.onClose();
@@ -53,9 +55,11 @@ export async function createRateHttpFixture(options) {
   let closed = false;
   let listener;
   let keepalive;
+  let listeningPort;
   const server = new EventEmitter();
   Object.assign(server, {
-    listen(_port, address) {
+    listen(port, address) {
+      listeningPort = port;
       assertLoopback(address);
       keepalive = setInterval(() => {}, 1000);
       queueMicrotask(() => server.emit("listening"));
@@ -81,6 +85,7 @@ export async function createRateHttpFixture(options) {
   });
   return {
     gateway,
+    readListeningPort: () => listeningPort,
     request(overrides = {}) {
       if (closed) return Promise.reject(new Error("Fixture listener closed."));
       return new Promise((resolve, reject) => {

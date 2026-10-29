@@ -65,6 +65,18 @@ jobs:
       - name: Validate prior work and prepare the complete native request
         id: request
         run: node worker/review-trial.mjs request "$PORTION"
+      - if: inputs.provider == 'codex'
+        run: npm ci --ignore-scripts --no-audit
+      - name: Package trusted native admission controls
+        id: rate-input
+        if: inputs.provider == 'codex'
+        run: node worker/prepare-codex-rate.mjs
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        if: inputs.provider == 'codex'
+        with:
+          name: native-rate-input-${{ inputs.portion }}
+          path: ${{ steps.rate-input.outputs.rate-input }}
+          retention-days: 1
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: trial-session-input-${{ inputs.portion }}
@@ -74,6 +86,7 @@ jobs:
   model:
     needs: request
     if: *trial-authority
+    name: ${{ inputs.provider == 'codex' && format('native-codex-{0}', inputs.portion) || 'model' }}
     concurrency:
       group: ${{ needs.request.outputs.model-queue }}
       cancel-in-progress: false
@@ -102,15 +115,29 @@ jobs:
           git clone --quiet "$RUNNER_TEMP/trial/snapshot.bundle" "$GITHUB_WORKSPACE"
           ln -s "$RUNNER_TEMP/trial/data" "$GITHUB_WORKSPACE/.review"
           echo "REVIEW_CHECKOUT=$GITHUB_WORKSPACE" >> "$GITHUB_ENV"
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        if: inputs.provider == 'codex'
+        with:
+          name: native-rate-input-${{ inputs.portion }}
+          path: ${{ runner.temp }}/native-rate-download
+      - if: inputs.provider == 'codex'
+        run: tar -xzf "$RUNNER_TEMP/native-rate-download/native-rate-input.tgz" -C "$RUNNER_TEMP"
+      - name: Authenticate preceding quota state and prepare protected admission
+        id: rate
+        if: inputs.provider == 'codex'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node "$RUNNER_TEMP/native-rate-input/runtime.mjs" prepare "$RUNNER_TEMP/native-rate-input"
       - name: Native Codex investigation
         id: codex
         if: inputs.provider == 'codex'
         continue-on-error: true
         uses: openai/codex-action@c05cfd74ad95c626cdf05c6685e62becc3bf7813
         env:
-          BASH_ENV: ${{ runner.temp }}/codex-log-capture.sh
+          BASH_ENV: ${{ steps.rate.outputs.hook }}
         with:
           openai-api-key: ${{ secrets.TRUSTED_REVIEW_OPENAI_API_KEY }}
+          responses-api-endpoint: ${{ steps.rate.outputs.endpoint }}
           codex-version: 0.164.0
           model: gpt-6.1-sol
           effort: high
@@ -122,6 +149,27 @@ jobs:
           output-schema-file: ${{ runner.temp }}/trial/schema.json
           output-file: ${{ runner.temp }}/trial-answer.json
           codex-args: '["--ephemeral", "--json"]'
+      - name: Retain fixed native admission failure facts
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        if: always() && inputs.provider == 'codex' && steps.rate.outcome == 'failure'
+        with:
+          name: native-rate-setup-${{ inputs.portion }}
+          path: ${{ runner.temp }}/native-rate-setup.json
+          retention-days: 14
+          if-no-files-found: error
+      - name: Require finalized native quota state and cleanup
+        if: always() && inputs.provider == 'codex' && steps.rate.outcome == 'success'
+        env:
+          RATE_COLLECTOR: ${{ steps.rate.outputs.collector }}
+          RATE_FOLDER: ${{ steps.rate.outputs.folder }}
+        run: node "$RATE_COLLECTOR" collect "$RATE_FOLDER"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        if: always() && inputs.provider == 'codex' && steps.rate.outcome == 'success'
+        with:
+          name: ${{ steps.rate.outputs.artifact }}
+          path: ${{ steps.rate.outputs.result }}
+          if-no-files-found: error
+          retention-days: 90
       - name: Claude investigation
         id: claude
         if: inputs.provider == 'claude'

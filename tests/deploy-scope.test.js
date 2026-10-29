@@ -23,6 +23,11 @@ const DEPLOY_REPORT = "worker/report-deploy.mjs";
 
 test("rate-control tooling changes do not deploy Workers while unknown root code still does", () => {
   for (const name of [
+    "access",
+    "handoff",
+    "lifecycle",
+    "policy",
+    "runtime",
     "budget",
     "controller",
     "estimate",
@@ -36,6 +41,7 @@ test("rate-control tooling changes do not deploy Workers while unknown root code
     assert.equal(decideDeploy([`worker/codex-rate-${name}.mjs`]).isNeeded, false, name);
   }
   assert.equal(decideDeploy(["worker/prove-codex-rate-isolation.mjs"]).isNeeded, false);
+  assert.equal(decideDeploy(["worker/prepare-codex-rate.mjs"]).isNeeded, false);
   assert.equal(decideDeploy(["worker/example-runtime.mjs"]).isNeeded, true);
 });
 

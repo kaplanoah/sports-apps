@@ -9,12 +9,17 @@ const requireCount = (value, label) => {
 export function parseRetryAfter(headers, now) {
   const value = headers.get("retry-after");
   if (value !== null) {
-    if (/^\d+$/.test(value)) return now + Number(value) * 1000;
+    if (/^\d+$/.test(value)) {
+      const deadline = now + Number(value) * 1000;
+      if (Number.isSafeInteger(deadline)) return deadline;
+    }
     const date = Date.parse(value);
-    if (Number.isFinite(date) && date >= now) return date;
+    if (Number.isSafeInteger(date) && date >= now) return date;
   }
   const milliseconds = headers.get("retry-after-ms");
-  return milliseconds !== null && /^\d+$/.test(milliseconds) ? now + Number(milliseconds) : null;
+  const deadline =
+    milliseconds !== null && /^\d+$/.test(milliseconds) ? now + Number(milliseconds) : NaN;
+  return Number.isSafeInteger(deadline) ? deadline : null;
 }
 
 /** @param {string | null} value @param {number} now */
@@ -27,7 +32,7 @@ export function parseReset(value, now) {
     total += Number(match[1]) * { ms: 1, s: 1000, m: 60000, h: 3600000 }[match[2]];
     end += match[0].length;
   }
-  return end === value.length && end > 0 && Number.isSafeInteger(Math.ceil(total))
+  return end === value.length && end > 0 && Number.isSafeInteger(now + Math.ceil(total))
     ? now + Math.ceil(total)
     : null;
 }

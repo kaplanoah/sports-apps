@@ -13,6 +13,7 @@ import {
 } from "./review-supplied.mjs";
 import { retainCodexUsage } from "./review-evaluation.mjs";
 import { writeReviewModelQueue } from "./review-provider.mjs";
+import { createBoundedNativeConfig } from "./codex-rate-policy.mjs";
 
 const CANDIDATE_FIELDS = {
   path: { type: "string" },
@@ -237,21 +238,13 @@ function writeCodexConfig(env) {
     [
       "project_doc_max_bytes = 0",
       'approval_policy = "never"',
+      createBoundedNativeConfig().trimEnd(),
       "[shell_environment_policy]",
       'inherit = "none"',
       "[shell_environment_policy.set]",
       'PATH = "/usr/local/bin:/usr/bin:/bin"',
       `[projects.${JSON.stringify(env.REVIEW_CHECKOUT)}]`,
       'trust_level = "untrusted"',
-      "",
-    ].join("\n"),
-  );
-  writeFileSync(
-    join(env.RUNNER_TEMP, "codex-log-capture.sh"),
-    [
-      'if [ -n "${CODEX_PROMPT_FILE:-}" ]; then',
-      '  exec > "$RUNNER_TEMP/codex-events.jsonl" 2>&1',
-      "fi",
       "",
     ].join("\n"),
   );

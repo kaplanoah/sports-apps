@@ -82,6 +82,98 @@ test("request handler forwards split UTF-8 SSE bytes unchanged and counts usage 
   assert.equal(JSON.stringify(budget).includes("fake-test"), false);
 });
 
+test("a protected prepared port is bound only on IPv4 loopback", async (t) => {
+  const fixture = await createGateway(t, async () => new Response(""), { port: 43210 });
+  assert.equal(fixture.readListeningPort(), 43210);
+});
+
+test("shutdown waits for aborted upstream settlement before quota state can finalize", async (t) => {
+  let release;
+  let entered = false;
+  const paused = new Promise((resolve) => {
+    release = resolve;
+  });
+  const fixture = await createGateway(t, async (_url, options) => {
+    entered = true;
+    await new Promise((resolve) =>
+      options.signal.addEventListener("abort", resolve, { once: true }),
+    );
+    await paused;
+    throw new Error("aborted fake stream");
+  });
+  const request = fixture.request().catch(() => undefined);
+  await tick();
+  assert.equal(entered, true);
+  let finished = false;
+  const closing = fixture.gateway.close().then(() => {
+    finished = true;
+  });
+  try {
+    await tick();
+    assert.equal(finished, false);
+  } finally {
+    release();
+    await closing;
+    await request;
+  }
+  assert.deepEqual(fixture.budget.settled, [{ id: 1, observed: null }]);
+});
+
+test("settlement errors cannot turn shutdown into successful quota finalization", async (t) => {
+  const budget = createBudget();
+  budget.settle = () => {
+    throw new Error("unavailable quota finalization");
+  };
+  const fixture = await createGateway(t, async () => new Response("data: [DONE]\n\n"), { budget });
+  await (await fixture.request()).text();
+  await tick();
+  await assert.rejects(fixture.gateway.close(), /could not finalize/);
+});
+
+test("streamed rate advice and retryable server advice carry shared cooldown without replay", async (t) => {
+  const now = 1000000;
+  for (const [code, message, milliseconds] of [
+    ["rate_limit_exceeded", "Please try again in 180s.", 180000],
+    ["slow_down", "Try again in 1.5 seconds.", 1500],
+    ["rate_limit_exceeded", "Try again in 2500ms.", 2500],
+    ["invalid_prompt", "Try again in 180s.", null],
+  ]) {
+    const body = `data: ${JSON.stringify({ type: "response.failed", response: { error: { code, message } } })}\n\n`;
+    let calls = 0;
+    const fixture = await createGateway(
+      t,
+      async () => {
+        calls++;
+        return new Response(body);
+      },
+      { now: () => now },
+    );
+    const result = await fixture.request();
+    assert.equal(await result.text(), body);
+    await tick();
+    assert.equal(calls, 1);
+    assert.deepEqual(
+      fixture.budget.deadlines,
+      milliseconds === null ? [] : [now + Number(milliseconds)],
+    );
+    assert.deepEqual(fixture.budget.settled, [{ id: 1, observed: null }]);
+  }
+  const fixture = await createGateway(
+    t,
+    async () =>
+      new Response("unavailable", {
+        status: 503,
+        headers: { "retry-after": "180" },
+      }),
+    { now: () => now },
+  );
+  const response = await fixture.request();
+  assert.equal(response.status, 503);
+  assert.equal(response.headers.get("retry-after"), "180");
+  assert.deepEqual(fixture.budget.deadlines, [now + 180000]);
+  await response.text();
+});
+
 test("native session and sticky-routing headers survive both directions", async (t) => {
   let received;
   const { request } = await createGateway(t, async (_url, options) => {

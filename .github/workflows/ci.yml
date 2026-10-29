@@ -489,6 +489,18 @@ jobs:
           path: ${{ runner.temp }}/codex-rate-isolation-proof.json
           if-no-files-found: error
           retention-days: 14
+      - name: Check cross-run artifact access with the current read permission
+        if: steps.rate-scope.outputs.needed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node worker/codex-rate-access.mjs
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        if: always() && steps.rate-scope.outputs.needed == 'true'
+        with:
+          name: codex-rate-access
+          path: ${{ runner.temp }}/codex-rate-access.json
+          if-no-files-found: error
+          retention-days: 14
 
   # Review credentials and posting live only in the default-branch Trusted review workflow.
   # This PR workflow joins its authenticated result using read-only Actions access.

@@ -13,6 +13,7 @@ import {
 import { recomputeReviewCoverage, readReviewIdentity } from "../worker/review-data.mjs";
 import { exportReviewArtifact, importReviewArtifacts } from "../worker/trusted-review.mjs";
 import { readRepoFile, REPO_ROOT } from "./repo-files.js";
+import { createNativeRateHook } from "../worker/codex-rate-runtime.mjs";
 
 const ENV = {
   GITHUB_REPOSITORY: "example/repository",
@@ -182,6 +183,15 @@ test("the trusted shell capture keeps native events out of stdout and preserves 
     { env, encoding: "utf8" },
   );
   assert.equal(config.status, 0, config.stderr);
+  assert.match(
+    readFileSync(join(folder, "codex-home/config.toml"), "utf8"),
+    /unbounded_connection_retries = false/,
+  );
+  mkdirSync(join(folder, "public"));
+  const launcher = join(folder, "public/runtime.mjs");
+  writeFileSync(launcher, "process.exit(0);\n");
+  const hook = join(folder, "hook.sh");
+  writeFileSync(hook, createNativeRateHook(folder, process.execPath));
   const script = join(folder, "step.sh");
   writeFileSync(
     script,
@@ -192,7 +202,7 @@ test("the trusted shell capture keeps native events out of stdout and preserves 
       PATH: process.env.PATH,
       RUNNER_TEMP: folder,
       CODEX_PROMPT_FILE: "prompt.txt",
-      BASH_ENV: join(folder, "codex-log-capture.sh"),
+      BASH_ENV: hook,
     },
     encoding: "utf8",
   });
@@ -203,7 +213,22 @@ test("the trusted shell capture keeps native events out of stdout and preserves 
     '{"type":"turn.completed"}\ntool output\n',
   );
   const workflow = readRepoFile(".github/workflows/trusted-codex-review.yml");
-  assert.match(workflow, /BASH_ENV: \$\{\{ runner.temp \}\}\/codex-log-capture.sh/);
+  writeFileSync(launcher, "process.exit(3);\n");
+  const blocked = spawnSync("bash", ["--noprofile", "--norc", "-e", "-o", "pipefail", script], {
+    env: {
+      PATH: process.env.PATH,
+      RUNNER_TEMP: folder,
+      CODEX_PROMPT_FILE: "prompt.txt",
+      BASH_ENV: hook,
+    },
+    encoding: "utf8",
+  });
+  assert.equal(blocked.status, 1);
+  assert.equal(
+    readFileSync(join(folder, "codex-events.jsonl"), "utf8"),
+    '{"type":"turn.completed"}\ntool output\n',
+  );
+  assert.match(workflow, /BASH_ENV: \$\{\{ steps.rate.outputs.hook \}\}/);
   assert.match(workflow, /name: Retain only native usage counters\n {8}if: always\(\)/);
   assert.match(workflow, /review-codex.mjs" usage/);
   const upload = workflow.split("name: trusted-codex-answer-")[1].split("  validate:")[0];

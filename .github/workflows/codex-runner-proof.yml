@@ -37,6 +37,15 @@ jobs:
         env:
           CODEX_EVIDENCE_CERTIFICATE: ${{ inputs.evidence-certificate }}
         run: node worker/prove-codex-runner.mjs prepare
+      - run: npm ci --ignore-scripts --no-audit
+      - name: Package trusted native admission controls
+        id: rate-input
+        run: node worker/prepare-codex-rate.mjs
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: native-rate-input-proof
+          path: ${{ steps.rate-input.outputs.rate-input }}
+          retention-days: 1
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: codex-proof-input
@@ -46,6 +55,7 @@ jobs:
   model:
     needs: prepare
     if: *proof-authority
+    name: native-codex-proof
     concurrency:
       group: ${{ needs.prepare.outputs.model-queue }}
       cancel-in-progress: false
@@ -65,15 +75,26 @@ jobs:
         run: tar -xzf "$RUNNER_TEMP/codex-proof-download/codex-proof-input.tgz" -C "$RUNNER_TEMP"
       - name: Prepare the answer destination
         run: mkdir "$RUNNER_TEMP/codex-answer"
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: native-rate-input-proof
+          path: ${{ runner.temp }}/native-rate-download
+      - run: tar -xzf "$RUNNER_TEMP/native-rate-download/native-rate-input.tgz" -C "$RUNNER_TEMP"
+      - name: Authenticate preceding quota state and prepare protected admission
+        id: rate
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node "$RUNNER_TEMP/native-rate-input/runtime.mjs" prepare "$RUNNER_TEMP/native-rate-input"
       - name: Run one native Codex proof
         id: model
         continue-on-error: true
         uses: openai/codex-action@c05cfd74ad95c626cdf05c6685e62becc3bf7813
         env:
-          BASH_ENV: ${{ runner.temp }}/codex-log-capture.sh
+          BASH_ENV: ${{ steps.rate.outputs.hook }}
           TRIAL_SECRET_CANARY: harmless-shell-isolation-test
         with:
           openai-api-key: ${{ secrets.TRUSTED_REVIEW_OPENAI_API_KEY }}
+          responses-api-endpoint: ${{ steps.rate.outputs.endpoint }}
           codex-version: 0.164.0
           model: gpt-6.1-sol
           effort: high
@@ -85,6 +106,27 @@ jobs:
           output-schema-file: ${{ runner.temp }}/codex-proof/schema.json
           output-file: ${{ runner.temp }}/codex-answer/answer.json
           codex-args: '["--ephemeral", "--json"]'
+      - name: Retain fixed native admission failure facts
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        if: always() && steps.rate.outcome == 'failure'
+        with:
+          name: native-rate-setup-proof
+          path: ${{ runner.temp }}/native-rate-setup.json
+          retention-days: 14
+          if-no-files-found: error
+      - name: Require finalized native quota state and cleanup
+        if: always() && steps.rate.outcome == 'success'
+        env:
+          RATE_COLLECTOR: ${{ steps.rate.outputs.collector }}
+          RATE_FOLDER: ${{ steps.rate.outputs.folder }}
+        run: node "$RATE_COLLECTOR" collect "$RATE_FOLDER"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        if: always() && steps.rate.outcome == 'success'
+        with:
+          name: ${{ steps.rate.outputs.artifact }}
+          path: ${{ steps.rate.outputs.result }}
+          if-no-files-found: error
+          retention-days: 90
       # The model cannot see current source, historical fixes or evaluation rubrics.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         if: always()
