@@ -172,7 +172,7 @@ test("the sheet's parts and lists leave room between their rows", async ({ page 
     const tape = body.querySelector(".tape").getBoundingClientRect();
     return body.querySelector(".scout").getBoundingClientRect().top - tape.bottom;
   });
-  expect(Math.round(tapeToScout)).toBe(22);
+  expect(Math.round(tapeToScout)).toBe(14);
 });
 
 /**

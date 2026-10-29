@@ -1,6 +1,6 @@
 import { test, expect, openApp } from "./harness.mjs";
 import { VIEW_GROUPS, openWithEverything } from "./views.mjs";
-import { checkEachView } from "../../../../tests/browser/view-walk.mjs";
+import { TABS_GROUP, checkEachView } from "../../../../tests/browser/view-walk.mjs";
 import { ALIGNMENT_TOLERANCE, readTeamLines } from "../../../../tests/browser/team-lines.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
@@ -8,7 +8,7 @@ test.use({ contextOptions: { reducedMotion: "reduce" } });
 const THEMES = /** @type {const} */ (["light", "dark"]);
 
 const SEASON_VIEWS = new Set(["Bracket", "Standings", "News"]);
-const TAB_VIEWS = VIEW_GROUPS["the page's tabs"];
+const TAB_VIEWS = VIEW_GROUPS[TABS_GROUP];
 const ALIGNMENT_VIEWS = {
   ...VIEW_GROUPS,
   Bracket: TAB_VIEWS.filter((view) => view.name === "Bracket"),

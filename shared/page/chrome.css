@@ -588,9 +588,9 @@ section.view.active:not([data-follows]):has(> :is(.day-view, .season-parts)) {
   display: none;
 }
 /* A line parts each setting or group of settings from the next, never a group's own rows. Settings
-   in titled groups have no line around them. Each group's heading sits as far below the line above
-   it as sections sit apart, whether that line ends a group or tops settings with a line between
-   each row. */
+   in titled groups have no line around them. Each group's heading sits sheet.css's
+   --heading-below-line under the line above it, whether that line ends a group or tops settings
+   with a line between each row. */
 .settings-controls > :not([hidden]) ~ :not([hidden]) {
   border-top: 1px solid var(--divider);
 }
@@ -599,10 +599,10 @@ section.view.active:not([data-follows]):has(> :is(.day-view, .season-parts)) {
 }
 .settings-controls.grouped > :not([hidden]) ~ :not([hidden]) {
   margin-top: var(--section-gap);
-  padding-top: var(--section-gap);
+  padding-top: var(--heading-below-line);
 }
 .settings-controls:not(.grouped) > .settings-group {
-  padding-top: var(--section-gap);
+  padding-top: var(--heading-below-line);
 }
 /* Rows that open a page of settings stand together, a line between each, each row padding its own
    text, so a line sits as far from the text above it as from the text below. */

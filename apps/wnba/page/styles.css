@@ -165,7 +165,6 @@
   --sheet-band-line: var(--edge);
   --sheet-gap: 15px;
   --meeting-day-width: 4em;
-  --meeting-room: 7px;
   --meeting-result-gap: 8px;
   --meeting-score-lift: 0px;
   --player-fact-room: 12px;
@@ -809,13 +808,13 @@ header.top h1 .title-letter:nth-child(3) {
 }
 
 /* The game sheet: the two teams across the score in its band, then the game's parts, each under a
-   teal title, with --part-space-first between the band and the first title,
-   --part-space-above each later title, and --part-space-below it. Each team's side of a chart or
-   bar is in its color for the theme, which js/sheet-colors.js hands the sheet, with its name and
-   numbers in a darker shade of it where the color is too light to read as text, and the side
-   behind on a measure gets a paler bar of the same hue, faded toward a gray as light as the
-   sheet, since fading it toward the tan track or the cream sheet would turn blue gray and green
-   olive. */
+   teal title: a first title --heading-below-line under the band's line, a message that comes first
+   --part-space-first under it, --part-space-above each later title, and --part-space-below it.
+   Each team's side of a chart or bar is in its color for the theme, which js/sheet-colors.js
+   hands the sheet, with its name and numbers in a darker shade of it where the color is too light
+   to read as text, and the side behind on a measure gets a paler bar of the same hue, faded
+   toward a gray as light as the sheet, since fading it toward the tan track or the cream sheet
+   would turn blue gray and green olive. */
 .game-sheet-body {
   --away: var(--away-light, var(--ink-dim));
   --home: var(--home-light, var(--ink-dim));
@@ -830,6 +829,11 @@ header.top h1 .title-letter:nth-child(3) {
 }
 .game-sheet-body > .sheet-part {
   gap: var(--part-space-below);
+}
+/* A title that comes first sits the shared --heading-below-line under the band's line, as every
+   heading under a line does. */
+:is(.game-sheet-body, .team-sheet-body) > .sheet-part:first-child {
+  margin-top: calc(var(--heading-below-line) - var(--part-space-first));
 }
 /* By quarter's first row is its small, light quarter numbers, which read as more room under its
    title than the same gap does under the others. */
@@ -1187,7 +1191,7 @@ table.players .players-head th:not(:first-child) {
 }
 table.line-score th,
 table.players .players-head th {
-  padding: 0 0 5px;
+  padding: 0 0 var(--row-line-room);
   font-family: var(--display);
   font-size: var(--type-label-size);
   font-weight: var(--type-label-weight);
@@ -1198,7 +1202,7 @@ table.players .players-head th {
 }
 table.line-score tbody td,
 table.line-score tbody th {
-  padding: 6px 0;
+  padding: var(--row-line-room) 0;
   border-top: 1px solid var(--divider);
   font-family: var(--numbers);
   font-size: var(--type-stat-size);
@@ -1250,7 +1254,7 @@ table.players .players-head th .club {
 }
 table.players td,
 table.players th[scope="row"] {
-  padding: 6px 0 6px 8px;
+  padding: var(--row-line-room) 0 var(--row-line-room) 8px;
   border-top: 1px solid var(--divider);
   font-family: var(--numbers);
   font-size: var(--type-stat-size);
@@ -2047,9 +2051,10 @@ table.standings tr.playoff-line + tr td {
   font-family: var(--team-name);
   letter-spacing: 0.02em;
 }
-/* A team's sheet's parts are spaced like the game sheet's: --part-space-first under the band, --part-space-above each later title, and
-   --part-space-below each title. Last 10 and Streak sit --form-space-above under the numbers
-   before them, --form-space-between apart. */
+/* A team's sheet's parts are spaced like the game sheet's: a first title --heading-below-line
+   under the band's line, a message that comes first --part-space-first under it,
+   --part-space-above each later title, and --part-space-below each title. Last 10 and Streak sit
+   --form-space-above under the numbers before them, --form-space-between apart. */
 .team-sheet-body {
   --part-space-first: 20px;
   --part-space-above: 29px;
@@ -2422,7 +2427,7 @@ table.player-game {
   table-layout: fixed;
 }
 table.player-game th {
-  padding: 0 4px 5px;
+  padding: 0 4px var(--row-line-room);
   font-size: var(--type-label-size);
   font-weight: var(--type-label-weight);
   text-transform: uppercase;
@@ -2436,7 +2441,7 @@ table.player-game td {
   text-align: center;
 }
 .player-game-line td {
-  padding: 10px 4px 5px;
+  padding: var(--row-line-room) 4px 5px;
   border-top: 1px solid var(--divider);
   font-size: var(--type-stat-large-size);
   font-weight: var(--type-stat-large-weight);
