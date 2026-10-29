@@ -34,7 +34,10 @@ export const readTeamLines = (page, league) =>
       if (Math.abs(actual - expected) > 0.08)
         problems.push(`${description}: ${actual}, expected ${expected}`);
     };
+    const fonts = new Map();
     const measureFont = (style) => {
+      const key = [style.fontFamily, style.fontSize, style.fontWeight].join("/");
+      if (fonts.has(key)) return fonts.get(key);
       const probe = document.createElement("span");
       Object.assign(probe.style, {
         position: "absolute",
@@ -47,7 +50,9 @@ export const readTeamLines = (page, league) =>
       document.body.append(probe);
       const { width: cap, height: x } = probe.getBoundingClientRect();
       probe.remove();
-      return { cap, x };
+      const metrics = { cap, x };
+      fonts.set(key, metrics);
+      return metrics;
     };
     for (const line of document.querySelectorAll(
       ".club, .team-title, .game-card-opponent, .runs-half-head",
@@ -144,6 +149,13 @@ export const readTeamLines = (page, league) =>
         attachments.add("league chip");
         check(middle(chip) - (middle(name) + (cap - x) / 2), -1, `${description} league chip`);
       }
+    }
+    for (const placeholder of document.querySelectorAll(".tbd:not(.club)")) {
+      if (!placeholder.checkVisibility()) continue;
+      states.add("TBD");
+      const style = getComputedStyle(placeholder);
+      check(parseFloat(style.fontSize), values.team[0], "TBD size");
+      check(Number(style.fontWeight), values.team[1], "TBD weight");
     }
     return {
       problems,

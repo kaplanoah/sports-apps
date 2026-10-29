@@ -45,6 +45,7 @@ for (const width of [390, 1280]) {
       expect([...roles].sort()).toEqual(["label", "large", "small", "team"]);
       expect(placements).toContain("team after");
       expect(states).toContain("winner");
+      expect(states).toContain("TBD");
       expect([...names].some((name) => name.length > 14)).toBe(true);
       expect(placements).toContain("small after");
       expect(attachments).toContain("rank chip");
