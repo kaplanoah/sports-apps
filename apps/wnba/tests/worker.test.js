@@ -194,13 +194,96 @@ function leaveOutGames(...days) {
   return espn;
 }
 
-test("ESPN's backup keeps a score it sends as a number, and takes one that isn't a number as none", async () => {
+test("ESPN's backup takes a score it sends as a number, and leaves a game it gives no score for to the league", async () => {
   const espn = structuredClone(ESPN.answers);
-  for (const event of espn[SEP_30].events) {
-    for (const competitor of event.competitions[0].competitors) {
-      competitor.score = competitor.homeAway === "away" ? Number(competitor.score) : "--";
-    }
-  }
+  const [numbered, unscored] = espn[SEP_30].events.map((event) => event.competitions[0]);
+  for (const competitor of numbered.competitors) competitor.score = Number(competitor.score);
+  unscored.competitors.find((competitor) => competitor.homeAway === "home").score = "--";
+  const loadGames = async (answers) => {
+    const league = createLeague({ refuse: { scoreboard: "page" }, espn: answers });
+    const loader = createSnapshotLoader({
+      fetchImpl: league.fetchImpl,
+      now: () => Date.parse(ESPN.now),
+    });
+    return (await loader.loadSnapshot(2026)).games;
+  };
+
+  const [games, leagueGames] = await Promise.all([
+    loadGames(espn),
+    loadGames(leaveOutGames(SEP_30)),
+  ]);
+
+  const findGame = (list, id) => list.find((game) => game.id === id);
+  const numberedGame = findGame(games, "1042600132");
+  assert.deepEqual(
+    [numberedGame.state, numberedGame.away.score, numberedGame.home.score],
+    ["final", 93, 75],
+  );
+  assert.deepEqual(findGame(games, "1042600112"), findGame(leagueGames, "1042600112"));
+});
+
+/**
+ * ESPN's answers with today's game as `changeToday` leaves it, and the same two teams' final the
+ * night before, 23 hours ahead of it, at 10:00 pm ET.
+ * @param {(espn: any) => void} changeToday
+ */
+function addNightBeforeFinal(changeToday) {
+  const espn = structuredClone(ESPN.answers);
+  const nightBefore = structuredClone(espn[OCT_1].events[0]);
+  nightBefore.id = "401918999";
+  const competition = nightBefore.competitions[0];
+  competition.date = new Date(Date.parse(competition.date) - 23 * 60 * 60 * 1000).toISOString();
+  competition.status = structuredClone(espn[SEP_30].events[0].competitions[0].status);
+  const [first, second] = competition.competitors;
+  [first.score, second.score] = ["81", "77"];
+  changeToday(espn);
+  espn[SEP_30].events.push(nightBefore);
+  return espn;
+}
+
+/**
+ * Today's game started and scored as `state` and `score` give it.
+ * @param {string} state
+ * @param {string} score
+ */
+const setToday = (state, score) => (espn) => {
+  const competition = espn[OCT_1].events[0].competitions[0];
+  competition.status.type.state = state;
+  for (const competitor of competition.competitors) competitor.score = score;
+};
+
+for (const today of [
+  { name: "hasn't started", change: setToday("pre", "0") },
+  { name: "gives no score for", change: setToday("in", "--") },
+  {
+    name: "leaves out",
+    change: (espn) => {
+      espn[OCT_1].events = [];
+    },
+  },
+]) {
+  test(`a game ESPN ${today.name} keeps the league's own word on it, not the same teams' final the night before`, async () => {
+    const league = createLeague({
+      refuse: { scoreboard: "page" },
+      espn: addNightBeforeFinal(today.change),
+    });
+    const loader = createSnapshotLoader({
+      fetchImpl: league.fetchImpl,
+      now: () => Date.parse(ESPN.now),
+    });
+
+    const snapshot = await loader.loadSnapshot(2026);
+
+    const game = snapshot.games.find((candidate) => candidate.id === "1042600123");
+    assert.deepEqual([game.state, game.away.score, game.home.score], ["pre", 0, 0]);
+  });
+}
+
+test("while the scoreboard doesn't answer, ESPN covers nothing with a started game it gives no score for, and the status says so", async () => {
+  const espn = leaveOutGames(SEP_30);
+  const competition = espn[OCT_1].events[0].competitions[0];
+  competition.status.type.state = "in";
+  for (const competitor of competition.competitors) competitor.score = "--";
   const league = createLeague({ refuse: { scoreboard: "page" }, espn });
   const loader = createSnapshotLoader({
     fetchImpl: league.fetchImpl,
@@ -209,12 +292,11 @@ test("ESPN's backup keeps a score it sends as a number, and takes one that isn't
 
   const snapshot = await loader.loadSnapshot(2026);
 
-  const readScores = (id) => {
-    const game = snapshot.games.find((candidate) => candidate.id === id);
-    return [game.away.score, game.home.score];
-  };
-  assert.deepEqual(readScores("1042600132"), [93, null]);
-  assert.deepEqual(readScores("1042600112"), [100, null]);
+  assert.deepEqual([snapshot.standIn, snapshot.scoreboardCover], [null, null]);
+  assert.equal(
+    readBackupReason(snapshot),
+    "ESPN gave a score for none of the league's games on 20260930 or 20261001, of 1 in all",
+  );
 });
 
 test("ESPN's backup reads only its site scoreboard of yesterday and today, which answers a Worker, not its core API, which turns one away", async () => {
@@ -313,7 +395,7 @@ test("while the scoreboard doesn't answer, ESPN's days without the league's game
   assert.deepEqual([snapshot.standIn, snapshot.scoreboardCover], [null, null]);
   assert.equal(
     readBackupReason(snapshot),
-    "ESPN listed none of the league's games on 20260930 or 20261001, of 0 in all",
+    "ESPN gave a score for none of the league's games on 20260930 or 20261001, of 0 in all",
   );
 });
 

@@ -56,8 +56,8 @@ export const describeFailures = (failures) =>
     .join("; ");
 
 // ESPN can answer every day and still leave the scoreboard's games uncovered, so while the
-// scoreboard is down, days without one of the league's games while a score is due count as the
-// backup failing.
+// scoreboard is down and a score is due, days on which it neither lists one of the league's games
+// ahead of its start nor scores one count as the backup failing.
 /**
  * Why ESPN's backup, once it answered, left the scoreboard's games uncovered, or null when it
  * didn't.
@@ -67,7 +67,7 @@ export const describeFailures = (failures) =>
 function describeCoverageGap({ scoreboard, backup }, snapshot) {
   if (!backup || scoreboard || snapshot.scoreboardCover || !snapshot.hasScoreDue) return null;
   const total = backup.answers.flatMap((answer) => answer.events ?? []).length;
-  return `ESPN listed none of the league's games on ${backup.days.join(" or ")}, of ${total} in all`;
+  return `ESPN gave a score for none of the league's games on ${backup.days.join(" or ")}, of ${total} in all`;
 }
 
 const countFinals = (scoreboard) =>

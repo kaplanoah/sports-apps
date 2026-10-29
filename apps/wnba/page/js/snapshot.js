@@ -442,6 +442,8 @@ const isSameMatchup = (game, backup) =>
   game.home.team === backup.home?.team && game.away.team === backup.away?.team;
 const measureStartGap = (game, backup) =>
   Math.abs(Date.parse(game.start) - Date.parse(backup.start));
+const isOnSameDay = (game, espnGame) =>
+  readLeagueDate(game.start) === readLeagueDate(espnGame.start);
 
 // ESPN numbers its games its own way, so an ESPN game stands for the league's game between the
 // same home and away teams that starts nearest it.
@@ -481,12 +483,25 @@ function listGamesForBackup(games, responses, season) {
   return games.filter((game) => leftLive.has(game.id));
 }
 
+const isScored = (backup) =>
+  typeof backup.away?.score === "number" && typeof backup.home?.score === "number";
+
+// The ESPN game that is a league game's own, on the league's day for it, when it answers for it: one
+// ESPN hasn't started, or one it gives both scores for. Another game between the same teams, like
+// the night before's, never stands in for it.
+function findAnsweringGame(game, backupGames) {
+  const sameDay = backupGames.filter((backup) => isOnSameDay(game, backup));
+  const backup = findEspnGame(game, sameDay);
+  return backup && (backup.state === "pre" || isScored(backup)) ? backup : null;
+}
+
 // Each league game a started ESPN game stands for, by the league's game ID. A game ESPN hasn't
-// started keeps the league's own word on it.
+// started, or gives no score for, keeps the league's own word on it.
 function matchBackupGames(games, backupGames) {
-  const startedGames = backupGames.filter((backup) => backup.state !== "pre");
   return new Map(
-    games.map((game) => [game.id, findEspnGame(game, startedGames)]).filter(([, backup]) => backup),
+    games
+      .map((game) => [game.id, findAnsweringGame(game, backupGames)])
+      .filter(([, backup]) => backup && backup.state !== "pre"),
   );
 }
 
@@ -498,7 +513,7 @@ function matchBackupGames(games, backupGames) {
  * @param {any[]} backupGames
  */
 const isEspnCovering = (games, responses, backupGames) =>
-  !responses.scoreboard && games.some((game) => !!findEspnGame(game, backupGames));
+  !responses.scoreboard && games.some((game) => !!findAnsweringGame(game, backupGames));
 
 function applyBackupGame(game, backup) {
   const { state, status, period, clock } = backup;
@@ -532,9 +547,6 @@ function readNetworkGame(event) {
 
 // Until ESPN names both teams, its game could be any of a round's games at that time.
 const hasBothTeams = (networkGame) => !!(networkGame.home?.team && networkGame.away?.team);
-
-const isOnSameDay = (game, espnGame) =>
-  readLeagueDate(game.start) === readLeagueDate(espnGame.start);
 
 // A game from the league's yesterday that isn't over is one the scoreboard still holds past
 // midnight, or one the schedule hasn't caught up on. An older one left unplayed or unfinished is the
