@@ -1,3 +1,4 @@
+// Job status types shared with Diagnostics without importing Worker persistence.
 /**
  * @typedef {{ at: string, message: string }} JobFailure
  */

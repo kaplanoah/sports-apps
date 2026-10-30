@@ -1,3 +1,4 @@
+import { nameNetworkMonthKey } from "./network-storage.js";
 import { findTeamCodeByEspnId } from "../../page/js/teams.js";
 import * as WNBASnapshot from "./adapters/wnba.js";
 import { createFeedKeeper, createMemoryStorage } from "../../../../shared/worker/feed-keeper.js";
@@ -173,7 +174,7 @@ export function createSnapshotLoader({
 
   /** @param {string} month @param {boolean} [verify] */
   async function readNetworkMonth(month, verify = false) {
-    const key = `networks:${month}`;
+    const key = nameNetworkMonthKey(month);
     if (!networkMonths.has(month)) networkMonths.set(month, await storage.get(key));
     const kept = networkMonths.get(month);
     // A reminder needs current listings, but a finalized month cannot change.
@@ -301,16 +302,11 @@ export function createSnapshotLoader({
     const snapshot = WNBASnapshot.buildSnapshot(responses, { season, now: requestedAt });
     const coverageGap = describeCoverageGap(responses, snapshot);
     const ended = await addGameEnds(snapshot);
+    const espnAnswers = [...(responses.networks ?? []), ...(responses.backup?.answers ?? [])];
     return {
       ...ended,
-      identityRecords: readIdentityGames(
-        [...(responses.networks ?? []), ...(responses.backup?.answers ?? [])],
-        findTeamCodeByEspnId,
-      ),
-      espnMatches: listEspnMatches(ended, [
-        ...(responses.networks ?? []),
-        ...(responses.backup?.answers ?? []),
-      ]),
+      identityRecords: readIdentityGames(espnAnswers, findTeamCodeByEspnId),
+      espnMatches: listEspnMatches(ended, espnAnswers),
       nextReadAt,
       failures: coverageGap ? { ...failures, backup: coverageGap } : failures,
       meetings: listUpcomingMeetings(responses.schedule, ended),

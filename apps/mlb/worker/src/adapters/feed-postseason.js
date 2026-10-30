@@ -10,7 +10,12 @@ import {
   listScheduledGames,
 } from "./feed-games.js";
 
-import { LEAGUES, countWinsNeeded, resolveBracket } from "../../../page/js/bracket-rules.js";
+import {
+  LEAGUES,
+  countWinsNeeded,
+  resolveBracket,
+  readSeriesFacts,
+} from "../../../page/js/bracket-rules.js";
 
 /**
  * The postseason's games split by whether they're played: once a series is decided, the games it
@@ -50,22 +55,22 @@ export const listPostseasonGames = (responses) =>
 // then "NYY/BOS" once the wild card clubs are set). A wild card host is the 3 seed if it won its
 // division, else the 4. The 1 seed, the club with the league's best record, plays every game of DS1.
 function findSeriesId(game, { champions, bestRecords }) {
-  if (game.type === "W") return "WS";
+  if (game.round === "WS") return "WS";
   const { league } = game;
   if (!league) return null;
   const names = `${game.away.name} | ${game.home.name}`;
   const bestRecord = bestRecords[league];
-  switch (game.type) {
-    case "F":
+  switch (game.round) {
+    case "WC":
       if (/#3 Seed|Wild Card #3/.test(names)) return `${league}_WC1`;
       if (/Wild Card #[12]/.test(names)) return `${league}_WC2`;
       return champions.has(game.home.id) ? `${league}_WC1` : `${league}_WC2`;
-    case "D":
+    case "DS":
       if (/4\/5|#1 Seed/.test(names) || (bestRecord && isFeedGamePlayedBy(game, bestRecord)))
         return `${league}_DS1`;
       if (/3\/6|#2 Seed/.test(names) || (bestRecord && hasClub(game))) return `${league}_DS2`;
       return null;
-    case "L":
+    case "CS":
       return `${league}_CS`;
     default:
       return null;
@@ -138,7 +143,7 @@ function findNextGame(games, today) {
 }
 
 function tallySeries(seriesId, games, round, teamA, teamB, today) {
-  const facts = { round, league: seriesId === "WS" ? null : seriesId.split("_")[0] };
+  const facts = readSeriesFacts(seriesId);
   const record = { round: facts.round, league: facts.league, winsA: 0, winsB: 0 };
   const log = [];
   const need = countWinsNeeded(round);

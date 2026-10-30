@@ -4,6 +4,7 @@ import {
   countWinsNeeded,
   findFeederSeries,
   resolveBracket,
+  readSeriesFacts,
 } from "./bracket-rules.js";
 import { keepLastRead } from "#shared/kept-read.js";
 
@@ -207,9 +208,9 @@ export function describeFirstPitchWait(game, now) {
 
 export function nameSeries(id) {
   if (id === "WS") return "World Series";
-  const [league, key] = String(id).split("_");
-  if (!key) return String(id);
-  if (key === "CS") return `${league}CS`;
-  if (key.startsWith("DS")) return `${league}DS`;
+  const { league, round } = readSeriesFacts(String(id));
+  if (!round) return String(id);
+  if (round === "CS") return `${league}CS`;
+  if (round === "DS") return `${league}DS`;
   return `${league} Wild Card Series`;
 }

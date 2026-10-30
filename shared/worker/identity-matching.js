@@ -1,19 +1,22 @@
-import { readNameLetters } from "./player-name.js";
+// Corroborated matching shared by live vendor links and persisted identity reconciliation.
+import { readPlayerName } from "./player-name.js";
 import { readEasternDay } from "../page/days.js";
 
 /** @param {any} game */
-const readDay = (game) =>
+export const readIdentityDay = (game) =>
   game.date ??
   (Number.isFinite(Date.parse(game.start)) ? readEasternDay(Date.parse(game.start)).date : null);
-const readPlayerName = (player) =>
-  readNameLetters(`${player.firstName ?? ""} ${player.lastName ?? ""}`);
 
 function hasSameTeams(first, second) {
   return !!first.away && !!first.home && first.away === second.away && first.home === second.home;
 }
 
 function matchesGame(first, second) {
-  return hasSameTeams(first, second) && !!readDay(first) && readDay(first) === readDay(second);
+  return (
+    hasSameTeams(first, second) &&
+    !!readIdentityDay(first) &&
+    readIdentityDay(first) === readIdentityDay(second)
+  );
 }
 
 function matchesPlayer(first, second) {
@@ -38,6 +41,29 @@ function hasContradictoryEvidence(native, record, type) {
   return !!native.birthdate && !!record.birthdate && native.birthdate !== record.birthdate;
 }
 
+/** One candidate rule for live links and stored identity observations. */
+export function findIdentityCandidate(type, record, uniqueNatives, uniqueRecords) {
+  const matches = uniqueNatives.filter((native) =>
+    type === "game" ? matchesGame(native, record) : matchesPlayer(native, record),
+  );
+  const numbered = type === "game" && Number.isInteger(record.gameNumber) && record.gameNumber > 0;
+  const candidates = numbered
+    ? matches.filter((native) => native.gameNumber === record.gameNumber)
+    : matches;
+  const candidate = candidates.length === 1 ? candidates[0] : null;
+  const competitors =
+    candidate &&
+    uniqueRecords.filter((other) =>
+      type === "game"
+        ? matchesGame(candidate, other) && (!numbered || other.gameNumber === candidate.gameNumber)
+        : matchesPlayer(candidate, other),
+    );
+  const confident =
+    candidate && competitors.length === 1 && (type !== "game" || numbered || matches.length === 1);
+  const decisive = !!confident && (numbered || !!(candidate.birthdate && record.birthdate));
+  return { candidate, confident: !!confident, decisive, numbered };
+}
+
 /**
  * Match normalized records, retaining established identities when schedules or rosters change.
  * @param {ReturnType<typeof import("./identity.js").createIdentityLookup>} lookup
@@ -49,31 +75,19 @@ export async function reconcileIdentities(lookup, { type, vendor, natives, recor
   const observations = [];
   for (const record of uniqueRecords) {
     const established = await lookup.read(type, vendor, String(record.id));
-    const matches = uniqueNatives.filter((native) =>
-      type === "game" ? matchesGame(native, record) : matchesPlayer(native, record),
+    const { candidate, confident, decisive, numbered } = findIdentityCandidate(
+      type,
+      record,
+      uniqueNatives,
+      uniqueRecords,
     );
-    const numbered =
-      type === "game" && Number.isInteger(record.gameNumber) && record.gameNumber > 0;
-    const candidates = numbered
-      ? matches.filter((native) => native.gameNumber === record.gameNumber)
-      : matches;
-    const candidate = candidates.length === 1 ? candidates[0] : null;
-    const competitors =
-      candidate &&
-      uniqueRecords.filter((other) =>
-        type === "game"
-          ? matchesGame(candidate, other) &&
-            (!numbered || other.gameNumber === candidate.gameNumber)
-          : matchesPlayer(candidate, other),
-      );
-    const confident =
-      candidate &&
-      competitors.length === 1 &&
-      (type !== "game" || numbered || matches.length === 1);
-    const decisive = !!confident && (numbered || !!(candidate.birthdate && record.birthdate));
     const internalId =
       established && !decisive ? established : confident ? String(candidate.id) : undefined;
-    const establishedNative = uniqueNatives.find((native) => String(native.id) === established);
+    let establishedNative = uniqueNatives.find((native) => String(native.id) === established);
+    if (established && !establishedNative) {
+      const entry = await lookup.readEntry(type, established);
+      establishedNative = entry ? { id: entry.id, ...entry.facts } : null;
+    }
     const disputed =
       !!established &&
       !decisive &&
@@ -111,7 +125,7 @@ export async function reconcileIdentities(lookup, { type, vendor, natives, recor
           ? {
               away: record.away,
               home: record.home,
-              day: readDay(record),
+              day: readIdentityDay(record),
               gameNumber: record.gameNumber ?? null,
             }
           : {

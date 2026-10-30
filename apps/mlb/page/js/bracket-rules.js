@@ -6,8 +6,13 @@ export const BEST_OF = { WC: 3, DS: 5, CS: 7, WS: 7 };
 export const countWinsNeeded = (round) => Math.ceil(BEST_OF[round] / 2);
 
 /** @param {string} seriesId */
-export const readSeriesRound = (seriesId) =>
-  seriesId === "WS" ? "WS" : seriesId.split("_")[1].replace(/\d$/, "");
+export function readSeriesFacts(seriesId) {
+  const match = /^(?:(AL|NL)_)?(WC|DS|CS|WS)\d?$/.exec(seriesId);
+  return match ? { league: match[1] ?? null, round: match[2] } : {};
+}
+
+/** @param {string} seriesId */
+export const readSeriesRound = (seriesId) => readSeriesFacts(seriesId).round;
 
 /** @param {string} seriesId */
 export const countSeriesWinsNeeded = (seriesId) => countWinsNeeded(readSeriesRound(seriesId));

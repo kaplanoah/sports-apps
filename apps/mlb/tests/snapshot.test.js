@@ -442,8 +442,6 @@ test("September: the day's games, in the shape the stamp reads, each with MLB's 
   assert.deepEqual(first, {
     id: "823326",
     season: 2026,
-    round: null,
-    gameNumber: 1,
     away: "STL",
     home: "PIT",
     state: "final",
@@ -1004,7 +1002,7 @@ test("fetchSnapshot fails when the postseason or the schedule doesn't answer", a
 });
 
 test("a snapshot is small enough to poll", () => {
-  assert.ok(JSON.stringify(buildSnapshot(EVENING)).length < 24000);
+  assert.ok(JSON.stringify(buildSnapshot(EVENING)).length < 22000);
 });
 
 test("a set bracket still builds when a club is missing from the standings", () => {
@@ -1212,8 +1210,6 @@ test("a live All-Star Game is followed as closely as any live game", () => {
   const allStar = {
     id: "823443",
     season: 2026,
-    round: null,
-    gameNumber: 1,
     away: "AL",
     home: "NL",
     state: "live",
@@ -1426,8 +1422,6 @@ test("the season's whole schedule lists every game by month, from Opening Day to
     date: "2026-03-25",
     id: "823244",
     season: 2026,
-    round: null,
-    gameNumber: 1,
     away: "NYY",
     home: "SF",
     state: "final",
@@ -1446,8 +1440,6 @@ test("the season's whole schedule lists every game by month, from Opening Day to
         date: "2026-07-14",
         id: "823443",
         season: 2026,
-        round: null,
-        gameNumber: 1,
         away: "AL",
         home: "NL",
         state: "final",
@@ -1472,8 +1464,6 @@ test("a postponed game is listed on the day it was to be played and on the day i
         date: "2026-06-25",
         id: "823042",
         season: 2026,
-        round: null,
-        gameNumber: 1,
         away: "ARI",
         home: "STL",
         state: "off",
@@ -1484,8 +1474,6 @@ test("a postponed game is listed on the day it was to be played and on the day i
         date: "2026-07-23",
         id: "823042",
         season: 2026,
-        round: null,
-        gameNumber: 1,
         away: "ARI",
         home: "STL",
         state: "final",
@@ -1644,7 +1632,6 @@ test("a postseason final names its series and its game in it, and shows its star
       season: 2026,
       round: "WC",
       league: "NL",
-      gameNumber: 1,
       away: "PHI",
       home: "ATL",
       state: "final",

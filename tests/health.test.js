@@ -19,10 +19,9 @@ test("identity uncertainty and coverage reach health independently of feed failu
     backfill: { complete: false },
   };
   const serve = createHealthServer({
-    readFeedFailures: async () => ({}),
-    readIdentityStatus: async () => {
+    readStoreHealth: async () => {
       reads += 1;
-      return identity;
+      return { feeds: {}, identity };
     },
     release: "abc1234",
     now: () => now,
@@ -36,14 +35,16 @@ test("identity uncertainty and coverage reach health independently of feed failu
   now = HEALTH_REUSE_MS;
   await serve(ENV);
   assert.equal(reads, 2);
+  let failedReads = 0;
   const failed = createHealthServer({
-    readFeedFailures: async () => ({}),
-    readIdentityStatus: async () => {
+    readStoreHealth: async () => {
+      failedReads += 1;
       throw new Error("storage failed");
     },
     release: "abc1234",
   });
-  assert.deepEqual((await (await failed(ENV)).json()).identity, { unavailable: true });
+  for (let hit = 0; hit < 5; hit += 1) assert.equal((await failed(ENV)).status, 503);
+  assert.equal(failedReads, 1);
 });
 
 /**
@@ -54,7 +55,10 @@ test("identity uncertainty and coverage reach health independently of feed failu
 function createCountedHealth(answer, { now = () => 0 } = {}) {
   const asked = [];
   const serveHealth = createHealthServer({
-    readFeedFailures: (env) => (asked.push(env), answer(env)),
+    readStoreHealth: async (env) => {
+      asked.push(env);
+      return { feeds: await answer(env) };
+    },
     release: "abc1234",
     now,
   });

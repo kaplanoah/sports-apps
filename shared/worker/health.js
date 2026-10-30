@@ -69,32 +69,23 @@ const askService = (binding) =>
   }));
 
 /**
- * @typedef {{ answered: true, feeds: Record<string, import("./feed-failures.js").FeedFailure> } | { answered: false }} StoreHealth
+ * @typedef {{ answered: true, feeds: Record<string, import("./feed-failures.js").FeedFailure>, identity?: any } | { answered: false }} StoreHealth
  */
 
 /**
  * @param {object} options
- * @param {(env: any) => Promise<Record<string, import("./feed-failures.js").FeedFailure>>} options.readFeedFailures
+ * @param {(env: any) => Promise<{ feeds: Record<string, import("./feed-failures.js").FeedFailure>, identity?: any }>} options.readStoreHealth
  *   which of the league's feeds the store says are failing, throwing when the store doesn't answer
- * @param {(env: any) => Promise<any>} [options.readIdentityStatus]
  * @param {string | null} options.release the commit the Worker was built from
  * @param {() => number} [options.now]
  */
-export function createHealthServer({
-  readFeedFailures,
-  readIdentityStatus,
-  release,
-  now = Date.now,
-}) {
+export function createHealthServer({ readStoreHealth, release, now = Date.now }) {
   /** @returns {Promise<StoreHealth>} */
   const askStore = (env) =>
-    askInTime(() => readFeedFailures(env)).then(
-      (feeds) => ({ answered: true, feeds }),
+    askInTime(() => readStoreHealth(env)).then(
+      (health) => ({ answered: true, ...health }),
       () => ({ answered: false }),
     );
-  const checkIdentity = readIdentityStatus
-    ? createReusedLoader((env) => askInTime(() => readIdentityStatus(env)), HEALTH_REUSE_MS, now)
-    : null;
   const checkStore = createReusedLoader(askStore, HEALTH_REUSE_MS, now);
   const serviceChecks = SERVICES.map((service) => ({
     service,
@@ -112,16 +103,12 @@ export function createHealthServer({
 
   /** @param {any} env the Worker's bindings */
   return async function serveHealth(env) {
-    const [store, serviceHealths, identity] = await Promise.all([
-      checkStore(env),
-      checkServices(env),
-      checkIdentity?.(env).catch(() => ({ unavailable: true })),
-    ]);
+    const [store, serviceHealths] = await Promise.all([checkStore(env), checkServices(env)]);
     const health = {
       ok: store.answered,
       release,
       store: store.answered ? "ok" : "no answer",
-      ...(identity && { identity }),
+      ...(store.answered && store.identity && { identity: store.identity }),
       ...(store.answered && { feeds: listLongFailures(store.feeds, now()) }),
       ...(Object.keys(serviceHealths).length && { services: serviceHealths }),
     };

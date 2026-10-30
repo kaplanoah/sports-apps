@@ -1,3 +1,4 @@
+import { nameStoredFeedKey } from "./feed-keeper.js";
 import { createIdentityDocuments } from "./identity-documents.js";
 import {
   createRequestBudget,
@@ -58,7 +59,7 @@ import { describeError, respondError, respondJson, respondMethodNotAllowed } fro
 
 /**
  * The snapshot fields the store itself reads. Other fields belong to the league's callbacks.
- * @typedef {{ season: number, identityRecords?: any[], failures?: Record<string, string>, nextReadAt?: number }} SeasonSnapshot
+ * @typedef {{ season: number, identityRecords?: { records: any[], rejected: number }, failures?: Record<string, string>, nextReadAt?: number }} SeasonSnapshot
  */
 
 /**
@@ -195,9 +196,9 @@ function isWatching(socket, path) {
 
 // What a league's reads keep between updates, under keys the store's paths can't name.
 const createFeedStorage = (storage) => ({
-  get: (key) => storage.get(`feed:${key}`),
-  put: (key, value) => storage.put(`feed:${key}`, value),
-  delete: (key) => storage.delete(`feed:${key}`),
+  get: (key) => storage.get(nameStoredFeedKey(key)),
+  put: (key, value) => storage.put(nameStoredFeedKey(key), value),
+  delete: (key) => storage.delete(nameStoredFeedKey(key)),
 });
 
 function openWatchSocket(ctx) {
@@ -381,18 +382,21 @@ export function createSeasonStore(league) {
 
     async readDoc(key) {
       const data =
-        key === "identity/status" && this.identities
-          ? await this.identities.readStatus()
-          : await this.ctx.storage.get(key);
+        key === "health/status"
+          ? {
+              feeds: (await this.ctx.storage.get(FEEDS_KEY))?.failing ?? {},
+              ...(this.identities && { identity: await this.identities.readStatus() }),
+            }
+          : key === "identity/status" && this.identities
+            ? await this.identities.readStatus()
+            : await this.ctx.storage.get(key);
       return respondJson({ data: data ?? null });
     }
 
     async putDoc(key, doc) {
-      const prepared =
-        this.identities && key !== "identity/status"
-          ? await this.identities.prepareDocument(key, doc)
-          : doc;
+      const prepared = this.identities ? await this.identities.prepareDocument(key, doc) : doc;
       const data = sortKeys(prepared);
+      if (isSameJson(await this.ctx.storage.get(key), data)) return;
       await this.ctx.storage.put(key, data);
       this.announceChange(key, data);
     }
@@ -706,7 +710,10 @@ export function createSeasonStore(league) {
       try {
         before = await league.readUpdates(this.docs, snapshot.season);
         await league.saveSnapshot(this.docs, snapshot);
-        await this.identities?.saveVendorGames(snapshot.identityRecords ?? []);
+        await this.identities?.saveVendorGames(
+          snapshot.identityRecords?.records ?? [],
+          snapshot.identityRecords?.rejected ?? 0,
+        );
         await this.saveCurrentSeason(snapshot.season);
       } catch (error) {
         await this.reminders.saveGames(null);
@@ -840,9 +847,9 @@ export async function forwardToStore(request, env, storePath) {
  * Which of the league's feeds are failing, since when and why, for the Worker's health, which
  * learns from this read too whether the store answers. Throws when it doesn't.
  * @param {any} env the Worker's bindings
- * @returns {Promise<Record<string, import("./feed-failures.js").FeedFailure>>}
+ * @returns {Promise<{ feeds: Record<string, import("./feed-failures.js").FeedFailure>, identity?: any }>}
  */
-export const readFeedFailures = async (env) => (await readStoreDoc(env, FEEDS_KEY))?.failing ?? {};
+export const readStoreHealth = async (env) => await readStoreDoc(env, "health/status");
 
 /**
  * A document the store keeps, as null when it has none, for the Worker's own reads.
@@ -854,6 +861,3 @@ export async function readStoreDoc(env, key) {
   if (!response.ok) throw new Error(`The store answered ${response.status} for ${key}`);
   return (await response.json()).data;
 }
-
-/** @param {any} env */
-export const readIdentityStatus = async (env) => await readStoreDoc(env, "identity/status");

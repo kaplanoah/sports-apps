@@ -1,5 +1,6 @@
 // WNBA's scoreboard, schedule, bracket, and standings adapted to app-owned records.
 // ESPN supplies channels and unset starts, and stands in for a failed scoreboard or games left live.
+import { ROUNDS } from "../../../page/js/snapshot.js";
 import { readGameFacts } from "./game-facts.js";
 
 import {
@@ -54,11 +55,13 @@ export const REQUESTS = {
 };
 
 // The playoff suffix locates a game's round, series from zero, and game within that series.
-const PLAYOFF_GAME_ID = new RegExp(`^${GAME_PREFIXES.playoffs}(\\d{2})00([1-3])(\\d)(\\d)$`);
+const PLAYOFF_GAME_ID = new RegExp(
+  `^${GAME_PREFIXES.playoffs}(?:\\d{2})00([${Object.keys(ROUNDS).join("")}])(\\d)(\\d)$`,
+);
 
 /** @param {string} id */
 export function readPlayoffGameId(id) {
-  const [, , round, series, game] = String(id).match(PLAYOFF_GAME_ID) ?? [];
+  const [, round, series, game] = String(id).match(PLAYOFF_GAME_ID) ?? [];
   if (!round) return null;
   return {
     season: readGameFacts(id).season,
@@ -71,7 +74,7 @@ export function readPlayoffGameId(id) {
 // The games of a season the Games view lists: its regular season's, the Commissioner's Cup final,
 // which has a number of its own, the All-Star Game, and its playoffs'.
 const SEASON_GAME_ID = new RegExp(
-  `^(?:${[GAME_PREFIXES.regularSeason, GAME_PREFIXES.allStar, GAME_PREFIXES.playoffs, GAME_PREFIXES.cupFinal].join("|")})(\\d{2})\\d{5}$`,
+  `^(?:${[GAME_PREFIXES.regularSeason, GAME_PREFIXES.allStar, GAME_PREFIXES.playoffs, GAME_PREFIXES.cupFinal].join("|")})(?:\\d{2})\\d{5}$`,
 );
 
 const ALL_STAR_GAME_ID = new RegExp(`^${GAME_PREFIXES.allStar}`);
@@ -115,6 +118,14 @@ function readOpeningDay(schedule, season) {
 }
 
 const nameSeries = (round, series) => `${round}-${series}`;
+
+/** @param {string} id */
+export function readSeriesFacts(id) {
+  const [round, series, extra] = id.split("-");
+  return Object.hasOwn(ROUNDS, round) && /^\d$/.test(series ?? "") && !extra
+    ? { round: Number(round) }
+    : {};
+}
 
 const GAME_STATES = { 1: "pre", 2: "live", 3: "final" };
 

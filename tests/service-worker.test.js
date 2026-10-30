@@ -748,7 +748,7 @@ test("an old offline copy keeps working until a complete new release preserves i
     name: "mlb",
     pageFiles: { "index.html": { contentType: "text/html", text: writePage("b") } },
     forwardToStore: () => new Response(),
-    readFeedFailures: async () => ({}),
+    readStoreHealth: async () => ({ feeds: {} }),
   });
   const published = await app.fetch(new Request(SCOPE), { APP_KEY: "k3y" });
   const headers = Object.fromEntries(published.headers);

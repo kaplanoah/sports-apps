@@ -13,7 +13,7 @@ const worker = createAppWorker({
   name: "test",
   pageFiles: readPageFiles(join(import.meta.dirname, "..", "..", pageFolder)),
   forwardToStore: () => new Response(null, { status: 404 }),
-  readFeedFailures: async () => ({}),
+  readStoreHealth: async () => ({ feeds: {} }),
 });
 
 /** @param {import("node:http").IncomingMessage} request */

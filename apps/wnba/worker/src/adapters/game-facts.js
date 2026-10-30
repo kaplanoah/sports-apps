@@ -1,3 +1,4 @@
+// Explicit WNBA ingestion facts decoded from the league's legacy game identifier.
 import { GAME_PREFIXES } from "../../../page/js/snapshot.js";
 
 const GAME_ID = new RegExp(`^(${Object.values(GAME_PREFIXES).join("|")})(\\d{2})\\d{5}$`);

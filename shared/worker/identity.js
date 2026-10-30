@@ -1,3 +1,4 @@
+// Atomic, vendor-scoped associations retain matching evidence and independent uncertainty counts.
 import { IdentityEntry, IdentityObservation, validateSportsData } from "./sports-schema.js";
 import { isSameJson } from "../page/compare.js";
 
@@ -124,12 +125,7 @@ export function createIdentityLookup(storage, league) {
             continue;
           }
           if (!observation.internalId) {
-            await saveProblem(
-              transaction,
-              league,
-              key,
-              observation.disputed ? "disputed" : "unmatched",
-            );
+            await saveProblem(transaction, league, key, "unmatched");
             continue;
           }
           results.push(await saveAssociation(transaction, league, observation));
@@ -174,7 +170,17 @@ export function createIdentityLookup(storage, league) {
           }
         } else if (key.startsWith("identity:vendor:") && value.league === league) {
           const entry = await transaction.get(nameEntityKey(league, value.type, value.internalId));
-          if (entry?.vendors[value.vendor] !== value.vendorId) conflicts += 1;
+          if (entry?.vendors[value.vendor] !== value.vendorId) {
+            const entities = await storage.list({
+              prefix: `identity:entity:${league}:${value.type}:`,
+            });
+            if (
+              ![...entities.values()].some(
+                (entity) => entity.vendors[value.vendor] === value.vendorId,
+              )
+            )
+              conflicts += 1;
+          }
         }
         return conflicts;
       });

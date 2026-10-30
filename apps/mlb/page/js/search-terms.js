@@ -3,7 +3,7 @@
 // league's own playoff rounds, its starting pitchers, the channels its games are on, and how to
 // read one of its games. Runs in the page and in Node, so it uses no DOM.
 
-import { readSeriesRound } from "./bracket-rules.js";
+import { readSeriesFacts } from "./bracket-rules.js";
 import { readMinutesIntoDay } from "#shared/days.js";
 import { listSearchChannels, listSearchGames, listVenuePlaces } from "#shared/game-search.js";
 import { LEAGUE_WORDS } from "./league-words.js";
@@ -283,9 +283,9 @@ const ROUND_NUMBERS = { WC: 1, DS: 2, CS: 3, WS: 4 };
  */
 function readSeries(series) {
   if (!series) return { round: null, conference: null };
-  const [league] = series.split("_");
+  const { league, round } = readSeriesFacts(series);
   return {
-    round: ROUND_NUMBERS[readSeriesRound(series)] ?? null,
+    round: ROUND_NUMBERS[round] ?? null,
     conference: series === "WS" ? null : league,
   };
 }

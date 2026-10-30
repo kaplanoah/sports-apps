@@ -1,8 +1,4 @@
-/** @param {string} id */
-const readSeriesFacts = (id) => {
-  const match = /^(?:(AL|NL)_)?(WC|DS|CS|WS)\d?$/.exec(id);
-  return match ? { league: match[1] ?? null, round: match[2] } : {};
-};
+import { readSeriesFacts } from "../../page/js/bracket-rules.js";
 
 /** @type {import("../../../../shared/worker/identity-documents.js").IdentityPolicy} */
 export const identityPolicy = {

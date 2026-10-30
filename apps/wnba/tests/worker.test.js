@@ -1399,3 +1399,29 @@ test("the snapshot loader keeps retry deadlines and persists ESPN matches togeth
     assert.deepEqual(reads, [nameSummaryRequest(match.eventId)]);
   }
 });
+
+test("live snapshot identity records use existing ESPN answers and isolate malformed event identities", async () => {
+  const espn = structuredClone(ESPN_SCOREBOARD.answers);
+  const league = createLeague({ espn });
+  const loader = createSnapshotLoader({ fetchImpl: league.fetchImpl, now: () => NOW });
+  const snapshot = await loader.loadSnapshot(2026);
+  assert.ok(snapshot.identityRecords.records.length > 0);
+  assert.equal(snapshot.identityRecords.rejected, 0);
+  for (const match of snapshot.espnMatches)
+    assert.ok(snapshot.identityRecords.records.some((record) => record.id === match.eventId));
+  const before = league.reads.length;
+  await loader.loadSnapshot(2026);
+  assert.equal(league.reads.length, before);
+  for (const answer of Object.values(espn))
+    for (const event of answer.events) {
+      event.id = "";
+      event.competitions[0].gameNumber = 0;
+    }
+  const malformed = await createSnapshotLoader({
+    fetchImpl: createLeague({ espn }).fetchImpl,
+    now: () => NOW,
+  }).loadSnapshot(2026);
+  assert.equal(malformed.games.length, snapshot.games.length);
+  assert.equal(malformed.identityRecords.records.length, 0);
+  assert.ok(malformed.identityRecords.rejected > 0);
+});

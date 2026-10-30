@@ -1,3 +1,5 @@
+import { findIdentityCandidate } from "../../../../../shared/worker/identity-matching.js";
+import { readIdentityGames } from "../../../../../shared/worker/espn-adapter.js";
 import { createReusedLoader } from "../../../../../shared/worker/upstream.js";
 import {
   findEventId as findEspnEventId,
@@ -55,29 +57,36 @@ export const nameEspnMatchKey = (id) => `espnMatches/${id}`;
 
 /** @param {any} snapshot @param {any[]} answers */
 export function listEspnMatches(snapshot, answers) {
-  const games = [...snapshot.games, ...snapshot.nearestGames];
-  const matches = new Map();
-  for (const game of games) {
-    if (!game.start || !game.away.team || !game.home.team) continue;
-    const teams = { away: game.away.team, home: game.home.team, start: game.start };
-    const day = formatGameDay(game.start);
-    const events = answers
-      .flatMap((answer) => answer.events ?? [])
-      .filter(
-        (event) => Number.isFinite(Date.parse(event.date)) && formatGameDay(event.date) === day,
-      );
-    const eventIds = [
-      ...new Set(
-        events.flatMap((event) => {
-          const id = findEventId({ events: [event] }, teams);
-          return id ? [id] : [];
-        }),
-      ),
-    ];
-    if (eventIds.length === 1)
-      matches.set(game.id, { id: game.id, eventId: eventIds[0], ...teams });
-  }
-  return [...matches.values()];
+  const games = [
+    ...new Map(
+      [...snapshot.games, ...snapshot.nearestGames].map((game) => [
+        game.id,
+        {
+          id: game.id,
+          away: game.away.team,
+          home: game.home.team,
+          start: game.start,
+          ...(game.gameNumber && { gameNumber: game.gameNumber }),
+        },
+      ]),
+    ).values(),
+  ];
+  const { records } = readIdentityGames(answers, findTeamCodeByEspnId);
+  const uniqueRecords = [...new Map(records.map((record) => [record.id, record])).values()];
+  return uniqueRecords.flatMap((record) => {
+    const { confident, candidate } = findIdentityCandidate("game", record, games, uniqueRecords);
+    return confident
+      ? [
+          {
+            id: candidate.id,
+            eventId: record.id,
+            away: candidate.away,
+            home: candidate.home,
+            start: candidate.start,
+          },
+        ]
+      : [];
+  });
 }
 
 export { readEndTime } from "../../../../../shared/worker/espn-adapter.js";

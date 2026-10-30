@@ -137,3 +137,18 @@ test("ESPN has no box score of a game that hasn't started, or that it hasn't wri
   );
   assert.equal(describeEspnBoxScore(null, "1042600122", INDEX), null);
 });
+
+test("both box-score adapters retain season and Cup Final facts directly", () => {
+  const [id, { summary }] = Object.entries(ESPN.games)[0];
+  const native = structuredClone(GAMES.boxScores[id]);
+  native.game.gameId = "1052600001";
+  for (const box of [
+    describeBoxScore(native),
+    describeEspnBoxScore(summary, "1052600001", INDEX),
+  ]) {
+    assert.equal(box.season, 2026);
+    assert.equal(box.isCupFinal, true);
+  }
+  assert.equal(describeBoxScore(GAMES.boxScores[id]).isCupFinal, false);
+  assert.equal(describeEspnBoxScore(summary, id, INDEX).isCupFinal, false);
+});

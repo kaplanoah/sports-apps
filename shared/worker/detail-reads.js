@@ -36,7 +36,8 @@ export function createDetailReads(reads, { storage, now, docs, services }) {
         for (const entry of entries.keys()) if (!keep.has(entry)) await storage.delete(entry);
         await storage.put(ANSWER_PREFIX + key, { at: now(), body });
       });
-    return saving;
+    await saving;
+    return (await storage.get(ANSWER_PREFIX + key))?.body ?? body;
   }
 
   const load = createReusedLoader(
@@ -59,7 +60,9 @@ export function createDetailReads(reads, { storage, now, docs, services }) {
           const answer = service.field ? { ...stored, [service.field]: body } : body;
           return isSameJson(stored, answer) ? null : answer;
         });
-      } else await keepAnswer(url.pathname + url.search, body);
+        const saved = await docs.read(canonicalKey);
+        body = (service.field ? saved?.[service.field] : saved) ?? body;
+      } else body = await keepAnswer(url.pathname + url.search, body);
       return body;
     },
     DETAIL_REUSE_MS,

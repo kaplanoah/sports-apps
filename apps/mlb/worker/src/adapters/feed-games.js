@@ -153,7 +153,9 @@ export function normalizeGame(game) {
   return {
     id: String(game.gamePk),
     type: game.gameType,
-    season: Number(game.season ?? game.officialDate?.slice(0, 4)),
+    ...(Number.isInteger(Number(game.season ?? game.officialDate?.slice(0, 4))) && {
+      season: Number(game.season ?? game.officialDate?.slice(0, 4)),
+    }),
     round: { F: "WC", D: "DS", L: "CS", W: "WS" }[game.gameType] ?? null,
     gameNumber: game.gameNumber ?? 1,
     date: game.officialDate,
@@ -258,14 +260,16 @@ export function summarizeGame(game, pitchers) {
   const summary = {
     id: game.id,
     season: game.season,
-    round: game.round,
-    gameNumber: game.gameNumber,
     away: game.away.id,
     home: game.home.id,
     state: game.state,
     start: game.start,
   };
-  if (game.round) summary.league = game.league;
+  if (game.round) {
+    summary.round = game.round;
+    summary.league = game.league;
+  }
+  if (game.gameNumber > 1) summary.gameNumber = game.gameNumber;
   if (game.tbd) summary.tbd = true;
   if (game.doubleheader) summary.doubleheader = game.doubleheader;
   if (game.type !== "R") summary.postseason = true;

@@ -13,11 +13,7 @@ import { createSnapshotLoader } from "./snapshot.js";
 import { GAME_DETAILS_COLLECTION } from "./store-docs.js";
 import { createWatchedGameLoader } from "./watched-games.js";
 
-export {
-  forwardToStore,
-  readFeedFailures,
-  readIdentityStatus,
-} from "../../../../shared/worker/season-store.js";
+export { forwardToStore, readStoreHealth } from "../../../../shared/worker/season-store.js";
 
 /**
  * @type {import("../../../../shared/worker/season-store.js").League<

@@ -1,6 +1,5 @@
 // Shared ESPN sports-data adapter; league mappings and basketball rules are supplied by callers.
 import { readNameLetters } from "./player-name.js";
-export { readNameLetters } from "./player-name.js";
 import {
   ReportedPlayers,
   VendorGameIdentities,
@@ -144,7 +143,10 @@ function readEspnEvent(event, readCompetitorDetails, findTeam) {
   const sides = Object.fromEntries(
     (competition.competitors ?? []).map((competitor) => [
       competitor.homeAway,
-      { team: findTeam(competitor.id), ...readCompetitorDetails(competitor) },
+      {
+        team: findTeam(competitor.id ?? competitor.team?.id),
+        ...readCompetitorDetails(competitor),
+      },
     ]),
   );
   return { competition, start: competition.date ?? event.date, home: sides.home, away: sides.away };
@@ -177,24 +179,27 @@ export const readBackupGames = (backup, findTeam) =>
 
 /** @param {any[]} answers @param {(id: string) => string | null} findTeam */
 export function readIdentityGames(answers, findTeam) {
-  return validateSportsData(
-    VendorGameIdentities,
-    answers
-      .flatMap((answer) => answer?.events ?? [])
-      .flatMap((event) => {
-        if (event.id == null) return [];
-        const { competition, start, home, away } = readEspnEvent(event, () => ({}), findTeam);
-        return [
+  const records = [];
+  let rejected = 0;
+  for (const event of answers.flatMap((answer) => answer?.events ?? [])) {
+    try {
+      const { competition, start, home, away } = readEspnEvent(event, () => ({}), findTeam);
+      records.push(
+        ...validateSportsData(VendorGameIdentities, [
           {
-            id: String(event.id),
+            id: event.id == null ? "" : String(event.id),
             start,
             home: home?.team ?? null,
             away: away?.team ?? null,
-            ...(Number.isInteger(competition.gameNumber) && { gameNumber: competition.gameNumber }),
+            ...(competition.gameNumber !== undefined && { gameNumber: competition.gameNumber }),
           },
-        ];
-      }),
-  );
+        ]),
+      );
+    } catch {
+      rejected += 1;
+    }
+  }
+  return { records, rejected };
 }
 
 const isNational = (broadcast) => broadcast.market === "national";
