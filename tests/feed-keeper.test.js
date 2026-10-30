@@ -174,15 +174,13 @@ test("a feed that failed is asked again five minutes on, however young its kept 
       { onFailure: (reason) => reasons.push(reason) },
     );
   await read("standings");
-  await assert.rejects(
-    keeper.readFeed(
-      "standings",
-      "/standings",
-      async () => {
-        throw new Error("The league answered 503");
-      },
-      { requireFresh: true },
-    ),
+  await keeper.readFeed(
+    "standings",
+    "/standings",
+    async () => {
+      throw new Error("The league answered 503");
+    },
+    { readAgain: true },
   );
 
   clock.now = 4 * MINUTE_MS;
@@ -245,15 +243,33 @@ test("a player's read is due when his games change, and once more ten minutes af
   assert.equal(isPlayerReadDue(asHePlayed, 3, 10 * MINUTE_MS), true);
 });
 
-test("required fresh reads replace the shared cached answer and reject failed verification", async () => {
+test("a read again replaces a young kept answer, which still stands in when it fails", async () => {
   const { keeper, read } = createKeeper();
   await read("standings");
   const fresh = { name: "standings", read: 2 };
   assert.deepEqual(
-    await keeper.readFeed("standings", "/standings", async () => fresh, { requireFresh: true }),
+    await keeper.readFeed("standings", "/standings", async () => fresh, { readAgain: true }),
     fresh,
   );
   assert.deepEqual(await read("standings"), fresh);
+  /** @type {string[]} */
+  const reasons = [];
+  assert.deepEqual(
+    await keeper.readFeed(
+      "standings",
+      "/standings",
+      async () => {
+        throw new Error("Source down");
+      },
+      { readAgain: true, onFailure: (reason) => reasons.push(reason) },
+    ),
+    fresh,
+  );
+  assert.deepEqual(reasons, ["Source down"]);
+});
+
+test("a read again with no kept answer fails as its read did", async () => {
+  const { keeper } = createKeeper();
   await assert.rejects(
     keeper.readFeed(
       "standings",
@@ -261,9 +277,8 @@ test("required fresh reads replace the shared cached answer and reject failed ve
       async () => {
         throw new Error("Source down");
       },
-      { requireFresh: true },
+      { readAgain: true },
     ),
     /Source down/,
   );
-  assert.deepEqual(await read("standings"), fresh);
 });

@@ -602,6 +602,24 @@ test("a final the league still marks if necessary isn't marked", () => {
   }
 });
 
+test("a kept schedule is confirmed only while the scoreboard lists each game it has on the league's today", () => {
+  const { schedule, scoreboard } = RESPONSES;
+  const now = Date.parse(AFTERNOON.now);
+  /** @param {any[]} games @param {number} [at] */
+  const isConfirmed = (games, at = now) =>
+    WNBASnapshot.isTodayOnScoreboard(
+      schedule,
+      { scoreboard: { ...scoreboard.scoreboard, games } },
+      AFTERNOON.season,
+      at,
+    );
+  const games = scoreboard.scoreboard.games;
+  assert.equal(isConfirmed(games), true);
+  assert.equal(isConfirmed(games.slice(1)), false);
+  assert.equal(isConfirmed(games, Date.parse("2026-10-01T16:00:00Z")), false);
+  assert.equal(WNBASnapshot.isTodayOnScoreboard(schedule, null, AFTERNOON.season, now), false);
+});
+
 const FINALS_GAME = {
   id: "1042600406",
   state: "pre",

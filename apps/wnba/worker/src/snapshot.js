@@ -107,7 +107,7 @@ export function createSnapshotLoader({
   /**
    * @param {keyof typeof SLOW_FEEDS} name
    * @param {string} url
-   * @param {{ isBehind?: (answer: any) => boolean, requireFresh?: boolean, onFailure: (reason: string) => void }} options
+   * @param {{ isBehind?: (answer: any) => boolean, readAgain?: boolean, onFailure: (reason: string) => void }} options
    */
   const readSlowFeed = (name, url, options) =>
     slowFeeds.readFeed(name, url, () => fetchFeed(name, url), options);
@@ -198,20 +198,29 @@ export function createSnapshotLoader({
     await slowFeeds.noteFinalCount(scoreboard ? countFinals(scoreboard) : null);
     const hasGamesLeftLive = (schedule) =>
       WNBASnapshot.listGamesLeftLive(schedule, scoreboard, season).size > 0;
-    const [schedule, bracket, standings] = await Promise.all([
+    const [scheduleAnswer, bracket, standings] = await Promise.all([
       readSlowFeed("schedule", WNBASnapshot.REQUESTS.schedule, {
         isBehind: hasGamesLeftLive,
-        requireFresh: verify,
+        readAgain: verify,
         onFailure: noteReason("schedule"),
       }).catch(noteFailure("schedule")),
+      // A kept bracket can only hold a reminder back: a series' wins only grow, and the games
+      // played count them too.
       readSlowFeed("bracket", WNBASnapshot.REQUESTS.bracket(season), {
-        requireFresh: verify,
+        readAgain: verify,
         onFailure: noteReason("bracket"),
       }).catch(noteFailure("bracket")),
       readSlowFeed("standings", WNBASnapshot.REQUESTS.standings(season), {
         onFailure: noteReason("standings"),
       }).catch(noteFailure("standings")),
     ]);
+    // A reminder goes out only on what the league says now. Each game a reminder can be due for is
+    // played on the league's today, so a kept schedule stands in once the scoreboard lists them all.
+    const isScheduleConfirmed =
+      !verify ||
+      !failures.schedule ||
+      WNBASnapshot.isTodayOnScoreboard(scheduleAnswer, scoreboard, season, now());
+    const schedule = isScheduleConfirmed ? scheduleAnswer : null;
     if (!scoreboard && !schedule && !bracket)
       throw new Error(`None of the WNBA's feeds answered with data: ${describeFailures(failures)}`);
     const needsBackup = !scoreboard || hasGamesLeftLive(schedule);
