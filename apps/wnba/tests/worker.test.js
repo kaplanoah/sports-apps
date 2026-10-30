@@ -16,12 +16,7 @@ import {
   nameSummaryRequest,
 } from "../worker/src/adapters/lead.js";
 import { describePreview } from "../worker/src/adapters/preview.js";
-import { createDocs } from "../../../tests/job-context.js";
-import {
-  saveSnapshot,
-  describeSnapshotStatus,
-  listFeedFailures,
-} from "../worker/src/season-updater.js";
+import { describeSnapshotStatus, listFeedFailures } from "../worker/src/season-updater.js";
 import { NETWORKS_MS, createSnapshotLoader, describeFailures } from "../worker/src/snapshot.js";
 import { trimNetworkAnswer } from "../../../shared/worker/espn-adapter.js";
 import { ESPN, readAfternoonEspn, SEP_30 } from "./espn-fixtures.js";
