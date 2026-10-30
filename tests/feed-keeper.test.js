@@ -495,3 +495,43 @@ test("feed answers wait for asynchronous consumer validation before cache retent
     );
   }
 });
+
+test("a failed due refresh cannot return a cached answer invalid for its current consumers", async () => {
+  let time = 0;
+  let reads = 0;
+  let needsPositive = false;
+  let unavailable = false;
+  let value = -1;
+  const keeper = createFeedKeeper({
+    feeds: { people: { maxAgeMs: 1, changesWithGames: false } },
+    now: () => time,
+  });
+  const read = () =>
+    keeper.readFeed(
+      "people",
+      "/people",
+      async () => {
+        reads += 1;
+        if (unavailable) throw new Error("upstream unavailable");
+        return value;
+      },
+      {
+        validate: (answer) => {
+          if (needsPositive && answer < 0) throw new Error("Invalid sports data");
+        },
+      },
+    );
+  assert.equal(await read(), -1);
+  needsPositive = true;
+  unavailable = true;
+  time += 2;
+  await assert.rejects(read(), /upstream unavailable/);
+  assert.equal(reads, 2);
+  time += FAILED_FEED_WAIT_MS - 1;
+  await assert.rejects(read(), /upstream unavailable/);
+  assert.equal(reads, 2);
+  time += 1;
+  unavailable = false;
+  value = 3;
+  assert.equal(await read(), 3);
+});

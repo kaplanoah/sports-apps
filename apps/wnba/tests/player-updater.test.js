@@ -1172,3 +1172,38 @@ test("cold roster and player-list requests stay concurrent while list validation
   await update;
   assert.ok(run.docs.stored.get(nameRosterKey(2026, "NYL")));
 });
+
+test("stale roster and player-list refreshes retain upstream concurrency", async () => {
+  const job = createPlayerJob();
+  const run = createRun({ job });
+  await run.runJob();
+  run.wait(25 * 60);
+  const pending = createDeferred();
+  const started = createDeferred();
+  let lists = 0;
+  const fetchImpl = async (url) => {
+    if (url === namePlayerListRequest(2026)) lists += 1;
+    if (url === nameLeagueRosterRequest("NYL", 2026)) {
+      started.resolve();
+      await pending.promise;
+    }
+    return run.league.fetchImpl(url);
+  };
+  const update = job.updateStore({
+    docs: run.docs,
+    storage: run.storage,
+    env: {},
+    fetchImpl,
+    now: () => NOW + 25 * 60 * MINUTE_MS,
+    createLoadSnapshot: () => async () => null,
+  });
+  await started.promise;
+  await new Promise((resolve) => setImmediate(resolve));
+  try {
+    assert.equal(lists, 1);
+  } finally {
+    pending.resolve();
+    await update;
+  }
+  assert.ok(run.docs.stored.get(nameRosterKey(2026, "NYL")));
+});

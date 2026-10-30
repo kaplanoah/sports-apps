@@ -210,21 +210,30 @@ export function createFeedKeeper({ feeds, now, storage = createMemoryStorage() }
       const storageKey = await nameFeedKey(name, key);
       const what = `${name} ${key}`;
       let record = await readRecord(storageKey);
-      if (record?.answer) {
+      let answer = record?.answer;
+      let hasCheckedAnswer = false;
+      async function validateKeptAnswer() {
+        if (hasCheckedAnswer || !answer) return;
+        hasCheckedAnswer = true;
         try {
-          await validate(record.answer.data);
+          await validate(answer.data);
         } catch (error) {
+          answer = undefined;
           await rejectFeed(name, key, error);
-          record = await readRecord(storageKey);
         }
       }
-      const answer = record?.answer;
-      const times = await findReadTimes(name, record, isBehind);
-      if (!readAgain && now() < times.dueAt) {
-        if (record?.reason !== undefined) onFailure(record.reason);
-        onNextRead(times.nextReadAt);
-        if (answer) return answer.data;
-        throw new Error(record.reason);
+      // A due refresh starts before waiting for context needed only by a cached stand-in.
+      const scheduledTimes = await findReadTimes(name, record, () => false);
+      if (!readAgain && now() < scheduledTimes.dueAt) {
+        await validateKeptAnswer();
+        record = await readRecord(storageKey);
+        const times = await findReadTimes(name, record, isBehind);
+        if (now() < times.dueAt) {
+          if (record?.reason !== undefined) onFailure(record.reason);
+          onNextRead(times.nextReadAt);
+          if (answer) return answer.data;
+          throw new Error(record.reason);
+        }
       }
       try {
         const data = await load();
@@ -234,6 +243,7 @@ export function createFeedKeeper({ feeds, now, storage = createMemoryStorage() }
         onNextRead((await findReadTimes(name, updated, isBehind)).nextReadAt);
         return data;
       } catch (error) {
+        await validateKeptAnswer();
         if (error instanceof RequestBudgetExhausted) {
           if (answer) return answer.data;
           throw error;
