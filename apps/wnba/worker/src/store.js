@@ -19,7 +19,10 @@ export {
   readStoreDoc,
 } from "../../../../shared/worker/season-store.js";
 
-/** @param {ReturnType<typeof import("./adapters/wnba.js").buildSnapshot>} snapshot @param {number} now */
+/**
+ * @param {ReturnType<typeof import("./adapters/wnba.js").buildSnapshot> & import("../../../../shared/worker/season-store.js").SeasonSnapshot} snapshot
+ * @param {number} now
+ */
 function choosePollDelay(snapshot, now) {
   const delay = chooseGamePollDelay(snapshot, now);
   const hasFailedSlowFeed = Object.keys(SLOW_FEEDS).some(
