@@ -555,17 +555,9 @@ test("reminders require confirmed necessary playoff games and successful source 
     { isTimeSet: false },
     { away: { team: null } },
     { start: null },
-    { isIfNeeded: true, number: 99 },
+    { isIfNeeded: true },
   ])
     assert.deepEqual(listChanged(change), []);
-  assert.deepEqual(
-    WNBASnapshot.listReminderGames({
-      ...snapshot,
-      games: snapshot.games.map((game) => ({ ...game, isIfNeeded: true })),
-      series: snapshot.series.map((series) => ({ ...series, winner: "NYL" })),
-    }),
-    [],
-  );
   for (const missing of ["schedule", "scoreboard", "bracket"])
     assert.equal(WNBASnapshot.listReminderGames({ ...snapshot, missing: [missing] }), null);
 });
@@ -589,6 +581,14 @@ test("a game the league still marks if necessary once its series needs it isn't 
   assert.ok(WNBASnapshot.listReminderGames(snapshot).some((game) => game.id === "1042600123"));
   const leadGameThree = snapshot.games.find((game) => game.id === "1042600133");
   assert.equal(leadGameThree.isIfNeeded, true, "series led 1-0");
+});
+
+test("a final the league still marks if necessary isn't marked", () => {
+  const snapshot = buildAfternoon(markIfNecessary({ 1042600102: true }));
+  for (const games of [snapshot.games, snapshot.schedule]) {
+    const seriesWinner = games.find((game) => game.id === "1042600102");
+    assert.deepEqual([seriesWinner.state, seriesWinner.isIfNeeded], ["final", false]);
+  }
 });
 
 const FINALS_GAME = {

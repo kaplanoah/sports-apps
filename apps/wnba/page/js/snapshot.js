@@ -660,8 +660,7 @@ export function listScheduledStarts(schedule, season) {
 }
 
 // The league's schedule can go on marking a game if necessary for hours after its series came to
-// need it, as it did a Finals Game 7 at 3-3, so only a game still to come that its series may not
-// need stays marked.
+// need it, so only a game still to come that its series may not need stays marked.
 /**
  * @param {any} game
  * @param {Map<string, any>} seriesById
