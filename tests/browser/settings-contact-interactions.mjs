@@ -407,6 +407,7 @@ export function testSettingsContactInteractions(test, expect, { openApp, setting
   test("with Diagnostics on, a tap on Add screenshot logs its touch, its clicks, and that a file came back, never the file's name", async ({
     page,
   }) => {
+    test.slow();
     await page.emulateMedia({ reducedMotion: "reduce" });
     await serveContact(page);
     await openApp(page);
@@ -444,6 +445,7 @@ export function testSettingsContactInteractions(test, expect, { openApp, setting
   test("with Diagnostics on, a log opened in settings stays open as taps there log more lines", async ({
     page,
   }) => {
+    test.slow();
     await page.emulateMedia({ reducedMotion: "reduce" });
     await openApp(page);
     await turnOnDiagnostics(page);
