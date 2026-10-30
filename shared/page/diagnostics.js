@@ -585,11 +585,35 @@ const renderLine = (line) =>
   </li>`;
 
 /**
+ * Each record's open state as the viewer left it, by its `data-record` key, since a redraw puts
+ * back each record's markup.
+ * @type {Map<string, boolean>}
+ */
+let shownOpen = new Map();
+
+/** @param {Element} section */
+const readShownOpen = (section) =>
+  new Map(
+    [...section.querySelectorAll("details[data-record]")].map((details) => [
+      /** @type {HTMLDetailsElement} */ (details).dataset.record ?? "",
+      /** @type {HTMLDetailsElement} */ (details).open,
+    ]),
+  );
+
+/**
+ * The attributes that key a record and open it as the viewer left it, or as it opens at first.
+ * @param {string} key
+ * @param {boolean} isOpenAtFirst
+ */
+const renderRecordState = (key, isOpenAtFirst) =>
+  html`data-record="${key}" ${(shownOpen.get(key) ?? isOpenAtFirst) ? "open" : ""}`;
+
+/**
  * @param {OpenRecord} openRecord
  * @param {number} index
  */
 const renderRecord = (openRecord, index) =>
-  html`<details class="diagnostics-record" ${index === 0 ? "open" : ""}>
+  html`<details class="diagnostics-record" ${renderRecordState(String(openRecord.at), index === 0)}>
     <summary class="press-tint">
       <span class="diagnostics-when"
         >${joinWithSeparator(describeRecord(openRecord, new Date()))}</span
@@ -623,7 +647,7 @@ const renderStepLine = (line) =>
  */
 const renderSteps = (title, lines) =>
   lines.length > 0 &&
-  html`<details class="diagnostics-record">
+  html`<details class="diagnostics-record" ${renderRecordState(title, false)}>
     <summary class="press-tint"><span class="diagnostics-when">${title}</span></summary>
     <ol class="diagnostics-lines diagnostics-viewport">
       ${lines.map(renderStepLine)}
@@ -635,12 +659,14 @@ const renderStepLog = (log) => renderSteps(log.title, log.readLines().toReversed
 
 const listServiceWorkerSteps = () => serviceWorkerSteps.toReversed();
 
+const VIEWPORT_TITLE = "Viewport";
+
 /** @param {import("./viewport-log.js").ViewportLine[]} lines newest first */
 const renderViewport = (lines) => {
   const isOff = lines.some((line) => line.isOff);
-  return html`<details class="diagnostics-record">
+  return html`<details class="diagnostics-record" ${renderRecordState(VIEWPORT_TITLE, false)}>
     <summary class="press-tint">
-      <span class="diagnostics-when">Viewport</span>
+      <span class="diagnostics-when">${VIEWPORT_TITLE}</span>
       <span class="diagnostics-flag ${isOff ? "dip" : ""}">${isOff ? "Off" : "Steady"}</span>
     </summary>
     <ol class="diagnostics-lines diagnostics-viewport">
@@ -693,7 +719,9 @@ function drawRecords() {
   findElement("diagnosticsSwitch").setAttribute("aria-checked", String(isOn));
   const section = findElement("diagnostics");
   section.hidden = !isOn;
-  if (findSettings()?.open) setHtml(section, isOn ? renderRecords() : html``);
+  if (!findSettings()?.open) return;
+  shownOpen = readShownOpen(section);
+  setHtml(section, isOn ? renderRecords() : html``);
 }
 
 function drawRecordsAsSettingsOpens() {

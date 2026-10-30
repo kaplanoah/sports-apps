@@ -1,13 +1,8 @@
+import { followOneFingerTouches } from "./one-finger-touch.js";
 import { isOnGlide } from "./press.js";
 import { findPartHolding } from "./season-part.js";
 import { createStepLog } from "./step-log.js";
-import {
-  describeDistance,
-  describeLift,
-  describePointer,
-  describeTaking,
-  measureMove,
-} from "./touch-words.js";
+import { describeDistance, describeLift, describePointer, describeTaking } from "./touch-words.js";
 
 /** @param {Element} target */
 const isOnParts = (target) => !!findPartHolding(target);
@@ -61,70 +56,28 @@ export function describeTouchEnd({
 }
 
 /**
- * Logs, while Diagnostics is on, what became of each one-finger touch on the parts. It listens on
- * the window, which a touch reaches last, so a move shows whether any of the page's code stopped
- * the browser's scroll.
+ * Logs, while Diagnostics is on, what became of each one-finger touch on the parts.
  */
 export function watchTouches() {
-  /** @type {{ origin: { x: number, y: number }, part: HTMLElement, scrollTop: number, moved: Move, isLandingOnGlide: boolean, takenAt: Move | null, isPointerCancelled: boolean } | null} */
-  let touch = null;
-
-  /** @param {TouchEvent} event */
-  function startTouch(event) {
-    touch = null;
-    if (!bracketStandingsLog.isLogging() || event.touches.length !== 1) return;
-    const part = event.target instanceof Element ? findPartHolding(event.target) : null;
-    if (!part) return;
-    const { clientX, clientY } = event.touches[0];
-    touch = {
-      origin: { x: clientX, y: clientY },
-      part,
-      scrollTop: part.scrollTop,
-      moved: { x: 0, y: 0 },
-      isLandingOnGlide: isOnGlide(event.target),
-      takenAt: null,
-      isPointerCancelled: false,
-    };
-  }
-
-  /** @param {PointerEvent} event */
-  function notePointerCancel(event) {
-    if (touch && event.isPrimary) touch.isPointerCancelled = true;
-  }
-
-  /** @param {TouchEvent} event */
-  function followTouch(event) {
-    if (!touch) return;
-    if (event.touches.length !== 1) {
-      touch = null;
-      return;
-    }
-    touch.moved = measureMove(event.touches[0], touch.origin);
-    if (event.defaultPrevented && !touch.takenAt) touch.takenAt = touch.moved;
-  }
-
-  /** @param {TouchEvent} event */
-  function endTouch(event) {
-    if (!touch) return;
-    const { moved, isLandingOnGlide, takenAt, isPointerCancelled, part } = touch;
-    const scrolled = part.scrollTop - touch.scrollTop;
-    touch = null;
-    bracketStandingsLog.noteStep(
-      describeTouchEnd({
-        isCancelled: event.type === "touchcancel",
-        moved,
-        isLandingOnGlide,
-        takenAt,
-        isPointerCancelled,
-        part: /** @type {string} */ (part.dataset.part),
-        scrolled,
-      }),
-    );
-  }
-
-  addEventListener("touchstart", startTouch, { passive: true });
-  addEventListener("touchmove", followTouch, { passive: true });
-  addEventListener("pointercancel", notePointerCancel, { passive: true });
-  addEventListener("touchend", endTouch, { passive: true });
-  addEventListener("touchcancel", endTouch, { passive: true });
+  followOneFingerTouches({
+    startFollowing(event) {
+      if (!bracketStandingsLog.isLogging()) return null;
+      const part = event.target instanceof Element ? findPartHolding(event.target) : null;
+      if (!part) return null;
+      return { part, scrollTop: part.scrollTop, isLandingOnGlide: isOnGlide(event.target) };
+    },
+    noteEnd({ part, scrollTop, moved, isLandingOnGlide, takenAt, isPointerCancelled }, event) {
+      bracketStandingsLog.noteStep(
+        describeTouchEnd({
+          isCancelled: event.type === "touchcancel",
+          moved,
+          isLandingOnGlide,
+          takenAt,
+          isPointerCancelled,
+          part: /** @type {string} */ (part.dataset.part),
+          scrolled: part.scrollTop - scrollTop,
+        }),
+      );
+    },
+  });
 }

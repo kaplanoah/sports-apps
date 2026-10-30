@@ -88,6 +88,7 @@ The Worker serves every file here, its `networks/` logos too, under `shared/`, b
 - `bracket-standings-log.js`: each touch on the standings and bracket
 - `settings-touch-log.js`: each touch and click on settings and Contact, and the screenshot field
 - `touch-words.js`: how a touch moved and who took it, in the touch logs' words
+- `one-finger-touch.js`: following each one-finger touch from landing to lift, for the touch logs
 - `phone-look-log.js`: each change of the phone's light or dark look, and of the page's focus
 - `error-log.js`: each error the page's code doesn't catch
 

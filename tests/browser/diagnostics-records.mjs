@@ -9,6 +9,23 @@ import { readTokenColor } from "./token-color.mjs";
 export const findRecords = (page) => page.locator("#diagnostics");
 
 /**
+ * The lines of a Diagnostics log in settings, oldest first, without their times.
+ * @param {import("@playwright/test").Page} page
+ * @param {string} title
+ */
+export async function readLog(page, title) {
+  const log = findRecords(page).locator(".diagnostics-record", { hasText: title });
+  await expect(log).toHaveCount(1);
+  const lines = await log.locator("li").allTextContents();
+  return lines.toReversed().map((line) =>
+    line
+      .replace(/\s+/g, " ")
+      .trim()
+      .replace(/^\d{1,2}:\d\d:\d\d ?[AP]M ?/, ""),
+  );
+}
+
+/**
  * Empties a part and fills it again while the page's record is under way, then lets the record
  * finish, so it's flagged as a dip.
  * @param {import("@playwright/test").Page} page

@@ -1,7 +1,9 @@
 import { holdClock } from "./harness.mjs";
 import { openContact, serveContact } from "./contact-views.mjs";
 import { SCREENSHOT } from "./contact.mjs";
+import { findRecords, readLog } from "./diagnostics-records.mjs";
 import { turnOnDiagnostics } from "./diagnostics-switch.mjs";
+import { openSettings } from "./settings.mjs";
 
 /**
  * Measures each page row in a dialog, its words, how far it lifts them over its middle, and its
@@ -410,16 +412,7 @@ export function testSettingsContactInteractions(test, expect, { openApp, setting
       await page.clock.runFor(1000);
     }
 
-    const log = page.locator("#diagnostics .diagnostics-record", {
-      hasText: "Settings and Contact",
-    });
-    await expect(log).toHaveCount(1);
-    const lines = (await log.locator("li").allTextContents()).map((line) =>
-      line
-        .replace(/\s+/g, " ")
-        .trim()
-        .replace(/^\d{1,2}:\d\d:\d\d ?[AP]M ?/, ""),
-    );
+    const lines = await readLog(page, "Settings and Contact");
     expect(lines).toContainEqual(
       expect.stringMatching(/^touchstart at \d+,\d+ on label\.contact-secondary$/),
     );
@@ -436,6 +429,28 @@ export function testSettingsContactInteractions(test, expect, { openApp, setting
     expect(lines).toContain("the click on #contactScreenshot reached the window untaken");
     expect(lines).toContain("the screenshot field changed with a file chosen");
     expect(lines.filter((line) => line.includes(SCREENSHOT.name))).toEqual([]);
+  });
+
+  test("with Diagnostics on, a log opened in settings stays open as taps there log more lines", async ({
+    page,
+  }) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await openApp(page);
+    await turnOnDiagnostics(page);
+    await openSettings(page);
+    const heading = findRecords(page).getByRole("heading", { name: "Recent opens" });
+    await heading.tap();
+    const log = findRecords(page).locator(".diagnostics-record", {
+      hasText: "Settings and Contact",
+    });
+    await log.locator("summary").tap();
+    await page.clock.runFor(1000);
+    await expect(log).toHaveAttribute("open", "");
+    const linesBefore = await log.locator("li").count();
+    await page.locator("#settingsTitle").tap();
+    await page.clock.runFor(1000);
+    await expect.poll(() => log.locator("li").count()).toBeGreaterThan(linesBefore);
+    await expect(log).toHaveAttribute("open", "");
   });
 
   test("Add screenshot's field stays reachable by Tab and VoiceOver, ringing its label", async ({

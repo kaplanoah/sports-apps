@@ -1,14 +1,12 @@
 import { createStepLog, describeTarget } from "./step-log.js";
-import { describeLift, describePointer, describeTaking, measureMove } from "./touch-words.js";
+import { followOneFingerTouches } from "./one-finger-touch.js";
+import { describeLift, describePointer, describeTaking } from "./touch-words.js";
 
 const SETTINGS_DIALOGS = "#settingsDialog, #contactDialog";
 const SCREENSHOT_FIELD_ID = "contactScreenshot";
-const DIAGNOSTICS = "#diagnostics";
 
-// Diagnostics' own records are left out, since a line logged as a tap opens one would redraw the
-// records and close it again.
 /** @param {Element} target */
-const isFollowed = (target) => !!target.closest(SETTINGS_DIALOGS) && !target.closest(DIAGNOSTICS);
+const isFollowed = (target) => !!target.closest(SETTINGS_DIALOGS);
 
 // What settings and Contact do with each touch: each touch and click on them, and as the finger
 // lifts, how far it moved, whether the page's code or the browser took it, what scrolled, what lies
@@ -100,63 +98,32 @@ function nameElementAt(point) {
  * ends, so a click the page's code stopped shows as well.
  */
 export function watchSettingsTouches() {
-  /** @type {{ origin: { x: number, y: number }, moved: Move, takenAt: Move | null, isPointerCancelled: boolean, scrolled: string | null } | null} */
-  let touch = null;
   /** @type {WeakSet<Event>} */
   const reachedClicks = new WeakSet();
 
-  /** @param {TouchEvent} event */
-  function startTouch(event) {
-    touch = null;
-    if (!settingsTouchLog.isLogging() || event.touches.length !== 1) return;
-    if (!(event.target instanceof Element && isFollowed(event.target))) return;
-    const { clientX, clientY } = event.touches[0];
-    touch = {
-      origin: { x: clientX, y: clientY },
-      moved: { x: 0, y: 0 },
-      takenAt: event.defaultPrevented ? { x: 0, y: 0 } : null,
-      isPointerCancelled: false,
-      scrolled: null,
-    };
-  }
-
-  /** @param {TouchEvent} event */
-  function followTouch(event) {
-    if (!touch) return;
-    if (event.touches.length !== 1) {
-      touch = null;
-      return;
-    }
-    touch.moved = measureMove(event.touches[0], touch.origin);
-    if (event.defaultPrevented && !touch.takenAt) touch.takenAt = touch.moved;
-  }
-
-  /** @param {PointerEvent} event */
-  function notePointerCancel(event) {
-    if (touch && event.isPrimary) touch.isPointerCancelled = true;
-  }
+  const readTouch = followOneFingerTouches({
+    startFollowing: (event) =>
+      settingsTouchLog.isLogging() && event.target instanceof Element && isFollowed(event.target)
+        ? { scrolled: /** @type {string | null} */ (null) }
+        : null,
+    noteEnd: ({ moved, takenAt, isPointerCancelled, scrolled }, event) =>
+      settingsTouchLog.noteStep(
+        describeSettingsTouchEnd({
+          isCancelled: event.type === "touchcancel",
+          moved,
+          takenAt,
+          isLiftTaken: event.defaultPrevented,
+          isPointerCancelled,
+          scrolled,
+          endedOver: nameElementAt(event.changedTouches[0]),
+        }),
+      ),
+  });
 
   /** @param {Event} event */
   function noteScroll(event) {
+    const touch = readTouch();
     if (touch) touch.scrolled ??= nameScroller(event.target);
-  }
-
-  /** @param {TouchEvent} event */
-  function endTouch(event) {
-    if (!touch) return;
-    const { moved, takenAt, isPointerCancelled, scrolled } = touch;
-    touch = null;
-    settingsTouchLog.noteStep(
-      describeSettingsTouchEnd({
-        isCancelled: event.type === "touchcancel",
-        moved,
-        takenAt,
-        isLiftTaken: event.defaultPrevented,
-        isPointerCancelled,
-        scrolled,
-        endedOver: nameElementAt(event.changedTouches[0]),
-      }),
-    );
   }
 
   /** @param {MouseEvent} event */
@@ -182,11 +149,6 @@ export function watchSettingsTouches() {
       settingsTouchLog.noteStep(describeScreenshotField(event.type, field.files?.length ?? 0));
   }
 
-  addEventListener("touchstart", startTouch, { passive: true });
-  addEventListener("touchmove", followTouch, { passive: true });
-  addEventListener("pointercancel", notePointerCancel, { passive: true });
-  addEventListener("touchend", endTouch, { passive: true });
-  addEventListener("touchcancel", endTouch, { passive: true });
   addEventListener("click", followClick, { capture: true, passive: true });
   addEventListener("click", (event) => reachedClicks.add(event), { passive: true });
   document.addEventListener("scroll", noteScroll, { capture: true, passive: true });

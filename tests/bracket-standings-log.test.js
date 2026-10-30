@@ -129,6 +129,18 @@ test("a touch elsewhere on the page, or one a second finger joins, isn't logged"
   assert.deepEqual(lines, []);
 });
 
+test("a touch the page's code took as it landed says it took it before it moved", () => {
+  const target = new FakeElement("standings");
+  const lines = readLiftsFrom(() => {
+    sendTouch("touchstart", { target, points: [{ x: 100, y: 200 }], defaultPrevented: true });
+    sendTouch("touchmove", { target, points: [{ x: 100, y: 230 }], defaultPrevented: true });
+    sendTouch("touchend", { target, points: [] });
+  });
+  assert.deepEqual(lines, [
+    "lifted after moving 30 down; it landed on a list at rest; the page's code took the touch before it moved; its pointer wasn't cancelled; the standings didn't scroll",
+  ]);
+});
+
 test("a touch the page's code took says how far the finger had moved when it did, and that its part didn't scroll", () => {
   assert.equal(
     describeTouchEnd({

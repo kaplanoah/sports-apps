@@ -38,30 +38,20 @@ globalThis.addEventListener = /** @type {any} */ (addListenerTo(windowListeners)
 /** A stand-in for an element, in settings or Contact or elsewhere on the page. */
 class FakeElement {
   /**
-   * @param {{ id?: string, localName?: string, classes?: string[], isInSettings?: boolean, isInDiagnostics?: boolean, label?: string, files?: { name: string }[] }} element
+   * @param {{ id?: string, localName?: string, classes?: string[], isInSettings?: boolean, label?: string, files?: { name: string }[] }} element
    *   `label` is a button's aria-label, for an element that's a button
    */
-  constructor({
-    id = "",
-    localName = "div",
-    classes = [],
-    isInSettings = true,
-    isInDiagnostics = false,
-    label,
-    files,
-  }) {
+  constructor({ id = "", localName = "div", classes = [], isInSettings = true, label, files }) {
     this.id = id;
     this.localName = localName;
     this.classList = classes;
     this.isInSettings = isInSettings;
-    this.isInDiagnostics = isInDiagnostics;
     this.label = label;
     this.files = files;
   }
   /** @param {string} selector */
   closest(selector) {
     if (selector === "button, a") return this.label ? this : null;
-    if (selector === "#diagnostics") return this.isInDiagnostics ? this : null;
     return selector === "#settingsDialog, #contactDialog" && this.isInSettings ? this : null;
   }
   getAttribute() {
@@ -172,6 +162,28 @@ test("a touch the browser took for a scroll says so, and a click the page's code
   ]);
 });
 
+test("a touch says the browser took it from a pointer cancel alone or from a scroll alone, and a click the page's code stopped without taking says so", async () => {
+  elementAtPoint = settingsBody;
+  const lines = await readLinesFrom(() => {
+    sendEvent("touchstart", { target: addScreenshot, points: [{ x: 120, y: 610 }] });
+    sendEvent("pointercancel", { target: addScreenshot });
+    sendEvent("touchend", { target: addScreenshot, endPoint: { x: 120, y: 610 } });
+    sendEvent("touchstart", { target: addScreenshot, points: [{ x: 120, y: 610 }] });
+    sendEvent("scroll", { target: settingsBody });
+    sendEvent("touchend", { target: addScreenshot, endPoint: { x: 120, y: 610 } });
+    sendEvent("click", { target: addScreenshot, isStopped: true });
+  });
+  assert.deepEqual(lines, [
+    "touchstart at 120,610 on label.contact-secondary",
+    "touchend at 120,610 on label.contact-secondary",
+    "lifted without moving; the browser took the touch; the page's code left its end; its pointer was cancelled; nothing scrolled; it ended over div.settings-body",
+    "touchstart at 120,610 on label.contact-secondary",
+    "touchend at 120,610 on label.contact-secondary",
+    "lifted without moving; the browser took the touch; the page's code left its end; its pointer wasn't cancelled; div.settings-body scrolled; it ended over div.settings-body",
+    "the page's code stopped the click on label.contact-secondary",
+  ]);
+});
+
 test("a touch the page's code took says when, and that it took the touch's end, and a click it took says so", async () => {
   const done = new FakeElement({ localName: "button", label: "Done" });
   elementAtPoint = done;
@@ -207,17 +219,13 @@ test("a touch the browser cancels, a picker closed with nothing chosen, and a fi
   ]);
 });
 
-test("a touch or click elsewhere on the page or on settings' Diagnostics, one a second finger joins, and a change of another field aren't logged", async () => {
+test("a touch or click elsewhere on the page, one a second finger joins, and a change of another field aren't logged", async () => {
   const elsewhere = new FakeElement({ isInSettings: false });
-  const record = new FakeElement({ localName: "summary", isInDiagnostics: true });
   const message = new FakeElement({ id: "contactMessage", localName: "textarea" });
   const lines = await readLinesFrom(() => {
     sendEvent("touchstart", { target: elsewhere, points: [{ x: 100, y: 200 }] });
     sendEvent("touchend", { target: elsewhere, endPoint: { x: 100, y: 200 } });
     sendEvent("click", { target: elsewhere });
-    sendEvent("touchstart", { target: record, points: [{ x: 100, y: 500 }] });
-    sendEvent("touchend", { target: record, endPoint: { x: 100, y: 500 } });
-    sendEvent("click", { target: record });
     sendEvent("touchstart", { target: addScreenshot, points: [{ x: 120, y: 610 }] });
     sendEvent("touchmove", {
       target: addScreenshot,
