@@ -404,6 +404,66 @@ export function testSettingsContactInteractions(test, expect, { openApp, setting
     await expect(dialog).toBeHidden();
   });
 
+  test("a tap just past Add screenshot's edge opens the picker, and that reach covers no field or button beside it", async ({
+    page,
+  }) => {
+    test.slow();
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await serveContact(page);
+    await openApp(page);
+    const dialog = await openContact(page);
+    await dialog.getByRole("button", { name: "Bug report", exact: true }).tap();
+    const attach = dialog.locator('label[for="contactScreenshot"]');
+    /** @param {import("@playwright/test").Locator[]} neighbors */
+    const expectNeighborsKeepTheirTaps = async (neighbors) => {
+      for (const neighbor of neighbors)
+        expect(
+          await neighbor.evaluate(
+            (element, label) => {
+              const own = element.getBoundingClientRect();
+              const reach = /** @type {Element} */ (label).getBoundingClientRect();
+              const x = Math.min(
+                Math.max(reach.left + reach.width / 2, own.left + 1),
+                own.right - 1,
+              );
+              const y = Math.min(
+                Math.max(reach.top + reach.height / 2, own.top + 1),
+                own.bottom - 1,
+              );
+              return element.contains(document.elementFromPoint(x, y));
+            },
+            await attach.elementHandle(),
+          ),
+        ).toBe(true);
+    };
+    await expectNeighborsKeepTheirTaps([
+      dialog.locator("#contactMessage"),
+      dialog.locator('label[for="contactEmail"]'),
+    ]);
+    const box = await attach.boundingBox();
+    const middle = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+    for (const [x, y] of [
+      [box.x - 8, middle.y],
+      [box.x + box.width + 8, middle.y],
+      [middle.x, box.y - 8],
+      [middle.x, box.y + box.height + 8],
+    ]) {
+      const chooser = page.waitForEvent("filechooser", { timeout: 5000 });
+      await page.touchscreen.tap(x, y);
+      await chooser;
+      await dialog.locator('input[type="file"]').dispatchEvent("cancel", { bubbles: true });
+      await page.clock.runFor(1000);
+    }
+    const chooser = page.waitForEvent("filechooser");
+    await attach.tap();
+    await (await chooser).setFiles(SCREENSHOT);
+    await expect(attach).toHaveText("Change screenshot");
+    await expectNeighborsKeepTheirTaps([
+      dialog.locator("#contactMessage"),
+      dialog.getByRole("button", { name: "Remove" }),
+    ]);
+  });
+
   test("with Diagnostics on, a tap on Add screenshot logs its touch, its clicks, and that a file came back, never the file's name", async ({
     page,
   }) => {
