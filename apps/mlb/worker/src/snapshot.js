@@ -48,7 +48,7 @@ export function createSnapshotLoader({
   /**
    * @param {string} path
    * @param {string} name
-   * @param {{ requireFresh: boolean, onFailure: (reason: string) => void }} options
+   * @param {{ readAgain: boolean, onFailure: (reason: string) => void }} options
    */
   function fetchSnapshotJson(path, name, options) {
     if (name === "schedule") return fetchSchedule(path);
@@ -60,7 +60,9 @@ export function createSnapshotLoader({
 
   /**
    * The snapshot, with why each feed that failed did, by its name, for the store's health. A
-   * verifying read reads the postseason again rather than trust a kept answer.
+   * verifying read reads the postseason again, and its kept answer stands in only when MLB
+   * doesn't answer, since the days around today, read every time, hold each game a reminder can
+   * be due for, and their word on a game replaces the postseason's.
    * @param {number} season
    * @param {number} requestedAt
    * @param {boolean} [verify]
@@ -74,8 +76,8 @@ export function createSnapshotLoader({
       const onFailure = (reason) => {
         failures[name] = reason;
       };
-      const requireFresh = verify && name === "postseason";
-      return fetchSnapshotJson(path, name, { requireFresh, onFailure }).catch((error) => {
+      const readAgain = verify && name === "postseason";
+      return fetchSnapshotJson(path, name, { readAgain, onFailure }).catch((error) => {
         onFailure(describeError(error));
         throw error;
       });

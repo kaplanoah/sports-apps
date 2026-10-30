@@ -1,8 +1,9 @@
 import { readFileSync } from "node:fs";
-import { buildSnapshot } from "../page/js/snapshot.js";
+import { buildSnapshot, REQUESTS } from "../page/js/snapshot.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { BACKGROUND_JOBS } from "../page/js/background-jobs.js";
+import { createSnapshotLoader } from "../worker/src/snapshot.js";
 import { SeasonStore } from "../worker/src/store.js";
 import { createDurableObjectContext } from "../../../tests/durable-object-context.js";
 
@@ -84,4 +85,38 @@ test("the real league store keeps what its last update saved when a reminder ver
     saved,
   );
   assert.equal(stored.get("push:reminder-games").verifiedAt, null);
+});
+
+test("the real league store verifies reminders from the kept schedule when the schedule fails and the scoreboard lists today's games", async () => {
+  const fixture = JSON.parse(
+    readFileSync(new URL("./fixtures/2026-09-30-afternoon.json", import.meta.url), "utf8"),
+  );
+  const now = Date.parse(fixture.now);
+  const feeds = {
+    [REQUESTS.scoreboard]: "scoreboard",
+    [REQUESTS.schedule]: "schedule",
+    [REQUESTS.bracket(fixture.season)]: "bracket",
+    [REQUESTS.standings(fixture.season)]: "standings",
+  };
+  let isScheduleDown = false;
+  /** @param {string} url */
+  const fetchImpl = async (url) => {
+    const feed = feeds[url];
+    if (!feed) return new Response("", { status: 404 });
+    if (feed === "schedule" && isScheduleDown) return new Response("<!DOCTYPE html><html></html>");
+    return new Response(JSON.stringify(fixture.responses[feed]));
+  };
+  const { ctx, stored } = createDurableObjectContext();
+  const { loadSnapshot } = createSnapshotLoader({ fetchImpl, now: () => now });
+  const store = new SeasonStore(
+    ctx,
+    {},
+    { now: () => now, createLoadSnapshot: () => loadSnapshot },
+  );
+  await store.updateSeason();
+  isScheduleDown = true;
+  await store.verifyReminderGames();
+  const facts = stored.get("push:reminder-games");
+  assert.equal(facts.verifiedAt, now);
+  assert.ok(facts.games.some((game) => game.id === "1042600132"));
 });

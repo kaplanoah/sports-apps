@@ -481,6 +481,27 @@ export function listGamesLeftLive(schedule, scoreboard, season) {
   );
 }
 
+/**
+ * Whether the scoreboard, which answered, lists every game the schedule has on the league's day of
+ * `now`. Its word on each game it lists replaces the schedule's, so a schedule kept from an earlier
+ * read then holds nothing older than the scoreboard for today's games.
+ * @param {any} schedule
+ * @param {any} scoreboard
+ * @param {number} season
+ * @param {number} now
+ */
+export function isTodayOnScoreboard(schedule, scoreboard, season, now) {
+  if (!scoreboard) return false;
+  const listed = new Set(
+    listSeasonGames(scoreboard.scoreboard?.games ?? [], season).map((game) => String(game.gameId)),
+  );
+  const today = readEasternDay(now).date;
+  return listScheduleGames(schedule, season)
+    .map(normalizeGame)
+    .filter((game) => readLeagueDate(game.start) === today)
+    .every((game) => listed.has(game.id));
+}
+
 // ESPN stands in for every game while the scoreboard doesn't answer, and otherwise only for those
 // the schedule has left under way.
 function listGamesForBackup(games, responses, season) {

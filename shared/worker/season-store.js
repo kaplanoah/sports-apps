@@ -421,9 +421,9 @@ export function createSeasonStore(league) {
         await this.ctx.storage.setAlarm(Math.max(this.now(), dueAt));
     }
 
-    // A verifying read takes no kept answer for the feeds it verifies, so one that can't verify them
-    // knows less than the last update did, and leaves what that update saved, and its status, as
-    // they are.
+    // A verifying read reads the feeds it verifies again, and takes a kept answer for one only where
+    // feeds read now confirm it, so one that can't verify the games knows less than the last update
+    // did, and leaves what that update saved, and its status, as they are.
     async verifyReminderGames() {
       if (!league.listReminderGames) return;
       const snapshot = await this.loadCurrentSnapshot({ verify: true }).catch((error) => {

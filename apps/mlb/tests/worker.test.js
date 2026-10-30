@@ -14,6 +14,10 @@ const SEASON_GAMES = JSON.parse(
   readFileSync(path.join(import.meta.dirname, "fixtures/2026-10-09-season.json"), "utf8"),
 ).responses.seasonGames;
 const RESPONSES = { ...EVENING.responses, seasonGames: SEASON_GAMES };
+// The first evening of the playoffs, with games to remind of.
+const PLAYOFFS = JSON.parse(
+  readFileSync(path.join(import.meta.dirname, "fixtures/2026-10-07-evening.json"), "utf8"),
+);
 
 /** @param {string} url */
 function nameRequest(url) {
@@ -331,4 +335,26 @@ test("reminder verification refreshes game facts without rereading every league 
   assert.equal(mlb.countCalls("postseason"), 2);
   assert.equal(mlb.countCalls("standings"), 1);
   assert.equal(mlb.countCalls("seasonGames"), 1);
+});
+
+test("a reminder verification takes the postseason's kept answer when it fails, since the days around today hold each game", async () => {
+  let isPostseasonDown = false;
+  const fetchImpl = async (/** @type {string} */ url) => {
+    const kind = nameRequest(url);
+    const answer = PLAYOFFS.responses[kind];
+    if (!answer || (isPostseasonDown && kind === "postseason"))
+      return new Response("", { status: 503 });
+    return new Response(JSON.stringify(answer));
+  };
+  const now = Date.parse(PLAYOFFS.now);
+  const loader = createSnapshotLoader({ fetchImpl, now: () => now });
+  const answered = await loader.loadSnapshot(2026, { verify: true });
+  isPostseasonDown = true;
+  const verified = await loader.loadSnapshot(2026, { verify: true });
+  assert.match(verified.failures.postseason, /answered 503/);
+  assert.ok(MLBSnapshot.listReminderGames(answered)?.length);
+  assert.deepEqual(
+    MLBSnapshot.listReminderGames(verified),
+    MLBSnapshot.listReminderGames(answered),
+  );
 });

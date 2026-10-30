@@ -1,7 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { ESPN_DAY_REQUEST, NETWORKS_REQUEST, REQUESTS } from "../page/js/snapshot.js";
+import {
+  ESPN_DAY_REQUEST,
+  listReminderGames,
+  NETWORKS_REQUEST,
+  REQUESTS,
+} from "../page/js/snapshot.js";
 import { findTeamCodeByEspnId, TEAMS } from "../page/js/teams.js";
 import {
   createEspnGameReader,
@@ -1036,19 +1041,41 @@ test("reminder verification refreshes schedule, scoreboard and bracket without r
   assert.equal(league.countReads("standings"), 1);
 });
 
-test("failed reminder verification keeps source failure reasons and rejects cached schedule and bracket", async () => {
+test("a reminder verification takes the kept schedule and bracket when they fail, once the scoreboard lists today's games", async () => {
   /** @type {Record<string, "page" | "error">} */
   const refuse = {};
   const league = createLeague({ refuse });
   const loader = createSnapshotLoader({ fetchImpl: league.fetchImpl, now: () => NOW });
   await loader.loadSnapshot(2026);
-  refuse.schedule = "error";
+  refuse.schedule = "page";
   refuse.bracket = "error";
   const verified = await loader.loadSnapshot(2026, { verify: true });
-  for (const feed of ["schedule", "bracket"]) {
-    assert.ok(verified.missing.includes(feed));
-    assert.match(verified.failures[feed], /The WNBA answered 503/);
-  }
+  assert.equal(league.countReads("schedule"), 2);
+  assert.equal(league.countReads("bracket"), 2);
+  assert.deepEqual(verified.missing, []);
+  assert.ok(verified.failures.schedule);
+  assert.match(verified.failures.bracket, /The WNBA answered 503/);
+  const answering = createSnapshotLoader({ fetchImpl: createLeague().fetchImpl, now: () => NOW });
+  const expected = listReminderGames(await answering.loadSnapshot(2026, { verify: true }));
+  assert.ok(expected?.length);
+  assert.deepEqual(listReminderGames(verified), expected);
+});
+
+test("a reminder verification takes no kept schedule while the scoreboard leaves out one of today's games", async () => {
+  /** @type {Record<string, "page" | "error">} */
+  const refuse = {};
+  /** @type {Record<string, any>} */
+  const answers = {};
+  const league = createLeague({ refuse, answers });
+  const loader = createSnapshotLoader({ fetchImpl: league.fetchImpl, now: () => NOW });
+  await loader.loadSnapshot(2026);
+  refuse.schedule = "page";
+  const { scoreboard } = RESPONSES.scoreboard;
+  answers.scoreboard = { scoreboard: { ...scoreboard, games: scoreboard.games.slice(0, 1) } };
+  const verified = await loader.loadSnapshot(2026, { verify: true });
+  assert.ok(verified.missing.includes("schedule"));
+  assert.ok(verified.failures.schedule);
+  assert.equal(listReminderGames(verified), null);
 });
 
 test("reminder verification refreshes open network months while reusing finalized months", async () => {

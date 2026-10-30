@@ -169,7 +169,8 @@ export function createFeedKeeper({ feeds, now, storage = createMemoryStorage() }
      * @param {string} key the request, so that each season's answers are kept apart
      * @param {() => Promise<any>} load
      * @param {object} [options]
-     * @param {boolean} [options.requireFresh] read again and reject failed verification
+     * @param {boolean} [options.readAgain] read again however young the kept answer, which still
+     *   stands in when the read fails
      * @param {(data: any) => boolean} [options.isBehind] whether a kept answer is behind what
      *   another feed already says
      * @param {(reason: string) => void} [options.onFailure] told why the feed's last read failed
@@ -179,13 +180,13 @@ export function createFeedKeeper({ feeds, now, storage = createMemoryStorage() }
       name,
       key,
       load,
-      { isBehind = () => false, requireFresh = false, onFailure = () => {} } = {},
+      { isBehind = () => false, readAgain = false, onFailure = () => {} } = {},
     ) {
       const storageKey = await nameFeedKey(name, key);
       const what = `${name} ${key}`;
       const record = await readRecord(storageKey);
       const answer = record?.answer;
-      if (!requireFresh && !(await isDue(name, record, isBehind))) {
+      if (!readAgain && !(await isDue(name, record, isBehind))) {
         if (record?.reason !== undefined) onFailure(record.reason);
         if (answer) return answer.data;
         throw new Error(record.reason);
@@ -198,7 +199,7 @@ export function createFeedKeeper({ feeds, now, storage = createMemoryStorage() }
         const reason = describeError(error);
         await saveRecord(storageKey, { answer, failedAt: now(), reason }, what);
         onFailure(reason);
-        if (answer && !requireFresh) return answer.data;
+        if (answer) return answer.data;
         throw error;
       }
     },
