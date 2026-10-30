@@ -8,7 +8,7 @@ import { SeasonStore } from "../worker/src/store.js";
 import { createDurableObjectContext } from "../../../tests/durable-object-context.js";
 import { readAfternoonEspn } from "./espn-fixtures.js";
 
-test("every background job saves how its run went where the Diagnostics report reads it", async () => {
+test("live jobs report their runs and idle history leaves its Diagnostics status untouched", async () => {
   const { ctx, stored } = createDurableObjectContext();
   const now = Date.parse("2026-09-30T20:00:00Z");
   const store = new SeasonStore(
@@ -25,11 +25,16 @@ test("every background job saves how its run went where the Diagnostics report r
 
   await store.startDueJobs(now);
   await Promise.all(store.jobRuns.values());
-  store.startHistory(0);
+  store.startHistory(0, store.alarmGeneration);
   await store.historyRun;
 
   const saved = [...stored.keys()].filter((key) => key.endsWith("/status"));
-  assert.deepEqual(saved.sort(), BACKGROUND_JOBS.map((name) => `${name}/status`).sort());
+  assert.deepEqual(
+    saved.sort(),
+    BACKGROUND_JOBS.filter((name) => !name.endsWith("-history"))
+      .map((name) => `${name}/status`)
+      .sort(),
+  );
 });
 
 test("the real league store saves confirmed playoff reminder facts from its snapshot", async () => {

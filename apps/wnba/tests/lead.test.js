@@ -40,7 +40,7 @@ const ESPN_ANSWERS = {
  * @param {Record<string, string>} params
  * @param {(key: string) => Promise<any>} [readDoc]
  */
-const askForLead = (fetchImpl, params, readDoc) =>
+const askForLead = (fetchImpl, params, readDoc = async () => null) =>
   createLeadServer({ fetchImpl }).serveLead(
     new URL(`https://wnba.test/lead?${new URLSearchParams(params)}`),
     readDoc,

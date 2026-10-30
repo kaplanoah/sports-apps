@@ -107,6 +107,7 @@
     "tests/deploy-service.test.js",
     "tests/deploy.test.js",
     "tests/detail-boundary.test.js",
+    "tests/detail-reads.test.js",
     "tests/diagnostics.test.js",
     "tests/error-log.test.js",
     "tests/espn-adapter.test.js",

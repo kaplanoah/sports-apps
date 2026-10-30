@@ -163,7 +163,7 @@ async function askForPitcher(query, { docs, answers = listAnswers() } = {}) {
   const counter = createLeagueReadCounter();
   const response = await createPitcherServer({ fetchImpl, now: () => NOW }).servePitcher(
     new URL(`https://mlb-app.example/k3y/pitcher?${query}`),
-    docs ? readFromStore(docs) : undefined,
+    docs ? readFromStore(docs) : async () => null,
     counter.countLeagueRead,
   );
   return {
@@ -185,7 +185,7 @@ async function askForRotation(query, { docs } = {}) {
   const counter = createLeagueReadCounter();
   const response = await createRotationServer({ fetchImpl, now: () => NOW }).serveRotation(
     new URL(`https://mlb-app.example/k3y/rotation?${query}`),
-    docs ? readFromStore(docs) : undefined,
+    docs ? readFromStore(docs) : async () => null,
     counter.countLeagueRead,
   );
   return {

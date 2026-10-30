@@ -139,7 +139,7 @@ const listGameRequests = (id) => {
 async function askWorker(route, params, docs) {
   const league = createLeagueFetch((url) => listAnswers()[url]);
   const url = new URL(`https://wnba.test/${route}?${new URLSearchParams(params)}`);
-  const readDoc = docs && ((/** @type {string} */ key) => docs.read(key));
+  const readDoc = docs ? (/** @type {string} */ key) => docs.read(key) : async () => null;
   const response =
     route === "box-score"
       ? await createBoxScoreServer({ fetchImpl: league.fetchImpl }).serveBoxScore(url, readDoc)
