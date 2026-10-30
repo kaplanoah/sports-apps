@@ -106,6 +106,23 @@ Reuse verified historical, cross-app and malformed/stale-evidence checks. Do not
 
 Timeouts and one-run scope bound work, not dollars. The native client does not expose a strict per-response output cap, request reservations are conservative estimates, and interrupted turns can lack numeric usage. Before paid acceptance, agree a spending ceiling using verified current pricing and a provider-enforced allowance where available. Do not describe budget alerts, queue serialization or workflow timeouts as a hard monetary cap.
 
+### Recorded native acceptance evidence
+
+Two first-attempt acceptance runs used trusted source `dd2ae5b40b17fd7f77332bbb054ec67a5e44eaf8`, the pinned official action and CLI 0.164.0, and configured `gpt-6.1-sol` with high effort. Both original outcomes remain unchanged.
+
+| Run | Actual result | Independently verified evidence |
+| --- | --- | --- |
+| [40993443451](https://github.com/kaplanoah/sports-apps/actions/runs/40993443451), interruption | Failed as deliberately requested; native step stopped at exactly 300 seconds; whole Actions run 469 seconds | Trusted probe succeeded before an unfinished native wait; GitHub logged the timeout; encrypted trace replay matched the exact source and request |
+| [40994401100](https://github.com/kaplanoah/sports-apps/actions/runs/40994401100), empty integration | Passed; native step 31 seconds; whole Actions run 77 seconds | Two real Git diffs and two explicitly synthetic empty portion seeds; one native integration; 15 successful native commands; exact binding, completion and supplied-content validation |
+
+All ten original ZIPs matched fresh GitHub digests and run/source metadata. Both encrypted archives were privately decrypted with the retained evidence key. Complete preparation and model logs were separately scanned without proof-marker, raw-native-event or bearer-value leakage. Both quota records finalized with namespaces restored, private runtime removed and authenticated cooldown retained. The distinct integration run did not retry or change the interruption outcome.
+
+The interrupted native turn has no completed-turn usage; its usage remains unavailable, never zero. Its gateway separately observed 250,546 tokens across 21 admitted requests. Those request totals are not a replacement for missing native turn counters.
+
+The completed integration reported 20,788 uncached input, 57,260 cached input and 1,180 output tokens. Its 20,776 cache-write tokens are already within uncached input, and its 226 reasoning-output tokens are already within output. The observed CLI was `codex-cli 0.164.0`. No counter is added twice or presented as an invoice.
+
+These establish intentional interruption and a distinct empty-integration recovery, not review-quality equivalence or positive protected publishing. A real Codex-selected PR must still pass the protected App publisher, tested-tree/provider reconciliation and ordinary CI, thread and phone requirements under explicitly controlled activation.
+
 ### Hosted runner proof
 
 After the owner saves the API secret, dispatch `codex-runner-proof.yml` once on main with the public `evidence-certificate` prepared by `TRUSTED_REVIEW_EVALUATION.md`. Only the owner can dispatch it, with live Codex still disabled. The disposable model host receives a hostile fixture and trusted configuration; current source, historical fixes and evaluation rubrics arrive only after the model exits.
