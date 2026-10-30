@@ -1,5 +1,7 @@
 import {
   PositiveId,
+  BasketballPlayerName,
+  BasketballRosterFacts,
   BasketballRoster,
   validateSportsData,
 } from "../../../../../shared/worker/sports-schema.js";
@@ -30,13 +32,33 @@ export function validateRosterFeed(answer, table, { season, now }) {
   const rows = readRequiredTable(answer, table);
   if (table === "CommonTeamRoster") {
     const context = { outByName: new Map(), ageDay: chooseAgeDay(season, now) };
-    const fields = BasketballRoster.shape.players.element.omit({ firstName: true, lastName: true });
     for (const row of rows) {
       validateSportsData(PositiveId, row.PLAYER_ID);
-      validateSportsData(fields, describePlayer(row, new Map(), context));
+      validateSportsData(BasketballRosterFacts, describePlayer(row, new Map(), context));
     }
   } else {
     for (const row of rows) validateSportsData(PositiveId, row.PERSON_ID);
+  }
+  return answer;
+}
+
+/** @param {any} answer @param {any[]} leagueRosters */
+export function validatePlayerList(answer, leagueRosters) {
+  const ids = new Set(
+    leagueRosters
+      .filter(Boolean)
+      .flatMap((roster) =>
+        readRequiredTable(roster, "CommonTeamRoster").map((row) => row.PLAYER_ID),
+      ),
+  );
+  for (const row of readRequiredTable(answer, "PlayerIndex")) {
+    validateSportsData(PositiveId, row.PERSON_ID);
+    if (!ids.has(row.PERSON_ID)) continue;
+    validateSportsData(BasketballPlayerName, {
+      firstName: row.PLAYER_FIRST_NAME,
+      lastName: row.PLAYER_LAST_NAME,
+    });
+    validateSportsData(BasketballRosterFacts.shape.debut, readDebut(row.FROM_YEAR));
   }
   return answer;
 }

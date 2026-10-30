@@ -91,14 +91,8 @@ export function readTable(answer, name) {
   );
 }
 
-/**
- * @param {any} answer
- * @param {string} name
- */
-export function readRequiredTable(answer, name) {
-  const table = Array.isArray(answer?.resultSets)
-    ? answer.resultSets.find((/** @type {any} */ entry) => entry?.name === name)
-    : null;
+/** @param {any} table */
+function validateTable(table) {
   if (
     !Array.isArray(table?.headers) ||
     !Array.isArray(table?.rowSet) ||
@@ -109,6 +103,15 @@ export function readRequiredTable(answer, name) {
     )
   )
     throw new Error("Invalid sports table");
+}
+
+/** @param {any} answer @param {string} name */
+export function readRequiredTable(answer, name) {
+  validateTable(
+    Array.isArray(answer?.resultSets)
+      ? answer.resultSets.find((entry) => entry?.name === name)
+      : null,
+  );
   return readTable(answer, name);
 }
 
@@ -119,8 +122,10 @@ export function readRequiredTable(answer, name) {
  * @param {string[]} columns
  */
 export function trimColumns(answer, columns) {
+  if (!Array.isArray(answer?.resultSets)) throw new Error("Invalid sports table");
   return {
     resultSets: answer.resultSets.map((/** @type {any} */ table) => {
+      validateTable(table);
       const kept = table.headers.flatMap(
         (/** @type {string} */ header, /** @type {number} */ index) =>
           columns.includes(header) ? [index] : [],

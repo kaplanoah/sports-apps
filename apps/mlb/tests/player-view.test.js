@@ -12,6 +12,8 @@ import {
 import { EASTERN, useTimeZone } from "../../../tests/time-zone.js";
 import {
   indexSeasonStats,
+  trimHitting,
+  trimPitching,
   listRosterRequest,
   listSeasonStatsRequest,
 } from "../worker/src/rosters.js";
@@ -25,7 +27,10 @@ const { season, answers } = FIXTURE;
 useTimeZone(EASTERN);
 /** @param {"hitting" | "pitching"} group @param {object} [options] */
 const index = (group, options) =>
-  indexSeasonStats(answers[listSeasonStatsRequest(season, group, options)]);
+  indexSeasonStats(
+    answers[listSeasonStatsRequest(season, group, options)],
+    group === "hitting" ? trimHitting : trimPitching,
+  );
 const NUMBERS = {
   hitting: index("hitting"),
   pitching: index("pitching"),

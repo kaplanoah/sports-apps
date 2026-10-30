@@ -1,6 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { catchFailure, noteFailure, runWithStatus } from "../shared/worker/job-status.js";
+import {
+  catchFailure,
+  noteFailure,
+  readJobFeed,
+  runWithStatus,
+} from "../shared/worker/job-status.js";
+import { createFeedKeeper } from "../shared/worker/feed-keeper.js";
 import { createDocs, createJobStorage } from "./job-context.js";
 
 /**
@@ -82,4 +88,34 @@ test("a run saves its status with what the job adds, notes a failure it doesn't 
   assert.equal(after.ranAt, "2026-10-06T12:01:00.000Z");
   assert.equal(after.requests, 0);
   assert.deepEqual(after.lastFailure, failed.lastFailure);
+});
+
+test("job feed reads name cold and retained failures once even through outer job catches", async (context) => {
+  for (const warm of [false, true]) {
+    const failures = [];
+    let time = 0;
+    let failed = !warm;
+    const keeper = createFeedKeeper({
+      feeds: { people: { maxAgeMs: 1, changesWithGames: false } },
+      now: () => time,
+    });
+    const read = () =>
+      readJobFeed({ failures }, keeper, {
+        name: "people",
+        key: "/people",
+        label: "2026's player facts",
+        load: async () => {
+          if (failed) throw new Error("unavailable");
+          return { people: [] };
+        },
+      });
+    if (warm) await read();
+    failed = true;
+    time += 2;
+    await listLogged(context, () => catchFailure(failures, "Keeping players", read));
+    assert.deepEqual(failures, ["Reading 2026's player facts failed: unavailable"]);
+    failures.length = 0;
+    await listLogged(context, () => catchFailure(failures, "Keeping players", read));
+    assert.deepEqual(failures, ["Reading 2026's player facts failed: unavailable"]);
+  }
 });

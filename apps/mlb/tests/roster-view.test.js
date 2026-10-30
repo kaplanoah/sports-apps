@@ -5,6 +5,8 @@ import { renderRoster } from "../page/js/roster-view.js";
 import {
   describeRoster,
   indexSeasonStats,
+  trimHitting,
+  trimPitching,
   listRosterRequest,
   listSeasonStatsRequest,
 } from "../worker/src/rosters.js";
@@ -25,8 +27,8 @@ const describeClub = (club, mlbTeamId) =>
     club,
     season,
     roster: answers[listRosterRequest(mlbTeamId, season)],
-    hitting: indexSeasonStats(answers[listSeasonStatsRequest(season, "hitting")]),
-    pitching: indexSeasonStats(answers[listSeasonStatsRequest(season, "pitching")]),
+    hitting: indexSeasonStats(answers[listSeasonStatsRequest(season, "hitting")], trimHitting),
+    pitching: indexSeasonStats(answers[listSeasonStatsRequest(season, "pitching")], trimPitching),
   });
 
 /**

@@ -178,11 +178,15 @@ export function readPeople(answer, ids, onFailure) {
   const seen = new Set();
   for (const person of answer.people) {
     const id = BaseballPitcherDetails.shape.id.safeParse(person?.id).success ? person.id : null;
+    if (id != null && !ids.includes(id)) {
+      onFailure?.(new Error("Invalid sports identity"), null);
+      continue;
+    }
     try {
       validateSportsData(BaseballPitcherDetails.shape.id, person?.id);
       if (seen.has(person.id)) throw new Error("Invalid sports identity");
       seen.add(person.id);
-      if (ids.includes(person.id)) people.set(person.id, person);
+      people.set(person.id, person);
     } catch (error) {
       people.delete(id);
       if (!onFailure) throw error;
@@ -190,6 +194,25 @@ export function readPeople(answer, ids, onFailure) {
     }
   }
   return [...people.values()];
+}
+
+/**
+ * @param {any} answer
+ * @param {number[]} ids
+ * @param {(error: unknown) => void} onFailure
+ */
+export function readPeopleBatch(answer, ids, onFailure) {
+  const failed = new Set();
+  let hasUnknownFailure = false;
+  const people = new Map(
+    readPeople(answer, ids, (error, id) => {
+      if (id == null) hasUnknownFailure = true;
+      else failed.add(id);
+      onFailure(error);
+    }).map((person) => [person.id, person]),
+  );
+  if (hasUnknownFailure) for (const id of ids) if (!people.has(id)) failed.add(id);
+  return { people, failed };
 }
 
 /**
@@ -424,7 +447,7 @@ export function createPitcherReader({
    * @param {number} season
    */
   async function fetchPitcher(id, season) {
-    const [people, gameLogs] = await settleReads([
+    const [people, gameLogs] = await Promise.all([
       fetchMlbJson(fetchImpl, listPeopleRequest(season, [id]), PITCHER_CACHE_SECONDS),
       fetchMlbJson(fetchImpl, listGameLogRequest(season, [id]), PITCHER_CACHE_SECONDS),
     ]);

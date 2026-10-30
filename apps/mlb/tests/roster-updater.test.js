@@ -20,6 +20,8 @@ import {
 import {
   describeRoster,
   indexSeasonStats,
+  trimHitting,
+  trimPitching,
   listRosterRequest,
   listSeasonStatsRequest,
   nameRosterKey,
@@ -206,8 +208,8 @@ test("each club's roster has its active players and its injured list, each with 
     club: "LAD",
     season: SEASON,
     roster: answers[listRosterRequest(RECORDED.LAD, SEASON)],
-    hitting: indexSeasonStats(answers[HITTING]),
-    pitching: indexSeasonStats(answers[PITCHING]),
+    hitting: indexSeasonStats(answers[HITTING], trimHitting),
+    pitching: indexSeasonStats(answers[PITCHING], trimPitching),
   });
 
   assert.equal(roster.players.filter((player) => !player.injury).length, 26);
@@ -450,7 +452,7 @@ test("each run saves its status: when it ran, how many requests it made, and wha
   const status = run.docs.stored.get(STATUS_KEY);
   assert.equal(status.ranAt, new Date(NOW).toISOString());
   assert.ok(status.requests >= run.takeRequests().length);
-  assert.match(status.lastFailure.message, /^Reading every player's numbers failed: /);
+  assert.match(status.lastFailure.message, /^Reading 2026's regular-season hitting failed: /);
 });
 
 test("a run that fails as a whole saves its status, naming the season's rosters", async (t) => {
@@ -855,7 +857,7 @@ test("actual roster, player and hitter writers reject malformed cold reads, reta
 });
 
 test("a malformed last-game row or identity preserves its log without blocking other players", async () => {
-  for (const target of ["counts", "identity", "envelope"]) {
+  for (const target of ["counts", "identity", "unexpected", "envelope"]) {
     const run = createRun();
     await fillRosters(run);
     const id = 694197;
@@ -866,6 +868,7 @@ test("a malformed last-game row or identity preserves its log without blocking o
     const line = run.gameLogs[id].stats[0].splits.at(-1).stat;
     if (target === "counts") line.hits = -1;
     if (target === "identity") run.gameLogs[id].id = "bad";
+    if (target === "unexpected") run.gameLogs[id].id = 99999999;
     if (target === "envelope") run.gameLogs[id].stats = {};
     const reads = await run.storage.get(nameGameLogReadsKey(SEASON));
     delete reads[id];
@@ -916,4 +919,40 @@ test("malformed statistic containers are rejected without exposing vendor values
   assert.match(message, /Invalid sports statistics/);
   assert.doesNotMatch(message, /private-vendor-value/);
   assert.equal(run.docs.stored.has(nameRosterKey("CLE")), false);
+});
+
+test("unused player facts cannot freeze rostered players and newly used bad cached facts retry", async () => {
+  const run = createRun();
+  const unused = { id: 99999999, currentAge: -1, weight: -1, mlbDebutDate: "bad" };
+  run.answers[PEOPLE].people.push(unused);
+  await fillRosters(run);
+  const id = 694197;
+  const key = namePlayerKey(SEASON, id);
+  const kept = structuredClone(run.docs.stored.get(key));
+  assert.ok(kept.facts);
+  const person = run.answers[PEOPLE].people.find((person) => person.id === id);
+  person.currentAge += 1;
+  run.wait(24 * 60 + 1);
+  await run.runJob();
+  assert.equal(run.docs.stored.get(key).facts.age, kept.facts.age + 1);
+  const roster = run.answers[nameClubRequest("CLE")];
+  roster.roster.push({
+    person: { id: unused.id, fullName: "New Player" },
+    jerseyNumber: "1",
+    position: { abbreviation: "P" },
+    status: { description: "Active" },
+  });
+  const rosterReads = await run.storage.get(`roster-reads:${SEASON}`);
+  rosterReads.readAt.CLE = 0;
+  await run.storage.put(`roster-reads:${SEASON}`, rosterReads);
+  run.wait(6);
+  await run.runJob();
+  assert.equal(run.takeRequests().filter((path) => path === PEOPLE).length, 1);
+  assert.equal(run.docs.stored.get(namePlayerKey(SEASON, unused.id)).facts, null);
+  unused.currentAge = 25;
+  unused.weight = 180;
+  unused.mlbDebutDate = "2026-01-01";
+  run.wait(6);
+  await run.runJob();
+  assert.equal(run.docs.stored.get(namePlayerKey(SEASON, unused.id)).facts.age, 25);
 });

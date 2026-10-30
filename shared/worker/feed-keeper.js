@@ -109,11 +109,19 @@ export function createFeedKeeper({ feeds, now, storage = createMemoryStorage() }
     }
   }
 
-  /** @param {string} name @param {string} key */
-  async function invalidateFeed(name, key) {
+  /** @param {string} name @param {string} key @param {unknown} error */
+  async function rejectFeed(name, key, error) {
     const storageKey = await nameFeedKey(name, key);
-    records.delete(storageKey);
-    await storage.delete(storageKey);
+    const record = await readRecord(storageKey);
+    await saveRecord(
+      storageKey,
+      {
+        failedAt:
+          record?.failedAt !== undefined && now() < findRetryAt(record) ? record.failedAt : now(),
+        reason: describeError(error),
+      },
+      `feed ${name}`,
+    );
   }
 
   /**
@@ -165,11 +173,11 @@ export function createFeedKeeper({ feeds, now, storage = createMemoryStorage() }
       const storageKey = await nameFeedKey(name, key);
       if (forgotten.has(storageKey)) return;
       forgotten.add(storageKey);
-      await invalidateFeed(name, key);
+      records.delete(storageKey);
+      await storage.delete(storageKey);
     },
 
-    // A later normalization failure can reveal an unusable answer after its transport check.
-    invalidateFeed,
+    rejectFeed,
 
     /**
      * The feed's kept answer while it's still good, or a new one from `load`.
@@ -185,6 +193,7 @@ export function createFeedKeeper({ feeds, now, storage = createMemoryStorage() }
      *   while no read since has answered, even when the kept answer stands in
      * @param {(at: number) => void} [options.onNextRead] told when a retry or settling answer needs
      *   an update before the ordinary poll; age alone waits for that poll
+     * @param {(data: any) => unknown} [options.validate] checks usable rows for the current consumers
      */
     async readFeed(
       name,
@@ -195,11 +204,20 @@ export function createFeedKeeper({ feeds, now, storage = createMemoryStorage() }
         readAgain = false,
         onFailure = () => {},
         onNextRead = () => {},
+        validate = () => {},
       } = {},
     ) {
       const storageKey = await nameFeedKey(name, key);
       const what = `${name} ${key}`;
-      const record = await readRecord(storageKey);
+      let record = await readRecord(storageKey);
+      if (record?.answer) {
+        try {
+          await validate(record.answer.data);
+        } catch (error) {
+          await rejectFeed(name, key, error);
+          record = await readRecord(storageKey);
+        }
+      }
       const answer = record?.answer;
       const times = await findReadTimes(name, record, isBehind);
       if (!readAgain && now() < times.dueAt) {
@@ -210,6 +228,7 @@ export function createFeedKeeper({ feeds, now, storage = createMemoryStorage() }
       }
       try {
         const data = await load();
+        await validate(data);
         const updated = { answer: { at: now(), data } };
         await saveRecord(storageKey, updated, what);
         onNextRead((await findReadTimes(name, updated, isBehind)).nextReadAt);

@@ -6,7 +6,9 @@ import {
   describeSeasonPlayers,
   describeRanks,
   validatePlayerFeed,
+  describeRegularSeason,
 } from "../worker/src/adapters/player.js";
+import { readPerGame } from "../worker/src/season-averages.js";
 import { joinGameLogs } from "./player-fixtures.js";
 
 const PLAYERS = JSON.parse(
@@ -112,7 +114,28 @@ test("WNBA records allow mononyms and null optional columns without checking unu
   corruptColumn(answers.totals, "PLAYER_NAME", "Mononym");
   for (const column of ["STL", "BLK", "FGM", "FGA", "FG3M", "FG3A", "FTM", "FTA"])
     corruptColumn(answers.totals, column, null);
-  assert.ok(describeSeasonPlayers(answers).players.size > 0);
+  const totalsTable = answers.totals.resultSets[0];
+  const playerId = totalsTable.rowSet[0][totalsTable.headers.indexOf("PLAYER_ID")];
+  for (const feed of [answers.regularGames, answers.playoffGames]) {
+    const table = feed.resultSets[0];
+    const idColumn = table.headers.indexOf("PLAYER_ID");
+    table.rowSet = table.rowSet.filter((row) => row[idColumn] !== playerId);
+  }
+  const seasonPlayers = describeSeasonPlayers(answers);
+  const numbers = seasonPlayers.players.get(String(playerId));
+  assert.deepEqual(numbers.name, { firstName: "Mononym", lastName: "" });
+  for (const key of ["STL", "BLK", "FGM", "FGA", "FG3M", "FG3A", "FTM", "FTA"])
+    assert.equal(numbers.totals[key], null);
+  const regular = describeRegularSeason(
+    numbers.totals,
+    describeRanks(answers.totals, answers.teamRegularGames),
+  );
+  assert.equal(readPerGame("STL")({ GP: numbers.totals.GP, STL: numbers.totals.STL }), null);
+  assert.equal(readPerGame("BLK")({ GP: numbers.totals.GP, BLK: numbers.totals.BLK }), null);
+  assert.equal(
+    regular.stats.some((stat) => stat.key === "steals" || stat.key === "blocks"),
+    false,
+  );
   const leagueRoster = structuredClone(ROSTERS.rosters["NYL:2026"]);
   const playerList = structuredClone(ROSTERS.playerList);
   const table = playerList.resultSets[0];
@@ -139,4 +162,16 @@ test("WNBA records allow mononyms and null optional columns without checking unu
   assert.equal(roster.players[0].firstName, "Mononym");
   assert.equal(roster.players[0].lastName, "");
   assert.equal(roster.players[0].debut, null);
+  used[table.headers.indexOf("PLAYER_FIRST_NAME")] = "";
+  used[table.headers.indexOf("PLAYER_LAST_NAME")] = "Mononym";
+  const reversed = describeRoster({
+    team: "NYL",
+    season: 2026,
+    leagueRoster,
+    playerList,
+    outPlayers: [],
+    now: NOW,
+  });
+  assert.equal(reversed.players[0].firstName, "");
+  assert.equal(reversed.players[0].lastName, "Mononym");
 });

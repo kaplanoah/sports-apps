@@ -371,3 +371,22 @@ test("a request that names no game is refused, and MLB not answering says so", a
   const answer = await askForBoxScore(RAYS_AT_YANKEES, { isDown: true });
   assert.match(await assertErrorAnswer(answer, 502, "upstream_error"), /^Couldn't read MLB: /);
 });
+
+test("lineup averages use the same supported no-value rates as roster and pitcher records", () => {
+  for (const rate of [".---", "-.--", "--", "*.**"]) {
+    const feed = structuredClone(GAMES.feeds[RAYS_AT_YANKEES]);
+    for (const side of [feed.liveData.boxscore.teams.away, feed.liveData.boxscore.teams.home])
+      for (const player of Object.values(side.players)) {
+        player.seasonStats ??= {};
+        player.seasonStats.batting ??= {};
+        player.seasonStats.batting.avg = rate;
+      }
+    const boxScore = describeBoxScore(RAYS_AT_YANKEES, feed);
+    assert.ok(boxScore.away.batters.length);
+    assert.ok(
+      [...boxScore.away.batters, ...boxScore.home.batters].every(
+        (batter) => batter.average === null,
+      ),
+    );
+  }
+});

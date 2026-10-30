@@ -11,6 +11,8 @@ import {
 } from "../worker/src/players.js";
 import {
   indexSeasonStats,
+  trimHitting,
+  trimPitching,
   listRosterRequest,
   listSeasonStatsRequest,
 } from "../worker/src/rosters.js";
@@ -22,13 +24,15 @@ const FIXTURE = JSON.parse(
 );
 const { season, answers } = FIXTURE;
 const NUMBERS = {
-  hitting: indexSeasonStats(answers[listSeasonStatsRequest(season, "hitting")]),
-  pitching: indexSeasonStats(answers[listSeasonStatsRequest(season, "pitching")]),
+  hitting: indexSeasonStats(answers[listSeasonStatsRequest(season, "hitting")], trimHitting),
+  pitching: indexSeasonStats(answers[listSeasonStatsRequest(season, "pitching")], trimPitching),
   postseasonHitting: indexSeasonStats(
     answers[listSeasonStatsRequest(season, "hitting", { gameType: "P" })],
+    trimHitting,
   ),
   postseasonPitching: indexSeasonStats(
     answers[listSeasonStatsRequest(season, "pitching", { gameType: "P" })],
+    trimPitching,
   ),
 };
 const PEOPLE = indexPeople(answers[listPeopleRequest(season)]);

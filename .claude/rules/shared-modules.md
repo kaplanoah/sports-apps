@@ -248,10 +248,10 @@ Pages link these before their own stylesheet, and theme them with the tokens the
 - `health.js`: the Worker's health, for an uptime monitor, what each service it binds answers, and which league feeds are failing
 - `services.js`: the services an app may bind, and each one's binding name
 - `season-store.js`: the store's Durable Object, which each app's store hands its league
-- `background-job.js`: what a league's background jobs share
-- `job-status.js`: what each job's status says of its last run
+- `background-job.js`: per-store jobs, saved documents, and past-season retry attempts
+- `job-status.js`: run status and named feed-failure reporting
 - `upstream.js`: reading a league's feeds and reusing a recent load
-- `feed-keeper.js`: reading slower feeds again only when they may have changed
+- `feed-keeper.js`: slower feed retention, validation, and retry timing
 - `feed-failures.js`: each update's failures and read deadlines, and which feeds have been failing, since when, and why
 - `timeout.js`: giving up on a call that doesn't answer in time
 - `highlights-job.js`: keeping each final's highlights

@@ -1,4 +1,5 @@
 import test from "node:test";
+import { createDeferred } from "../../../tests/deferred.js";
 import assert from "node:assert/strict";
 import { createPitcherServer } from "../worker/src/pitchers.js";
 import {
@@ -298,4 +299,26 @@ test("the speeds of the qualified starters come in batches of 30", async () => {
     batches.sort((first, second) => second - first),
     [30, 30, 5, 1],
   );
+});
+
+test("historical people batches settle their pending siblings before rejecting", async () => {
+  const { fetchPeople } = await import("../worker/src/adapters/pitchers.js");
+  const pending = createDeferred();
+  const error = new Error("unavailable");
+  let finished = false;
+  const read = fetchPeople(
+    (path) => (path === "1" ? Promise.reject(error) : pending.promise),
+    (ids) => String(ids[0]),
+    Array.from({ length: 31 }, (_, index) => index + 1),
+  ).finally(() => {
+    finished = true;
+  });
+  const rejected = assert.rejects(read, (failure) => failure === error);
+  await new Promise((resolve) => setImmediate(resolve));
+  try {
+    assert.equal(finished, false);
+  } finally {
+    pending.resolve({ people: [] });
+  }
+  await rejected;
 });

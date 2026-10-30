@@ -1,4 +1,5 @@
 import test from "node:test";
+import { createDeferred } from "../../../tests/deferred.js";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { isStillPlaying } from "../page/js/series.js";
@@ -25,7 +26,6 @@ import {
   nameRosterKey,
 } from "../worker/src/adapters/roster.js";
 import { nameFeedKey, createFeedKeeper } from "../../../shared/worker/feed-keeper.js";
-import { PAST_RETRY_MS } from "../../../shared/worker/background-job.js";
 import { createDocs, createJobStorage } from "../../../tests/job-context.js";
 import { findTeamLeaders } from "../page/js/team-view.js";
 
@@ -43,6 +43,7 @@ const INJURIES = JSON.parse(
 );
 const NOW = Date.parse(ROSTERS.recordedAt);
 const MINUTE_MS = 60 * 1000;
+const HISTORY_RECOVERY_MS = 2 * 60 * MINUTE_MS;
 const STEWART = "1627668";
 const SABALLY = "1630149";
 const FIEBICH = "1630142";
@@ -685,7 +686,7 @@ test("the status keeps a run's failure, with when it ran, until another run fail
 
   const failed = docs.stored.get(STATUS_KEY).lastFailure;
   assert.equal(failed.at, new Date(NOW).toISOString());
-  assert.match(failed.message, /^Reading 2026's totals failed: /);
+  assert.match(failed.message, /^Reading 2026's regular-season totals failed: /);
 
   answers[nameTotalsRequest(2026)] = withSeasonColumns(2026, totals);
   await endGames(2);
@@ -928,7 +929,7 @@ test("historical malformed roster facts and opponent scores recover with the sam
       /Invalid sports data/,
     );
     row[column] = original;
-    time += PAST_RETRY_MS + 1;
+    time += HISTORY_RECOVERY_MS + 1;
     await update();
     assert.ok(await storage.get("filled:2025"), corrupted);
     assert.ok(docs.stored.get(nameRosterKey(2025, "NYL")), corrupted);
@@ -962,12 +963,12 @@ test("a malformed player list preserves a complete kept roster when its raw cach
   await run.runJob();
   assert.deepEqual(run.docs.stored.get(key), kept);
   assert.equal(await run.storage.get("filled:2025"), undefined);
-  run.wait(PAST_RETRY_MS / MINUTE_MS + 1);
+  run.wait(HISTORY_RECOVERY_MS / MINUTE_MS + 1);
   await run.runJob();
   assert.deepEqual(run.docs.stored.get(key), kept);
   assert.equal(await run.storage.get("filled:2025"), undefined);
   listed[column] = original;
-  run.wait(PAST_RETRY_MS / MINUTE_MS + 1);
+  run.wait(HISTORY_RECOVERY_MS / MINUTE_MS + 1);
   await run.runJob();
   assert.deepEqual(run.docs.stored.get(key), kept);
   assert.ok(await run.storage.get("filled:2025"));
@@ -990,10 +991,17 @@ test("malformed player-list identities preserve roster facts and recover in the 
     assert.deepEqual(run.docs.stored.get(key), kept, String(value));
     assert.match(run.docs.stored.get(STATUS_KEY).lastFailure.message, /Invalid sports data/);
     row[column] = original;
+    row[table.headers.indexOf("COLLEGE")] = "Recovery College";
     run.wait(6);
     await run.runJob();
-    assert.deepEqual(run.docs.stored.get(key), kept);
-    assert.ok(run.league.requests.filter((url) => url === namePlayerListRequest(2026)).length >= 3);
+    assert.equal(
+      run.docs.stored.get(key).players.find((player) => player.id === STEWART).college,
+      "Recovery College",
+    );
+    assert.equal(
+      run.league.requests.filter((url) => url === namePlayerListRequest(2026)).length,
+      3,
+    );
   }
 });
 
@@ -1018,7 +1026,7 @@ test("a failed player-list transport preserves a canonical roster without a raw 
   assert.deepEqual(run.docs.stored.get(key), kept);
   assert.equal(await run.storage.get("filled:2025"), undefined);
   answers[path] = original;
-  run.wait(PAST_RETRY_MS / MINUTE_MS + 1);
+  run.wait(HISTORY_RECOVERY_MS / MINUTE_MS + 1);
   await run.runJob();
   assert.deepEqual(run.docs.stored.get(key), kept);
   assert.ok(await run.storage.get("filled:2025"));
@@ -1057,7 +1065,110 @@ test("a malformed newest WNBA season backs off across restarts while older histo
   assert.equal(attempts(), 1);
   assert.equal(await run.storage.get("allFilled"), undefined);
   totals.rowSet[0][column] = original;
-  await update(NOW + PAST_RETRY_MS + 1);
+  await update(NOW + HISTORY_RECOVERY_MS + 1);
   assert.ok(await run.storage.get("filled:2025"));
   assert.equal(await run.storage.get("past-retry:2025"), undefined);
+});
+
+test("a persistently malformed joined list retries within its backoff without discarding roster feeds", async () => {
+  const answers = structuredClone(listAnswers());
+  const run = createRun({ answers });
+  await run.runJob();
+  const key = nameRosterKey(2026, "NYL");
+  const kept = structuredClone(run.docs.stored.get(key));
+  const path = namePlayerListRequest(2026);
+  const table = answers[path].resultSets[0];
+  const row = table.rowSet.find(
+    (row) => row[table.headers.indexOf("PERSON_ID")] === Number(STEWART),
+  );
+  const column = table.headers.indexOf("FROM_YEAR");
+  const original = row[column];
+  const requests = (url) => run.league.requests.filter((request) => request === url).length;
+  row[column] = "2016.5";
+  run.wait(24 * 60 + 1);
+  await run.runJob();
+  const lists = requests(path);
+  const rosters = requests(nameLeagueRosterRequest("NYL", 2026));
+  for (let minute = 0; minute < 4; minute += 1) {
+    run.wait(1);
+    await run.runJob();
+  }
+  assert.equal(requests(path), lists);
+  assert.equal(requests(nameLeagueRosterRequest("NYL", 2026)), rosters);
+  run.wait(1);
+  await run.runJob();
+  assert.equal(requests(path), lists + 1);
+  assert.equal(requests(nameLeagueRosterRequest("NYL", 2026)), rosters);
+  assert.deepEqual(run.docs.stored.get(key), kept);
+  row[column] = original;
+  row[table.headers.indexOf("COLLEGE")] = "Recovered College";
+  run.wait(5);
+  await run.runJob();
+  assert.equal(requests(path), lists + 2);
+  assert.equal(requests(nameLeagueRosterRequest("NYL", 2026)), rosters);
+  assert.equal(
+    run.docs.stored.get(key).players.find((player) => player.id === STEWART).college,
+    "Recovered College",
+  );
+});
+
+test("raw shifted stat rows cannot become valid through trimming in the actual writer", async () => {
+  const answers = structuredClone(listAnswers());
+  const path = nameTotalsRequest(2026);
+  const table = answers[path].resultSets[0];
+  const column = table.headers.indexOf("PTS");
+  const original = [...table.rowSet[0]];
+  table.rowSet[0].splice(column, 1);
+  const run = createRun({ answers });
+  await run.runJob();
+  assert.equal(run.docs.stored.has(nameRanksKey(2026)), false);
+  assert.match(run.docs.stored.get(STATUS_KEY).lastFailure.message, /Invalid sports table/);
+  table.rowSet[0] = [...original];
+  run.wait(6);
+  await run.runJob();
+  const id = String(original[table.headers.indexOf("PLAYER_ID")]);
+  const key = nameNumbersKey(2026, id);
+  const kept = structuredClone(run.docs.stored.get(key));
+  assert.equal(kept.totals.PTS, original[column]);
+  table.rowSet[0].splice(column, 1);
+  run.wait(6 * 60 + 1);
+  await run.runJob();
+  assert.deepEqual(run.docs.stored.get(key), kept);
+  table.rowSet[0] = [...original];
+  table.rowSet[0][column] += 1;
+  run.wait(6);
+  await run.runJob();
+  assert.equal(run.docs.stored.get(key).totals.PTS, original[column] + 1);
+});
+
+test("cold roster and player-list requests stay concurrent while list validation waits for roster consumers", async () => {
+  const run = createRun();
+  const pending = createDeferred();
+  const started = createDeferred();
+  let lists = 0;
+  const fetchImpl = async (url) => {
+    if (url === namePlayerListRequest(2026)) lists += 1;
+    if (url === nameLeagueRosterRequest("NYL", 2026)) {
+      started.resolve();
+      await pending.promise;
+    }
+    return run.league.fetchImpl(url);
+  };
+  const update = createPlayerJob().updateStore({
+    docs: run.docs,
+    storage: run.storage,
+    env: {},
+    fetchImpl,
+    now: () => NOW,
+    createLoadSnapshot: () => async () => null,
+  });
+  await started.promise;
+  await new Promise((resolve) => setImmediate(resolve));
+  try {
+    assert.equal(lists, 1);
+  } finally {
+    pending.resolve();
+  }
+  await update;
+  assert.ok(run.docs.stored.get(nameRosterKey(2026, "NYL")));
 });

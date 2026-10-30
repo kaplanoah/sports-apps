@@ -264,8 +264,11 @@ export const BaseballClubStarts = z.object({
   pitchers: z.array(BaseballRotationPitcher),
 });
 
-const PlayerName = z.object({ firstName: Identifier, lastName: z.string() });
-const RosterPlayer = PlayerName.extend({
+const PlayerNameFields = { firstName: z.string(), lastName: z.string() };
+/** @param {{ firstName: string, lastName: string }} name */
+const hasPlayerName = ({ firstName, lastName }) => !!(firstName.trim() || lastName.trim());
+export const BasketballPlayerName = z.object(PlayerNameFields).refine(hasPlayerName);
+export const BasketballRosterFacts = z.object({
   id: PlayerId,
   number: z.string().nullable(),
   position: z.string().nullable(),
@@ -283,6 +286,7 @@ const RosterPlayer = PlayerName.extend({
     })
     .nullable(),
 });
+const RosterPlayer = BasketballRosterFacts.extend(PlayerNameFields).refine(hasPlayerName);
 export const BasketballRoster = z.object({
   team: Identifier,
   season: Count.positive(),
@@ -345,7 +349,7 @@ export const BasketballTeamGame = z.object({
   minutes: Nonnegative,
 });
 export const BasketballPlayerNumbers = z.object({
-  name: PlayerName.nullable(),
+  name: BasketballPlayerName.nullable(),
   totals: BasketballPlayerTotals.nullable(),
   lastGame: BasketballPlayerGame.nullable(),
   playoffPoints: z.record(Identifier, Count),

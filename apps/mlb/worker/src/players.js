@@ -128,15 +128,17 @@ export const describeLastGames = (person) =>
 /**
  * Each player's facts in MLB's list, by id.
  * @param {any} peopleResponse
+ * @param {Set<number>} [usedIds]
  * @returns {Map<number, any>}
  */
-export function indexPeople(peopleResponse) {
+export function indexPeople(peopleResponse, usedIds) {
   if (peopleResponse != null && !Array.isArray(peopleResponse.people))
     throw new Error("Invalid sports people");
   return new Map(
     (peopleResponse?.people ?? []).map((/** @type {any} */ person) => {
       validateSportsData(BaseballPlayer.shape.id, person.id);
-      validateSportsData(BaseballPlayer.shape.facts, describeFacts(person));
+      if (usedIds?.has(person.id))
+        validateSportsData(BaseballPlayer.shape.facts, describeFacts(person));
       return [person.id, person];
     }),
   );

@@ -1,5 +1,6 @@
 import { SCHEDULE_EDITION } from "../page/js/snapshot.js";
 import test from "node:test";
+import { createDeferred } from "../../../tests/deferred.js";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { createHighlightsServer } from "../worker/src/highlights.js";
@@ -616,4 +617,24 @@ test("actual live and historical highlight writers preserve usable media after m
     await update();
     assert.notDeepEqual(docs.stored.get(key), valid);
   }
+});
+
+test("a failed media read settles pending plays before the highlight writer can finish", async () => {
+  const { fetchGameMedia } = await import("../worker/src/adapters/highlights.js");
+  const pending = createDeferred();
+  let finished = false;
+  const read = fetchGameMedia(
+    async (url) => (url.includes("/content") ? new Response("", { status: 503 }) : pending.promise),
+    BREWERS_AT_PADRES,
+  ).finally(() => {
+    finished = true;
+  });
+  const rejected = assert.rejects(read, /MLB Stats API answered 503/);
+  await new Promise((resolve) => setImmediate(resolve));
+  try {
+    assert.equal(finished, false);
+  } finally {
+    pending.resolve(Response.json(RECORDED.plays[BREWERS_AT_PADRES]));
+  }
+  await rejected;
 });

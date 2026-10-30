@@ -1,10 +1,29 @@
 import { isSameJson } from "../page/compare.js";
 
-export const PAST_RETRY_MS = 60 * 60 * 1000;
-
 // What a league's background jobs share: one job serving every store with what each keeps in memory
 // between runs, saving a document only when it changed, and the seasons a job fills from before the
 // current one.
+
+const PAST_RETRY_MS = 60 * 60 * 1000;
+
+/**
+ * @param {Pick<JobContext, "storage" | "now">} context
+ * @param {number} season
+ * @param {() => Promise<boolean>} fill whether the season is complete
+ * @returns {Promise<boolean>} whether a fill was attempted
+ */
+export async function tryPastSeason({ storage, now }, season, fill) {
+  const key = `past-retry:${season}`;
+  if (((await storage.get(key)) ?? -Infinity) > now()) return false;
+  try {
+    if (await fill()) await storage.delete(key);
+    else await storage.put(key, now() + PAST_RETRY_MS);
+  } catch (error) {
+    await storage.put(key, now() + PAST_RETRY_MS);
+    throw error;
+  }
+  return true;
+}
 
 /** @typedef {import("./season-store.js").JobContext} JobContext */
 /** @typedef {(context: JobContext) => Promise<void>} StoreUpdate */

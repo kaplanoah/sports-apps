@@ -14,7 +14,7 @@ import {
   namePitcherKey,
   nameStartersKey,
   readLeagueRows,
-  readPeople,
+  readPeopleBatch,
   readSpeeds,
   splitIntoBatches,
 } from "./adapters/pitchers.js";
@@ -28,7 +28,7 @@ import {
   nameRotationKey,
 } from "./adapters/rotations.js";
 import {
-  PAST_RETRY_MS,
+  tryPastSeason,
   createPerStoreJob,
   createSavedDocs,
   createVersionForgetter,
@@ -36,7 +36,12 @@ import {
   nameVersionedKey,
 } from "../../../../shared/worker/background-job.js";
 import { createFeedKeeper, isPlayerReadDue } from "../../../../shared/worker/feed-keeper.js";
-import { catchFailure, noteFailure, runWithStatus } from "../../../../shared/worker/job-status.js";
+import {
+  catchFailure,
+  noteFailure,
+  readJobFeed,
+  runWithStatus,
+} from "../../../../shared/worker/job-status.js";
 import { nameCountKey, LEAGUE_READS_COUNT } from "../../../../shared/worker/season-store.js";
 
 // Keeps what the matchup sheet shows, so a tap reads only the store and never waits on MLB. Each
@@ -122,25 +127,18 @@ function createStoreUpdate() {
    * @param {RunContext} context
    * @param {string} name
    * @param {string} key
+   * @param {string} label
    * @param {() => Promise<any>} load
    * @param {(answer: any) => boolean} [isBehind]
    */
-  async function readFeed(context, name, key, load, isBehind) {
-    let failure = "";
-    const data = await /** @type {ReturnType<typeof createFeedKeeper>} */ (keeper).readFeed(
+  const readFeed = (context, name, key, label, load, isBehind) =>
+    readJobFeed(context, /** @type {ReturnType<typeof createFeedKeeper>} */ (keeper), {
       name,
       key,
+      label,
       load,
-      {
-        isBehind,
-        onFailure: (reason) => {
-          failure = reason;
-        },
-      },
-    );
-    if (failure) noteFailure(context.failures, `Reading ${name}`, new Error(failure));
-    return data;
-  }
+      isBehind,
+    });
 
   /**
    * @param {JobContext} context
@@ -159,6 +157,7 @@ function createStoreUpdate() {
       context,
       "schedule",
       String(season),
+      `${season}'s recent starts`,
       async () => {
         const today = readEasternDay(context.now()).date;
         const from = addDays(today, -LOOKBACK_DAYS);
@@ -178,13 +177,25 @@ function createStoreUpdate() {
   const readSeasonFeeds = (context, season) =>
     settleReads([
       ...[listAppearancesRequest(season, "R"), listAppearancesRequest(season, "P")].map((path) =>
-        readFeed(context, "appearances", path, () => fetchJson(context, path)),
+        readFeed(
+          context,
+          "appearances",
+          path,
+          `${season}'s ${path.includes("gameType=P") ? "postseason" : "regular-season"} appearances`,
+          () => fetchJson(context, path),
+        ),
       ),
-      readFeed(context, "qualified", listQualifiedRequest(season), async () => {
-        const answer = await fetchJson(context, listQualifiedRequest(season));
-        describeStarters(answer, new Map());
-        return answer;
-      }),
+      readFeed(
+        context,
+        "qualified",
+        listQualifiedRequest(season),
+        `${season}'s qualified starters`,
+        async () => {
+          const answer = await fetchJson(context, listQualifiedRequest(season));
+          describeStarters(answer, new Map());
+          return answer;
+        },
+      ),
       readSchedule(context, season),
     ]);
 
@@ -199,33 +210,25 @@ function createStoreUpdate() {
       fetchJson(context, listPeopleRequest(season, ids)),
       fetchJson(context, listGameLogRequest(season, ids)),
     ]);
-    const failed = new Set();
-    let hasUnknownFailure = false;
-    const notePersonFailure = (error, id) => {
-      if (id == null) hasUnknownFailure = true;
-      else failed.add(id);
+    const notePersonFailure = (error) =>
       noteFailure(context.failures, `Reading ${season}'s pitcher`, error);
-    };
-    const gameLogsById = new Map(
-      readPeople(gameLogs, ids, notePersonFailure).map((person) => [person.id, person]),
-    );
-    const hasUnknownGameLogFailure = hasUnknownFailure;
-    const saved = new Set();
-    for (const person of readPeople(people, ids, notePersonFailure)) {
-      if (hasUnknownGameLogFailure && !gameLogsById.has(person.id)) failed.add(person.id);
+    const logs = readPeopleBatch(gameLogs, ids, notePersonFailure);
+    const batch = readPeopleBatch(people, ids, notePersonFailure);
+    const failed = new Set([...logs.failed, ...batch.failed]);
+    for (const person of batch.people.values()) {
       if (failed.has(person.id)) continue;
       try {
         await saveDoc(
           context.docs,
           namePitcherKey(season, person.id),
-          describePitcher(person, gameLogsById.get(person.id)),
+          describePitcher(person, logs.people.get(person.id)),
         );
-        saved.add(person.id);
       } catch (error) {
-        notePersonFailure(error, person.id);
+        failed.add(person.id);
+        notePersonFailure(error);
       }
     }
-    return ids.filter((id) => !failed.has(id) && (!hasUnknownFailure || saved.has(id)));
+    return ids.filter((id) => !failed.has(id));
   }
 
   /**
@@ -330,27 +333,24 @@ function createStoreUpdate() {
   async function fillPastSeason(context, current) {
     for (const season of await listPastSeasons(context.docs, current)) {
       if (await context.storage.get(nameFilledKey(season))) continue;
-      const retryKey = `past-retry:${season}`;
-      if (((await context.storage.get(retryKey)) ?? -Infinity) > context.now()) continue;
-      try {
-        const qualified = await fetchJson(context, listQualifiedRequest(season));
-        const people = await fetchPeople(
-          (path) => fetchJson(context, path),
-          (ids) => listPeopleRequest(season, ids),
-          listQualifiedIds(qualified),
-        );
-        await saveDoc(
-          context.docs,
-          nameStartersKey(season),
-          describeStarters(qualified, readSpeeds(people)),
-        );
-        await context.storage.put(nameFilledKey(season), true);
-        await context.storage.delete(retryKey);
-      } catch (error) {
-        await context.storage.put(retryKey, context.now() + PAST_RETRY_MS);
-        noteFailure(context.failures, "Filling a past season's starters", error);
-      }
-      return;
+      if (
+        await tryPastSeason(context, season, async () => {
+          const qualified = await fetchJson(context, listQualifiedRequest(season));
+          const people = await fetchPeople(
+            (path) => fetchJson(context, path),
+            (ids) => listPeopleRequest(season, ids),
+            listQualifiedIds(qualified),
+          );
+          await saveDoc(
+            context.docs,
+            nameStartersKey(season),
+            describeStarters(qualified, readSpeeds(people)),
+          );
+          await context.storage.put(nameFilledKey(season), true);
+          return true;
+        })
+      )
+        return;
     }
   }
 

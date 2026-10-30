@@ -105,10 +105,10 @@ export const trimPitching = (stat) =>
 /**
  * Each player's numbers in one of MLB's league tables, by id.
  * @param {any} table
- * @param {(stat: any) => any} [trim]
+ * @param {(stat: any) => any} trim
  * @returns {Map<number, any>}
  */
-export const indexSeasonStats = (table, trim = (stat) => stat) =>
+export const indexSeasonStats = (table, trim) =>
   new Map(
     table == null
       ? []

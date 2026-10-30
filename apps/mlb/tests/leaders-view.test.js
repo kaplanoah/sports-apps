@@ -5,6 +5,8 @@ import { renderLeaders } from "../page/js/leaders-view.js";
 import {
   describeRoster,
   indexSeasonStats,
+  trimHitting,
+  trimPitching,
   listRosterRequest,
   listSeasonStatsRequest,
 } from "../worker/src/rosters.js";
@@ -19,8 +21,8 @@ const ROSTER = describeRoster({
   club: "LAD",
   season,
   roster: answers[listRosterRequest(119, season)],
-  hitting: indexSeasonStats(answers[listSeasonStatsRequest(season, "hitting")]),
-  pitching: indexSeasonStats(answers[listSeasonStatsRequest(season, "pitching")]),
+  hitting: indexSeasonStats(answers[listSeasonStatsRequest(season, "hitting")], trimHitting),
+  pitching: indexSeasonStats(answers[listSeasonStatsRequest(season, "pitching")], trimPitching),
 });
 const SEASON_GAMES = 162;
 

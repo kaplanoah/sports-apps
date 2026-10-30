@@ -47,7 +47,7 @@ While a league is being built, a sandbox Worker may try its feeds from Cloudflar
 
 6. **Tests.** The root's `tests/sports-boundary.test.js` discovers every app's pages and uses `listReachedFiles` from the root's `worker/browser-scope.mjs`. Extend its independent vendor policy when adding a vendor; prove indirect imports fail the guard. Record malformed responses alongside valid fixtures, verify validation under a runtime that forbids code generation, and assert unusable output preserves stored records and reports health failures.
 
-   Exercise the actual live and historical writers with recorded full responses, empty seasons, malformed cold reads, failed updates over usable documents, and valid recovery. Count every request and await sibling reads after a failure before a job finishes. Remove the validation guards deliberately and verify the corresponding regressions fail before restoring them.
+   Exercise the actual live and historical writers with recorded full responses, empty seasons, malformed cold reads, failed updates over usable documents, and valid recovery.
 
    Count requests, including repeated, concurrent, failed, and timed-out reads, so historical work cannot starve live updates or reminders. If the league introduces a missing identity or merge facility, its contract tests must cover concurrent mapping, reconciliation, provenance, corrections, and old links. These are acceptance criteria for that prerequisite work, not interfaces available today. Operational migrations and restore rehearsals need their separate authorization; automated stubs do not establish Cloudflare restoration or phone reload behavior.
 
