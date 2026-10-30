@@ -9,7 +9,6 @@
 - Write every change as it would have been written had its final design been known from the start, however many rounds of mockups, sliders, comparisons, or fixes it took to get there. Build from the values picked, never from a playground's code, and leave nothing those rounds left behind: values or options no longer chosen, a setting or branch kept only to compare, a case that can no longer happen, a name for an earlier version, or a rule that overrides another where one rule would do. Before each push, read the whole diff against `main` for it, and CI's review flags any of it.
 - Start function names with a verb naming the action (boolean predicates excepted). No generic names like `call`, `run`, `execute`, or `handle`, which lint rejects for a function.
 - Make every function do one thing well. Make orchestration a sequence of named steps. Extract and name any non-trivial logic inside blocks or chained conditions.
-- Keep a view's decisions out of the code that draws it. What to show, which item is chosen, the order, and any time limit live in a module the view calls with its state and what it measured, so a Node test reaches them, as `shared/page/search-reading.js` does for what search shows as words are typed.
 - A rule or a limit two places share lives in one place, like the two minutes away that closes a sheet or the search, so the places can't drift apart.
 - A fact two places show, like a game's inning or a club's record, comes from one read, kept in one document, so the places can't trail each other, as a game's row and its field did while one read MLB's schedule and the other its live feed. Where one read would cost more than the store's request budget allows, the later place waits for the earlier, or hides, rather than reading on its own. A fix of two places that trailed adds a test that they agree.
 - Name variables with full words that are reasonable for their types. No opaque abbreviations.
@@ -92,7 +91,7 @@ Follow these steps in order, with the `ship` skill loaded, which adds to most of
 
 ### When something is wrong
 
-- When fixing a bug, look for the same bug in all apps and in every view, sheet, and theme, and fix those in the same PR. Say what else you checked.
+- When fixing a bug, name the kind of problem it is, not only the case in front of you, like a tap area smaller than it looks rather than one button. Look for that kind in all apps and in every view, sheet, and theme, fix those in the same PR, and say what else you checked.
 - When a bug reaches production or beta, the PR also says how it got there and why no test caught it, and adds the test or lint rule that would have. Prefer a test or lint rule over a written rule, which agents can forget.
 - Say a bug is fixed only once you've reproduced it and seen the fix work.
 - Ask for a Diagnostics report rather than guessing.
