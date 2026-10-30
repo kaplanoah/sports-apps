@@ -198,12 +198,14 @@ export function createSnapshotLoader({
     await slowFeeds.noteFinalCount(scoreboard ? countFinals(scoreboard) : null);
     const hasGamesLeftLive = (schedule) =>
       WNBASnapshot.listGamesLeftLive(schedule, scoreboard, season).size > 0;
-    const [readSchedule, bracket, standings] = await Promise.all([
+    const [scheduleAnswer, bracket, standings] = await Promise.all([
       readSlowFeed("schedule", WNBASnapshot.REQUESTS.schedule, {
         isBehind: hasGamesLeftLive,
         readAgain: verify,
         onFailure: noteReason("schedule"),
       }).catch(noteFailure("schedule")),
+      // A kept bracket can only hold a reminder back: a series' wins only grow, and the games
+      // played count them too.
       readSlowFeed("bracket", WNBASnapshot.REQUESTS.bracket(season), {
         readAgain: verify,
         onFailure: noteReason("bracket"),
@@ -217,8 +219,8 @@ export function createSnapshotLoader({
     const isScheduleConfirmed =
       !verify ||
       !failures.schedule ||
-      WNBASnapshot.isTodayOnScoreboard(readSchedule, scoreboard, season, now());
-    const schedule = isScheduleConfirmed ? readSchedule : null;
+      WNBASnapshot.isTodayOnScoreboard(scheduleAnswer, scoreboard, season, now());
+    const schedule = isScheduleConfirmed ? scheduleAnswer : null;
     if (!scoreboard && !schedule && !bracket)
       throw new Error(`None of the WNBA's feeds answered with data: ${describeFailures(failures)}`);
     const needsBackup = !scoreboard || hasGamesLeftLive(schedule);

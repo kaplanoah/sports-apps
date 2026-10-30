@@ -1078,6 +1078,19 @@ test("a reminder verification takes no kept schedule while the scoreboard leaves
   assert.equal(listReminderGames(verified), null);
 });
 
+test("a reminder verification keeps a schedule read now while the scoreboard leaves out one of today's games", async () => {
+  /** @type {Record<string, any>} */
+  const answers = {};
+  const league = createLeague({ answers });
+  const loader = createSnapshotLoader({ fetchImpl: league.fetchImpl, now: () => NOW });
+  const { scoreboard } = RESPONSES.scoreboard;
+  answers.scoreboard = { scoreboard: { ...scoreboard, games: scoreboard.games.slice(0, 1) } };
+  const verified = await loader.loadSnapshot(2026, { verify: true });
+  assert.equal(verified.failures.schedule, undefined);
+  assert.ok(!verified.missing.includes("schedule"));
+  assert.notEqual(listReminderGames(verified), null);
+});
+
 test("reminder verification refreshes open network months while reusing finalized months", async () => {
   const league = createLeague();
   let now = NOW;
