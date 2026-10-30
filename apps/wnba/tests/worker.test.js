@@ -16,6 +16,7 @@ import {
 import { describePreview } from "../worker/src/preview.js";
 import { describeSnapshotStatus, listFeedFailures } from "../worker/src/season-updater.js";
 import { createSnapshotLoader, describeFailures } from "../worker/src/snapshot.js";
+import { readAfternoonEspn } from "./espn-fixtures.js";
 import { nameFeedKey } from "../../../shared/worker/feed-keeper.js";
 
 const AFTERNOON = JSON.parse(
@@ -1059,6 +1060,53 @@ test("a reminder verification takes the kept schedule and bracket when they fail
   const expected = listReminderGames(await answering.loadSnapshot(2026, { verify: true }));
   assert.ok(expected?.length);
   assert.deepEqual(listReminderGames(verified), expected);
+});
+
+test("a reminder verification takes the kept schedule when it and the scoreboard fail, once ESPN answers for today's games", async () => {
+  /** @type {Record<string, "page" | "error">} */
+  const refuse = {};
+  const league = createLeague({ refuse, espn: readAfternoonEspn() });
+  const loader = createSnapshotLoader({ fetchImpl: league.fetchImpl, now: () => NOW });
+  await loader.loadSnapshot(2026);
+  refuse.schedule = "page";
+  refuse.scoreboard = "error";
+  const verified = await loader.loadSnapshot(2026, { verify: true });
+  assert.equal(league.countReads("schedule"), 2);
+  assert.deepEqual(verified.missing, ["scoreboard"]);
+  const answering = createSnapshotLoader({ fetchImpl: createLeague().fetchImpl, now: () => NOW });
+  const expected = listReminderGames(await answering.loadSnapshot(2026, { verify: true }));
+  assert.ok(expected?.length);
+  assert.deepEqual(listReminderGames(verified), expected);
+});
+
+test("a reminder verification confirms nothing when the scoreboard and ESPN both fail", async () => {
+  /** @type {Record<string, "page" | "error">} */
+  const refuse = {};
+  const league = createLeague({ refuse });
+  const loader = createSnapshotLoader({ fetchImpl: league.fetchImpl, now: () => NOW });
+  await loader.loadSnapshot(2026);
+  refuse.schedule = "page";
+  refuse.scoreboard = "error";
+  const verified = await loader.loadSnapshot(2026, { verify: true });
+  assert.ok(verified.failures.backup);
+  assert.deepEqual(verified.missing, ["schedule", "scoreboard"]);
+  assert.equal(listReminderGames(verified), null);
+});
+
+test("a reminder verification takes no kept schedule while ESPN, standing in for the scoreboard, leaves out one of today's games", async () => {
+  /** @type {Record<string, "page" | "error">} */
+  const refuse = {};
+  const league = createLeague({
+    refuse,
+    espn: readAfternoonEspn((events) => events.slice(1)),
+  });
+  const loader = createSnapshotLoader({ fetchImpl: league.fetchImpl, now: () => NOW });
+  await loader.loadSnapshot(2026);
+  refuse.schedule = "page";
+  refuse.scoreboard = "error";
+  const verified = await loader.loadSnapshot(2026, { verify: true });
+  assert.deepEqual(verified.missing, ["schedule", "scoreboard"]);
+  assert.equal(listReminderGames(verified), null);
 });
 
 test("a reminder verification takes no kept schedule while the scoreboard leaves out one of today's games", async () => {

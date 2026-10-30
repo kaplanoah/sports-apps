@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import { GAME_DAY_CHECK_MS } from "#shared/poll-schedule.js";
 import * as WNBASnapshot from "../page/js/snapshot.js";
 import { checkInTimeZone } from "../../../tests/time-zone.js";
+import { readAfternoonEspn } from "./espn-fixtures.js";
 
 const AFTERNOON = JSON.parse(
   readFileSync(`${import.meta.dirname}/fixtures/2026-09-30-afternoon.json`, "utf8"),
@@ -618,6 +619,28 @@ test("a kept schedule is confirmed only while the scoreboard lists each game it 
   assert.equal(isConfirmed(games.slice(1)), false);
   assert.equal(isConfirmed(games, Date.parse("2026-10-01T16:00:00Z")), false);
   assert.equal(WNBASnapshot.isTodayOnScoreboard(schedule, null, AFTERNOON.season, now), false);
+});
+
+test("while the scoreboard doesn't answer, the reminders' games are confirmed from ESPN only while it lists each game on the league's today", () => {
+  const now = Date.parse(AFTERNOON.now);
+  /** @param {(events: any[]) => any[]} [changeEvents] */
+  const readBackup = (changeEvents) => ({
+    answers: Object.values(readAfternoonEspn(changeEvents)),
+  });
+  const isConfirmed = (backup) =>
+    WNBASnapshot.isTodayOnBackup(RESPONSES.schedule, backup, AFTERNOON.season, now);
+  const leaveOutFirst = (events) => events.slice(1);
+  assert.equal(isConfirmed(readBackup()), true);
+  assert.equal(isConfirmed(readBackup(leaveOutFirst)), false);
+  assert.equal(isConfirmed(null), false);
+
+  const listGames = (backup) =>
+    WNBASnapshot.listReminderGames(buildAfternoon({ ...RESPONSES, scoreboard: null, backup }));
+  const answering = WNBASnapshot.listReminderGames(buildAfternoon());
+  assert.ok(answering?.length);
+  assert.deepEqual(listGames(readBackup()), answering);
+  assert.equal(listGames(readBackup(leaveOutFirst)), null);
+  assert.equal(listGames(null), null);
 });
 
 const FINALS_GAME = {
