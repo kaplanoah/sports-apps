@@ -138,12 +138,8 @@ function findNextGame(games, today) {
 }
 
 function tallySeries(seriesId, games, round, teamA, teamB, today) {
-  const record = {
-    round,
-    league: seriesId === "WS" ? null : seriesId.split("_")[0],
-    winsA: 0,
-    winsB: 0,
-  };
+  const facts = { round, league: seriesId === "WS" ? null : seriesId.split("_")[0] };
+  const record = { ...facts, winsA: 0, winsB: 0 };
   const log = [];
   const need = countWinsNeeded(round);
   let winner = null;
@@ -167,6 +163,7 @@ function tallySeries(seriesId, games, round, teamA, teamB, today) {
     if (score[0] >= need) {
       winner = won;
       log.push({
+        ...facts,
         at: game.end,
         kind: "clinch",
         series: seriesId,
@@ -178,6 +175,7 @@ function tallySeries(seriesId, games, round, teamA, teamB, today) {
       break;
     }
     log.push({
+      ...facts,
       at: game.end,
       kind: "game",
       series: seriesId,

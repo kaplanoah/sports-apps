@@ -12,6 +12,8 @@ const Start = z
   .nullable();
 const BasketballState = z.enum(["pre", "live", "final"]);
 const GameState = z.enum(["pre", "live", "final", "off"]);
+const BaseballRound = z.enum(["WC", "DS", "CS", "WS"]);
+const BaseballLeague = z.enum(["AL", "NL"]).nullable();
 
 const IdentityEvidence = z.looseObject({
   method: z.enum(["existing-id", "discovery", "teams-day", "game-number", "player-facts"]),
@@ -77,7 +79,8 @@ const BaseballSide = z.union([
 export const BaseballGame = z.looseObject({
   id: Identifier,
   season: Count.optional(),
-  round: z.enum(["WC", "DS", "CS", "WS"]).nullable().optional(),
+  round: BaseballRound.nullable().optional(),
+  league: BaseballLeague.optional(),
   gameNumber: Count.positive().optional(),
   state: GameState,
   start: Start,
@@ -156,12 +159,22 @@ export const BaseballSnapshot = z.looseObject({
   ...Season,
   springStart: Start,
   teams: z.record(z.string(), z.looseObject({ league: Identifier, seed: Count })),
-  series: z.record(z.string(), z.looseObject({ winsA: Count, winsB: Count })),
+  series: z.record(
+    z.string(),
+    z.looseObject({
+      winsA: Count,
+      winsB: Count,
+      round: BaseballRound.optional(),
+      league: BaseballLeague.optional(),
+    }),
+  ),
   log: z.array(
     z.looseObject({
       at: Start,
       kind: z.enum(["game", "clinch"]),
       series: Identifier,
+      round: BaseballRound.optional(),
+      league: BaseballLeague.optional(),
       score: z.tuple([Count, Count]),
       runs: z.tuple([Count, Count]),
     }),
@@ -237,6 +250,7 @@ const BoxScoreSide = z.looseObject({
 export const BasketballBoxScore = z.looseObject({
   id: Identifier,
   season: Count.optional(),
+  isCupFinal: z.boolean().optional(),
   source: z.literal("espn").optional(),
   state: BasketballState,
   period: NullableCount,

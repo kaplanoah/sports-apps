@@ -259,6 +259,7 @@ export function summarizeGame(game, pitchers) {
     id: game.id,
     season: game.season,
     round: game.round,
+    ...(game.round && { league: game.league }),
     gameNumber: game.gameNumber,
     away: game.away.id,
     home: game.home.id,
