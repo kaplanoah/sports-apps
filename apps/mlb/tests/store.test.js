@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { buildSnapshot } from "../page/js/snapshot.js";
+import { buildSnapshot } from "../worker/src/adapters/mlb.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import worker from "../worker/src/index.js";

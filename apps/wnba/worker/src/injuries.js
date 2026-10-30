@@ -3,18 +3,18 @@ import {
   fetchInjuryReport,
   listReportedPlayers,
   nameInjuryReportRequest,
-} from "../../../../shared/worker/injury-report.js";
+} from "../../../../shared/worker/espn-adapter.js";
 import { ESPN_HEADERS } from "./wnba.js";
 
 // Who ESPN's injury report lists as out across the league, whether she's out for the rest of the
-// season, and why (shared/worker/injury-report.js). Only today's report exists, so only today's
+// season, and why (shared/worker/espn-adapter.js). Only today's report exists, so only today's
 // rosters say who is out.
 
 const SPORT = "basketball/wnba";
 const OUT = "Out";
 const FOR_SEASON = "OFS";
 
-export { describeOutReason } from "../../../../shared/worker/injury-report.js";
+export { describeOutReason } from "../../../../shared/worker/espn-adapter.js";
 
 /**
  * @typedef {object} OutReason

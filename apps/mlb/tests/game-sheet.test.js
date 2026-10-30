@@ -5,7 +5,7 @@ import { renderBoxScore } from "../page/js/box-score-view.js";
 import { isEarlierBoxScore, renderGameBody, renderWhen, titleGame } from "../page/js/game-sheet.js";
 import { listSides, renderMatchupBody } from "../page/js/matchup.js";
 import { session } from "../page/js/session.js";
-import { buildSnapshot } from "../page/js/snapshot.js";
+import { buildSnapshot } from "../worker/src/adapters/mlb.js";
 import { convertToText } from "#shared/html.js";
 import { describeBoxScore } from "../worker/src/box-score.js";
 import { EASTERN, useTimeZone } from "../../../tests/time-zone.js";

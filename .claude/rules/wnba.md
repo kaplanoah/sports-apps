@@ -7,8 +7,10 @@ paths:
 
 - `apps/wnba/` is the WNBA, Worker `wnba-app`.
 - The record and reads:
+  - Feed parsing and snapshot composition live in `worker/src/adapters/wnba.js`; `page/js/snapshot.js` holds only the app-owned format and rules.
+  - The shared `sports-schema.js` validates snapshot output before persistence; the shared `espn-adapter.js` owns ESPN parsing for both apps.
   - The Worker reads:
-    - the league's own feeds (`page/js/snapshot.js` says which), with the browser headers they require (`worker/src/wnba.js`)
+    - the league's own feeds (`worker/src/adapters/wnba.js` says which), with the browser headers they require (`worker/src/wnba.js`)
     - ESPN's scoreboard, for where each game is on
     - ESPN's scores and clocks while the league's scoreboard isn't answering, or for a game the league's schedule still holds as under way once its scoreboard no longer lists it, reading the schedule again every five minutes until it catches up
     - ESPN's scores and clocks once an hour even while the league's scoreboard answers, so a backup that stopped answering shows in the health's `feeds` before it's needed, and again five minutes after a read of them fails until one answers (`worker/src/backup-probe.js`)
@@ -53,7 +55,7 @@ paths:
     - The store reads a live game's box score and lead with each update while a page has its sheet open, and pushes them to that page (`worker/src/watched-games.js`).
     - The store keeps each finished game's box score and lead for good, read as it ends and once more after the league and ESPN catch up, and a few at a time back through each season it keeps (`worker/src/game-details-updater.js`).
     - The store keeps each upcoming game's meetings from the schedule each update reads, so the sheet's routes read the league only for what the store doesn't keep (the shared `store-reads.js`).
-    - From ESPN's game summary, the Worker reads the score through each game for the sheet's lead chart (`worker/src/lead.js` and `page/js/lead-chart.js`), and when each game it saw live ended (`worker/src/game-ends.js`).
+    - From ESPN's game summary, the Worker reads the score through each game for the sheet's lead chart (the shared `espn-adapter.js` and `page/js/lead-chart.js`), and when each game it saw live ended (`worker/src/game-ends.js`).
   - Highlights (`worker/src/highlights.js` and `highlights-updater.js`):
     - Once a game is over, its game sheet has pills that slide between its box score and its Highlights.
     - The Highlights are ESPN's recap video, its story, and its clips, from ESPN's game summary, each leaving once ESPN takes it down.

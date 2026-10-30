@@ -1,8 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { splitPostseasonGames } from "../page/js/feed-postseason.js";
-import * as MLBSnapshot from "../page/js/snapshot.js";
+import { splitPostseasonGames } from "../worker/src/adapters/feed-postseason.js";
+import * as MLBSnapshot from "../worker/src/adapters/mlb.js";
 import { GAME_DAY_CHECK_MS, OFF_DAY_CHECK_MS } from "#shared/poll-schedule.js";
 
 const readFixture = (name) =>

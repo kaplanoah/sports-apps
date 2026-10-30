@@ -5,7 +5,7 @@ import {
   listReportedPlayers,
   nameInjuryReportRequest,
   readNameLetters,
-} from "../shared/worker/injury-report.js";
+} from "../shared/worker/espn-adapter.js";
 
 const REPORT = {
   injuries: [

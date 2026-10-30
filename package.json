@@ -6,7 +6,7 @@
     "#page-files/*": "./apps/*/worker/page-files.mjs",
     "#shared/*": "./shared/page/*"
   },
-  "description": "Year-round tracker pages for sports leagues, and the Cloudflare Workers that serve them. Its one runtime dependency checks passkeys for the accounts service.",
+  "description": "Year-round tracker pages for sports leagues, and the Cloudflare Workers that serve them. Runtime dependencies validate sports records and check passkeys for the accounts service.",
   "license": "MIT",
   "engines": {
     "node": ">=22.21"
@@ -61,7 +61,8 @@
     ]
   },
   "dependencies": {
-    "@simplewebauthn/server": "14.0.3"
+    "@simplewebauthn/server": "14.0.3",
+    "zod": "4.6.7"
   },
   "overrides": {
     "typed-rest-client": {

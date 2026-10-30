@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { isDeepStrictEqual } from "node:util";
 import { sortInScheduleOrder } from "../page/js/schedule-order.js";
-import * as MLBSnapshot from "../page/js/snapshot.js";
+import * as MLBSnapshot from "../worker/src/adapters/mlb.js";
 import { OFF_DAY_CHECK_MS } from "#shared/poll-schedule.js";
 import { composeLog, createReading, sortParts } from "../worker/src/readings.js";
 import { loadCurrentSnapshot, saveSnapshot } from "../worker/src/season-updater.js";

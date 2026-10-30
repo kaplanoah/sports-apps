@@ -6,7 +6,7 @@ import {
   listReminderGames,
   NETWORKS_REQUEST,
   REQUESTS,
-} from "../page/js/snapshot.js";
+} from "../worker/src/adapters/wnba.js";
 import { findTeamCodeByEspnId, TEAMS } from "../page/js/teams.js";
 import {
   createEspnGameReader,

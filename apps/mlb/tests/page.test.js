@@ -14,7 +14,7 @@ import { listSlateGames } from "../page/js/slate.js";
 import { LOOKS } from "../page/js/looks.js";
 import { html } from "../../../shared/page/html.js";
 import { renderUpdates as renderUpdateBox } from "../../../shared/page/updates.js";
-import { buildSnapshot } from "../page/js/snapshot.js";
+import { buildSnapshot } from "../worker/src/adapters/mlb.js";
 import { formatStampName } from "../page/js/stamp.js";
 import {
   findUpdateGame,

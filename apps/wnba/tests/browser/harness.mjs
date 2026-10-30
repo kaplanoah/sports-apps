@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { buildSnapshot, REQUESTS } from "../../page/js/snapshot.js";
+import { buildSnapshot, REQUESTS } from "../../worker/src/adapters/wnba.js";
 import { createBoxScoreServer, nameBoxScoreRequest } from "../../worker/src/box-score.js";
 import { createHighlightsServer, describeHighlights } from "../../worker/src/highlights.js";
 import {

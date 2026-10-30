@@ -10,7 +10,7 @@ import {
   sortRows,
 } from "../page/js/roster-view.js";
 import { isStillPlaying } from "../page/js/series.js";
-import { buildSnapshot } from "../page/js/snapshot.js";
+import { buildSnapshot } from "../worker/src/adapters/wnba.js";
 import { listOutPlayers } from "../worker/src/injuries.js";
 import { describeRoster } from "../worker/src/roster.js";
 import { convertToText, Markup } from "../../../shared/page/html.js";

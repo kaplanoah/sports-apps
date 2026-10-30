@@ -6,7 +6,8 @@ paths:
 # What MLB's app holds
 
 - `apps/mlb/` is baseball, Worker `mlb-app`.
-- The record and the live feed (`page/js/snapshot.js`):
+- The page keeps only app-owned rules and paths in `page/js/snapshot.js`, `bracket-rules.js`, and `standings-rules.js`. Worker adapters own feed parsing and validate snapshots with the shared `sports-schema.js`.
+- The record and the live feed (`worker/src/adapters/mlb.js`):
   - The page reads each season's one record from the store, which the Worker saves as it reads MLB, as the WNBA's does.
   - The Worker reads each game being played from MLB's live feed with each update, since the schedule's copy of it runs half a minute or more behind, so every part shows the same inning, outs, and score.
   - Each update names each MLB feed that failed, with why, for the health's `feeds`. MLB has no backup feed, so there's none to probe as the WNBA's ESPN is.
@@ -31,7 +32,7 @@ paths:
   - The same job that keeps the rosters keeps his last few games for each player on a roster.
   - That job holds his season's totals, on his sheet and his club's Roster, as they were while his game log is still to read the game they count, so the two never show different games, unless that read failed.
 - Injuries, in the box on a player's sheet:
-  - The box's stay and why come from ESPN's injury report, read for the whole league once an hour (`worker/src/injuries.js`, with the shared `injury-report.js` the WNBA's reads too).
+  - The box's stay and why come from ESPN's injury report, read for the whole league once an hour (`worker/src/injuries.js`, with the shared `espn-adapter.js` the WNBA's reads too).
   - The box doesn't show when the box score that opened him shows him playing in a game under way or ended today, which the report hasn't caught up with (the shared `playing-now.js`).
 - A game's sheet, which opens from the game's row (`page/js/game-sheet.js`, `matchup.js`, and `box-score-view.js`):
   - Its Game section shows the game:

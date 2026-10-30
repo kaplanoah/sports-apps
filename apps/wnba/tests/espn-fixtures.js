@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { ESPN_DAY_REQUEST } from "../page/js/snapshot.js";
+import { ESPN_DAY_REQUEST } from "../worker/src/adapters/wnba.js";
 
 // ESPN's scoreboards of Sep 30 and Oct 1 the next morning, with both games of Sep 30 finished.
 export const ESPN = JSON.parse(

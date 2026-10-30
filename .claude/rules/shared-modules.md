@@ -256,7 +256,8 @@ Pages link these before their own stylesheet, and theme them with the tokens the
 - `timeout.js`: giving up on a call that doesn't answer in time
 - `highlights-job.js`: keeping each final's highlights
 - `game-details-job.js`: keeping each finished game's details
-- `injury-report.js`: ESPN's injury report
+- `espn-adapter.js`: shared ESPN requests and parsing, with league-supplied mappings and basketball rules
+- `sports-schema.js`: app-owned sports schemas and Worker-only validation with Zod configured without runtime compilation
 - `store-reads.js`: reading the documents the store keeps for a sheet
 - `story-lead.js`: a story's first lines as plain text
 - `news-updater.js`: keeping a league's news from its outlets' feeds

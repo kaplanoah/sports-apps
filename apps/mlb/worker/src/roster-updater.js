@@ -1,7 +1,7 @@
 import { isSameJson } from "#shared/compare.js";
 import { namePlayerIndexKey } from "#shared/page-search.js";
 import { addDays, readEasternDay } from "#shared/days.js";
-import { listClubs, readClubId, readMlbTeamId } from "../../page/js/snapshot.js";
+import { listClubs, readClubId, readMlbTeamId } from "./adapters/mlb.js";
 import {
   fetchInjuries,
   indexInjuredPlayers,

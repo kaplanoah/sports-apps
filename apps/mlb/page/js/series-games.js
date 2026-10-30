@@ -5,7 +5,7 @@ import { describeSeriesAfterWin, describeSeriesLead } from "#shared/series-text.
 import { nameSeries } from "./bracket.js";
 import { nameTeam } from "./teams.js";
 import { listCountedGames } from "./season-games.js";
-import { countSeriesWinsNeeded, readSeriesRound } from "./feed-postseason.js";
+import { countSeriesWinsNeeded, readSeriesRound } from "./bracket-rules.js";
 
 // Short names, since the label shares the row's middle with the time or score.
 /** @param {string} seriesId */

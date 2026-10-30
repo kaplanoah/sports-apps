@@ -1,4 +1,4 @@
-import * as WNBASnapshot from "../../page/js/snapshot.js";
+import * as WNBASnapshot from "./adapters/wnba.js";
 import { createFeedKeeper, createMemoryStorage } from "../../../../shared/worker/feed-keeper.js";
 import { describeError } from "../../../../shared/worker/responses.js";
 import { createReusedLoader } from "../../../../shared/worker/upstream.js";
@@ -100,17 +100,23 @@ export function createSnapshotLoader({
   /**
    * @param {keyof typeof FEED_DATA} name
    * @param {string} url
+   * @param {number} season
    */
-  const fetchFeed = (name, url) =>
-    fetchWnbaJson(fetchImpl, url, LIVE_CACHE_SECONDS, (answer) => hasFeedData(name, answer));
+  const fetchFeed = async (name, url, season) => {
+    const answer = await fetchWnbaJson(fetchImpl, url, LIVE_CACHE_SECONDS, (answer) =>
+      hasFeedData(name, answer),
+    );
+    return WNBASnapshot.validateFeedResponse(name, answer, { season, now: now() });
+  };
 
   /**
    * @param {keyof typeof SLOW_FEEDS} name
    * @param {string} url
+   * @param {number} season
    * @param {{ isBehind?: (answer: any) => boolean, readAgain?: boolean, onFailure: (reason: string) => void }} options
    */
-  const readSlowFeed = (name, url, options) =>
-    slowFeeds.readFeed(name, url, () => fetchFeed(name, url), options);
+  const readSlowFeed = (name, url, season, options) =>
+    slowFeeds.readFeed(name, url, () => fetchFeed(name, url, season), options);
 
   /** @param {string} url */
   const fetchEspn = (url) => fetchEspnJson(fetchImpl, url, LIVE_CACHE_SECONDS);
@@ -192,25 +198,27 @@ export function createSnapshotLoader({
       noteReason(name)(describeError(error));
       return null;
     };
-    const scoreboard = await fetchFeed("scoreboard", WNBASnapshot.REQUESTS.scoreboard).catch(
-      noteFailure("scoreboard"),
-    );
+    const scoreboard = await fetchFeed(
+      "scoreboard",
+      WNBASnapshot.REQUESTS.scoreboard,
+      season,
+    ).catch(noteFailure("scoreboard"));
     await slowFeeds.noteFinalCount(scoreboard ? countFinals(scoreboard) : null);
     const hasGamesLeftLive = (schedule) =>
       WNBASnapshot.listGamesLeftLive(schedule, scoreboard, season).size > 0;
     const [scheduleAnswer, bracket, standings] = await Promise.all([
-      readSlowFeed("schedule", WNBASnapshot.REQUESTS.schedule, {
+      readSlowFeed("schedule", WNBASnapshot.REQUESTS.schedule, season, {
         isBehind: hasGamesLeftLive,
         readAgain: verify,
         onFailure: noteReason("schedule"),
       }).catch(noteFailure("schedule")),
       // A kept bracket can only hold a reminder back: a series' wins only grow, and the games
       // played count them too.
-      readSlowFeed("bracket", WNBASnapshot.REQUESTS.bracket(season), {
+      readSlowFeed("bracket", WNBASnapshot.REQUESTS.bracket(season), season, {
         readAgain: verify,
         onFailure: noteReason("bracket"),
       }).catch(noteFailure("bracket")),
-      readSlowFeed("standings", WNBASnapshot.REQUESTS.standings(season), {
+      readSlowFeed("standings", WNBASnapshot.REQUESTS.standings(season), season, {
         onFailure: noteReason("standings"),
       }).catch(noteFailure("standings")),
     ]);

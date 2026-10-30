@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { readEasternDay } from "#shared/days.js";
 import { namePlayerIndexKey } from "#shared/page-search.js";
-import { listClubs, readMlbTeamId } from "../page/js/snapshot.js";
+import { listClubs, readMlbTeamId } from "../worker/src/adapters/mlb.js";
 import {
   describeHitters,
   listGameLogRequest,

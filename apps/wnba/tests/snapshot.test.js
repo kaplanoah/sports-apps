@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { GAME_DAY_CHECK_MS } from "#shared/poll-schedule.js";
-import * as WNBASnapshot from "../page/js/snapshot.js";
+import * as WNBASnapshot from "../worker/src/adapters/wnba.js";
 import { checkInTimeZone } from "../../../tests/time-zone.js";
 import { readAfternoonEspn } from "./espn-fixtures.js";
 

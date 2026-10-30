@@ -25,7 +25,7 @@ import {
 import { fetchInjuries, listOutPlayers } from "./injuries.js";
 import { namePlayerIndexKey } from "#shared/page-search.js";
 import { nameOvertimesKey } from "../../page/js/search-pages.js";
-import { nameScheduleKey } from "../../page/js/snapshot.js";
+import { nameScheduleKey } from "./adapters/wnba.js";
 import { describeOvertimes } from "./overtimes.js";
 import { describeAveragesDoc, listLeaders, nameAveragesKey } from "./season-averages.js";
 import { nameSeasonKey } from "./season-updater.js";

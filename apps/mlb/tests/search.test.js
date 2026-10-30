@@ -15,7 +15,7 @@ import { EASTERN, useTimeZone } from "../../../tests/time-zone.js";
 import { listSeasonGames, nameGameKey } from "../page/js/season-games.js";
 import { listSearchPages } from "../page/js/search-pages.js";
 import { createSearchTerms, readSearchGames } from "../page/js/search-terms.js";
-import { buildSnapshot } from "../page/js/snapshot.js";
+import { buildSnapshot } from "../worker/src/adapters/mlb.js";
 
 useTimeZone(EASTERN);
 

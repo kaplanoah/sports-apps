@@ -1,4 +1,4 @@
-import { REQUESTS } from "../../page/js/snapshot.js";
+import { REQUESTS } from "./adapters/wnba.js";
 import { TEAMS } from "../../page/js/teams.js";
 import { respondError, respondJson } from "../../../../shared/worker/responses.js";
 import { readKeptDoc } from "../../../../shared/worker/store-reads.js";

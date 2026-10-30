@@ -1,5 +1,5 @@
 import { addDays, readEasternDay } from "#shared/days.js";
-import { listStarterIds } from "../../page/js/snapshot.js";
+import { listStarterIds } from "./adapters/mlb.js";
 import { fetchMlbJson } from "./mlb.js";
 import {
   describePitcher,

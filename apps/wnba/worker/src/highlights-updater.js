@@ -1,5 +1,5 @@
 import { createHighlightsJob } from "../../../../shared/worker/highlights-job.js";
-import { nameScheduleKey } from "../../page/js/snapshot.js";
+import { nameScheduleKey } from "./adapters/wnba.js";
 import { createHighlightsReader, nameHighlightsKey } from "./highlights.js";
 
 // Keeps each of the current season's finals' highlights, as the shared job reads them over the

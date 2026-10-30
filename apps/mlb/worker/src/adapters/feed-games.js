@@ -1,12 +1,11 @@
 // Each game as the snapshot reads it from MLB's schedule, and the slate of games the page follows:
 // today's, the next day's, last night's, and each club's last and next games.
-// Runs in both the browser page and the Worker, so it uses no DOM and no globals.
 
 import { addDays, readEasternDay } from "#shared/days.js";
 import { isPlayedBy } from "#shared/game-clubs.js";
-import { isPastMidnight } from "./dates.js";
-import { sortInScheduleOrder } from "./schedule-order.js";
-import { MLB_TEAM, readClubId } from "./mlb-ids.js";
+import { isPastMidnight } from "../../../page/js/dates.js";
+import { sortInScheduleOrder } from "../../../page/js/schedule-order.js";
+import { MLB_TEAM, readClubId } from "../../../page/js/mlb-ids.js";
 
 export const isNumber = (value) => typeof value === "number" && Number.isFinite(value);
 

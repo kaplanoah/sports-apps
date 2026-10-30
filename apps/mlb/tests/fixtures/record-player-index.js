@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { MLB_API, listClubs, readMlbTeamId } from "../../page/js/snapshot.js";
+import { MLB_API, listClubs, readMlbTeamId } from "../../worker/src/adapters/mlb.js";
 import { indexRosters } from "../../worker/src/player-index.js";
 import { indexPeople, listPeopleRequest } from "../../worker/src/players.js";
 import { listRosterRequest } from "../../worker/src/rosters.js";

@@ -1,9 +1,10 @@
+import { nameScheduleKey } from "../../page/js/snapshot.js";
 import { isSameJson } from "#shared/compare.js";
 import { readEasternDay } from "#shared/days.js";
 import * as Readings from "./readings.js";
 import { guessSeasonYear, hasSpringStarted } from "../../page/js/session.js";
 import { sortInScheduleOrder } from "../../page/js/schedule-order.js";
-import * as MLBSnapshot from "../../page/js/snapshot.js";
+import * as MLBSnapshot from "./adapters/mlb.js";
 
 // Keeps the current season's saved data up to date from MLB, whether or not a page is open.
 // `docs` reads and writes the store's documents: read(key), list(collection), write(key, doc),
@@ -156,7 +157,7 @@ async function writeListedMonths(docs, snapshot, saved) {
     const doc = saved.get(month);
     const games = keepPlayoffGames(snapshot, listed, doc);
     if (isSavedSchedule(doc, snapshot, games)) continue;
-    await docs.write(MLBSnapshot.nameScheduleKey(year, month), {
+    await docs.write(nameScheduleKey(year, month), {
       version: snapshot.version,
       edition: MLBSnapshot.SCHEDULE_EDITION,
       year,
@@ -183,7 +184,7 @@ async function removeEmptiedMonths(docs, snapshot, saved) {
   if (!snapshot.isSeriesKnown) return;
   for (const [month, doc] of saved)
     if (!Object.hasOwn(snapshot.schedule, month) && holdsOnlyPlayoffGames(doc))
-      await docs.remove(MLBSnapshot.nameScheduleKey(snapshot.season, month));
+      await docs.remove(nameScheduleKey(snapshot.season, month));
 }
 
 // Each month of the season's games keeps a document of its own, saved only when its games change,

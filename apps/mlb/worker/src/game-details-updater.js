@@ -1,4 +1,4 @@
-import { nameScheduleCollection } from "../../page/js/snapshot.js";
+import { nameScheduleCollection } from "./adapters/mlb.js";
 import { listSlateGames } from "../../page/js/slate.js";
 import { fetchBoxScore, nameGameDetailsKey } from "./box-score.js";
 import { createGameDetailsJob } from "../../../../shared/worker/game-details-job.js";

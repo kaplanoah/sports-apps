@@ -11,7 +11,7 @@ import {
 } from "../worker/src/highlights.js";
 import { createHighlightsUpdater } from "../worker/src/highlights-updater.js";
 import { STILLS_PER_READ } from "../worker/src/headline-stills.js";
-import { buildSnapshot } from "../page/js/snapshot.js";
+import { buildSnapshot } from "../worker/src/adapters/mlb.js";
 import { assertErrorAnswer } from "../../../tests/error-answer.js";
 import { createDocs, createJobStorage } from "../../../tests/job-context.js";
 

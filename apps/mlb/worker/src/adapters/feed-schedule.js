@@ -1,8 +1,7 @@
 // The season's whole schedule, which the Games view lists, kept by the store a month to a document.
-// Runs in both the browser page and the Worker, so it uses no DOM and no globals.
 
 import { isStillIfNecessary } from "#shared/series-text.js";
-import { sortInScheduleOrder } from "./schedule-order.js";
+import { sortInScheduleOrder } from "../../../page/js/schedule-order.js";
 import {
   LISTED_GAME_TYPES,
   isNumber,
@@ -13,22 +12,6 @@ import {
   summarizeGame,
 } from "./feed-games.js";
 import { countSeriesWinsNeeded, listSeriesIds } from "./feed-postseason.js";
-
-// The Games view lists every game of the season, which the store keeps a month to a document, apart
-// from the season's record that pages follow through every live game, and saves again only as a
-// game ends or the schedule changes.
-/** @param {number} year */
-export const nameScheduleCollection = (year) => `schedules-${year}`;
-
-// What the schedule's games hold, raised whenever they hold more, so a past season saved before is
-// read once more for it.
-export const SCHEDULE_EDITION = 2;
-
-/**
- * @param {number} year
- * @param {string} month "YYYY-MM"
- */
-export const nameScheduleKey = (year, month) => `${nameScheduleCollection(year)}/${month}`;
 
 // A postponed or suspended game is listed on the day it was to be played and again on the day it's
 // played, and the later of two listings of the same day counts. MLB gives both listings the day

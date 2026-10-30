@@ -10,7 +10,7 @@ import {
   nameGameKey,
 } from "../page/js/season-games.js";
 import { countSeriesWins, groupSeriesFinals } from "../page/js/series-games.js";
-import { buildSnapshot } from "../page/js/snapshot.js";
+import { buildSnapshot } from "../worker/src/adapters/mlb.js";
 
 // MLB's 2026 season as the store kept it on Friday, October 9.
 const FIXTURE = JSON.parse(

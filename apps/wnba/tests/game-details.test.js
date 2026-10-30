@@ -7,7 +7,7 @@ import {
   describeBoxScore,
   nameBoxScoreRequest,
 } from "../worker/src/box-score.js";
-import { REQUESTS } from "../page/js/snapshot.js";
+import { REQUESTS } from "../worker/src/adapters/wnba.js";
 import { nameScoreboardRequest, nameSummaryRequest } from "../worker/src/lead.js";
 import {
   createPreviewServer,
