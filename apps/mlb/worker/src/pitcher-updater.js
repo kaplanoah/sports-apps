@@ -28,6 +28,7 @@ import {
   nameRotationKey,
 } from "./adapters/rotations.js";
 import {
+  PAST_RETRY_MS,
   createPerStoreJob,
   createSavedDocs,
   createVersionForgetter,
@@ -118,18 +119,28 @@ function createStoreUpdate() {
   const forgetEarlierVersions = createVersionForgetter();
 
   /**
-   * @param {JobContext & { failures?: string[] }} context
-   * @param {string} name which feed's limits apply
-   * @param {string} key what the answer is kept under
+   * @param {RunContext} context
+   * @param {string} name
+   * @param {string} key
    * @param {() => Promise<any>} load
-   * @param {(answer: any) => boolean} [isBehind] whether a kept answer is behind
+   * @param {(answer: any) => boolean} [isBehind]
    */
-  const readFeed = (context, name, key, load, isBehind) =>
-    /** @type {ReturnType<typeof createFeedKeeper>} */ (keeper).readFeed(name, key, load, {
-      isBehind,
-      onFailure: (reason) =>
-        noteFailure(context.failures ?? [], "Reading pitcher data", new Error(reason)),
-    });
+  async function readFeed(context, name, key, load, isBehind) {
+    let failure = "";
+    const data = await /** @type {ReturnType<typeof createFeedKeeper>} */ (keeper).readFeed(
+      name,
+      key,
+      load,
+      {
+        isBehind,
+        onFailure: (reason) => {
+          failure = reason;
+        },
+      },
+    );
+    if (failure) noteFailure(context.failures, `Reading ${name}`, new Error(failure));
+    return data;
+  }
 
   /**
    * @param {JobContext} context
@@ -140,7 +151,7 @@ function createStoreUpdate() {
   /**
    * The last two weeks of every club's games, through today, read again once today is a day the
    * last read didn't reach, so a club's starts reach today however long the night's been quiet.
-   * @param {JobContext} context
+   * @param {RunContext} context
    * @param {number} season
    */
   function readSchedule(context, season) {
@@ -161,7 +172,7 @@ function createStoreUpdate() {
   }
 
   /**
-   * @param {JobContext} context
+   * @param {RunContext} context
    * @param {number} season
    */
   const readSeasonFeeds = (context, season) =>
@@ -179,22 +190,42 @@ function createStoreUpdate() {
 
   /**
    * Reads one batch of pitchers and saves each one's side.
-   * @param {JobContext} context
+   * @param {RunContext} context
    * @param {number} season
    * @param {number[]} ids
    */
   async function updateBatch(context, season, ids) {
-    const [people, gameLogs] = await Promise.all([
+    const [people, gameLogs] = await settleReads([
       fetchJson(context, listPeopleRequest(season, ids)),
       fetchJson(context, listGameLogRequest(season, ids)),
     ]);
-    const gameLogsById = new Map(readPeople(gameLogs, ids).map((person) => [person.id, person]));
-    for (const person of readPeople(people, ids))
-      await saveDoc(
-        context.docs,
-        namePitcherKey(season, person.id),
-        describePitcher(person, gameLogsById.get(person.id)),
-      );
+    const failed = new Set();
+    let hasUnknownFailure = false;
+    const notePersonFailure = (error, id) => {
+      if (id == null) hasUnknownFailure = true;
+      else failed.add(id);
+      noteFailure(context.failures, `Reading ${season}'s pitcher`, error);
+    };
+    const gameLogsById = new Map(
+      readPeople(gameLogs, ids, notePersonFailure).map((person) => [person.id, person]),
+    );
+    const hasUnknownGameLogFailure = hasUnknownFailure;
+    const saved = new Set();
+    for (const person of readPeople(people, ids, notePersonFailure)) {
+      if (hasUnknownGameLogFailure && !gameLogsById.has(person.id)) failed.add(person.id);
+      if (failed.has(person.id)) continue;
+      try {
+        await saveDoc(
+          context.docs,
+          namePitcherKey(season, person.id),
+          describePitcher(person, gameLogsById.get(person.id)),
+        );
+        saved.add(person.id);
+      } catch (error) {
+        notePersonFailure(error, person.id);
+      }
+    }
+    return ids.filter((id) => !failed.has(id) && (!hasUnknownFailure || saved.has(id)));
   }
 
   /**
@@ -216,12 +247,12 @@ function createStoreUpdate() {
     const results = await Promise.allSettled(
       batches.map((batch) => updateBatch(context, season, batch)),
     );
-    for (const [index, result] of results.entries()) {
+    for (const result of results) {
       if (result.status === "rejected") {
         noteFailure(context.failures, `Reading ${season}'s pitchers`, result.reason);
         continue;
       }
-      for (const id of batches[index]) {
+      for (const id of result.value) {
         const count = /** @type {number} */ (games.get(id));
         const isSettled = reads[id] === undefined || reads[id].games === count;
         reads[id] = { games: count, at: context.now(), isSettled };
@@ -293,24 +324,32 @@ function createStoreUpdate() {
 
   /**
    * Fills the qualified starters of the newest past season the store keeps that it hasn't filled.
-   * @param {JobContext} context
+   * @param {RunContext} context
    * @param {number} current
    */
   async function fillPastSeason(context, current) {
     for (const season of await listPastSeasons(context.docs, current)) {
       if (await context.storage.get(nameFilledKey(season))) continue;
-      const qualified = await fetchJson(context, listQualifiedRequest(season));
-      const people = await fetchPeople(
-        (path) => fetchJson(context, path),
-        (ids) => listPeopleRequest(season, ids),
-        listQualifiedIds(qualified),
-      );
-      await saveDoc(
-        context.docs,
-        nameStartersKey(season),
-        describeStarters(qualified, readSpeeds(people)),
-      );
-      await context.storage.put(nameFilledKey(season), true);
+      const retryKey = `past-retry:${season}`;
+      if (((await context.storage.get(retryKey)) ?? -Infinity) > context.now()) continue;
+      try {
+        const qualified = await fetchJson(context, listQualifiedRequest(season));
+        const people = await fetchPeople(
+          (path) => fetchJson(context, path),
+          (ids) => listPeopleRequest(season, ids),
+          listQualifiedIds(qualified),
+        );
+        await saveDoc(
+          context.docs,
+          nameStartersKey(season),
+          describeStarters(qualified, readSpeeds(people)),
+        );
+        await context.storage.put(nameFilledKey(season), true);
+        await context.storage.delete(retryKey);
+      } catch (error) {
+        await context.storage.put(retryKey, context.now() + PAST_RETRY_MS);
+        noteFailure(context.failures, "Filling a past season's starters", error);
+      }
       return;
     }
   }

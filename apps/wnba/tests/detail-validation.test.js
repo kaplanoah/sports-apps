@@ -18,8 +18,8 @@ const ROSTERS = JSON.parse(
 const NOW = Date.parse(ROSTERS.recordedAt);
 const readAnswers = () => ({
   totals: structuredClone(PLAYERS.totals[2026]),
-  regularGames: joinGameLogs(PLAYERS.gameLogs, 2026, "Regular Season"),
-  playoffGames: joinGameLogs(PLAYERS.gameLogs, 2026, "Playoffs"),
+  regularGames: structuredClone(joinGameLogs(PLAYERS.gameLogs, 2026, "Regular Season")),
+  playoffGames: structuredClone(joinGameLogs(PLAYERS.gameLogs, 2026, "Playoffs")),
   teamRegularGames: structuredClone(PLAYERS.teamGames["2026:Regular Season"]),
   teamPlayoffGames: structuredClone(PLAYERS.teamGames["2026:Playoffs"]),
 });
@@ -55,10 +55,14 @@ test("all recorded WNBA rosters validate and malformed identities and nested fac
   };
   assert.throws(() => describeRoster(parts), /Invalid sports data/);
   const valid = { ...parts, leagueRoster: ROSTERS.rosters["NYL:2026"] };
-  assert.throws(() => describeRoster({ ...valid, season: Infinity }), /Invalid sports data/);
+
   assert.throws(() => describeRoster({ ...valid, leagueRoster: {} }), /Invalid sports table/);
   const empty = structuredClone(valid.leagueRoster);
   empty.resultSets[0].rowSet = [];
+  assert.throws(
+    () => describeRoster({ ...valid, leagueRoster: empty, season: Infinity }),
+    /Invalid sports data/,
+  );
   assert.deepEqual(describeRoster({ ...valid, leagueRoster: empty }).players, []);
 });
 
@@ -84,7 +88,7 @@ test("recorded WNBA player numbers reject malformed counts, identities and neste
   assert.throws(() => describeSeasonPlayers(nameless), /Invalid sports data/);
   const malformed = readAnswers();
   malformed.totals.resultSets[0].rowSet[0].pop();
-  assert.throws(() => describeSeasonPlayers(malformed), /Invalid sports table/);
+  assert.throws(() => describeSeasonPlayers(malformed), /Invalid sports/);
 });
 
 test("rank construction validates every row before qualification can hide a malformed value", () => {
@@ -101,4 +105,38 @@ test("rank construction validates every row before qualification can hide a malf
   assert.equal(describeSeasonPlayers(empty).players.size, 0);
   assert.equal(describeRanks(empty.totals, empty.teamRegularGames).seasonGames, 0);
   assert.throws(() => validatePlayerFeed({}, "PlayerGameLogs"), /Invalid sports table/);
+});
+
+test("WNBA records allow mononyms and null optional columns without checking unused all-time names", () => {
+  const answers = readAnswers();
+  corruptColumn(answers.totals, "PLAYER_NAME", "Mononym");
+  for (const column of ["STL", "BLK", "FGM", "FGA", "FG3M", "FG3A", "FTM", "FTA"])
+    corruptColumn(answers.totals, column, null);
+  assert.ok(describeSeasonPlayers(answers).players.size > 0);
+  const leagueRoster = structuredClone(ROSTERS.rosters["NYL:2026"]);
+  const playerList = structuredClone(ROSTERS.playerList);
+  const table = playerList.resultSets[0];
+  const id =
+    leagueRoster.resultSets[0].rowSet[0][leagueRoster.resultSets[0].headers.indexOf("PLAYER_ID")];
+  const used = table.rowSet.find((row) => row[table.headers.indexOf("PERSON_ID")] === id);
+  used[table.headers.indexOf("PLAYER_FIRST_NAME")] = "Mononym";
+  used[table.headers.indexOf("PLAYER_LAST_NAME")] = "";
+  used[table.headers.indexOf("FROM_YEAR")] = "0";
+  corruptColumn(leagueRoster, "PLAYER", null);
+  const unused = [...used];
+  unused[table.headers.indexOf("PERSON_ID")] = 999999999;
+  unused[table.headers.indexOf("PLAYER_FIRST_NAME")] = null;
+  unused[table.headers.indexOf("FROM_YEAR")] = "bad";
+  table.rowSet.push(unused);
+  const roster = describeRoster({
+    team: "NYL",
+    season: 2026,
+    leagueRoster,
+    playerList,
+    outPlayers: [],
+    now: NOW,
+  });
+  assert.equal(roster.players[0].firstName, "Mononym");
+  assert.equal(roster.players[0].lastName, "");
+  assert.equal(roster.players[0].debut, null);
 });

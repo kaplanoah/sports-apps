@@ -28,8 +28,6 @@ While a league is being built, a sandbox Worker may try its feeds from Cloudflar
 
    Follow `.claude/rules/worker.md` for the sports-data boundary. Extend `shared/worker/sports-schema.js` and derive JSDoc types from its schemas. Malformed records must reach store status and feed health without replacing usable records or exposing raw payloads.
 
-   Give every detail record a complete contract, including nested stats, counts, identities, and legitimate missing values. Validate each builder's output before a live or background writer can save it. Separately validate usable transport rows before retaining them in a feed cache; a transport table is not a normalized domain record.
-
 3. **Reading the feeds.** `worker/src/snapshot.js` coordinates adapters with `createSnapshotLoader()`, using `shared/worker/feed-keeper.js` for slower reads and saved answers. Preserve the league's explicit request budget, timeout, and refresh policy. Use `shared/worker/upstream.js`'s `createReusedLoader` for concurrent store-owned reads. Pages request only app records from their store.
 
    Build shared facilities in `shared/worker/` once, with both apps supplying league policy; never put a second identity table or vendor merge in an app. Check `.claude/rules/shared-modules.md` for the facilities available before extending them. A missing shared facility must be introduced there with its contract tests, rather than represented as an interface that already exists.

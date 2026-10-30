@@ -1,4 +1,5 @@
 import {
+  PlayerId,
   BasketballPlayerNumbers,
   BasketballPlayerTotals,
   BasketballPlayerGame,
@@ -454,6 +455,7 @@ function groupByPlayer(rows) {
   const groups = new Map();
   for (const row of rows) {
     const id = String(row.PLAYER_ID);
+    validateSportsData(PlayerId, id);
     if (!groups.has(id)) groups.set(id, []);
     groups.get(id).push(row);
   }
@@ -473,18 +475,16 @@ export function describeSeasonPlayers({
   teamPlayoffGames,
 }) {
   for (const [answer, table] of [
-    [totals, "LeagueDashPlayerStats"],
     [regularGames, "PlayerGameLogs"],
     [playoffGames, "PlayerGameLogs"],
-    [teamRegularGames, "LeagueGameLog"],
     [teamPlayoffGames, "LeagueGameLog"],
   ])
     validatePlayerFeed(answer, table);
   const totalsById = new Map(
-    readTable(totals, "LeagueDashPlayerStats").map((row) => [String(row.PLAYER_ID), row]),
+    readRequiredTable(totals, "LeagueDashPlayerStats").map((row) => [String(row.PLAYER_ID), row]),
   );
-  const regularById = groupByPlayer(readTable(regularGames, "PlayerGameLogs"));
-  const playoffsById = groupByPlayer(readTable(playoffGames, "PlayerGameLogs"));
+  const regularById = groupByPlayer(readRequiredTable(regularGames, "PlayerGameLogs"));
+  const playoffsById = groupByPlayer(readRequiredTable(playoffGames, "PlayerGameLogs"));
   const teamGames = {
     regular: readTable(teamRegularGames, "LeagueGameLog"),
     playoffs: readTable(teamPlayoffGames, "LeagueGameLog"),
@@ -537,7 +537,7 @@ export function composePlayer({ id, team, season, numbers, roster, ranks }) {
 /** @param {URLSearchParams} searchParams */
 export function readId(searchParams) {
   const id = searchParams.get("id") ?? "";
-  return /^\d{1,12}$/.test(id) ? id : null;
+  return PlayerId.safeParse(id).success ? id : null;
 }
 
 /**
@@ -563,7 +563,7 @@ export function createPlayerReader({
       url,
       isCurrentSeason(season, now()) ? CACHE_SECONDS : PAST_CACHE_SECONDS,
       hasTable(table),
-    ).then((answer) => validatePlayerFeed(answer, table));
+    );
 
   // Each key is a season, or a season and the kind of games, as 2026:Playoffs.
   const loadTotals = createReusedLoader(

@@ -1,6 +1,12 @@
+import {
+  BaseballPlayer,
+  BaseballLastGames,
+  BaseballHitters,
+  validateSportsData,
+} from "../../../../shared/worker/sports-schema.js";
 import { addDays } from "#shared/days.js";
 import { readClubId } from "./adapters/mlb.js";
-import { readLeagueRows } from "./adapters/pitchers.js";
+import { readLeagueRows, readBaseballRate } from "./adapters/pitchers.js";
 import { readInjury, trimHitting, trimPitching, trimStats } from "./rosters.js";
 
 // What each player's sheet shows: his facts, from MLB's list of every player this season, his stay
@@ -113,18 +119,28 @@ function listLastGames(person, group) {
  * A player's last games at the plate and on the mound, from MLB's game logs.
  * @param {any} person a person in MLB's answer to listGameLogRequest
  */
-export const describeLastGames = (person) => ({
-  hitting: listLastGames(person, "hitting"),
-  pitching: listLastGames(person, "pitching"),
-});
+export const describeLastGames = (person) =>
+  validateSportsData(BaseballLastGames, {
+    hitting: listLastGames(person, "hitting"),
+    pitching: listLastGames(person, "pitching"),
+  });
 
 /**
  * Each player's facts in MLB's list, by id.
  * @param {any} peopleResponse
  * @returns {Map<number, any>}
  */
-export const indexPeople = (peopleResponse) =>
-  new Map((peopleResponse?.people ?? []).map((/** @type {any} */ person) => [person.id, person]));
+export function indexPeople(peopleResponse) {
+  if (peopleResponse != null && !Array.isArray(peopleResponse.people))
+    throw new Error("Invalid sports people");
+  return new Map(
+    (peopleResponse?.people ?? []).map((/** @type {any} */ person) => {
+      validateSportsData(BaseballPlayer.shape.id, person.id);
+      validateSportsData(BaseballPlayer.shape.facts, describeFacts(person));
+      return [person.id, person];
+    }),
+  );
+}
 
 /**
  * Where a player was born, as his sheet writes it: a city and state in the United States, or a
@@ -166,7 +182,7 @@ const readNumbers = (table, id, trim) => (table.has(id) ? trim(table.get(id)) : 
 /**
  * A player's sheet: his facts, his stay on the injured list and why, and his season at the plate
  * and on the mound, regular and post.
- * @param {PlayerNumbers & { entry: any, club: string, season: number, person: any, lastGames?: any, out?: import("./injuries.js").OutReason | null }} sources
+ * @param {PlayerNumbers & { entry: any, club: string, season: number, person: any, lastGames?: any, out?: import("./injuries.js").OutReason | null, kept?: any, failed?: Set<string> }} sources
  *   `entry` is his line on the club's roster, `lastGames` what describeLastGames found, and `out`
  *   what ESPN's injury report says of him
  */
@@ -177,26 +193,32 @@ export function describePlayer({
   person,
   lastGames = null,
   out = null,
+  kept = null,
+  failed = new Set(),
   ...numbers
 }) {
   const id = entry.person.id;
   const injury = readInjury(entry);
-  return {
+  return validateSportsData(BaseballPlayer, {
     id,
     season,
     club,
     name: entry.person.fullName ?? person?.fullName ?? "",
     number: entry.jerseyNumber ?? "",
     position: entry.position?.abbreviation ?? "",
-    facts: person ? describeFacts(person) : null,
+    facts: failed.has("people") ? (kept?.facts ?? null) : person ? describeFacts(person) : null,
     injury,
     out: injury ? out : null,
     hitting: readNumbers(numbers.hitting, id, trimHitting),
     pitching: readNumbers(numbers.pitching, id, trimPitching),
-    postseasonHitting: readNumbers(numbers.postseasonHitting, id, trimHitting),
-    postseasonPitching: readNumbers(numbers.postseasonPitching, id, trimPitching),
+    postseasonHitting: failed.has("postseasonHitting")
+      ? (kept?.postseasonHitting ?? null)
+      : readNumbers(numbers.postseasonHitting, id, trimHitting),
+    postseasonPitching: failed.has("postseasonPitching")
+      ? (kept?.postseasonPitching ?? null)
+      : readNumbers(numbers.postseasonPitching, id, trimPitching),
     lastGames,
-  };
+  });
 }
 
 /**
@@ -211,18 +233,19 @@ const shareOf = (count, plateAppearances) =>
  * Every hitter MLB ranks, each with the numbers a hitter's sheet ranks.
  * @param {any} qualifiedResponse MLB's qualified hitters
  */
-export const describeHitters = (qualifiedResponse) => ({
-  hitters: readLeagueRows(qualifiedResponse).map((row) => ({
-    id: row.player.id,
-    avg: Number(row.stat.avg),
-    obp: Number(row.stat.obp),
-    slg: Number(row.stat.slg),
-    ops: Number(row.stat.ops),
-    homeRuns: row.stat.homeRuns,
-    rbi: row.stat.rbi,
-    runs: row.stat.runs,
-    stolenBases: row.stat.stolenBases,
-    walkRate: shareOf(row.stat.baseOnBalls, row.stat.plateAppearances),
-    strikeoutRate: shareOf(row.stat.strikeOuts, row.stat.plateAppearances),
-  })),
-});
+export const describeHitters = (qualifiedResponse) =>
+  validateSportsData(BaseballHitters, {
+    hitters: readLeagueRows(qualifiedResponse).map((row) => ({
+      id: row.player.id,
+      avg: readBaseballRate(row.stat.avg),
+      obp: readBaseballRate(row.stat.obp),
+      slg: readBaseballRate(row.stat.slg),
+      ops: readBaseballRate(row.stat.ops),
+      homeRuns: row.stat.homeRuns,
+      rbi: row.stat.rbi,
+      runs: row.stat.runs,
+      stolenBases: row.stat.stolenBases,
+      walkRate: shareOf(row.stat.baseOnBalls, row.stat.plateAppearances),
+      strikeoutRate: shareOf(row.stat.strikeOuts, row.stat.plateAppearances),
+    })),
+  });

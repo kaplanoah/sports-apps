@@ -1,5 +1,7 @@
 import { isSameJson } from "../page/compare.js";
 
+export const PAST_RETRY_MS = 60 * 60 * 1000;
+
 // What a league's background jobs share: one job serving every store with what each keeps in memory
 // between runs, saving a document only when it changed, and the seasons a job fills from before the
 // current one.

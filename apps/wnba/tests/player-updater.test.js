@@ -25,6 +25,7 @@ import {
   nameRosterKey,
 } from "../worker/src/adapters/roster.js";
 import { nameFeedKey, createFeedKeeper } from "../../../shared/worker/feed-keeper.js";
+import { PAST_RETRY_MS } from "../../../shared/worker/background-job.js";
 import { createDocs, createJobStorage } from "../../../tests/job-context.js";
 import { findTeamLeaders } from "../page/js/team-view.js";
 
@@ -684,7 +685,7 @@ test("the status keeps a run's failure, with when it ran, until another run fail
 
   const failed = docs.stored.get(STATUS_KEY).lastFailure;
   assert.equal(failed.at, new Date(NOW).toISOString());
-  assert.match(failed.message, /^Reading 2026's stats failed: /);
+  assert.match(failed.message, /^Reading 2026's totals failed: /);
 
   answers[nameTotalsRequest(2026)] = withSeasonColumns(2026, totals);
   await endGames(2);
@@ -908,7 +909,7 @@ test("historical malformed roster facts and opponent scores recover with the sam
         : corrupted === "birthday"
           ? "JAN 01, 2099"
           : corrupted === "name"
-            ? "InvalidName"
+            ? " "
             : row[headers.indexOf("PTS")] + 1;
     const update = async () => {
       await createPlayerJob().updateHistory({
@@ -927,11 +928,136 @@ test("historical malformed roster facts and opponent scores recover with the sam
       /Invalid sports data/,
     );
     row[column] = original;
-    time += 5 * MINUTE_MS + 1;
+    time += PAST_RETRY_MS + 1;
     await update();
     assert.ok(await storage.get("filled:2025"), corrupted);
     assert.ok(docs.stored.get(nameRosterKey(2025, "NYL")), corrupted);
     assert.ok(docs.stored.get(nameRanksKey(2025)), corrupted);
     assert.ok(league.requests.length <= 2 * (STATS_FEEDS + TEAM_COUNT + 1));
   }
+});
+
+test("a malformed player list preserves a complete kept roster when its raw cache is absent", async () => {
+  const { describeRoster } = await import("../worker/src/adapters/roster.js");
+  const answers = listAnswers();
+  const kept = describeRoster({
+    team: "NYL",
+    season: 2025,
+    leagueRoster: answers[nameLeagueRosterRequest("NYL", 2025)],
+    playerList: answers[namePlayerListRequest(2025)],
+    outPlayers: [],
+    now: NOW,
+  });
+  answers[namePlayerListRequest(2025)] = structuredClone(answers[namePlayerListRequest(2025)]);
+  const table = answers[namePlayerListRequest(2025)].resultSets[0];
+  const column = table.headers.indexOf("FROM_YEAR");
+  const rosterTable = answers[nameLeagueRosterRequest("NYL", 2025)].resultSets[0];
+  const id = rosterTable.rowSet[0][rosterTable.headers.indexOf("PLAYER_ID")];
+  const listed = table.rowSet.find((row) => row[table.headers.indexOf("PERSON_ID")] === id);
+  const original = listed[column];
+  listed[column] = "2016.5";
+  const run = createRun({ answers });
+  const key = nameRosterKey(2025, "NYL");
+  run.docs.stored.set(key, kept);
+  await run.runJob();
+  assert.deepEqual(run.docs.stored.get(key), kept);
+  assert.equal(await run.storage.get("filled:2025"), undefined);
+  run.wait(PAST_RETRY_MS / MINUTE_MS + 1);
+  await run.runJob();
+  assert.deepEqual(run.docs.stored.get(key), kept);
+  assert.equal(await run.storage.get("filled:2025"), undefined);
+  listed[column] = original;
+  run.wait(PAST_RETRY_MS / MINUTE_MS + 1);
+  await run.runJob();
+  assert.deepEqual(run.docs.stored.get(key), kept);
+  assert.ok(await run.storage.get("filled:2025"));
+});
+
+test("malformed player-list identities preserve roster facts and recover in the same job", async () => {
+  for (const value of ["bad", "1627668", -1]) {
+    const answers = structuredClone(listAnswers());
+    const run = createRun({ answers });
+    await run.runJob();
+    const key = nameRosterKey(2026, "NYL");
+    const kept = structuredClone(run.docs.stored.get(key));
+    const table = answers[namePlayerListRequest(2026)].resultSets[0];
+    const column = table.headers.indexOf("PERSON_ID");
+    const row = table.rowSet.find((row) => row[column] === Number(STEWART));
+    const original = row[column];
+    row[column] = value;
+    run.wait(24 * 60 + 1);
+    await run.runJob();
+    assert.deepEqual(run.docs.stored.get(key), kept, String(value));
+    assert.match(run.docs.stored.get(STATUS_KEY).lastFailure.message, /Invalid sports data/);
+    row[column] = original;
+    run.wait(6);
+    await run.runJob();
+    assert.deepEqual(run.docs.stored.get(key), kept);
+    assert.ok(run.league.requests.filter((url) => url === namePlayerListRequest(2026)).length >= 3);
+  }
+});
+
+test("a failed player-list transport preserves a canonical roster without a raw cached answer", async () => {
+  const { describeRoster } = await import("../worker/src/adapters/roster.js");
+  const answers = structuredClone(listAnswers());
+  const path = namePlayerListRequest(2025);
+  const original = answers[path];
+  const key = nameRosterKey(2025, "NYL");
+  const kept = describeRoster({
+    team: "NYL",
+    season: 2025,
+    leagueRoster: answers[nameLeagueRosterRequest("NYL", 2025)],
+    playerList: original,
+    outPlayers: [],
+    now: NOW,
+  });
+  answers[path] = {};
+  const run = createRun({ answers });
+  run.docs.stored.set(key, kept);
+  await run.runJob();
+  assert.deepEqual(run.docs.stored.get(key), kept);
+  assert.equal(await run.storage.get("filled:2025"), undefined);
+  answers[path] = original;
+  run.wait(PAST_RETRY_MS / MINUTE_MS + 1);
+  await run.runJob();
+  assert.deepEqual(run.docs.stored.get(key), kept);
+  assert.ok(await run.storage.get("filled:2025"));
+});
+
+test("a malformed newest WNBA season backs off across restarts while older history fills", async () => {
+  const answers = structuredClone(listAnswers());
+  for (const [url, answer] of Object.entries(answers)) {
+    if (url.includes("Season=2025"))
+      answers[url.replace("Season=2025", "Season=2024")] = structuredClone(answer);
+  }
+  const totals = answers[nameTotalsRequest(2025)].resultSets[0];
+  const column = totals.headers.indexOf("PTS");
+  const original = totals.rowSet[0][column];
+  totals.rowSet[0][column] = -1;
+  const run = createRun({ answers });
+  run.docs.stored.set("seasons/2024", { year: 2024, games: [], series: [] });
+  const update = (time) =>
+    createPlayerJob().updateHistory({
+      docs: run.docs,
+      storage: run.storage,
+      env: {},
+      now: () => time,
+      fetchImpl: run.league.fetchImpl,
+      createLoadSnapshot: () => async () => null,
+    });
+  await update(NOW);
+  assert.equal(await run.storage.get("filled:2025"), undefined);
+  const attempts = () =>
+    run.league.requests.filter((url) => url === nameTotalsRequest(2025)).length;
+  assert.equal(attempts(), 1);
+  await update(NOW + 6 * MINUTE_MS);
+  assert.equal(attempts(), 1);
+  assert.ok(await run.storage.get("filled:2024"));
+  await update(NOW + 12 * MINUTE_MS);
+  assert.equal(attempts(), 1);
+  assert.equal(await run.storage.get("allFilled"), undefined);
+  totals.rowSet[0][column] = original;
+  await update(NOW + PAST_RETRY_MS + 1);
+  assert.ok(await run.storage.get("filled:2025"));
+  assert.equal(await run.storage.get("past-retry:2025"), undefined);
 });

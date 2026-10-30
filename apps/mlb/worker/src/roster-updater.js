@@ -21,7 +21,7 @@ import {
   nameHittersKey,
   namePlayerKey,
 } from "./players.js";
-import { splitIntoBatches } from "./adapters/pitchers.js";
+import { readPeople, splitIntoBatches } from "./adapters/pitchers.js";
 import {
   describeRoster,
   indexSeasonStats,
@@ -29,6 +29,8 @@ import {
   listRosterRequest,
   listSeasonStatsRequest,
   nameRosterKey,
+  trimHitting,
+  trimPitching,
 } from "./rosters.js";
 import {
   createPerStoreJob,
@@ -74,7 +76,7 @@ const FEEDS = {
  * Every player's numbers this season, by id, and his facts, the hitters MLB ranks, and why each
  * player ESPN's injury report names is out, by nameInjuredKey. A table that hasn't answered is
  * empty.
- * @typedef {import("./players.js").PlayerNumbers & { people: Map<number, any>, qualified: any, outPlayers: Map<string, import("./injuries.js").OutReason> }} SeasonNumbers
+ * @typedef {import("./players.js").PlayerNumbers & { people: Map<number, any>, qualified: any, outPlayers: Map<string, import("./injuries.js").OutReason>, failed?: Set<string> }} SeasonNumbers
  */
 /**
  * When each club's roster was read, which clubs have a transaction since, and the transactions
@@ -202,19 +204,40 @@ function createStoreUpdate() {
   const fetchJson = (context, path) => fetchMlbJson(context.fetchImpl, path, null);
 
   /**
+   * @param {RunContext} context
    * @param {string} name which feed's limits apply
    * @param {string} key what the answer is kept under
    * @param {() => Promise<any>} load
    */
-  const readFeed = (name, key, load) =>
-    /** @type {ReturnType<typeof createFeedKeeper>} */ (keeper).readFeed(name, key, load);
+  async function readFeed(context, name, key, load) {
+    let failure;
+    const answer = await /** @type {ReturnType<typeof createFeedKeeper>} */ (keeper).readFeed(
+      name,
+      key,
+      load,
+      {
+        onFailure: (reason) => {
+          failure = reason;
+        },
+      },
+    );
+    if (failure) noteFailure(context.failures, `Reading ${name}`, new Error(failure));
+    return answer;
+  }
 
   /**
    * @param {RunContext} context
    * @param {string} path
+   * @param {string} group
+   * @param {boolean} [qualified]
    */
-  const readStats = (context, path) =>
-    readFeed("rosterStats", path, () => fetchJson(context, path));
+  const readStats = (context, path, group, qualified = false) =>
+    readFeed(context, "rosterStats", path, async () => {
+      const answer = await fetchJson(context, path);
+      indexSeasonStats(answer, group === "hitting" ? trimHitting : trimPitching);
+      if (qualified) describeHitters(answer);
+      return answer;
+    });
 
   /**
    * Every player's numbers and facts, and why those on the injured list are there, or null when
@@ -227,16 +250,38 @@ function createStoreUpdate() {
   async function readSeasonNumbers(context, season) {
     const [hitting, pitching, postseasonHitting, postseasonPitching, qualified, people, injured] =
       await Promise.allSettled([
-        readStats(context, listSeasonStatsRequest(season, "hitting")),
-        readStats(context, listSeasonStatsRequest(season, "pitching")),
-        readStats(context, listSeasonStatsRequest(season, "hitting", { gameType: "P" })),
-        readStats(context, listSeasonStatsRequest(season, "pitching", { gameType: "P" })),
-        readStats(context, listSeasonStatsRequest(season, "hitting", { pool: "qualified" })),
-        readFeed("people", String(season), () => fetchJson(context, listPeopleRequest(season))),
-        readFeed("injuries", "league", async () =>
+        readStats(context, listSeasonStatsRequest(season, "hitting"), "hitting"),
+        readStats(context, listSeasonStatsRequest(season, "pitching"), "pitching"),
+        readStats(context, listSeasonStatsRequest(season, "hitting", { gameType: "P" }), "hitting"),
+        readStats(
+          context,
+          listSeasonStatsRequest(season, "pitching", { gameType: "P" }),
+          "pitching",
+        ),
+        readStats(
+          context,
+          listSeasonStatsRequest(season, "hitting", { pool: "qualified" }),
+          "hitting",
+          true,
+        ),
+        readFeed(context, "people", String(season), async () => {
+          const answer = await fetchJson(context, listPeopleRequest(season));
+          indexPeople(answer);
+          return answer;
+        }),
+        readFeed(context, "injuries", "league", async () =>
           listInjuredPlayers(await fetchInjuries(context.fetchImpl)),
         ),
       ]);
+    for (const [name, result] of /** @type {const} */ ([
+      ["postseason hitting", postseasonHitting],
+      ["postseason pitching", postseasonPitching],
+      ["qualified hitters", qualified],
+      ["player facts", people],
+      ["injuries", injured],
+    ]))
+      if (result.status === "rejected")
+        noteFailure(context.failures, `Reading ${name}`, result.reason);
     if (hitting.status === "rejected" || pitching.status === "rejected") {
       noteFailure(
         context.failures,
@@ -248,13 +293,18 @@ function createStoreUpdate() {
     /** @param {PromiseSettledResult<any>} result */
     const readAnswer = (result) => (result.status === "fulfilled" ? result.value : null);
     return {
-      hitting: indexSeasonStats(hitting.value),
-      pitching: indexSeasonStats(pitching.value),
-      postseasonHitting: indexSeasonStats(readAnswer(postseasonHitting)),
-      postseasonPitching: indexSeasonStats(readAnswer(postseasonPitching)),
+      hitting: indexSeasonStats(hitting.value, trimHitting),
+      pitching: indexSeasonStats(pitching.value, trimPitching),
+      postseasonHitting: indexSeasonStats(readAnswer(postseasonHitting), trimHitting),
+      postseasonPitching: indexSeasonStats(readAnswer(postseasonPitching), trimPitching),
       qualified: readAnswer(qualified),
       people: indexPeople(readAnswer(people)),
       outPlayers: indexInjuredPlayers(readAnswer(injured) ?? []),
+      failed: new Set([
+        ...(people.status === "rejected" ? ["people"] : []),
+        ...(postseasonHitting.status === "rejected" ? ["postseasonHitting"] : []),
+        ...(postseasonPitching.status === "rejected" ? ["postseasonPitching"] : []),
+      ]),
     };
   }
 
@@ -264,7 +314,7 @@ function createStoreUpdate() {
    */
   async function readTransactions(context, season) {
     const today = readEasternDay(context.now()).date;
-    const answer = await readFeed("transactions", String(season), () =>
+    const answer = await readFeed(context, "transactions", String(season), () =>
       fetchJson(context, listTransactionsRequest(today)),
     );
     return answer?.transactions ?? [];
@@ -297,7 +347,13 @@ function createStoreUpdate() {
     const due = listDueClubs(reads, context.now());
     const results = await Promise.allSettled(
       due.map((club) =>
-        fetchJson(context, listRosterRequest(/** @type {number} */ (readMlbTeamId(club)), season)),
+        fetchJson(
+          context,
+          listRosterRequest(/** @type {number} */ (readMlbTeamId(club)), season),
+        ).then((answer) => {
+          describeRoster({ club, season, roster: answer, hitting: new Map(), pitching: new Map() });
+          return answer;
+        }),
       ),
     );
     const readAt = { ...reads.readAt };
@@ -328,19 +384,22 @@ function createStoreUpdate() {
     for (const entry of (roster?.roster ?? []).filter(isOnRoster)) {
       const id = entry.person.id;
       const person = numbers.people.get(id) ?? null;
-      await saveDoc(
-        context.docs,
-        namePlayerKey(season, id),
-        describePlayer({
+      try {
+        const kept = await readDoc(context.docs, namePlayerKey(season, id));
+        const player = describePlayer({
           ...numbers,
           entry,
           club,
           season,
           person,
+          kept,
           lastGames: lastGames.get(`${nameLastGamesPrefix(season)}${id}`) ?? null,
           out: numbers.outPlayers.get(nameInjuredKey(club, entry.person.fullName ?? "")) ?? null,
-        }),
-      );
+        });
+        await saveDoc(context.docs, namePlayerKey(season, id), player);
+      } catch (error) {
+        noteFailure(context.failures, "Keeping a player", error);
+      }
     }
   }
 
@@ -386,15 +445,37 @@ function createStoreUpdate() {
         for (const id of batches[index]) if (reads[id]) reads[id] = { ...reads[id], failedAt: now };
         continue;
       }
-      const people = new Map(
-        (result.value?.people ?? []).map((/** @type {any} */ person) => [person.id, person]),
-      );
+      const failed = new Set();
+      let hasUnknownFailure = false;
+      let people;
+      try {
+        people = new Map(
+          readPeople(result.value, batches[index], (error, id) => {
+            if (id == null) hasUnknownFailure = true;
+            else failed.add(id);
+            noteFailure(context.failures, "Reading players' last games", error);
+          }).map((person) => [person.id, person]),
+        );
+      } catch (error) {
+        noteFailure(context.failures, "Reading players' last games", error);
+        for (const id of batches[index]) if (reads[id]) reads[id] = { ...reads[id], failedAt: now };
+        continue;
+      }
       for (const id of batches[index]) {
         const person = people.get(id);
-        const lastGames = person ? describeLastGames(person) : { hitting: [], pitching: [] };
-        await context.storage.put(`${nameLastGamesPrefix(season)}${id}`, lastGames);
-        const games = countGames(numbers, id);
-        reads[id] = { games, at: now, isSettled: reads[id]?.games === games };
+        if (failed.has(id) || (!person && hasUnknownFailure)) {
+          if (reads[id]) reads[id] = { ...reads[id], failedAt: now };
+          continue;
+        }
+        try {
+          const lastGames = person ? describeLastGames(person) : { hitting: [], pitching: [] };
+          await context.storage.put(`${nameLastGamesPrefix(season)}${id}`, lastGames);
+          const games = countGames(numbers, id);
+          reads[id] = { games, at: now, isSettled: reads[id]?.games === games };
+        } catch (error) {
+          noteFailure(context.failures, "Reading players' last games", error);
+          if (reads[id]) reads[id] = { ...reads[id], failedAt: now };
+        }
       }
     }
     await context.storage.put(nameGameLogReadsKey(season), reads);
@@ -450,13 +531,14 @@ function createStoreUpdate() {
     for (const club of listClubs()) {
       const roster = await context.storage.get(nameAnswerKey(season, club));
       if (!roster) continue;
-      await saveDoc(
-        context.docs,
-        nameRosterKey(club),
-        describeRoster({ club, season, roster, hitting, pitching }),
-      );
-      await savePlayers(context, season, club, roster, numbers, lastGames);
-      rosters.push({ club, roster });
+      try {
+        const record = describeRoster({ club, season, roster, hitting, pitching });
+        await saveDoc(context.docs, nameRosterKey(club), record);
+        await savePlayers(context, season, club, roster, numbers, lastGames);
+        rosters.push({ club, roster });
+      } catch (error) {
+        noteFailure(context.failures, "Keeping a roster", error);
+      }
     }
     if (numbers.qualified)
       await saveDoc(context.docs, nameHittersKey(season), describeHitters(numbers.qualified));

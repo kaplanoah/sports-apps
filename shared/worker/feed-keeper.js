@@ -109,6 +109,13 @@ export function createFeedKeeper({ feeds, now, storage = createMemoryStorage() }
     }
   }
 
+  /** @param {string} name @param {string} key */
+  async function invalidateFeed(name, key) {
+    const storageKey = await nameFeedKey(name, key);
+    records.delete(storageKey);
+    await storage.delete(storageKey);
+  }
+
   /**
    * @param {string} name
    * @param {any} record
@@ -158,9 +165,11 @@ export function createFeedKeeper({ feeds, now, storage = createMemoryStorage() }
       const storageKey = await nameFeedKey(name, key);
       if (forgotten.has(storageKey)) return;
       forgotten.add(storageKey);
-      records.delete(storageKey);
-      await storage.delete(storageKey);
+      await invalidateFeed(name, key);
     },
+
+    // A later normalization failure can reveal an unusable answer after its transport check.
+    invalidateFeed,
 
     /**
      * The feed's kept answer while it's still good, or a new one from `load`.

@@ -189,11 +189,20 @@ export const BaseballHighlights = z.object({
 });
 
 const Day = z.iso.date();
-const PersonId = Count.positive();
-const PlayerId = z.string().regex(/^\d{1,12}$/);
+export const PositiveId = Count.positive();
+export const PlayerId = z.string().regex(/^\d{1,12}$/);
 const Nonnegative = z.number().nonnegative();
 const Innings = z.string().regex(/^\d+(?:\.[012])?$/);
-const RateText = z.union([z.string().regex(/^\d+(?:\.\d+)?$/), z.literal("-.--"), z.literal("--")]);
+export const BaseballRate = z
+  .union([
+    Nonnegative,
+    z
+      .string()
+      .regex(/^(?:\d+(?:\.\d+)?|\.\d+)$/)
+      .refine((value) => Number.isFinite(Number(value))),
+    z.enum(["-.--", "--", "*.**", ".---"]),
+  ])
+  .nullable();
 const PitcherStart = z.object({
   date: Day,
   opp: Identifier.nullable(),
@@ -204,8 +213,8 @@ const PitcherStart = z.object({
   pitches: NullableCount,
 });
 export const BaseballPitcherDetails = z.object({
-  id: PersonId,
-  firstName: Identifier,
+  id: PositiveId,
+  firstName: Identifier.nullable(),
   lastName: Identifier,
   hand: z.string().nullable(),
   birthDate: Day.nullable(),
@@ -213,7 +222,7 @@ export const BaseballPitcherDetails = z.object({
     .object({
       starts: Count,
       ip: Innings.nullable(),
-      era: z.union([RateText, Nonnegative]).nullable(),
+      era: BaseballRate,
       k9: Nonnegative.nullable(),
       bb9: Nonnegative.nullable(),
       speed: Nonnegative.nullable(),
@@ -232,7 +241,7 @@ export const BaseballPitcherDetails = z.object({
 export const BaseballQualifiedStarters = z.object({
   starters: z.array(
     z.object({
-      id: PersonId,
+      id: PositiveId,
       era: Nonnegative.nullable(),
       k9: Nonnegative.nullable(),
       bb9: Nonnegative.nullable(),
@@ -242,7 +251,7 @@ export const BaseballQualifiedStarters = z.object({
 });
 const RotationStart = PitcherStart.pick({ date: true, ip: true, pitches: true });
 export const BaseballRotationPitcher = z.object({
-  id: PersonId,
+  id: PositiveId,
   name: Identifier,
   hand: z.string().nullable(),
   starts: z.array(RotationStart),
@@ -251,11 +260,11 @@ export const BaseballClubStarts = z.object({
   club: Identifier,
   from: Day,
   through: Day,
-  games: z.array(z.object({ date: Day, id: PersonId })),
+  games: z.array(z.object({ date: Day, id: PositiveId })),
   pitchers: z.array(BaseballRotationPitcher),
 });
 
-const PlayerName = z.object({ firstName: Identifier, lastName: Identifier });
+const PlayerName = z.object({ firstName: Identifier, lastName: z.string() });
 const RosterPlayer = PlayerName.extend({
   id: PlayerId,
   number: z.string().nullable(),
@@ -282,31 +291,29 @@ export const BasketballRoster = z.object({
 });
 export const BasketballPlayerTotals = z
   .object({
-    PLAYER_ID: PersonId,
+    PLAYER_ID: PositiveId,
     PLAYER_NAME: Identifier,
     GP: Count,
     MIN: Nonnegative,
     PTS: Count,
     REB: Count,
     AST: Count,
-    STL: Count.optional(),
-    BLK: Count.optional(),
-    TOV: Count.optional(),
-    FGM: Count.optional(),
-    FGA: Count.optional(),
-    FG3M: Count.optional(),
-    FG3A: Count.optional(),
-    FTM: Count.optional(),
-    FTA: Count.optional(),
+    STL: Count.nullish(),
+    BLK: Count.nullish(),
+    TOV: Count.nullish(),
+    FGM: Count.nullish(),
+    FGA: Count.nullish(),
+    FG3M: Count.nullish(),
+    FG3A: Count.nullish(),
+    FTM: Count.nullish(),
+    FTA: Count.nullish(),
   })
   .refine((line) =>
     [
       [line.FGM, line.FGA],
       [line.FG3M, line.FG3A],
       [line.FTM, line.FTA],
-    ].every(
-      ([made, attempted]) => made === undefined || attempted === undefined || made <= attempted,
-    ),
+    ].every(([made, attempted]) => made == null || attempted == null || made <= attempted),
   );
 export const BasketballPlayerGame = z.object({
   gameId: Identifier,
@@ -319,18 +326,18 @@ export const BasketballPlayerGame = z.object({
   rebounds: Count,
   assists: Count,
   minutes: Nonnegative,
-  steals: Count.optional(),
-  blocks: Count.optional(),
-  turnovers: Count.optional(),
-  fieldGoalsMade: Count.optional(),
-  fieldGoalsAttempted: Count.optional(),
-  threesMade: Count.optional(),
-  threesAttempted: Count.optional(),
-  freeThrowsMade: Count.optional(),
-  freeThrowsAttempted: Count.optional(),
+  steals: Count.nullish(),
+  blocks: Count.nullish(),
+  turnovers: Count.nullish(),
+  fieldGoalsMade: Count.nullish(),
+  fieldGoalsAttempted: Count.nullish(),
+  threesMade: Count.nullish(),
+  threesAttempted: Count.nullish(),
+  freeThrowsMade: Count.nullish(),
+  freeThrowsAttempted: Count.nullish(),
 });
 export const BasketballTeamGame = z.object({
-  teamId: PersonId,
+  teamId: PositiveId,
   gameId: Identifier,
   points: Count,
   plusMinus: z.number().int(),
@@ -356,6 +363,122 @@ export const BasketballRanks = z.object({
     threeShare: z.array(Nonnegative.max(1)),
     freeThrowShare: z.array(Nonnegative.max(1)),
   }),
+});
+
+const BaseballHitting = z.object({
+  plateAppearances: Count.nullish(),
+  gamesPlayed: Count.nullish(),
+  atBats: Count.nullish(),
+  hits: Count.nullish(),
+  doubles: Count.nullish(),
+  triples: Count.nullish(),
+  homeRuns: Count.nullish(),
+  rbi: Count.nullish(),
+  runs: Count.nullish(),
+  baseOnBalls: Count.nullish(),
+  strikeOuts: Count.nullish(),
+  stolenBases: Count.nullish(),
+  avg: BaseballRate.optional(),
+  obp: BaseballRate.optional(),
+  slg: BaseballRate.optional(),
+  ops: BaseballRate.optional(),
+});
+const BaseballPitching = z.object({
+  gamesPlayed: Count.nullish(),
+  gamesStarted: Count.nullish(),
+  wins: Count.nullish(),
+  losses: Count.nullish(),
+  strikeOuts: Count.nullish(),
+  saves: Count.nullish(),
+  baseOnBalls: Count.nullish(),
+  inningsPitched: Innings.nullish(),
+  era: BaseballRate.optional(),
+});
+const BaseballRosterPlayer = z.object({
+  id: PositiveId,
+  name: z.string(),
+  number: z.string(),
+  position: z.string(),
+  injury: z.string().nullable(),
+  hitting: BaseballHitting.optional(),
+  pitching: BaseballPitching.optional(),
+});
+export const BaseballRoster = z.object({
+  club: Identifier,
+  season: Count.positive(),
+  players: z.array(BaseballRosterPlayer),
+});
+const PlayerGameFacts = z.object({
+  date: Day,
+  opponent: Identifier.nullable(),
+  isHome: z.boolean(),
+});
+export const BaseballLastGames = z.object({
+  hitting: z.array(
+    PlayerGameFacts.extend(
+      BaseballHitting.pick({
+        atBats: true,
+        hits: true,
+        doubles: true,
+        triples: true,
+        homeRuns: true,
+        rbi: true,
+        baseOnBalls: true,
+      }).shape,
+    ),
+  ),
+  pitching: z.array(
+    PlayerGameFacts.extend({
+      inningsPitched: Innings.nullish(),
+      numberOfPitches: Count.nullish(),
+      runs: Count.nullish(),
+      strikeOuts: Count.nullish(),
+    }),
+  ),
+});
+export const BaseballPlayer = BaseballRosterPlayer.omit({ hitting: true, pitching: true }).extend({
+  season: Count.positive(),
+  club: Identifier,
+  facts: z
+    .object({
+      bats: z.string().nullable(),
+      throws: z.string().nullable(),
+      age: NullableCount,
+      height: z.string().nullable(),
+      weight: NullableCount,
+      debut: Count.positive().nullable(),
+      birthplace: z.string().nullable(),
+    })
+    .nullable(),
+  out: z
+    .object({
+      reason: z.string().nullable(),
+      sentence: z.string().nullable(),
+      updated: z.string().nullable(),
+    })
+    .nullable(),
+  hitting: BaseballHitting.nullable(),
+  pitching: BaseballPitching.nullable(),
+  postseasonHitting: BaseballHitting.nullable(),
+  postseasonPitching: BaseballPitching.nullable(),
+  lastGames: BaseballLastGames.nullable(),
+});
+export const BaseballHitters = z.object({
+  hitters: z.array(
+    z.object({
+      id: PositiveId,
+      avg: Nonnegative.nullable(),
+      obp: Nonnegative.nullable(),
+      slg: Nonnegative.nullable(),
+      ops: Nonnegative.nullable(),
+      homeRuns: Count,
+      rbi: Count,
+      runs: Count,
+      stolenBases: Count,
+      walkRate: Nonnegative.max(1),
+      strikeoutRate: Nonnegative.max(1),
+    }),
+  ),
 });
 
 const BoxScoreSide = z.looseObject({

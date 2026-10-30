@@ -125,3 +125,23 @@ test("recorded MLB highlights validate nested scores, clip fields and identities
     { id, recap: null, story: null, plays: [] },
   );
 });
+
+test("pitcher records preserve missing first names, typeless arsenal entries and no-value rates", () => {
+  const person = structuredClone(PERSON);
+  delete person.useName;
+  const arsenal = person.stats.find((entry) => entry.type.displayName === "pitchArsenal");
+  arsenal.splits.push({ stat: { percentage: -1, averageSpeed: Infinity } });
+  assert.equal(readSide(person).firstName, null);
+  assert.equal(readSpeeds([person]).get(person.id), readSide(person).line.speed);
+  for (const rate of ["-.--", "--", "*.**", ".---", null]) {
+    const changed = structuredClone(person);
+    const line = changed.stats[0].splits[0].stat;
+    line.era = rate;
+    line.strikeoutsPer9Inn = rate;
+    line.walksPer9Inn = rate;
+    const side = readSide(changed);
+    assert.equal(side.line.era, rate);
+    assert.equal(side.line.k9, null);
+    assert.equal(side.line.bb9, null);
+  }
+});

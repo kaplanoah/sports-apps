@@ -25,6 +25,7 @@ import {
   nameRosterKey,
 } from "../worker/src/rosters.js";
 import { createDocs, createJobStorage } from "../../../tests/job-context.js";
+import { nameFeedKey } from "../../../shared/worker/feed-keeper.js";
 
 // What MLB answered early on Oct 8: the Guardians', Yankees', and Dodgers' 40-man rosters, their
 // players' regular seasons, and the day's transactions.
@@ -75,20 +76,11 @@ const readGameLogIds = (path) =>
   (/personIds=([\d,]+)/.exec(path)?.[1] ?? "").split(",").map(Number);
 
 /**
- * MLB's answer for some players' game logs, from the ones the fixture recorded.
- * @param {string} path
- */
-const answerGameLogs = (path) => ({
-  people: readGameLogIds(path)
-    .map((id) => FIXTURE.gameLogs[id])
-    .filter(Boolean),
-});
-
-/**
  * MLB's answers, by request, and ESPN's injury report, which a test can refuse or change.
  * @param {Record<string, any>} answers
  */
 function createMlbFetch(answers) {
+  const gameLogs = structuredClone(FIXTURE.gameLogs);
   /** @type {string[]} */
   const requests = [];
   const refused = new Set();
@@ -103,11 +95,16 @@ function createMlbFetch(answers) {
     const path = url.slice(MLB_API.length);
     requests.push(path);
     if (refused.has(path)) return new Response("", { status: 503 });
-    if (isGameLogRequest(path)) return new Response(JSON.stringify(answerGameLogs(path)));
+    if (isGameLogRequest(path))
+      return Response.json({
+        people: readGameLogIds(path)
+          .map((id) => gameLogs[id])
+          .filter(Boolean),
+      });
     if (!(path in answers)) return new Response("", { status: 503 });
     return new Response(JSON.stringify(answers[path]));
   };
-  return { requests, refused, espn, fetchImpl };
+  return { requests, refused, espn, fetchImpl, gameLogs };
 }
 
 /**
@@ -131,7 +128,7 @@ function createRun() {
   const mlb = createMlbFetch(answers);
   const clock = { now: NOW };
   const storage = createJobStorage();
-  const job = createRosterJob();
+  let job = createRosterJob();
   const runJob = () =>
     job.updateStore({
       docs,
@@ -155,7 +152,11 @@ function createRun() {
   return {
     docs,
     storage,
+    restartJob: () => {
+      job = createRosterJob();
+    },
     answers,
+    gameLogs: mlb.gameLogs,
     refused: mlb.refused,
     espn: mlb.espn,
     runJob,
@@ -763,4 +764,156 @@ test("a reason ESPN changes saves again only the player it's about", async () =>
     listDataWrites(run.docs).filter((key) => key.startsWith("players/")),
     [TREINEN],
   );
+});
+
+test("actual roster, player and hitter writers reject malformed cold reads, retain good answers and recover", async () => {
+  for (const target of ["roster", "hitting", "pitching", "people", "qualified"]) {
+    const run = createRun();
+    const path =
+      target === "roster"
+        ? nameClubRequest("CLE")
+        : target === "hitting"
+          ? HITTING
+          : target === "pitching"
+            ? PITCHING
+            : target === "people"
+              ? PEOPLE
+              : QUALIFIED;
+    const original = structuredClone(run.answers[path]);
+    const rosterIds = new Set(
+      run.answers[nameClubRequest("CLE")].roster.map((row) => row.person.id),
+    );
+    const selectRow = () =>
+      run.answers[path].stats[0].splits.find((row) => rosterIds.has(row.player.id)) ??
+      run.answers[path].stats[0].splits[0];
+    const selectPerson = () => run.answers[path].people.find((person) => rosterIds.has(person.id));
+    const key = target === "qualified" ? nameHittersKey(SEASON) : nameRosterKey("CLE");
+    const damage = () => {
+      if (target === "roster")
+        run.answers[path].roster.find((row) => row.status.description === "Active").person.id = -1;
+      else if (target === "people") selectPerson().currentAge = -1;
+      else selectRow().stat[target === "pitching" ? "era" : "homeRuns"] = -1;
+    };
+    damage();
+    await fillRosters(run);
+    if (target === "people") {
+      const id = selectPerson().id;
+      assert.ok(
+        [...run.docs.stored.values()]
+          .filter((doc) => doc?.id === id)
+          .every((doc) => doc.facts == null),
+      );
+    } else assert.equal(run.docs.stored.has(key), false, target);
+    run.answers[path] = structuredClone(original);
+    run.wait(24 * 60 + 1);
+    await fillRosters(run);
+    const valid = structuredClone(run.docs.stored.get(key));
+    assert.ok(valid, target);
+    const playerKeys = [...run.docs.stored.keys()].filter((key) => key.startsWith("players/"));
+    const players = new Map(
+      playerKeys.map((key) => [key, structuredClone(run.docs.stored.get(key))]),
+    );
+    const cacheKey =
+      target === "roster"
+        ? `roster-answer:${SEASON}:CLE`
+        : await nameFeedKey(
+            target === "people" ? "people" : "rosterStats",
+            target === "people" ? String(SEASON) : path,
+          );
+    const cached = structuredClone(run.storage.stored.get(cacheKey));
+    damage();
+    run.wait(24 * 60 + 1);
+    await run.runJob();
+    assert.deepEqual(run.docs.stored.get(key), valid, target);
+    for (const [key, player] of players)
+      assert.deepEqual(run.docs.stored.get(key), player, `${target}: ${key}`);
+    const after = run.storage.stored.get(cacheKey);
+    assert.deepEqual(
+      target === "roster" ? after : after.answer,
+      target === "roster" ? cached : cached.answer,
+      target,
+    );
+    assert.match(run.docs.stored.get("rosters/status").lastFailure.message, /Invalid sports/);
+    run.answers[path] = structuredClone(original);
+    if (target === "roster")
+      run.answers[path].roster.find((row) => row.status.description === "Active").jerseyNumber =
+        "99";
+    else if (target === "people") selectPerson().currentAge += 1;
+    else
+      selectRow().stat[target === "pitching" ? "era" : "homeRuns"] =
+        target === "pitching" ? "2.01" : 99;
+    run.wait(24 * 60 + 1);
+    await fillRosters(run);
+    if (target === "people")
+      assert.ok(
+        playerKeys.some(
+          (key) => JSON.stringify(run.docs.stored.get(key)) !== JSON.stringify(players.get(key)),
+        ),
+      );
+    else assert.notDeepEqual(run.docs.stored.get(key), valid, target);
+  }
+});
+
+test("a malformed last-game row or identity preserves its log without blocking other players", async () => {
+  for (const target of ["counts", "identity", "envelope"]) {
+    const run = createRun();
+    await fillRosters(run);
+    const id = 694197;
+    const goodId = 608070;
+    const original = structuredClone(run.gameLogs[id]);
+    const key = namePlayerKey(SEASON, id);
+    const valid = structuredClone(run.docs.stored.get(key).lastGames);
+    const line = run.gameLogs[id].stats[0].splits.at(-1).stat;
+    if (target === "counts") line.hits = -1;
+    if (target === "identity") run.gameLogs[id].id = "bad";
+    if (target === "envelope") run.gameLogs[id].stats = {};
+    const reads = await run.storage.get(nameGameLogReadsKey(SEASON));
+    delete reads[id];
+    delete reads[goodId];
+    await run.storage.put(nameGameLogReadsKey(SEASON), reads);
+    run.wait(6);
+    await run.runJob();
+    assert.deepEqual(run.docs.stored.get(key).lastGames, valid, target);
+    const failed = await run.storage.get(nameGameLogReadsKey(SEASON));
+    assert.equal(failed[id], undefined, target);
+    assert.ok(failed[goodId], target);
+    run.gameLogs[id] = original;
+    run.gameLogs[id].stats[0].splits.at(-1).stat.hits = 3;
+    run.wait(6);
+    await run.runJob();
+    assert.notDeepEqual(run.docs.stored.get(key).lastGames, valid, target);
+    assert.ok((await run.storage.get(nameGameLogReadsKey(SEASON)))[id], target);
+  }
+});
+
+test("failed auxiliary feeds preserve player facts and postseason lines even after raw cache loss", async () => {
+  for (const path of [PEOPLE, POSTSEASON_HITTING, POSTSEASON_PITCHING]) {
+    const run = createRun();
+    await fillRosters(run);
+    const players = new Map([...run.docs.stored].filter(([key]) => key.startsWith("players/")));
+    const rawKey = await nameFeedKey(
+      path === PEOPLE ? "people" : "rosterStats",
+      path === PEOPLE ? String(SEASON) : path,
+    );
+    await run.storage.delete(rawKey);
+    run.answers[path] =
+      path === PEOPLE
+        ? { people: [{ id: -1 }] }
+        : { stats: [{ splits: [{ player: { id: -1 }, stat: {} }] }] };
+    run.restartJob();
+    run.wait(24 * 60 + 1);
+    await run.runJob();
+    for (const [key, kept] of players) assert.deepEqual(run.docs.stored.get(key), kept, path);
+    assert.match(run.docs.stored.get("rosters/status").lastFailure.message, /Invalid sports/);
+  }
+});
+
+test("malformed statistic containers are rejected without exposing vendor values in status", async () => {
+  const run = createRun();
+  run.answers[HITTING].stats[0].splits[0].stat = "private-vendor-value";
+  await run.runJob();
+  const message = run.docs.stored.get("rosters/status").lastFailure.message;
+  assert.match(message, /Invalid sports statistics/);
+  assert.doesNotMatch(message, /private-vendor-value/);
+  assert.equal(run.docs.stored.has(nameRosterKey("CLE")), false);
 });

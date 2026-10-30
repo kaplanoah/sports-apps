@@ -290,3 +290,14 @@ test("a player asked for with no id, team, or real season, or one the league doe
     /^Couldn't read the WNBA: The WNBA answered 404/,
   );
 });
+
+test("a live player reader validates the saved latest game while leaving unused older stats alone", async () => {
+  const answers = structuredClone(listAnswers());
+  const regular = answers[nameGameLogRequest(2026, "Regular Season", STEWART)].resultSets[0];
+  regular.rowSet[regular.rowSet.length - 1][regular.headers.indexOf("REB")] = -1;
+  const query = `id=${STEWART}&team=NYL&season=2026`;
+  assert.equal((await askForPlayer(answers, query)).status, 200);
+  const playoffs = answers[nameGameLogRequest(2026, "Playoffs", STEWART)].resultSets[0];
+  for (const row of playoffs.rowSet) row[playoffs.headers.indexOf("REB")] = -1;
+  assert.equal((await askForPlayer(answers, query)).status, 502);
+});

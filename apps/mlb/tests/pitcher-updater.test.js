@@ -18,6 +18,7 @@ import {
 } from "../worker/src/adapters/rotations.js";
 import { addDays } from "#shared/days.js";
 import { nameFeedKey } from "../../../shared/worker/feed-keeper.js";
+import { PAST_RETRY_MS } from "../../../shared/worker/background-job.js";
 import { createDocs, createJobStorage } from "../../../tests/job-context.js";
 
 // MLB's tables, the last two weeks of games, and the pitchers the matchup sheet reads, as MLB
@@ -580,7 +581,10 @@ test("actual pitcher, starter and rotation writers retain usable records and rec
     const requests = [];
     const fetchImpl = async (url) => {
       requests.push(url);
-      const response = await mlb.fetchImpl(url);
+      const response =
+        new URL(url).pathname === "/api/v1/schedule"
+          ? Response.json(answers[listScheduleRequest(null, "2026-09-22", TODAY)])
+          : await mlb.fetchImpl(url);
       if (!response.ok) return response;
       const answer = await response.json();
       if (phase === "malformed") {
@@ -601,6 +605,9 @@ test("actual pitcher, starter and rotation writers retain usable records and rec
             for (const game of date.games) game.officialDate = "invalid";
       }
       if (phase === "recovery") {
+        if (target === "rotation" && answer.dates)
+          for (const date of answer.dates)
+            for (const game of date.games) game.officialDate = "2026-10-01";
         const person = answer.people?.find((person) => person.id === id);
         const line = person?.stats?.find((entry) => entry.type?.displayName === "season")
           ?.splits?.[0]?.stat;
@@ -651,7 +658,7 @@ test("actual pitcher, starter and rotation writers retain usable records and rec
     phase = "recovery";
     await update();
     assert.ok(docs.stored.get(key), target);
-    if (target !== "rotation") assert.notDeepEqual(docs.stored.get(key), valid, target);
+    assert.notDeepEqual(docs.stored.get(key), valid, target);
   }
 });
 
@@ -665,8 +672,125 @@ test("the actual historical starter writer does not mark malformed data filled a
   assert.equal(run.docs.stored.has(nameStartersKey(2025)), false);
   assert.equal(await run.storage.get("filled:2025"), undefined);
   qualified.stats[0].splits[0].stat.era = original;
-  run.wait(5);
+  run.wait(PAST_RETRY_MS / MINUTE_MS + 1);
   await run.runJob();
   assert.ok(run.docs.stored.get(nameStartersKey(2025)));
   assert.equal(await run.storage.get("filled:2025"), true);
+});
+
+test("a malformed pitcher leaves valid batch-mates saved and read while only he retries", async () => {
+  for (const damage of ["rate", "identity", "duplicate"]) {
+    const run = createRun();
+    const id = FIXTURE.people[2026][0].id;
+    const goodId = FIXTURE.people[2026][1].id;
+    let bad = true;
+    const fetchImpl = async (url) => {
+      const response = await run.mlb.fetchImpl(url);
+      if (!bad || !url.includes("pitchArsenal")) return response;
+      const answer = await response.json();
+      const person = answer.people?.find((row) => row.id === id);
+      if (person) {
+        if (damage === "rate") person.stats[0].splits[0].stat.era = "Infinity";
+        if (damage === "identity") person.id = "bad";
+        if (damage === "duplicate") answer.people.push(structuredClone(person));
+      }
+      return Response.json(answer);
+    };
+    const update = () =>
+      createPitcherJob().updateStore({
+        docs: run.docs,
+        storage: run.storage,
+        env: {},
+        fetchImpl,
+        now: () => NOW + (bad ? 0 : 6 * MINUTE_MS),
+        createLoadSnapshot: () => async () => null,
+      });
+    await update();
+    assert.equal(run.docs.stored.has(namePitcherKey(2026, id)), false, damage);
+    assert.ok(run.docs.stored.get(namePitcherKey(2026, goodId)), damage);
+    const reads = await run.storage.get(nameReadsKey(2026));
+    assert.equal(reads[id], undefined, damage);
+    assert.ok(reads[goodId], damage);
+    bad = false;
+    await update();
+    assert.ok(run.docs.stored.get(namePitcherKey(2026, id)), damage);
+    assert.ok((await run.storage.get(nameReadsKey(2026)))[id], damage);
+  }
+});
+
+test("a bad newest historical season backs off across restarts while an older season fills", async () => {
+  const answers = listAnswers();
+  answers[listQualifiedRequest(2024)] = { stats: [] };
+  answers[listQualifiedRequest(2025)].stats[0].splits[0].stat.era = "Infinity";
+  const run = createRun({ answers });
+  run.docs.stored.set("seasons/2024", { year: 2024 });
+  await run.runJob();
+  const attempts = () =>
+    run.mlb.requests.filter((path) => path === listQualifiedRequest(2025)).length;
+  assert.equal(attempts(), 1);
+  const restart = () =>
+    createPitcherJob().updateStore({
+      docs: run.docs,
+      storage: run.storage,
+      env: {},
+      fetchImpl: run.mlb.fetchImpl,
+      now: () => NOW + 6 * MINUTE_MS,
+      createLoadSnapshot: () => async () => null,
+    });
+  await restart();
+  assert.equal(attempts(), 1);
+  assert.equal(await run.storage.get("filled:2024"), true);
+  assert.equal(await run.storage.get("filled:2025"), undefined);
+  answers[listQualifiedRequest(2025)] = structuredClone(
+    FIXTURE.answers[listQualifiedRequest(2025)],
+  );
+  run.wait(PAST_RETRY_MS / MINUTE_MS + 1);
+  await run.runJob();
+  assert.equal(attempts(), 2);
+  assert.equal(await run.storage.get("filled:2025"), true);
+  assert.equal(await run.storage.get("past-retry:2025"), undefined);
+});
+
+test("a malformed game-log identity retains saved starts and retries without blocking batch-mates", async () => {
+  const run = createRun();
+  await run.runJob();
+  const id = FIXTURE.people[2026][0].id;
+  const key = namePitcherKey(2026, id);
+  const kept = structuredClone(run.docs.stored.get(key));
+  assert.ok(kept.starts.length);
+  const goodId = FIXTURE.people[2026][1].id;
+  const reads = await run.storage.get(nameReadsKey(2026));
+  delete reads[id];
+  delete reads[goodId];
+  await run.storage.put(nameReadsKey(2026), reads);
+  let bad = true;
+  const fetchImpl = async (url) => {
+    const response = await run.mlb.fetchImpl(url);
+    if (!url.includes("gameLog")) return response;
+    const answer = await response.json();
+    const person = answer.people?.find((row) => row.id === id);
+    if (person && bad) person.id = "bad";
+    if (person && !bad)
+      for (const entry of person.stats)
+        for (const game of entry.splits) game.stat.numberOfPitches = 77;
+    return Response.json(answer);
+  };
+  const job = createPitcherJob();
+  const update = () =>
+    job.updateStore({
+      docs: run.docs,
+      storage: run.storage,
+      env: {},
+      fetchImpl,
+      now: () => NOW + (bad ? 6 : 12) * MINUTE_MS,
+      createLoadSnapshot: () => async () => null,
+    });
+  await update();
+  assert.deepEqual(run.docs.stored.get(key), kept);
+  assert.equal((await run.storage.get(nameReadsKey(2026)))[id], undefined);
+  assert.ok((await run.storage.get(nameReadsKey(2026)))[goodId]);
+  bad = false;
+  await update();
+  assert.ok((await run.storage.get(nameReadsKey(2026)))[id]);
+  assert.notDeepEqual(run.docs.stored.get(key), kept);
 });

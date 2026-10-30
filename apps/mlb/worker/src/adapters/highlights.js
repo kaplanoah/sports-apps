@@ -1,3 +1,4 @@
+import { settleReads } from "../../../../../shared/worker/upstream.js";
 import {
   BaseballHighlights,
   validateSportsData,
@@ -51,9 +52,7 @@ export const namePlaysRequest = (id) => `/api/v1.1/game/${id}/feed/live?fields=$
  */
 function readSeconds(duration) {
   if (duration == null || duration === "") return null;
-  const parts = String(duration ?? "")
-    .split(":")
-    .map(Number);
+  const parts = String(duration).split(":").map(Number);
   if (parts.some((part) => !Number.isFinite(part))) return NaN;
   return parts.reduce((total, part) => total * 60 + part, 0);
 }
@@ -119,7 +118,7 @@ function listPlaysById(feed) {
   if (!Array.isArray(feed?.liveData?.plays?.allPlays)) throw new Error("Invalid sports plays");
   /** @type {Map<string, any>} */
   const plays = new Map();
-  (feed?.liveData?.plays?.allPlays ?? []).forEach((/** @type {any} */ play, order) => {
+  feed.liveData.plays.allPlays.forEach((/** @type {any} */ play, order) => {
     const isTop = play.about?.halfInning === "top";
     const scored = play.about?.isScoringPlay === true;
     const facts = {
@@ -243,7 +242,7 @@ export function describeHighlights(id, content, feed, withHeadlines = new Set())
  * @param {string} id
  */
 export async function fetchGameMedia(fetchImpl, id) {
-  const [content, feed] = await Promise.all([
+  const [content, feed] = await settleReads([
     fetchMlbJson(fetchImpl, nameContentRequest(id), CONTENT_CACHE_SECONDS),
     fetchMlbJson(fetchImpl, namePlaysRequest(id), CONTENT_CACHE_SECONDS),
   ]);

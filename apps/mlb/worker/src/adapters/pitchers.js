@@ -1,4 +1,5 @@
 import {
+  BaseballRate,
   BaseballPitcherDetails,
   BaseballQualifiedStarters,
   validateSportsData,
@@ -6,7 +7,7 @@ import {
 import { readEasternDay } from "#shared/days.js";
 import { readClubId } from "./mlb.js";
 import { fetchMlbJson } from "../mlb.js";
-import { createReusedLoader } from "../../../../../shared/worker/upstream.js";
+import { createReusedLoader, settleReads } from "../../../../../shared/worker/upstream.js";
 
 // A pitcher's numbers change at most once a game, and the league's once a day of games.
 const PITCHER_CACHE_SECONDS = 10 * 60;
@@ -160,26 +161,35 @@ export function splitIntoBatches(ids) {
  * @param {number[]} ids
  */
 export async function fetchPeople(fetchJson, nameRequest, ids) {
-  const answers = await Promise.all(
-    splitIntoBatches(ids).map((batch) => fetchJson(nameRequest(batch))),
-  );
-  return answers.flatMap((answer, index) => readPeople(answer, splitIntoBatches(ids)[index]));
+  const batches = splitIntoBatches(ids);
+  const answers = await settleReads(batches.map((batch) => fetchJson(nameRequest(batch))));
+  return answers.flatMap((answer, index) => readPeople(answer, batches[index]));
 }
 
 /**
  * @param {any} answer
  * @param {number[]} ids
+ * @param {(error: unknown, id: number | null) => void} [onFailure]
  * @returns {any[]}
  */
-export function readPeople(answer, ids) {
+export function readPeople(answer, ids, onFailure) {
   if (!Array.isArray(answer?.people)) throw new Error("Invalid sports people");
+  const people = new Map();
   const seen = new Set();
   for (const person of answer.people) {
-    validateSportsData(BaseballPitcherDetails.shape.id, person?.id);
-    if (seen.has(person.id)) throw new Error("Invalid sports identity");
-    seen.add(person.id);
+    const id = BaseballPitcherDetails.shape.id.safeParse(person?.id).success ? person.id : null;
+    try {
+      validateSportsData(BaseballPitcherDetails.shape.id, person?.id);
+      if (seen.has(person.id)) throw new Error("Invalid sports identity");
+      seen.add(person.id);
+      if (ids.includes(person.id)) people.set(person.id, person);
+    } catch (error) {
+      people.delete(id);
+      if (!onFailure) throw error;
+      onFailure(error, id);
+    }
   }
-  return answer.people.filter((person) => ids.includes(person.id));
+  return [...people.values()];
 }
 
 /**
@@ -195,15 +205,14 @@ const readStats = (person, type) =>
  * @param {number} places
  */
 const roundTo = (value, places) => {
-  const number = readRate(value);
+  const number = readBaseballRate(value);
   return number == null ? null : Math.round(number * 10 ** places) / 10 ** places;
 };
 
 /** @param {number | string | null | undefined} value */
-function readRate(value) {
-  if (value == null || value === "-.--" || value === "--") return null;
-  if (typeof value === "number") return value;
-  return /^\d+(?:\.\d+)?$/.test(value) ? Number(value) : NaN;
+export function readBaseballRate(value) {
+  const rate = validateSportsData(BaseballRate, value ?? null);
+  return rate == null || Number.isNaN(Number(rate)) ? null : Number(rate);
 }
 
 // The fastball he throws most, a four-seamer or a sinker, stands for how hard he throws, to the
@@ -226,9 +235,9 @@ export const describeStarters = (qualifiedResponse, speeds) =>
   validateSportsData(BaseballQualifiedStarters, {
     starters: readLeagueRows(qualifiedResponse).map((row) => ({
       id: row.player.id,
-      era: readRate(row.stat.era),
-      k9: readRate(row.stat.strikeoutsPer9Inn),
-      bb9: readRate(row.stat.walksPer9Inn),
+      era: readBaseballRate(row.stat.era),
+      k9: readBaseballRate(row.stat.strikeoutsPer9Inn),
+      bb9: readBaseballRate(row.stat.walksPer9Inn),
       speed: speeds.get(row.player.id) ?? null,
     })),
   });
@@ -238,9 +247,11 @@ export const describeStarters = (qualifiedResponse, speeds) =>
  * @param {any[]} people
  */
 export const readSpeeds = (people) =>
-  new Map(
-    people.map((person) => [person.id, readFastballSpeed(readStats(person, "pitchArsenal"))]),
-  );
+  new Map(people.map((person) => [person.id, readFastballSpeed(readArsenal(person))]));
+
+/** @param {any} person */
+const readArsenal = (person) =>
+  readStats(person, "pitchArsenal").filter((pitch) => pitch.stat?.type?.code);
 
 const MEASURES = { era: "low", k9: "high", bb9: "low", speed: "high" };
 
@@ -321,10 +332,10 @@ export const listStarts = (gameLogPerson) =>
  * @param {any} gameLogPerson
  */
 export function describePitcher(person, gameLogPerson) {
-  const arsenal = readStats(person, "pitchArsenal").filter((pitch) => pitch.stat?.type?.code);
+  const arsenal = readArsenal(person);
   return validateSportsData(BaseballPitcherDetails, {
     id: person.id,
-    firstName: person.useName,
+    firstName: person.useName ?? null,
     lastName: person.useLastName,
     hand: person.pitchHand?.code ?? null,
     birthDate: person.birthDate ?? null,
@@ -413,7 +424,7 @@ export function createPitcherReader({
    * @param {number} season
    */
   async function fetchPitcher(id, season) {
-    const [people, gameLogs] = await Promise.all([
+    const [people, gameLogs] = await settleReads([
       fetchMlbJson(fetchImpl, listPeopleRequest(season, [id]), PITCHER_CACHE_SECONDS),
       fetchMlbJson(fetchImpl, listGameLogRequest(season, [id]), PITCHER_CACHE_SECONDS),
     ]);

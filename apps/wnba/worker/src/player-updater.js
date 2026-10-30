@@ -1,6 +1,7 @@
 import { isSameJson } from "#shared/compare.js";
 import { settleReads } from "../../../../shared/worker/upstream.js";
 import {
+  PAST_RETRY_MS,
   createPerStoreJob,
   createSavedDocs,
   listPastSeasons,
@@ -143,6 +144,9 @@ const countFinals = (schedule) =>
     ? schedule.games.filter((/** @type {any} */ game) => game.state === "final").length
     : null;
 
+/** @param {string} url @param {string[]} columns */
+const nameStatsFeedKey = (url, columns) => `${url} ${columns.join(" ")}`;
+
 // Each season's totals as they were kept without each player's team, under a key no run reads,
 // written out as they were kept, since a change to how the totals are read now can't change it.
 /** @param {number} season */
@@ -165,37 +169,52 @@ function createStoreUpdate(historyOnly = false) {
   }
 
   /**
-   * Reads a feed trimmed to its columns, kept under them, so one kept with fewer is read again.
    * @param {RunContext} context
-   * @param {string} name which feed's limits apply
+   * @param {{ season: number, name: string, url: string, table: string, columns: string[], validate: (answer: any) => unknown }} feed
+   */
+  async function readStats(context, { season, name, url, table, columns, validate }) {
+    const what = `Reading ${season}'s ${name}`;
+    let reported = false;
+    try {
+      return await /** @type {ReturnType<typeof createFeedKeeper>} */ (keeper).readFeed(
+        name,
+        nameStatsFeedKey(url, columns),
+        async () => {
+          addOne(context.log.feeds, name);
+          const answer = await fetchWnbaJson(context.fetchImpl, url, null, hasTable(table));
+          validate(answer);
+          return trimColumns(answer, columns);
+        },
+        {
+          onFailure: (reason) => {
+            reported = true;
+            noteFailure(context.failures, what, new Error(reason));
+          },
+        },
+      );
+    } catch (error) {
+      if (!reported) noteFailure(context.failures, what, error);
+      throw error;
+    }
+  }
+
+  /**
+   * @param {RunContext} context
+   * @param {number} season
+   * @param {string} name
    * @param {string} url
    * @param {string} table
    * @param {string[]} columns
    */
-  const readStats = (context, name, url, table, columns) =>
-    /** @type {ReturnType<typeof createFeedKeeper>} */ (keeper).readFeed(
+  const readPlayerStats = (context, season, name, url, table, columns) =>
+    readStats(context, {
+      season,
       name,
-      `${url} ${columns.join(" ")}`,
-      async () => {
-        addOne(context.log.feeds, name);
-        const answer = await fetchWnbaJson(context.fetchImpl, url, null, hasTable(table));
-        if (table === "CommonTeamRoster" || table === "PlayerIndex")
-          validateRosterFeed(answer, table, {
-            season: Number(new URL(url).searchParams.get("Season")),
-            now: context.now(),
-          });
-        else validatePlayerFeed(answer, table);
-        return trimColumns(answer, columns);
-      },
-      {
-        onFailure: (reason) =>
-          noteFailure(
-            context.failures,
-            `Reading ${new URL(url).searchParams.get("Season")}'s stats`,
-            new Error(reason),
-          ),
-      },
-    );
+      url,
+      table,
+      columns,
+      validate: (answer) => validatePlayerFeed(answer, table),
+    });
 
   /**
    * Who ESPN lists as out on each team today, and why, or no one when ESPN hasn't answered.
@@ -221,18 +240,19 @@ function createStoreUpdate(historyOnly = false) {
    * @param {number} season
    */
   async function readSeasonFeeds(context, season) {
-    await forgetOldTotals(season);
     return settleReads([
-      readStats(
+      readPlayerStats(
         context,
+        season,
         "totals",
         nameTotalsRequest(season),
         "LeagueDashPlayerStats",
         TOTALS_FEED_COLUMNS,
       ),
       ...[REGULAR_SEASON, PLAYOFFS].map((seasonType) =>
-        readStats(
+        readPlayerStats(
           context,
+          season,
           "playerGames",
           nameGameLogRequest(season, seasonType),
           "PlayerGameLogs",
@@ -240,8 +260,9 @@ function createStoreUpdate(historyOnly = false) {
         ),
       ),
       ...[REGULAR_SEASON, PLAYOFFS].map((seasonType) =>
-        readStats(
+        readPlayerStats(
           context,
+          season,
           "teamGames",
           nameTeamGameLogRequest(season, seasonType),
           "LeagueGameLog",
@@ -259,13 +280,15 @@ function createStoreUpdate(historyOnly = false) {
   const readRosterFeeds = (context, season) =>
     Promise.all(
       TEAM_KEYS.map((team) =>
-        readStats(
-          context,
-          "roster",
-          nameLeagueRosterRequest(team, season),
-          "CommonTeamRoster",
-          ROSTER_COLUMNS,
-        ).catch(() => null),
+        readStats(context, {
+          season,
+          name: "roster",
+          url: nameLeagueRosterRequest(team, season),
+          table: "CommonTeamRoster",
+          columns: ROSTER_COLUMNS,
+          validate: (answer) =>
+            validateRosterFeed(answer, "CommonTeamRoster", { season, now: context.now() }),
+        }).catch(() => null),
       ),
     );
 
@@ -287,25 +310,47 @@ function createStoreUpdate(historyOnly = false) {
    * @param {RunContext} context
    * @param {number} season
    * @param {{ leagueRosters: any[], outPlayers: import("./injuries.js").OutPlayer[][], playerList: any }} answers
-   * @returns {Promise<ReturnType<typeof describeRoster>[]>} the rosters of the teams the league answered for
+   * @returns {Promise<{ rosters: ReturnType<typeof describeRoster>[], isWhole: boolean }>}
    */
   async function saveRosters(context, season, { leagueRosters, outPlayers, playerList }) {
     const rosters = [];
+    let isWhole = true;
     for (const [index, team] of TEAM_KEYS.entries()) {
       const leagueRoster = leagueRosters[index];
-      if (!leagueRoster) continue;
-      const roster = describeRoster({
-        team,
-        season,
-        leagueRoster,
-        playerList,
-        outPlayers: outPlayers[index],
-        now: context.now(),
-      });
-      await saveDoc(context, nameRosterKey(season, team), roster);
-      rosters.push(roster);
+      const key = nameRosterKey(season, team);
+      const kept = !leagueRoster || !playerList ? await savedDocs.readDoc(context.docs, key) : null;
+      if (!leagueRoster || (!playerList && kept)) {
+        if (kept) rosters.push(kept);
+        isWhole = false;
+        continue;
+      }
+      try {
+        const roster = describeRoster({
+          team,
+          season,
+          leagueRoster,
+          playerList,
+          outPlayers: outPlayers[index],
+          now: context.now(),
+        });
+        await saveDoc(context, key, roster);
+        rosters.push(roster);
+      } catch (error) {
+        isWhole = false;
+        noteFailure(context.failures, "Keeping a roster", error);
+        const previous = await savedDocs.readDoc(context.docs, key);
+        if (previous) rosters.push(previous);
+        await /** @type {ReturnType<typeof createFeedKeeper>} */ (keeper).invalidateFeed(
+          "roster",
+          nameStatsFeedKey(nameLeagueRosterRequest(team, season), ROSTER_COLUMNS),
+        );
+        await /** @type {ReturnType<typeof createFeedKeeper>} */ (keeper).invalidateFeed(
+          "playerList",
+          nameStatsFeedKey(namePlayerListRequest(season), PLAYER_LIST_COLUMNS),
+        );
+      }
     }
-    return rosters;
+    return { rosters, isWhole };
   }
 
   /**
@@ -361,24 +406,28 @@ function createStoreUpdate(historyOnly = false) {
    * @param {any[] | null} series the season's series, or null for a past season
    */
   async function updateSeason(context, season, series) {
+    await forgetOldTotals(season);
     const [stats, leagueRosters, outPlayers, playerList] = await Promise.all([
-      readSeasonFeeds(context, season).catch((error) => {
-        noteFailure(context.failures, `Reading ${season}'s stats`, error);
-        return null;
-      }),
+      readSeasonFeeds(context, season).catch(() => null),
       readRosterFeeds(context, season),
       readOutFeeds(context, series),
-      readStats(
-        context,
-        "playerList",
-        namePlayerListRequest(season),
-        "PlayerIndex",
-        PLAYER_LIST_COLUMNS,
-      ).catch(() => null),
+      readStats(context, {
+        season,
+        name: "playerList",
+        url: namePlayerListRequest(season),
+        table: "PlayerIndex",
+        columns: PLAYER_LIST_COLUMNS,
+        validate: (answer) =>
+          validateRosterFeed(answer, "PlayerIndex", { season, now: context.now() }),
+      }).catch(() => null),
     ]);
-    const rosters = await saveRosters(context, season, { leagueRosters, outPlayers, playerList });
+    const { rosters, isWhole } = await saveRosters(context, season, {
+      leagueRosters,
+      outPlayers,
+      playerList,
+    });
     if (stats) await savePlayers(context, season, stats);
-    const hasEveryRoster = leagueRosters.every(Boolean);
+    const hasEveryRoster = isWhole && leagueRosters.every(Boolean);
     if (hasEveryRoster)
       await saveDoc(context, namePlayerIndexKey(season), indexRosters(season, rosters));
     return !!stats && !!playerList && hasEveryRoster;
@@ -407,17 +456,29 @@ function createStoreUpdate(historyOnly = false) {
   async function fillPastSeason(context, current) {
     const allFilled = describeAllFilled(current);
     if ((await context.storage.get(ALL_FILLED_KEY)) === allFilled) return;
+    let hasPending = false;
     for (const season of await listPastSeasons(context.docs, current)) {
       if ((await context.storage.get(nameFilledKey(season))) === FILLED_WITH) {
         await indexKeptRosters(context, season);
         continue;
       }
-      const isWhole = await updateSeason(context, season, null);
-      context.log.pastSeason = { season, isWhole };
-      if (isWhole) await context.storage.put(nameFilledKey(season), FILLED_WITH);
+      hasPending = true;
+      const retryKey = `past-retry:${season}`;
+      if (((await context.storage.get(retryKey)) ?? -Infinity) > context.now()) continue;
+      try {
+        const isWhole = await updateSeason(context, season, null);
+        context.log.pastSeason = { season, isWhole };
+        if (isWhole) {
+          await context.storage.put(nameFilledKey(season), FILLED_WITH);
+          await context.storage.delete(retryKey);
+        } else await context.storage.put(retryKey, context.now() + PAST_RETRY_MS);
+      } catch (error) {
+        await context.storage.put(retryKey, context.now() + PAST_RETRY_MS);
+        throw error;
+      }
       return;
     }
-    await context.storage.put(ALL_FILLED_KEY, allFilled);
+    if (!hasPending) await context.storage.put(ALL_FILLED_KEY, allFilled);
   }
 
   /** @param {RunContext} context */
