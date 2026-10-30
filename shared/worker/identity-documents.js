@@ -193,7 +193,9 @@ export function createIdentityDocuments(storage, policy) {
           ...(readTeam(value.home) && { home: readTeam(value.home) }),
           ...(value.start && { start: value.start }),
           ...(value.date && { date: value.date }),
-          ...(record.gameNumber && { gameNumber: record.gameNumber }),
+          ...((value.doubleheader ?? record.gameNumber) && {
+            gameNumber: value.doubleheader ?? record.gameNumber,
+          }),
         });
       }
       if (value.espnIdentity && !hasIdentifier(value.espnIdentity.id)) rejected += 1;

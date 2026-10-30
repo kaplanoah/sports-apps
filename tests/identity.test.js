@@ -499,13 +499,21 @@ test("box scores and highlights cannot replace an established MLB doubleheader n
   const store = new MlbStore(ctx, {}, { now: () => 0 });
   await store.docs.write("schedules-2026/2026-06", {
     year: 2026,
-    games: [createGame("7", { state: "final", doubleheader: 2, gameNumber: 2 })],
+    games: [
+      createGame("7", { state: "final", doubleheader: 2, gameNumber: 2 }),
+      createGame("8", { state: "final", doubleheader: 1 }),
+    ],
   });
   await store.docs.write("games/7", { id: "7", state: "final", innings: [] });
   await store.docs.write("highlights/7", { id: "7", plays: [] });
   assert.equal((await store.identities.lookup.readEntry("game", "7")).facts.gameNumber, 2);
   assert.notEqual(stored.get("games/7").gameNumber, 1);
   assert.notEqual(stored.get("highlights/7").gameNumber, 1);
+  assert.equal((await store.identities.lookup.readEntry("game", "8")).facts.gameNumber, 1);
+  assert.equal(
+    stored.get("schedules-2026/2026-06").games.find((game) => game.id === "8").gameNumber,
+    undefined,
+  );
 });
 
 test("contradictory evidence marks an established association disputed even without a replacement, and omission cannot clear it", async () => {
