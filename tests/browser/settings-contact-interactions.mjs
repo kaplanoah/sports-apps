@@ -414,6 +414,32 @@ export function testSettingsContactInteractions(test, expect, { openApp, setting
     const dialog = await openContact(page);
     await dialog.getByRole("button", { name: "Bug report", exact: true }).tap();
     const attach = dialog.locator('label[for="contactScreenshot"]');
+    /** @param {import("@playwright/test").Locator[]} neighbors */
+    const expectNeighborsKeepTheirTaps = async (neighbors) => {
+      for (const neighbor of neighbors)
+        expect(
+          await neighbor.evaluate(
+            (element, label) => {
+              const own = element.getBoundingClientRect();
+              const reach = /** @type {Element} */ (label).getBoundingClientRect();
+              const x = Math.min(
+                Math.max(reach.left + reach.width / 2, own.left + 1),
+                own.right - 1,
+              );
+              const y = Math.min(
+                Math.max(reach.top + reach.height / 2, own.top + 1),
+                own.bottom - 1,
+              );
+              return element.contains(document.elementFromPoint(x, y));
+            },
+            await attach.elementHandle(),
+          ),
+        ).toBe(true);
+    };
+    await expectNeighborsKeepTheirTaps([
+      dialog.locator("#contactMessage"),
+      dialog.locator('label[for="contactEmail"]'),
+    ]);
     const box = await attach.boundingBox();
     const middle = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
     for (const [x, y] of [
@@ -432,25 +458,10 @@ export function testSettingsContactInteractions(test, expect, { openApp, setting
     await attach.tap();
     await (await chooser).setFiles(SCREENSHOT);
     await expect(attach).toHaveText("Change screenshot");
-
-    const neighbors = [
+    await expectNeighborsKeepTheirTaps([
       dialog.locator("#contactMessage"),
       dialog.getByRole("button", { name: "Remove" }),
-      dialog.locator('label[for="contactEmail"]'),
-    ];
-    for (const neighbor of neighbors)
-      expect(
-        await neighbor.evaluate(
-          (element, label) => {
-            const own = element.getBoundingClientRect();
-            const reach = /** @type {Element} */ (label).getBoundingClientRect();
-            const x = Math.min(Math.max(reach.left + reach.width / 2, own.left + 1), own.right - 1);
-            const y = Math.min(Math.max(reach.top + reach.height / 2, own.top + 1), own.bottom - 1);
-            return element.contains(document.elementFromPoint(x, y));
-          },
-          await attach.elementHandle(),
-        ),
-      ).toBe(true);
+    ]);
   });
 
   test("with Diagnostics on, a tap on Add screenshot logs its touch, its clicks, and that a file came back, never the file's name", async ({
