@@ -403,11 +403,14 @@ test("the backup and the game sheet keep a day's ESPN scoreboard at the edge as 
     ),
   );
 
-  await createEspnGameReader({ fetchImpl: league.fetchImpl }).fetchSummary({
-    away,
-    home,
-    start: game.date,
-  });
+  await createEspnGameReader({ fetchImpl: league.fetchImpl }).fetchSummary(
+    {
+      away,
+      home,
+      start: game.date,
+    },
+    async () => null,
+  );
 
   const cacheTimes = league.reads
     .filter((read) => read.url === OCT_1)

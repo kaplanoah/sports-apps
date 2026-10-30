@@ -539,3 +539,32 @@ test("WNBA keeps a stored live lead through a failed summary with no secondary c
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), lead);
 });
+
+test("a tapped ESPN final outside the background list is replaced when the league recovers", async () => {
+  const league = LEAGUES[0];
+  const espn = readFixture("wnba", "2026-10-29-espn-box-scores.json").games[league.id];
+  let refuses = true;
+  let leagueReads = 0;
+  const harness = createHarness(league, async (url) => {
+    if (url.includes("boxscore")) {
+      leagueReads += 1;
+      return refuses ? new Response(null, { status: 403 }) : Response.json(league.feed);
+    }
+    if (url.includes("scoreboard")) return Response.json(espn.scoreboard);
+    if (url.includes("summary")) return Response.json(espn.summary);
+    return new Response(null, { status: 404 });
+  });
+  const store = harness.getStore();
+  await store.docs.write("seasons/2026", { year: 2026, games: [], nearestGames: [] });
+  assert.equal((await (await harness.request()).json()).source, "espn");
+  assert.equal((await store.docs.read(`games/${league.id}`)).boxScore.source, "espn");
+  refuses = false;
+  harness.advance();
+  const expected = league.describe(league.feed);
+  assert.deepEqual(await (await harness.request()).json(), expected);
+  assert.deepEqual((await store.docs.read(`games/${league.id}`)).boxScore, expected);
+  assert.equal(leagueReads, 2);
+  harness.restart();
+  assert.deepEqual(await (await harness.request()).json(), expected);
+  assert.equal(leagueReads, 2);
+});

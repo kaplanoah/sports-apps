@@ -4,7 +4,7 @@ import {
 } from "../../../../../shared/worker/sports-schema.js";
 import { namePlayerIndexKey } from "#shared/page-search.js";
 import { readAnyGameSeason, readStrictGameState } from "./wnba.js";
-import { describeEspnBoxScore } from "./espn-box-score.js";
+import { describeEspnBoxScore, isFromEspn } from "./espn-box-score.js";
 import { createEspnGameReader } from "./lead.js";
 
 import { fetchWnbaJson, LIVE_CACHE_SECONDS } from "../wnba.js";
@@ -14,6 +14,9 @@ import { fetchWnbaJson, LIVE_CACHE_SECONDS } from "../wnba.js";
 
 // The league's CDN has no box score for a game that hasn't started, and says so with a 403.
 export const NOT_YET_STATUSES = [403, 404];
+
+/** @param {any} boxScore */
+export const isLeagueFinal = (boxScore) => boxScore?.state === "final" && !isFromEspn(boxScore);
 
 /** @param {string} id */
 export const nameBoxScoreRequest = (id) =>
@@ -101,20 +104,20 @@ export function createBoxScoreReader({
 } = {}) {
   /**
    * @param {Game} game
-   * @param {ReadDoc | undefined} readDoc
+   * @param {ReadDoc} readDoc
    * @param {() => Promise<any>} readSummary
    */
   async function readEspnBoxScore(game, readDoc, readSummary) {
     const summary = await readSummary();
     if (!summary) return null;
     const season = readAnyGameSeason(game.id);
-    const index = season && readDoc && (await readDoc(namePlayerIndexKey(season)));
+    const index = season && (await readDoc(namePlayerIndexKey(season)));
     return describeEspnBoxScore(summary, game.id, index);
   }
 
   /**
    * @param {Game} game
-   * @param {ReadDoc} [readDoc] the store's documents, when there's a store
+   * @param {ReadDoc} readDoc the store's documents
    * @param {() => Promise<any>} [readSummary] ESPN's summary of the game, as a caller that reads it
    *   anyway shares it
    */

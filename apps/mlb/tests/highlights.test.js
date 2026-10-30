@@ -533,3 +533,21 @@ test("historical highlights back off failed games, fill later games and stop sca
   assert.ok(!docs.lists.some((collection) => collection.startsWith("schedules-")));
   assert.ok(!readKeys.some((key) => key.startsWith("schedules-") || key.startsWith("highlights/")));
 });
+
+test("an unsupported frame template falls back to MLB's photo", () => {
+  const content = structuredClone(RECORDED.content[BREWERS_AT_PADRES]);
+  const recapItem = content.highlights.highlights.items.find((item) =>
+    /Game 3 Highlights/.test(item.headline),
+  );
+  recapItem.playbacks.find((playback) => playback.name === "trickplay").url =
+    "https://example.com/05s.%.webp";
+  const { recap } = describeHighlights(
+    BREWERS_AT_PADRES,
+    content,
+    RECORDED.plays[BREWERS_AT_PADRES],
+  );
+  assert.equal(
+    recap.still,
+    content.editorial.recap.mlb.image.cuts.find((cut) => cut.width === 960).src,
+  );
+});

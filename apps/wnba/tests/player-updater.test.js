@@ -41,6 +41,7 @@ const INJURIES = JSON.parse(
 );
 const NOW = Date.parse(ROSTERS.recordedAt);
 const MINUTE_MS = 60 * 1000;
+const HOUR_MS = 60 * MINUTE_MS;
 const STEWART = "1627668";
 const SABALLY = "1630149";
 const FIEBICH = "1630142";
@@ -50,7 +51,7 @@ const STATS_FEEDS = 5;
 const TEAM_COUNT = Object.keys(TEAMS).length;
 const STATUS_KEY = "players/status";
 
-test("historical players and rosters fill incrementally across restarts within four requests", async () => {
+test("historical players and rosters fill incrementally across restarts within their request budget", async () => {
   const { createRequestBudget, HISTORY_REQUESTS_PER_RUN } =
     await import("../../../shared/worker/request-budget.js");
   const { docs, storage, league } = createRun();
@@ -62,7 +63,7 @@ test("historical players and rosters fill incrementally across restarts within f
       docs,
       storage,
       env: {},
-      now: () => NOW + attempt * 50000,
+      now: () => NOW + attempt * 7 * HOUR_MS,
       fetchImpl: budget.fetchImpl,
       createLoadSnapshot: () => async () => null,
     });
@@ -74,7 +75,7 @@ test("historical players and rosters fill incrementally across restarts within f
     await createFeedKeeper({
       feeds: {},
       storage,
-      now: () => NOW + (attempt + 1) * 50000,
+      now: () => NOW + (attempt + 1) * 7 * HOUR_MS,
     }).noteFinalCount(attempt + 1);
   }
   assert.ok(await storage.get("filled:2025"));

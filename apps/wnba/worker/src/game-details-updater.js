@@ -1,4 +1,4 @@
-import { createBoxScoreReader } from "./adapters/box-score.js";
+import { createBoxScoreReader, isLeagueFinal } from "./adapters/box-score.js";
 import { isFromEspn } from "./adapters/espn-box-score.js";
 import { createEspnGameReader, describeGameLead } from "./adapters/lead.js";
 import { nameGameDetailsKey } from "./store-docs.js";
@@ -45,12 +45,6 @@ async function listFinals(context, year) {
 
 /** @param {PromiseSettledResult<any>} result */
 const readAnswer = (result) => (result.status === "fulfilled" ? result.value : null);
-
-/**
- * Whether a box score is the league's own final.
- * @param {any} boxScore
- */
-const isLeagueFinal = (boxScore) => boxScore?.state === "final" && !isFromEspn(boxScore);
 
 /**
  * Whether the league answered with a final box score, and ESPN with a lead that's over, or that it

@@ -50,7 +50,8 @@ import { fetchWnbaJson, hasTable, trimColumns } from "./wnba.js";
 // went to overtime, for search, and, once every team's roster has answered, the season's list of
 // players. Live runs report in `players/status`, including how often a sheet needed a league read.
 // A separate historical run fills one past season at a time, newest first, and reports its active
-// work in `players-history/status`. Completed seasons are read again only when required columns change.
+// work in `players-history/status`. A completed season is read again only when its required
+// columns change.
 
 const MINUTE_MS = 60 * 1000;
 const HOUR_MS = 60 * MINUTE_MS;

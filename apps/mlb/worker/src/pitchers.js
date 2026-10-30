@@ -17,7 +17,7 @@ export function createPitcherServer({
   const { fetchPitcher, loadQualified } = createPitcherReader({ fetchImpl, now });
 
   /**
-   * What the store keeps of the sheet, each part null when it doesn't keep it, when it has not been filled.
+   * The parts of the sheet the store keeps, each null until filled.
    * @param {number} id
    * @param {number} season
    * @param {ReadDoc} readDoc
@@ -27,7 +27,7 @@ export function createPitcherServer({
       namePitcherKey(season, id),
       nameStartersKey(season),
     ]);
-    const [pitcher = null, qualified = null] = docs ?? [];
+    const [pitcher = null, qualified = null] = docs;
     return { pitcher, qualified, isCurrentSeason };
   }
 

@@ -18,18 +18,18 @@ export function createRotationServer({
   const fetchClubStarts = createRotationReader({ fetchImpl });
 
   /**
-   * The club's starts the store keeps, null when they don't reach the two weeks before `date` or
-   * the store has not filled it, and whether `date` is in the store's current season. Storage errors stop the read.
+   * The saved starts that cover the two weeks before `date`, and whether its season is current.
+   * Storage errors stop the read.
    * @param {string} club
    * @param {string} date
-   * @param {((key: string) => Promise<any>) | undefined} readDoc
+   * @param {ReadDoc} readDoc
    */
   async function readSavedStarts(club, date, readDoc) {
     const season = Number(date.slice(0, 4));
     const { docs, isCurrentSeason } = await readSeasonDocs(readDoc, season, [
       nameRotationKey(season, club),
     ]);
-    const saved = docs?.[0] ?? null;
+    const [saved] = docs;
     return {
       clubStarts: saved && coversDay(saved, date, readEasternDay(now()).date) ? saved : null,
       isCurrentSeason,

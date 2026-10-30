@@ -111,7 +111,7 @@ const stampVersion = (read, version) => (version ? { ...read, version } : read);
  * saved, and one with misses saves what it brought, and either is tried again later; one that
  * brought what it could so far is finished next run.
  * @param {RunContext} context
- * @param {HighlightsLeague} league
+ * @param {Pick<HighlightsLeague, "readHighlights" | "nameKey" | "version">} league
  * @param {{ game: any, season: number }} final the game, and the current season it belongs to
  * @param {HighlightsRead | undefined} read
  * @returns {Promise<HighlightsRead>}
@@ -176,8 +176,8 @@ export function createHighlightsJob(league) {
 
 /**
  * A bounded historical fill reuses the live highlights reader's retry and version rules. A
- * completed season is never scanned again until the reader's version changes.
- * @param {HighlightsLeague & { listSeasonFinals: (context: JobContext, season: number) => Promise<any[]>, readSeasonRevision?: (context: JobContext, season: number) => Promise<string | null>, requestsPerGame: number }} league
+ * completed season is skipped until its reader version or schedule revision changes.
+ * @param {Pick<HighlightsLeague, "readHighlights" | "nameKey" | "version" | "gameLengthMs"> & { listSeasonFinals: (context: JobContext, season: number) => Promise<any[]>, readSeasonRevision: (context: JobContext, season: number) => Promise<string | null>, requestsPerGame: number }} league
  */
 export function createHistoricalHighlightsJob(league) {
   const version = league.version ?? 0;
@@ -213,9 +213,7 @@ export function createHistoricalHighlightsJob(league) {
 
   async function keepHistoricalSeason(context, season) {
     const filledKey = `highlights-filled:${season}`;
-    const revision = league.readSeasonRevision
-      ? await league.readSeasonRevision(context, season)
-      : "complete";
+    const revision = await league.readSeasonRevision(context, season);
     const completed = { version, revision };
     if (revision !== null && isSameJson(await context.storage.get(filledKey), completed)) return;
     const readsKey = `history-highlight-reads:${season}`;
@@ -224,9 +222,7 @@ export function createHistoricalHighlightsJob(league) {
     const games = await league.listSeasonFinals(context, season);
     await readHistoricalGames(context, season, games, reads);
     if (!isSameJson(stored, reads)) await context.storage.put(readsKey, reads);
-    const currentRevision = league.readSeasonRevision
-      ? await league.readSeasonRevision(context, season)
-      : revision;
+    const currentRevision = await league.readSeasonRevision(context, season);
     if (
       revision !== null &&
       revision === currentRevision &&

@@ -14,7 +14,7 @@ export function createWatchedGameLoader({ fetchImpl = (input, init) => fetch(inp
    * @param {string} id
    * @param {any} snapshot
    * @param {any} stored the details saved last
-   * @param {import("../../../../shared/worker/store-reads.js").ReadDoc} [readDoc] the store's documents
+   * @param {import("../../../../shared/worker/store-reads.js").ReadDoc} readDoc the store's documents
    */
   return async function loadWatchedGame(id, snapshot, stored, readDoc) {
     const game = [...snapshot.games, ...snapshot.nearestGames].find((each) => each.id === id);

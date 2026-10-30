@@ -73,10 +73,11 @@ function findFrame(item) {
     (/** @type {any} */ playback) => playback.name === FRAMES_PLAYBACK,
   )?.url;
   const count = Math.floor((readSeconds(item.duration) ?? 0) / FRAME_SECONDS);
-  if (!frames || count === 0) return null;
+  if (typeof frames !== "string" || count === 0) return null;
   const middle = String(Math.round(count / 2)).padStart(FRAME_NUMBER_DIGITS, "0");
   // Only the frame filename's token is a placeholder; URL escapes elsewhere stay intact.
-  return frames.replace(/%(?=\.jpg(?:[?#]|$))/g, middle);
+  const filled = frames.replace(/%(?=\.jpg(?:[?#]|$))/g, middle);
+  return filled === frames ? null : filled;
 }
 
 /** @param {any} item */

@@ -43,12 +43,12 @@ test("highlights request the shown season and retry an unfilled archive without 
   expect(new URL((await request).url()).searchParams.get("season")).toBe("2025");
   await expect(sheet.locator("#highlightsBody .retry-title")).toHaveText("Not available yet");
   await page.unroute(matchPath("/highlights"), unavailable);
+  const retryRequest = page.waitForRequest(/\/highlights\?/);
   await sheet.locator("#highlightsBody").getByRole("button", { name: "Try again" }).click();
+  expect(new URL((await retryRequest).url()).searchParams.get("season")).toBe("2025");
   await expect(sheet.locator("#highlightsBody .clip-row")).toHaveCount(15);
-  const unknownSeason = page.waitForRequest(/\/highlights\?/);
-  await page.evaluate(async () => {
-    const { fetchHighlights } = await import(new URL("js/highlights-fetch.js", location.href).href);
-    await fetchHighlights("849826", null);
-  });
-  expect(new URL((await unknownSeason).url()).searchParams.has("season")).toBe(false);
+  const reopenedRequest = page.waitForRequest(/\/highlights\?/);
+  await page.reload();
+  expect(new URL((await reopenedRequest).url()).searchParams.get("season")).toBe("2025");
+  await expect(sheet.locator("#highlightsBody .clip-row")).toHaveCount(15);
 });

@@ -1,5 +1,5 @@
 import { createEspnGameReader, readGame } from "./adapters/lead.js";
-import { createBoxScoreReader, NOT_YET_STATUSES } from "./adapters/box-score.js";
+import { createBoxScoreReader, isLeagueFinal, NOT_YET_STATUSES } from "./adapters/box-score.js";
 import { describeError, respondError, respondJson } from "../../../../shared/worker/responses.js";
 import { readKeptDoc } from "../../../../shared/worker/store-reads.js";
 import { nameGameDetailsKey } from "./store-docs.js";
@@ -18,7 +18,7 @@ export function createBoxScoreServer({
    */
   async function loadBoxScore(game, readDoc) {
     const kept = (await readKeptDoc(readDoc, nameGameDetailsKey(game.id)))?.boxScore;
-    if (kept?.state === "final") return kept;
+    if (isLeagueFinal(kept)) return kept;
     return readBoxScore(game, readDoc);
   }
 

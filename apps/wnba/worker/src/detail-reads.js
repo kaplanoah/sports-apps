@@ -1,5 +1,5 @@
 import { PLAYER_JOB } from "./player-updater.js";
-import { createEspnGameReader } from "./adapters/lead.js";
+import { createEspnGameReader, GAME_PARAMETERS } from "./adapters/lead.js";
 import { createDetailReads } from "../../../../shared/worker/detail-reads.js";
 import { createBoxScoreServer } from "./box-score.js";
 import { createHighlightsServer } from "./highlights.js";
@@ -10,7 +10,6 @@ import { createPlayerServer } from "./player.js";
 import { createPreviewServer } from "./preview.js";
 import { createRosterServer } from "./roster.js";
 
-const GAME_PARAMETERS = ["id", "away", "home", "start"];
 export const DETAIL_READS = {
   "/box-score": {
     parameters: GAME_PARAMETERS,

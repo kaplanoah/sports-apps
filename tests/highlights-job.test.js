@@ -336,7 +336,7 @@ test("completed historical seasons refill only when the reader version changes",
       version,
       gameLengthMs: GAME_LENGTH_MS,
       requestsPerGame: 1,
-      listFinals: async () => null,
+      readSeasonRevision: async () => "fixture",
       listSeasonFinals: async () => [endGame("one", 24 * 365)],
       nameKey: (id) => `highlights/${id}`,
       readHighlights: async (context, game) => {
@@ -376,7 +376,6 @@ test("historical completion waits for a complete schedule and follows its later 
     version: 1,
     gameLengthMs: GAME_LENGTH_MS,
     requestsPerGame: 1,
-    listFinals: async () => null,
     listSeasonFinals: async () => games,
     readSeasonRevision: async () => revision,
     nameKey: (id) => `highlights/${id}`,
@@ -408,4 +407,48 @@ test("historical completion waits for a complete schedule and follows its later 
   revision = "complete:2";
   await fillSchedule();
   assert.deepEqual(reads, ["one", "two"]);
+});
+
+test("a history budget cancelled during a game leaves no failed-try backoff", async () => {
+  const { createRequestBudget } = await import("../shared/worker/request-budget.js");
+  const docs = createDocs({ "live/current": { season: 2026 }, "seasons/2025": { year: 2025 } });
+  const storage = createJobStorage();
+  let active = true;
+  let requests = 0;
+  const budget = createRequestBudget(
+    async () => {
+      requests += 1;
+      active = false;
+      return Response.json({});
+    },
+    2,
+    () => active,
+  );
+  const updateHistory = createHistoricalHighlightsJob({
+    version: 1,
+    gameLengthMs: GAME_LENGTH_MS,
+    requestsPerGame: 2,
+    listSeasonFinals: async () => [endGame("one", 24 * 365)],
+    readSeasonRevision: async () => "fixture",
+    nameKey: (id) => `highlights/${id}`,
+    readHighlights: async (context) => {
+      await Promise.all([
+        context.fetchImpl("https://example.com/first"),
+        context.fetchImpl("https://example.com/second"),
+      ]);
+      return { highlights: { id: "one" }, isFinished: true };
+    },
+  });
+  await updateHistory({
+    docs,
+    storage,
+    env: {},
+    now: () => NOW,
+    fetchImpl: budget.fetchImpl,
+    remainingRequests: budget.remaining,
+    createLoadSnapshot: () => async () => null,
+  });
+  assert.equal(requests, 1);
+  assert.equal((await storage.get("history-highlight-reads:2025"))?.one?.tries, undefined);
+  assert.equal((await docs.read("highlights-history/status")).lastFailure, null);
 });

@@ -19,7 +19,7 @@ export function createPlayerServer({
   const readPlayerFromLeague = createPlayerReader({ loadRoster, fetchImpl, now });
 
   /**
-   * Her sheet from what the store keeps, undefined when it does not keep the season, and whether the season is the store's current one.
+   * Her sheet from the store, undefined until filled, and whether its season is current.
    * @param {{ id: string, team: string, season: number }} asked
    * @param {ReadDoc} readDoc
    */
@@ -29,7 +29,7 @@ export function createPlayerServer({
       nameNumbersKey(season, id),
       nameRosterKey(season, team),
     ]);
-    const [ranks, numbers, roster] = kept.docs ?? [];
+    const [ranks, numbers, roster] = kept.docs;
     return {
       player: ranks ? composePlayer({ id, team, season, numbers, roster, ranks }) : undefined,
       isCurrentSeason: kept.isCurrentSeason,

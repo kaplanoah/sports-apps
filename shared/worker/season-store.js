@@ -254,6 +254,7 @@ export function createSeasonStore(league) {
         return fetchImpl(input, init);
       };
       this.historyRun = null;
+      this.historyGeneration = null;
       this.alarmGeneration = 0;
       /** @type {Map<string, Promise<void>>} */
       this.jobRuns = new Map();
@@ -516,9 +517,9 @@ export function createSeasonStore(league) {
     }
 
     startHistory(requestsBefore, generation) {
-      if (this.historyRun) return;
-      const pending = [...this.jobRuns.values()];
-      this.historyRun = Promise.allSettled(pending)
+      if (this.historyRun && this.historyGeneration === generation) return;
+      const pending = [...(this.historyRun ? [this.historyRun] : []), ...this.jobRuns.values()];
+      const history = Promise.allSettled(pending)
         .then(async () => {
           const limit = Math.min(
             HISTORY_REQUESTS_PER_RUN,
@@ -547,9 +548,14 @@ export function createSeasonStore(league) {
             console.error(`Filling history failed: ${describeError(error)}`);
         })
         .finally(() => {
-          this.historyRun = null;
+          if (this.historyRun === history) {
+            this.historyRun = null;
+            this.historyGeneration = null;
+          }
         });
-      this.ctx.waitUntil?.(this.historyRun);
+      this.historyRun = history;
+      this.historyGeneration = generation;
+      this.ctx.waitUntil?.(history);
     }
 
     // The next run is set before this one starts, so a run that never ends can't stop the next. A

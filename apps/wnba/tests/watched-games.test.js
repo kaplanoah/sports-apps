@@ -54,7 +54,7 @@ function createLoader({
 
 test("a live game's details are its box score and its lead", async () => {
   const { loadWatchedGame } = createLoader();
-  const details = await loadWatchedGame(ID, createSnapshot("live"), null);
+  const details = await loadWatchedGame(ID, createSnapshot("live"), null, async () => null);
   assert.deepEqual(details.boxScore, describeBoxScore(liveBoxScore));
   assert.equal(details.lead.periods, 5);
 });
@@ -62,16 +62,19 @@ test("a live game's details are its box score and its lead", async () => {
 test("a team's nearest game is watched like a playoff game", async () => {
   const { loadWatchedGame } = createLoader();
   const snapshot = { games: [], nearestGames: [createGame("live")] };
-  const details = await loadWatchedGame(ID, snapshot, null);
+  const details = await loadWatchedGame(ID, snapshot, null, async () => null);
   assert.deepEqual(details.boxScore, describeBoxScore(liveBoxScore));
 });
 
 test("a game that hasn't started, or whose final box score is saved, needs no reads", async () => {
   const { reads, loadWatchedGame } = createLoader();
-  assert.equal(await loadWatchedGame(ID, createSnapshot("pre"), null), null);
+  assert.equal(await loadWatchedGame(ID, createSnapshot("pre"), null, async () => null), null);
   const saved = { boxScore: { state: "final" }, lead: null };
-  assert.equal(await loadWatchedGame(ID, createSnapshot("final"), saved), null);
-  assert.equal(await loadWatchedGame("1042600999", createSnapshot("live"), null), null);
+  assert.equal(await loadWatchedGame(ID, createSnapshot("final"), saved, async () => null), null);
+  assert.equal(
+    await loadWatchedGame("1042600999", createSnapshot("live"), null, async () => null),
+    null,
+  );
   assert.deepEqual(reads, []);
 });
 
@@ -102,5 +105,8 @@ test("while the league refuses a live game's box score, it comes from ESPN's, re
 test("a read that fails keeps the details saved", async () => {
   const { loadWatchedGame } = createLoader({ refuse: true });
   const saved = { boxScore: { state: "live", away: {}, home: {} }, lead: { periods: 4 } };
-  assert.deepEqual(await loadWatchedGame(ID, createSnapshot("live"), saved), saved);
+  assert.deepEqual(
+    await loadWatchedGame(ID, createSnapshot("live"), saved, async () => null),
+    saved,
+  );
 });

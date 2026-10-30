@@ -177,6 +177,7 @@ function listScheduleWrites(snapshot, saved) {
 /** @param {any} doc a month of the season's games as the store keeps it */
 const holdsOnlyPlayoffGames = (doc) => (doc.games ?? []).every((game) => game.postseason);
 
+// Only playoff-only months can disappear when a series ends; a partial standings read keeps them.
 /** @param {any} snapshot @param {Map<string, any>} saved */
 function listDroppedMonths(snapshot, saved) {
   if (!snapshot.isSeriesKnown) return [];
@@ -188,6 +189,7 @@ function listDroppedMonths(snapshot, saved) {
     .map(([month]) => nameScheduleKey(snapshot.season, month));
 }
 
+// Each month has its own document so a game update sends open pages only that month.
 // A publication revision lets historical consumers skip completed schedules, and an interrupted
 // publication remains incomplete so the past-season job repairs it.
 async function saveSchedule(docs, snapshot) {

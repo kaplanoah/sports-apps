@@ -18,7 +18,7 @@ export function createHighlightsReader({
   fetchImpl = (input, init) => fetch(input, init),
   espnGames = createEspnGameReader({ fetchImpl }),
 } = {}) {
-  /** @param {{ id: string, away: string, home: string, start: string }} game @param {ReadDoc} [readDoc] */
+  /** @param {{ id: string, away: string, home: string, start: string }} game @param {ReadDoc} readDoc */
   return async function readHighlights(game, readDoc) {
     const summary = await espnGames.fetchSummary(game, readDoc);
     return summary ? describeHighlights(game.id, summary) : null;

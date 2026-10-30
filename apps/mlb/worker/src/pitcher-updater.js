@@ -53,7 +53,6 @@ const HOUR_MS = 60 * MINUTE_MS;
 const RUN_DELAY_MS = 5 * MINUTE_MS;
 const STATUS_KEY = "pitchers/status";
 export const PITCHER_JOB = "pitchers";
-// The count detail services add to each time a sheet reads MLB for what the store should have kept.
 // Every starter's first read spreads over a few runs, while a game's end needs only one batch.
 const BATCHES_PER_RUN = 4;
 

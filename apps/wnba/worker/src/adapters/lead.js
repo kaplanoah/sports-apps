@@ -15,6 +15,7 @@ import { fetchEspnDay, fetchEspnJson } from "../wnba.js";
 // A live game's plays change with every basket.
 const SUMMARY_CACHE_SECONDS = 15;
 const GAME_ID = /^\d{10}$/;
+export const GAME_PARAMETERS = ["id", "away", "home", "start"];
 
 /** @param {string} start */
 const formatGameDay = (start) => formatEspnDay(Date.parse(start));
@@ -39,10 +40,7 @@ export const describeLead = (summary) =>
  * @param {URLSearchParams} searchParams
  */
 export function readGame(searchParams) {
-  const id = searchParams.get("id") ?? "";
-  const away = searchParams.get("away") ?? "";
-  const home = searchParams.get("home") ?? "";
-  const start = searchParams.get("start") ?? "";
+  const [id, away, home, start] = GAME_PARAMETERS.map((name) => searchParams.get(name) ?? "");
   const isValid =
     GAME_ID.test(id) &&
     Object.hasOwn(TEAMS, away) &&
@@ -97,9 +95,9 @@ export function createEspnGameReader({ fetchImpl = (input, init) => fetch(input,
     () => Date.now(),
   );
 
-  /** @param {{ id?: string, away: string, home: string, start: string }} game @param {ReadDoc | undefined} readDoc */
+  /** @param {{ id?: string, away: string, home: string, start: string }} game @param {ReadDoc} readDoc */
   async function findGameEventId(game, readDoc) {
-    const kept = game.id && readDoc && (await readDoc(nameEspnMatchKey(game.id)));
+    const kept = game.id && (await readDoc(nameEspnMatchKey(game.id)));
     if (kept && kept.away === game.away && kept.home === game.home) return kept.eventId;
     const scoreboard = await loadDay(formatGameDay(game.start));
     return findEventId(scoreboard, game);
@@ -109,7 +107,7 @@ export function createEspnGameReader({ fetchImpl = (input, init) => fetch(input,
     /**
      * The game's summary, or null when ESPN has no such game that day.
      * @param {{ id?: string, away: string, home: string, start: string }} game
-     * @param {ReadDoc} [readDoc]
+     * @param {ReadDoc} readDoc
      */
     async fetchSummary(game, readDoc) {
       const eventId = await findGameEventId(game, readDoc);

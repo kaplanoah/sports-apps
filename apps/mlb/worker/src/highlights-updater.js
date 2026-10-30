@@ -8,6 +8,7 @@ import { findHeadlineStills, forgetOtherSeasonsStills } from "./headline-stills.
 import {
   describeHighlights,
   fetchGameMedia,
+  fetchHighlights,
   listStillsToCheck,
   nameHighlightsKey,
 } from "./adapters/highlights.js";
@@ -56,17 +57,16 @@ export function createHighlightsUpdater() {
   return {
     ...createLiveJob(),
     updateHistory: createHistoricalHighlightsJob({
-      listFinals: listCurrentFinals,
       listSeasonFinals: listFinals,
       readSeasonRevision: ({ docs }, season) => ensureScheduleRevision(docs, season),
       gameLengthMs: GAME_LENGTH_MS,
       nameKey: nameHighlightsKey,
       version: HIGHLIGHTS_VERSION,
       requestsPerGame: 2,
-      readHighlights: async (context, game) => {
-        const { content, feed } = await fetchGameMedia(context.fetchImpl, game.id);
-        return { highlights: describeHighlights(game.id, content, feed), isFinished: true };
-      },
+      readHighlights: async (context, game) => ({
+        highlights: await fetchHighlights(context.fetchImpl, game.id),
+        isFinished: true,
+      }),
     }),
   };
 }

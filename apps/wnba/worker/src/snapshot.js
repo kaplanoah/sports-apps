@@ -85,7 +85,7 @@ export function createSnapshotLoader({
   fetchImpl = (input, init) => fetch(input, init),
   now = () => Date.now(),
   storage = createMemoryStorage(),
-  readDoc,
+  readDoc = async () => null,
 } = {}) {
   const slowFeeds = createFeedKeeper({ feeds: SLOW_FEEDS, now, storage });
   const networkMonths = new Map();

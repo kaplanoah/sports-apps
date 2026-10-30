@@ -1305,6 +1305,7 @@ test("a new alarm cancels an older history continuation before it can fetch besi
     releaseHistory = resolve;
   });
   const reads = [];
+  let historyRuns = 0;
   const SeasonStore = createSeasonStore({
     ...QUIET_LEAGUE,
     backgroundJobs: {
@@ -1314,10 +1315,11 @@ test("a new alarm cancels an older history continuation before it can fetch besi
           await fetchImpl("https://example.com/live");
         },
         updateHistory: async ({ fetchImpl }) => {
-          await fetchImpl("https://example.com/history-first");
+          const invocation = ++historyRuns;
+          await fetchImpl(`https://example.com/history-${invocation}-first`);
           announceHistory();
           await held;
-          await fetchImpl("https://example.com/history-second");
+          await fetchImpl(`https://example.com/history-${invocation}-second`);
         },
       },
     },
@@ -1341,7 +1343,9 @@ test("a new alarm cancels an older history continuation before it can fetch besi
   await store.historyRun;
   assert.deepEqual(reads, [
     "https://example.com/live",
-    "https://example.com/history-first",
+    "https://example.com/history-1-first",
     "https://example.com/live",
+    "https://example.com/history-2-first",
+    "https://example.com/history-2-second",
   ]);
 });

@@ -7,6 +7,7 @@
     "apps/mlb/tests/game-details-updater.test.js",
     "apps/mlb/tests/game-sheet.test.js",
     "apps/mlb/tests/headline-stills.test.js",
+    "apps/mlb/tests/highlights-fetch.test.js",
     "apps/mlb/tests/highlights.test.js",
     "apps/mlb/tests/injuries.test.js",
     "apps/mlb/tests/kept-on-device.test.js",
