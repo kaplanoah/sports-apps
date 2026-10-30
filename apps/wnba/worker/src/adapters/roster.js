@@ -1,9 +1,13 @@
+import {
+  BasketballRoster,
+  validateSportsData,
+} from "../../../../../shared/worker/sports-schema.js";
 import { TEAMS } from "../../../page/js/teams.js";
 import { createReusedLoader } from "../../../../../shared/worker/upstream.js";
 import { fetchInjuries, listOutPlayers } from "../injuries.js";
 import { readNameLetters } from "../../../../../shared/worker/espn-adapter.js";
 import { splitName } from "../season-averages.js";
-import { fetchWnbaJson, hasTable, isCurrentSeason, readTable } from "../wnba.js";
+import { fetchWnbaJson, hasTable, isCurrentSeason, readRequiredTable, readTable } from "../wnba.js";
 
 const WNBA_STATS = "https://stats.wnba.com/stats";
 // A roster changes with a signing or an injury, a past season's never, and the list of every
@@ -15,6 +19,36 @@ const PLAYER_LIST_CACHE_SECONDS = 24 * 60 * 60;
 const ROSTER_REUSE_MS = 5 * 60 * 1000;
 // A past season's player is the age she was midway through it.
 const MIDSEASON_MONTH = 6;
+
+/**
+ * @param {any} answer
+ * @param {string} table
+ * @param {{ season: number, now: number }} context
+ */
+export function validateRosterFeed(answer, table, { season, now }) {
+  const rows = readRequiredTable(answer, table);
+  if (table === "CommonTeamRoster") {
+    const context = { outByName: new Map(), ageDay: chooseAgeDay(season, now) };
+    validateSportsData(
+      BasketballRoster.shape.players,
+      rows.map((row) => describePlayer(row, new Map(), context)),
+    );
+    return answer;
+  }
+  for (const row of rows) {
+    const names = { firstName: row.PLAYER_FIRST_NAME, lastName: row.PLAYER_LAST_NAME };
+    validateSportsData(
+      BasketballRoster.shape.players.element.pick({
+        id: true,
+        firstName: true,
+        lastName: true,
+        debut: true,
+      }),
+      { id: String(row.PERSON_ID), ...names, debut: readDebut(row.FROM_YEAR) },
+    );
+  }
+  return answer;
+}
 
 /**
  * @param {string} team
@@ -62,6 +96,12 @@ const readText = (value) => {
   const text = String(value ?? "").trim();
   return text && text !== "-" ? text : null;
 };
+
+/** @param {unknown} value */
+function readDebut(value) {
+  const text = readText(/** @type {string | null | undefined} */ (value));
+  return text == null ? null : Number(text);
+}
 
 const MONTHS = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
 
@@ -117,7 +157,6 @@ function readNames(row, listed) {
 function describePlayer(row, listed, { outByName, ageDay }) {
   const entry = listed.get(row.PLAYER_ID);
   const names = readNames(row, entry);
-  const debut = Number(entry?.FROM_YEAR);
   return {
     id: String(row.PLAYER_ID),
     number: readText(row.NUM),
@@ -128,7 +167,7 @@ function describePlayer(row, listed, { outByName, ageDay }) {
     college: readText(entry?.COLLEGE),
     country: readText(entry?.COUNTRY),
     out: outByName.get(readNameLetters(`${names.firstName} ${names.lastName}`)) ?? null,
-    debut: Number.isFinite(debut) && debut > 0 ? debut : null,
+    debut: readDebut(entry?.FROM_YEAR),
   };
 }
 
@@ -143,17 +182,19 @@ function nameHeadCoach(leagueRoster) {
  *   `outPlayers` are the team's players ESPN lists as out
  */
 export function describeRoster({ team, season, leagueRoster, playerList, outPlayers, now }) {
+  validateRosterFeed(leagueRoster, "CommonTeamRoster", { season, now });
+  if (playerList) validateRosterFeed(playerList, "PlayerIndex", { season, now });
   const listed = new Map(readTable(playerList, "PlayerIndex").map((row) => [row.PERSON_ID, row]));
   const outByName = new Map(outPlayers.map(({ name, ...out }) => [name, out]));
   const context = { outByName, ageDay: chooseAgeDay(season, now) };
-  return {
+  return validateSportsData(BasketballRoster, {
     team,
     season,
     coach: nameHeadCoach(leagueRoster),
     players: readTable(leagueRoster, "CommonTeamRoster").map((row) =>
       describePlayer(row, listed, context),
     ),
-  };
+  });
 }
 
 /**
@@ -189,13 +230,13 @@ export function createRosterReader({
         nameLeagueRosterRequest(team, season),
         isCurrent ? ROSTER_CACHE_SECONDS : PAST_ROSTER_CACHE_SECONDS,
         hasTable("CommonTeamRoster"),
-      ),
+      ).then((answer) => validateRosterFeed(answer, "CommonTeamRoster", { season, now: now() })),
       fetchWnbaJson(
         fetchImpl,
         namePlayerListRequest(season),
         PLAYER_LIST_CACHE_SECONDS,
         hasTable("PlayerIndex"),
-      ),
+      ).then((answer) => validateRosterFeed(answer, "PlayerIndex", { season, now: now() })),
       isCurrent ? readOutPlayers(team) : [],
     ]);
     return describeRoster({ team, season, leagueRoster, playerList, outPlayers, now: now() });

@@ -7,6 +7,7 @@ import { createPlayerServer } from "../worker/src/player.js";
 import {
   PLAYOFFS,
   REGULAR_SEASON,
+  TOTALS_FEED_COLUMNS,
   nameGameLogRequest,
   nameRanksKey,
   nameNumbersKey,
@@ -780,4 +781,157 @@ test("past seasons filled with other columns are listed again", async () => {
   await runJob();
 
   assert.deepEqual(docs.lists, ["seasons"]);
+});
+
+test("actual live player writes and historical refills reject malformed feeds and recover across restarts", async () => {
+  for (const historical of [false, true]) {
+    const season = historical ? 2025 : 2026;
+    const answers = listAnswers();
+    const docs = createDocs({
+      "live/current": { season: 2026 },
+      "seasons/2026": { year: 2026, games: [], series: [] },
+      "seasons/2025": { year: 2025, games: [], series: [] },
+    });
+    const storage = createJobStorage();
+    const league = createLeagueFetch(answers);
+    const totals = answers[nameTotalsRequest(season)].resultSets[0];
+    const roster = answers[nameLeagueRosterRequest("NYL", season)].resultSets[0];
+    const pointsColumn = totals.headers.indexOf("PTS");
+    const idColumn = roster.headers.indexOf("PLAYER_ID");
+    const originalPoints = totals.rowSet[0][pointsColumn];
+    const originalId = roster.rowSet[0][idColumn];
+    let time = NOW;
+    const statusKey = historical ? "players-history/status" : STATUS_KEY;
+    const keys = [
+      nameRanksKey(season),
+      nameNumbersKey(season, String(totals.rowSet[0][totals.headers.indexOf("PLAYER_ID")])),
+      nameRosterKey(season, "NYL"),
+    ];
+    const update = async () => {
+      if (historical) {
+        storage.stored.clear();
+        await storage.delete(`filled:${season}`);
+        await storage.delete("allFilled");
+      }
+      const before = league.requests.length;
+      const context = {
+        docs,
+        storage,
+        env: {},
+        fetchImpl: league.fetchImpl,
+        now: () => time,
+        createLoadSnapshot: () => async () => null,
+      };
+      const job = createPlayerJob();
+      await (historical ? job.updateHistory(context) : job.updateStore(context));
+      assert.equal(docs.stored.get(statusKey).requests, league.requests.length - before);
+      assert.ok(league.requests.length - before <= STATS_FEEDS + TEAM_COUNT + 2);
+      time += Math.max(...Object.values(FEEDS).map((feed) => feed.maxAgeMs)) + 1;
+    };
+    totals.rowSet[0][pointsColumn] = -1;
+    roster.rowSet[0][idColumn] = "invalid";
+    await update();
+    for (const key of keys) assert.equal(docs.stored.has(key), false, key);
+    assert.match(docs.stored.get(statusKey).lastFailure.message, /Invalid sports data/);
+    assert.equal(await storage.get(`filled:${season}`), undefined);
+    totals.rowSet[0][pointsColumn] = originalPoints;
+    roster.rowSet[0][idColumn] = originalId;
+    await update();
+    const valid = keys.map((key) => structuredClone(docs.stored.get(key)));
+    assert.ok(valid.every(Boolean));
+    const cacheKey = await nameFeedKey(
+      "totals",
+      `${nameTotalsRequest(season)} ${TOTALS_FEED_COLUMNS.join(" ")}`,
+    );
+    const cached = structuredClone(storage.stored.get(cacheKey).answer.data);
+    totals.rowSet[0][pointsColumn] = -1;
+    roster.rowSet[0][idColumn] = "invalid";
+    await update();
+    assert.deepEqual(
+      keys.map((key) => docs.stored.get(key)),
+      valid,
+    );
+    if (!historical) assert.deepEqual(storage.stored.get(cacheKey).answer.data, cached);
+    totals.rowSet[0][pointsColumn] = originalPoints + 1;
+    roster.rowSet[0][idColumn] = originalId;
+    await update();
+    assert.notDeepEqual(docs.stored.get(keys[1]), valid[1]);
+    assert.deepEqual(docs.stored.get(keys[2]), valid[2]);
+  }
+});
+
+test("historical malformed roster facts and opponent scores recover with the same retained storage", async () => {
+  for (const corrupted of ["debut", "birthday", "opponent", "name"]) {
+    const answers = listAnswers();
+    const docs = createDocs({
+      "live/current": { season: 2026 },
+      "seasons/2025": { year: 2025, games: [], series: [] },
+    });
+    const storage = createJobStorage();
+    const league = createLeagueFetch(answers);
+    let time = NOW;
+    const roster = answers[nameLeagueRosterRequest("NYL", 2025)].resultSets[0];
+    const id = roster.rowSet[0][roster.headers.indexOf("PLAYER_ID")];
+    const listed = answers[namePlayerListRequest(2025)].resultSets[0];
+    const person = listed.rowSet.find((row) => row[listed.headers.indexOf("PERSON_ID")] === id);
+    const teamGames = answers[nameTeamGameLogRequest(2025, PLAYOFFS)].resultSets[0];
+    const totals = answers[nameTotalsRequest(2025)].resultSets[0];
+    const row =
+      corrupted === "debut"
+        ? person
+        : corrupted === "birthday"
+          ? roster.rowSet[0]
+          : corrupted === "name"
+            ? totals.rowSet[0]
+            : teamGames.rowSet[0];
+    const headers =
+      corrupted === "debut"
+        ? listed.headers
+        : corrupted === "birthday"
+          ? roster.headers
+          : corrupted === "name"
+            ? totals.headers
+            : teamGames.headers;
+    const column = headers.indexOf(
+      corrupted === "debut"
+        ? "FROM_YEAR"
+        : corrupted === "birthday"
+          ? "BIRTH_DATE"
+          : corrupted === "name"
+            ? "PLAYER_NAME"
+            : "PLUS_MINUS",
+    );
+    const original = row[column];
+    row[column] =
+      corrupted === "debut"
+        ? "2016.5"
+        : corrupted === "birthday"
+          ? "JAN 01, 2099"
+          : corrupted === "name"
+            ? "InvalidName"
+            : row[headers.indexOf("PTS")] + 1;
+    const update = async () => {
+      await createPlayerJob().updateHistory({
+        docs,
+        storage,
+        env: {},
+        fetchImpl: league.fetchImpl,
+        now: () => time,
+        createLoadSnapshot: () => async () => null,
+      });
+    };
+    await update();
+    assert.equal(await storage.get("filled:2025"), undefined, corrupted);
+    assert.match(
+      docs.stored.get("players-history/status").lastFailure.message,
+      /Invalid sports data/,
+    );
+    row[column] = original;
+    time += 5 * MINUTE_MS + 1;
+    await update();
+    assert.ok(await storage.get("filled:2025"), corrupted);
+    assert.ok(docs.stored.get(nameRosterKey(2025, "NYL")), corrupted);
+    assert.ok(docs.stored.get(nameRanksKey(2025)), corrupted);
+    assert.ok(league.requests.length <= 2 * (STATS_FEEDS + TEAM_COUNT + 1));
+  }
 });

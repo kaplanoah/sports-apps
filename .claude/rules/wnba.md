@@ -15,6 +15,7 @@ paths:
   - The health's `feeds` counts the league's scoreboard as failing only while a score is due, so an idle scoreboard never reads as one.
   - Detail routes forward to the store; its services fetch through adapters. ESPN game matches are persisted during ingestion in `espnMatches/<game-id>` and reused after restarts.
   - The page saves nothing to the store.
+  - Rosters, player numbers, and rank records use complete shared schemas before persistence. Stats and roster adapters also validate usable feed rows before cache retention; malformed live and historical reads preserve usable documents and report failures without vendor values.
   - The settings pick any season the store keeps, once it keeps more than one.
 - A team's sheet:
   - It opens on cards of its last game, the one it's playing, and its next, from the whole season, regular season and all (`page/js/nearest-games.js`).

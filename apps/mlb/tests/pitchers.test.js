@@ -282,7 +282,9 @@ test("MLB failing is reported", async () => {
 });
 
 test("the speeds of the qualified starters come in batches of 30", async () => {
-  const lines = Array.from({ length: 65 }, (_, index) => describeLine(index + 1, 30, "3.00", 8, 3));
+  const lines = Array.from({ length: 65 }, (_, index) =>
+    describeLine(index + 1, 30, "180.0", "3.00", 8, 3),
+  );
   const { mlb, requestPitcher } = createTestServer({
     qualified: { stats: [{ splits: lines }] },
     people: [],

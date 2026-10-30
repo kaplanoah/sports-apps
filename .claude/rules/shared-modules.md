@@ -257,7 +257,7 @@ Pages link these before their own stylesheet, and theme them with the tokens the
 - `highlights-job.js`: keeping each final's highlights
 - `game-details-job.js`: keeping each finished game's details
 - `espn-adapter.js`: shared ESPN requests and parsing, with league-supplied mappings and basketball rules
-- `sports-schema.js`: app-owned sports schemas and Worker-only validation with Zod configured without runtime compilation
+- `sports-schema.js`: app-owned season, box score, highlight, pitcher, rotation, roster, player and rank contracts, validated only in the Worker with Zod configured without runtime compilation
 - `store-reads.js`: reading the documents a store-owned detail service keeps for a sheet
 - `detail-reads.js`: sharing store-owned detail reads and retaining usable answers across restarts
 - `request-budget.js`: bounding historical requests after live work and reminders

@@ -558,3 +558,115 @@ test("one job keeps each store it serves whole, however many there are", async (
   assert.ok(second.docs.stored.get(nameStartersKey(2026)));
   assert.deepEqual([...second.docs.stored.keys()].sort(), [...first.docs.stored.keys()].sort());
 });
+
+test("actual pitcher, starter and rotation writers retain usable records and recover after malformed reads", async () => {
+  for (const target of ["pitcher", "starters", "rotation"]) {
+    const answers = listAnswers();
+    const mlb = createMlbFetch(answers);
+    const docs = createDocs({
+      "live/current": { season: 2026 },
+      "seasons/2026": describeSeason(0),
+    });
+    const storage = createJobStorage();
+    const id = FIXTURE.people[2026][0].id;
+    const key =
+      target === "pitcher"
+        ? namePitcherKey(2026, id)
+        : target === "starters"
+          ? nameStartersKey(2026)
+          : nameRotationKey(2026, "CLE");
+    let phase = "malformed";
+    let time = NOW;
+    const requests = [];
+    const fetchImpl = async (url) => {
+      requests.push(url);
+      const response = await mlb.fetchImpl(url);
+      if (!response.ok) return response;
+      const answer = await response.json();
+      if (phase === "malformed") {
+        if (target === "pitcher") {
+          const person = answer.people?.find((person) => person.id === id);
+          const line = person?.stats?.find((entry) => entry.type?.displayName === "season")
+            ?.splits?.[0]?.stat;
+          if (line) line.era = "Infinity";
+        }
+        if (
+          target === "starters" &&
+          new URL(url).pathname === "/api/v1/stats" &&
+          url.includes("playerPool=qualified")
+        )
+          answer.stats[0].splits[0].stat.era = "NaN";
+        if (target === "rotation" && answer.dates)
+          for (const date of answer.dates)
+            for (const game of date.games) game.officialDate = "invalid";
+      }
+      if (phase === "recovery") {
+        const person = answer.people?.find((person) => person.id === id);
+        const line = person?.stats?.find((entry) => entry.type?.displayName === "season")
+          ?.splits?.[0]?.stat;
+        if (line) line.era = "2.17";
+        if (target === "starters" && url.includes("playerPool=qualified"))
+          answer.stats[0].splits[0].stat.era = "2.17";
+      }
+      return Response.json(answer);
+    };
+    const update = async () => {
+      const appearances = answers[listAppearancesRequest(2026, "R")].stats[0].splits;
+      appearances.find((row) => row.player.id === id).stat.gamesPlayed += 1;
+      docs.stored.set(
+        "seasons/2026",
+        describeSeason(appearances.find((row) => row.player.id === id).stat.gamesPlayed),
+      );
+      const before = requests.length;
+      await createPitcherJob().updateStore({
+        docs,
+        storage,
+        env: {},
+        fetchImpl,
+        now: () => time,
+        createLoadSnapshot: () => async () => null,
+      });
+      assert.equal(docs.stored.get(STATUS_KEY).requests, requests.length - before);
+      assert.ok(requests.length - before <= LEAGUE_FEEDS + 2 * 4);
+      time += 7 * 60 * MINUTE_MS;
+    };
+    await update();
+    assert.equal(docs.stored.has(key), false, target);
+    assert.match(docs.stored.get(STATUS_KEY).lastFailure.message, /Invalid sports data/);
+    phase = "valid";
+    await update();
+    const valid = structuredClone(docs.stored.get(key));
+    assert.ok(valid, target);
+    const cacheKey =
+      target === "starters"
+        ? await nameFeedKey("qualified", listQualifiedRequest(2026))
+        : target === "rotation"
+          ? await nameFeedKey("schedule", "2026")
+          : null;
+    const cached = cacheKey && structuredClone(storage.stored.get(cacheKey).answer.data);
+    phase = "malformed";
+    await update();
+    assert.deepEqual(docs.stored.get(key), valid, target);
+    if (cacheKey) assert.deepEqual(storage.stored.get(cacheKey).answer.data, cached);
+    phase = "recovery";
+    await update();
+    assert.ok(docs.stored.get(key), target);
+    if (target !== "rotation") assert.notDeepEqual(docs.stored.get(key), valid, target);
+  }
+});
+
+test("the actual historical starter writer does not mark malformed data filled and retries to recovery", async () => {
+  const answers = listAnswers();
+  const qualified = answers[listQualifiedRequest(2025)];
+  const original = qualified.stats[0].splits[0].stat.era;
+  qualified.stats[0].splits[0].stat.era = "Infinity";
+  const run = createRun({ answers });
+  await run.runJob();
+  assert.equal(run.docs.stored.has(nameStartersKey(2025)), false);
+  assert.equal(await run.storage.get("filled:2025"), undefined);
+  qualified.stats[0].splits[0].stat.era = original;
+  run.wait(5);
+  await run.runJob();
+  assert.ok(run.docs.stored.get(nameStartersKey(2025)));
+  assert.equal(await run.storage.get("filled:2025"), true);
+});

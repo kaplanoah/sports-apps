@@ -1,7 +1,12 @@
+import {
+  BaseballClubStarts,
+  BaseballRotationPitcher,
+  validateSportsData,
+} from "../../../../../shared/worker/sports-schema.js";
 import { addDays } from "#shared/days.js";
 import { listScheduleGames, readClubId, readGameState, readMlbTeamId } from "./mlb.js";
 import { fetchMlbJson } from "../mlb.js";
-import { listGameLogRequest, listStarts } from "./pitchers.js";
+import { listGameLogRequest, listStarts, readPeople } from "./pitchers.js";
 
 // A club's starts change at most once a game.
 const ROTATION_CACHE_SECONDS = 10 * 60;
@@ -58,13 +63,14 @@ const findClubSide = (game, mlbTeamId) =>
  * @returns {{ date: string, id: number }[]}
  */
 function listClubStarts(scheduleResponse, mlbTeamId) {
+  if (!Array.isArray(scheduleResponse?.dates)) throw new Error("Invalid sports schedule");
   return listScheduleGames(scheduleResponse)
     .filter((/** @type {any} */ game) => readGameState(game.status ?? {}) === "final")
     .map((/** @type {any} */ game) => ({
       date: game.officialDate,
       id: findClubSide(game, mlbTeamId)?.probablePitcher?.id,
     }))
-    .filter((/** @type {{ id?: number }} */ start) => start.id);
+    .filter((/** @type {{ id?: number }} */ start) => start.id != null);
 }
 
 /**
@@ -85,22 +91,20 @@ export const listClubStarterIds = (scheduleResponse, club) => [
  * @param {any} scheduleResponse
  * @returns {string[]}
  */
-export const listScheduleClubs = (scheduleResponse) => [
-  ...new Set(
-    listScheduleGames(scheduleResponse)
-      .flatMap((/** @type {any} */ game) => [game.teams?.away, game.teams?.home])
-      .map((/** @type {any} */ side) => readClubId(side?.team?.id))
-      .filter(Boolean),
-  ),
-];
+export const listScheduleClubs = (scheduleResponse) => {
+  if (!Array.isArray(scheduleResponse?.dates)) throw new Error("Invalid sports schedule");
+  return [
+    ...new Set(
+      listScheduleGames(scheduleResponse)
+        .flatMap((/** @type {any} */ game) => [game.teams?.away, game.teams?.home])
+        .map((/** @type {any} */ side) => readClubId(side?.team?.id))
+        .filter(Boolean),
+    ),
+  ];
+};
 
 /**
- * @typedef {object} RotationPitcher
- * @property {number} id
- * @property {string} name his last name
- * @property {string | null} hand
- * @property {{ date: string, ip: string, pitches: number | null }[]} starts his starts, the
- *   newest first
+ * @typedef {import("../../../../../shared/worker/sports-schema.js").RotationPitcherRecord} RotationPitcher
  */
 
 /**
@@ -118,7 +122,7 @@ export function describeClubStarts({ club, from, through, schedule, pitchers }) 
   const games = listClubStarts(schedule, /** @type {number} */ (readMlbTeamId(club)));
   const ids = [...new Set(games.map((game) => game.id))];
   const kept = ids.map((id) => pitchers.get(id)).filter(Boolean);
-  return { club, from, through, games, pitchers: kept };
+  return validateSportsData(BaseballClubStarts, { club, from, through, games, pitchers: kept });
 }
 
 /**
@@ -139,24 +143,26 @@ export function coversDay({ from, through }, date, today) {
  * @param {any} gameLogPerson
  * @returns {RotationPitcher}
  */
-export const describeRotationPitcher = (gameLogPerson) => ({
-  id: gameLogPerson.id,
-  name: gameLogPerson.useLastName,
-  hand: gameLogPerson.pitchHand?.code ?? null,
-  starts: listStarts(gameLogPerson).map(({ date, ip, pitches }) => ({ date, ip, pitches })),
-});
+export const describeRotationPitcher = (gameLogPerson) =>
+  validateSportsData(BaseballRotationPitcher, {
+    id: gameLogPerson.id,
+    name: gameLogPerson.useLastName,
+    hand: gameLogPerson.pitchHand?.code ?? null,
+    starts: listStarts(gameLogPerson).map(({ date, ip, pitches }) => ({ date, ip, pitches })),
+  });
 
 /**
  * A pitcher as the rotation shows him, from his side of the matchup sheet as the store keeps it.
  * @param {{ id: number, lastName: string, hand: string | null, starts: any[] }} side
  * @returns {RotationPitcher}
  */
-export const describeKeptRotationPitcher = ({ id, lastName, hand, starts }) => ({
-  id,
-  name: lastName,
-  hand,
-  starts: starts.map(({ date, ip, pitches }) => ({ date, ip, pitches })),
-});
+export const describeKeptRotationPitcher = ({ id, lastName, hand, starts }) =>
+  validateSportsData(BaseballRotationPitcher, {
+    id,
+    name: lastName,
+    hand,
+    starts: starts.map(({ date, ip, pitches }) => ({ date, ip, pitches })),
+  });
 
 /**
  * @param {string} earlier
@@ -222,7 +228,7 @@ export function createRotationReader({ fetchImpl = (input, init) => fetch(input,
       ? await fetchJson(listGameLogRequest(Number(date.slice(0, 4)), ids))
       : null;
     const pitchers = new Map(
-      (gameLogs?.people || []).map((/** @type {any} */ person) => [
+      (gameLogs ? readPeople(gameLogs, ids) : []).map((person) => [
         person.id,
         describeRotationPitcher(person),
       ]),

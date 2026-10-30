@@ -1,6 +1,7 @@
 import { addDays, readEasternDay } from "#shared/days.js";
 import { listStarterIds } from "./adapters/mlb.js";
 import { fetchMlbJson } from "./mlb.js";
+import { settleReads } from "../../../../shared/worker/upstream.js";
 import {
   describePitcher,
   describeStarters,
@@ -13,6 +14,7 @@ import {
   namePitcherKey,
   nameStartersKey,
   readLeagueRows,
+  readPeople,
   readSpeeds,
   splitIntoBatches,
 } from "./adapters/pitchers.js";
@@ -116,7 +118,7 @@ function createStoreUpdate() {
   const forgetEarlierVersions = createVersionForgetter();
 
   /**
-   * @param {JobContext} context
+   * @param {JobContext & { failures?: string[] }} context
    * @param {string} name which feed's limits apply
    * @param {string} key what the answer is kept under
    * @param {() => Promise<any>} load
@@ -125,6 +127,8 @@ function createStoreUpdate() {
   const readFeed = (context, name, key, load, isBehind) =>
     /** @type {ReturnType<typeof createFeedKeeper>} */ (keeper).readFeed(name, key, load, {
       isBehind,
+      onFailure: (reason) =>
+        noteFailure(context.failures ?? [], "Reading pitcher data", new Error(reason)),
     });
 
   /**
@@ -148,6 +152,8 @@ function createStoreUpdate() {
         const today = readEasternDay(context.now()).date;
         const from = addDays(today, -LOOKBACK_DAYS);
         const schedule = await fetchJson(context, listScheduleRequest(null, from, today));
+        for (const club of listScheduleClubs(schedule))
+          describeClubStarts({ club, from, through: today, schedule, pitchers: new Map() });
         return { from, through: today, schedule };
       },
       (recent) => !(recent.through >= readEasternDay(context.now()).date),
@@ -159,13 +165,15 @@ function createStoreUpdate() {
    * @param {number} season
    */
   const readSeasonFeeds = (context, season) =>
-    Promise.all([
+    settleReads([
       ...[listAppearancesRequest(season, "R"), listAppearancesRequest(season, "P")].map((path) =>
         readFeed(context, "appearances", path, () => fetchJson(context, path)),
       ),
-      readFeed(context, "qualified", listQualifiedRequest(season), () =>
-        fetchJson(context, listQualifiedRequest(season)),
-      ),
+      readFeed(context, "qualified", listQualifiedRequest(season), async () => {
+        const answer = await fetchJson(context, listQualifiedRequest(season));
+        describeStarters(answer, new Map());
+        return answer;
+      }),
       readSchedule(context, season),
     ]);
 
@@ -180,10 +188,8 @@ function createStoreUpdate() {
       fetchJson(context, listPeopleRequest(season, ids)),
       fetchJson(context, listGameLogRequest(season, ids)),
     ]);
-    const gameLogsById = new Map(
-      (gameLogs?.people || []).map((/** @type {any} */ person) => [person.id, person]),
-    );
-    for (const person of people?.people || [])
+    const gameLogsById = new Map(readPeople(gameLogs, ids).map((person) => [person.id, person]));
+    for (const person of readPeople(people, ids))
       await saveDoc(
         context.docs,
         namePitcherKey(season, person.id),

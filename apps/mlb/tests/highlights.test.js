@@ -389,8 +389,11 @@ test("the store's job asks Claude about a few stills a run, saving the game's hi
   await runJob();
 
   const games = [...new Set(mlb.requests.map((path) => /\/game\/(\d+)\//.exec(path)?.[1] ?? ""))];
-  const listStills = (id) => listStillsToCheck(RECORDED.content[id], RECORDED.plays[id]);
-  const askedFirst = games.map((id) => Math.min(listStills(id).length, STILLS_PER_READ));
+  const listStills = (id) =>
+    RECORDED.content[id] ? listStillsToCheck(RECORDED.content[id], RECORDED.plays[id]) : [];
+  const askedFirst = games
+    .filter((id) => RECORDED.content[id])
+    .map((id) => Math.min(listStills(id).length, STILLS_PER_READ));
   assert.equal(
     mlb.stillsAsked.length,
     askedFirst.reduce((sum, count) => sum + count, 0),
@@ -550,4 +553,67 @@ test("an unsupported frame template falls back to MLB's photo", () => {
     recap.still,
     content.editorial.recap.mlb.image.cuts.find((cut) => cut.width === 960).src,
   );
+});
+
+test("actual live and historical highlight writers preserve usable media after malformed updates and recover", async () => {
+  for (const historical of [false, true]) {
+    const game = { id: BREWERS_AT_PADRES, state: "final", start: "2026-10-07T20:00:00Z" };
+    const season = historical ? 2025 : 2026;
+    const docs = createDocs({
+      "live/current": { season: 2026 },
+      [`seasons/${season}`]: { year: season, slate: { today: { games: [game] } } },
+      [`schedule-revisions/${season}`]: { edition: SCHEDULE_EDITION, revision: 1, isWhole: true },
+      [`schedules-${season}/10`]: { games: [game] },
+    });
+    let phase = "malformed";
+    const requests = [];
+    const fetchImpl = async (url) => {
+      requests.push(url);
+      const answer = structuredClone(
+        url.includes("/content") ? RECORDED.content[game.id] : RECORDED.plays[game.id],
+      );
+      if (!url.includes("/content")) {
+        const play = answer.liveData.plays.allPlays.find((play) => play.about.isScoringPlay);
+        if (phase === "malformed") play.result.awayScore = -1;
+        if (phase === "recovery") play.result.awayScore += 1;
+      }
+      return Response.json(answer);
+    };
+    const update = async () => {
+      const before = requests.length;
+      const job = createHighlightsUpdater();
+      const storage = createJobStorage();
+      if (historical)
+        await storage.put(`history-highlight-reads:${season}`, {
+          [game.id]: { readAt: null, triedAt: 0, version: 0 },
+        });
+      const context = {
+        docs,
+        storage,
+        env: {},
+        fetchImpl,
+        now: () => Date.parse("2026-10-30T12:00:00Z"),
+        createLoadSnapshot: () => async () => null,
+      };
+      await (historical ? job.updateHistory(context) : job.updateStore(context));
+      assert.equal(requests.length - before, 2);
+      assert.equal(
+        docs.stored.get(historical ? "highlights-history/status" : "highlights/status").requests,
+        2,
+      );
+    };
+    const key = nameHighlightsKey(game.id);
+    await update();
+    assert.equal(docs.stored.has(key), false);
+    phase = "valid";
+    await update();
+    const valid = structuredClone(docs.stored.get(key));
+    assert.ok(valid.plays.length);
+    phase = "malformed";
+    await update();
+    assert.deepEqual(docs.stored.get(key), valid);
+    phase = "recovery";
+    await update();
+    assert.notDeepEqual(docs.stored.get(key), valid);
+  }
 });

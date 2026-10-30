@@ -1,4 +1,5 @@
 import { isSameJson } from "#shared/compare.js";
+import { settleReads } from "../../../../shared/worker/upstream.js";
 import {
   createPerStoreJob,
   createSavedDocs,
@@ -17,6 +18,7 @@ import {
   TEAM_GAME_COLUMNS,
   TOTALS_FEED_COLUMNS,
   describeSeasonPlayers,
+  validatePlayerFeed,
   nameGameLogRequest,
   nameNumbersKey,
   nameRanksKey,
@@ -32,6 +34,7 @@ import { nameSeasonKey } from "./season-updater.js";
 import { indexRosters } from "./player-index.js";
 import {
   describeRoster,
+  validateRosterFeed,
   nameLeagueRosterRequest,
   namePlayerListRequest,
   nameRosterKey,
@@ -175,10 +178,22 @@ function createStoreUpdate(historyOnly = false) {
       `${url} ${columns.join(" ")}`,
       async () => {
         addOne(context.log.feeds, name);
-        return trimColumns(
-          await fetchWnbaJson(context.fetchImpl, url, null, hasTable(table)),
-          columns,
-        );
+        const answer = await fetchWnbaJson(context.fetchImpl, url, null, hasTable(table));
+        if (table === "CommonTeamRoster" || table === "PlayerIndex")
+          validateRosterFeed(answer, table, {
+            season: Number(new URL(url).searchParams.get("Season")),
+            now: context.now(),
+          });
+        else validatePlayerFeed(answer, table);
+        return trimColumns(answer, columns);
+      },
+      {
+        onFailure: (reason) =>
+          noteFailure(
+            context.failures,
+            `Reading ${new URL(url).searchParams.get("Season")}'s stats`,
+            new Error(reason),
+          ),
       },
     );
 
@@ -207,7 +222,7 @@ function createStoreUpdate(historyOnly = false) {
    */
   async function readSeasonFeeds(context, season) {
     await forgetOldTotals(season);
-    return Promise.all([
+    return settleReads([
       readStats(
         context,
         "totals",

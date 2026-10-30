@@ -157,16 +157,205 @@ const Clip = z.looseObject({
   length: z.number().nonnegative().nullable(),
   still: z.string().nullable(),
   video: Identifier,
-  expiresAt: z.string().nullable(),
 });
 
-export const Highlights = z.object({
+const Story = z.object({
+  title: Identifier,
+  lead: Identifier,
+  url: Identifier,
+  outlet: Identifier,
+});
+const HighlightFields = {
   id: Identifier,
-  recap: Clip.nullable(),
-  story: z
-    .object({ title: Identifier, lead: Identifier, url: Identifier, outlet: Identifier })
+  story: Story.nullable(),
+};
+const EspnClip = Clip.extend({ expiresAt: z.string().nullable() });
+export const Highlights = z.object({
+  ...HighlightFields,
+  recap: EspnClip.nullable(),
+  plays: z.array(EspnClip),
+});
+export const BaseballHighlights = z.object({
+  ...HighlightFields,
+  recap: Clip.extend({ blurb: z.string() }).nullable(),
+  plays: z.array(
+    Clip.extend({
+      half: z.enum(["top", "bottom"]),
+      inning: Count.positive().nullable(),
+      score: z.tuple([Count, Count]).nullable(),
+      scorer: z.enum(["away", "home"]).nullable(),
+    }),
+  ),
+});
+
+const Day = z.iso.date();
+const PersonId = Count.positive();
+const PlayerId = z.string().regex(/^\d{1,12}$/);
+const Nonnegative = z.number().nonnegative();
+const Innings = z.string().regex(/^\d+(?:\.[012])?$/);
+const RateText = z.union([z.string().regex(/^\d+(?:\.\d+)?$/), z.literal("-.--"), z.literal("--")]);
+const PitcherStart = z.object({
+  date: Day,
+  opp: Identifier.nullable(),
+  home: z.boolean(),
+  ip: Innings,
+  runs: Count,
+  k: Count,
+  pitches: NullableCount,
+});
+export const BaseballPitcherDetails = z.object({
+  id: PersonId,
+  firstName: Identifier,
+  lastName: Identifier,
+  hand: z.string().nullable(),
+  birthDate: Day.nullable(),
+  line: z
+    .object({
+      starts: Count,
+      ip: Innings.nullable(),
+      era: z.union([RateText, Nonnegative]).nullable(),
+      k9: Nonnegative.nullable(),
+      bb9: Nonnegative.nullable(),
+      speed: Nonnegative.nullable(),
+    })
     .nullable(),
-  plays: z.array(Clip),
+  pitches: z.array(
+    z.object({
+      code: Identifier,
+      name: Identifier,
+      share: Nonnegative.max(1).nullable(),
+      mph: Nonnegative.nullable(),
+    }),
+  ),
+  starts: z.array(PitcherStart),
+});
+export const BaseballQualifiedStarters = z.object({
+  starters: z.array(
+    z.object({
+      id: PersonId,
+      era: Nonnegative.nullable(),
+      k9: Nonnegative.nullable(),
+      bb9: Nonnegative.nullable(),
+      speed: Nonnegative.nullable(),
+    }),
+  ),
+});
+const RotationStart = PitcherStart.pick({ date: true, ip: true, pitches: true });
+export const BaseballRotationPitcher = z.object({
+  id: PersonId,
+  name: Identifier,
+  hand: z.string().nullable(),
+  starts: z.array(RotationStart),
+});
+export const BaseballClubStarts = z.object({
+  club: Identifier,
+  from: Day,
+  through: Day,
+  games: z.array(z.object({ date: Day, id: PersonId })),
+  pitchers: z.array(BaseballRotationPitcher),
+});
+
+const PlayerName = z.object({ firstName: Identifier, lastName: Identifier });
+const RosterPlayer = PlayerName.extend({
+  id: PlayerId,
+  number: z.string().nullable(),
+  position: z.string().nullable(),
+  height: z.string().nullable(),
+  age: NullableCount,
+  college: z.string().nullable(),
+  country: z.string().nullable(),
+  debut: Count.positive().nullable(),
+  out: z
+    .object({
+      reason: z.string().nullable(),
+      isForSeason: z.boolean(),
+      sentence: z.string().nullable(),
+      updated: z.string().nullable(),
+    })
+    .nullable(),
+});
+export const BasketballRoster = z.object({
+  team: Identifier,
+  season: Count.positive(),
+  coach: z.string().nullable(),
+  players: z.array(RosterPlayer),
+});
+export const BasketballPlayerTotals = z
+  .object({
+    PLAYER_ID: PersonId,
+    PLAYER_NAME: Identifier,
+    GP: Count,
+    MIN: Nonnegative,
+    PTS: Count,
+    REB: Count,
+    AST: Count,
+    STL: Count.optional(),
+    BLK: Count.optional(),
+    TOV: Count.optional(),
+    FGM: Count.optional(),
+    FGA: Count.optional(),
+    FG3M: Count.optional(),
+    FG3A: Count.optional(),
+    FTM: Count.optional(),
+    FTA: Count.optional(),
+  })
+  .refine((line) =>
+    [
+      [line.FGM, line.FGA],
+      [line.FG3M, line.FG3A],
+      [line.FTM, line.FTA],
+    ].every(
+      ([made, attempted]) => made === undefined || attempted === undefined || made <= attempted,
+    ),
+  );
+export const BasketballPlayerGame = z.object({
+  gameId: Identifier,
+  day: Day,
+  isPlayoffs: z.boolean(),
+  isWin: z.boolean(),
+  teamScore: NullableCount,
+  opponentScore: NullableCount,
+  points: Count,
+  rebounds: Count,
+  assists: Count,
+  minutes: Nonnegative,
+  steals: Count.optional(),
+  blocks: Count.optional(),
+  turnovers: Count.optional(),
+  fieldGoalsMade: Count.optional(),
+  fieldGoalsAttempted: Count.optional(),
+  threesMade: Count.optional(),
+  threesAttempted: Count.optional(),
+  freeThrowsMade: Count.optional(),
+  freeThrowsAttempted: Count.optional(),
+});
+export const BasketballTeamGame = z.object({
+  teamId: PersonId,
+  gameId: Identifier,
+  points: Count,
+  plusMinus: z.number().int(),
+  opponentPoints: Count,
+  minutes: Nonnegative,
+});
+export const BasketballPlayerNumbers = z.object({
+  name: PlayerName.nullable(),
+  totals: BasketballPlayerTotals.nullable(),
+  lastGame: BasketballPlayerGame.nullable(),
+  playoffPoints: z.record(Identifier, Count),
+});
+export const BasketballRanks = z.object({
+  seasonGames: Count,
+  values: z.object({
+    points: z.array(Nonnegative),
+    rebounds: z.array(Nonnegative),
+    assists: z.array(Nonnegative),
+    steals: z.array(Nonnegative),
+    blocks: z.array(Nonnegative),
+    turnovers: z.array(Nonnegative),
+    fieldGoalShare: z.array(Nonnegative.max(1)),
+    threeShare: z.array(Nonnegative.max(1)),
+    freeThrowShare: z.array(Nonnegative.max(1)),
+  }),
 });
 
 const BoxScoreSide = z.looseObject({
@@ -236,7 +425,7 @@ const BaseballPitcher = z.object({
   id: Count,
   name: z.string(),
   decision: z.enum(["W", "L", "S"]).nullable(),
-  inningsPitched: z.string().regex(/^\d+(?:\.[012])?$/),
+  inningsPitched: Innings,
   pitches: Count,
   hits: Count,
   runs: Count,
@@ -311,6 +500,9 @@ export const ReportedPlayers = z.record(
 /** @typedef {z.infer<typeof BasketballGame>} BasketballGameRecord */
 /** @typedef {z.infer<typeof BaseballGame>} BaseballGameRecord */
 /** @typedef {z.infer<typeof ReportedPlayers>[string][number]} ReportedPlayerRecord */
+/** @typedef {z.infer<typeof BaseballRotationPitcher>} RotationPitcherRecord */
+/** @typedef {z.infer<typeof BasketballRanks>} BasketballRanksRecord */
+/** @typedef {z.infer<typeof BasketballPlayerNumbers>} PlayerNumbersRecord */
 
 /**
  * Reject invalid adapter output without putting vendor payloads in health or logs.

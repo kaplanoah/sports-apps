@@ -1,3 +1,8 @@
+import {
+  BaseballPitcherDetails,
+  BaseballQualifiedStarters,
+  validateSportsData,
+} from "../../../../../shared/worker/sports-schema.js";
 import { readEasternDay } from "#shared/days.js";
 import { readClubId } from "./mlb.js";
 import { fetchMlbJson } from "../mlb.js";
@@ -126,11 +131,16 @@ export const listAppearancesRequest = (season, gameType) =>
  * @param {any} leagueResponse
  * @returns {any[]}
  */
-export const readLeagueRows = (leagueResponse) => leagueResponse?.stats?.[0]?.splits || [];
+export function readLeagueRows(leagueResponse) {
+  if (!Array.isArray(leagueResponse?.stats)) throw new Error("Invalid sports table");
+  const rows = leagueResponse.stats[0]?.splits ?? [];
+  if (!Array.isArray(rows)) throw new Error("Invalid sports table");
+  return rows;
+}
 
 /** @param {any} qualifiedResponse */
 export const listQualifiedIds = (qualifiedResponse) =>
-  readLeagueRows(qualifiedResponse).map((row) => row.player.id);
+  describeStarters(qualifiedResponse, new Map()).starters.map((row) => row.id);
 
 /**
  * The pitchers in batches of as many as one request reads.
@@ -153,7 +163,23 @@ export async function fetchPeople(fetchJson, nameRequest, ids) {
   const answers = await Promise.all(
     splitIntoBatches(ids).map((batch) => fetchJson(nameRequest(batch))),
   );
-  return answers.flatMap((answer) => answer?.people || []);
+  return answers.flatMap((answer, index) => readPeople(answer, splitIntoBatches(ids)[index]));
+}
+
+/**
+ * @param {any} answer
+ * @param {number[]} ids
+ * @returns {any[]}
+ */
+export function readPeople(answer, ids) {
+  if (!Array.isArray(answer?.people)) throw new Error("Invalid sports people");
+  const seen = new Set();
+  for (const person of answer.people) {
+    validateSportsData(BaseballPitcherDetails.shape.id, person?.id);
+    if (seen.has(person.id)) throw new Error("Invalid sports identity");
+    seen.add(person.id);
+  }
+  return answer.people.filter((person) => ids.includes(person.id));
 }
 
 /**
@@ -165,16 +191,26 @@ const readStats = (person, type) =>
   person?.stats?.find((/** @type {any} */ entry) => entry.type?.displayName === type)?.splits || [];
 
 /**
- * @param {number | null | undefined} value
+ * @param {number | string | null | undefined} value
  * @param {number} places
  */
-const roundTo = (value, places) =>
-  Number.isFinite(value) ? Math.round(Number(value) * 10 ** places) / 10 ** places : null;
+const roundTo = (value, places) => {
+  const number = readRate(value);
+  return number == null ? null : Math.round(number * 10 ** places) / 10 ** places;
+};
+
+/** @param {number | string | null | undefined} value */
+function readRate(value) {
+  if (value == null || value === "-.--" || value === "--") return null;
+  if (typeof value === "number") return value;
+  return /^\d+(?:\.\d+)?$/.test(value) ? Number(value) : NaN;
+}
 
 // The fastball he throws most, a four-seamer or a sinker, stands for how hard he throws, to the
 // tenth of a mile an hour the sheet shows.
 /** @param {any[]} arsenal */
 function readFastballSpeed(arsenal) {
+  validateSportsData(BaseballPitcherDetails.shape.pitches, arsenal.map(describePitch));
   const fastballs = arsenal
     .filter((pitch) => FASTBALLS.includes(pitch.stat?.type?.code))
     .sort((first, second) => second.stat.percentage - first.stat.percentage);
@@ -186,15 +222,16 @@ function readFastballSpeed(arsenal) {
  * @param {any} qualifiedResponse
  * @param {Map<number, number | null>} speeds
  */
-export const describeStarters = (qualifiedResponse, speeds) => ({
-  starters: readLeagueRows(qualifiedResponse).map((row) => ({
-    id: row.player.id,
-    era: Number(row.stat.era),
-    k9: Number(row.stat.strikeoutsPer9Inn),
-    bb9: Number(row.stat.walksPer9Inn),
-    speed: speeds.get(row.player.id) ?? null,
-  })),
-});
+export const describeStarters = (qualifiedResponse, speeds) =>
+  validateSportsData(BaseballQualifiedStarters, {
+    starters: readLeagueRows(qualifiedResponse).map((row) => ({
+      id: row.player.id,
+      era: readRate(row.stat.era),
+      k9: readRate(row.stat.strikeoutsPer9Inn),
+      bb9: readRate(row.stat.walksPer9Inn),
+      speed: speeds.get(row.player.id) ?? null,
+    })),
+  });
 
 /**
  * Each person's fastball speed, by id.
@@ -245,9 +282,9 @@ function describeLine(line, arsenal) {
   return {
     starts: line.gamesStarted ?? 0,
     ip: line.inningsPitched ?? null,
-    era: line.era,
-    k9: roundTo(Number(line.strikeoutsPer9Inn), 1),
-    bb9: roundTo(Number(line.walksPer9Inn), 1),
+    era: line.era ?? null,
+    k9: roundTo(line.strikeoutsPer9Inn, 1),
+    bb9: roundTo(line.walksPer9Inn, 1),
     speed: readFastballSpeed(arsenal),
   };
 }
@@ -285,7 +322,7 @@ export const listStarts = (gameLogPerson) =>
  */
 export function describePitcher(person, gameLogPerson) {
   const arsenal = readStats(person, "pitchArsenal").filter((pitch) => pitch.stat?.type?.code);
-  return {
+  return validateSportsData(BaseballPitcherDetails, {
     id: person.id,
     firstName: person.useName,
     lastName: person.useLastName,
@@ -294,7 +331,7 @@ export function describePitcher(person, gameLogPerson) {
     line: describeLine(readStats(person, "season")[0]?.stat, arsenal),
     pitches: arsenal.map(describePitch),
     starts: listStarts(gameLogPerson).slice(0, RECENT_STARTS),
-  };
+  });
 }
 
 /**
@@ -380,8 +417,9 @@ export function createPitcherReader({
       fetchMlbJson(fetchImpl, listPeopleRequest(season, [id]), PITCHER_CACHE_SECONDS),
       fetchMlbJson(fetchImpl, listGameLogRequest(season, [id]), PITCHER_CACHE_SECONDS),
     ]);
-    const person = people?.people?.[0];
-    return person ? describePitcher(person, gameLogs?.people?.[0]) : null;
+    const person = readPeople(people, [id])[0];
+    const logs = readPeople(gameLogs, [id])[0];
+    return person ? describePitcher(person, logs) : null;
   }
 
   return { fetchPitcher, loadQualified };
