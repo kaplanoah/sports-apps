@@ -60,11 +60,14 @@ test("historical players and rosters fill incrementally across restarts within f
       docs,
       storage,
       env: {},
-      now: () => NOW + attempt * 300000,
+      now: () => NOW + attempt * 50000,
       fetchImpl: budget.fetchImpl,
       createLoadSnapshot: () => async () => null,
     });
-    assert.ok(league.requests.length - before <= 4);
+    const issued = league.requests.length - before;
+    assert.ok(issued <= 4);
+    assert.equal(docs.stored.get("players-history/status").requests, issued);
+    assert.equal(docs.stored.get("players-history/status").lastFailure, null);
   }
   assert.ok(await storage.get("filled:2025"));
   assert.ok(docs.stored.get(nameRanksKey(2025)));

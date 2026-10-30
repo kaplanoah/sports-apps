@@ -28,8 +28,9 @@ function countRequests(fetchImpl) {
     count: 0,
     /** @type {typeof fetch} */
     fetchImpl: (input, init) => {
+      const response = fetchImpl(input, init);
       counter.count += 1;
-      return fetchImpl(input, init);
+      return response;
     },
   };
   return counter;

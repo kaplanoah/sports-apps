@@ -22,8 +22,8 @@ export { forwardToStore, readFeedFailures } from "../../../../shared/worker/seas
  */
 const league = {
   release: readReleaseCommit(PAGE_FILES),
-  createLoadSnapshot: (storage, fetchImpl) =>
-    createSnapshotLoader({ storage, fetchImpl }).loadSnapshot,
+  createLoadSnapshot: (storage, fetchImpl, readDoc) =>
+    createSnapshotLoader({ storage, fetchImpl, readDoc }).loadSnapshot,
   loadCurrentSnapshot: SeasonUpdater.loadCurrentSnapshot,
   readUpdates: SeasonUpdater.readUpdates,
   saveSnapshot: SeasonUpdater.saveSnapshot,

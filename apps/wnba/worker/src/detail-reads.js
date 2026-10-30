@@ -1,3 +1,4 @@
+import { PLAYER_JOB } from "./player-updater.js";
 import { createEspnGameReader } from "./adapters/lead.js";
 import { createDetailReads } from "../../../../shared/worker/detail-reads.js";
 import { createBoxScoreServer } from "./box-score.js";
@@ -7,9 +8,9 @@ import { createPlayerServer } from "./player.js";
 import { createPreviewServer } from "./preview.js";
 import { createRosterServer } from "./roster.js";
 
-/** @param {import("../../../../shared/worker/season-store.js").JobContext} context */
+/** @param {import("../../../../shared/worker/season-store.js").DetailContext} context */
 export function createReadDetail(context) {
-  const { docs, fetchImpl, now, storage } = context;
+  const { docs, fetchImpl, now, storage, countLeagueRead } = context;
   const espnGames = createEspnGameReader({ fetchImpl });
   const rosters = createRosterServer({ fetchImpl, now });
   const boxScore = createBoxScoreServer({ fetchImpl, espnGames });
@@ -22,7 +23,7 @@ export function createReadDetail(context) {
       "/box-score": (url) => boxScore.serveBoxScore(url, docs.read),
       "/highlights": (url) => highlights.serveHighlights(url, docs.read),
       "/lead": (url) => lead.serveLead(url, docs.read),
-      "/player": (url) => player.servePlayer(url, docs.read),
+      "/player": (url) => player.servePlayer(url, docs.read, () => countLeagueRead(PLAYER_JOB)),
       "/preview": (url) => preview.servePreview(url, docs.read),
       "/roster": (url) => rosters.serveRoster(url, docs.read),
     },

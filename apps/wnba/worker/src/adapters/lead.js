@@ -52,8 +52,6 @@ export function readGame(searchParams) {
   return isValid ? { id, away, home, start } : null;
 }
 
-/** @param {{ away: string, home: string, start: string }} game */
-
 /** @param {string} id */
 export const nameEspnMatchKey = (id) => `espnMatches/${id}`;
 

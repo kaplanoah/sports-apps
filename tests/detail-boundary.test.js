@@ -78,6 +78,8 @@ test("native baseball box scores reject malformed batting, pitching, innings, li
   }
   const lineup = readFixture("mlb", "2026-10-07-games.json").feeds["849838"];
   const team = lineup.liveData.boxscore.teams.home;
+  team.players[`ID${team.batters[0]}`].seasonStats.batting.avg = "1.000";
+  assert.equal(describeBaseball("849838", lineup).home.batters[0].average, "1.000");
   team.players[`ID${team.batters[0]}`].seasonStats.batting.avg = "bad";
   assert.throws(() => describeBaseball("849838", lineup), /Invalid sports data/);
 });
@@ -312,6 +314,29 @@ function createHarness(league, fetchImpl) {
 }
 
 for (const league of LEAGUES) {
+  test(`${league.app}: concurrent store-gap reads update the local diagnostics counter`, async () => {
+    let reads = 0;
+    const harness = createHarness(league, async () => {
+      reads += 1;
+      return new Response(null, { status: 503 });
+    });
+    const store = harness.getStore();
+    await store.docs.write("live/current", { season: 2026 });
+    const paths =
+      league.app === "wnba"
+        ? ["player?id=1627668&team=NYL&season=2026", "player?id=1629477&team=NYL&season=2026"]
+        : [
+            "pitcher?id=1&season=2026",
+            "pitcher?id=2&season=2026",
+            "rotation?club=CLE&date=2026-10-30",
+          ];
+    const responses = await Promise.all(paths.map((path) => harness.request(path)));
+    assert.ok(responses.every((response) => response.status === 502));
+    assert.ok(reads > 0);
+    const job = league.app === "wnba" ? "players" : "pitchers";
+    assert.equal(await store.createJobStorage(job).get("count:leagueReads"), paths.length);
+  });
+
   test(`${league.app}: every detail route reaches the store before validation or adapter work`, async () => {
     let reads = 0;
     const harness = createHarness(league, async () => {
@@ -327,11 +352,11 @@ for (const league of LEAGUES) {
 
   test(`${league.app}: concurrent and repeated route reads share the store's adapter request, survive restart and recover`, async () => {
     let reads = 0;
-    let down = false;
+    let refusal = 0;
     const harness = createHarness(league, async (url) => {
       reads += 1;
-      if (down || (!url.includes("boxscore") && !url.includes("feed/live")))
-        return new Response(null, { status: 503 });
+      if (refusal || (!url.includes("boxscore") && !url.includes("feed/live")))
+        return new Response(null, { status: refusal || 503 });
       return Response.json(league.feed);
     });
     const results = await Promise.all(Array.from({ length: 5 }, () => harness.request()));
@@ -344,12 +369,14 @@ for (const league of LEAGUES) {
     assert.equal(reads, 1);
     assert.equal((await harness.request()).status, 200);
     assert.equal(reads, 1);
-    down = true;
-    harness.restart();
-    assert.deepEqual(await (await harness.request()).json(), expected);
-    assert.ok(reads > 1);
+    for (const status of [403, 404, 503]) {
+      refusal = status;
+      harness.restart();
+      assert.deepEqual(await (await harness.request()).json(), expected);
+      assert.ok(reads > 1);
+    }
     const failedReads = reads;
-    down = false;
+    refusal = 0;
     harness.advance();
     assert.deepEqual(await (await harness.request()).json(), expected);
     assert.equal(reads, failedReads + 1);

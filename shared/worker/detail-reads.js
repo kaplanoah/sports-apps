@@ -29,7 +29,8 @@ export function createDetailReads(reads, { storage, now }) {
     try {
       return respondJson(await load(key));
     } catch (error) {
-      if (error instanceof Response && error.status < 500) return error.clone();
+      if (error instanceof Response && error.status < 500 && ![404, 409].includes(error.status))
+        return error.clone();
       const kept = await storage.get(`detail-answer:${key}`);
       if (kept) return respondJson(kept);
       return error instanceof Response

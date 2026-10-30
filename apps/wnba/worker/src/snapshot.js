@@ -79,11 +79,13 @@ const countFinals = (scoreboard) =>
  * @param {(input: string, init: object) => Promise<Response>} [options.fetchImpl]
  * @param {() => number} [options.now]
  * @param {import("../../../../shared/worker/feed-keeper.js").FeedStorage} [options.storage]
+ * @param {import("../../../../shared/worker/store-reads.js").ReadDoc} [options.readDoc]
  */
 export function createSnapshotLoader({
   fetchImpl = (input, init) => fetch(input, init),
   now = () => Date.now(),
   storage = createMemoryStorage(),
+  readDoc,
 } = {}) {
   const slowFeeds = createFeedKeeper({ feeds: SLOW_FEEDS, now, storage });
   const networkMonths = new Map();
@@ -91,7 +93,10 @@ export function createSnapshotLoader({
   const gameEnds = createGameEnds({
     loadEndTime: (game) =>
       espnGames
-        .fetchSummary({ away: game.away.team, home: game.home.team, start: game.start })
+        .fetchSummary(
+          { id: game.id, away: game.away.team, home: game.home.team, start: game.start },
+          readDoc,
+        )
         .then(readEndTime),
     now,
     storage,

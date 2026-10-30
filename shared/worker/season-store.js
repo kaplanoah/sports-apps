@@ -37,6 +37,8 @@ import { describeError, respondError, respondJson, respondMethodNotAllowed } fro
  * @property {() => number} now
  */
 
+/** @typedef {JobContext & { countLeagueRead: (job: string) => Promise<void> }} DetailContext */
+
 /**
  * Work a league's store does on its own schedule. A run that takes long, like asking Claude, goes
  * on beside the season's updates and never holds them up.
@@ -73,7 +75,7 @@ import { describeError, respondError, respondJson, respondMethodNotAllowed } fro
  * @template {SeasonSnapshot} Snapshot
  * @template Updates
  * @typedef {object} League
- * @property {(storage: import("./feed-keeper.js").FeedStorage, fetchImpl: typeof fetch) => SnapshotLoader<Snapshot>} createLoadSnapshot
+ * @property {(storage: import("./feed-keeper.js").FeedStorage, fetchImpl: typeof fetch, readDoc: SeasonDocuments["read"]) => SnapshotLoader<Snapshot>} createLoadSnapshot
  *   reads the league through `fetchImpl`, keeping what it may read again in `storage`
  * @property {(loadSnapshot: SnapshotLoader<Snapshot>, now: number) => Promise<Snapshot>} loadCurrentSnapshot
  * @property {(docs: SeasonDocuments, season: number) => Promise<Updates>} readUpdates
@@ -91,7 +93,7 @@ import { describeError, respondError, respondJson, respondMethodNotAllowed } fro
  * @property {string} [detailsCollection] where the details of the games pages have open are kept
  * @property {(options: { fetchImpl: typeof fetch }) => (id: string, snapshot: Snapshot, stored: any, readDoc: SeasonDocuments["read"]) => Promise<object | null>} [createLoadDetails]
  *   reads a game's details, or answers null while it needs none
- * @property {(context: JobContext) => (url: URL) => Promise<Response | null>} [createReadDetail]
+ * @property {(context: DetailContext) => (url: URL) => Promise<Response | null>} [createReadDetail]
  * @property {Record<string, BackgroundJob>} [backgroundJobs]
  * @property {string | null} [release] the commit the Worker was built from, or null outside a
  *   build
@@ -231,7 +233,9 @@ export function createSeasonStore(league) {
         now = () => Date.now(),
         fetchImpl = (input, init) => fetch(input, init),
         createLoadSnapshot = (/** @type {typeof fetch} */ fetchWith) =>
-          league.createLoadSnapshot(createFeedStorage(ctx.storage), fetchWith),
+          league.createLoadSnapshot(createFeedStorage(ctx.storage), fetchWith, (key) =>
+            ctx.storage.get(key),
+          ),
         loadDetails = undefined,
       } = {},
     ) {
@@ -264,6 +268,7 @@ export function createSeasonStore(league) {
       });
       /** @type {Map<string, Promise<void>>} */
       this.docUpdates = new Map();
+      this.countUpdates = new Map();
       /** @type {SeasonDocuments} */
       this.docs = {
         read: async (key) => (await ctx.storage.get(key)) ?? null,
@@ -277,6 +282,9 @@ export function createSeasonStore(league) {
       this.readDetail = league.createReadDetail?.({
         docs: this.docs,
         storage: this.createJobStorage("details"),
+        countLeagueRead: async (job) => {
+          await this.incrementJobCount(job, "leagueReads");
+        },
         createLoadSnapshot: this.createLoadSnapshot,
         env,
         fetchImpl: this.fetchImpl,
@@ -339,10 +347,22 @@ export function createSeasonStore(league) {
       const isJob = Object.hasOwn(league.backgroundJobs ?? {}, job);
       if (!isJob || !isStoreName(name) || rest.length)
         return respondError(404, "not_found", "No such count.");
-      const storage = this.createJobStorage(job);
-      const count = ((await storage.get(nameCountKey(name))) ?? 0) + 1;
-      await storage.put(nameCountKey(name), count);
-      return respondJson({ count });
+      return respondJson({ count: await this.incrementJobCount(job, name) });
+    }
+
+    incrementJobCount(job, name) {
+      const key = `${job}:${name}`;
+      const pending = (this.countUpdates.get(key) ?? Promise.resolve()).then(async () => {
+        const storage = this.createJobStorage(job);
+        const count = ((await storage.get(nameCountKey(name))) ?? 0) + 1;
+        await storage.put(nameCountKey(name), count);
+        return count;
+      });
+      this.countUpdates.set(
+        key,
+        pending.catch(() => {}),
+      );
+      return pending;
     }
 
     async listDocs(collection, searchParams) {

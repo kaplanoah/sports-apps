@@ -646,7 +646,8 @@ test("a league reads through the fetch it's handed, and keeps what it reads in t
   const context = createDurableObjectContext();
   const SeasonStore = createSeasonStore({
     ...QUIET_LEAGUE,
-    createLoadSnapshot: (storage, fetchImpl) => async () => {
+    createLoadSnapshot: (storage, fetchImpl, readDoc) => async () => {
+      assert.deepEqual(await readDoc("espnMatches/game"), { eventId: "401" });
       const answer = await (await fetchImpl("https://league.example/standings")).json();
       await storage.put("standings", answer);
       await storage.put("old-standings", answer);
@@ -667,6 +668,7 @@ test("a league reads through the fetch it's handed, and keeps what it reads in t
   const storeFetch = createFetch("store");
   const store = new SeasonStore(context.ctx, {}, { fetchImpl: storeFetch.fetchImpl });
 
+  await store.docs.write("espnMatches/game", { eventId: "401" });
   assert.deepEqual(await store.loadSnapshot(2026), { readBy: "store" });
   assert.deepEqual(storeFetch.reads, ["https://league.example/standings"]);
   assert.deepEqual(await context.ctx.storage.get("feed:standings"), { readBy: "store" });

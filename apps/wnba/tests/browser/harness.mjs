@@ -372,17 +372,14 @@ export async function openApp(
         .flatMap((socket) => socket.deserializeAttachment()?.watching ?? []),
     /** @param {(season: any) => any} change */
     changeSeason: async (change) => {
-      await store.docs.write("seasons/2026", { ...change(await readSeason()), year: Number(year) });
+      await store.docs.write("seasons/2026", change(await readSeason()));
     },
     /**
      * A change the page's socket never hears of, as when a phone sleeps through it.
      * @param {(season: any) => any} change
      */
     changeSeasonWhileAway: async (change) => {
-      await context.ctx.storage.put("seasons/2026", {
-        ...change(await readSeason()),
-        year: Number(year),
-      });
+      await context.ctx.storage.put("seasons/2026", change(await readSeason()));
     },
     holdStore: () => holdStore(page),
     ...createWorkerControls(testStore),

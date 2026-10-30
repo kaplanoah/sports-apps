@@ -886,36 +886,45 @@ test("a game that ends has the slow feeds read again at once, and once more ten 
   assert.deepEqual(countSlowReads(league), [3, 3, 3]);
 });
 
-test("a game seen live and then final ends when ESPN logged its last play, as each team's last game too, looked up once", async () => {
-  const live = structuredClone(AFTERNOON.responses.scoreboard);
-  Object.assign(live.scoreboard.games[0], { gameStatus: 2, gameStatusText: "Q4 0:30" });
-  const start = live.scoreboard.games[0].gameTimeUTC;
-  const competitors = [
-    { homeAway: "away", team: { id: String(TEAMS.ATL.espnId) } },
-    { homeAway: "home", team: { id: String(TEAMS.WAS.espnId) } },
-  ];
-  const espn = {
-    [nameScoreboardRequest(start)]: { events: [{ id: "401", competitions: [{ competitors }] }] },
-    [nameSummaryRequest("401")]: {
-      plays: [{ type: { text: "End Game" }, wallclock: "2026-10-01T01:11:27Z" }],
-    },
-  };
-  const answers = { scoreboard: live };
-  const league = createLeague({ answers, espn });
-  let now = NOW;
-  const loader = createSnapshotLoader({ fetchImpl: league.fetchImpl, now: () => now });
-  await loader.loadSnapshot(2026);
+for (const isKept of [false, true]) {
+  test(`a game ending reuses a ${isKept ? "persisted" : "new"} ESPN match`, async () => {
+    const live = structuredClone(AFTERNOON.responses.scoreboard);
+    Object.assign(live.scoreboard.games[0], { gameStatus: 2, gameStatusText: "Q4 0:30" });
+    const start = live.scoreboard.games[0].gameTimeUTC;
+    const competitors = [
+      { homeAway: "away", team: { id: String(TEAMS.ATL.espnId) } },
+      { homeAway: "home", team: { id: String(TEAMS.WAS.espnId) } },
+    ];
+    const espn = {
+      [nameScoreboardRequest(start)]: { events: [{ id: "401", competitions: [{ competitors }] }] },
+      [nameSummaryRequest("401")]: {
+        plays: [{ type: { text: "End Game" }, wallclock: "2026-10-01T01:11:27Z" }],
+      },
+    };
+    const answers = { scoreboard: live };
+    const league = createLeague({ answers, espn });
+    let now = NOW;
+    const loader = createSnapshotLoader({
+      fetchImpl: league.fetchImpl,
+      now: () => now,
+      readDoc: async (key) =>
+        isKept && key === "espnMatches/1042600132"
+          ? { away: "ATL", home: "WAS", eventId: "401" }
+          : null,
+    });
+    await loader.loadSnapshot(2026);
 
-  answers.scoreboard = finishFirstGame(AFTERNOON.responses.scoreboard);
-  now += 11 * 1000;
-  const snapshot = await loader.loadSnapshot(2026);
+    answers.scoreboard = finishFirstGame(AFTERNOON.responses.scoreboard);
+    now += 11 * 1000;
+    const snapshot = await loader.loadSnapshot(2026);
 
-  const ended = snapshot.games.find((game) => game.id === "1042600132");
-  assert.equal(ended.end, "2026-10-01T01:11:27Z");
-  const last = snapshot.nearestGames.find((game) => game.id === "1042600132");
-  assert.equal(last.end, "2026-10-01T01:11:27Z");
-  assert.equal(league.countReads("espn"), 2);
-});
+    const ended = snapshot.games.find((game) => game.id === "1042600132");
+    assert.equal(ended.end, "2026-10-01T01:11:27Z");
+    const last = snapshot.nearestGames.find((game) => game.id === "1042600132");
+    assert.equal(last.end, "2026-10-01T01:11:27Z");
+    assert.equal(league.countReads("espn"), isKept ? 1 : 2);
+  });
+}
 
 test("a scoreboard that misses a read doesn't look like a game ending once it's back", async () => {
   /** @type {Record<string, "page" | "error">} */

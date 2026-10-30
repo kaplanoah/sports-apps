@@ -3,7 +3,9 @@ import { openSeasonPart } from "../../../../tests/browser/season-tab.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
-for (const theme of ["light", "dark"]) {
+const THEMES = /** @type {const} */ (["light", "dark"]);
+
+for (const theme of THEMES) {
   for (const width of [390, 1280]) {
     test(`unfilled history explains availability and retries in ${theme} at ${width}px`, async ({
       page,

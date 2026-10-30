@@ -227,7 +227,7 @@ const BaseballLineupBatter = z.object({
   position: z.string(),
   average: z
     .string()
-    .regex(/^(?:0?\.)\d+$/)
+    .regex(/^(?:0?\.\d+|1\.0+)$/)
     .nullable(),
   homeRuns: NullableCount,
   rbi: NullableCount,
