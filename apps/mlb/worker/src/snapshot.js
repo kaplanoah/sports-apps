@@ -99,10 +99,7 @@ export function createSnapshotLoader({
   async function loadPastSnapshot(season) {
     if (pastSnapshots.has(season)) return pastSnapshots.get(season);
     const snapshot = await loadCurrentSnapshot(season);
-    if (!snapshot.missing.length && !Object.keys(snapshot.failures).length) {
-      delete snapshot.nextReadAt;
-      pastSnapshots.set(season, snapshot);
-    }
+    if (!snapshot.missing.length) pastSnapshots.set(season, snapshot);
     return snapshot;
   }
 

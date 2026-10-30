@@ -267,42 +267,72 @@ function nameMlbFeed(url) {
   return searchParams.has("gameType") ? "seasonGames" : "schedule";
 }
 
+function createQuietMlbStore(time = "2026-10-30T12:00:00Z") {
+  const fixture = JSON.parse(
+    readFileSync(new URL("./fixtures/2026-09-24-evening.json", import.meta.url), "utf8"),
+  );
+  fixture.responses.schedule = { dates: [] };
+  fixture.responses.postseason = { dates: [] };
+  fixture.responses.seasonGames = JSON.parse(
+    readFileSync(new URL("./fixtures/2026-10-09-season.json", import.meta.url), "utf8"),
+  ).responses.seasonGames;
+  const clock = { now: Date.parse(time) };
+  const downFeeds = new Set();
+  const reads = new Map();
+  const fetchImpl = async (url) => {
+    const name = nameMlbFeed(url);
+    reads.set(name, (reads.get(name) ?? 0) + 1);
+    if (
+      downFeeds.has(name) ||
+      (downFeeds.has("upcoming") && new URL(url).pathname.includes("/seasons/2027"))
+    )
+      return new Response("", { status: 503 });
+    return Response.json(fixture.responses[name]);
+  };
+  const { ctx, stored } = createDurableObjectContext();
+  const storage = createMemoryStorage();
+  const restartStore = () =>
+    new SeasonStore(
+      ctx,
+      {},
+      {
+        now: () => clock.now,
+        createLoadSnapshot: () =>
+          createSnapshotLoader({ fetchImpl, storage, now: () => clock.now }).loadSnapshot,
+      },
+    );
+  return { clock, downFeeds, reads, stored, restartStore };
+}
+
+for (const time of ["2026-10-30T12:00:00Z", "2027-01-10T12:00:00Z"]) {
+  test(`a quiet MLB day keeps its regular request budget at ${time}`, async () => {
+    const { clock, reads, downFeeds, stored, restartStore } = createQuietMlbStore(time);
+    downFeeds.add("upcoming");
+    const dayMs = 24 * 60 * 60_000;
+    const firstAt = clock.now;
+    assert.equal(await restartStore().updateSeasonWhenDue(clock.now), firstAt + dayMs);
+    assert.equal(stored.get("live/current").season, 2026);
+    assert.deepEqual(stored.get("live/feeds")?.failing ?? {}, {});
+    const firstReads = new Map(reads);
+    for (let hour = 1; hour < 24; hour++) {
+      clock.now = firstAt + hour * 60 * 60_000;
+      assert.equal(await restartStore().updateSeasonWhenDue(clock.now), firstAt + dayMs);
+      assert.deepEqual(reads, firstReads);
+    }
+    clock.now = firstAt + dayMs;
+    assert.equal(await restartStore().updateSeasonWhenDue(clock.now), clock.now + dayMs);
+    for (const name of ["schedule", "postseason"])
+      assert.equal(reads.get(name), 2 * firstReads.get(name));
+  });
+}
+
 test("MLB slow-feed failures schedule retries and retain saved data through restarts", async (t) => {
   for (const failedFeed of ["season", "seasonGames", "standings", "postseason"]) {
     await t.test(failedFeed, async () => {
-      const fixture = JSON.parse(
-        readFileSync(new URL("./fixtures/2026-09-24-evening.json", import.meta.url), "utf8"),
-      );
-      fixture.responses.schedule = { dates: [] };
-      fixture.responses.postseason = { dates: [] };
-      fixture.responses.seasonGames = JSON.parse(
-        readFileSync(new URL("./fixtures/2026-10-09-season.json", import.meta.url), "utf8"),
-      ).responses.seasonGames;
-      const clock = { now: Date.parse("2026-10-30T12:00:00Z") };
-      const downFeeds = new Set();
-      const reads = new Map();
-      const fetchImpl = async (url) => {
-        const name = nameMlbFeed(url);
-        reads.set(name, (reads.get(name) ?? 0) + 1);
-        if (downFeeds.has(name)) return new Response("", { status: 503 });
-        return Response.json(fixture.responses[name]);
-      };
-      const { ctx, stored } = createDurableObjectContext();
-      const storage = createMemoryStorage();
-      const restartStore = () =>
-        new SeasonStore(
-          ctx,
-          {},
-          {
-            now: () => clock.now,
-            createLoadSnapshot: () =>
-              createSnapshotLoader({ fetchImpl, storage, now: () => clock.now }).loadSnapshot,
-          },
-        );
+      const { clock, downFeeds, reads, stored, restartStore } = createQuietMlbStore();
       const dayMs = 24 * 60 * 60 * 1000;
-      const hourMs = 60 * 60 * 1000;
       let store = restartStore();
-      assert.equal(await store.updateSeasonWhenDue(clock.now), clock.now + hourMs);
+      assert.equal(await store.updateSeasonWhenDue(clock.now), clock.now + dayMs);
       const saved = structuredClone(stored.get("seasons/2026"));
       clock.now += dayMs;
       downFeeds.add(failedFeed);
@@ -325,10 +355,7 @@ test("MLB slow-feed failures schedule retries and retain saved data through rest
       downFeeds.clear();
       store = restartStore();
       clock.now += FAILED_FEED_WAIT_MS;
-      assert.equal(
-        await store.updateSeasonWhenDue(clock.now),
-        (failedFeed === "postseason" ? clock.now : failedAt) + hourMs,
-      );
+      assert.equal(await store.updateSeasonWhenDue(clock.now), clock.now + dayMs);
       assert.deepEqual(stored.get("live/feeds").failing, {});
       assert.equal(reads.get(failedFeed), failedReads.get(failedFeed) + 2);
       for (const name of ["season", "seasonGames", "standings", "postseason"].filter(

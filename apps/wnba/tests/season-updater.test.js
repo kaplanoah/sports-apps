@@ -631,20 +631,3 @@ test("the new year's season is followed from its opening day, or once its standi
   seasons[2027] = { ...seasons[2027], openingDay: null, standings: SNAPSHOT.standings };
   assert.equal(await followAt("2027-01-01T05:30:00Z"), 2027);
 });
-
-test("a new season's retry deadline survives choosing the previous WNBA season", async () => {
-  const now = Date.parse("2027-01-01T05:30:00Z");
-  const retryAt = now + 5 * 60_000;
-  const snapshot = await loadCurrentSnapshot(
-    async (season) => ({
-      ...SNAPSHOT,
-      season,
-      openingDay: "2027-04-24",
-      standings: [],
-      nextReadAt: season === 2027 ? retryAt : now + 60 * 60_000,
-    }),
-    now,
-  );
-  assert.equal(snapshot.season, 2026);
-  assert.equal(snapshot.nextReadAt, retryAt);
-});

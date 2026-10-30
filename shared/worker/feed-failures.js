@@ -1,4 +1,5 @@
-// Which of a league's feeds have been failing, and why, kept by the store from each update, so the
+// Each update's feed failures and earliest retry or settling deadline, handed to the store.
+// Which feeds have been failing, and why, are kept from each update, so the
 // Worker's health can say so before a fan notices. A feed counts as failing from the first of its
 // failed reads in a row, and only once that's FEED_FAILURE_MS old, so a moment's blip, which the
 // next read clears, never reaches the health.
@@ -22,18 +23,6 @@ export function createFeedReadStatus() {
     },
     readStatus: () => ({ failures, ...(Number.isFinite(nextReadAt) && { nextReadAt }) }),
   };
-}
-
-/**
- * Keeps a read's deadline even when another season remains current.
- * @template {{ nextReadAt?: number }} Snapshot
- * @param {Snapshot} snapshot
- * @param {{ nextReadAt?: number }} other
- * @returns {Snapshot}
- */
-export function carryReadDeadline(snapshot, other) {
-  const at = Math.min(snapshot.nextReadAt ?? Infinity, other.nextReadAt ?? Infinity);
-  return Number.isFinite(at) ? { ...snapshot, nextReadAt: at } : snapshot;
 }
 
 /**

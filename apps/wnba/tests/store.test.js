@@ -145,7 +145,7 @@ test("the real league store verifies reminders from the kept schedule when the s
   assert.ok(facts.games.some((game) => game.id === "1042600132"));
 });
 
-function createOffseasonStore() {
+function createOffseasonStore(time = "2026-10-30T12:00:00Z") {
   const fixture = JSON.parse(
     readFileSync(new URL("./fixtures/2026-09-30-afternoon.json", import.meta.url), "utf8"),
   );
@@ -155,7 +155,7 @@ function createOffseasonStore() {
       game.gameStatus = 3;
       game.gameStatusText = "Final";
     }
-  const clock = { now: Date.parse("2026-10-30T12:00:00Z") };
+  const clock = { now: Date.parse(time) };
   const feeds = new Map(
     Object.entries(REQUESTS).map(([name, request]) => [
       typeof request === "function" ? request(fixture.season) : request,
@@ -165,11 +165,15 @@ function createOffseasonStore() {
   const reads = new Map();
   const downFeeds = new Set();
   const fetchImpl = async (url) => {
+    const request = new URL(url);
     const name =
       feeds.get(url) ??
       (new URL(url).searchParams.get("dates")?.length === 8 ? "backup" : "networks");
     reads.set(name, (reads.get(name) ?? 0) + 1);
-    if (downFeeds.has(name)) {
+    const isUpcoming =
+      request.searchParams.get("Season") === "2027" ||
+      request.searchParams.get("SeasonYear") === "2027";
+    if (downFeeds.has(name) || (isUpcoming && downFeeds.has("upcoming"))) {
       if (name === "standings") throw new Error("No answer in 8000 ms");
       return new Response("<title>WNBA.com - Official Site of the WNBA</title>");
     }
@@ -276,6 +280,29 @@ test("offseason backup probes wake the store hourly and retry failures across re
   for (const name of ["schedule", "standings", "bracket"]) assert.equal(reads.get(name), 1);
   assert.equal(reads.get("networks"), networkReads);
   assert.equal(reads.get("scoreboard"), 5);
+});
+
+test("a future WNBA season's failed feeds do not make January retry all season reads", async () => {
+  const { clock, reads, downFeeds, stored, restartStore } =
+    createOffseasonStore("2027-01-10T12:00:00Z");
+  downFeeds.add("upcoming");
+  const hourMs = 60 * 60_000;
+  const firstAt = clock.now;
+  assert.equal(await restartStore().updateSeasonWhenDue(clock.now), firstAt + hourMs);
+  assert.equal(stored.get("live/current").season, 2026);
+  assert.deepEqual(stored.get("live/feeds")?.failing ?? {}, {});
+  const firstReads = new Map(reads);
+  for (let minute = 5; minute < 60; minute += 5) {
+    clock.now = firstAt + minute * 60_000;
+    assert.equal(await restartStore().updateSeasonWhenDue(clock.now), firstAt + hourMs);
+    assert.deepEqual(reads, firstReads);
+  }
+  clock.now = firstAt + hourMs;
+  assert.equal(await restartStore().updateSeasonWhenDue(clock.now), clock.now + hourMs);
+  assert.equal(reads.get("scoreboard"), 4);
+  assert.equal(reads.get("backup"), 2);
+  for (const name of ["schedule", "standings", "bracket"])
+    assert.equal(reads.get(name), firstReads.get(name));
 });
 
 test("feed deadlines preserve faster live polling and do not turn unrelated failures into retries", async () => {

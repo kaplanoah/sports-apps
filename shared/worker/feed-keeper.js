@@ -113,19 +113,23 @@ export function createFeedKeeper({ feeds, now, storage = createMemoryStorage() }
    * @param {any} record
    * @param {(data: any) => boolean} isBehind
    */
-  async function findNextReadAt(name, record, isBehind) {
-    if (record?.failedAt !== undefined) return findRetryAt(record);
+  async function findReadTimes(name, record, isBehind) {
+    if (record?.failedAt !== undefined) {
+      const retryAt = findRetryAt(record);
+      return { dueAt: retryAt, nextReadAt: retryAt };
+    }
     const { maxAgeMs, changesWithGames } = feeds[name];
-    if (!record?.answer) return -Infinity;
+    if (!record?.answer) return { dueAt: -Infinity, nextReadAt: Infinity };
     const { at, data } = record.answer;
-    let nextAt = at + maxAgeMs;
+    let nextAt = Infinity;
     if (isBehind(data)) nextAt = Math.min(nextAt, at + BEHIND_FEED_WAIT_MS);
-    if (!changesWithGames) return nextAt;
-    const finals = await readRecord(await digestKey(FINALS_KEY));
-    const finalAt = finals?.at ?? -Infinity;
-    if (at < finalAt) return -Infinity;
-    if (at < finalAt + SETTLE_MS) nextAt = Math.min(nextAt, finalAt + SETTLE_MS);
-    return nextAt;
+    if (changesWithGames) {
+      const finals = await readRecord(await digestKey(FINALS_KEY));
+      const finalAt = finals?.at ?? -Infinity;
+      if (at < finalAt) nextAt = -Infinity;
+      else if (at < finalAt + SETTLE_MS) nextAt = Math.min(nextAt, finalAt + SETTLE_MS);
+    }
+    return { dueAt: Math.min(at + maxAgeMs, nextAt), nextReadAt: nextAt };
   }
 
   return {
@@ -167,9 +171,10 @@ export function createFeedKeeper({ feeds, now, storage = createMemoryStorage() }
      *   stands in when the read fails
      * @param {(data: any) => boolean} [options.isBehind] whether a kept answer is behind what
      *   another feed already says
-     * @param {(reason: string, retryAt: number) => void} [options.onFailure] told why the feed's last read failed
-     *   while no read since has answered, even when the kept answer stands in, and when its retry is due
-     * @param {(at: number) => void} [options.onNextRead] told when this feed next needs a read
+     * @param {(reason: string) => void} [options.onFailure] told why the feed's last read failed
+     *   while no read since has answered, even when the kept answer stands in
+     * @param {(at: number) => void} [options.onNextRead] told when a retry or settling answer needs
+     *   an update before the ordinary poll; age alone waits for that poll
      */
     async readFeed(
       name,
@@ -186,9 +191,10 @@ export function createFeedKeeper({ feeds, now, storage = createMemoryStorage() }
       const what = `${name} ${key}`;
       const record = await readRecord(storageKey);
       const answer = record?.answer;
-      if (!readAgain && now() < (await findNextReadAt(name, record, isBehind))) {
-        if (record?.reason !== undefined) onFailure(record.reason, findRetryAt(record));
-        onNextRead(await findNextReadAt(name, record, isBehind));
+      const times = await findReadTimes(name, record, isBehind);
+      if (!readAgain && now() < times.dueAt) {
+        if (record?.reason !== undefined) onFailure(record.reason);
+        onNextRead(times.nextReadAt);
         if (answer) return answer.data;
         throw new Error(record.reason);
       }
@@ -196,13 +202,13 @@ export function createFeedKeeper({ feeds, now, storage = createMemoryStorage() }
         const data = await load();
         const updated = { answer: { at: now(), data } };
         await saveRecord(storageKey, updated, what);
-        onNextRead(await findNextReadAt(name, updated, isBehind));
+        onNextRead((await findReadTimes(name, updated, isBehind)).nextReadAt);
         return data;
       } catch (error) {
         const reason = describeError(error);
         const failed = { answer, failedAt: now(), reason };
         await saveRecord(storageKey, failed, what);
-        onFailure(reason, findRetryAt(failed));
+        onFailure(reason);
         onNextRead(findRetryAt(failed));
         if (answer) return answer.data;
         throw error;

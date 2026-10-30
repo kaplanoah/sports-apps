@@ -11,7 +11,7 @@ import {
 const MINUTE_MS = 60 * 1000;
 const HOUR_MS = 60 * MINUTE_MS;
 
-test("successful feeds publish absolute age, behind and final-settle deadlines across restarts", async () => {
+test("successful feeds publish behind and final-settle deadlines without waking for age alone", async () => {
   const storage = createMemoryStorage();
   const clock = { now: 0 };
   const restart = () =>
@@ -41,7 +41,7 @@ test("successful feeds publish absolute age, behind and final-settle deadlines a
     );
   await keeper.noteFinalCount(0);
   await read();
-  assert.equal(nextAt, 24 * HOUR_MS);
+  assert.equal(nextAt, Infinity);
   clock.now = MINUTE_MS;
   await keeper.noteFinalCount(1);
   behind = true;
@@ -59,10 +59,10 @@ test("successful feeds publish absolute age, behind and final-settle deadlines a
   clock.now = nextAt;
   await read();
   assert.equal(reads, 4);
-  assert.equal(nextAt, clock.now + 24 * HOUR_MS);
+  assert.equal(nextAt, Infinity);
 });
 
-test("failure callbacks report the keeper's absolute retry deadline across restarts", async () => {
+test("failed reads publish their absolute retry deadline across restarts", async () => {
   const storage = createMemoryStorage();
   const clock = { now: 0 };
   const restart = () =>
@@ -72,7 +72,11 @@ test("failure callbacks report the keeper's absolute retry deadline across resta
       storage,
     });
   const deadlines = [];
-  const onFailure = (reason, retryAt) => deadlines.push({ reason, retryAt });
+  const reasons = [];
+  const options = {
+    onFailure: (...args) => reasons.push(args),
+    onNextRead: (at) => deadlines.push(at),
+  };
   let keeper = restart();
   await keeper.readFeed("standings", "/standings", async () => "saved");
   clock.now = MINUTE_MS;
@@ -83,7 +87,7 @@ test("failure callbacks report the keeper's absolute retry deadline across resta
       async () => {
         throw new Error("down");
       },
-      { onFailure },
+      options,
     ),
     "saved",
   );
@@ -95,16 +99,15 @@ test("failure callbacks report the keeper's absolute retry deadline across resta
     reads += 1;
     return "recovered";
   };
-  assert.equal(await keeper.readFeed("standings", "/standings", load, { onFailure }), "saved");
-  assert.deepEqual(deadlines, [
-    { reason: "down", retryAt },
-    { reason: "down", retryAt },
-  ]);
+  assert.equal(await keeper.readFeed("standings", "/standings", load, options), "saved");
+  assert.deepEqual(deadlines, [retryAt, retryAt]);
+  assert.deepEqual(reasons, [["down"], ["down"]]);
   assert.equal(reads, 0);
   clock.now = retryAt;
-  assert.equal(await keeper.readFeed("standings", "/standings", load, { onFailure }), "recovered");
+  assert.equal(await keeper.readFeed("standings", "/standings", load, options), "recovered");
   assert.equal(reads, 1);
-  assert.equal(deadlines.length, 2);
+  assert.deepEqual(deadlines, [retryAt, retryAt, Infinity]);
+  assert.equal(reasons.length, 2);
 });
 
 function createKeeper() {
