@@ -214,21 +214,32 @@ export function createSnapshotLoader({
         onFailure: noteReason("standings"),
       }).catch(noteFailure("standings")),
     ]);
-    // A reminder goes out only on what the league says now. Each game a reminder can be due for is
-    // played on the league's today, so a kept schedule stands in once the scoreboard lists them all.
-    const isScheduleConfirmed =
+    /** @param {any} schedule */
+    const throwIfNoneAnswered = (schedule) => {
+      if (!scoreboard && !schedule && !bracket)
+        throw new Error(
+          `None of the WNBA's feeds answered with data: ${describeFailures(failures)}`,
+        );
+    };
+    // With every feed down, ESPN has no league games to stand in for, so it isn't read.
+    throwIfNoneAnswered(scheduleAnswer);
+    // A reminder goes out only on a current read of today's games. Each game a reminder can be due
+    // for is played on the league's today, so a kept schedule stands in once the scoreboard lists
+    // them all, or, while the scoreboard doesn't answer, once ESPN agrees with it on them all.
+    /** @param {import("./backup-probe.js").Backup | null} [backup] */
+    const isScheduleConfirmed = (backup = null) =>
       !verify ||
       !failures.schedule ||
-      WNBASnapshot.isTodayOnScoreboard(scheduleAnswer, scoreboard, season, now());
-    const schedule = isScheduleConfirmed ? scheduleAnswer : null;
-    if (!scoreboard && !schedule && !bracket)
-      throw new Error(`None of the WNBA's feeds answered with data: ${describeFailures(failures)}`);
-    const needsBackup = !scoreboard || hasGamesLeftLive(schedule);
-    const [{ backup, failure }, networks] = await Promise.all([
-      readBackup(needsBackup),
-      readNetworks(schedule, season, verify),
-    ]);
+      (scoreboard
+        ? WNBASnapshot.isTodayOnScoreboard(scheduleAnswer, scoreboard, season, now())
+        : WNBASnapshot.isTodayOnBackup(scheduleAnswer, backup, season, now()));
+    const needsBackup = !scoreboard || (isScheduleConfirmed() && hasGamesLeftLive(scheduleAnswer));
+    const { backup, failure } = await readBackup(needsBackup);
     if (failure) failures.backup = failure;
+    const schedule = isScheduleConfirmed(backup) ? scheduleAnswer : null;
+    throwIfNoneAnswered(schedule);
+    // The networks are read only for a confirmed schedule, which may wait on ESPN's answer.
+    const networks = await readNetworks(schedule, season, verify);
     return { responses: { scoreboard, schedule, bracket, standings, backup, networks }, failures };
   }
 

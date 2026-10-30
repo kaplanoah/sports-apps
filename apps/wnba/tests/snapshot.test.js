@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import { GAME_DAY_CHECK_MS } from "#shared/poll-schedule.js";
 import * as WNBASnapshot from "../page/js/snapshot.js";
 import { checkInTimeZone } from "../../../tests/time-zone.js";
+import { readAfternoonEspn } from "./espn-fixtures.js";
 
 const AFTERNOON = JSON.parse(
   readFileSync(`${import.meta.dirname}/fixtures/2026-09-30-afternoon.json`, "utf8"),
@@ -618,6 +619,107 @@ test("a kept schedule is confirmed only while the scoreboard lists each game it 
   assert.equal(isConfirmed(games.slice(1)), false);
   assert.equal(isConfirmed(games, Date.parse("2026-10-01T16:00:00Z")), false);
   assert.equal(WNBASnapshot.isTodayOnScoreboard(schedule, null, AFTERNOON.season, now), false);
+});
+
+/** @param {any} competition An ESPN event's competition. */
+const postponeCompetition = (competition) => {
+  competition.status = structuredClone(competition.status);
+  competition.status.type.shortDetail = "Postponed";
+};
+
+test("while the scoreboard doesn't answer, the reminders' games are confirmed from ESPN only while it lists each game on the league's today", () => {
+  const now = Date.parse(AFTERNOON.now);
+  /** @param {(events: any[]) => any[]} [changeEvents] */
+  const readBackup = (changeEvents) => ({
+    answers: Object.values(readAfternoonEspn(changeEvents)),
+  });
+  const isConfirmed = (backup) =>
+    WNBASnapshot.isTodayOnBackup(RESPONSES.schedule, backup, AFTERNOON.season, now);
+  const leaveOutFirst = (events) => events.slice(1);
+  assert.equal(isConfirmed(readBackup()), true);
+  assert.equal(isConfirmed(readBackup(leaveOutFirst)), false);
+  assert.equal(isConfirmed(null), false);
+
+  const listGames = (backup) =>
+    WNBASnapshot.listReminderGames(buildAfternoon({ ...RESPONSES, scoreboard: null, backup }));
+  const answering = WNBASnapshot.listReminderGames(buildAfternoon());
+  assert.ok(answering?.length);
+  assert.deepEqual(listGames(readBackup()), answering);
+  assert.equal(listGames(readBackup(leaveOutFirst)), null);
+  assert.equal(listGames(null), null);
+});
+
+test("ESPN confirms a kept schedule only while each game it has between named teams on the league's today, and hasn't put off, is the schedule's too", () => {
+  const now = Date.parse(AFTERNOON.now);
+  /** @param {(event: any) => void} changeAdded */
+  const isConfirmed = (changeAdded) => {
+    const espn = readAfternoonEspn((events) => {
+      // Mystics at Dream, a game the schedule doesn't have on the league's today.
+      const added = structuredClone(events[0]);
+      for (const competitor of added.competitions[0].competitors)
+        competitor.homeAway = competitor.homeAway === "home" ? "away" : "home";
+      changeAdded(added);
+      return [...events, added];
+    });
+    const backup = { answers: Object.values(espn) };
+    return WNBASnapshot.isTodayOnBackup(RESPONSES.schedule, backup, AFTERNOON.season, now);
+  };
+  const leaveAsIs = () => {};
+  const unnameTeams = (event) => {
+    for (const competitor of event.competitions[0].competitors) competitor.id = "0";
+  };
+  const dayEarlier = (event) => {
+    const [competition] = event.competitions;
+    competition.date = new Date(Date.parse(competition.date) - 24 * 60 * 60 * 1000).toISOString();
+  };
+  const postpone = (event) => postponeCompetition(event.competitions[0]);
+  assert.equal(isConfirmed(leaveAsIs), false);
+  assert.equal(isConfirmed(unnameTeams), true);
+  assert.equal(isConfirmed(dayEarlier), true);
+  assert.equal(isConfirmed(postpone), true);
+});
+
+test("ESPN confirms a kept schedule's game it hasn't started only while it starts then, if set, and isn't put off", () => {
+  const now = Date.parse(AFTERNOON.now);
+  // ESPN's first game, Dream at Mystics, with its time to be decided in the schedule.
+  const tbdSchedule = structuredClone(RESPONSES.schedule);
+  const tbdGame = tbdSchedule.leagueSchedule.gameDates
+    .flatMap((day) => day.games)
+    .find((game) => game.gameId === "1042600132");
+  tbdGame.gameStatusText = "TBD";
+  /** @param {(competition: any) => void} changeFirst */
+  const isConfirmed = (changeFirst, schedule = RESPONSES.schedule) => {
+    const espn = readAfternoonEspn((events) => {
+      changeFirst(events[0].competitions[0]);
+      return events;
+    });
+    const backup = { answers: Object.values(espn) };
+    return WNBASnapshot.isTodayOnBackup(schedule, backup, AFTERNOON.season, now);
+  };
+  const hourEarlier = (competition) => {
+    competition.date = new Date(Date.parse(competition.date) - 60 * 60 * 1000).toISOString();
+  };
+  const startHourEarlier = (competition) => {
+    hourEarlier(competition);
+    competition.status = {
+      clock: 300,
+      displayClock: "5:00",
+      period: 1,
+      type: {
+        name: "STATUS_IN_PROGRESS",
+        state: "in",
+        completed: false,
+        shortDetail: "5:00 - 1st",
+      },
+    };
+    for (const competitor of competition.competitors) competitor.score = "10";
+  };
+  const leaveAsIs = () => {};
+  assert.equal(isConfirmed(leaveAsIs), true);
+  assert.equal(isConfirmed(hourEarlier), false);
+  assert.equal(isConfirmed(postponeCompetition), false);
+  assert.equal(isConfirmed(startHourEarlier), true);
+  assert.equal(isConfirmed(hourEarlier, tbdSchedule), true);
 });
 
 const FINALS_GAME = {

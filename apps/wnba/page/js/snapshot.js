@@ -443,6 +443,10 @@ function readBackupGame(event) {
   };
 }
 
+/** @param {{ answers: any[] } | null | undefined} backup */
+const readBackupGames = (backup) =>
+  (backup?.answers ?? []).flatMap((answer) => answer.events ?? []).map(readBackupGame);
+
 const MATCH_WINDOW_MS = 24 * 60 * 60 * 1000;
 const isSameMatchup = (game, backup) =>
   game.home.team === backup.home?.team && game.away.team === backup.away?.team;
@@ -495,11 +499,53 @@ export function isTodayOnScoreboard(schedule, scoreboard, season, now) {
   const listed = new Set(
     listSeasonGames(scoreboard.scoreboard?.games ?? [], season).map((game) => String(game.gameId)),
   );
-  const today = readEasternDay(now).date;
+  return listTodayGames(schedule, season, now).every((game) => listed.has(game.id));
+}
+
+/**
+ * Whether ESPN's backup, which answered, agrees with the schedule on the games of the league's day
+ * of `now`, as the scoreboard would while it doesn't answer. ESPN's word on a game it has started
+ * replaces the schedule's, and one it hasn't must start when the schedule says and not be put off.
+ * Each game ESPN has on that day and hasn't put off must be one of the schedule's too, so a schedule
+ * kept from an earlier read then holds nothing older than ESPN for today's games, a game moved into
+ * today too.
+ * @param {any} schedule
+ * @param {{ answers: any[] } | null | undefined} backup
+ * @param {number} season
+ * @param {number} now
+ */
+export function isTodayOnBackup(schedule, backup, season, now) {
+  if (!backup) return false;
+  const backupGames = readBackupGames(backup);
+  const todayGames = listTodayGames(schedule, season, now);
+  const backupTodayGames = backupGames.filter(
+    (backupGame) =>
+      hasBothTeams(backupGame) && !isPutOff(backupGame) && isOnLeagueToday(backupGame, now),
+  );
+  return (
+    todayGames.every((game) => isBackupAgreeing(game, findAnsweringGame(game, backupGames))) &&
+    backupTodayGames.every((backupGame) =>
+      todayGames.some((game) => isSameMatchup(game, backupGame)),
+    )
+  );
+}
+
+// A game whose time isn't set gets no reminder, so only a set time has to match ESPN's.
+/** @param {any} game @param {any} backup */
+const isBackupAgreeing = (game, backup) =>
+  !!backup &&
+  (backup.state !== "pre" ||
+    (!isPutOff(backup) &&
+      (!game.isTimeSet || Date.parse(game.start) === Date.parse(backup.start))));
+
+/** @param {{ start: string | null }} game @param {number} now */
+const isOnLeagueToday = (game, now) => readLeagueDate(game.start) === readEasternDay(now).date;
+
+/** @param {any} schedule @param {number} season @param {number} now */
+function listTodayGames(schedule, season, now) {
   return listScheduleGames(schedule, season)
     .map(normalizeGame)
-    .filter((game) => readLeagueDate(game.start) === today)
-    .every((game) => listed.has(game.id));
+    .filter((game) => isOnLeagueToday(game, now));
 }
 
 // ESPN stands in for every game while the scoreboard doesn't answer, and otherwise only for those
@@ -573,7 +619,7 @@ function readNetworkGame(event) {
 }
 
 // Until ESPN names both teams, its game could be any of a round's games at that time.
-const hasBothTeams = (networkGame) => !!(networkGame.home?.team && networkGame.away?.team);
+const hasBothTeams = (espnGame) => !!(espnGame.home?.team && espnGame.away?.team);
 
 // A game from the league's yesterday that isn't over is one the scoreboard still holds past
 // midnight, or one the schedule hasn't caught up on. An older one left unplayed or unfinished is the
@@ -707,9 +753,7 @@ function isStillIfNeeded(game, seriesById) {
  * @param {{ season: number, now?: number }} options
  */
 export function buildSnapshot(responses, { season, now = Date.now() }) {
-  const backupGames = (responses.backup?.answers ?? [])
-    .flatMap((answer) => answer.events ?? [])
-    .map(readBackupGame);
+  const backupGames = readBackupGames(responses.backup);
   const leagueGames = mergeGames(responses.schedule, responses.scoreboard, season);
   const standIns = matchBackupGames(
     listGamesForBackup(leagueGames, responses, season),
@@ -746,6 +790,7 @@ export function buildSnapshot(responses, { season, now = Date.now() }) {
     missing: LEAGUE_FEEDS.filter((name) => !responses[name]),
     standIn: standIns.size ? "espn" : null,
     scoreboardCover: isEspnCovering(leagueGames, responses, backupGames) ? "espn" : null,
+    isTodayOnBackup: isTodayOnBackup(responses.schedule, responses.backup, season, now),
     hasNoScoreboardGame:
       !!responses.schedule && !seasonGames.some((game) => isScoreboardGame(game, seriesById, now)),
     // Without the schedule, which says when each game starts, a score may be due.
@@ -794,8 +839,7 @@ export function choosePollDelay(snapshot, now = Date.now()) {
 
 /** @param {any} snapshot */
 export function listReminderGames(snapshot) {
-  if (snapshot.missing.some((name) => ["schedule", "scoreboard", "bracket"].includes(name)))
-    return null;
+  if (!REMINDER_FEEDS.every((name) => isReminderFeedHeard(snapshot, name))) return null;
   const series = mapSeriesById(snapshot.series);
   return listTimedReminderGames(
     snapshot.games.filter((game) => isConfirmedReminderGame(game, series)),
@@ -803,6 +847,12 @@ export function listReminderGames(snapshot) {
     (game) => ({ away: TEAMS[game.away.team]?.name, home: TEAMS[game.home.team]?.name }),
   );
 }
+
+const REMINDER_FEEDS = ["schedule", "scoreboard", "bracket"];
+
+// ESPN answering for each of today's games stands in for the scoreboard.
+const isReminderFeedHeard = (snapshot, name) =>
+  !snapshot.missing.includes(name) || (name === "scoreboard" && snapshot.isTodayOnBackup);
 
 const isConfirmedReminderGame = (game, seriesById) =>
   game.state === "pre" && game.isTimeSet && isToBePlayed(game, seriesById) && !game.isIfNeeded;

@@ -6,6 +6,7 @@ import { BACKGROUND_JOBS } from "../page/js/background-jobs.js";
 import { createSnapshotLoader } from "../worker/src/snapshot.js";
 import { SeasonStore } from "../worker/src/store.js";
 import { createDurableObjectContext } from "../../../tests/durable-object-context.js";
+import { readAfternoonEspn } from "./espn-fixtures.js";
 
 test("every background job saves how its run went where the Diagnostics report reads it", async () => {
   const { ctx, stored } = createDurableObjectContext();
@@ -87,7 +88,12 @@ test("the real league store keeps what its last update saved when a reminder ver
   assert.equal(stored.get("push:reminder-games").verifiedAt, null);
 });
 
-test("the real league store verifies reminders from the kept schedule when the schedule fails and the scoreboard lists today's games", async () => {
+/**
+ * A league store over the afternoon fixture's feeds, read through the real snapshot loader, with
+ * each feed named in `downFeeds` answering a page instead, and ESPN answering `espn` by URL.
+ * @param {{ espn?: Record<string, unknown> }} [options]
+ */
+function createLeagueStore({ espn = {} } = {}) {
   const fixture = JSON.parse(
     readFileSync(new URL("./fixtures/2026-09-30-afternoon.json", import.meta.url), "utf8"),
   );
@@ -98,12 +104,14 @@ test("the real league store verifies reminders from the kept schedule when the s
     [REQUESTS.bracket(fixture.season)]: "bracket",
     [REQUESTS.standings(fixture.season)]: "standings",
   };
-  let isScheduleDown = false;
+  /** @type {Set<string>} */
+  const downFeeds = new Set();
   /** @param {string} url */
   const fetchImpl = async (url) => {
+    if (url in espn) return new Response(JSON.stringify(espn[url]));
     const feed = feeds[url];
     if (!feed) return new Response("", { status: 404 });
-    if (feed === "schedule" && isScheduleDown) return new Response("<!DOCTYPE html><html></html>");
+    if (downFeeds.has(feed)) return new Response("<!DOCTYPE html><html></html>");
     return new Response(JSON.stringify(fixture.responses[feed]));
   };
   const { ctx, stored } = createDurableObjectContext();
@@ -113,8 +121,23 @@ test("the real league store verifies reminders from the kept schedule when the s
     {},
     { now: () => now, createLoadSnapshot: () => loadSnapshot },
   );
+  return { store, stored, downFeeds, now };
+}
+
+test("the real league store verifies reminders from the kept schedule when the schedule fails and the scoreboard lists today's games", async () => {
+  const { store, stored, downFeeds, now } = createLeagueStore();
   await store.updateSeason();
-  isScheduleDown = true;
+  downFeeds.add("schedule");
+  await store.verifyReminderGames();
+  const facts = stored.get("push:reminder-games");
+  assert.equal(facts.verifiedAt, now);
+  assert.ok(facts.games.some((game) => game.id === "1042600132"));
+});
+
+test("the real league store verifies reminders from the kept schedule when the scoreboard and schedule fail and ESPN answers for today's games", async () => {
+  const { store, stored, downFeeds, now } = createLeagueStore({ espn: readAfternoonEspn() });
+  await store.updateSeason();
+  downFeeds.add("scoreboard").add("schedule");
   await store.verifyReminderGames();
   const facts = stored.get("push:reminder-games");
   assert.equal(facts.verifiedAt, now);

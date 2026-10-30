@@ -16,6 +16,7 @@ import {
 import { describePreview } from "../worker/src/preview.js";
 import { describeSnapshotStatus, listFeedFailures } from "../worker/src/season-updater.js";
 import { createSnapshotLoader, describeFailures } from "../worker/src/snapshot.js";
+import { ESPN, readAfternoonEspn, SEP_30 } from "./espn-fixtures.js";
 import { nameFeedKey } from "../../../shared/worker/feed-keeper.js";
 
 const AFTERNOON = JSON.parse(
@@ -27,10 +28,6 @@ const GAMES = JSON.parse(
   readFileSync(`${import.meta.dirname}/fixtures/2026-10-01-games.json`, "utf8"),
 );
 const RESPONSES = AFTERNOON.responses;
-// ESPN's scoreboards of Sep 30 and Oct 1 the next morning, with both games of Sep 30 finished.
-const ESPN = JSON.parse(
-  readFileSync(`${import.meta.dirname}/fixtures/2026-10-01-espn-days.json`, "utf8"),
-);
 
 // Where ESPN says the afternoon's games, and the day before's, were on.
 const ESPN_SCOREBOARD = JSON.parse(
@@ -185,7 +182,6 @@ const readBackupReason = (snapshot) =>
     .find((reason) => reason.startsWith("backup: "))
     ?.slice("backup: ".length) ?? null;
 
-const SEP_30 = ESPN_DAY_REQUEST("20260930");
 const OCT_1 = ESPN_DAY_REQUEST("20261001");
 const BACKUP_PATH = new URL(SEP_30).pathname;
 
@@ -972,7 +968,7 @@ test("a slow feed that didn't answer waits five minutes before it's asked again"
   assert.deepEqual(answered.missing, []);
 });
 
-test("a snapshot says why it couldn't be read when no feed answers", async () => {
+test("a snapshot says why it couldn't be read when no feed answers, without reading ESPN", async () => {
   const league = createLeague({
     refuse: { scoreboard: "error", schedule: "error", bracket: "error", standings: "error" },
   });
@@ -980,8 +976,9 @@ test("a snapshot says why it couldn't be read when no feed answers", async () =>
 
   await assert.rejects(
     loader.loadSnapshot(2026),
-    /None of the WNBA's feeds answered with data: scoreboard: The WNBA answered 503 for \/.+; schedule: The WNBA answered 503 for \/.+; bracket: .+; standings: .+/,
+    /^Error: None of the WNBA's feeds answered with data: scoreboard: The WNBA answered 503 for \/[^;]+; schedule: The WNBA answered 503 for \/[^;]+; bracket: [^;]+; standings: [^;]+$/,
   );
+  assert.equal(league.countReads("espn"), 0);
 });
 
 test("the Worker bundles with its page, and exports its store", async () => {
@@ -1059,6 +1056,53 @@ test("a reminder verification takes the kept schedule and bracket when they fail
   const expected = listReminderGames(await answering.loadSnapshot(2026, { verify: true }));
   assert.ok(expected?.length);
   assert.deepEqual(listReminderGames(verified), expected);
+});
+
+test("a reminder verification takes the kept schedule when it and the scoreboard fail, once ESPN answers for today's games", async () => {
+  /** @type {Record<string, "page" | "error">} */
+  const refuse = {};
+  const league = createLeague({ refuse, espn: readAfternoonEspn() });
+  const loader = createSnapshotLoader({ fetchImpl: league.fetchImpl, now: () => NOW });
+  await loader.loadSnapshot(2026);
+  refuse.schedule = "page";
+  refuse.scoreboard = "error";
+  const verified = await loader.loadSnapshot(2026, { verify: true });
+  assert.equal(league.countReads("schedule"), 2);
+  assert.deepEqual(verified.missing, ["scoreboard"]);
+  const answering = createSnapshotLoader({ fetchImpl: createLeague().fetchImpl, now: () => NOW });
+  const expected = listReminderGames(await answering.loadSnapshot(2026, { verify: true }));
+  assert.ok(expected?.length);
+  assert.deepEqual(listReminderGames(verified), expected);
+});
+
+test("a reminder verification confirms nothing when the scoreboard and ESPN both fail", async () => {
+  /** @type {Record<string, "page" | "error">} */
+  const refuse = {};
+  const league = createLeague({ refuse });
+  const loader = createSnapshotLoader({ fetchImpl: league.fetchImpl, now: () => NOW });
+  await loader.loadSnapshot(2026);
+  refuse.schedule = "page";
+  refuse.scoreboard = "error";
+  const verified = await loader.loadSnapshot(2026, { verify: true });
+  assert.ok(verified.failures.backup);
+  assert.deepEqual(verified.missing, ["schedule", "scoreboard"]);
+  assert.equal(listReminderGames(verified), null);
+});
+
+test("a reminder verification takes no kept schedule while ESPN, standing in for the scoreboard, leaves out one of today's games", async () => {
+  /** @type {Record<string, "page" | "error">} */
+  const refuse = {};
+  const league = createLeague({
+    refuse,
+    espn: readAfternoonEspn((events) => events.slice(1)),
+  });
+  const loader = createSnapshotLoader({ fetchImpl: league.fetchImpl, now: () => NOW });
+  await loader.loadSnapshot(2026);
+  refuse.schedule = "page";
+  refuse.scoreboard = "error";
+  const verified = await loader.loadSnapshot(2026, { verify: true });
+  assert.deepEqual(verified.missing, ["schedule", "scoreboard"]);
+  assert.equal(listReminderGames(verified), null);
 });
 
 test("a reminder verification takes no kept schedule while the scoreboard leaves out one of today's games", async () => {
