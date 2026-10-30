@@ -1091,6 +1091,30 @@ test("a reminder verification keeps a schedule read now while the scoreboard lea
   assert.notEqual(listReminderGames(verified), null);
 });
 
+test("an ordinary update keeps the kept schedule while it fails and the scoreboard leaves out one of today's games", async () => {
+  /** @type {Record<string, "page" | "error">} */
+  const refuse = {};
+  /** @type {Record<string, any>} */
+  const answers = {};
+  const league = createLeague({ refuse, answers });
+  let now = NOW;
+  const loader = createSnapshotLoader({ fetchImpl: league.fetchImpl, now: () => now });
+  const first = await loader.loadSnapshot(2026);
+  refuse.schedule = "page";
+  const { scoreboard } = RESPONSES.scoreboard;
+  answers.scoreboard = { scoreboard: { ...scoreboard, games: scoreboard.games.slice(0, 1) } };
+  await loader.loadSnapshot(2026, { verify: true });
+  now += 60_000;
+  const updated = await loader.loadSnapshot(2026);
+  assert.ok(updated.failures.schedule);
+  assert.ok(!updated.missing.includes("schedule"));
+  assert.ok(first.nearestGames.length);
+  assert.deepEqual(
+    updated.nearestGames.map((game) => game.id),
+    first.nearestGames.map((game) => game.id),
+  );
+});
+
 test("reminder verification refreshes open network months while reusing finalized months", async () => {
   const league = createLeague();
   let now = NOW;
