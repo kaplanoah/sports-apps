@@ -143,13 +143,14 @@ for (const { app, fixture: name, buildSnapshot, Store } of LEAGUES) {
     const now = Date.parse(fixture.now);
     let responses = fixture.responses;
     const { ctx } = createDurableObjectContext();
+    /** @returns {Promise<any>} */
+    const loadSnapshot = async () => buildSnapshot(responses, { season: fixture.season, now });
     const store = new Store(
       ctx,
       {},
       {
         now: () => now,
-        createLoadSnapshot: () => async () =>
-          buildSnapshot(responses, { season: fixture.season, now }),
+        createLoadSnapshot: () => loadSnapshot,
       },
     );
     await store.updateSeason();

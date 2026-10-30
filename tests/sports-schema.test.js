@@ -41,6 +41,7 @@ test("schemas reject malformed game state and scores without logging the payload
     assert.throws(
       () => validateSportsData(BaseballGame, invalid),
       (error) => {
+        assert.ok(error instanceof Error);
         assert.match(error.message, /Invalid sports data at (score.1|state):/);
         assert.doesNotMatch(error.message, /private-payload|unexpected/);
         return true;
