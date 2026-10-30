@@ -355,10 +355,10 @@ export function testSettingsContactInteractions(test, expect, { openApp, setting
     ]) {
       await page.locator("#settingsDialog .sheet-close").focus();
       await opener.dispatchEvent("click");
-      await page.clock.runFor(1000);
+      await page.clock.runFor(100);
       await expect(dialog.locator("h2")).toBeFocused();
       await close();
-      await page.clock.runFor(1000);
+      await page.clock.runFor(100);
       await expect(dialog).toBeHidden();
       await expect(opener).toBeFocused();
     }
