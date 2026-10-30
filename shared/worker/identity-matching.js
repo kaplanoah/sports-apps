@@ -1,16 +1,12 @@
+import { readNameLetters } from "./player-name.js";
 import { readEasternDay } from "../page/days.js";
 
 /** @param {any} game */
 const readDay = (game) =>
   game.date ??
   (Number.isFinite(Date.parse(game.start)) ? readEasternDay(Date.parse(game.start)).date : null);
-const readLetters = (name) =>
-  String(name ?? "")
-    .normalize("NFD")
-    .replace(/[^a-z]/gi, "")
-    .toLowerCase();
 const readPlayerName = (player) =>
-  readLetters(`${player.firstName ?? ""} ${player.lastName ?? ""}`);
+  readNameLetters(`${player.firstName ?? ""} ${player.lastName ?? ""}`);
 
 function hasSameTeams(first, second) {
   return !!first.away && !!first.home && first.away === second.away && first.home === second.home;
@@ -27,6 +23,19 @@ function matchesPlayer(first, second) {
   return (
     !!first.team && first.team === second.team && !!first.number && first.number === second.number
   );
+}
+
+function hasContradictoryEvidence(native, record, type) {
+  if (!native) return false;
+  if (type === "game")
+    return (
+      (!!native.away && !!record.away && native.away !== record.away) ||
+      (!!native.home && !!record.home && native.home !== record.home) ||
+      (Number.isInteger(native.gameNumber) &&
+        Number.isInteger(record.gameNumber) &&
+        native.gameNumber !== record.gameNumber)
+    );
+  return !!native.birthdate && !!record.birthdate && native.birthdate !== record.birthdate;
 }
 
 /**
@@ -64,14 +73,19 @@ export async function reconcileIdentities(lookup, { type, vendor, natives, recor
     const decisive = !!confident && (numbered || !!(candidate.birthdate && record.birthdate));
     const internalId =
       established && !decisive ? established : confident ? String(candidate.id) : undefined;
+    const establishedNative = uniqueNatives.find((native) => String(native.id) === established);
     const disputed =
-      !!established && !!confident && String(candidate.id) !== established && !decisive;
+      !!established &&
+      !decisive &&
+      (hasContradictoryEvidence(establishedNative, record, type) ||
+        (!!confident && String(candidate.id) !== established));
     if (disputed) {
       observations.push({
         type,
         vendor,
         vendorId: String(record.id),
-        internalId: String(candidate.id),
+        internalId: established,
+        disputed: true,
         evidence: { method: type === "game" ? "teams-day" : "player-facts" },
       });
       continue;
@@ -90,6 +104,7 @@ export async function reconcileIdentities(lookup, { type, vendor, natives, recor
       vendorId: String(record.id),
       ...(internalId && { internalId }),
       decisive,
+      preserveProblem: !!established && !confident,
       evidence: {
         method,
         ...(type === "game"

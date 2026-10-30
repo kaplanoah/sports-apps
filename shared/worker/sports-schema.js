@@ -30,6 +30,8 @@ export const IdentityObservation = z.looseObject({
   internalId: Identifier.optional(),
   evidence: IdentityEvidence,
   decisive: z.boolean().optional(),
+  disputed: z.boolean().optional(),
+  preserveProblem: z.boolean().optional(),
   facts: z.record(z.string(), z.unknown()).optional(),
 });
 export const VendorGameIdentities = z.array(

@@ -8,7 +8,7 @@ const nameEntityKey = (league, type, id) =>
 const nameVendorKey = (league, type, vendor, id) =>
   `identity:vendor:${encodeURIComponent(vendor)}:${encodeURIComponent(league)}:${type}:${encodeURIComponent(id)}`;
 const nameProblemKey = (key) => `identity:problem:${key}`;
-const createBlankStatus = () => ({ games: 0, players: 0, unmatched: 0, disputed: 0, conflicts: 0 });
+const createBlankStatus = () => ({ games: 0, players: 0, unmatched: 0, disputed: 0 });
 
 /** @param {any} storage @param {string} key @param {any} value */
 async function saveChanged(storage, key, value) {
@@ -97,7 +97,7 @@ async function saveAssociation(transaction, league, observation) {
     vendor,
     vendorId,
   });
-  await saveProblem(transaction, league, key, null);
+  if (!observation.preserveProblem) await saveProblem(transaction, league, key, null);
   return { internalId, disputed: false };
 }
 
@@ -120,6 +120,10 @@ export function createIdentityLookup(storage, league) {
             observation.vendor,
             observation.vendorId,
           );
+          if (observation.disputed) {
+            await saveProblem(transaction, league, key, "disputed");
+            continue;
+          }
           if (!observation.internalId) {
             await saveProblem(
               transaction,
@@ -156,6 +160,26 @@ export function createIdentityLookup(storage, league) {
     },
     /** @param {"game" | "player"} type @param {string} id */
     readEntry: (type, id) => storage.get(nameEntityKey(league, type, id)),
+    async countMappingConflicts(key) {
+      return storage.transaction(async (transaction) => {
+        const value = await transaction.get(key);
+        if (!value) return 0;
+        let conflicts = 0;
+        if (key.startsWith(`identity:entity:${league}:`)) {
+          for (const [vendor, id] of Object.entries(value.vendors)) {
+            if (
+              (await transaction.get(nameVendorKey(league, value.type, vendor, id)))?.internalId !==
+              value.id
+            )
+              conflicts += 1;
+          }
+        } else if (key.startsWith("identity:vendor:") && value.league === league) {
+          const entry = await transaction.get(nameEntityKey(league, value.type, value.internalId));
+          if (entry?.vendors[value.vendor] !== value.vendorId) conflicts += 1;
+        }
+        return conflicts;
+      });
+    },
     readStatus: async () => (await storage.get(nameStatusKey(league))) ?? createBlankStatus(),
   };
 }

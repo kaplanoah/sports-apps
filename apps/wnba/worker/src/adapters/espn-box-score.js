@@ -4,7 +4,7 @@ import { describeEspnBoxScore as describeBoxScore } from "../../../../../shared/
 export { isFromEspn } from "../../../../../shared/worker/espn-adapter.js";
 
 /** @param {any} summary @param {string} id @param {any} index */
-export const describeEspnBoxScore = (summary, id, index) => ({
-  ...describeBoxScore(summary, id, index, findTeamCodeByEspnId),
-  ...readGameFacts(id),
-});
+export function describeEspnBoxScore(summary, id, index) {
+  const boxScore = describeBoxScore(summary, id, index, findTeamCodeByEspnId);
+  return boxScore ? { ...boxScore, ...readGameFacts(id) } : null;
+}

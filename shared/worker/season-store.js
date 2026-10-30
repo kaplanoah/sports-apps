@@ -428,6 +428,8 @@ export function createSeasonStore(league) {
     async startUpdating() {
       if (this.hasAlarm) return;
       const alarmAt = await this.ctx.storage.getAlarm();
+      if (isFromEarlierRelease(await this.ctx.storage.get(SCHEDULE_KEY)))
+        await this.identities?.restartCompletedBackfill();
       if (alarmAt === null || (alarmAt > this.now() && (await this.isBehindDeploy())))
         await this.ctx.storage.setAlarm(this.now());
       this.hasAlarm = true;

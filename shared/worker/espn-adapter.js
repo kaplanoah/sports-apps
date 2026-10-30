@@ -1,3 +1,5 @@
+import { readNameLetters } from "./player-name.js";
+export { readNameLetters } from "./player-name.js";
 // Shared ESPN sports-data adapter; league mappings and basketball rules are supplied by callers.
 import {
   ReportedPlayers,
@@ -50,16 +52,6 @@ export const fetchInjuryReport = (
     headers,
     cacheSeconds,
   });
-
-/**
- * A name's letters alone, in lowercase, to match one player across two spellings of his name.
- * @param {string} name
- */
-export const readNameLetters = (name) =>
-  name
-    .normalize("NFD")
-    .replace(/[^a-z]/gi, "")
-    .toLowerCase();
 
 // A word in capitals, like ACL, or a name keeps its capitals; any other drops its first.
 /** @param {string} word */

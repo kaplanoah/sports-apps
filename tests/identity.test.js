@@ -69,6 +69,18 @@ test("a failed identity transaction rolls back its associations and counters", a
   assert.equal((await lookup.readStatus()).games, 1);
 });
 
+test("identity consistency checks detect broken forward and reverse references", async () => {
+  const { ctx } = createDurableObjectContext();
+  const lookup = createIdentityLookup(ctx.storage, "mlb");
+  await lookup.save([createNative("game", "7")]);
+  assert.equal(await lookup.countMappingConflicts("identity:entity:mlb:game:7"), 0);
+  const key = "identity:vendor:league:mlb:game:7";
+  const mapping = await ctx.storage.get(key);
+  await ctx.storage.put(key, { ...mapping, internalId: "missing" });
+  assert.equal(await lookup.countMappingConflicts("identity:entity:mlb:game:7"), 1);
+  assert.equal(await lookup.countMappingConflicts(key), 1);
+});
+
 test("postponement and resume keep a game association even when its date and time move", async () => {
   const { ctx } = createDurableObjectContext();
   const lookup = createIdentityLookup(ctx.storage, "wnba");
@@ -451,4 +463,84 @@ test("a temporary detail writer registers a newly seen player even after backfil
     .createJobStorage("details")
     .get("detail-answer:/player?id=44&season=2026");
   assert.equal(cached.body.lastGame.season, 2026);
+});
+
+for (const [app, Store] of STORES) {
+  test(`${app}: operational job status documents never become games`, async () => {
+    const { ctx, stored } = createDurableObjectContext();
+    const store = new Store(ctx, {}, { now: () => 0 });
+    const status = { error: "", reads: 2, failures: [] };
+    await store.docs.write("games/status", status);
+    await store.docs.write("highlights/status", status);
+    assert.deepEqual(stored.get("games/status"), status);
+    assert.deepEqual(stored.get("highlights/status"), status);
+    assert.equal(await store.identities.lookup.read("game", app, "status"), null);
+    assert.equal((await store.identities.lookup.readStatus()).games, 0);
+  });
+}
+
+test("box scores and highlights cannot replace an established MLB doubleheader number without evidence", async () => {
+  const { ctx, stored } = createDurableObjectContext();
+  const store = new MlbStore(ctx, {}, { now: () => 0 });
+  await store.docs.write("schedules-2026/2026-06", {
+    year: 2026,
+    games: [createGame("7", { state: "final", doubleheader: 2, gameNumber: 2 })],
+  });
+  await store.docs.write("games/7", { id: "7", state: "final", innings: [] });
+  await store.docs.write("highlights/7", { id: "7", plays: [] });
+  assert.equal((await store.identities.lookup.readEntry("game", "7")).facts.gameNumber, 2);
+  assert.notEqual(stored.get("games/7").gameNumber, 1);
+  assert.notEqual(stored.get("highlights/7").gameNumber, 1);
+});
+
+test("contradictory evidence marks an established association disputed even without a replacement, and omission cannot clear it", async () => {
+  const { ctx } = createDurableObjectContext();
+  const lookup = createIdentityLookup(ctx.storage, "mlb");
+  const native = createGame("one", { gameNumber: 1 });
+  await lookup.save([createNative("game", "one", native)]);
+  const match = (record) =>
+    reconcileIdentities(lookup, {
+      type: "game",
+      vendor: "espn",
+      natives: [native],
+      records: [record],
+    });
+  await match(createGame("event", { gameNumber: 1 }));
+  for (const contradictory of [
+    createGame("event", { gameNumber: 2 }),
+    createGame("event", { away: "C" }),
+  ]) {
+    await match(contradictory);
+    assert.equal(await lookup.read("game", "espn", "event"), "one");
+    assert.equal((await lookup.readStatus()).disputed, 1);
+    await match(createGame("event", { start: "2026-06-09T20:00:00Z" }));
+    assert.equal((await lookup.readStatus()).disputed, 1);
+    await match(createGame("event", { gameNumber: 1 }));
+    assert.equal((await lookup.readStatus()).disputed, 0);
+  }
+});
+
+test("redeployment after older writers ran invalidates completed coverage and rechecks preserved historical progress", async () => {
+  const { ctx, stored } = createDurableObjectContext();
+  stored.set("identity:backfill", { complete: true, checkedDocuments: 123 });
+  stored.set("poll:schedule", { release: "old-writer", dueAt: 9999 });
+  stored.set("schedules-2025/2025-06", {
+    year: 2025,
+    games: [createGame("7", { state: "final" })],
+  });
+  stored.set("games/7", { id: "7", state: "final", innings: [] });
+  stored.set("job:players:filled:2025", true);
+  const store = new MlbStore(ctx, {}, { now: () => 0 });
+  await store.startUpdating();
+  assert.equal((await store.identities.readStatus()).checks.verified, false);
+  for (
+    let iteration = 0;
+    iteration < 60 && !(await store.identities.readStatus()).backfill.complete;
+    iteration += 1
+  )
+    await store.identities.backfill(store.docs);
+  assert.equal(stored.get("games/7").season, 2025);
+  assert.equal(stored.get("job:players:filled:2025"), true);
+  assert.equal((await store.identities.readStatus()).checks.missingFacts, 0);
+  assert.equal((await store.identities.readStatus()).checks.verified, true);
 });

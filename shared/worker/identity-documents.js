@@ -5,6 +5,15 @@ import { reconcileIdentities } from "./identity-matching.js";
 
 const BACKFILL_KEY = "identity:backfill";
 const BATCH_SIZE = 20;
+const createBackfillProgress = () => ({
+  cursor: "",
+  checkedDocuments: 0,
+  complete: false,
+  phase: "documents",
+  missingEntries: 0,
+  missingFacts: 0,
+  conflicts: 0,
+});
 const PLAYER_FIELDS = new Set(["players", "batters", "pitchers", "starters", "leaders"]);
 const GAME_FIELDS = new Set([
   "games",
@@ -51,10 +60,10 @@ export function createIdentityDocuments(storage, policy) {
     const observations = new Map();
     const espnPlayers = [];
     const matched = /^(?:players|pitchers)\/(\d{4})-(.+)$/.exec(key);
-    const rootId =
-      document?.id ??
-      document?.boxScore?.id ??
-      (/^(?:games|highlights)\//.test(key) ? key.split("/")[1] : null);
+    const isGameDocument = /^(?:games|highlights|espnMatches)\/(?!status$)/.test(key);
+    const rootId = isGameDocument
+      ? (document?.id ?? document?.boxScore?.id ?? key.split("/")[1])
+      : null;
     const established = rootId ? await lookup.readEntry("game", String(rootId)) : null;
     const season =
       document?.season ??
@@ -75,7 +84,7 @@ export function createIdentityDocuments(storage, policy) {
         evidence: { method: "existing-id" },
       });
     };
-    if (/^(?:games|highlights|espnMatches)\//.test(key) && rootId) {
+    if (isGameDocument && rootId) {
       const facts = policy.readGameFacts({ ...document, id: String(rootId) }, season);
       document = { ...facts, ...document };
       addNative("game", rootId, facts);
@@ -165,11 +174,7 @@ export function createIdentityDocuments(storage, policy) {
       }
       return expanded;
     }
-    const rootKind = /^(?:games|highlights|espnMatches)\//.test(key)
-      ? "game"
-      : matched
-        ? "player"
-        : null;
+    const rootKind = isGameDocument ? "game" : matched ? "player" : null;
     const expanded = expandRecord(document, rootKind, season);
     await lookup.save([...observations.values()]);
     if (audit)
@@ -224,15 +229,7 @@ export function createIdentityDocuments(storage, policy) {
   /** @param {import("./season-store.js").SeasonDocuments} docs */
   async function backfill(docs, isActive = () => true) {
     if (!isActive()) return;
-    const progress = (await storage.get(BACKFILL_KEY)) ?? {
-      cursor: "",
-      checkedDocuments: 0,
-      complete: false,
-      phase: "documents",
-      missingEntries: 0,
-      missingFacts: 0,
-      conflicts: 0,
-    };
+    const progress = (await storage.get(BACKFILL_KEY)) ?? createBackfillProgress();
     if (progress.complete) return;
     const entries = await storage.list({
       prefix: "",
@@ -278,15 +275,8 @@ export function createIdentityDocuments(storage, policy) {
       }
       if (progress.phase === "vendors") {
         await saveVendorGames(policy.readSavedVendorGames?.(key, value) ?? []);
-        if (key.startsWith(`identity:entity:${policy.league}:`)) {
-          for (const [vendor, id] of Object.entries(value.vendors))
-            if ((await lookup.read(value.type, vendor, String(id))) !== value.id)
-              progress.conflicts += 1;
-        }
-        if (key.startsWith("identity:vendor:") && value.league === policy.league) {
-          const entry = await lookup.readEntry(value.type, value.internalId);
-          if (entry?.vendors[value.vendor] !== value.vendorId) progress.conflicts += 1;
-        }
+        if (key.startsWith("identity:entity:") || key.startsWith("identity:vendor:"))
+          progress.conflicts += await lookup.countMappingConflicts(key);
       }
       progress.cursor = key;
       progress.checkedDocuments += 1;
@@ -321,5 +311,18 @@ export function createIdentityDocuments(storage, policy) {
     };
   }
 
-  return { prepareDocument, prepareDetailAnswer, saveVendorGames, backfill, lookup, readStatus };
+  async function restartCompletedBackfill() {
+    if ((await storage.get(BACKFILL_KEY))?.complete)
+      await storage.put(BACKFILL_KEY, createBackfillProgress());
+  }
+
+  return {
+    prepareDocument,
+    prepareDetailAnswer,
+    saveVendorGames,
+    backfill,
+    lookup,
+    readStatus,
+    restartCompletedBackfill,
+  };
 }
