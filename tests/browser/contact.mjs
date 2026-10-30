@@ -6,7 +6,7 @@ import { listTapsOffButtons } from "./tap-states.mjs";
 import { holdRequests } from "./hold-requests.mjs";
 import { listStrayPeriods } from "./stray-periods.mjs";
 
-const SCREENSHOT = {
+export const SCREENSHOT = {
   name: "phone.png",
   mimeType: "image/png",
   buffer: Buffer.from(

@@ -256,7 +256,8 @@ export function watchPresses(appRowButtons = []) {
   document.addEventListener("touchend", noteLift, { passive: true });
   document.addEventListener("touchcancel", noteLift, { passive: true });
   document.addEventListener("scroll", noteScroll, { capture: true, passive: true });
-  // On the window, so it hears the click before anything else on the page does.
+  // On the window, so it hears the click before anything that acts on it. Diagnostics, which each
+  // page starts first, listens there ahead of it, so its logs show even a click this drops.
   addEventListener("click", dropClickAfterScroll, { capture: true });
   document.addEventListener("keydown", forgetTouch, { capture: true, passive: true });
 }

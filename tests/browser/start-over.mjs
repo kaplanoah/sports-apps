@@ -11,7 +11,7 @@ import { holdRequests } from "./hold-requests.mjs";
 import { readSeasonPartScroll, readSeasonRide, scrollSeasonPartToEnd } from "./season-scroll.mjs";
 import { findSeasonPill, findSeasonTab, openSeasonPart } from "./season-tab.mjs";
 import { writeUnreadableLastSeen } from "./unreadable-last-seen.mjs";
-import { passTime, setHidden } from "./visibility.mjs";
+import { leaveFor, passTime, setHidden } from "./visibility.mjs";
 
 /** A screen short enough for the bracket to scroll, and narrow enough for it to scroll sideways. */
 export const SHORT_PHONE = { width: 390, height: 480 };
@@ -131,19 +131,6 @@ export async function moveNewsOffTop(page) {
   return readNewsPlace(page);
 }
 
-/**
- * Has the page leave the screen for `ms` and come back, as a phone's switch to another app and
- * back does, and draw the frame it comes back on.
- * @param {import("@playwright/test").Page} page
- * @param {number} ms
- */
-async function leaveFor(page, ms) {
-  await setHidden(page, true);
-  await passTime(page, ms);
-  await setHidden(page, false);
-  await page.clock.runFor(100);
-}
-
 /** @param {import("@playwright/test").Page} page */
 export const readPageScroll = (page) => page.evaluate(() => Math.round(scrollY));
 
@@ -158,6 +145,7 @@ export async function leaveScrolledFor(page, { sideways, writeDocument, awayMs }
   const newsPlace = await moveNewsOffTop(page);
   const season = await moveSeasonTabOffStart(page, sideways);
   await leaveFor(page, awayMs);
+  await page.clock.runFor(100);
   return { newsPlace, ...season };
 }
 

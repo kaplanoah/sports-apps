@@ -69,13 +69,17 @@ globalThis.Node = /** @type {any} */ ({ TEXT_NODE: 3 });
  */
 const createSpan = (text) => ({ nodeType: 1, childNodes: [{ nodeType: 3, nodeValue: text }] });
 
-/** A stand-in for an element, inside the part when `isInPart`, in a control holding `spans`. */
+/**
+ * A stand-in for an element, inside the part when `isInPart`, in a control holding `spans`, which
+ * links to `href` when it's a link.
+ */
 class FakeElement {
-  /** @param {{ isInPart: boolean, label?: string, spans?: string[] }} element */
-  constructor({ isInPart, label, spans = [] }) {
+  /** @param {{ isInPart: boolean, label?: string, spans?: string[], href?: string }} element */
+  constructor({ isInPart, label, spans = [], href }) {
     this.isInPart = isInPart;
     this.label = label;
     this.spans = spans;
+    this.href = href;
     this.id = "";
     this.localName = "span";
     this.classList = ["cell-name"];
@@ -84,7 +88,11 @@ class FakeElement {
   closest(selector) {
     if (selector === "button, a")
       return this.label || this.spans.length
-        ? { getAttribute: () => this.label ?? null, childNodes: this.spans.map(createSpan) }
+        ? {
+            getAttribute: (/** @type {string} */ name) =>
+              (name === "href" ? this.href : this.label) ?? null,
+            childNodes: this.spans.map(createSpan),
+          }
         : null;
     return this.isInPart ? this : null;
   }
@@ -370,6 +378,31 @@ test("a tap on a button whose words sit in parts side by side, like a seed besid
   assert.deepEqual(
     log.readLines().map((line) => line.text),
     ["click at 10,20 on 3 Fever, team details"],
+  );
+});
+
+test("a tap on an email link logs the element, never the address its words are", () => {
+  const log = createLog();
+  log.watchSteps(
+    () => true,
+    () => {},
+  );
+  const noteClick = /** @type {(event: any) => void} */ (listeners.get("click"));
+
+  noteClick({
+    type: "click",
+    target: new FakeElement({
+      isInPart: true,
+      spans: ["help@example.com"],
+      href: "mailto:help@example.com",
+    }),
+    clientX: 10,
+    clientY: 20,
+  });
+
+  assert.deepEqual(
+    log.readLines().map((line) => line.text),
+    ["click at 10,20 on span.cell-name"],
   );
 });
 

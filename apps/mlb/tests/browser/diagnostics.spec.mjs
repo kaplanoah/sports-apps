@@ -10,7 +10,7 @@ import {
   findDiagnosticsSwitch,
   turnOnDiagnostics,
 } from "../../../../tests/browser/diagnostics-switch.mjs";
-import { showDipAndOffViewport } from "../../../../tests/browser/diagnostics-records.mjs";
+import { readLog, showDipAndOffViewport } from "../../../../tests/browser/diagnostics-records.mjs";
 import { listLowContrastTextInEachTheme } from "../../../../tests/browser/contrast.mjs";
 import { SETTINGS } from "../../../../tests/browser/settings.mjs";
 import { serveReleases } from "../../../../tests/browser/serve-releases.mjs";
@@ -168,24 +168,6 @@ async function openSeasonGamesLogging(page) {
   return app;
 }
 
-/**
- * The lines of a Diagnostics log, oldest first, without their times.
- * @param {import("@playwright/test").Page} page
- * @param {string} title
- */
-async function readLog(page, title) {
-  await openSettings(page);
-  const log = page.locator("#diagnostics .diagnostics-record", { hasText: title });
-  await expect(log).toHaveCount(1);
-  const lines = await log.locator("li").allTextContents();
-  return lines.toReversed().map((line) =>
-    line
-      .replace(/\s+/g, " ")
-      .trim()
-      .replace(/^\d{1,2}:\d\d:\d\d ?[AP]M ?/, ""),
-  );
-}
-
 /** @param {import("@playwright/test").Page} page */
 const findList = (page) => page.locator("#seasonGames .day-list");
 
@@ -196,6 +178,7 @@ test("with Diagnostics on, each fill of the Games list logs what it drew and whe
   await page.reload();
   await expect(page.locator("#seasonGames .game-day.is-today")).toBeInViewport();
 
+  await openSettings(page);
   expect(await readLog(page, "Games list")).toContainEqual(
     expect.stringMatching(
       /^draw \d+ days, from 2026-03-25 to 2026-\d\d-\d\d, starting on 2026-09-24; 2026-09-24 at the top, \d+px down/,
@@ -213,6 +196,7 @@ test("with Diagnostics on, a day that changes height as it's drawn whole is logg
     await page.clock.runFor(100);
   }
 
+  await openSettings(page);
   expect(await readLog(page, "Games list")).toContainEqual(
     expect.stringMatching(
       /^a day changed height as it was drawn: 2026-\d\d-\d\d whole [\d.]+px to [\d.]+px.*, which moved 2026-\d\d-\d\d -?[\d.]+px$/,
@@ -233,6 +217,7 @@ test("with Diagnostics on, a strip that doesn't scroll where it's told is logged
     /is-chosen/,
   );
 
+  await openSettings(page);
   expect(await readLog(page, "Games list")).toContainEqual(
     expect.stringMatching(/^the strip was told to scroll to \d+ but is at 0$/),
   );
@@ -252,6 +237,7 @@ test("with Diagnostics on, the day a tap sent the list to is logged as it arrive
   });
   await expect(page.locator("#seasonGames")).not.toHaveAttribute("data-held-day");
 
+  await openSettings(page);
   const lines = await readLog(page, "Games list");
   expect(lines).toContain("arrived at 2026-09-27");
   expect(lines).toContainEqual(expect.stringMatching(/^2026-09-27's place moved from \d+ to \d+$/));
@@ -270,6 +256,7 @@ test("with Diagnostics on, scrolling the list logs each new day at its top and h
     /is-chosen/,
   );
 
+  await openSettings(page);
   expect(await readLog(page, "Games list")).toContain(
     "top day 2026-09-25, chosen at once: no finger or wheel moved the list",
   );
@@ -299,6 +286,7 @@ test("with Diagnostics on, a slide of the strip's dates that leaves the strip sh
   await page.clock.runFor(1500);
   await expect(page.locator("#seasonGames .strip-lens")).toHaveCount(0);
 
+  await openSettings(page);
   const lines = await readLog(page, "Games list");
   expect(lines).toContain("top day 2026-09-25, slide");
   expect(lines).toContainEqual(
@@ -320,6 +308,7 @@ test("with Diagnostics on, a click iOS sends after the browser took a touch on t
   await sendFinger(button, { moves: [12], isCancelled: true });
   expect(await sendClick(button)).toBe(false);
 
+  await openSettings(page);
   const lines = await readLog(page, "Standings and bracket");
   expect(lines).toContainEqual(expect.stringMatching(/^touchend on .*team details$/));
   expect(lines).not.toContainEqual(expect.stringMatching(/^click /));
@@ -356,6 +345,7 @@ test("with Diagnostics on, each touch on the standings logs how far it moved, wh
   // The drag, and the flick it ends in, ride the header and settings' button out of sight.
   await scrollSeasonPart(page, "standings", 0);
 
+  await openSettings(page);
   const lines = await readLog(page, "Standings and bracket");
   expect(lines).toContainEqual(expect.stringMatching(/^touchstart at \d+,\d+ on .*team details$/));
   expect(lines).toContainEqual(

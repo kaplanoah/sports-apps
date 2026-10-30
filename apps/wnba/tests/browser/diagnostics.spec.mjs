@@ -1,6 +1,6 @@
 import { test, expect, findGameButton, openApp, NOW } from "./harness.mjs";
 import { serveReleases } from "../../../../tests/browser/serve-releases.mjs";
-import { passTime, setHidden } from "../../../../tests/browser/visibility.mjs";
+import { leaveFor } from "../../../../tests/browser/visibility.mjs";
 import {
   findDiagnosticsSwitch,
   turnOnDiagnostics,
@@ -9,6 +9,7 @@ import { SETTINGS, openSettings } from "../../../../tests/browser/settings.mjs";
 import {
   findRecords,
   makeDip,
+  readLog,
   showDipAndOffViewport,
 } from "../../../../tests/browser/diagnostics-records.mjs";
 import { listLowContrastTextInEachTheme } from "../../../../tests/browser/contrast.mjs";
@@ -177,10 +178,7 @@ test("each record's flag stands out as AA asks, in Maple and Walnut", async ({ p
 test("a return to the page is recorded with how long it was away", async ({ page }) => {
   await openApp(page);
   await turnOnDiagnostics(page);
-  await setHidden(page, true);
-  await passTime(page, 5 * 60 * 1000);
-
-  await setHidden(page, false);
+  await leaveFor(page, 5 * 60 * 1000);
   await page.clock.runFor(RECORD_MS + 1000);
   await openSettings(page);
 
@@ -207,12 +205,7 @@ test("with Diagnostics on, a tap that opens a team's sheet from a game's, the ro
   await page.keyboard.press("Escape");
   await openSettings(page);
 
-  const log = findRecords(page).locator(".diagnostics-record", { hasText: "Sheets" });
-  await expect(log).toHaveCount(1);
-  await log.locator("summary").click();
-  const lines = await log.locator("li").allInnerTexts();
-  const steps = lines.toReversed().map((line) => line.replace(/^\S+\s[AP]M\s+/, ""));
-  expect(steps).toEqual(
+  expect(await readLog(page, "Sheets")).toEqual(
     expect.arrayContaining([
       "open gameSheet over the page",
       "settle on gameSheet",
@@ -270,12 +263,7 @@ test("with Diagnostics on, each tap on the Games list's strip and Today is logge
   await page.locator("#seasonGames .go-today").tap();
   await openSettings(page);
 
-  const log = findRecords(page).locator(".diagnostics-record", { hasText: "Games list" });
-  await expect(log).toHaveCount(1);
-  await log.locator("summary").click();
-  const lines = await log.locator("li").allInnerTexts();
-  const steps = lines.toReversed().map((line) => line.replace(/^\S+\s[AP]M\s+/, ""));
-  expect(steps).toEqual([
+  expect(await readLog(page, "Games list")).toEqual([
     expect.stringMatching(/^jump to 2026-09-30, list 0 to \d+$/),
     "arrived at 2026-09-30",
     expect.stringMatching(/^touchstart at \d+,\d+ on Tue 29, September$/),
@@ -318,10 +306,7 @@ test("with Diagnostics on, each error the page doesn't catch is logged with wher
   });
   await openSettings(page);
 
-  const log = findRecords(page).locator(".diagnostics-record", { hasText: "Errors" });
-  await log.locator("summary").click();
-  const lines = await log.locator("li").allInnerTexts();
-  expect(lines.toReversed().map((line) => line.replace(/^\S+\s[AP]M\s+/, ""))).toEqual([
+  expect(await readLog(page, "Errors")).toEqual([
     "TypeError: list is null at games-view.js:12:7",
     "a promise failed: RangeError: too far",
   ]);

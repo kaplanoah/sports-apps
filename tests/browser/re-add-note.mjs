@@ -11,7 +11,7 @@ import { listStrayPeriods } from "./stray-periods.mjs";
 import { listTapsOffButtons } from "./tap-states.mjs";
 import { listTextOffRoles } from "./type-roles.mjs";
 import { listChipsOffCenter } from "./chip-centering.mjs";
-import { passTime, setHidden } from "./visibility.mjs";
+import { leaveFor, setHidden } from "./visibility.mjs";
 import { ASSERTION_TIMEOUT_MS } from "./limits.mjs";
 
 const NOTE_SELECTOR = "#appearanceNote";
@@ -726,18 +726,6 @@ async function openLockedSettings({ page, serveLockedApp, openSettings }) {
   await page.getByRole("textbox", { name: "Access code" }).fill("FASTBREAK");
   await page.getByRole("button", { name: "Open" }).click();
   await openSettings(page);
-}
-
-/**
- * Has the page leave the screen for `ms`, as a phone's switch to another app does, which freezes
- * the page's timers, so only its clock moves on.
- * @param {import("@playwright/test").Page} page
- * @param {number} ms
- */
-async function leaveFor(page, ms) {
-  await setHidden(page, true);
-  await passTime(page, ms);
-  await setHidden(page, false);
 }
 
 /**

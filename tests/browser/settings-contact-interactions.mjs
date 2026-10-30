@@ -1,5 +1,11 @@
+import { RECORD_MS } from "../../shared/page/diagnostics.js";
 import { holdClock } from "./harness.mjs";
 import { openContact, serveContact } from "./contact-views.mjs";
+import { SCREENSHOT } from "./contact.mjs";
+import { findRecords, readLog } from "./diagnostics-records.mjs";
+import { turnOnDiagnostics } from "./diagnostics-switch.mjs";
+import { openSettings } from "./settings.mjs";
+import { leaveFor } from "./visibility.mjs";
 
 /**
  * Measures each page row in a dialog, its words, how far it lifts them over its middle, and its
@@ -338,27 +344,35 @@ export function testSettingsContactInteractions(test, expect, { openApp, setting
     });
   });
 
-  test("Contact gives focus back to its row once its sheet has closed", async ({ page }) => {
-    await page.emulateMedia({ reducedMotion: "reduce" });
-    await openApp(page);
-    await page.getByRole("button", { name: "Settings", exact: true }).click();
-    const opener = page.locator("#contactBtn");
-    const dialog = page.locator("#contactDialog");
-    await holdClock(page);
-    for (const close of [
-      () => dialog.getByRole("button", { name: "Back to Settings" }).click(),
-      () => page.keyboard.press("Escape"),
-    ]) {
+  /** @type {[string, (page: import("@playwright/test").Page) => Promise<void>][]} */
+  const contactCloses = [
+    [
+      "its back button",
+      (page) =>
+        page.locator("#contactDialog").getByRole("button", { name: "Back to Settings" }).click(),
+    ],
+    ["Escape", (page) => page.keyboard.press("Escape")],
+  ];
+  for (const [closeName, close] of contactCloses) {
+    test(`Contact gives focus back to its row once ${closeName} has closed its sheet`, async ({
+      page,
+    }) => {
+      await page.emulateMedia({ reducedMotion: "reduce" });
+      await openApp(page);
+      await page.getByRole("button", { name: "Settings", exact: true }).click();
+      const opener = page.locator("#contactBtn");
+      const dialog = page.locator("#contactDialog");
+      await holdClock(page);
       await page.locator("#settingsDialog .sheet-close").focus();
       await opener.dispatchEvent("click");
-      await page.clock.runFor(1000);
+      await page.clock.runFor(100);
       await expect(dialog.locator("h2")).toBeFocused();
-      await close();
-      await page.clock.runFor(1000);
+      await close(page);
+      await page.clock.runFor(100);
       await expect(dialog).toBeHidden();
       await expect(opener).toBeFocused();
-    }
-  });
+    });
+  }
 
   test("the whole Add screenshot label opens the picker and cancel keeps the Contact draft open", async ({
     page,
@@ -388,6 +402,99 @@ export function testSettingsContactInteractions(test, expect, { openApp, setting
     await page.keyboard.press("Escape");
     await page.clock.runFor(1000);
     await expect(dialog).toBeHidden();
+  });
+
+  test("with Diagnostics on, a tap on Add screenshot logs its touch, its clicks, and that a file came back, never the file's name", async ({
+    page,
+  }) => {
+    test.slow();
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await serveContact(page);
+    await openApp(page);
+    await turnOnDiagnostics(page);
+    const dialog = await openContact(page);
+    await dialog.getByRole("button", { name: "Bug report", exact: true }).tap();
+    const chooser = page.waitForEvent("filechooser");
+    await dialog.locator('label[for="contactScreenshot"]').tap();
+    await (await chooser).setFiles(SCREENSHOT);
+    await page.clock.runFor(1000);
+    for (const name of ["Back to Contact", "Back to Settings"]) {
+      await dialog.getByRole("button", { name }).tap();
+      await page.clock.runFor(1000);
+    }
+
+    const lines = await readLog(page, "Settings and Contact");
+    expect(lines).toContainEqual(
+      expect.stringMatching(/^touchstart at \d+,\d+ on label\.contact-secondary$/),
+    );
+    expect(lines).toContainEqual(
+      expect.stringMatching(
+        /^lifted without moving; neither the page's code nor the browser took the touch; the page's code left its end; its pointer wasn't cancelled; nothing scrolled; it ended over label\.contact-secondary(\.is-pressed)?$/,
+      ),
+    );
+    expect(lines).toContainEqual(
+      expect.stringMatching(
+        /^the click on label\.contact-secondary(\.is-pressed)? reached the window untaken$/,
+      ),
+    );
+    expect(lines).toContain("the click on #contactScreenshot reached the window untaken");
+    expect(lines).toContain("the screenshot field changed with a file chosen");
+    expect(lines.filter((line) => line.includes(SCREENSHOT.name))).toEqual([]);
+  });
+
+  test("with Diagnostics on, a log opened in settings stays open as taps there log more lines", async ({
+    page,
+  }) => {
+    test.slow();
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await openApp(page);
+    await turnOnDiagnostics(page);
+    await openSettings(page);
+    const heading = findRecords(page).getByRole("heading", { name: "Recent opens" });
+    await heading.tap();
+    const log = findRecords(page).locator(".diagnostics-record", {
+      hasText: "Settings and Contact",
+    });
+    await log.locator("summary").tap();
+    await page.clock.runFor(1000);
+    await expect(log).toHaveAttribute("open", "");
+    const linesBefore = await log.locator("li").count();
+    await page.locator("#settingsTitle").tap();
+    await page.clock.runFor(1000);
+    await expect.poll(() => log.locator("li").count()).toBeGreaterThan(linesBefore);
+    await expect(log).toHaveAttribute("open", "");
+  });
+
+  test("with Diagnostics on, a newer return's record opens in place of the one before, while a log the viewer opened stays open", async ({
+    page,
+  }) => {
+    test.slow();
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await openApp(page);
+    await turnOnDiagnostics(page);
+    const comeBack = async () => {
+      await leaveFor(page, 5 * 60 * 1000);
+      await page.clock.runFor(RECORD_MS + 1000);
+    };
+    await comeBack();
+    await openSettings(page);
+    const returns = findRecords(page).locator(".diagnostics-record", { hasText: "Back after" });
+    await expect(returns).toHaveCount(1);
+    await expect(returns.first()).toHaveAttribute("open", "");
+    await findRecords(page).getByRole("heading", { name: "Recent opens" }).tap();
+    const log = findRecords(page).locator(".diagnostics-record", {
+      hasText: "Settings and Contact",
+    });
+    await log.locator("summary").tap();
+    await expect(log).toHaveAttribute("open", "");
+    await page.keyboard.press("Escape");
+
+    await comeBack();
+    await openSettings(page);
+    await expect(returns).toHaveCount(2);
+    await expect(returns.first()).toHaveAttribute("open", "");
+    await expect(returns.nth(1)).not.toHaveAttribute("open");
+    await expect(log).toHaveAttribute("open", "");
   });
 
   test("Add screenshot's field stays reachable by Tab and VoiceOver, ringing its label", async ({

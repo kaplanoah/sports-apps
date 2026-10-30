@@ -8,7 +8,8 @@
 // since a load it never let reach the page is what they're for, and the logs of the viewport's
 // changes (viewport-log.js), of what each dialog's row of sheets does (sheet-log.js), of what a
 // season's list of days does (day-strip-log.js), of what became of each touch on a season's
-// standings and bracket (bracket-standings-log.js), of each change of the phone's look
+// standings and bracket (bracket-standings-log.js), of what became of each touch and click on
+// settings and Contact (settings-touch-log.js), of each change of the phone's look
 // (phone-look-log.js), and of each error the page's code doesn't catch (error-log.js). It records
 // nothing while it's off, which it starts as.
 
@@ -39,6 +40,7 @@ import { bracketStandingsLog, watchTouches } from "./bracket-standings-log.js";
 import { dayStripLog } from "./day-strip-log.js";
 import { errorLog, watchErrors } from "./error-log.js";
 import { phoneLookLog, watchPhoneLook } from "./phone-look-log.js";
+import { settingsTouchLog, watchSettingsTouches } from "./settings-touch-log.js";
 import { sheetLog } from "./sheet-log.js";
 import { writeStepsAsText } from "./step-log.js";
 import { hideAddresses } from "./report-addresses.js";
@@ -57,7 +59,14 @@ const KEPT_RECORDS = 5;
 const DIP_SHARE = 0.25;
 const MINUTE_MS = 60 * 1000;
 const ON_REQUEST = "On request";
-const STEP_LOGS = [errorLog, sheetLog, dayStripLog, bracketStandingsLog, phoneLookLog];
+const STEP_LOGS = [
+  errorLog,
+  sheetLog,
+  dayStripLog,
+  bracketStandingsLog,
+  settingsTouchLog,
+  phoneLookLog,
+];
 const SERVICE_WORKER_TITLE = "Service worker";
 
 /** @typedef {{ ms: number, text: string, isDip?: boolean }} RecordLine */
@@ -576,11 +585,44 @@ const renderLine = (line) =>
   </li>`;
 
 /**
+ * Each record's open state the viewer chose, by its `data-record` key, since a redraw puts back
+ * each record's markup.
+ * @type {Map<string, boolean>}
+ */
+const chosenOpen = new Map();
+/**
+ * Each record's open state as the last draw drew it, so only what the viewer changed since counts
+ * as a choice, never a record drawn open as the newest.
+ * @type {Map<string, boolean>}
+ */
+let drawnOpen = new Map();
+
+/** @param {Element} section */
+function noteChosenOpen(section) {
+  for (const details of section.querySelectorAll("details[data-record]")) {
+    const { open } = /** @type {HTMLDetailsElement} */ (details);
+    const key = /** @type {HTMLDetailsElement} */ (details).dataset.record ?? "";
+    if (open !== drawnOpen.get(key)) chosenOpen.set(key, open);
+  }
+}
+
+/**
+ * The attributes that key a record and open it as the viewer chose, or as it opens at first.
+ * @param {string} key
+ * @param {boolean} isOpenAtFirst
+ */
+function renderRecordState(key, isOpenAtFirst) {
+  const isOpen = chosenOpen.get(key) ?? isOpenAtFirst;
+  drawnOpen.set(key, isOpen);
+  return html`data-record="${key}" ${isOpen ? "open" : ""}`;
+}
+
+/**
  * @param {OpenRecord} openRecord
  * @param {number} index
  */
 const renderRecord = (openRecord, index) =>
-  html`<details class="diagnostics-record" ${index === 0 ? "open" : ""}>
+  html`<details class="diagnostics-record" ${renderRecordState(String(openRecord.at), index === 0)}>
     <summary class="press-tint">
       <span class="diagnostics-when"
         >${joinWithSeparator(describeRecord(openRecord, new Date()))}</span
@@ -614,7 +656,7 @@ const renderStepLine = (line) =>
  */
 const renderSteps = (title, lines) =>
   lines.length > 0 &&
-  html`<details class="diagnostics-record">
+  html`<details class="diagnostics-record" ${renderRecordState(title, false)}>
     <summary class="press-tint"><span class="diagnostics-when">${title}</span></summary>
     <ol class="diagnostics-lines diagnostics-viewport">
       ${lines.map(renderStepLine)}
@@ -626,12 +668,14 @@ const renderStepLog = (log) => renderSteps(log.title, log.readLines().toReversed
 
 const listServiceWorkerSteps = () => serviceWorkerSteps.toReversed();
 
+const VIEWPORT_TITLE = "Viewport";
+
 /** @param {import("./viewport-log.js").ViewportLine[]} lines newest first */
 const renderViewport = (lines) => {
   const isOff = lines.some((line) => line.isOff);
-  return html`<details class="diagnostics-record">
+  return html`<details class="diagnostics-record" ${renderRecordState(VIEWPORT_TITLE, false)}>
     <summary class="press-tint">
-      <span class="diagnostics-when">Viewport</span>
+      <span class="diagnostics-when">${VIEWPORT_TITLE}</span>
       <span class="diagnostics-flag ${isOff ? "dip" : ""}">${isOff ? "Off" : "Steady"}</span>
     </summary>
     <ol class="diagnostics-lines diagnostics-viewport">
@@ -684,7 +728,10 @@ function drawRecords() {
   findElement("diagnosticsSwitch").setAttribute("aria-checked", String(isOn));
   const section = findElement("diagnostics");
   section.hidden = !isOn;
-  if (findSettings()?.open) setHtml(section, isOn ? renderRecords() : html``);
+  if (!findSettings()?.open) return;
+  noteChosenOpen(section);
+  drawnOpen = new Map();
+  setHtml(section, isOn ? renderRecords() : html``);
 }
 
 function drawRecordsAsSettingsOpens() {
@@ -787,10 +834,10 @@ function noteReturn(awayMs) {
  * Wires the settings switch (#diagnosticsSwitch) and the records under it (#diagnostics), and,
  * while the switch is on, records this load, each return to the page, each change to the
  * viewport, each step of a dialog's row of sheets, what became of each touch on the standings
- * and bracket, and each change of the phone's look. A page that leaves the screen keeps
- * what it recorded so far, as when it reloads for a new release or the phone drops it. The page
- * starts it before drawing anything, so a load's first reading is what show-last-drawn.js put
- * back.
+ * and bracket and on settings and Contact, and each change of the phone's look. A page that
+ * leaves the screen keeps what it recorded so far, as when it reloads for a new release or the
+ * phone drops it. The page starts it before drawing anything, so a load's first reading is what
+ * show-last-drawn.js put back.
  */
 export function startDiagnostics() {
   findElement("diagnosticsSwitch").addEventListener("click", toggleRecording);
@@ -812,4 +859,5 @@ export function startDiagnostics() {
   for (const log of STEP_LOGS) log.watchSteps(isRecording, drawRecords);
   watchErrors();
   watchTouches();
+  watchSettingsTouches();
 }

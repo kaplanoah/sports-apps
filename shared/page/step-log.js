@@ -69,13 +69,23 @@ const readControlWords = (control) =>
   readTextParts(control).replace(/\s+/g, " ").replaceAll(" ,", ",").trim();
 
 /**
+ * Whether a control is an email link, whose words are an address, so a report never names it by
+ * them.
+ * @param {Element} control
+ */
+const isEmailLink = (control) => !!control.getAttribute("href")?.startsWith("mailto:");
+
+/**
  * What a touch or click landed on: the button or link it's in, by name, or else the element.
  * @param {Element} target
  * @returns {string}
  */
-function describeTarget(target) {
+export function describeTarget(target) {
   const control = target.closest("button, a");
-  const name = control && (control.getAttribute("aria-label") || readControlWords(control));
+  const name =
+    control &&
+    !isEmailLink(control) &&
+    (control.getAttribute("aria-label") || readControlWords(control));
   if (name) return name;
   if (target.id) return `#${target.id}`;
   return [target.localName, ...target.classList].join(".");
