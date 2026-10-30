@@ -311,9 +311,8 @@ export function createIdentityDocuments(storage, policy) {
     };
   }
 
-  async function restartCompletedBackfill() {
-    if ((await storage.get(BACKFILL_KEY))?.complete)
-      await storage.put(BACKFILL_KEY, createBackfillProgress());
+  async function restartBackfill() {
+    await storage.put(BACKFILL_KEY, createBackfillProgress());
   }
 
   return {
@@ -323,6 +322,6 @@ export function createIdentityDocuments(storage, policy) {
     backfill,
     lookup,
     readStatus,
-    restartCompletedBackfill,
+    restartBackfill,
   };
 }

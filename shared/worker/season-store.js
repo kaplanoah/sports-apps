@@ -428,11 +428,15 @@ export function createSeasonStore(league) {
     async startUpdating() {
       if (this.hasAlarm) return;
       const alarmAt = await this.ctx.storage.getAlarm();
-      if (isFromEarlierRelease(await this.ctx.storage.get(SCHEDULE_KEY)))
-        await this.identities?.restartCompletedBackfill();
+      await this.prepareIdentityBackfill();
       if (alarmAt === null || (alarmAt > this.now() && (await this.isBehindDeploy())))
         await this.ctx.storage.setAlarm(this.now());
       this.hasAlarm = true;
+    }
+
+    async prepareIdentityBackfill() {
+      if (this.identities && isFromEarlierRelease(await this.ctx.storage.get(SCHEDULE_KEY)))
+        await this.identities.restartBackfill();
     }
 
     async isBehindDeploy() {
@@ -456,6 +460,7 @@ export function createSeasonStore(league) {
       const requestsBefore = this.requestCount;
       let nextAt = now + RETRY_MS[0];
       try {
+        await this.prepareIdentityBackfill();
         const seasonDueAt = await this.updateSeasonWhenDue(now);
         await this.reminders.checkDue();
         const jobDueTimes = await this.startDueJobs(now);

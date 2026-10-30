@@ -259,13 +259,13 @@ export function summarizeGame(game, pitchers) {
     id: game.id,
     season: game.season,
     round: game.round,
-    ...(game.round && { league: game.league }),
     gameNumber: game.gameNumber,
     away: game.away.id,
     home: game.home.id,
     state: game.state,
     start: game.start,
   };
+  if (game.round) summary.league = game.league;
   if (game.tbd) summary.tbd = true;
   if (game.doubleheader) summary.doubleheader = game.doubleheader;
   if (game.type !== "R") summary.postseason = true;

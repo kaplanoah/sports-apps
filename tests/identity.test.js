@@ -549,3 +549,41 @@ test("redeployment after older writers ran invalidates completed coverage and re
   assert.equal((await store.identities.readStatus()).checks.missingFacts, 0);
   assert.equal((await store.identities.readStatus()).checks.verified, true);
 });
+
+test("an alarm after older writers ran restarts incomplete coverage before replacing the poll release", async () => {
+  const { ctx, stored } = createDurableObjectContext();
+  stored.set("identity:backfill", {
+    complete: false,
+    phase: "facts",
+    cursor: "z",
+    checkedDocuments: 123,
+  });
+  stored.set("poll:schedule", { release: "old-writer", dueAt: 0 });
+  stored.set("schedules-2025/2025-06", {
+    year: 2025,
+    games: [createGame("7", { state: "final" })],
+  });
+  stored.set("games/7", { id: "7", state: "final", innings: [] });
+  const Store = createSeasonStore({
+    release: "current-writer",
+    identity: identityPolicy,
+    createLoadSnapshot: () => async () => ({ season: 2026 }),
+    loadCurrentSnapshot: async () => ({ season: 2026 }),
+    readUpdates: async () => null,
+    saveSnapshot: async () => {},
+    describeSnapshotStatus: () => ({}),
+    choosePollDelay: () => 60_000,
+    listNotifications: () => [],
+  });
+  const store = new Store(ctx, {}, { now: () => 0 });
+  await store.alarm();
+  await store.historyRun;
+  for (
+    let iteration = 0;
+    iteration < 60 && !(await store.identities.readStatus()).backfill.complete;
+    iteration += 1
+  )
+    await store.identities.backfill(store.docs);
+  assert.equal(stored.get("games/7").season, 2025);
+  assert.equal((await store.identities.readStatus()).checks.verified, true);
+});
