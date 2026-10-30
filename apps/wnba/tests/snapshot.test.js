@@ -643,6 +643,34 @@ test("while the scoreboard doesn't answer, the reminders' games are confirmed fr
   assert.equal(listGames(null), null);
 });
 
+test("ESPN confirms a kept schedule only while each game it has between named teams on the league's today is the schedule's too", () => {
+  const now = Date.parse(AFTERNOON.now);
+  /** @param {(event: any) => void} changeAdded */
+  const isConfirmed = (changeAdded) => {
+    const espn = readAfternoonEspn((events) => {
+      // Mystics at Dream, a game the schedule doesn't have on the league's today.
+      const added = structuredClone(events[0]);
+      for (const competitor of added.competitions[0].competitors)
+        competitor.homeAway = competitor.homeAway === "home" ? "away" : "home";
+      changeAdded(added);
+      return [...events, added];
+    });
+    const backup = { answers: Object.values(espn) };
+    return WNBASnapshot.isTodayOnBackup(RESPONSES.schedule, backup, AFTERNOON.season, now);
+  };
+  const leaveAsIs = () => {};
+  const unnameTeams = (event) => {
+    for (const competitor of event.competitions[0].competitors) competitor.id = "0";
+  };
+  const dayEarlier = (event) => {
+    const [competition] = event.competitions;
+    competition.date = new Date(Date.parse(competition.date) - 24 * 60 * 60 * 1000).toISOString();
+  };
+  assert.equal(isConfirmed(leaveAsIs), false);
+  assert.equal(isConfirmed(unnameTeams), true);
+  assert.equal(isConfirmed(dayEarlier), true);
+});
+
 test("ESPN confirms a kept schedule's game it hasn't started only while it starts then, if set, and isn't put off", () => {
   const now = Date.parse(AFTERNOON.now);
   // ESPN's first game, Dream at Mystics, with its time to be decided in the schedule.

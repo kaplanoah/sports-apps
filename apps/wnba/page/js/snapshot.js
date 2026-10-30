@@ -503,11 +503,11 @@ export function isTodayOnScoreboard(schedule, scoreboard, season, now) {
 }
 
 /**
- * Whether ESPN's backup, which answered, agrees with the schedule on every game it has on the
- * league's day of `now`, as the scoreboard would while it doesn't answer. ESPN's word on a game it
- * has started replaces the schedule's, and one it hasn't must start when the schedule says and not
- * be put off, so a schedule kept from an earlier read then holds nothing older than ESPN for
- * today's games.
+ * Whether ESPN's backup, which answered, agrees with the schedule on the games of the league's day
+ * of `now`, as the scoreboard would while it doesn't answer. ESPN's word on a game it has started
+ * replaces the schedule's, and one it hasn't must start when the schedule says and not be put off.
+ * Each game ESPN has on that day must be one of the schedule's too, so a schedule kept from an
+ * earlier read then holds nothing older than ESPN for today's games, a game moved into today too.
  * @param {any} schedule
  * @param {{ answers: any[] } | null | undefined} backup
  * @param {number} season
@@ -516,8 +516,15 @@ export function isTodayOnScoreboard(schedule, scoreboard, season, now) {
 export function isTodayOnBackup(schedule, backup, season, now) {
   if (!backup) return false;
   const backupGames = readBackupGames(backup);
-  return listTodayGames(schedule, season, now).every((game) =>
-    isBackupAgreeing(game, findAnsweringGame(game, backupGames)),
+  const todayGames = listTodayGames(schedule, season, now);
+  const backupTodayGames = backupGames.filter(
+    (backupGame) => hasBothTeams(backupGame) && isOnLeagueToday(backupGame, now),
+  );
+  return (
+    todayGames.every((game) => isBackupAgreeing(game, findAnsweringGame(game, backupGames))) &&
+    backupTodayGames.every((backupGame) =>
+      todayGames.some((game) => isSameMatchup(game, backupGame)),
+    )
   );
 }
 
@@ -529,12 +536,14 @@ const isBackupAgreeing = (game, backup) =>
     (!isPutOff(backup) &&
       (!game.isTimeSet || Date.parse(game.start) === Date.parse(backup.start))));
 
+/** @param {{ start: string | null }} game @param {number} now */
+const isOnLeagueToday = (game, now) => readLeagueDate(game.start) === readEasternDay(now).date;
+
 /** @param {any} schedule @param {number} season @param {number} now */
 function listTodayGames(schedule, season, now) {
-  const today = readEasternDay(now).date;
   return listScheduleGames(schedule, season)
     .map(normalizeGame)
-    .filter((game) => readLeagueDate(game.start) === today);
+    .filter((game) => isOnLeagueToday(game, now));
 }
 
 // ESPN stands in for every game while the scoreboard doesn't answer, and otherwise only for those
@@ -608,7 +617,7 @@ function readNetworkGame(event) {
 }
 
 // Until ESPN names both teams, its game could be any of a round's games at that time.
-const hasBothTeams = (networkGame) => !!(networkGame.home?.team && networkGame.away?.team);
+const hasBothTeams = (espnGame) => !!(espnGame.home?.team && espnGame.away?.team);
 
 // A game from the league's yesterday that isn't over is one the scoreboard still holds past
 // midnight, or one the schedule hasn't caught up on. An older one left unplayed or unfinished is the
