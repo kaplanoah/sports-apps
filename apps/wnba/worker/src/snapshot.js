@@ -221,7 +221,7 @@ export function createSnapshotLoader({
           `None of the WNBA's feeds answered with data: ${describeFailures(failures)}`,
         );
     };
-    // ESPN stands in only for the scoreboard, beside a schedule, so it isn't read without one.
+    // With every feed down, ESPN has no league games to stand in for, so it isn't read.
     throwIfNoneAnswered(scheduleAnswer);
     // A reminder goes out only on a current read of today's games. Each game a reminder can be due
     // for is played on the league's today, so a kept schedule stands in once the scoreboard lists

@@ -506,8 +506,9 @@ export function isTodayOnScoreboard(schedule, scoreboard, season, now) {
  * Whether ESPN's backup, which answered, agrees with the schedule on the games of the league's day
  * of `now`, as the scoreboard would while it doesn't answer. ESPN's word on a game it has started
  * replaces the schedule's, and one it hasn't must start when the schedule says and not be put off.
- * Each game ESPN has on that day must be one of the schedule's too, so a schedule kept from an
- * earlier read then holds nothing older than ESPN for today's games, a game moved into today too.
+ * Each game ESPN has on that day and hasn't put off must be one of the schedule's too, so a schedule
+ * kept from an earlier read then holds nothing older than ESPN for today's games, a game moved into
+ * today too.
  * @param {any} schedule
  * @param {{ answers: any[] } | null | undefined} backup
  * @param {number} season
@@ -518,7 +519,8 @@ export function isTodayOnBackup(schedule, backup, season, now) {
   const backupGames = readBackupGames(backup);
   const todayGames = listTodayGames(schedule, season, now);
   const backupTodayGames = backupGames.filter(
-    (backupGame) => hasBothTeams(backupGame) && isOnLeagueToday(backupGame, now),
+    (backupGame) =>
+      hasBothTeams(backupGame) && !isPutOff(backupGame) && isOnLeagueToday(backupGame, now),
   );
   return (
     todayGames.every((game) => isBackupAgreeing(game, findAnsweringGame(game, backupGames))) &&

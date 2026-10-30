@@ -643,7 +643,7 @@ test("while the scoreboard doesn't answer, the reminders' games are confirmed fr
   assert.equal(listGames(null), null);
 });
 
-test("ESPN confirms a kept schedule only while each game it has between named teams on the league's today is the schedule's too", () => {
+test("ESPN confirms a kept schedule only while each game it has between named teams on the league's today, and hasn't put off, is the schedule's too", () => {
   const now = Date.parse(AFTERNOON.now);
   /** @param {(event: any) => void} changeAdded */
   const isConfirmed = (changeAdded) => {
@@ -666,9 +666,15 @@ test("ESPN confirms a kept schedule only while each game it has between named te
     const [competition] = event.competitions;
     competition.date = new Date(Date.parse(competition.date) - 24 * 60 * 60 * 1000).toISOString();
   };
+  const postpone = (event) => {
+    const [competition] = event.competitions;
+    competition.status = structuredClone(competition.status);
+    competition.status.type.shortDetail = "Postponed";
+  };
   assert.equal(isConfirmed(leaveAsIs), false);
   assert.equal(isConfirmed(unnameTeams), true);
   assert.equal(isConfirmed(dayEarlier), true);
+  assert.equal(isConfirmed(postpone), true);
 });
 
 test("ESPN confirms a kept schedule's game it hasn't started only while it starts then, if set, and isn't put off", () => {
