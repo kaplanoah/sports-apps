@@ -1832,6 +1832,8 @@ test("reminders join current playoff state and channels, excluding unconfirmed a
     },
     (game) => {
       game.status = { abstractGameState: "Final", codedGameState: "F" };
+      game.teams.away.score = 1;
+      game.teams.home.score = 0;
     },
     (game) => {
       game.status = { abstractGameState: "Final", codedGameState: "D", detailedState: "Postponed" };
