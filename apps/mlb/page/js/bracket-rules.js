@@ -12,10 +12,7 @@ export function readSeriesFacts(seriesId) {
 }
 
 /** @param {string} seriesId */
-export const readSeriesRound = (seriesId) => readSeriesFacts(seriesId).round;
-
-/** @param {string} seriesId */
-export const countSeriesWinsNeeded = (seriesId) => countWinsNeeded(readSeriesRound(seriesId));
+export const countSeriesWinsNeeded = (seriesId) => countWinsNeeded(readSeriesFacts(seriesId).round);
 
 // The bracket is fixed, not reseeded: 1 draws the 4/5 winner, 2 the 3/6.
 const LEAGUE_SERIES = [
