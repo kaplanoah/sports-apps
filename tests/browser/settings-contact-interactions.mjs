@@ -342,27 +342,35 @@ export function testSettingsContactInteractions(test, expect, { openApp, setting
     });
   });
 
-  test("Contact gives focus back to its row once its sheet has closed", async ({ page }) => {
-    await page.emulateMedia({ reducedMotion: "reduce" });
-    await openApp(page);
-    await page.getByRole("button", { name: "Settings", exact: true }).click();
-    const opener = page.locator("#contactBtn");
-    const dialog = page.locator("#contactDialog");
-    await holdClock(page);
-    for (const close of [
-      () => dialog.getByRole("button", { name: "Back to Settings" }).click(),
-      () => page.keyboard.press("Escape"),
-    ]) {
+  /** @type {[string, (page: import("@playwright/test").Page) => Promise<void>][]} */
+  const contactCloses = [
+    [
+      "its back button",
+      (page) =>
+        page.locator("#contactDialog").getByRole("button", { name: "Back to Settings" }).click(),
+    ],
+    ["Escape", (page) => page.keyboard.press("Escape")],
+  ];
+  for (const [closeName, close] of contactCloses) {
+    test(`Contact gives focus back to its row once ${closeName} has closed its sheet`, async ({
+      page,
+    }) => {
+      await page.emulateMedia({ reducedMotion: "reduce" });
+      await openApp(page);
+      await page.getByRole("button", { name: "Settings", exact: true }).click();
+      const opener = page.locator("#contactBtn");
+      const dialog = page.locator("#contactDialog");
+      await holdClock(page);
       await page.locator("#settingsDialog .sheet-close").focus();
       await opener.dispatchEvent("click");
       await page.clock.runFor(100);
       await expect(dialog.locator("h2")).toBeFocused();
-      await close();
+      await close(page);
       await page.clock.runFor(100);
       await expect(dialog).toBeHidden();
       await expect(opener).toBeFocused();
-    }
-  });
+    });
+  }
 
   test("the whole Add screenshot label opens the picker and cancel keeps the Contact draft open", async ({
     page,
