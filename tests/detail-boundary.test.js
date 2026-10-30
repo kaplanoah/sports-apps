@@ -1,3 +1,5 @@
+import { readIdentityGames } from "../shared/worker/espn-adapter.js";
+import { findTeamCodeByEspnId } from "../apps/wnba/page/js/teams.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -8,7 +10,7 @@ import { describeBoxScore as describeBaseball } from "../apps/mlb/worker/src/ada
 import { createWnbaGameDetailsJob } from "../apps/wnba/worker/src/game-details-updater.js";
 import { createMlbGameDetailsJob } from "../apps/mlb/worker/src/game-details-updater.js";
 import { createDurableObjectContext } from "./durable-object-context.js";
-import { listEspnMatches, nameSummaryRequest } from "../apps/wnba/worker/src/adapters/lead.js";
+import { nameSummaryRequest } from "../apps/wnba/worker/src/adapters/lead.js";
 import { buildSnapshot } from "../apps/wnba/worker/src/adapters/wnba.js";
 import { createHighlightsUpdater } from "../apps/mlb/worker/src/highlights-updater.js";
 import { DETAIL_REUSE_MS } from "../shared/worker/detail-reads.js";
@@ -140,15 +142,22 @@ test("ingested ESPN matches survive a store restart and avoid another scoreboard
   const scoreboard = {
     events: lead.scoreboard.events.map((event) => ({ ...event, date: lead.game.start })),
   };
-  const matches = listEspnMatches({ games: [game], nearestGames: [game] }, [scoreboard]);
-  assert.equal(matches.length, 1);
-  assert.equal(matches[0].eventId, String(lead.eventId));
+  const identityRecords = readIdentityGames([scoreboard], findTeamCodeByEspnId);
   const ambiguous = structuredClone(scoreboard);
   ambiguous.events.push({
     ...ambiguous.events.find((event) => String(event.id) === String(lead.eventId)),
     id: "other-event",
   });
-  assert.deepEqual(listEspnMatches({ games: [game], nearestGames: [] }, [ambiguous]), []);
+  const uncertain = createHarness(LEAGUES[0], async () => new Response(null, { status: 503 }));
+  await uncertain.getStore().docs.write("seasons/2026", { year: 2026, games: [game] });
+  await uncertain
+    .getStore()
+    .identities.saveVendorGames(
+      readIdentityGames([ambiguous], findTeamCodeByEspnId).records,
+      0,
+      uncertain.getStore().docs,
+    );
+  assert.equal((await uncertain.getStore().docs.list("espnMatches")).length, 0);
   const requests = [];
   const harness = createHarness(LEAGUES[0], async (url) => {
     requests.push(url);
@@ -160,7 +169,14 @@ test("ingested ESPN matches survive a store restart and avoid another scoreboard
     season: 2026,
     now: Date.parse(afternoon.now),
   });
-  await harness.getStore().saveSeason({ ...snapshot, espnMatches: matches });
+  const update = { ...snapshot, games: [game], identityRecords };
+  await harness.getStore().saveSeason(update);
+  const match = await harness.getStore().docs.read(`espnMatches/${game.id}`);
+  assert.equal(match.eventId, String(lead.eventId));
+  assert.equal(
+    await harness.getStore().identities.lookup.read("game", "espn", String(lead.eventId)),
+    game.id,
+  );
   harness.restart();
   const params = new URLSearchParams({ id: game.id, ...lead.game });
   const response = await harness.request(`lead?${params}`);
@@ -289,9 +305,17 @@ test("MLB historical highlights fill newest season first in the remaining budget
   };
   for (const year of [2025, 2024]) {
     await store.createJobStorage("highlights").delete(`highlights-filled:${year}`);
-    await store.createJobStorage("highlights").delete(`history-highlight-reads:${year}`);
+    const ids = year === 2025 ? ["849826", "849838"] : ["111"];
+    await store
+      .createJobStorage("highlights")
+      .put(
+        `history-highlight-reads:${year}`,
+        Object.fromEntries(ids.map((id) => [id, { version: 0, readAt: 0, triedAt: 0 }])),
+      );
   }
+  const beforeReread = requests.length;
   await fillArchive(HISTORY_REQUESTS_PER_RUN);
+  assert.ok(requests.length > beforeReread);
   assert.deepEqual(publications, []);
 });
 

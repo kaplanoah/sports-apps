@@ -286,7 +286,7 @@ function readSeries(series) {
   const { league, round } = readSeriesFacts(series);
   return {
     round: ROUND_NUMBERS[round] ?? null,
-    conference: series === "WS" ? null : league,
+    conference: league ?? null,
   };
 }
 

@@ -75,7 +75,7 @@ const askService = (binding) =>
 /**
  * @param {object} options
  * @param {(env: any) => Promise<{ feeds: Record<string, import("./feed-failures.js").FeedFailure>, identity?: any }>} options.readStoreHealth
- *   which of the league's feeds the store says are failing, throwing when the store doesn't answer
+ *   the failing feeds and identity status, throwing when the store does not answer
  * @param {string | null} options.release the commit the Worker was built from
  * @param {() => number} [options.now]
  */

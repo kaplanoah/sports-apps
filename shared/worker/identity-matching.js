@@ -41,12 +41,15 @@ function hasContradictoryEvidence(native, record, type) {
   return !!native.birthdate && !!record.birthdate && native.birthdate !== record.birthdate;
 }
 
-/** One candidate rule for live links and stored identity observations. */
-export function findIdentityCandidate(type, record, uniqueNatives, uniqueRecords) {
+function findIdentityCandidate(type, record, uniqueNatives, uniqueRecords) {
   const matches = uniqueNatives.filter((native) =>
     type === "game" ? matchesGame(native, record) : matchesPlayer(native, record),
   );
-  const numbered = type === "game" && Number.isInteger(record.gameNumber) && record.gameNumber > 0;
+  const numbered =
+    type === "game" &&
+    Number.isInteger(record.gameNumber) &&
+    record.gameNumber > 0 &&
+    matches.some((native) => Number.isInteger(native.gameNumber) && native.gameNumber > 0);
   const candidates = numbered
     ? matches.filter((native) => native.gameNumber === record.gameNumber)
     : matches;
@@ -137,5 +140,5 @@ export async function reconcileIdentities(lookup, { type, vendor, natives, recor
       },
     });
   }
-  await lookup.save(observations);
+  return lookup.save(observations);
 }

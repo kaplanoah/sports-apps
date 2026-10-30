@@ -7,7 +7,7 @@ import { describeDayInSentence, readGameDay } from "./days.js";
 import { describeLiveMoment } from "./games-view.js";
 import { mapSeriesById } from "./nearest-games.js";
 import { BRACKET_ORDER } from "./series.js";
-import { ROUNDS } from "./snapshot.js";
+import { ROUNDS, readSeriesFacts } from "./snapshot.js";
 
 /** @typedef {import("./series.js").Series} Series */
 /** @typedef {import("./series.js").SeriesSide} SeriesSide */
@@ -107,7 +107,7 @@ function renderSeries(series, games, now) {
  */
 const describeUnlisted = (id) => ({
   id,
-  round: Number(id.split("-")[0]),
+  round: readSeriesFacts(id).round,
   top: null,
   bottom: null,
   winner: null,

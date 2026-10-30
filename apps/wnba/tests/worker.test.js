@@ -1,3 +1,5 @@
+import { SeasonStore } from "../worker/src/store.js";
+import { createDurableObjectContext } from "../../../tests/durable-object-context.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -935,12 +937,15 @@ for (const failsFirst of [false, true]) {
       assert.equal(countMonthReads(), before + 2);
     }
     const eventIds = new Set(ESPN_SCOREBOARD.answers[request].events.map((event) => event.id));
-    const matches = updated.espnMatches.filter((match) => eventIds.has(match.eventId));
+    const { ctx } = createDurableObjectContext();
+    const store = new SeasonStore(ctx, {}, { now: () => now });
+    await store.saveSeason(updated);
+    const matches = (await store.docs.list("espnMatches")).filter((match) =>
+      eventIds.has(match.eventId),
+    );
     assert.ok(matches.length > 0);
-    const docs = createDocs();
-    await saveSnapshot(docs, updated);
     for (const match of matches)
-      assert.deepEqual(await docs.read(`espnMatches/${match.id}`), match);
+      assert.equal(await store.identities.lookup.read("game", "espn", match.eventId), match.id);
     const completedReads = countMonthReads();
     now += 24 * HOUR_MS;
     await restart().loadSnapshot(2026, { verify: true });
@@ -1368,7 +1373,9 @@ test("a malformed scoreboard is named before snapshot composition and leaves the
 test("the snapshot loader keeps retry deadlines and persists ESPN matches together", async () => {
   const league = createLeague({ espn: readAfternoonEspn(), refuse: { standings: "error" } });
   const storage = createMemoryStorage();
-  const docs = createDocs();
+  const { ctx } = createDurableObjectContext();
+  const store = new SeasonStore(ctx, {}, { now: () => NOW });
+  const docs = store.docs;
   const eventIds = new Set(
     Object.values(ESPN_SCOREBOARD.answers).flatMap((answer) =>
       answer.events.map((event) => String(event.id)),
@@ -1378,14 +1385,16 @@ test("the snapshot loader keeps retry deadlines and persists ESPN matches togeth
     const loader = createSnapshotLoader({ fetchImpl: league.fetchImpl, storage, now: () => NOW });
     const snapshot = await loader.loadSnapshot(2026);
     assert.equal(snapshot.nextReadAt, NOW + FAILED_FEED_WAIT_MS);
-    assert.ok(snapshot.espnMatches.length > 0);
-    await saveSnapshot(docs, snapshot);
-    for (const match of snapshot.espnMatches) {
+    assert.ok(snapshot.identityRecords.records.length > 0);
+    await store.saveSeason(snapshot);
+    const matches = await docs.list("espnMatches");
+    assert.ok(matches.length > 0);
+    for (const match of matches) {
       assert.ok(eventIds.has(match.eventId));
-      assert.deepEqual(await docs.read(`espnMatches/${match.id}`), match);
+      assert.equal(await store.identities.lookup.read("game", "espn", match.eventId), match.id);
       assert.ok(snapshot.games.concat(snapshot.nearestGames).some((game) => game.id === match.id));
     }
-    const [match] = snapshot.espnMatches;
+    const [match] = matches;
     const reads = [];
     const reader = createEspnGameReader({
       fetchImpl: async (url) => {
@@ -1407,7 +1416,12 @@ test("live snapshot identity records use existing ESPN answers and isolate malfo
   const snapshot = await loader.loadSnapshot(2026);
   assert.ok(snapshot.identityRecords.records.length > 0);
   assert.equal(snapshot.identityRecords.rejected, 0);
-  for (const match of snapshot.espnMatches)
+  const { ctx } = createDurableObjectContext();
+  const store = new SeasonStore(ctx, {}, { now: () => NOW });
+  await store.saveSeason(snapshot);
+  const matches = await store.docs.list("espnMatches");
+  assert.ok(matches.length > 0);
+  for (const match of matches)
     assert.ok(snapshot.identityRecords.records.some((record) => record.id === match.eventId));
   const before = league.reads.length;
   await loader.loadSnapshot(2026);

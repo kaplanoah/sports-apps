@@ -122,13 +122,25 @@ export function createIdentityLookup(storage, league) {
           );
           if (observation.disputed) {
             await saveProblem(transaction, league, key, "disputed");
+            results.push({
+              vendorId: observation.vendorId,
+              internalId: observation.internalId ?? null,
+              disputed: true,
+            });
             continue;
           }
           if (!observation.internalId) {
             await saveProblem(transaction, league, key, "unmatched");
+            results.push({ vendorId: observation.vendorId, internalId: null, disputed: false });
             continue;
           }
-          results.push(await saveAssociation(transaction, league, observation));
+          const result = await saveAssociation(transaction, league, observation);
+          results.push({
+            ...result,
+            vendorId: observation.vendorId,
+            disputed:
+              result.disputed || (await transaction.get(nameProblemKey(key))) === "disputed",
+          });
         }
         return results;
       });
@@ -155,32 +167,20 @@ export function createIdentityLookup(storage, league) {
     },
     /** @param {"game" | "player"} type @param {string} id */
     readEntry: (type, id) => storage.get(nameEntityKey(league, type, id)),
-    async countMappingConflicts(key) {
+    async listMappingConflicts(key) {
       return storage.transaction(async (transaction) => {
         const value = await transaction.get(key);
-        if (!value) return 0;
-        let conflicts = 0;
+        if (!value) return [];
+        const conflicts = [];
         if (key.startsWith(`identity:entity:${league}:`)) {
           for (const [vendor, id] of Object.entries(value.vendors)) {
-            if (
-              (await transaction.get(nameVendorKey(league, value.type, vendor, id)))?.internalId !==
-              value.id
-            )
-              conflicts += 1;
+            const vendorKey = nameVendorKey(league, value.type, vendor, id);
+            if ((await transaction.get(vendorKey))?.internalId !== value.id)
+              conflicts.push(vendorKey);
           }
         } else if (key.startsWith("identity:vendor:") && value.league === league) {
           const entry = await transaction.get(nameEntityKey(league, value.type, value.internalId));
-          if (entry?.vendors[value.vendor] !== value.vendorId) {
-            const entities = await storage.list({
-              prefix: `identity:entity:${league}:${value.type}:`,
-            });
-            if (
-              ![...entities.values()].some(
-                (entity) => entity.vendors[value.vendor] === value.vendorId,
-              )
-            )
-              conflicts += 1;
-          }
+          if (entry?.vendors[value.vendor] !== value.vendorId) conflicts.push(key);
         }
         return conflicts;
       });

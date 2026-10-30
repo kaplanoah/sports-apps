@@ -8,7 +8,7 @@ import { describeError } from "../../../../shared/worker/responses.js";
 import { createReusedLoader } from "../../../../shared/worker/upstream.js";
 import { createBackupReader } from "./backup-probe.js";
 import { createGameEnds } from "./game-ends.js";
-import { createEspnGameReader, readEndTime, listEspnMatches } from "./adapters/lead.js";
+import { createEspnGameReader, readEndTime } from "./adapters/lead.js";
 import { listUpcomingMeetings } from "./adapters/preview.js";
 import { fetchEspnDay, fetchEspnJson, fetchWnbaJson, LIVE_CACHE_SECONDS } from "./wnba.js";
 
@@ -306,7 +306,6 @@ export function createSnapshotLoader({
     return {
       ...ended,
       identityRecords: readIdentityGames(espnAnswers, findTeamCodeByEspnId),
-      espnMatches: listEspnMatches(ended, espnAnswers),
       nextReadAt,
       failures: coverageGap ? { ...failures, backup: coverageGap } : failures,
       meetings: listUpcomingMeetings(responses.schedule, ended),

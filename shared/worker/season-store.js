@@ -195,10 +195,20 @@ function isWatching(socket, path) {
 }
 
 // What a league's reads keep between updates, under keys the store's paths can't name.
-const createFeedStorage = (storage) => ({
+/**
+ * @param {any} storage
+ * @param {{ forgetIdentity: (key: string) => Promise<unknown>, noteIdentityAnswer: (key: string, value: any) => Promise<unknown> }} identity
+ */
+const createFeedStorage = (storage, { forgetIdentity, noteIdentityAnswer }) => ({
   get: (key) => storage.get(nameStoredFeedKey(key)),
-  put: (key, value) => storage.put(nameStoredFeedKey(key), value),
-  delete: (key) => storage.delete(nameStoredFeedKey(key)),
+  put: async (key, value) => {
+    await storage.put(nameStoredFeedKey(key), value);
+    await noteIdentityAnswer(nameStoredFeedKey(key), value);
+  },
+  delete: async (key) => {
+    await storage.delete(nameStoredFeedKey(key));
+    await forgetIdentity(nameStoredFeedKey(key));
+  },
 });
 
 function openWatchSocket(ctx) {
@@ -243,8 +253,15 @@ export function createSeasonStore(league) {
         now = () => Date.now(),
         fetchImpl = (input, init) => fetch(input, init),
         createLoadSnapshot = (/** @type {typeof fetch} */ fetchWith) =>
-          league.createLoadSnapshot(createFeedStorage(ctx.storage), fetchWith, (key) =>
-            ctx.storage.get(key),
+          league.createLoadSnapshot(
+            createFeedStorage(ctx.storage, {
+              forgetIdentity: async (key) =>
+                await this.identities?.forgetSource(key).catch(() => {}),
+              noteIdentityAnswer: async (key, value) =>
+                await this.identities?.noteFeedAnswer(key, value),
+            }),
+            fetchWith,
+            (key) => ctx.storage.get(key),
           ),
         loadDetails = undefined,
       } = {},
@@ -387,16 +404,17 @@ export function createSeasonStore(league) {
               feeds: (await this.ctx.storage.get(FEEDS_KEY))?.failing ?? {},
               ...(this.identities && { identity: await this.identities.readStatus() }),
             }
-          : key === "identity/status" && this.identities
-            ? await this.identities.readStatus()
-            : await this.ctx.storage.get(key);
+          : await this.ctx.storage.get(key);
       return respondJson({ data: data ?? null });
     }
 
     async putDoc(key, doc) {
-      const prepared = this.identities ? await this.identities.prepareDocument(key, doc) : doc;
+      const previous = await this.ctx.storage.get(key);
+      const prepared = this.identities
+        ? await this.identities.prepareDocument(key, doc, previous)
+        : doc;
       const data = sortKeys(prepared);
-      if (isSameJson(await this.ctx.storage.get(key), data)) return;
+      if (isSameJson(previous, data)) return;
       await this.ctx.storage.put(key, data);
       this.announceChange(key, data);
     }
@@ -423,6 +441,7 @@ export function createSeasonStore(league) {
 
     async deleteDoc(key) {
       await this.ctx.storage.delete(key);
+      await this.identities?.forgetSource(key).catch(() => {});
       this.announceChange(key, null);
     }
 
@@ -652,11 +671,15 @@ export function createSeasonStore(league) {
         put: async (key, value) => {
           const prepared =
             name === "details" && key.startsWith("detail-answer:") && this.identities
-              ? await this.identities.prepareDetailAnswer(key, value)
+              ? await this.identities.prepareDetailAnswer(prefix + key, value)
               : value;
           await storage.put(prefix + key, prepared);
         },
-        delete: (key) => storage.delete(prefix + key),
+        delete: async (key) => {
+          const removed = await storage.delete(prefix + key);
+          await this.identities?.forgetSource(prefix + key).catch(() => {});
+          return removed;
+        },
         list: async (keyPrefix) =>
           new Map(
             [...(await storage.list({ prefix: prefix + keyPrefix }))].map(([key, value]) => [
@@ -713,6 +736,7 @@ export function createSeasonStore(league) {
         await this.identities?.saveVendorGames(
           snapshot.identityRecords?.records ?? [],
           snapshot.identityRecords?.rejected ?? 0,
+          this.docs,
         );
         await this.saveCurrentSeason(snapshot.season);
       } catch (error) {
@@ -844,8 +868,8 @@ export async function forwardToStore(request, env, storePath) {
 }
 
 /**
- * Which of the league's feeds are failing, since when and why, for the Worker's health, which
- * learns from this read too whether the store answers. Throws when it doesn't.
+ * The store's failing feeds and identity coverage, for the Worker's single reused health read.
+ * Throws when the store does not answer.
  * @param {any} env the Worker's bindings
  * @returns {Promise<{ feeds: Record<string, import("./feed-failures.js").FeedFailure>, identity?: any }>}
  */

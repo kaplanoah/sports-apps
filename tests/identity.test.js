@@ -1,3 +1,4 @@
+import { identityPolicy as wnbaIdentityPolicy } from "../apps/wnba/worker/src/identity-policy.js";
 import { trimNetworkAnswer, readIdentityGames } from "../shared/worker/espn-adapter.js";
 import { normalizeGame as normalizeMlbGame } from "../apps/mlb/worker/src/adapters/feed-games.js";
 import { describeEspnBoxScore } from "../apps/wnba/worker/src/adapters/espn-box-score.js";
@@ -78,12 +79,12 @@ test("identity consistency checks detect broken forward and reverse references",
   const { ctx } = createDurableObjectContext();
   const lookup = createIdentityLookup(ctx.storage, "mlb");
   await lookup.save([createNative("game", "7")]);
-  assert.equal(await lookup.countMappingConflicts("identity:entity:mlb:game:7"), 0);
+  assert.deepEqual(await lookup.listMappingConflicts("identity:entity:mlb:game:7"), []);
   const key = "identity:vendor:league:mlb:game:7";
   const mapping = await ctx.storage.get(key);
   await ctx.storage.put(key, { ...mapping, internalId: "missing" });
-  assert.equal(await lookup.countMappingConflicts("identity:entity:mlb:game:7"), 1);
-  assert.equal(await lookup.countMappingConflicts(key), 0);
+  assert.deepEqual(await lookup.listMappingConflicts("identity:entity:mlb:game:7"), [key]);
+  assert.deepEqual(await lookup.listMappingConflicts(key), [key]);
 });
 
 test("postponement and resume keep a game association even when its date and time move", async () => {
@@ -237,7 +238,8 @@ for (const [app, Store] of STORES) {
     if (app === "wnba") assert.equal(saved.isCupFinal, true);
     else {
       assert.equal(saved.round, "DS");
-      assert.equal(saved.gameNumber, 2);
+      assert.equal(saved.doubleheader, 2);
+      assert.equal((await store.identities.lookup.readEntry("game", id)).facts.gameNumber, 2);
     }
     assert.equal(await store.identities.lookup.read("game", app, id), id);
     assert.equal(await store.identities.lookup.read("player", app, "44"), "44");
@@ -323,6 +325,9 @@ test("recorded adapters populate explicit facts without changing IDs", () => {
     ),
   );
   assert.equal(games.find((game) => game.series === "AL_DS1").round, "DS");
+  const doubleheader = games.find((game) => game.doubleheader === 2);
+  assert.ok(doubleheader);
+  assert.equal(Object.hasOwn(doubleheader, "gameNumber"), false);
   const wnba = readFixture("../apps/wnba/tests/fixtures/2026-09-30-afternoon.json");
   const wholeSchedule = readFixture("../apps/wnba/tests/fixtures/2026-10-01-games.json").preview
     .schedule;
@@ -387,7 +392,7 @@ test("MLB backfill fills boxes, series and schedules across seasons without chan
   }
   for (const year of [2025, 2026]) {
     assert.equal(stored.get(`games/${year}`).season, year);
-    assert.equal(stored.get(`schedules-${year}/${year}-10`).games[0].gameNumber, 2);
+    assert.equal(stored.get(`schedules-${year}/${year}-10`).games[0].doubleheader, 2);
     assert.deepEqual(stored.get(`seasons/${year}`).series.AL_DS1, {
       league: "AL",
       round: "DS",
@@ -861,6 +866,7 @@ test("network trimming retains real doubleheader evidence and MLB missing dates 
   assert.equal(trimmed.events[0].competitions[0].gameNumber, 2);
   assert.equal(readIdentityGames([trimmed], findIdentityTeam).records[0].gameNumber, 2);
   assert.ok(!Object.hasOwn(normalizeMlbGame({ gamePk: 1 }), "season"));
+  assert.ok(!Object.hasOwn(normalizeMlbGame({ gamePk: 1, officialDate: "" }), "season"));
 });
 
 test("completed coverage requires zero missing entries, facts and competing mappings", async () => {
@@ -922,4 +928,393 @@ test("a recovered cached-detail identity write clears only its failure and permi
   });
   assert.equal((await store.identities.readStatus()).errors, 1);
   assert.equal((await store.identities.readStatus()).checks.verified, false);
+});
+
+test("rejected cached records keep health uncertain without restarting completed backfill", async () => {
+  const { ctx, stored } = createDurableObjectContext();
+  stored.set("feed:networks:202606", { data: { events: [createEspnEvent("")] } });
+  const store = new WnbaStore(ctx, {});
+  for (
+    let iteration = 0;
+    iteration < 40 && !(await store.identities.readStatus()).backfill.complete;
+    iteration += 1
+  )
+    await store.identities.backfill(store.docs);
+  const progress = structuredClone(stored.get("identity:backfill"));
+  assert.equal((await store.identities.readStatus()).errors, 1);
+  for (let iteration = 0; iteration < 3; iteration += 1)
+    await store.identities.backfill(store.docs);
+  assert.deepEqual(stored.get("identity:backfill"), progress);
+  assert.equal((await store.identities.readStatus()).checks.verified, false);
+});
+
+test("backfill recovers a live cached-detail failure under the same physical source key", async () => {
+  const { ctx } = createDurableObjectContext();
+  const store = new WnbaStore(ctx, {});
+  const transaction = ctx.storage.transaction;
+  const key = "detail-answer:/player?id=44&season=2026";
+  ctx.storage.transaction = async () => {
+    throw new Error("temporary identity failure");
+  };
+  await store
+    .createJobStorage("details")
+    .put(key, { at: 1, body: { id: "44", firstName: "Alex", lastName: "Jones", season: 2026 } });
+  assert.equal((await store.identities.readStatus()).errors, 1);
+  ctx.storage.transaction = transaction;
+  for (
+    let iteration = 0;
+    iteration < 40 && !(await store.identities.readStatus()).backfill.complete;
+    iteration += 1
+  )
+    await store.identities.backfill(store.docs);
+  assert.equal((await store.identities.readStatus()).errors, 0);
+  assert.equal((await store.identities.readStatus()).checks.verified, true);
+});
+
+test("cached-detail rejections are per answer and eviction or document deletion clears only its errors", async () => {
+  const { ctx } = createDurableObjectContext();
+  const store = new WnbaStore(ctx, {});
+  const answers = store.createJobStorage("details");
+  const bad = { at: 1, body: { season: 2026, players: [{ id: 44, espnIdentity: { id: "" } }] } };
+  await answers.put("detail-answer:/roster?season=2026&team=ATL", bad);
+  await answers.put("detail-answer:/roster?season=2026&team=NYL", {
+    at: 1,
+    body: { season: 2026, players: [] },
+  });
+  assert.equal((await store.identities.readStatus()).errors, 1);
+  await store.docs.write("games/1022600001", { id: "1022600001", players: bad.body.players });
+  assert.equal((await store.identities.readStatus()).errors, 2);
+  await answers.delete("detail-answer:/roster?season=2026&team=ATL");
+  assert.equal((await store.identities.readStatus()).errors, 1);
+  await store.docs.remove("games/1022600001");
+  assert.equal((await store.identities.readStatus()).errors, 0);
+});
+
+test("identity outages preserve prepared sports facts and never announce unchanged fallback copies", async () => {
+  for (const [app, Store] of STORES) {
+    const { ctx } = createDurableObjectContext();
+    const store = new Store(ctx, {});
+    const id = app === "wnba" ? "1052600001" : "44";
+    const raw = {
+      boxScore: { id, state: "final", season: 2026 },
+      ...(app === "mlb" && { series: "AL_DS1" }),
+    };
+    await store.docs.write("games/" + id, raw);
+    const previous = await store.docs.read("games/" + id);
+    const transaction = ctx.storage.transaction;
+    ctx.storage.transaction = async () => {
+      throw new Error("identity unavailable");
+    };
+    const changed = [];
+    store.announceChange = (key) => {
+      changed.push(key);
+    };
+    await store.docs.write("games/" + id, raw);
+    assert.deepEqual(await store.docs.read("games/" + id), previous);
+    assert.deepEqual(changed, []);
+    ctx.storage.transaction = transaction;
+    await store.docs.write("games/" + id, raw);
+    assert.deepEqual(changed, []);
+  }
+});
+
+test("successful unchanged writes never put or delete identity-error keys", async () => {
+  const { ctx } = createDurableObjectContext();
+  const store = new WnbaStore(ctx, {});
+  const document = { id: "1022600001", season: 2026, state: "final", period: 4 };
+  await store.docs.write("games/1022600001", document);
+  const put = ctx.storage.put;
+  const remove = ctx.storage.delete;
+  const mutations = [];
+  ctx.storage.put = async (key, value) => {
+    if (String(key).startsWith("identity:error:")) mutations.push(key);
+    return put(key, value);
+  };
+  ctx.storage.delete = async (key) => {
+    if (String(key).startsWith("identity:error:")) mutations.push(key);
+    return remove(key);
+  };
+  await store.docs.write("games/1022600001", document);
+  await store.identities.saveVendorGames([], 0);
+  assert.deepEqual(mutations, []);
+});
+
+test("raw and retained ESPN game numbers normalize identically and WNBA unique games still link", async () => {
+  const game = {
+    id: "1022600001",
+    start: "2026-06-01T18:00:00Z",
+    state: "pre",
+    away: { team: "A" },
+    home: { team: "B" },
+  };
+  for (const gameNumber of [null, "2", 0, -1, 1.5, 2]) {
+    const { ctx } = createDurableObjectContext();
+    const store = new WnbaStore(ctx, {});
+    await store.docs.write("seasons/2026", { year: 2026, games: [game] });
+    const answer = { events: [createEspnEvent("event", gameNumber)] };
+    const live = readIdentityGames([answer], findIdentityTeam);
+    assert.equal(live.rejected, 0);
+    assert.equal(live.records.length, 1);
+    assert.deepEqual(live, readIdentityGames([trimNetworkAnswer(answer)], findIdentityTeam));
+    await store.identities.saveVendorGames(live.records, live.rejected, store.docs);
+    assert.equal(await store.identities.lookup.read("game", "espn", "event"), game.id);
+    const match = await store.docs.read("espnMatches/" + game.id);
+    assert.ok(match);
+    assert.equal(match.eventId, "event");
+  }
+});
+
+test("one stored candidate set keeps postponed identities, ledger mappings and legacy ESPN links consistent", async () => {
+  const { ctx } = createDurableObjectContext();
+  const store = new WnbaStore(ctx, {});
+  const game = {
+    id: "1022600001",
+    start: "2026-06-01T18:00:00Z",
+    state: "pre",
+    away: { team: "A" },
+    home: { team: "B" },
+  };
+  const postponed = { ...game, id: "1022600002" };
+  await store.docs.write("seasons/2025", { year: 2025, games: [postponed] });
+  await store.docs.write("seasons/2026", { year: 2026, games: [game] });
+  const records = readIdentityGames([{ events: [createEspnEvent("event", 2)] }], findIdentityTeam);
+  await store.identities.saveVendorGames(records.records, 0, store.docs);
+  assert.equal(await store.identities.lookup.read("game", "espn", "event"), null);
+  assert.equal(await store.docs.read("espnMatches/" + game.id), null);
+  assert.equal((await store.identities.readStatus()).unmatched, 1);
+  await store.docs.write("seasons/2025", {
+    year: 2025,
+    games: [{ ...postponed, start: "2026-06-05T18:00:00Z" }],
+  });
+  await store.identities.saveVendorGames(records.records, 0, store.docs);
+  assert.equal(await store.identities.lookup.read("game", "espn", "event"), game.id);
+  assert.equal((await store.docs.read("espnMatches/" + game.id)).eventId, "event");
+  assert.equal((await store.identities.readStatus()).unmatched, 0);
+});
+
+test("bounded recovery passes advance past persistent failures instead of starving later sources", async () => {
+  const { ctx } = createDurableObjectContext();
+  const store = new WnbaStore(ctx, {});
+  const transaction = ctx.storage.transaction;
+  ctx.storage.transaction = async () => {
+    throw new Error("identity unavailable");
+  };
+  for (let number = 1; number <= 25; number += 1) {
+    const id = String(number).padStart(2, "0");
+    await store.createJobStorage("details").put(`detail-answer:/player?id=${id}&season=2026`, {
+      at: 1,
+      body: { id, season: 2026, firstName: "Alex", lastName: "Jones" },
+    });
+  }
+  for (
+    let iteration = 0;
+    iteration < 60 && !(await store.identities.readStatus()).backfill.complete;
+    iteration += 1
+  )
+    await store.identities.backfill(store.docs);
+  assert.equal((await store.identities.readStatus()).errors, 25);
+  ctx.storage.transaction = (callback) =>
+    transaction((inner) =>
+      callback({
+        ...inner,
+        put: async (key, value) => {
+          if (key.startsWith("identity:entity:wnba:player:") && Number(key.split(":").at(-1)) <= 20)
+            throw new Error("still unavailable");
+          return inner.put(key, value);
+        },
+      }),
+    );
+  for (
+    let iteration = 0;
+    iteration < 60 && !(await store.identities.lookup.read("player", "wnba", "25"));
+    iteration += 1
+  )
+    await store.identities.backfill(store.docs);
+  assert.equal(await store.identities.lookup.read("player", "wnba", "25"), "25");
+  assert.equal(await store.identities.lookup.read("player", "wnba", "01"), null);
+  assert.equal((await store.identities.readStatus()).errors, 20);
+});
+
+test("a superseded in-flight backfill cannot overwrite a newer checkpoint", async () => {
+  const { ctx, stored } = createDurableObjectContext();
+  stored.set("games/1022600001", { id: "1022600001", season: 2026, state: "final", period: 4 });
+  const store = new WnbaStore(ctx, {});
+  let release;
+  let began;
+  const started = new Promise((resolve) => {
+    began = resolve;
+  });
+  const delayed = new Promise((resolve) => {
+    release = resolve;
+  });
+  const read = store.docs.read;
+  store.docs.read = async (key) => {
+    began();
+    await delayed;
+    return read(key);
+  };
+  let active = true;
+  const pending = store.identities.backfill(store.docs, () => active);
+  await started;
+  active = false;
+  const checkpoint = {
+    complete: false,
+    phase: "facts",
+    cursor: "new-generation",
+    checkedDocuments: 10,
+  };
+  stored.set("identity:backfill", checkpoint);
+  release();
+  await pending;
+  assert.deepEqual(stored.get("identity:backfill"), checkpoint);
+});
+
+test("recovered backfill repeats dependent facts and audits before declaring coverage verified", async () => {
+  const { ctx, stored } = createDurableObjectContext();
+  stored.set("games/7", { id: "7", state: "final", innings: [] });
+  stored.set("schedules-2026/2026-06", {
+    year: 2026,
+    games: [createGame("7", { state: "final" })],
+  });
+  const transaction = ctx.storage.transaction;
+  ctx.storage.transaction = async () => {
+    throw new Error("identity unavailable");
+  };
+  const store = new MlbStore(ctx, {});
+  for (
+    let iteration = 0;
+    iteration < 40 && !(await store.identities.readStatus()).backfill.complete;
+    iteration += 1
+  )
+    await store.identities.backfill(store.docs);
+  assert.equal((await store.identities.readStatus()).checks.verified, false);
+  ctx.storage.transaction = transaction;
+  await store.identities.backfill(store.docs);
+  for (
+    let iteration = 0;
+    iteration < 40 && !(await store.identities.readStatus()).backfill.complete;
+    iteration += 1
+  )
+    await store.identities.backfill(store.docs);
+  assert.equal(stored.get("games/7").season, 2026);
+  assert.equal((await store.identities.readStatus()).checks.verified, true);
+});
+
+test("mapping coverage counts one broken vendor relation without scanning all entities per key", async () => {
+  const { ctx } = createDurableObjectContext();
+  const store = new MlbStore(ctx, {});
+  await store.identities.lookup.save([createNative("game", "7", { season: 2026 })]);
+  const key = "identity:vendor:league:mlb:game:7";
+  await ctx.storage.put(key, { ...(await ctx.storage.get(key)), internalId: "missing" });
+  const list = ctx.storage.list;
+  let fullEntityLists = 0;
+  ctx.storage.list = async (options) => {
+    if (options.prefix.startsWith("identity:entity:")) fullEntityLists += 1;
+    return list(options);
+  };
+  for (
+    let iteration = 0;
+    iteration < 40 && !(await store.identities.readStatus()).backfill.complete;
+    iteration += 1
+  )
+    await store.identities.backfill(store.docs);
+  assert.equal((await store.identities.readStatus()).checks.competingMappings, 1);
+  assert.equal(fullEntityLists, 0);
+});
+
+test("WNBA legacy series facts use the page-safe series contract during storage expansion", async () => {
+  const { ctx } = createDurableObjectContext();
+  const store = new WnbaStore(ctx, {});
+  await store.docs.write("schedules/2026", {
+    year: 2026,
+    games: [{ id: "1042600201", state: "pre", start: "2026-10-01T18:00:00Z", series: "2-0" }],
+  });
+  assert.equal((await store.docs.read("schedules/2026")).games[0].round, 2);
+});
+
+test("actual feed-cache updates refresh their own rejection signal without reconciling before sports writes", async () => {
+  const { ctx } = createDurableObjectContext();
+  let feedStorage;
+  const Store = createSeasonStore({
+    identity: wnbaIdentityPolicy,
+    createLoadSnapshot: (storage) => {
+      feedStorage = storage;
+      return async () => ({ season: 2026 });
+    },
+    loadCurrentSnapshot: async () => ({ season: 2026 }),
+    readUpdates: async () => null,
+    saveSnapshot: async () => {},
+    describeSnapshotStatus: () => ({}),
+    choosePollDelay: () => 60000,
+    listNotifications: () => [],
+  });
+  const store = new Store(ctx, {});
+  store.createLoadSnapshot(async () => Response.error());
+  await feedStorage.put("networks:202606", { data: { events: [createEspnEvent("")] } });
+  assert.equal((await store.identities.readStatus()).errors, 1);
+  await feedStorage.put("networks:202606", { data: { events: [createEspnEvent("event")] } });
+  assert.equal((await store.identities.readStatus()).errors, 0);
+  assert.equal(await store.identities.lookup.read("game", "espn", "event"), null);
+  await feedStorage.put("networks:202606", { data: { events: [createEspnEvent("")] } });
+  await feedStorage.delete("networks:202606");
+  assert.equal((await store.identities.readStatus()).errors, 0);
+});
+
+test("live-only vendor failures await a fresh observation instead of restarting or being cleared by backfill", async () => {
+  const { ctx, stored } = createDurableObjectContext();
+  const store = new WnbaStore(ctx, {});
+  await store.docs.write("seasons/2026", {
+    year: 2026,
+    games: [
+      {
+        id: "1022600001",
+        start: "2026-06-01T18:00:00Z",
+        state: "pre",
+        away: { team: "A" },
+        home: { team: "B" },
+      },
+    ],
+  });
+  for (
+    let iteration = 0;
+    iteration < 40 && !(await store.identities.readStatus()).backfill.complete;
+    iteration += 1
+  )
+    await store.identities.backfill(store.docs);
+  const read = store.identities.lookup.read;
+  store.identities.lookup.read = async () => {
+    throw new Error("transient vendor lookup failure");
+  };
+  await store.identities.saveVendorGames([createGame("event")]);
+  assert.equal((await store.identities.readStatus()).errors, 1);
+  const progress = structuredClone(stored.get("identity:backfill"));
+  await store.identities.backfill(store.docs);
+  assert.deepEqual(stored.get("identity:backfill"), progress);
+  assert.equal((await store.identities.readStatus()).errors, 1);
+  store.identities.lookup.read = read;
+  await store.identities.saveVendorGames([createGame("event")]);
+  assert.equal((await store.identities.readStatus()).errors, 0);
+});
+
+test("a new game without season facts cannot inherit an older completed coverage result", async () => {
+  const { ctx } = createDurableObjectContext();
+  const store = new MlbStore(ctx, {});
+  for (
+    let iteration = 0;
+    iteration < 20 && !(await store.identities.readStatus()).backfill.complete;
+    iteration += 1
+  )
+    await store.identities.backfill(store.docs);
+  assert.equal((await store.identities.readStatus()).checks.verified, true);
+  const box = { id: "7", state: "final", innings: [] };
+  await store.docs.write("games/7", box);
+  assert.equal((await store.identities.readStatus()).checks.verified, false);
+  assert.equal((await store.identities.readStatus()).errors, 1);
+  await store.docs.write("schedules-2026/2026-06", {
+    year: 2026,
+    games: [createGame("7", { state: "final" })],
+  });
+  await store.docs.write("games/7", box);
+  assert.equal((await store.docs.read("games/7")).season, 2026);
+  assert.equal((await store.identities.readStatus()).checks.verified, true);
 });

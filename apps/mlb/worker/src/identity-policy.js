@@ -7,9 +7,6 @@ export const identityPolicy = {
   readGameFacts: (game, season) => ({
     ...(season && { season }),
     ...(game.series && readSeriesFacts(game.series)),
-    ...((game.doubleheader ?? game.gameNumber) > 1 && {
-      gameNumber: game.doubleheader ?? game.gameNumber,
-    }),
   }),
   readSeriesFacts,
 };

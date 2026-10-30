@@ -15,6 +15,7 @@ const createBackfillProgress = () => ({
   missingEntries: 0,
   missingFacts: 0,
   conflicts: 0,
+  conflictKeys: [],
 });
 const PLAYER_FIELDS = new Set(["players", "batters", "pitchers", "starters", "leaders"]);
 const GAME_FIELDS = new Set([
@@ -35,16 +36,6 @@ const readTeam = (side) => (typeof side === "string" ? side : (side?.team ?? sid
 const hasIdentifier = (value) =>
   (typeof value === "string" && value.length > 0) || (Number.isInteger(value) && value > 0);
 
-function stripIdentityMetadata(value) {
-  if (!value || typeof value !== "object") return value;
-  if (Array.isArray(value)) return value.map(stripIdentityMetadata);
-  return Object.fromEntries(
-    Object.entries(value)
-      .filter(([key]) => key !== "espnIdentity")
-      .map(([key, part]) => [key, stripIdentityMetadata(part)]),
-  );
-}
-
 /**
  * @typedef {object} IdentityPolicy
  * @property {string} league
@@ -52,6 +43,7 @@ function stripIdentityMetadata(value) {
  * @property {(record: any, season: number | null) => object} readGameFacts
  * @property {(id: string) => object} readSeriesFacts
  * @property {(key: string, value: any) => { records: any[], rejected: number } | null} [readSavedVendorGames]
+ * @property {(id: string) => string} [nameMatchKey]
  */
 
 /** @param {any} storage @param {IdentityPolicy} policy */
@@ -60,18 +52,21 @@ export function createIdentityDocuments(storage, policy) {
 
   const nameErrorKey = (key, kind) => `identity:error:${kind}:${encodeURIComponent(key)}`;
   async function saveErrors(key, count, kind = "rejected") {
-    if (count) await storage.put(nameErrorKey(key, kind), count);
-    else await storage.delete(nameErrorKey(key, kind));
+    const path = nameErrorKey(key, kind);
+    const previous = await storage.get(path);
+    if (previous === count || (!previous && !count)) return;
+    if (count) await storage.put(path, count);
+    else await storage.delete(path);
   }
 
-  async function attemptIdentity(key, action, fallback) {
+  async function attemptIdentity(key, action, fallback = () => null) {
     try {
       const result = await action();
-      if (result !== false) await saveErrors(key, 0, "failed");
+      await saveErrors(key, 0, "failed");
       return result;
     } catch {
       await saveErrors(key, 1, "failed").catch(() => {});
-      return fallback;
+      return fallback();
     }
   }
 
@@ -104,7 +99,7 @@ export function createIdentityDocuments(storage, policy) {
       vendorBatches.clear();
     }
   }
-  async function saveVendorGames(records, key = "snapshot", rejected = 0) {
+  async function saveVendorGames(records, key = "snapshot", rejected = 0, docs = null) {
     await saveErrors(key, rejected);
     if (!records?.length) return;
     const nameGameGroup = (record) =>
@@ -117,12 +112,32 @@ export function createIdentityDocuments(storage, policy) {
         (entry) => entry.vendors[policy.vendor] && groups.has(nameGameGroup(entry.facts ?? {})),
       )
       .map((entry) => ({ id: entry.id, ...entry.facts }));
-    await reconcileIdentities(lookup, { type: "game", vendor: "espn", natives, records });
+    const results = await reconcileIdentities(lookup, {
+      type: "game",
+      vendor: "espn",
+      natives,
+      records,
+    });
+    if (docs && policy.nameMatchKey) {
+      for (const result of results) {
+        if (!result.internalId || result.disputed) continue;
+        const entry = await lookup.readEntry("game", result.internalId);
+        const facts = entry?.facts;
+        if (!facts?.away || !facts?.home || !facts?.start) continue;
+        await docs.write(policy.nameMatchKey(result.internalId), {
+          id: result.internalId,
+          eventId: result.vendorId,
+          away: facts.away,
+          home: facts.home,
+          start: facts.start,
+        });
+      }
+    }
     vendorBatches.set(key, signature);
   }
 
   /** @param {string} key @param {any} document */
-  async function prepareDocument(key, document, audit = null) {
+  function expandDocument(key, document, known = null) {
     const observations = new Map();
     const espnPlayers = [];
     let rejected = 0;
@@ -131,12 +146,11 @@ export function createIdentityDocuments(storage, policy) {
     const rootId = isGameDocument
       ? (document?.id ?? document?.boxScore?.id ?? key.split("/")[1])
       : null;
-    const established = rootId ? await lookup.readEntry("game", String(rootId)) : null;
     const season =
       document?.season ??
       document?.year ??
       document?.boxScore?.season ??
-      established?.facts?.season ??
+      known?.season ??
       (Number(/(?:^|[/:-])(\d{4})(?:$|[-/])/.exec(key)?.[1]) || null);
     const addNative = (type, id, facts) => {
       if (!hasIdentifier(id)) return;
@@ -154,7 +168,12 @@ export function createIdentityDocuments(storage, policy) {
     };
     if (isGameDocument && rootId) {
       const facts = policy.readGameFacts({ ...document, id: String(rootId) }, season);
-      document = { ...facts, ...document };
+      const savedFacts = Object.fromEntries(
+        ["season", "isCupFinal", "round", "league"]
+          .filter((field) => known?.[field] !== undefined)
+          .map((field) => [field, known[field]]),
+      );
+      document = { ...savedFacts, ...facts, ...document };
       addNative("game", rootId, facts);
     }
     if (matched) addNative("player", matched[2], { season: Number(matched[1]) });
@@ -248,11 +267,31 @@ export function createIdentityDocuments(storage, policy) {
     }
     const rootKind = isGameDocument ? "game" : matched ? "player" : null;
     const expanded = expandRecord(document, rootKind, season);
-    await lookup.save([...observations.values()]);
-    await saveErrors(key, rejected);
-    rememberNatives([...observations.values()]);
+    return {
+      document: expanded,
+      observations: [...observations.values()],
+      espnPlayers,
+      rejected,
+      rootId,
+    };
+  }
+
+  async function registerDocument(key, sourceKey, prepared, audit) {
+    const { document, observations, rejected, espnPlayers } = prepared;
+    if (observations.length) await lookup.save(observations);
+    let missingFacts = 0;
+    for (const observation of observations) {
+      if (
+        observation.type === "game" &&
+        !Number.isInteger(observation.facts?.season) &&
+        !Number.isInteger((await lookup.readEntry("game", observation.internalId))?.facts?.season)
+      )
+        missingFacts += 1;
+    }
+    await saveErrors(sourceKey, rejected + missingFacts);
+    rememberNatives(observations);
     if (audit)
-      for (const observation of observations.values()) {
+      for (const observation of observations) {
         if (
           (await lookup.read(observation.type, policy.vendor, observation.internalId)) !==
           observation.internalId
@@ -284,7 +323,7 @@ export function createIdentityDocuments(storage, policy) {
           vendorId: String(document.eventId),
           internalId: String(document.id),
           evidence: {
-            method: "teams-day",
+            method: "existing-id",
             away: document.away,
             home: document.home,
             start: document.start,
@@ -292,14 +331,89 @@ export function createIdentityDocuments(storage, policy) {
         },
       ]);
     }
-    return expanded;
+    return prepared.document;
+  }
+  async function prepareDocument(key, document, audit = null, sourceKey = key, known = null) {
+    let prepared = expandDocument(key, document, known);
+    return attemptIdentity(
+      sourceKey,
+      async () => {
+        if (prepared.rootId && !prepared.document.season) {
+          const entry = await lookup.readEntry("game", String(prepared.rootId));
+          if (entry?.facts) prepared = expandDocument(key, document, entry.facts);
+        }
+        return registerDocument(key, sourceKey, prepared, audit);
+      },
+      () => prepared.document,
+    );
   }
 
   async function prepareDetailAnswer(key, value, audit = null) {
-    const url = new URL(key.slice("detail-answer:".length), "https://store");
+    const url = new URL(key.slice("job:details:detail-answer:".length), "https://store");
     const season = Number(url.searchParams.get("season")) || value.body?.season;
-    const body = await prepareDocument(`details/${season ?? "answer"}`, value.body, audit);
+    const body = await prepareDocument(`details/${season ?? "answer"}`, value.body, audit, key);
     return { ...value, body };
+  }
+
+  async function forgetSource(key) {
+    await saveErrors(key, 0, "failed");
+    await saveErrors(key, 0, "rejected");
+  }
+
+  async function backfillSource(docs, key, value, audit = null, vendors = false) {
+    try {
+      if (isStoreDocumentPath(key) && !vendors) {
+        const previous = await docs.read(key);
+        if (!previous) return forgetSource(key);
+        const expanded = await prepareDocument(key, previous, audit, key, previous);
+        await docs.update(key, (latest) =>
+          isSameJson(latest, previous) && !isSameJson(latest, expanded) ? expanded : null,
+        );
+      } else if (key.startsWith("job:details:detail-answer:") && !vendors) {
+        const expanded = await prepareDetailAnswer(key, value, audit);
+        await storage.transaction(async (transaction) => {
+          const latest = await transaction.get(key);
+          if (isSameJson(latest, value) && !isSameJson(value, expanded))
+            await transaction.put(key, expanded);
+        });
+      } else if (vendors) {
+        const saved = policy.readSavedVendorGames?.(key, value);
+        if (saved)
+          await attemptIdentity(key, () =>
+            saveVendorGames(saved.records, key, saved.rejected, docs),
+          );
+        if (key.startsWith("identity:entity:") || key.startsWith("identity:vendor:")) {
+          await attemptIdentity(key, async () => {
+            const keys = await lookup.listMappingConflicts(key);
+            audit.conflictKeys = [...new Set([...(audit.conflictKeys ?? []), ...keys])];
+            audit.conflicts = audit.conflictKeys.length;
+          });
+        }
+      }
+    } catch {
+      await saveErrors(key, 1, "failed").catch(() => {});
+    }
+  }
+
+  async function noteFeedAnswer(key, value) {
+    try {
+      const saved = policy.readSavedVendorGames?.(key, value);
+      if (saved) await saveErrors(key, saved.rejected);
+    } catch {
+      await saveErrors(key, 1, "failed").catch(() => {});
+    }
+  }
+
+  async function hasFailedSources() {
+    const errors = await storage.list({ prefix: "identity:error:failed:", limit: BATCH_SIZE });
+    let retry = false;
+    for (const [path] of errors) {
+      const key = decodeURIComponent(path.slice("identity:error:failed:".length));
+      if (key === "snapshot") continue;
+      if ((await storage.get(key)) === undefined) await forgetSource(key);
+      else retry = true;
+    }
+    return retry;
   }
 
   /** @param {import("./season-store.js").SeasonDocuments} docs */
@@ -307,7 +421,7 @@ export function createIdentityDocuments(storage, policy) {
     if (!isActive()) return;
     let progress = (await storage.get(BACKFILL_KEY)) ?? createBackfillProgress();
     if (progress.complete) {
-      if (!(await storage.list({ prefix: "identity:error:", limit: 1 })).size) return;
+      if (!(await hasFailedSources())) return;
       progress = createBackfillProgress();
     }
     const entries = await storage.list({
@@ -322,59 +436,19 @@ export function createIdentityDocuments(storage, policy) {
         await storage.put(BACKFILL_KEY, progress);
         return;
       }
-      await attemptIdentity(
+      await backfillSource(
+        docs,
         key,
-        async () => {
-          let processed = false;
-          if (
-            (progress.phase === "documents" || progress.phase === "facts") &&
-            isStoreDocumentPath(key)
-          ) {
-            processed = true;
-            const previous = await docs.read(key);
-            if (previous) {
-              const expanded = await prepareDocument(
-                key,
-                previous,
-                progress.phase === "facts" ? progress : null,
-              );
-              await docs.update(key, (latest) =>
-                isSameJson(latest, previous) && !isSameJson(latest, expanded) ? expanded : null,
-              );
-            }
-          } else if (
-            (progress.phase === "documents" || progress.phase === "facts") &&
-            key.startsWith("job:details:detail-answer:")
-          ) {
-            processed = true;
-            const expanded = await prepareDetailAnswer(
-              key.slice("job:details:".length),
-              value,
-              progress.phase === "facts" ? progress : null,
-            );
-            await storage.transaction(async (transaction) => {
-              const latest = await transaction.get(key);
-              if (isSameJson(latest, value) && !isSameJson(value, expanded))
-                await transaction.put(key, expanded);
-            });
-          }
-          if (progress.phase === "vendors") {
-            const saved = policy.readSavedVendorGames?.(key, value);
-            if (saved) {
-              await saveVendorGames(saved.records, key, saved.rejected);
-              processed = true;
-            }
-            if (key.startsWith("identity:entity:") || key.startsWith("identity:vendor:"))
-              progress.conflicts += await lookup.countMappingConflicts(key);
-          }
-          return processed;
-        },
-        null,
+        value,
+        progress.phase === "facts" || progress.phase === "vendors" ? progress : null,
+        progress.phase === "vendors",
       );
+      if (!isActive()) return;
       progress.cursor = key;
       progress.checkedDocuments += 1;
       await storage.put(BACKFILL_KEY, progress);
     }
+    if (!isActive()) return;
     if (entries.size < BATCH_SIZE) {
       if (progress.phase === "documents") {
         progress.phase = "facts";
@@ -419,12 +493,13 @@ export function createIdentityDocuments(storage, policy) {
   }
 
   return {
-    prepareDocument: (key, document) =>
-      attemptIdentity(key, () => prepareDocument(key, document), stripIdentityMetadata(document)),
-    prepareDetailAnswer: (key, value) =>
-      attemptIdentity(key, () => prepareDetailAnswer(key, value), stripIdentityMetadata(value)),
-    saveVendorGames: (records, rejected = 0) =>
-      attemptIdentity("snapshot", () => saveVendorGames(records, "snapshot", rejected), null),
+    prepareDocument: (key, document, known = null) =>
+      prepareDocument(key, document, null, key, known),
+    prepareDetailAnswer,
+    saveVendorGames: (records, rejected = 0, docs = null) =>
+      attemptIdentity("snapshot", () => saveVendorGames(records, "snapshot", rejected, docs)),
+    forgetSource,
+    noteFeedAnswer,
     backfill,
     lookup,
     readStatus,

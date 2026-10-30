@@ -177,6 +177,9 @@ export const readBackupGames = (backup, findTeam) =>
     .flatMap((answer) => answer.events ?? [])
     .map((event) => readBackupGame(event, findTeam));
 
+const readGameNumberFacts = (gameNumber) =>
+  Number.isInteger(gameNumber) && gameNumber > 0 ? { gameNumber } : {};
+
 /** @param {any[]} answers @param {(id: string) => string | null} findTeam */
 export function readIdentityGames(answers, findTeam) {
   const records = [];
@@ -191,7 +194,7 @@ export function readIdentityGames(answers, findTeam) {
             start,
             home: home?.team ?? null,
             away: away?.team ?? null,
-            ...(competition.gameNumber !== undefined && { gameNumber: competition.gameNumber }),
+            ...readGameNumberFacts(competition.gameNumber),
           },
         ]),
       );
@@ -232,7 +235,7 @@ export function trimNetworkAnswer(answer) {
       date: event.date,
       competitions: (event.competitions ?? []).slice(0, 1).map((competition) => ({
         date: competition.date,
-        ...(Number.isInteger(competition.gameNumber) && { gameNumber: competition.gameNumber }),
+        ...readGameNumberFacts(competition.gameNumber),
         timeValid: competition.timeValid,
         competitors: (competition.competitors ?? []).map(({ id, homeAway }) => ({ id, homeAway })),
         broadcasts: (competition.broadcasts ?? []).map(({ market, names }) => ({ market, names })),

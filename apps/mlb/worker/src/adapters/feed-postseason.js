@@ -142,11 +142,11 @@ function findNextGame(games, today) {
     .sort((first, second) => first.number - second.number || compareStarts(first, second))[0];
 }
 
-function tallySeries(seriesId, games, round, teamA, teamB, today) {
+function tallySeries(seriesId, games, teamA, teamB, today) {
   const facts = readSeriesFacts(seriesId);
   const record = { round: facts.round, league: facts.league, winsA: 0, winsB: 0 };
   const log = [];
-  const need = countWinsNeeded(round);
+  const need = countWinsNeeded(facts.round);
   let winner = null;
   const seriesGames =
     teamA && teamB
@@ -203,7 +203,7 @@ export function buildSeries(teams, gamesBySeries, today) {
   const log = [];
   resolveBracket(teams, (seriesId, round, teamA, teamB) => {
     const games = gamesBySeries[seriesId] || [];
-    const tally = tallySeries(seriesId, games, round, teamA, teamB, today);
+    const tally = tallySeries(seriesId, games, teamA, teamB, today);
     series[seriesId] = tally.record;
     log.push(...tally.log);
     return tally.winner;

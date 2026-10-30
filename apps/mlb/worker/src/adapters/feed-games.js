@@ -147,17 +147,15 @@ export function normalizeGame(game) {
       record: side.leagueRecord,
     };
   };
+  const season = Number(game.season ?? game.officialDate?.slice(0, 4));
   const status = game.status || {};
   const state = readGameState(status);
   const league = /^(AL|NL)\b/.exec(game.seriesDescription || "");
   return {
     id: String(game.gamePk),
     type: game.gameType,
-    ...(Number.isInteger(Number(game.season ?? game.officialDate?.slice(0, 4))) && {
-      season: Number(game.season ?? game.officialDate?.slice(0, 4)),
-    }),
+    ...(Number.isInteger(season) && season > 0 && { season }),
     round: { F: "WC", D: "DS", L: "CS", W: "WS" }[game.gameType] ?? null,
-    gameNumber: game.gameNumber ?? 1,
     date: game.officialDate,
     start: game.gameDate,
     tbd: !!status.startTimeTBD,
@@ -269,7 +267,6 @@ export function summarizeGame(game, pitchers) {
     summary.round = game.round;
     summary.league = game.league;
   }
-  if (game.gameNumber > 1) summary.gameNumber = game.gameNumber;
   if (game.tbd) summary.tbd = true;
   if (game.doubleheader) summary.doubleheader = game.doubleheader;
   if (game.type !== "R") summary.postseason = true;
