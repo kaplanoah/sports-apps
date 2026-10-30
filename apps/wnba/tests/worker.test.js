@@ -12,8 +12,8 @@ import {
   createEspnGameReader,
   nameScoreboardRequest,
   nameSummaryRequest,
-} from "../worker/src/lead.js";
-import { describePreview } from "../worker/src/preview.js";
+} from "../worker/src/adapters/lead.js";
+import { describePreview } from "../worker/src/adapters/preview.js";
 import { describeSnapshotStatus, listFeedFailures } from "../worker/src/season-updater.js";
 import { NETWORKS_MS, createSnapshotLoader, describeFailures } from "../worker/src/snapshot.js";
 import { ESPN, readAfternoonEspn, SEP_30 } from "./espn-fixtures.js";

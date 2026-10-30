@@ -1,6 +1,10 @@
 import fs from "node:fs";
 import path from "node:path";
-import { nameScoreboardRequest, nameSummaryRequest, findEventId } from "../../worker/src/lead.js";
+import {
+  nameScoreboardRequest,
+  nameSummaryRequest,
+  findEventId,
+} from "../../worker/src/adapters/lead.js";
 import { ESPN_HEADERS } from "../../worker/src/wnba.js";
 
 // Records what a game's Highlights section reads from ESPN for one game: the day's scoreboard and

@@ -1,3 +1,4 @@
+import { createReadDetail } from "./detail-reads.js";
 import { choosePollDelay, listReminderGames } from "./adapters/wnba.js";
 import PAGE_FILES from "#page-files/wnba";
 import { readReleaseCommit } from "../../../../shared/worker/app-worker.js";
@@ -11,12 +12,7 @@ import { createSnapshotLoader } from "./snapshot.js";
 import { GAME_DETAILS_COLLECTION } from "./store-docs.js";
 import { createWatchedGameLoader } from "./watched-games.js";
 
-export {
-  addToJobCount,
-  forwardToStore,
-  readFeedFailures,
-  readStoreDoc,
-} from "../../../../shared/worker/season-store.js";
+export { forwardToStore, readFeedFailures } from "../../../../shared/worker/season-store.js";
 
 /**
  * @type {import("../../../../shared/worker/season-store.js").League<
@@ -38,7 +34,8 @@ const league = {
   listNotifications: SeasonUpdater.listNotifications,
   listReminderGames,
   detailsCollection: GAME_DETAILS_COLLECTION,
-  createLoadDetails: () => createWatchedGameLoader(),
+  createLoadDetails: (options) => createWatchedGameLoader(options),
+  createReadDetail,
   backgroundJobs: {
     games: createWnbaGameDetailsJob(),
     highlights: createHighlightsUpdater(),

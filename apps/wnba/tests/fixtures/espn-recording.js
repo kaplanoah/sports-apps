@@ -1,4 +1,8 @@
-import { nameScoreboardRequest, nameSummaryRequest, findEventId } from "../../worker/src/lead.js";
+import {
+  nameScoreboardRequest,
+  nameSummaryRequest,
+  findEventId,
+} from "../../worker/src/adapters/lead.js";
 import { ESPN_HEADERS } from "../../worker/src/wnba.js";
 
 // What the recorders share for reading a game from ESPN: its day's scoreboard, trimmed to how the

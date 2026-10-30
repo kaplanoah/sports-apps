@@ -2,12 +2,12 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { nameInjuriesRequest } from "../worker/src/injuries.js";
+import { createRosterServer } from "../worker/src/roster.js";
 import {
-  createRosterServer,
   describeRoster,
   nameLeagueRosterRequest,
   namePlayerListRequest,
-} from "../worker/src/roster.js";
+} from "../worker/src/adapters/roster.js";
 import { assertErrorAnswer } from "../../../tests/error-answer.js";
 
 // The league's rosters of the Liberty, Dream, Aces, Fever, and Wings this season and the Liberty's

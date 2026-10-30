@@ -25,6 +25,8 @@ test("every background job saves how its run went where the Diagnostics report r
 
   await store.startDueJobs(now);
   await Promise.all(store.jobRuns.values());
+  store.startHistory(0);
+  await store.historyRun;
 
   const saved = [...stored.keys()].filter((key) => key.endsWith("/status"));
   assert.deepEqual(saved.sort(), BACKGROUND_JOBS.map((name) => `${name}/status`).sort());

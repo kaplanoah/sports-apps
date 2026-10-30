@@ -21,10 +21,13 @@ async function requestFromWorker(path, { timeoutMs, isExpected }) {
   });
   reloadWhenSignedOut(response);
   const body = await response.json().catch(() => null);
-  if (!response.ok)
-    throw Object.assign(new Error(readWorkerError(body, response.status).message), {
+  if (!response.ok) {
+    const failure = readWorkerError(body, response.status);
+    throw Object.assign(new Error(failure.message), {
       status: response.status,
+      code: failure.code,
     });
+  }
   if (!body || !isExpected(body))
     throw Object.assign(new Error("unexpected answer"), { status: response.status });
   return body;

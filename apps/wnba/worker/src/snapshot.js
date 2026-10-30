@@ -4,8 +4,8 @@ import { describeError } from "../../../../shared/worker/responses.js";
 import { createReusedLoader } from "../../../../shared/worker/upstream.js";
 import { createBackupReader } from "./backup-probe.js";
 import { createGameEnds } from "./game-ends.js";
-import { createEspnGameReader, readEndTime } from "./lead.js";
-import { listUpcomingMeetings } from "./preview.js";
+import { createEspnGameReader, readEndTime, listEspnMatches } from "./adapters/lead.js";
+import { listUpcomingMeetings } from "./adapters/preview.js";
 import { fetchEspnDay, fetchEspnJson, fetchWnbaJson, LIVE_CACHE_SECONDS } from "./wnba.js";
 
 // No longer than the wait between updates in a game's closing stretch, so each one reads the league.
@@ -272,6 +272,10 @@ export function createSnapshotLoader({
     const ended = await addGameEnds(snapshot);
     return {
       ...ended,
+      espnMatches: listEspnMatches(ended, [
+        ...(responses.networks ?? []),
+        ...(responses.backup?.answers ?? []),
+      ]),
       failures: coverageGap ? { ...failures, backup: coverageGap } : failures,
       meetings: listUpcomingMeetings(responses.schedule, ended),
     };

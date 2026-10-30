@@ -22,7 +22,7 @@ import {
   nameRanksKey,
   nameTeamGameLogRequest,
   nameTotalsRequest,
-} from "./player.js";
+} from "./adapters/player.js";
 import { fetchInjuries, listOutPlayers } from "./injuries.js";
 import { namePlayerIndexKey } from "#shared/page-search.js";
 import { nameOvertimesKey } from "../../page/js/search-pages.js";
@@ -35,7 +35,7 @@ import {
   nameLeagueRosterRequest,
   namePlayerListRequest,
   nameRosterKey,
-} from "./roster.js";
+} from "./adapters/roster.js";
 import { fetchWnbaJson, hasTable, trimColumns } from "./wnba.js";
 
 // Keeps what player and roster sheets show, and the list of players search finds, so a tap reads
@@ -59,7 +59,7 @@ const HOUR_MS = 60 * MINUTE_MS;
 const RUN_DELAY_MS = 5 * MINUTE_MS;
 const STATUS_KEY = "players/status";
 export const PLAYER_JOB = "players";
-export const LEAGUE_READS_COUNT = "leagueReads";
+const LEAGUE_READS_COUNT = "leagueReads";
 const TEAM_KEYS = Object.keys(TEAMS);
 
 const FEEDS = {
@@ -149,7 +149,7 @@ const nameOldTotalsRequest = (season) =>
   `https://stats.wnba.com/stats/leaguedashplayerstats?College=&Conference=&Country=&DateFrom=&DateTo=&Division=&DraftPick=&DraftYear=&GameScope=&GameSegment=&Height=&LastNGames=0&LeagueID=10&Location=&MeasureType=Base&Month=0&OpponentTeamID=0&Outcome=&PORound=0&PaceAdjust=N&PerMode=Totals&Period=0&PlayerExperience=&PlayerPosition=&PlusMinus=N&Rank=N&Season=${season}&SeasonSegment=&SeasonType=Regular+Season&ShotClockRange=&StarterBench=&TeamID=0&VsConference=&VsDivision=&Weight= PLAYER_ID PLAYER_NAME GP MIN PTS REB AST STL BLK TOV FGM FGA FG3M FG3A FTM FTA`;
 
 /** One store's update, with what it keeps between runs while it stays in memory. */
-function createStoreUpdate() {
+function createStoreUpdate(historyOnly = false) {
   /** @type {ReturnType<typeof createFeedKeeper> | null} */
   let keeper = null;
   const savedDocs = createSavedDocs();
@@ -416,13 +416,14 @@ function createStoreUpdate() {
     });
     const current = (await context.docs.read("live/current"))?.season;
     if (!Number.isInteger(current)) return;
+    if (historyOnly) {
+      await fillPastSeason(context, current);
+      return;
+    }
     const savedSeason = await context.docs.read(nameSeasonKey(current));
     await keeper.noteFinalCount(countFinals(await context.docs.read(nameScheduleKey(current))));
     await catchFailure(context.failures, `Keeping ${current}'s players`, () =>
       updateSeason(context, current, savedSeason?.series ?? []),
-    );
-    await catchFailure(context.failures, "Filling a past season's players", () =>
-      fillPastSeason(context, current),
     );
   }
 
@@ -430,7 +431,7 @@ function createStoreUpdate() {
   function updateStore(context) {
     const log = createRunLog();
     return runWithStatus(context, {
-      statusKey: STATUS_KEY,
+      statusKey: historyOnly ? "players-history/status" : STATUS_KEY,
       updateStore: (runContext) => keepPlayers({ ...runContext, log }),
       describeRun: async ({ storage }) => ({
         feeds: log.feeds,
@@ -444,4 +445,8 @@ function createStoreUpdate() {
   return updateStore;
 }
 
-export const createPlayerJob = () => createPerStoreJob(RUN_DELAY_MS, createStoreUpdate);
+export function createPlayerJob() {
+  const live = createPerStoreJob(RUN_DELAY_MS, createStoreUpdate);
+  const history = createPerStoreJob(RUN_DELAY_MS, () => createStoreUpdate(true));
+  return { ...live, updateHistory: history.updateStore };
+}

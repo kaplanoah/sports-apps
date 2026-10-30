@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { Markup, convertToText } from "#shared/html.js";
 import { describeScoringPlay, describeSetup, renderRuns } from "../page/js/runs-view.js";
-import { describeBoxScore } from "../worker/src/box-score.js";
+import { describeBoxScore } from "../worker/src/adapters/box-score.js";
 
 // MLB's live feed for NLCS Game 1 as it stood with one out in the top of the 3rd, and for ALDS
 // Game 4 once it was final, trimmed to what the box score reads, plays and all.

@@ -1,3 +1,4 @@
+import { RequestBudgetExhausted } from "./request-budget.js";
 import { describeError } from "./responses.js";
 
 // What every background job's status document says of its last run, beside what the job adds of
@@ -41,6 +42,7 @@ function countRequests(fetchImpl) {
  * @param {unknown} error
  */
 export function noteFailure(failures, what, error) {
+  if (error instanceof RequestBudgetExhausted) return;
   const failure = `${what} failed: ${describeError(error)}`;
   console.error(failure);
   failures.push(failure);

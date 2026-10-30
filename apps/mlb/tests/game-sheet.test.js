@@ -7,7 +7,7 @@ import { listSides, renderMatchupBody } from "../page/js/matchup.js";
 import { session } from "../page/js/session.js";
 import { buildSnapshot } from "../worker/src/adapters/mlb.js";
 import { convertToText } from "#shared/html.js";
-import { describeBoxScore } from "../worker/src/box-score.js";
+import { describeBoxScore } from "../worker/src/adapters/box-score.js";
 import { EASTERN, useTimeZone } from "../../../tests/time-zone.js";
 
 useTimeZone(EASTERN);

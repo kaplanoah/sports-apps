@@ -1,12 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { createBoxScoreServer } from "../worker/src/box-score.js";
 import {
-  createBoxScoreServer,
   describeBoxScore,
   nameFeedRequest,
   nameGameDetailsKey,
-} from "../worker/src/box-score.js";
+} from "../worker/src/adapters/box-score.js";
 import { assertErrorAnswer } from "../../../tests/error-answer.js";
 
 // MLB's live feed for each of the Division Series' games on the evening of Oct 7, trimmed to what

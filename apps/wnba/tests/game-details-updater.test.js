@@ -2,13 +2,11 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { namePlayerIndexKey } from "#shared/page-search.js";
-import {
-  createBoxScoreServer,
-  describeBoxScore,
-  nameBoxScoreRequest,
-} from "../worker/src/box-score.js";
+import { createBoxScoreServer } from "../worker/src/box-score.js";
+import { describeBoxScore, nameBoxScoreRequest } from "../worker/src/adapters/box-score.js";
 import { createWnbaGameDetailsJob } from "../worker/src/game-details-updater.js";
-import { createLeadServer, nameScoreboardRequest, nameSummaryRequest } from "../worker/src/lead.js";
+import { createLeadServer } from "../worker/src/lead.js";
+import { nameScoreboardRequest, nameSummaryRequest } from "../worker/src/adapters/lead.js";
 import { createDocs, createJobStorage } from "../../../tests/job-context.js";
 import { readPlayerIndex } from "./player-fixtures.js";
 
@@ -127,7 +125,7 @@ function createRun({
 /** @param {string} id */
 const listGameRequests = (id) => {
   const game = [VALKYRIES_AT_WINGS, ACES_AT_FEVER].find((each) => each.id === id);
-  const requests = [nameScoreboardRequest(game?.start ?? ""), nameBoxScoreRequest(id)];
+  const requests = [nameBoxScoreRequest(id), nameScoreboardRequest(game?.start ?? "")];
   return id === VALKYRIES_AT_WINGS.id ? [...requests, nameSummaryRequest(LEAD.eventId)] : requests;
 };
 
@@ -359,8 +357,8 @@ test("a final's box score is kept from ESPN's while the league refuses it, with 
   await runJob();
 
   assert.deepEqual(takeRequests(), [
-    nameScoreboardRequest(ACES_AT_FEVER.start),
     nameBoxScoreRequest(ACES_AT_FEVER.id),
+    nameScoreboardRequest(ACES_AT_FEVER.start),
     nameSummaryRequest(eventId),
   ]);
   const saved = await docs.read(`games/${ACES_AT_FEVER.id}`);

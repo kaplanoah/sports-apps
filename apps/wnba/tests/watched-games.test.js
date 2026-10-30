@@ -2,8 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { namePlayerIndexKey } from "#shared/page-search.js";
-import { describeBoxScore, nameBoxScoreRequest } from "../worker/src/box-score.js";
-import { nameScoreboardRequest, nameSummaryRequest } from "../worker/src/lead.js";
+import { describeBoxScore, nameBoxScoreRequest } from "../worker/src/adapters/box-score.js";
+import { nameScoreboardRequest, nameSummaryRequest } from "../worker/src/adapters/lead.js";
 import { createWatchedGameLoader } from "../worker/src/watched-games.js";
 import { readPlayerIndex } from "./player-fixtures.js";
 

@@ -6,8 +6,8 @@ import { isEarlierBoxScore, isSeasonSeriesOver } from "../page/js/game-sheet.js"
 import { listSeasonDays } from "../page/js/games-view.js";
 import { renderPreview } from "../page/js/preview-view.js";
 import { buildSeasonWithLeaders } from "./player-fixtures.js";
-import { describeBoxScore } from "../worker/src/box-score.js";
-import { describePreview } from "../worker/src/preview.js";
+import { describeBoxScore } from "../worker/src/adapters/box-score.js";
+import { describePreview } from "../worker/src/adapters/preview.js";
 import { checkInTimeZone, EASTERN } from "../../../tests/time-zone.js";
 import { dropSpokenOnly, normalizeSpaces } from "../../../tests/text.js";
 

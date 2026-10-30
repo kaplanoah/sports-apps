@@ -1,14 +1,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { createHighlightsServer } from "../worker/src/highlights.js";
 import {
-  createHighlightsServer,
   describeHighlights,
   listStillsToCheck,
   nameContentRequest,
   nameHighlightsKey,
   namePlaysRequest,
-} from "../worker/src/highlights.js";
+} from "../worker/src/adapters/highlights.js";
 import { createHighlightsUpdater } from "../worker/src/highlights-updater.js";
 import { STILLS_PER_READ } from "../worker/src/headline-stills.js";
 import { buildSnapshot } from "../worker/src/adapters/mlb.js";

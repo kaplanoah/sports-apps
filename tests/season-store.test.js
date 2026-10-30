@@ -23,6 +23,57 @@ const QUIET_LEAGUE = {
 
 const NOW = Date.parse("2026-09-30T20:00:00Z");
 
+test("history waits for live jobs and reminders and spends only the alarm's remaining requests", async () => {
+  const events = [];
+  let finishLive;
+  const pendingLive = new Promise((resolve) => {
+    finishLive = resolve;
+  });
+  let requests = 0;
+  const Store = createSeasonStore({
+    ...QUIET_LEAGUE,
+    backgroundJobs: {
+      details: {
+        chooseDelay: () => 60000,
+        async updateStore(context) {
+          events.push("live");
+          await pendingLive;
+          for (let index = 0; index < 38; index += 1)
+            await context.fetchImpl("https://feed.example/live");
+          events.push("live finished");
+        },
+        async updateHistory(context) {
+          events.push("history");
+          for (let index = 0; index < 4; index += 1)
+            await context.fetchImpl("https://feed.example/history");
+        },
+      },
+    },
+  });
+  const { ctx } = createDurableObjectContext();
+  const store = new Store(
+    ctx,
+    {},
+    {
+      now: () => NOW,
+      fetchImpl: async () => {
+        requests += 1;
+        return new Response();
+      },
+    },
+  );
+  store.reminders.checkDue = async () => {
+    events.push("reminders");
+  };
+  await store.alarm();
+  assert.deepEqual(events, ["reminders", "live"]);
+  const history = store.historyRun;
+  finishLive();
+  await history;
+  assert.deepEqual(events, ["reminders", "live", "live finished", "history"]);
+  assert.equal(requests, 40);
+});
+
 const patchSeason = (store, body) =>
   store.fetch(
     new Request(`${ORIGIN}/store/seasons/2026`, {

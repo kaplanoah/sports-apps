@@ -4,7 +4,7 @@ import { listLowContrastText } from "../../../../tests/browser/contrast.mjs";
 import { listTextOffRoles } from "../../../../tests/browser/type-roles.mjs";
 import { listChipsOffCenter } from "../../../../tests/browser/chip-centering.mjs";
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
-import { describeBoxScore } from "../../worker/src/box-score.js";
+import { describeBoxScore } from "../../worker/src/adapters/box-score.js";
 import {
   ACES_AT_FEVER,
   FEVER_AT_ACES,

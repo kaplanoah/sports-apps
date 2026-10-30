@@ -21,7 +21,7 @@ import {
   nameHittersKey,
   namePlayerKey,
 } from "./players.js";
-import { splitIntoBatches } from "./pitchers.js";
+import { splitIntoBatches } from "./adapters/pitchers.js";
 import {
   describeRoster,
   indexSeasonStats,

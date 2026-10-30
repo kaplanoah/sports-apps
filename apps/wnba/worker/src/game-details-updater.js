@@ -1,6 +1,6 @@
-import { createBoxScoreReader } from "./box-score.js";
-import { isFromEspn } from "./espn-box-score.js";
-import { createEspnGameReader, describeGameLead } from "./lead.js";
+import { createBoxScoreReader } from "./adapters/box-score.js";
+import { isFromEspn } from "./adapters/espn-box-score.js";
+import { createEspnGameReader, describeGameLead } from "./adapters/lead.js";
 import { nameGameDetailsKey } from "./store-docs.js";
 import { createGameDetailsJob, nameReadsKey } from "../../../../shared/worker/game-details-job.js";
 
@@ -85,7 +85,7 @@ async function readDetails(context, game, stored) {
   const espnGames = createEspnGameReader({ fetchImpl });
   const readBoxScore = createBoxScoreReader({ fetchImpl, espnGames });
   const teams = { away: game.away.team, home: game.home.team, start: game.start };
-  const summary = espnGames.fetchSummary(teams);
+  const summary = espnGames.fetchSummary({ id: game.id, ...teams }, context.docs.read);
   const [boxScore, lead] = await Promise.allSettled([
     readBoxScore(
       { id: game.id, ...teams },

@@ -194,7 +194,7 @@ function describePlay(clip) {
 }
 
 /** @param {string} id */
-const loadHighlights = (id) => () => fetchHighlights(id);
+const loadHighlights = (id) => () => fetchHighlights(id, session.activeYear);
 
 // A final offers its highlights, and any other game hides their pill, leaving the section if it
 // showed.

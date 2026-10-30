@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { buildSnapshot } from "../worker/src/adapters/mlb.js";
-import { describeBoxScore, nameFeedRequest } from "../worker/src/box-score.js";
+import { describeBoxScore, nameFeedRequest } from "../worker/src/adapters/box-score.js";
 import { createWatchedGameLoader } from "../worker/src/watched-games.js";
 
 // The season as MLB had it on the evening of Oct 7, and its Division Series games' live feeds.

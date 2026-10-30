@@ -1,21 +1,21 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { createPitcherServer } from "../worker/src/pitchers.js";
 import {
-  createPitcherServer,
   listAppearancesRequest,
   listQualifiedIds,
   listQualifiedRequest,
   namePitcherKey,
   nameStartersKey,
-} from "../worker/src/pitchers.js";
+} from "../worker/src/adapters/pitchers.js";
 import { SIDE_VERSION, createPitcherJob, nameReadsKey } from "../worker/src/pitcher-updater.js";
+import { createRotationServer } from "../worker/src/rotations.js";
 import {
   LOOKBACK_DAYS,
-  createRotationServer,
   listScheduleRequest,
   nameRotationKey,
-} from "../worker/src/rotations.js";
+} from "../worker/src/adapters/rotations.js";
 import { addDays } from "#shared/days.js";
 import { nameFeedKey } from "../../../shared/worker/feed-keeper.js";
 import { createDocs, createJobStorage } from "../../../tests/job-context.js";
@@ -462,15 +462,15 @@ test("a pitcher named to start a game the page lists is kept before his first st
   assert.equal(named.leagueReads, 0);
 });
 
-test("a store that can't be read has the sheet read MLB", async () => {
+test("a failed store read stops pitcher and rotation reads", async () => {
   const broken = { read: async () => Promise.reject(new Error("The store answered 500")) };
   const query = `id=${QUALIFIED_IDS[0]}&season=2026`;
   const unreadable = await askForPitcher(query, { docs: broken });
-  assert.equal(unreadable.status, 200);
-  assert.deepEqual(unreadable.body, (await askForPitcher(query)).body);
+  assert.equal(unreadable.status, 502);
+  assert.equal(unreadable.requests.length, 0);
   const rotation = await askForRotation(`club=CLE&date=${TODAY}`, { docs: broken });
-  assert.equal(rotation.status, 200);
-  assert.ok(rotation.requests.length > 0);
+  assert.equal(rotation.status, 502);
+  assert.equal(rotation.requests.length, 0);
 });
 
 test("a feed that stops answering leaves what the store saved from it", async () => {

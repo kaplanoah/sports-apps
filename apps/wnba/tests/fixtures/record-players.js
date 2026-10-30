@@ -7,7 +7,7 @@ import {
   nameGameLogRequest,
   nameTeamGameLogRequest,
   nameTotalsRequest,
-} from "../../worker/src/player.js";
+} from "../../worker/src/adapters/player.js";
 import { FEED_HEADERS, trimColumns } from "../../worker/src/wnba.js";
 
 // Records what a player's sheet reads for the players and seasons named: every player's totals in

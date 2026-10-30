@@ -1,20 +1,17 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { createPlayerServer } from "../worker/src/player.js";
 import {
-  createPlayerServer,
   describeRanks,
   describeRegularSeason,
   nameGameLogRequest,
   nameTeamGameLogRequest,
   nameTotalsRequest,
-} from "../worker/src/player.js";
+} from "../worker/src/adapters/player.js";
 import { nameInjuriesRequest } from "../worker/src/injuries.js";
-import {
-  createRosterServer,
-  nameLeagueRosterRequest,
-  namePlayerListRequest,
-} from "../worker/src/roster.js";
+import { createRosterServer } from "../worker/src/roster.js";
+import { nameLeagueRosterRequest, namePlayerListRequest } from "../worker/src/adapters/roster.js";
 import { readTable } from "../worker/src/wnba.js";
 import { addTurnovers } from "./player-fixtures.js";
 import { assertErrorAnswer } from "../../../tests/error-answer.js";

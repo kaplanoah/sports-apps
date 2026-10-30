@@ -5,6 +5,18 @@ import { countKeptReads, fetchFromWorker } from "../shared/page/worker-fetch.js"
 const PAGE = "https://wnba-app.example/k3y/";
 const RULES = { reuseMs: 1000, timeoutMs: 5000, isExpected: (body) => body.id === "1" };
 
+test("availability errors retain the Worker's code for the shared retry state", async () => {
+  startWorker({
+    status: 409,
+    body: { error: { code: "not_available_yet", message: "Not available yet" } },
+  });
+  await assert.rejects(fetchFromWorker("historical-player", RULES), {
+    status: 409,
+    code: "not_available_yet",
+    message: "Not available yet",
+  });
+});
+
 // Stand-ins for the browser: the page's address, and a Worker that answers each read in turn.
 function startWorker(...answers) {
   const reads = [];

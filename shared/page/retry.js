@@ -48,7 +48,7 @@ export const renderRetryButton = ({ isFilled = false } = {}) =>
 export const renderRetryMessage = (message, className) =>
   html`<p class="${["retry-message", className].filter(Boolean).join(" ")}">${WARNING}<span>${message}</span></p>`;
 
-/** @typedef {"offline" | "unreachable" | "server"} ReadFailure */
+/** @typedef {"offline" | "unreachable" | "server" | "unavailable"} ReadFailure */
 
 /**
  * Why a read of the Worker failed: the phone is offline, the server is out of reach, or the server
@@ -58,12 +58,18 @@ export const renderRetryMessage = (message, className) =>
  */
 export function classifyReadFailure(error) {
   if (navigator.onLine === false) return "offline";
+  if (/** @type {any} */ (error)?.code === "not_available_yet") return "unavailable";
   return typeof (/** @type {any} */ (error)?.status) === "number" ? "server" : "unreachable";
 }
 
 // A read that failed offline reads again as the phone comes back online; any other waits for a tap.
 /** @type {Record<ReadFailure, { icon: import("./html.js").Markup, title: string, next: (subject: string) => string }>} */
 const FAILURES = {
+  unavailable: {
+    icon: PLUGS,
+    title: "Not available yet",
+    next: () => "We're still adding this past season's details",
+  },
   offline: {
     icon: CELL_SIGNAL_SLASH,
     title: "Couldn't connect to the internet",

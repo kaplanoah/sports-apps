@@ -1,3 +1,4 @@
+import { createRequestBudget } from "./request-budget.js";
 import { listFailureReasons, noteFeedFailures } from "./feed-failures.js";
 import { createGameReminders } from "./game-reminders.js";
 import { isSameJson } from "../page/compare.js";
@@ -41,6 +42,7 @@ import { describeError, respondError, respondJson, respondMethodNotAllowed } fro
  * on beside the season's updates and never holds them up.
  * @typedef {object} BackgroundJob
  * @property {(now: number) => number} chooseDelay the wait from one run's start to the next
+ * @property {(context: JobContext) => Promise<void>} [updateHistory] fills history after live jobs and reminders
  * @property {(context: JobContext) => Promise<void>} updateStore one run: brings what the job keeps
  *   in the store up to date
  */
@@ -87,8 +89,9 @@ import { describeError, respondError, respondJson, respondMethodNotAllowed } fro
  * @property {(change: { before: Updates, after: Updates, snapshot: Snapshot, now: number }) => object[]} listNotifications
  * @property {(snapshot: Snapshot) => ReturnType<typeof import("../page/reminder-games.js").listTimedReminderGames>} [listReminderGames]
  * @property {string} [detailsCollection] where the details of the games pages have open are kept
- * @property {() => (id: string, snapshot: Snapshot, stored: any, readDoc: SeasonDocuments["read"]) => Promise<object | null>} [createLoadDetails]
+ * @property {(options: { fetchImpl: typeof fetch }) => (id: string, snapshot: Snapshot, stored: any, readDoc: SeasonDocuments["read"]) => Promise<object | null>} [createLoadDetails]
  *   reads a game's details, or answers null while it needs none
+ * @property {(context: JobContext) => (url: URL) => Promise<Response | null>} [createReadDetail]
  * @property {Record<string, BackgroundJob>} [backgroundJobs]
  * @property {string | null} [release] the commit the Worker was built from, or null outside a
  *   build
@@ -229,22 +232,30 @@ export function createSeasonStore(league) {
         fetchImpl = (input, init) => fetch(input, init),
         createLoadSnapshot = (/** @type {typeof fetch} */ fetchWith) =>
           league.createLoadSnapshot(createFeedStorage(ctx.storage), fetchWith),
-        loadDetails = league.createLoadDetails?.() ?? null,
+        loadDetails = undefined,
       } = {},
     ) {
       this.ctx = ctx;
       this.env = env;
-      this.fetchImpl = fetchImpl;
+      this.requestCount = 0;
+      this.fetchImpl = (input, init) => {
+        this.requestCount += 1;
+        return fetchImpl(input, init);
+      };
+      this.historyRun = null;
       /** @type {Map<string, Promise<void>>} */
       this.jobRuns = new Map();
       this.openSocket = openSocket;
       this.createLoadSnapshot = createLoadSnapshot;
-      this.loadSnapshot = createLoadSnapshot(fetchImpl);
-      this.loadDetails = loadDetails;
+      this.loadSnapshot = createLoadSnapshot(this.fetchImpl);
+      this.loadDetails =
+        loadDetails === undefined
+          ? (league.createLoadDetails?.({ fetchImpl: this.fetchImpl }) ?? null)
+          : loadDetails;
       this.now = now;
       this.hasAlarm = false;
       this.failures = 0;
-      this.push = createPushService({ storage: ctx.storage, now, fetchImpl });
+      this.push = createPushService({ storage: ctx.storage, now, fetchImpl: this.fetchImpl });
       this.reminders = createGameReminders({
         storage: ctx.storage,
         push: this.push,
@@ -263,6 +274,14 @@ export function createSeasonStore(league) {
         update: (key, change) => this.updateDoc(key, change),
         remove: (key) => this.deleteDoc(key),
       };
+      this.readDetail = league.createReadDetail?.({
+        docs: this.docs,
+        storage: this.createJobStorage("details"),
+        createLoadSnapshot: this.createLoadSnapshot,
+        env,
+        fetchImpl: this.fetchImpl,
+        now,
+      });
     }
 
     async fetch(request) {
@@ -278,6 +297,11 @@ export function createSeasonStore(league) {
         return response;
       }
       if (pathname.startsWith("/count/")) return this.addToCount(request, pathname);
+      if (this.readDetail && !pathname.startsWith("/store/")) {
+        if (request.method !== "GET") return respondMethodNotAllowed(["GET"]);
+        const response = await this.readDetail(new URL(request.url));
+        if (response) return response;
+      }
       const path = readPath(pathname);
       if (!path) return respondError(404, "not_found", "No such path.");
       if (request.method !== "GET") return respondMethodNotAllowed(["GET"]);
@@ -396,11 +420,13 @@ export function createSeasonStore(league) {
     // storage failed is set again for a retry, since one never set would stop every update.
     async alarm() {
       const now = this.now();
+      const requestsBefore = this.requestCount;
       let nextAt = now + RETRY_MS[0];
       try {
         const seasonDueAt = await this.updateSeasonWhenDue(now);
-        const jobDueTimes = await this.startDueJobs(now);
         await this.reminders.checkDue();
+        const jobDueTimes = await this.startDueJobs(now);
+        this.startHistory(requestsBefore);
         const reminderAt = await this.reminders.findNextDeadline();
         nextAt = Math.min(
           seasonDueAt,
@@ -469,6 +495,32 @@ export function createSeasonStore(league) {
     startDueJobs(now) {
       const jobs = Object.entries(league.backgroundJobs ?? {});
       return Promise.all(jobs.map(([name, job]) => this.startJobWhenDue(name, job, now)));
+    }
+
+    startHistory(requestsBefore) {
+      if (this.historyRun) return;
+      const pending = [...this.jobRuns.values()];
+      this.historyRun = Promise.allSettled(pending)
+        .then(async () => {
+          const limit = Math.min(4, Math.max(0, 40 - (this.requestCount - requestsBefore)));
+          const budget = createRequestBudget(this.fetchImpl, limit);
+          for (const [name, job] of Object.entries(league.backgroundJobs ?? {})) {
+            if (!job.updateHistory || !budget.remaining()) continue;
+            await job.updateHistory({
+              docs: this.docs,
+              storage: this.createJobStorage(name),
+              createLoadSnapshot: this.createLoadSnapshot,
+              env: this.env,
+              fetchImpl: budget.fetchImpl,
+              now: this.now,
+            });
+          }
+        })
+        .catch((error) => console.error(`Filling history failed: ${describeError(error)}`))
+        .finally(() => {
+          this.historyRun = null;
+        });
+      this.ctx.waitUntil?.(this.historyRun);
     }
 
     // The next run is set before this one starts, so a run that never ends can't stop the next. A

@@ -1,3 +1,4 @@
+import { nameEspnMatchKey } from "./adapters/lead.js";
 import { isSameJson } from "#shared/compare.js";
 import { readEasternDay } from "#shared/days.js";
 import { nameScheduleKey } from "../../page/js/snapshot.js";
@@ -7,7 +8,7 @@ import {
   capNotifications,
   describeAsNotification,
 } from "../../../../shared/worker/notifications.js";
-import { nameMeetingsKey } from "./preview.js";
+import { nameMeetingsKey } from "./adapters/preview.js";
 import { describeFailures } from "./snapshot.js";
 
 // Keeps the current season's saved data up to date from the league, whether or not a page is
@@ -133,6 +134,10 @@ const prepareSeasonGames = (savedGames, games, update) =>
 
 // A feed that didn't answer leaves what it feeds as it was.
 export async function saveSnapshot(docs, snapshot) {
+  for (const match of snapshot.espnMatches ?? []) {
+    if (!isSameJson(await docs.read(nameEspnMatchKey(match.id)), match))
+      await docs.write(nameEspnMatchKey(match.id), match);
+  }
   await saveSeason(docs, snapshot);
   await saveSchedule(docs, snapshot);
   if (!snapshot.missing.includes("schedule")) await saveMeetings(docs, snapshot);

@@ -12,7 +12,7 @@ import {
 import { isStillPlaying } from "../page/js/series.js";
 import { buildSnapshot } from "../worker/src/adapters/wnba.js";
 import { listOutPlayers } from "../worker/src/injuries.js";
-import { describeRoster } from "../worker/src/roster.js";
+import { describeRoster } from "../worker/src/adapters/roster.js";
 import { convertToText, Markup } from "../../../shared/page/html.js";
 import { stripTags } from "../../../tests/text.js";
 import { readSeasonAverages } from "./player-fixtures.js";

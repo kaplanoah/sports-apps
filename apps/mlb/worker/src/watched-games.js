@@ -1,5 +1,5 @@
 import { listSlateGames } from "../../page/js/slate.js";
-import { fetchBoxScore } from "./box-score.js";
+import { fetchBoxScore } from "./adapters/box-score.js";
 
 // The box score of each game a page has open, which the store reads with each update and pushes to
 // the pages watching: the lineups of one to be played today, as the clubs post them, and every play

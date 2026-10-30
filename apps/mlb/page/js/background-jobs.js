@@ -3,6 +3,7 @@
 export const BACKGROUND_JOBS = [
   "games",
   "highlights",
+  "highlights-history",
   "news",
   "pastSeasons",
   "pitchers",

@@ -1,15 +1,15 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { createPitcherServer } from "../worker/src/pitchers.js";
 import {
   composePitcher,
-  createPitcherServer,
   describePitcher,
   describeStarters,
   listGameLogRequest,
   listPeopleRequest,
   listQualifiedRequest,
   readSpeeds,
-} from "../worker/src/pitchers.js";
+} from "../worker/src/adapters/pitchers.js";
 import { assertErrorAnswer } from "../../../tests/error-answer.js";
 
 const NOW = Date.parse("2026-09-30T16:00:00Z");

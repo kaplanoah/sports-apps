@@ -1,6 +1,6 @@
 import { createHighlightsJob } from "../../../../shared/worker/highlights-job.js";
 import { nameScheduleKey } from "../../page/js/snapshot.js";
-import { createHighlightsReader, nameHighlightsKey } from "./highlights.js";
+import { createHighlightsReader, nameHighlightsKey } from "./adapters/highlights.js";
 
 // Keeps each of the current season's finals' highlights, as the shared job reads them over the
 // hours after each game (highlights-job.js). A game from a season before is read on a tap.
@@ -38,12 +38,15 @@ export function createHighlightsUpdater() {
     listFinals: listCurrentFinals,
     gameLengthMs: GAME_LENGTH_MS,
     readHighlights: async (context, game) => ({
-      highlights: await createHighlightsReader({ fetchImpl: context.fetchImpl })({
-        id: game.id,
-        away: game.away.team,
-        home: game.home.team,
-        start: game.start,
-      }),
+      highlights: await createHighlightsReader({ fetchImpl: context.fetchImpl })(
+        {
+          id: game.id,
+          away: game.away.team,
+          home: game.home.team,
+          start: game.start,
+        },
+        context.docs.read,
+      ),
       isFinished: true,
     }),
     nameKey: nameHighlightsKey,

@@ -9,6 +9,28 @@ import {
 
 const HEADERS = { accept: "application/json" };
 
+test("a slow outstanding read stays shared after the reuse window expires", async () => {
+  let now = 0;
+  let finish;
+  let reads = 0;
+  const load = createReusedLoader(
+    () => {
+      reads += 1;
+      return new Promise((resolve) => {
+        finish = resolve;
+      });
+    },
+    5000,
+    () => now,
+  );
+  const first = load("game");
+  now = 6000;
+  const second = load("game");
+  assert.equal(reads, 1);
+  finish("answer");
+  assert.deepEqual(await Promise.all([first, second]), ["answer", "answer"]);
+});
+
 function recordFetches() {
   const requests = [];
   const fetchImpl = async (url, init) => {

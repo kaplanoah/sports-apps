@@ -1,13 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { listGameLogRequest } from "../worker/src/pitchers.js";
+import { listGameLogRequest } from "../worker/src/adapters/pitchers.js";
+import { createRotationServer } from "../worker/src/rotations.js";
 import {
-  createRotationServer,
   describeClubStarts,
   describeRotation,
   describeRotationPitcher,
   listScheduleRequest,
-} from "../worker/src/rotations.js";
+} from "../worker/src/adapters/rotations.js";
 import { assertErrorAnswer } from "../../../tests/error-answer.js";
 
 const PHILLIES = 143;

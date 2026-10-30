@@ -1,6 +1,6 @@
 import { addDays } from "#shared/days.js";
 import { readClubId } from "./adapters/mlb.js";
-import { readLeagueRows } from "./pitchers.js";
+import { readLeagueRows } from "./adapters/pitchers.js";
 import { readInjury, trimHitting, trimPitching, trimStats } from "./rosters.js";
 
 // What each player's sheet shows: his facts, from MLB's list of every player this season, his stay

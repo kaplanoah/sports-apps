@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { buildSnapshot, readPlayoffGameId } from "../worker/src/adapters/wnba.js";
-import { listUpcomingMeetings } from "../worker/src/preview.js";
+import { listUpcomingMeetings } from "../worker/src/adapters/preview.js";
 import {
   describeSnapshotStatus,
   listNotifications,

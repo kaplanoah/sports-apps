@@ -15,7 +15,7 @@ import {
   readLeagueRows,
   readSpeeds,
   splitIntoBatches,
-} from "./pitchers.js";
+} from "./adapters/pitchers.js";
 import {
   LOOKBACK_DAYS,
   describeClubStarts,
@@ -24,7 +24,7 @@ import {
   listScheduleClubs,
   listScheduleRequest,
   nameRotationKey,
-} from "./rotations.js";
+} from "./adapters/rotations.js";
 import {
   createPerStoreJob,
   createSavedDocs,
@@ -54,7 +54,7 @@ const RUN_DELAY_MS = 5 * MINUTE_MS;
 const STATUS_KEY = "pitchers/status";
 export const PITCHER_JOB = "pitchers";
 // The count the Worker adds to each time a sheet reads MLB for what the store should have kept.
-export const LEAGUE_READS_COUNT = "leagueReads";
+const LEAGUE_READS_COUNT = "leagueReads";
 // Every starter's first read spreads over a few runs, while a game's end needs only one batch.
 const BATCHES_PER_RUN = 4;
 

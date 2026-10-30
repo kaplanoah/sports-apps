@@ -1,4 +1,4 @@
-import { readLeagueRows } from "./pitchers.js";
+import { readLeagueRows } from "./adapters/pitchers.js";
 
 // Each club's roster for its sheet's Roster section: its active players and who is on the injured
 // list, from its 40-man roster, each with his regular season so far, from every player's numbers.

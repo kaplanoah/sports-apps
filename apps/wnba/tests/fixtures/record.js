@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { REQUESTS } from "../../worker/src/adapters/wnba.js";
-import { nameBoxScoreRequest } from "../../worker/src/box-score.js";
+import { nameBoxScoreRequest } from "../../worker/src/adapters/box-score.js";
 import { FEED_HEADERS } from "../../worker/src/wnba.js";
 
 // Records what the game sheet reads from the league: the box scores of the games named, and the

@@ -3,12 +3,12 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { buildSnapshot } from "../worker/src/adapters/mlb.js";
 import { listSlateGames } from "../page/js/slate.js";
+import { createBoxScoreServer } from "../worker/src/box-score.js";
 import {
-  createBoxScoreServer,
   describeBoxScore,
   nameFeedRequest,
   nameGameDetailsKey,
-} from "../worker/src/box-score.js";
+} from "../worker/src/adapters/box-score.js";
 import { createMlbGameDetailsJob } from "../worker/src/game-details-updater.js";
 import { createDocs, createJobStorage } from "../../../tests/job-context.js";
 

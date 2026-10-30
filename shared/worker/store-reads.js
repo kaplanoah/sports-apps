@@ -1,7 +1,6 @@
 import { describeError } from "./responses.js";
 
-// What the Worker's routes read from the store, so a tap reads the league only for what the store
-// doesn't keep, and count each read of the league the store should have spared.
+// Documents read by store-owned detail services. A storage failure stops the read.
 
 /**
  * Reads a document from the store, as null when it has none.
@@ -10,25 +9,18 @@ import { describeError } from "./responses.js";
 
 /**
  * The documents the store keeps at `keys`, each null when it keeps none, or null for them all
- * when the Worker has no store or the store can't be read, for the route to read the league
- * instead, so a sheet never shows some of what it reads from the store and not the rest.
+ * when no reader is supplied. Storage errors propagate to the store-owned service.
  * @param {ReadDoc | undefined} readDoc
  * @param {string[]} keys
  * @returns {Promise<any[] | null>}
  */
 async function readKeptDocs(readDoc, keys) {
   if (!readDoc) return null;
-  try {
-    return await Promise.all(keys.map((key) => readDoc(key)));
-  } catch (error) {
-    console.error(`Reading ${keys.join(", ")} from the store failed: ${describeError(error)}`);
-    return null;
-  }
+  return Promise.all(keys.map((key) => readDoc(key)));
 }
 
 /**
- * The document the store keeps at `key`, or null when it keeps none, the Worker has no store, or
- * the store can't be read.
+ * The document the store keeps at `key`, or null when it keeps none or no reader is supplied.
  * @param {ReadDoc | undefined} readDoc
  * @param {string} key
  */
@@ -37,9 +29,7 @@ export const readKeptDoc = async (readDoc, key) =>
 
 /**
  * The documents the store keeps at `keys` for `season`, as `readKeptDocs` reads them, and whether
- * `season` is the store's current one. Only the current season's reads of the league are counted,
- * since the store keeps it as it goes, while a season it never kept is read from the league by
- * design.
+ * `season` is the store's current one.
  * @param {ReadDoc | undefined} readDoc
  * @param {number} season
  * @param {string[]} keys

@@ -3,15 +3,15 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { renderBoxScore, renderPendingBoxScore } from "../page/js/box-score-view.js";
 import { renderLeadChart, renderPendingLeadChart } from "../page/js/lead-chart.js";
-import { describeBoxScore } from "../worker/src/box-score.js";
+import { describeBoxScore } from "../worker/src/adapters/box-score.js";
+import { createLeadServer } from "../worker/src/lead.js";
 import {
-  createLeadServer,
   describeLead,
   findEventId,
   nameScoreboardRequest,
   nameSummaryRequest,
   readEndTime,
-} from "../worker/src/lead.js";
+} from "../worker/src/adapters/lead.js";
 import { assertErrorAnswer } from "../../../tests/error-answer.js";
 
 // Valkyries at Wings, Game 2, which the Wings won 108-100 in overtime.
@@ -194,12 +194,11 @@ test("a finished game's lead comes from the store, and from ESPN while the store
   assert.equal(espn.reads, 3, "ESPN's game is found on its day's scoreboard once");
 });
 
-test("a store that can't be read leaves the lead to ESPN", async () => {
+test("a failed store read stops the lead read", async () => {
   const answer = await askForLead(createFetch(ESPN_ANSWERS), GAME, async () => {
     throw new Error("The store answered 500");
   });
-  assert.equal(answer.status, 200);
-  assert.equal((await answer.json()).periods, 5);
+  assert.equal(answer.status, 502);
 });
 
 test("a game ended when ESPN logged its last play, and its end is unknown until then", () => {
