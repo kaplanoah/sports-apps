@@ -440,13 +440,16 @@ export function testSettingsContactInteractions(test, expect, { openApp, setting
     ];
     for (const neighbor of neighbors)
       expect(
-        await neighbor.evaluate((element, label) => {
-          const own = element.getBoundingClientRect();
-          const reach = /** @type {Element} */ (label).getBoundingClientRect();
-          const x = Math.min(Math.max(reach.left + reach.width / 2, own.left + 1), own.right - 1);
-          const y = Math.min(Math.max(reach.top + reach.height / 2, own.top + 1), own.bottom - 1);
-          return element.contains(document.elementFromPoint(x, y));
-        }, await attach.elementHandle()),
+        await neighbor.evaluate(
+          (element, label) => {
+            const own = element.getBoundingClientRect();
+            const reach = /** @type {Element} */ (label).getBoundingClientRect();
+            const x = Math.min(Math.max(reach.left + reach.width / 2, own.left + 1), own.right - 1);
+            const y = Math.min(Math.max(reach.top + reach.height / 2, own.top + 1), own.bottom - 1);
+            return element.contains(document.elementFromPoint(x, y));
+          },
+          await attach.elementHandle(),
+        ),
       ).toBe(true);
   });
 
