@@ -12,6 +12,7 @@ import {
   loadCurrentSnapshot,
   saveSnapshot,
   ensureScheduleRevision,
+  hasCurrentSchedule,
   savePastSeason,
 } from "../worker/src/season-updater.js";
 import { testSeasonUpdater } from "../../../tests/season-updater-contract.js";
@@ -510,6 +511,7 @@ test("an interrupted schedule publication stays incomplete until the writer repa
   };
   await assert.rejects(savePastSeason(docs, changed), /Storage unavailable/);
   assert.equal(await ensureScheduleRevision(docs, 2026), null);
+  assert.equal(await hasCurrentSchedule(docs, 2026), false);
   docs.write = originalWrite;
   await savePastSeason(docs, changed);
   assert.ok(await ensureScheduleRevision(docs, 2026));

@@ -23,7 +23,7 @@ import {
   namePlayerListRequest,
   nameRosterKey,
 } from "../worker/src/adapters/roster.js";
-import { nameFeedKey } from "../../../shared/worker/feed-keeper.js";
+import { nameFeedKey, createFeedKeeper } from "../../../shared/worker/feed-keeper.js";
 import { createDocs, createJobStorage } from "../../../tests/job-context.js";
 import { findTeamLeaders } from "../page/js/team-view.js";
 
@@ -53,6 +53,7 @@ const STATUS_KEY = "players/status";
 test("historical players and rosters fill incrementally across restarts within four requests", async () => {
   const { createRequestBudget } = await import("../../../shared/worker/request-budget.js");
   const { docs, storage, league } = createRun();
+  await createFeedKeeper({ feeds: {}, storage, now: () => NOW }).noteFinalCount(0);
   for (let attempt = 0; attempt < 7; attempt += 1) {
     const before = league.requests.length;
     const budget = createRequestBudget(league.fetchImpl, 4);
@@ -69,12 +70,18 @@ test("historical players and rosters fill incrementally across restarts within f
     if (issued) assert.equal(docs.stored.get("players-history/status").requests, issued);
     assert.equal(docs.stored.get("players-history/status").lastFailure, null);
     assert.equal(Object.hasOwn(docs.stored.get("players-history/status"), "leagueReads"), false);
+    await createFeedKeeper({
+      feeds: {},
+      storage,
+      now: () => NOW + (attempt + 1) * 50000,
+    }).noteFinalCount(attempt + 1);
   }
   assert.ok(await storage.get("filled:2025"));
   assert.ok(docs.stored.get(nameRanksKey(2025)));
   assert.ok(docs.stored.get(nameRosterKey(2025, "NYL")));
   assert.ok(docs.stored.get(nameNumbersKey(2025, STEWART)));
   assert.ok(league.requests.every((url) => new URL(url).searchParams.get("Season") === "2025"));
+  assert.equal(new Set(league.requests).size, league.requests.length);
 });
 
 // The current season's feeds carry turnovers, and the past season's are as the fixture recorded

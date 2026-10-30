@@ -331,7 +331,7 @@ test("completed historical seasons refill only when the reader version changes",
   const storage = createJobStorage();
   let now = NOW;
   let reads = 0;
-  const run = async (version) => {
+  const fillVersion = async (version) => {
     const updateHistory = createHistoricalHighlightsJob({
       version,
       gameLengthMs: GAME_LENGTH_MS,
@@ -354,15 +354,15 @@ test("completed historical seasons refill only when the reader version changes",
       createLoadSnapshot: () => async () => null,
     });
   };
-  await run(undefined);
+  await fillVersion(undefined);
   assert.equal(reads, 1);
-  await run(undefined);
+  await fillVersion(undefined);
   assert.equal(reads, 1);
   now += 10 * MINUTE_MS;
-  await run(2);
+  await fillVersion(2);
   assert.equal(reads, 2);
   assert.equal((await docs.read("highlights/one")).version, 2);
-  await run(2);
+  await fillVersion(2);
   assert.equal(reads, 2);
 });
 
@@ -386,7 +386,7 @@ test("historical completion waits for a complete schedule and follows its later 
       return { highlights: { id: game.id }, isFinished: true };
     },
   });
-  const run = () =>
+  const fillSchedule = () =>
     updateHistory({
       docs,
       storage,
@@ -395,17 +395,17 @@ test("historical completion waits for a complete schedule and follows its later 
       fetchImpl: async () => new Response("{}"),
       createLoadSnapshot: () => async () => null,
     });
-  await run();
+  await fillSchedule();
   assert.equal(await storage.get("highlights-filled:2025"), undefined);
   games = [endGame("one", 24 * 365)];
-  await run();
+  await fillSchedule();
   assert.deepEqual(reads, ["one"]);
   assert.equal(await storage.get("highlights-filled:2025"), undefined);
   revision = "complete:1";
-  await run();
+  await fillSchedule();
   assert.ok(await storage.get("highlights-filled:2025"));
   games.push(endGame("two", 24 * 365));
   revision = "complete:2";
-  await run();
+  await fillSchedule();
   assert.deepEqual(reads, ["one", "two"]);
 });

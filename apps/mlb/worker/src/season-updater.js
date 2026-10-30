@@ -200,7 +200,8 @@ async function saveSchedule(docs, snapshot) {
   const key = nameScheduleRevisionKey(snapshot.season);
   const previous = await docs.read(key);
   const isWhole =
-    !snapshot.missing?.length || (previous?.isWhole && previous.edition === SCHEDULE_EDITION);
+    !snapshot.missing?.length ||
+    (previous?.isWhole === true && previous.edition === SCHEDULE_EDITION);
   const changed = writes.length > 0 || removed.length > 0;
   if (!changed && previous?.isWhole === isWhole && previous.edition === SCHEDULE_EDITION) return;
   const revision = (previous?.revision ?? 0) + 1;
