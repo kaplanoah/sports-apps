@@ -1,3 +1,4 @@
+import { SCHEDULE_EDITION } from "../page/js/snapshot.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -309,7 +310,7 @@ test("each month of the season's games is saved apart from its record, and only 
   await store.alarm();
   assert.deepEqual(read("schedules-2026/2026-07"), {
     version: WHOLE_SEASON.version,
-    edition: MLBSnapshot.SCHEDULE_EDITION,
+    edition: SCHEDULE_EDITION,
     year: 2026,
     month: "2026-07",
     games: WHOLE_SEASON.schedule["2026-07"],

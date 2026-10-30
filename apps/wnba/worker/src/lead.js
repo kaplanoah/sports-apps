@@ -8,7 +8,7 @@ import { findTeamCodeByEspnId, TEAMS } from "../../page/js/teams.js";
 import { describeError, respondError, respondJson } from "../../../../shared/worker/responses.js";
 import { nameGameDetailsKey } from "./store-docs.js";
 import { readKeptDoc } from "../../../../shared/worker/store-reads.js";
-import { ESPN_DAY_REQUEST, formatEspnDay } from "./adapters/wnba.js";
+import { ESPN_DAY_REQUEST, ESPN_SPORT, formatEspnDay } from "./adapters/wnba.js";
 import { fetchEspnDay, fetchEspnJson } from "./wnba.js";
 
 // Reads ESPN for the score through one game, for the game sheet's chart of the lead: the score
@@ -29,7 +29,7 @@ const formatGameDay = (start) => formatEspnDay(Date.parse(start));
 export const nameScoreboardRequest = (start) => ESPN_DAY_REQUEST(formatGameDay(start));
 
 /** @param {string} eventId */
-export const nameSummaryRequest = (eventId) => nameEspnSummaryRequest("basketball/wnba", eventId);
+export const nameSummaryRequest = (eventId) => nameEspnSummaryRequest(ESPN_SPORT, eventId);
 
 export const findEventId = (scoreboard, teams) =>
   findEspnEventId(scoreboard, teams, findTeamCodeByEspnId);

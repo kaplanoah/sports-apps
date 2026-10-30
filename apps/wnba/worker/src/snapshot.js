@@ -42,7 +42,7 @@ const NETWORKS_MS = 6 * 60 * 60 * 1000;
 const formatEspnMonth = (ms) => WNBASnapshot.formatEspnDay(ms).slice(0, 6);
 
 // The league's feeds, then ESPN's backup, which stands in for the scoreboard.
-const FAILURE_ORDER = [...Object.keys(FEED_DATA), "backup"];
+const FAILURE_ORDER = [...Object.keys(FEED_DATA), "backup", "networks"];
 
 // In the feeds' own order rather than the order they failed in, so the store's status doesn't
 // change while the same feeds fail for the same reasons.
@@ -161,12 +161,12 @@ export function createSnapshotLoader({
     if (!isDueForNetworksRead(month) && (!verify || isFinalAnswer(kept, month))) return kept.data;
     try {
       const data = await fetchEspn(WNBASnapshot.NETWORKS_REQUEST(month));
-      networkMonths.set(month, { readAt: now(), answeredAt: now(), data });
+      networkMonths.set(month, { readAt: now(), answeredAt: now(), data, failure: null });
       return data;
-    } catch {
+    } catch (error) {
       const answeredAt = kept?.answeredAt ?? null;
       const data = kept?.data ?? null;
-      networkMonths.set(month, { readAt: now(), answeredAt, data });
+      networkMonths.set(month, { readAt: now(), answeredAt, data, failure: describeError(error) });
       return data;
     }
   }
@@ -179,9 +179,11 @@ export function createSnapshotLoader({
     return [...new Set(times.map(formatEspnMonth))].sort();
   }
 
-  async function readNetworks(schedule, season, verify = false) {
+  async function readNetworks(schedule, season, verify = false, failures = {}) {
     const months = listNetworkMonths(schedule, season);
     const answers = await Promise.all(months.map((month) => readNetworkMonth(month, verify)));
+    const reasons = months.map((month) => networkMonths.get(month)?.failure).filter(Boolean);
+    if (reasons.length) failures.networks = [...new Set(reasons)].join("; ");
     return answers.filter(Boolean);
   }
 
@@ -247,7 +249,7 @@ export function createSnapshotLoader({
     const schedule = isScheduleConfirmed(backup) ? scheduleAnswer : null;
     throwIfNoneAnswered(schedule);
     // The networks are read only for a confirmed schedule, which may wait on ESPN's answer.
-    const networks = await readNetworks(schedule, season, verify);
+    const networks = await readNetworks(schedule, season, verify, failures);
     return { responses: { scoreboard, schedule, bracket, standings, backup, networks }, failures };
   }
 

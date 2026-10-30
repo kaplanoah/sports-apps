@@ -6,7 +6,6 @@ paths:
 # What MLB's app holds
 
 - `apps/mlb/` is baseball, Worker `mlb-app`.
-- The page keeps only app-owned rules and paths in `page/js/snapshot.js`, `bracket-rules.js`, and `standings-rules.js`. Worker adapters own feed parsing and validate snapshots with the shared `sports-schema.js`.
 - The record and the live feed (`worker/src/adapters/mlb.js`):
   - The page reads each season's one record from the store, which the Worker saves as it reads MLB, as the WNBA's does.
   - The Worker reads each game being played from MLB's live feed with each update, since the schedule's copy of it runs half a minute or more behind, so every part shows the same inning, outs, and score.

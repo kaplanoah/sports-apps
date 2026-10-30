@@ -6,12 +6,14 @@ import { buildSnapshot as buildBaseball } from "../apps/mlb/worker/src/adapters/
 import { SeasonStore as BasketballStore } from "../apps/wnba/worker/src/store.js";
 import { SeasonStore as BaseballStore } from "../apps/mlb/worker/src/store.js";
 import { createDurableObjectContext } from "./durable-object-context.js";
-import { createMemoryStorage } from "../shared/worker/feed-keeper.js";
+import { FAILED_FEED_WAIT_MS, createMemoryStorage } from "../shared/worker/feed-keeper.js";
 import { createSnapshotLoader as createBasketballLoader } from "../apps/wnba/worker/src/snapshot.js";
 import { createSnapshotLoader as createBaseballLoader } from "../apps/mlb/worker/src/snapshot.js";
 import { REQUESTS } from "../apps/wnba/worker/src/adapters/wnba.js";
 import { MLB_API, listMlbRequests } from "../apps/mlb/worker/src/adapters/mlb.js";
 import { describeEspnBoxScore } from "../apps/wnba/worker/src/espn-box-score.js";
+
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 const LEAGUES = [
   {
@@ -41,65 +43,78 @@ function corruptStandings(app, response) {
 }
 
 for (const { app, fixture: name } of LEAGUES) {
-  for (const isWarm of [false, true]) {
-    test(`${app}: a malformed slow feed never replaces its ${isWarm ? "good" : "empty"} cache and retries after correction`, async () => {
-      const fixture = JSON.parse(
-        readFileSync(
-          new URL(`../apps/${app}/tests/fixtures/${name}.json`, import.meta.url),
-          "utf8",
-        ),
-      );
-      let now = Date.parse(fixture.now);
-      let isMalformed = !isWarm;
-      let standingsReads = 0;
-      const fetchImpl = async (url) => {
-        const requests =
-          app === "wnba"
-            ? {
-                scoreboard: REQUESTS.scoreboard,
-                schedule: REQUESTS.schedule,
-                bracket: REQUESTS.bracket(fixture.season),
-                standings: REQUESTS.standings(fixture.season),
-              }
-            : Object.fromEntries(
-                Object.entries(
-                  listMlbRequests(
-                    fixture.season,
-                    now,
-                    fixture.responses.season.seasons[0].regularSeasonEndDate,
-                  ),
-                ).map(([key, path]) => [key, MLB_API + path]),
-              );
-        const feed = Object.keys(requests).find((key) => requests[key] === url);
-        const answer = structuredClone(fixture.responses[feed]);
-        if (!answer) return new Response("", { status: 404 });
-        if (feed === "standings") {
-          standingsReads++;
-          if (isMalformed) corruptStandings(app, answer);
+  for (const feed of app === "wnba" ? ["standings", "schedule", "bracket"] : ["standings"]) {
+    for (const isWarm of [false, true]) {
+      test(`${app}: a malformed ${feed} feed never replaces its ${isWarm ? "good" : "empty"} cache and retries after correction`, async () => {
+        const fixture = JSON.parse(
+          readFileSync(
+            new URL(`../apps/${app}/tests/fixtures/${name}.json`, import.meta.url),
+            "utf8",
+          ),
+        );
+        let now = Date.parse(fixture.now);
+        let isMalformed = !isWarm;
+        let feedReads = 0;
+        let first;
+        const fetchImpl = async (url) => {
+          const requests =
+            app === "wnba"
+              ? {
+                  scoreboard: REQUESTS.scoreboard,
+                  schedule: REQUESTS.schedule,
+                  bracket: REQUESTS.bracket(fixture.season),
+                  standings: REQUESTS.standings(fixture.season),
+                }
+              : Object.fromEntries(
+                  Object.entries(
+                    listMlbRequests(
+                      fixture.season,
+                      now,
+                      fixture.responses.season.seasons[0].regularSeasonEndDate,
+                    ),
+                  ).map(([key, path]) => [key, MLB_API + path]),
+                );
+          const requestedFeed = Object.keys(requests).find((key) => requests[key] === url);
+          const answer = structuredClone(fixture.responses[requestedFeed]);
+          if (!answer) return new Response("", { status: 404 });
+          if (requestedFeed === feed) {
+            feedReads++;
+            if (isMalformed) {
+              if (feed === "standings") corruptStandings(app, answer);
+              if (feed === "schedule")
+                answer.leagueSchedule.gameDates[0].games[0].homeTeam.score = "bad";
+              if (feed === "bracket")
+                answer.bracket.playoffBracketSeries[0].highSeedSeriesWins = "bad";
+            }
+          }
+          return new Response(JSON.stringify(answer));
+        };
+        const createLoader = app === "wnba" ? createBasketballLoader : createBaseballLoader;
+        const storage = createMemoryStorage();
+        const options = { fetchImpl, now: () => now, storage };
+        let loader = createLoader(options);
+        if (isWarm) {
+          first = await loader.loadSnapshot(fixture.season);
+          now += DAY_MS + 1;
+          isMalformed = true;
         }
-        return new Response(JSON.stringify(answer));
-      };
-      const createLoader = app === "wnba" ? createBasketballLoader : createBaseballLoader;
-      const storage = createMemoryStorage();
-      const options = { fetchImpl, now: () => now, storage };
-      let loader = createLoader(options);
-      if (isWarm) {
-        await loader.loadSnapshot(fixture.season);
-        now += 24 * 60 * 60 * 1000 + 1;
-        isMalformed = true;
-      }
-      const failed = await loader.loadSnapshot(fixture.season);
-      assert.match(failed.failures.standings, /Invalid sports data/);
-      assert.equal(standingsReads, isWarm ? 2 : 1);
-      if (isWarm) assert.ok(failed.standings);
-      isMalformed = false;
-      now += 5 * 60 * 1000 + 1;
-      loader = createLoader(options);
-      const recovered = await loader.loadSnapshot(fixture.season);
-      assert.equal(recovered.failures.standings, undefined);
-      assert.ok(recovered.standings);
-      assert.equal(standingsReads, isWarm ? 3 : 2);
-    });
+        const failed = await loader.loadSnapshot(fixture.season);
+        assert.match(failed.failures[feed], /Invalid sports data/);
+        assert.equal(feedReads, isWarm ? 2 : 1);
+        if (isWarm) {
+          const field = { standings: "standings", schedule: "schedule", bracket: "series" }[feed];
+          assert.ok(first[field]);
+          assert.deepEqual(failed[field], first[field]);
+        }
+        isMalformed = false;
+        now += FAILED_FEED_WAIT_MS + 1;
+        loader = createLoader(options);
+        const recovered = await loader.loadSnapshot(fixture.season);
+        assert.equal(recovered.failures[feed], undefined);
+        assert.ok(recovered.standings);
+        assert.equal(feedReads, isWarm ? 3 : 2);
+      });
+    }
   }
 }
 

@@ -1,10 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { listApps } from "../worker/apps.mjs";
 import { readdirSync } from "node:fs";
 import { listReachedFiles, readRepoText } from "../worker/browser-scope.mjs";
 
 const VENDOR_DATA_URL =
-  /https?:\/\/(?:(?:cdn|stats)\.wnba\.com|statsapi\.mlb\.com|site(?:\.web)?\.api\.espn\.com|api\.balldontlie\.io)\//;
+  /https?:\/\/(?:(?:cdn|stats)\.wnba\.com|statsapi\.mlb\.com|(?:site(?:\.web)?|sports\.core)\.api\.espn\.com|api\.balldontlie\.io)\//;
 const VALIDATOR_IMPORT = /["']zod(?:\/[^"']*)?["']/;
 
 /** @param {string[]} entries @param {(path: string) => string | null} readText */
@@ -21,10 +22,11 @@ function findBoundaryProblems(entries, readText) {
 }
 
 test("no page can reach a vendor data URL, Worker adapter, or Zod", () => {
-  const entries = ["shared/page", "apps/wnba/page", "apps/mlb/page"].flatMap((folder) =>
-    readdirSync(folder, { recursive: true, encoding: "utf8" })
-      .filter((name) => name.endsWith(".js"))
-      .map((name) => `${folder}/${name}`),
+  const entries = ["shared/page", ...listApps().map((app) => `apps/${app}/page`)].flatMap(
+    (folder) =>
+      readdirSync(folder, { recursive: true, encoding: "utf8" })
+        .filter((name) => name.endsWith(".js"))
+        .map((name) => `${folder}/${name}`),
   );
   assert.deepEqual(findBoundaryProblems(entries, readRepoText), []);
 });

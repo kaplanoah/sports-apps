@@ -48,8 +48,28 @@ test("schemas reject malformed game state and scores without logging the payload
       },
     );
   }
+  const basketball = {
+    id: "game",
+    round: null,
+    series: null,
+    number: null,
+    start: null,
+    state: "live",
+    status: "",
+    isTimeSet: true,
+    period: 1,
+    clock: "1:00",
+    isIfNeeded: false,
+    away: { team: "ATL", seed: null, score: 1, isInBonus: false },
+    home: { team: "NYL", seed: null, score: 2, isInBonus: false },
+  };
+  assert.equal(validateSportsData(BasketballGame, basketball), basketball);
   assert.throws(
-    () => validateSportsData(BasketballGame, { ...baseball, away: { team: "ATL", score: "1" } }),
-    /Invalid sports data/,
+    () =>
+      validateSportsData(BasketballGame, {
+        ...basketball,
+        away: { ...basketball.away, score: "1" },
+      }),
+    /Invalid sports data at away.score/,
   );
 });

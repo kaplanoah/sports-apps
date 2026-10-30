@@ -11,7 +11,6 @@ import {
 } from "./feed-games.js";
 
 import { LEAGUES, countWinsNeeded, resolveBracket } from "../../../page/js/bracket-rules.js";
-export * from "../../../page/js/bracket-rules.js";
 
 /**
  * The postseason's games split by whether they're played: once a series is decided, the games it

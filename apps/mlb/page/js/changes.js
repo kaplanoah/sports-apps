@@ -1,7 +1,7 @@
+import { countSeasonGames, hasWonDivision } from "./standings-rules.js";
 import { readEasternDay } from "#shared/days.js";
 import { isPlayedBy } from "#shared/game-clubs.js";
 import { sortInScheduleOrder } from "./schedule-order.js";
-import { countSeasonGames, hasWonDivision } from "./snapshot.js";
 
 export const MAX_LOG = 50;
 

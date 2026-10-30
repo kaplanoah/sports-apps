@@ -1,3 +1,4 @@
+import { ESPN_SPORT as SPORT } from "./adapters/wnba.js";
 import { findTeamCodeByEspnId } from "../../page/js/teams.js";
 import {
   fetchInjuryReport,
@@ -10,7 +11,6 @@ import { ESPN_HEADERS } from "./wnba.js";
 // season, and why (shared/worker/espn-adapter.js). Only today's report exists, so only today's
 // rosters say who is out.
 
-const SPORT = "basketball/wnba";
 const OUT = "Out";
 const FOR_SEASON = "OFS";
 

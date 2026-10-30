@@ -1,5 +1,5 @@
+import { countSeasonGames } from "./standings-rules.js";
 import { session } from "./session.js";
-import { countSeasonGames } from "./snapshot.js";
 
 const isAhead = (gamesBack) => gamesBack === "-" || String(gamesBack).startsWith("+");
 

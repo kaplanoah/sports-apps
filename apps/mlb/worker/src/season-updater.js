@@ -1,4 +1,9 @@
-import { nameScheduleKey } from "../../page/js/snapshot.js";
+import { settleDivisionRaces } from "../../page/js/standings-rules.js";
+import {
+  SCHEDULE_EDITION,
+  nameScheduleCollection,
+  nameScheduleKey,
+} from "../../page/js/snapshot.js";
 import { isSameJson } from "#shared/compare.js";
 import { readEasternDay } from "#shared/days.js";
 import * as Readings from "./readings.js";
@@ -128,7 +133,7 @@ async function removeExpiredReadings(docs, year, snapshot, parts) {
  */
 const isSavedSchedule = (doc, snapshot, games) =>
   doc?.version === snapshot.version &&
-  doc.edition === MLBSnapshot.SCHEDULE_EDITION &&
+  doc.edition === SCHEDULE_EDITION &&
   isSameJson(doc.games, games);
 
 /**
@@ -159,7 +164,7 @@ async function writeListedMonths(docs, snapshot, saved) {
     if (isSavedSchedule(doc, snapshot, games)) continue;
     await docs.write(nameScheduleKey(year, month), {
       version: snapshot.version,
-      edition: MLBSnapshot.SCHEDULE_EDITION,
+      edition: SCHEDULE_EDITION,
       year,
       month,
       games,
@@ -191,7 +196,7 @@ async function removeEmptiedMonths(docs, snapshot, saved) {
 // so a game's end sends open pages only its month.
 async function saveSchedule(docs, snapshot) {
   if (!snapshot.schedule) return;
-  const collection = MLBSnapshot.nameScheduleCollection(snapshot.season);
+  const collection = nameScheduleCollection(snapshot.season);
   const saved = new Map((await docs.list(collection)).map((doc) => [doc.month, doc]));
   await writeListedMonths(docs, snapshot, saved);
   await removeEmptiedMonths(docs, snapshot, saved);
@@ -222,7 +227,7 @@ function keepScheduledGames(snapshot, saved) {
   );
   return {
     ...snapshot,
-    standings: { ...snapshot.standings, divisions: MLBSnapshot.settleDivisionRaces(divisions) },
+    standings: { ...snapshot.standings, divisions: settleDivisionRaces(divisions) },
   };
 }
 
@@ -247,10 +252,8 @@ export async function savePastSeason(docs, snapshot) {
 // Whether the store keeps a season's games as the page reads them now, which a season saved before
 // it kept them, or before they held what they hold now, lacks.
 export async function hasCurrentSchedule(docs, year) {
-  const months = await docs.list(MLBSnapshot.nameScheduleCollection(year));
-  return (
-    months.length > 0 && months.every((month) => month.edition === MLBSnapshot.SCHEDULE_EDITION)
-  );
+  const months = await docs.list(nameScheduleCollection(year));
+  return months.length > 0 && months.every((month) => month.edition === SCHEDULE_EDITION);
 }
 
 // The updates the page lists, which the season's record keeps rebuilt from the readings.

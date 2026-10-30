@@ -1,3 +1,5 @@
+import { countSeasonGames } from "../page/js/standings-rules.js";
+import { findFeederSeries, resolveBracket } from "../page/js/bracket-rules.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -1036,14 +1038,14 @@ test("the bracket walk seats seeds and advances winners, 1 against the 4/5 winne
   const teams = {};
   for (const league of ["AL", "NL"])
     for (let seed = 1; seed <= 6; seed++) teams[`${league}${seed}`] = { league, seed };
-  const bracket = MLBSnapshot.resolveBracket(teams, (_, __, teamA) => teamA);
+  const bracket = resolveBracket(teams, (_, __, teamA) => teamA);
   assert.deepEqual([bracket.AL_WC2.teamA, bracket.AL_WC2.teamB], ["AL4", "AL5"]);
   assert.deepEqual([bracket.AL_DS1.teamA, bracket.AL_DS1.teamB], ["AL1", "AL4"]);
   assert.deepEqual([bracket.AL_DS2.teamA, bracket.AL_DS2.teamB], ["AL2", "AL3"]);
   assert.deepEqual([bracket.WS.teamA, bracket.WS.teamB], ["AL1", "NL1"]);
-  assert.equal(MLBSnapshot.findFeederSeries("NL_DS1", 1), "NL_WC2");
-  assert.equal(MLBSnapshot.findFeederSeries("NL_DS1", 0), null);
-  assert.equal(MLBSnapshot.findFeederSeries("WS", 1), "NL_CS");
+  assert.equal(findFeederSeries("NL_DS1", 1), "NL_WC2");
+  assert.equal(findFeederSeries("NL_DS1", 0), null);
+  assert.equal(findFeederSeries("WS", 1), "NL_CS");
 });
 
 test("a snapshot carries the day spring training starts", () => {
@@ -1344,8 +1346,8 @@ test("each club's standings row counts its season's games, one fewer for a raino
     ],
   );
   assert.equal(rows.length, 30);
-  assert.equal(MLBSnapshot.countSeasonGames(shortened[0]), 161);
-  assert.equal(MLBSnapshot.countSeasonGames({}), 162);
+  assert.equal(countSeasonGames(shortened[0]), 161);
+  assert.equal(countSeasonGames({}), 162);
 });
 
 test("a leader tied with a club a game short for a rainout never made up counts its magic number from that club's games", () => {

@@ -1,4 +1,5 @@
 // The app's postseason format and bracket.
+// Shared with the Worker without DOM or globals.
 
 export const LEAGUES = ["AL", "NL"];
 export const BEST_OF = { WC: 3, DS: 5, CS: 7, WS: 7 };

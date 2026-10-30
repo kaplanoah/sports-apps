@@ -1,5 +1,11 @@
+import {
+  BEST_OF,
+  LEAGUES,
+  countWinsNeeded,
+  findFeederSeries,
+  resolveBracket,
+} from "./bracket-rules.js";
 import { keepLastRead } from "#shared/kept-read.js";
-import { BEST_OF, LEAGUES, countWinsNeeded, findFeederSeries, resolveBracket } from "./snapshot.js";
 
 export const ROUND_LABEL = {
   WC: "Wild Card",

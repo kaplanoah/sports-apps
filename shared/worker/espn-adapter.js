@@ -4,17 +4,13 @@ import {
   GameLead,
   Highlights,
   BasketballBoxScore,
+  EspnGameState,
+  GameListing,
   validateSportsData,
 } from "./sports-schema.js";
 import { fetchFeedJson } from "./upstream.js";
 import { readEasternDay } from "#shared/days.js";
 import { readStoryLead } from "./story-lead.js";
-
-// ESPN's injury report for a league lists every player hurt or away across it in one answer:
-// what's wrong and on which side, the league's status for it, and RotoWire's sentence on it, which
-// ESPN carries with the day it last changed. Only today's report exists. Each league hands it how
-// to read ESPN's team ids and which statuses it shows, and matches the players to its own by their
-// names' letters, since ESPN and a league spell a name alike but for the odd accent or punctuation.
 
 const ESPN_SITE = "https://site.api.espn.com/apis/site/v2/sports";
 // ESPN answers any caller, so it needs only to be asked for JSON.
@@ -28,6 +24,8 @@ const PROPER_WORDS = new Set(["Achilles"]);
 
 /** @typedef {import("./sports-schema.js").ReportedPlayerRecord} ReportedPlayer */
 
+// ESPN's report lists today's injuries across a league, with RotoWire's sentence and its date.
+// A league supplies team mappings and shown statuses, matching players by their names' letters.
 /**
  * The address of a league's report.
  * @param {string} sport ESPN's sport and league, as "basketball/wnba"
@@ -40,17 +38,20 @@ export const nameInjuryReportRequest = (sport) => `${ESPN_SITE}/${sport}/injurie
  * @param {string} sport
  * @param {{ headers?: Record<string, string>, cacheSeconds?: number | null }} [options]
  */
-export const fetchInjuryReport = (
+export const fetchInjuryReport = async (
   fetchImpl,
   sport,
   { headers = JSON_HEADERS, cacheSeconds = null } = {},
-) =>
-  fetchFeedJson(fetchImpl, nameInjuryReportRequest(sport), {
+) => {
+  const report = await fetchFeedJson(fetchImpl, nameInjuryReportRequest(sport), {
     feed: "ESPN",
     path: "its injury report",
     headers,
     cacheSeconds,
   });
+  listReportedPlayers(report, { findTeam: (id) => id, isShown: () => true });
+  return report;
+};
 
 /**
  * A name's letters alone, in lowercase, to match one player across two spellings of his name.
@@ -167,7 +168,7 @@ function readBackupGame(event, findTeam) {
   const { competition, start, home, away } = readEspnEvent(event, readScoredSide, findTeam);
   const status = competition.status ?? event.status;
   const state = readEspnGameState(status);
-  return {
+  return validateSportsData(EspnGameState, {
     start,
     state,
     status: status?.type?.shortDetail?.trim() || "",
@@ -175,7 +176,7 @@ function readBackupGame(event, findTeam) {
     clock: state === "live" ? (status?.displayClock ?? null) : null,
     home,
     away,
-  };
+  });
 }
 
 /** @param {{ answers: any[] } | null | undefined} backup */
@@ -192,13 +193,13 @@ export function readNetworkGame(event, findTeam) {
   const { competition, start, home, away } = readEspnEvent(event, () => ({}), findTeam);
   const broadcasts = competition.broadcasts ?? [];
   const ordered = [...broadcasts.filter(isNational), ...broadcasts.filter(isLocal)];
-  return {
+  return validateSportsData(GameListing, {
     start,
     isTimeSet: competition.timeValid === true,
     home,
     away,
     networks: [...new Set(ordered.flatMap((broadcast) => broadcast.names ?? []))],
-  };
+  });
 }
 
 /** @param {string} sport */
@@ -219,8 +220,19 @@ export const nameEspnSummaryRequest = (sport, eventId) =>
  * @param {number} cacheSeconds
  * @param {Record<string, string>} headers
  */
-export const fetchEspnJson = (fetchImpl, url, cacheSeconds, headers) =>
-  fetchFeedJson(fetchImpl, url, { feed: "ESPN", headers, cacheSeconds });
+export const fetchEspnJson = async (fetchImpl, url, cacheSeconds, headers) => {
+  const answer = await fetchFeedJson(fetchImpl, url, { feed: "ESPN", headers, cacheSeconds });
+  if (new URL(url).pathname.endsWith("/scoreboard")) validateScoreboard(answer);
+  return answer;
+};
+
+/** @param {any} answer */
+function validateScoreboard(answer) {
+  for (const event of answer.events ?? []) {
+    readBackupGame(event, () => null);
+    readNetworkGame(event, () => null);
+  }
+}
 
 /** @param {number} period */
 const measurePeriod = (period, rules) =>
@@ -370,6 +382,8 @@ const ESPN_SOURCE = "espn";
  */
 export const isFromEspn = (boxScore) => boxScore?.source === ESPN_SOURCE;
 
+// ESPN numbers players differently; match the league's season list by name and team.
+// A player absent from that list keeps no league ID.
 /**
  * A team's players on the season's list, by name.
  * @param {any} index the season's list of players (`player-index.js`), or null

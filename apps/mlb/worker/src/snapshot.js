@@ -36,13 +36,13 @@ export function createSnapshotLoader({
 } = {}) {
   const slowFeeds = createFeedKeeper({ feeds: SLOW_FEEDS, now, storage });
 
-  const fetchFeed = async (path, name, season, requestedAt) => {
+  const fetchFeed = async (path, name) => {
     const answer = await fetchMlbJson(fetchImpl, path, EDGE_CACHE_SECONDS);
-    return MLBSnapshot.validateFeedResponse(name, answer, { season, now: requestedAt });
+    return MLBSnapshot.validateFeedResponse(name, answer);
   };
 
-  async function fetchSchedule(path, season, requestedAt) {
-    const schedule = await fetchFeed(path, "schedule", season, requestedAt);
+  async function fetchSchedule(path) {
+    const schedule = await fetchFeed(path, "schedule");
     await slowFeeds.noteFinalCount(MLBSnapshot.countFinals(schedule));
     return schedule;
   }
@@ -52,17 +52,15 @@ export function createSnapshotLoader({
    * @param {string} name
    * @param {{ readAgain: boolean, onFailure: (reason: string) => void }} options
    */
-  function fetchSnapshotJson(path, name, options, season, requestedAt) {
-    if (name === "schedule") return fetchSchedule(path, season, requestedAt);
-    if (name === "liveGame") return fetchMlbJson(fetchImpl, path, LIVE_FEED_CACHE_SECONDS);
-    if (Object.hasOwn(SLOW_FEEDS, name))
-      return slowFeeds.readFeed(
-        name,
-        path,
-        () => fetchFeed(path, name, season, requestedAt),
-        options,
+  function fetchSnapshotJson(path, name, options) {
+    if (name === "schedule") return fetchSchedule(path);
+    if (name === "liveGame")
+      return fetchMlbJson(fetchImpl, path, LIVE_FEED_CACHE_SECONDS).then((answer) =>
+        MLBSnapshot.validateFeedResponse(name, answer),
       );
-    return fetchFeed(path, name, season, requestedAt);
+    if (Object.hasOwn(SLOW_FEEDS, name))
+      return slowFeeds.readFeed(name, path, () => fetchFeed(path, name), options);
+    return fetchFeed(path, name);
   }
 
   /**
@@ -84,12 +82,10 @@ export function createSnapshotLoader({
         failures[name] = reason;
       };
       const readAgain = verify && name === "postseason";
-      return fetchSnapshotJson(path, name, { readAgain, onFailure }, season, requestedAt).catch(
-        (error) => {
-          onFailure(describeError(error));
-          throw error;
-        },
-      );
+      return fetchSnapshotJson(path, name, { readAgain, onFailure }).catch((error) => {
+        onFailure(describeError(error));
+        throw error;
+      });
     }
     const snapshot = await MLBSnapshot.fetchSnapshot(fetchNotingFailure, season, requestedAt);
     return { ...snapshot, failures };

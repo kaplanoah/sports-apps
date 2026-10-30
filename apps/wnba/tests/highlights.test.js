@@ -1,7 +1,8 @@
+import { nameScheduleKey } from "../page/js/snapshot.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { nameScheduleKey } from "../worker/src/adapters/wnba.js";
+
 import {
   createHighlightsServer,
   describeHighlights,

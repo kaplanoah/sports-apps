@@ -1,3 +1,4 @@
+import { countSeriesWinsNeeded } from "../../../page/js/bracket-rules.js";
 // The season's whole schedule, which the Games view lists, kept by the store a month to a document.
 
 import { isStillIfNecessary } from "#shared/series-text.js";
@@ -11,7 +12,7 @@ import {
   normalizeGame,
   summarizeGame,
 } from "./feed-games.js";
-import { countSeriesWinsNeeded, listSeriesIds } from "./feed-postseason.js";
+import { listSeriesIds } from "./feed-postseason.js";
 
 // A postponed or suspended game is listed on the day it was to be played and again on the day it's
 // played, and the later of two listings of the same day counts. MLB gives both listings the day

@@ -4,7 +4,6 @@
 import { compareStarts, hasClub, isNumber, listScheduleGames } from "./feed-games.js";
 import { LEAGUES } from "../../../page/js/bracket-rules.js";
 import { settleDivisionRaces } from "../../../page/js/standings-rules.js";
-export * from "../../../page/js/standings-rules.js";
 import { MLB_DIVISION, readClubId } from "../../../page/js/mlb-ids.js";
 
 function listStandingsRows(response) {

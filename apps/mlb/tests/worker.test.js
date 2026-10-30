@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import * as MLBSnapshot from "../worker/src/adapters/mlb.js";
-import { createMemoryStorage } from "../../../shared/worker/feed-keeper.js";
+import { FAILED_FEED_WAIT_MS, createMemoryStorage } from "../../../shared/worker/feed-keeper.js";
 import { createSnapshotLoader } from "../worker/src/snapshot.js";
 
 const EVENING = JSON.parse(
@@ -75,6 +75,85 @@ function createTestLoader(options = {}) {
     },
   };
 }
+
+for (const name of ["seasonGames", "postseason"]) {
+  test(`a malformed ${name} game cannot replace its cached answer and recovers after correction`, async () => {
+    let now = NOW;
+    let isMalformed = false;
+    let reads = 0;
+    const mlb = createFakeMlb();
+    const fetchImpl = async (url, init) => {
+      if (nameRequest(url) !== name) return mlb.fetchImpl(url, init);
+      reads++;
+      const answer = structuredClone(RESPONSES[name]);
+      if (isMalformed) {
+        const game = answer.dates.flatMap((day) => day.games)[0];
+        game.linescore = { ...game.linescore, currentInning: "invalid" };
+      }
+      return new Response(JSON.stringify(answer));
+    };
+    const storage = createMemoryStorage();
+    let loader = createSnapshotLoader({ fetchImpl, now: () => now, storage });
+    const first = await loader.loadSnapshot(2026);
+    now += 24 * 60 * 60 * 1000 + 1;
+    isMalformed = true;
+    const failed = await loader.loadSnapshot(2026);
+    assert.match(failed.failures[name], /Invalid sports data at inning/);
+    assert.deepEqual(failed.teams, first.teams);
+    assert.equal(reads, 2);
+    isMalformed = false;
+    now += FAILED_FEED_WAIT_MS + 1;
+    loader = createSnapshotLoader({ fetchImpl, now: () => now, storage });
+    const recovered = await loader.loadSnapshot(2026);
+    assert.equal(recovered.failures[name], undefined);
+    assert.equal(reads, 3);
+  });
+}
+
+test("a malformed schedule game rejects its required read before it can replace the season", async () => {
+  const schedule = structuredClone(RESPONSES.schedule);
+  schedule.dates[0].games[0].linescore = { currentInning: "invalid" };
+  const { loadSnapshot } = createTestLoader({ answers: { schedule } });
+  await assert.rejects(loadSnapshot, /Invalid sports data at inning/);
+});
+
+test("a malformed live answer leaves the schedule's coherent game state and names the failed feed", async () => {
+  const mlb = createFakeMlb();
+  let liveReads = 0;
+  const fetchImpl = (url, init) => {
+    if (nameRequest(url) !== "liveGame") return mlb.fetchImpl(url, init);
+    liveReads++;
+    const answer = answerLiveGame(url);
+    answer.liveData.linescore.currentInning = "invalid";
+    return Promise.resolve(new Response(JSON.stringify(answer)));
+  };
+  const loader = createSnapshotLoader({ fetchImpl, now: () => NOW });
+  const { failures, ...snapshot } = await loader.loadSnapshot(2026);
+  assert.match(failures.liveGame, /Invalid sports data at inning/);
+  assert.deepEqual(snapshot, MLBSnapshot.buildSnapshot(RESPONSES, { season: 2026, now: NOW }));
+  assert.equal(liveReads, LIVE_GAME_IDS.length);
+});
+
+test("recorded season dates and starters reject malformed fields before slow-feed caching", () => {
+  const season = structuredClone(RESPONSES.season);
+  assert.equal(MLBSnapshot.validateFeedResponse("season", season), season);
+  season.seasons[0].springStartDate = "invalid";
+  assert.throws(
+    () => MLBSnapshot.validateFeedResponse("season", season),
+    /Invalid sports data at springStart/,
+  );
+  assert.throws(
+    () => MLBSnapshot.buildSnapshot({ ...RESPONSES, season }, { season: 2026, now: NOW }),
+    /Invalid sports data at springStart/,
+  );
+  const pitchers = structuredClone(PLAYOFFS.responses.pitchers);
+  assert.equal(MLBSnapshot.validateFeedResponse("pitchers", pitchers), pitchers);
+  pitchers.people[0].useLastName = 42;
+  assert.throws(
+    () => MLBSnapshot.validateFeedResponse("pitchers", pitchers),
+    /Invalid sports data at 0.name/,
+  );
+});
 
 test("the snapshot is built from MLB, with a timeout and a short edge cache", async () => {
   const { mlb, loadSnapshot } = createTestLoader();

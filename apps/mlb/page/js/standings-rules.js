@@ -1,4 +1,5 @@
 // Standings arithmetic on the app's stored rows.
+// Shared with the Worker without DOM or globals.
 
 const SEASON_GAMES = 162;
 

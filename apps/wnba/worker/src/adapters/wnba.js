@@ -1,20 +1,20 @@
+// WNBA's scoreboard, schedule, bracket, and standings adapted to app-owned records.
+// ESPN supplies channels and unset starts, and stands in for a failed scoreboard or games left live.
+
 import {
   BasketballSnapshot,
+  BasketballGames,
+  BasketballSeries,
+  BasketballStandings,
   validateSportsData,
 } from "../../../../../shared/worker/sports-schema.js";
-import { readBackupGames, readNetworkGame } from "../../../../../shared/worker/espn-adapter.js";
 import {
+  readBackupGames,
+  readNetworkGame,
   nameEspnSite,
   nameEspnDayRequest,
   nameEspnNetworksRequest,
 } from "../../../../../shared/worker/espn-adapter.js";
-export { formatEspnDay } from "../../../../../shared/worker/espn-adapter.js";
-export const ESPN_SITE = nameEspnSite("basketball/wnba");
-export const ESPN_DAY_REQUEST = (day) => nameEspnDayRequest("basketball/wnba", day);
-export const NETWORKS_REQUEST = (month) => nameEspnNetworksRequest("basketball/wnba", month);
-
-// The WNBA feed adapter and snapshot composition.
-
 import { listTimedReminderGames } from "#shared/reminder-games.js";
 import { isStillIfNecessary } from "#shared/series-text.js";
 import { addDays, readEasternDay } from "#shared/days.js";
@@ -30,8 +30,13 @@ import {
 } from "../../../page/js/nearest-games.js";
 import { REGULATION_PERIODS } from "../../../page/js/periods.js";
 
-export { SNAPSHOT_VERSION, nameScheduleKey } from "../../../page/js/snapshot.js";
-import { SNAPSHOT_VERSION, countWinsNeeded } from "../../../page/js/snapshot.js";
+import { SNAPSHOT_VERSION, countWinsNeeded, GAME_PREFIXES } from "../../../page/js/snapshot.js";
+
+export { formatEspnDay } from "../../../../../shared/worker/espn-adapter.js";
+export const ESPN_SPORT = "basketball/wnba";
+export const ESPN_SITE = nameEspnSite(ESPN_SPORT);
+export const ESPN_DAY_REQUEST = (day) => nameEspnDayRequest(ESPN_SPORT, day);
+export const NETWORKS_REQUEST = (month) => nameEspnNetworksRequest(ESPN_SPORT, month);
 
 const WNBA_CDN = "https://cdn.wnba.com";
 const WNBA_STATS = "https://stats.wnba.com";
@@ -50,7 +55,7 @@ export const REQUESTS = {
 
 // A playoff game's ID spells out where it sits: 104, the season's last two digits, 00, then its
 // round, its series in that round from 0, and its game in the series.
-const PLAYOFF_GAME_ID = /^104(\d{2})00([1-3])(\d)(\d)$/;
+const PLAYOFF_GAME_ID = new RegExp(`^${GAME_PREFIXES.playoffs}(\\d{2})00([1-3])(\\d)(\\d)$`);
 
 /** @param {string} id */
 export function readPlayoffGameId(id) {
@@ -67,9 +72,11 @@ export function readPlayoffGameId(id) {
 // The games of a season the Games view lists: its regular season's, the Commissioner's Cup final,
 // which has a number of its own, the All-Star Game, and its playoffs'. The ID's 102, 105, 103, or
 // 104 comes before the season's last two digits.
-const SEASON_GAME_ID = /^10[2-5](\d{2})\d{5}$/;
+const SEASON_GAME_ID = new RegExp(
+  `^(?:${[GAME_PREFIXES.regularSeason, GAME_PREFIXES.allStar, GAME_PREFIXES.playoffs, GAME_PREFIXES.cupFinal].join("|")})(\\d{2})\\d{5}$`,
+);
 
-const ALL_STAR_GAME_ID = /^103/;
+const ALL_STAR_GAME_ID = new RegExp(`^${GAME_PREFIXES.allStar}`);
 
 // The All-Star Game's teams aren't the league's, so the game carries their names: a captain's name
 // or a conference, without the feeds' "Team" before it, as every team shows its name without its
@@ -90,7 +97,7 @@ function readGameSeason(id) {
 
 // The Games view leaves out the preseason, whose games are numbered 101 and then the season's last
 // two digits, but the season starts with its first game.
-const PRESEASON_GAME_ID = /^101(\d{2})\d{5}$/;
+const PRESEASON_GAME_ID = new RegExp(`^${GAME_PREFIXES.preseason}(\\d{2})\\d{5}$`);
 
 /** @param {string} id */
 export function readAnyGameSeason(id) {
@@ -244,7 +251,7 @@ const isPlayoffGame = (game) => game.round !== null;
 // the season's record carries it while it's played, as each team's game now, and only a final
 // keeps its score and status, since a row shows a game's start until then.
 /**
- * @param {{ team: string | null, seed: number | null, score: number | null }} side
+ * @param {Pick<import("../../../../../shared/worker/sports-schema.js").BasketballGameRecord["away"], "team" | "seed" | "score">} side
  * @param {boolean} isFinal
  */
 const readScheduledSide = ({ team, seed, score }, isFinal) => ({
@@ -762,7 +769,19 @@ const isConfirmedReminderGame = (game, seriesById) =>
   game.state === "pre" && game.isTimeSet && isToBePlayed(game, seriesById) && !game.isIfNeeded;
 
 /** @param {string} name @param {any} answer @param {{ season: number, now: number }} options */
-export function validateFeedResponse(name, answer, options) {
-  buildSnapshot({ [name]: answer }, options);
+export function validateFeedResponse(name, answer, { season }) {
+  if (name === "scoreboard")
+    validateSportsData(
+      BasketballGames,
+      listSeasonGames(answer.scoreboard.games, season).map(normalizeGame),
+    );
+  if (name === "schedule")
+    validateSportsData(BasketballGames, listScheduleGames(answer, season).map(normalizeGame));
+  if (name === "bracket")
+    validateSportsData(
+      BasketballSeries,
+      answer.bracket.playoffBracketSeries.map(readBracketSeries),
+    );
+  if (name === "standings") validateSportsData(BasketballStandings, readStandingsRows(answer));
   return answer;
 }

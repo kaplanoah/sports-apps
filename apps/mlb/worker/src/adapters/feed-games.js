@@ -220,7 +220,7 @@ export const compareStarts = (first, second) => Date.parse(first.start) - Date.p
 export const compareEnds = (first, second) => Date.parse(first.end) - Date.parse(second.end);
 
 // A pitcher MLB couldn't describe keeps his id, so the page can still ask about him.
-function describeStarter(id, pitchers) {
+export function describeStarter(id, pitchers) {
   if (!id) return null;
   const person = pitchers.get(id);
   if (!person) return { id };

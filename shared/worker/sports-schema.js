@@ -59,22 +59,65 @@ const Season = {
 };
 
 const SeriesSide = z.looseObject({ team: Identifier, wins: Count }).nullable();
+export const BasketballSeries = z.array(
+  z.looseObject({ id: Identifier, round: Count, top: SeriesSide, bottom: SeriesSide }),
+);
+export const BasketballStandings = z.array(
+  z.looseObject({ team: Identifier, wins: Count, losses: Count }),
+);
+export const BasketballGames = z.array(BasketballGame);
 
 export const BasketballSnapshot = z.looseObject({
   ...Season,
-  games: z.array(BasketballGame),
-  nearestGames: z.array(BasketballGame),
-  schedule: z.array(BasketballGame),
-  series: z.array(
-    z.looseObject({ id: Identifier, round: Count, top: SeriesSide, bottom: SeriesSide }),
-  ),
-  standings: z.array(z.looseObject({ team: Identifier, wins: Count, losses: Count })),
+  games: BasketballGames,
+  nearestGames: BasketballGames,
+  schedule: BasketballGames,
+  series: BasketballSeries,
+  standings: BasketballStandings,
 });
 
 const BaseballDay = z.looseObject({ games: z.array(BaseballGame) });
+export const BaseballStandings = z.looseObject({
+  divisions: z.record(z.string(), z.array(z.looseObject({ id: Identifier, w: Count, l: Count }))),
+});
+export const BaseballSeasonDates = z.object({ springStart: Start, regularSeasonEnd: Start });
+export const StartingPitchers = z.array(
+  z.looseObject({
+    id: z.union([Count, Identifier]),
+    name: z.string().optional(),
+    firstName: z.string().optional(),
+    hand: z.string().optional(),
+  }),
+);
+export const BaseballLiveState = z.object({
+  state: GameState,
+  inning: NullableCount.optional(),
+  outs: NullableCount.optional(),
+  awayScore: NullableCount.optional(),
+  homeScore: NullableCount.optional(),
+});
+
+const EspnSide = z.looseObject({ team: Identifier.nullable() });
+export const EspnGameState = z.object({
+  start: Start.optional(),
+  state: GameState,
+  status: z.string(),
+  period: NullableCount,
+  clock: z.string().nullable(),
+  home: EspnSide.extend({ score: NullableCount }).optional(),
+  away: EspnSide.extend({ score: NullableCount }).optional(),
+});
+export const GameListing = z.object({
+  start: Start.optional(),
+  isTimeSet: z.boolean(),
+  home: EspnSide.optional(),
+  away: EspnSide.optional(),
+  networks: z.array(z.string()),
+});
 
 export const BaseballSnapshot = z.looseObject({
   ...Season,
+  springStart: Start,
   teams: z.record(z.string(), z.looseObject({ league: Identifier, seed: Count })),
   series: z.record(z.string(), z.looseObject({ winsA: Count, winsB: Count })),
   log: z.array(
@@ -87,14 +130,7 @@ export const BaseballSnapshot = z.looseObject({
     }),
   ),
   reminderCandidates: z.array(BaseballGame).nullable(),
-  standings: z
-    .looseObject({
-      divisions: z.record(
-        z.string(),
-        z.array(z.looseObject({ id: Identifier, w: Count, l: Count })),
-      ),
-    })
-    .nullable(),
+  standings: BaseballStandings.nullable(),
   slate: z
     .looseObject({
       today: BaseballDay.nullable().optional(),

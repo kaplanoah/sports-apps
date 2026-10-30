@@ -1,9 +1,15 @@
+// MLB feed adaptation and snapshot composition.
+
+import { countSeriesWinsNeeded } from "../../../page/js/bracket-rules.js";
 import {
   BaseballSnapshot,
   BaseballGame,
+  BaseballStandings,
+  BaseballSeasonDates,
+  StartingPitchers,
+  BaseballLiveState,
   validateSportsData,
 } from "../../../../../shared/worker/sports-schema.js";
-// MLB feed adaptation and snapshot composition.
 
 import { listTimedReminderGames } from "#shared/reminder-games.js";
 import { isNecessaryPlayoffGame } from "#shared/series-text.js";
@@ -12,6 +18,9 @@ import { readEasternDay } from "#shared/days.js";
 import * as PollSchedule from "#shared/poll-schedule.js";
 import {
   normalizeGame,
+  describeStarter,
+  listPitchers,
+  readGameState,
   applyLiveGames,
   buildSlateWithAllStar,
   hasBothClubs,
@@ -21,7 +30,6 @@ import {
   listScheduledGames,
 } from "./feed-games.js";
 import {
-  countSeriesWinsNeeded,
   listSeriesIds,
   buildSeries,
   groupPostseason,
@@ -45,9 +53,6 @@ import {
 } from "./feed-standings.js";
 
 import { SNAPSHOT_VERSION } from "../../../page/js/snapshot.js";
-export { SCHEDULE_EDITION, nameScheduleCollection } from "../../../page/js/snapshot.js";
-export * from "../../../page/js/bracket-rules.js";
-export * from "../../../page/js/standings-rules.js";
 
 // MLB caches its responses for 20 seconds, so polling much faster only refetches the same answer.
 export const POLL_LIVE_MS = 30 * 1000;
@@ -248,6 +253,7 @@ export function buildSnapshot(rawResponses, { season, now = Date.now() }) {
   });
 }
 
+/** @param {import("../../../../../shared/worker/sports-schema.js").BaseballGameRecord} game */
 const isClosingInning = (game) => game.state === "live" && game.inning >= CLOSING_INNING;
 
 // A season with no slate, like a past one, has nothing to follow, so it's null.
@@ -280,11 +286,37 @@ export {
 } from "./feed-requests.js";
 export { listClubs, readClubId, readMlbTeamId } from "../../../page/js/mlb-ids.js";
 
-/** @param {string} name @param {any} answer @param {{ season: number, now: number }} options */
-export function validateFeedResponse(name, answer, options) {
+/** @param {string} name @param {any} answer */
+export function validateFeedResponse(name, answer) {
   if (["schedule", "seasonGames", "postseason"].includes(name))
     for (const game of listScheduleGames(answer))
       validateSportsData(BaseballGame, normalizeGame(game));
-  buildSnapshot({ [name]: answer }, options);
+  if (name === "standings") validateSportsData(BaseballStandings, buildStandings(answer, [], null));
+  if (name === "season")
+    validateSportsData(BaseballSeasonDates, {
+      springStart: readSpringStart(answer),
+      regularSeasonEnd: readRegularSeasonEnd(answer),
+    });
+  if (name === "pitchers") {
+    const pitchers = listPitchers({ pitchers: answer });
+    validateSportsData(
+      StartingPitchers,
+      [...pitchers.keys()].map((id) => describeStarter(id, pitchers)),
+    );
+  }
+  if (name === "liveGame") validateLiveGame(answer);
   return answer;
+}
+
+/** @param {any} answer */
+function validateLiveGame(answer) {
+  const linescore = answer.liveData?.linescore;
+  if (!linescore) return;
+  validateSportsData(BaseballLiveState, {
+    state: readGameState(answer.gameData?.status ?? {}),
+    inning: linescore.currentInning,
+    outs: linescore.outs,
+    awayScore: linescore.teams?.away?.runs,
+    homeScore: linescore.teams?.home?.runs,
+  });
 }
