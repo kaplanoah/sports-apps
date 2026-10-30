@@ -69,7 +69,7 @@ for (const { app, fixture: name } of LEAGUES) {
           standings: "standings",
           schedule: "schedule",
           bracket: "series",
-          seasonGames: "teams",
+          seasonGames: "schedule",
           postseason: "series",
         }[feed];
         const feedPolicy = app === "wnba" ? BASKETBALL_FEEDS : BASEBALL_FEEDS;
@@ -138,6 +138,11 @@ for (const { app, fixture: name } of LEAGUES) {
         }
         assert.equal(feedReads, isWarm ? 2 : 1);
         isMalformed = false;
+        if (feed === "seasonGames")
+          fixture.responses.seasonGames.dates[0].games[0].venue = {
+            name: "Corrected ballpark",
+            location: { city: "Example" },
+          };
         now += FAILED_FEED_WAIT_MS + 1;
         loader = createLoader(options);
         const recovered = await loader.loadSnapshot(fixture.season);
@@ -148,6 +153,16 @@ for (const { app, fixture: name } of LEAGUES) {
           recovered[field],
           expected(fixture.responses, { season: fixture.season, now })[field],
         );
+        if (feed === "seasonGames")
+          assert.equal(
+            Object.values(recovered.schedule)
+              .flat()
+              .find(
+                (game) =>
+                  game.id === String(fixture.responses.seasonGames.dates[0].games[0].gamePk),
+              ).ballpark.name,
+            "Corrected ballpark",
+          );
         assert.equal(feedReads, isWarm ? 3 : 2);
       });
     }

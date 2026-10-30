@@ -38,18 +38,17 @@ export const nameInjuryReportRequest = (sport) => `${ESPN_SITE}/${sport}/injurie
  * @param {string} sport
  * @param {{ headers?: Record<string, string>, cacheSeconds?: number | null }} [options]
  */
-export const fetchInjuryReport = async (
+export const fetchInjuryReport = (
   fetchImpl,
   sport,
   { headers = JSON_HEADERS, cacheSeconds = null } = {},
-) => {
-  return fetchFeedJson(fetchImpl, nameInjuryReportRequest(sport), {
+) =>
+  fetchFeedJson(fetchImpl, nameInjuryReportRequest(sport), {
     feed: "ESPN",
     path: "its injury report",
     headers,
     cacheSeconds,
   });
-};
 
 /**
  * A name's letters alone, in lowercase, to match one player across two spellings of his name.

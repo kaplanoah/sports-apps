@@ -762,8 +762,10 @@ const isReminderFeedHeard = (snapshot, name) =>
 const isConfirmedReminderGame = (game, seriesById) =>
   game.state === "pre" && game.isTimeSet && isToBePlayed(game, seriesById) && !game.isIfNeeded;
 
-/** @param {string} name @param {any} answer @param {{ season: number }} options */
-export function validateFeedResponse(name, answer, { season }) {
+/** @param {string} name @param {any} answer @param {{ season?: number }} [options] */
+export function validateFeedResponse(name, answer, { season } = {}) {
+  if (name === "backup") readBackupGames({ answers: [answer] }, findTeamCodeByEspnId);
+  if (name === "networks") readNetworkGames([answer], findTeamCodeByEspnId);
   if (name === "scoreboard")
     validateSportsData(
       BasketballGames,

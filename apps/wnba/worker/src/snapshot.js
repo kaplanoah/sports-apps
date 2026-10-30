@@ -1,5 +1,3 @@
-import { readBackupGames, readNetworkGames } from "../../../../shared/worker/espn-adapter.js";
-import { findTeamCodeByEspnId } from "../../page/js/teams.js";
 import * as WNBASnapshot from "./adapters/wnba.js";
 import { createFeedKeeper, createMemoryStorage } from "../../../../shared/worker/feed-keeper.js";
 import { describeError } from "../../../../shared/worker/responses.js";
@@ -130,7 +128,7 @@ export function createSnapshotLoader({
     const reads = await Promise.allSettled(
       days.map(async (day) => {
         const answer = await fetchEspnDay(fetchImpl, day);
-        readBackupGames({ answers: [answer] }, findTeamCodeByEspnId);
+        WNBASnapshot.validateFeedResponse("backup", answer);
         return answer;
       }),
     );
@@ -169,7 +167,7 @@ export function createSnapshotLoader({
     if (!isDueForNetworksRead(month) && (!verify || isFinalAnswer(kept, month))) return kept.data;
     try {
       const data = await fetchEspn(WNBASnapshot.NETWORKS_REQUEST(month));
-      readNetworkGames([data], findTeamCodeByEspnId);
+      WNBASnapshot.validateFeedResponse("networks", data);
       networkMonths.set(month, { readAt: now(), answeredAt: now(), data, failure: null });
       return data;
     } catch (error) {
