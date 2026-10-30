@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import * as MLBSnapshot from "../page/js/snapshot.js";
+import * as MLBSnapshot from "../worker/src/adapters/mlb.js";
 import worker from "../worker/src/index.js";
 import { nameInjuriesRequest } from "../worker/src/injuries.js";
 import { NEWS_FEEDS } from "../worker/src/news-feeds.js";

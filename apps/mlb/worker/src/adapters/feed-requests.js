@@ -1,6 +1,5 @@
 // What the snapshot asks MLB for, and each field it reads from the answers, which MLB filters with
 // `fields=`, so a field it renames or drops comes back as nothing and is named as missing.
-// Runs in both the browser page and the Worker, so it uses no DOM and no globals.
 
 import { addDays, readEasternDay } from "#shared/days.js";
 import {

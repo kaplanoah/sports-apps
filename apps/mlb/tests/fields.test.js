@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import * as MLBSnapshot from "../page/js/snapshot.js";
+import * as MLBSnapshot from "../worker/src/adapters/mlb.js";
 
 const readFixture = (name) =>
   JSON.parse(readFileSync(path.join(import.meta.dirname, "fixtures", `${name}.json`), "utf8"));

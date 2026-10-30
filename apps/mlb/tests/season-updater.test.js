@@ -2,8 +2,9 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { isDeepStrictEqual } from "node:util";
+import { SCHEDULE_EDITION } from "../page/js/snapshot.js";
 import { sortInScheduleOrder } from "../page/js/schedule-order.js";
-import * as MLBSnapshot from "../page/js/snapshot.js";
+import * as MLBSnapshot from "../worker/src/adapters/mlb.js";
 import { OFF_DAY_CHECK_MS } from "#shared/poll-schedule.js";
 import { composeLog, createReading, sortParts } from "../worker/src/readings.js";
 import { loadCurrentSnapshot, saveSnapshot } from "../worker/src/season-updater.js";
@@ -309,7 +310,7 @@ test("each month of the season's games is saved apart from its record, and only 
   await store.alarm();
   assert.deepEqual(read("schedules-2026/2026-07"), {
     version: WHOLE_SEASON.version,
-    edition: MLBSnapshot.SCHEDULE_EDITION,
+    edition: SCHEDULE_EDITION,
     year: 2026,
     month: "2026-07",
     games: WHOLE_SEASON.schedule["2026-07"],

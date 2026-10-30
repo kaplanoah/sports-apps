@@ -1,4 +1,4 @@
-import { choosePollDelay, listReminderGames } from "../../page/js/snapshot.js";
+import { choosePollDelay, listReminderGames } from "./adapters/wnba.js";
 import PAGE_FILES from "#page-files/wnba";
 import { readReleaseCommit } from "../../../../shared/worker/app-worker.js";
 import { createSeasonStore } from "../../../../shared/worker/season-store.js";
@@ -20,7 +20,7 @@ export {
 
 /**
  * @type {import("../../../../shared/worker/season-store.js").League<
- *   ReturnType<typeof import("../../page/js/snapshot.js").buildSnapshot>,
+ *   ReturnType<typeof import("./adapters/wnba.js").buildSnapshot>,
  *   Awaited<ReturnType<typeof SeasonUpdater.readUpdates>>
  * >}
  */

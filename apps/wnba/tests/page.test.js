@@ -13,7 +13,7 @@ import {
 } from "../page/js/games-view.js";
 import { renderScoreboard } from "../page/js/scoreboard.js";
 import { describeSeriesStanding, isFieldSet, isPlayoffsOver } from "../page/js/series.js";
-import { buildSnapshot } from "../page/js/snapshot.js";
+import { buildSnapshot } from "../worker/src/adapters/wnba.js";
 import { buildSeasonWithLeaders } from "./player-fixtures.js";
 import { describeStampProblem, renderStampLines } from "../page/js/stamp.js";
 import { renderStandings, renderStandingsLists } from "../page/js/standings-view.js";

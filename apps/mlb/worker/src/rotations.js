@@ -1,10 +1,5 @@
 import { addDays, readEasternDay } from "#shared/days.js";
-import {
-  listScheduleGames,
-  readClubId,
-  readGameState,
-  readMlbTeamId,
-} from "../../page/js/snapshot.js";
+import { listScheduleGames, readClubId, readGameState, readMlbTeamId } from "./adapters/mlb.js";
 import { DATE_RULE, fetchMlbJson, readDateParam } from "./mlb.js";
 import { listGameLogRequest, listStarts } from "./pitchers.js";
 import { noteLeagueRead, readSeasonDocs } from "../../../../shared/worker/store-reads.js";

@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { MLB_API } from "../../page/js/snapshot.js";
+import { MLB_API } from "../../worker/src/adapters/mlb.js";
 import { nameContentRequest, namePlaysRequest } from "../../worker/src/highlights.js";
 
 // Records what a final's Highlights section reads from MLB for the games named: each game's

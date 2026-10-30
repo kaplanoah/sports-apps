@@ -4,10 +4,10 @@ import {
   listReportedPlayers,
   nameInjuryReportRequest,
   readNameLetters,
-} from "../../../../shared/worker/injury-report.js";
+} from "../../../../shared/worker/espn-adapter.js";
 
 // Why each player on the injured list is there, from ESPN's injury report for all of MLB
-// (shared/worker/injury-report.js). MLB's own roster says who is on the list, so the report is
+// (shared/worker/espn-adapter.js). MLB's own roster says who is on the list, so the report is
 // kept for every player it names, whatever its status, and a player's sheet shows it only while
 // MLB lists him.
 

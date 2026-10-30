@@ -1,4 +1,4 @@
-import * as MLBSnapshot from "../../page/js/snapshot.js";
+import * as MLBSnapshot from "./adapters/mlb.js";
 import { guessSeasonYear } from "../../page/js/session.js";
 import { fetchMlbJson, LIVE_FEED_CACHE_SECONDS } from "./mlb.js";
 import { createFeedKeeper } from "../../../../shared/worker/feed-keeper.js";
@@ -13,7 +13,7 @@ const HOUR_MS = 60 * 60 * 1000;
 // the starters' numbers with each game, and the postseason as its games are set. The season's
 // whole schedule changes only as games are moved, since the days around today, read every time,
 // bring each game's end.
-const SLOW_FEEDS = {
+export const SLOW_FEEDS = {
   season: { maxAgeMs: 24 * HOUR_MS, changesWithGames: false },
   seasonGames: { maxAgeMs: 24 * HOUR_MS, changesWithGames: false },
   standings: { maxAgeMs: 24 * HOUR_MS, changesWithGames: true },
@@ -36,11 +36,13 @@ export function createSnapshotLoader({
 } = {}) {
   const slowFeeds = createFeedKeeper({ feeds: SLOW_FEEDS, now, storage });
 
-  /** @param {string} path */
-  const fetchFeed = (path) => fetchMlbJson(fetchImpl, path, EDGE_CACHE_SECONDS);
+  const fetchFeed = async (path, name) => {
+    const answer = await fetchMlbJson(fetchImpl, path, EDGE_CACHE_SECONDS);
+    return MLBSnapshot.validateFeedResponse(name, answer);
+  };
 
   async function fetchSchedule(path) {
-    const schedule = await fetchFeed(path);
+    const schedule = await fetchFeed(path, "schedule");
     await slowFeeds.noteFinalCount(MLBSnapshot.countFinals(schedule));
     return schedule;
   }
@@ -52,10 +54,13 @@ export function createSnapshotLoader({
    */
   function fetchSnapshotJson(path, name, options) {
     if (name === "schedule") return fetchSchedule(path);
-    if (name === "liveGame") return fetchMlbJson(fetchImpl, path, LIVE_FEED_CACHE_SECONDS);
+    if (name === "liveGame")
+      return fetchMlbJson(fetchImpl, path, LIVE_FEED_CACHE_SECONDS).then((answer) =>
+        MLBSnapshot.validateFeedResponse(name, answer),
+      );
     if (Object.hasOwn(SLOW_FEEDS, name))
-      return slowFeeds.readFeed(name, path, () => fetchFeed(path), options);
-    return fetchFeed(path);
+      return slowFeeds.readFeed(name, path, () => fetchFeed(path, name), options);
+    return fetchFeed(path, name);
   }
 
   /**

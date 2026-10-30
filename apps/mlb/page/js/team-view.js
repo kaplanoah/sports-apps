@@ -43,7 +43,7 @@ import { listCountedGames, listSeasonGames, nameGameKey } from "./season-games.j
 import { nameRound } from "./series-games.js";
 import { isFieldSet, session } from "./session.js";
 import { listSlateGames } from "./slate.js";
-import { countSeasonGames } from "./snapshot.js";
+import { countSeasonGames } from "./standings-rules.js";
 import { describeDivisionLead } from "./standings.js";
 import { nameTeam, TEAMS } from "./teams.js";
 

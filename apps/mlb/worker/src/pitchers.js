@@ -1,5 +1,5 @@
 import { readEasternDay } from "#shared/days.js";
-import { readClubId } from "../../page/js/snapshot.js";
+import { readClubId } from "./adapters/mlb.js";
 import { fetchMlbJson, SEASON_PARAM } from "./mlb.js";
 import { describeError, respondError, respondJson } from "../../../../shared/worker/responses.js";
 import { noteLeagueRead, readSeasonDocs } from "../../../../shared/worker/store-reads.js";

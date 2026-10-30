@@ -119,6 +119,25 @@ test("the Worker answers a game's lead, says when ESPN has no such game, and tur
   }
 });
 
+test("unrelated malformed scoreboard fields do not block a game's lead", async () => {
+  const scoreboard = structuredClone(LEAD.scoreboard);
+  const other = structuredClone(scoreboard.events[0]);
+  other.id = "unrelated";
+  other.competitions[0].competitors = [];
+  other.competitions[0].date = "invalid";
+  other.competitions[0].status = { type: { state: "in" }, period: "invalid" };
+  other.competitions[0].broadcasts = [{ names: [42] }];
+  scoreboard.events.push(other);
+  const counted = createCountedFetch({
+    ...ESPN_ANSWERS,
+    [nameScoreboardRequest(LEAD.game.start)]: scoreboard,
+  });
+  const answer = await askForLead(counted.fetchImpl, GAME);
+  assert.equal(answer.status, 200);
+  assert.deepEqual((await answer.json()).scores, describeLead(LEAD.summary).scores);
+  assert.equal(counted.reads, 2);
+});
+
 test("a lead ESPN can't send says what ESPN answered, and for which of its feeds", async () => {
   const fetchImpl = async (/** @type {string} */ url) =>
     url === nameSummaryRequest(LEAD.eventId)

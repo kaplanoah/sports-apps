@@ -1,9 +1,14 @@
+import {
+  findEventId as findEspnEventId,
+  describeBasketballLead,
+  nameEspnSummaryRequest,
+} from "../../../../shared/worker/espn-adapter.js";
 import { OVERTIME_SECONDS, QUARTER_SECONDS, REGULATION_PERIODS } from "../../page/js/periods.js";
 import { findTeamCodeByEspnId, TEAMS } from "../../page/js/teams.js";
 import { describeError, respondError, respondJson } from "../../../../shared/worker/responses.js";
 import { nameGameDetailsKey } from "./store-docs.js";
 import { readKeptDoc } from "../../../../shared/worker/store-reads.js";
-import { ESPN_DAY_REQUEST, ESPN_SITE, formatEspnDay } from "../../page/js/snapshot.js";
+import { ESPN_DAY_REQUEST, ESPN_SPORT, formatEspnDay } from "./adapters/wnba.js";
 import { fetchEspnDay, fetchEspnJson } from "./wnba.js";
 
 // Reads ESPN for the score through one game, for the game sheet's chart of the lead: the score
@@ -24,77 +29,16 @@ const formatGameDay = (start) => formatEspnDay(Date.parse(start));
 export const nameScoreboardRequest = (start) => ESPN_DAY_REQUEST(formatGameDay(start));
 
 /** @param {string} eventId */
-export const nameSummaryRequest = (eventId) => `${ESPN_SITE}/summary?event=${eventId}`;
+export const nameSummaryRequest = (eventId) => nameEspnSummaryRequest(ESPN_SPORT, eventId);
 
-/** @param {number} period */
-const measurePeriod = (period) =>
-  period > REGULATION_PERIODS ? OVERTIME_SECONDS : QUARTER_SECONDS;
-
-/**
- * The seconds played when a period's clock reads `clock`, like 7:58 or, in its last minute, 45.2.
- * @param {number} period
- * @param {string} clock
- */
-function countSecondsPlayed(period, clock) {
-  const [minutes, seconds] = String(clock).includes(":")
-    ? String(clock).split(":").map(Number)
-    : [0, Number(clock)];
-  const before = Array.from({ length: period - 1 }, (_, index) => measurePeriod(index + 1)).reduce(
-    (sum, length) => sum + length,
-    0,
-  );
-  const left = Math.min(measurePeriod(period), minutes * 60 + seconds);
-  return Math.round(before + measurePeriod(period) - left);
-}
-
-/**
- * @param {any} competition
- * @param {"away" | "home"} place
- */
-const findCompetitorCode = (competition, place) =>
-  findTeamCodeByEspnId(
-    competition?.competitors?.find((competitor) => competitor.homeAway === place)?.team?.id,
-  );
-
-/**
- * The day's ESPN game between the two teams, home and away as asked.
- * @param {any} scoreboard
- * @param {{ away: string, home: string }} teams
- */
-export function findEventId(scoreboard, { away, home }) {
-  const event = (scoreboard?.events ?? []).find((each) => {
-    const [competition] = each.competitions ?? [];
-    return (
-      findCompetitorCode(competition, "away") === away &&
-      findCompetitorCode(competition, "home") === home
-    );
+export const findEventId = (scoreboard, teams) =>
+  findEspnEventId(scoreboard, teams, findTeamCodeByEspnId);
+export const describeLead = (summary) =>
+  describeBasketballLead(summary, {
+    regulationPeriods: REGULATION_PERIODS,
+    quarterSeconds: QUARTER_SECONDS,
+    overtimeSeconds: OVERTIME_SECONDS,
   });
-  return event ? String(event.id) : null;
-}
-
-/**
- * Each scoring play's time in the game, in seconds from tip-off, with the score after it, from a
- * tied start. A game that went to overtime counts its periods past the fourth.
- * @param {any} summary ESPN's game summary
- */
-export function describeLead(summary) {
-  const scores = (summary?.plays ?? [])
-    .filter((play) => play.scoringPlay && play.period?.number && play.clock?.displayValue)
-    .map((play) => [
-      countSecondsPlayed(play.period.number, play.clock.displayValue),
-      play.awayScore,
-      play.homeScore,
-    ]);
-  const lastPeriod = Math.max(
-    REGULATION_PERIODS,
-    ...(summary?.plays ?? []).map((play) => play.period?.number ?? 0),
-  );
-  return {
-    periods: lastPeriod,
-    isOver: summary?.header?.competitions?.[0]?.status?.type?.completed === true,
-    scores: [[0, 0, 0], ...scores],
-  };
-}
 
 /**
  * The game a sheet's read names by its id, teams, and start, or null when it names none.
@@ -117,12 +61,7 @@ export function readGame(searchParams) {
 /** @param {{ away: string, home: string, start: string }} game */
 const nameGameKey = ({ away, home, start }) => `${away}-${home}-${start}`;
 
-/**
- * When the game ended, from the time ESPN logged its last play, or null before ESPN has it.
- * @param {any} summary ESPN's game summary
- */
-export const readEndTime = (summary) =>
-  (summary?.plays ?? []).findLast((play) => play.type?.text === "End Game")?.wallclock ?? null;
+export { readEndTime } from "../../../../shared/worker/espn-adapter.js";
 
 /**
  * Reads ESPN's summary of a WNBA game, finding the game on ESPN's scoreboard for its day once.

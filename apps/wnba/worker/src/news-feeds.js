@@ -1,6 +1,6 @@
 import { readNewsFeeds } from "../../../../shared/worker/news-feeds.js";
 import { parseAtom, parseEspnNews, parseRss } from "../../../../shared/worker/news-parse.js";
-import { ESPN_SITE } from "../../page/js/snapshot.js";
+import { ESPN_SITE } from "./adapters/wnba.js";
 import { ESPN_HEADERS } from "./wnba.js";
 
 // The outlets the WNBA's news reads, the Liberty's own beat writers among them.

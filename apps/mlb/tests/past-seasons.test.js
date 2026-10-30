@@ -1,7 +1,8 @@
+import { SCHEDULE_EDITION } from "../page/js/snapshot.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { SCHEDULE_EDITION, buildSnapshot } from "../page/js/snapshot.js";
+import { buildSnapshot } from "../worker/src/adapters/mlb.js";
 import { createPastSeasonsJob } from "../worker/src/past-seasons.js";
 import { createDocs, createJobStorage } from "../../../tests/job-context.js";
 

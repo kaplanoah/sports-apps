@@ -1,5 +1,6 @@
+import { nameScheduleKey } from "../../page/js/snapshot.js";
 import { readFileSync } from "node:fs";
-import * as MLBSnapshot from "../../page/js/snapshot.js";
+import * as MLBSnapshot from "../../worker/src/adapters/mlb.js";
 import { describeBoxScore } from "../../worker/src/box-score.js";
 import { describeHighlights } from "../../worker/src/highlights.js";
 import {
@@ -239,7 +240,7 @@ export const SCHEDULE_DOCS = (() => {
   const snapshot = buildFixtureSnapshot({ ...EVENING_FIXTURE, responses });
   return Object.fromEntries(
     Object.entries(snapshot.schedule).map(([month, games]) => [
-      MLBSnapshot.nameScheduleKey(snapshot.season, month),
+      nameScheduleKey(snapshot.season, month),
       { version: snapshot.version, year: snapshot.season, month, games, updatedAt: snapshot.asOf },
     ]),
   );

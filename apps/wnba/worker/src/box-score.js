@@ -1,5 +1,5 @@
 import { namePlayerIndexKey } from "#shared/page-search.js";
-import { readAnyGameSeason, readGameState } from "../../page/js/snapshot.js";
+import { readAnyGameSeason, readGameState } from "./adapters/wnba.js";
 import { describeError, respondError, respondJson } from "../../../../shared/worker/responses.js";
 import { describeEspnBoxScore } from "./espn-box-score.js";
 import { createEspnGameReader, readGame } from "./lead.js";

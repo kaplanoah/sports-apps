@@ -6,7 +6,7 @@ import {
   listReminderGames,
   NETWORKS_REQUEST,
   REQUESTS,
-} from "../page/js/snapshot.js";
+} from "../worker/src/adapters/wnba.js";
 import { findTeamCodeByEspnId, TEAMS } from "../page/js/teams.js";
 import {
   createEspnGameReader,
@@ -15,7 +15,7 @@ import {
 } from "../worker/src/lead.js";
 import { describePreview } from "../worker/src/preview.js";
 import { describeSnapshotStatus, listFeedFailures } from "../worker/src/season-updater.js";
-import { createSnapshotLoader, describeFailures } from "../worker/src/snapshot.js";
+import { NETWORKS_MS, createSnapshotLoader, describeFailures } from "../worker/src/snapshot.js";
 import { ESPN, readAfternoonEspn, SEP_30 } from "./espn-fixtures.js";
 import { nameFeedKey } from "../../../shared/worker/feed-keeper.js";
 
@@ -81,6 +81,74 @@ function createLeague({ refuse = {}, answers = {}, espn = {} } = {}) {
     countReads: (feed) => reads.filter((read) => read.feed === feed).length,
   };
 }
+
+for (const isWarm of [false, true]) {
+  test(`malformed ESPN listings cannot poison a ${isWarm ? "kept" : "cold"} month or freeze the season`, async () => {
+    const espn = structuredClone(ESPN_SCOREBOARD.answers);
+    const league = createLeague({ espn });
+    let now = NOW;
+    const loader = createSnapshotLoader({ fetchImpl: league.fetchImpl, now: () => now });
+    const first = isWarm ? await loader.loadSnapshot(2026) : null;
+    if (isWarm) now += NETWORKS_MS + 1;
+    for (const answer of Object.values(espn))
+      for (const event of answer.events) {
+        event.competitions[0].date = "unreadable-date";
+        event.competitions[0].timeValid = true;
+      }
+    const snapshot = await loader.loadSnapshot(2026);
+    assert.equal(snapshot.games.length, 28);
+    assert.match(snapshot.failures.networks, /Invalid sports data at start/);
+    if (first)
+      assert.deepEqual(
+        snapshot.games.map((game) => game.networks),
+        first.games.map((game) => game.networks),
+      );
+    const reads = league.countReads("espn");
+    now += 5000;
+    const repeated = await loader.loadSnapshot(2026);
+    assert.equal(repeated.games.length, 28);
+    assert.equal(league.countReads("espn"), reads);
+  });
+}
+
+test("an invalid ESPN backup period is a failed answer while the league season stays usable", async () => {
+  const espn = structuredClone(ESPN.answers);
+  for (const answer of Object.values(espn))
+    for (const event of answer.events) event.competitions[0].status.period = "invalid";
+  const league = createLeague({ refuse: { scoreboard: "error" }, espn });
+  const loader = createSnapshotLoader({
+    fetchImpl: league.fetchImpl,
+    now: () => Date.parse(ESPN.now),
+  });
+  const snapshot = await loader.loadSnapshot(2026);
+  assert.equal(snapshot.games.length, 28);
+  assert.match(snapshot.failures.backup, /Invalid sports data at period/);
+  assert.equal(league.countReads("espn"), 2);
+});
+
+test("ESPN listing reads ignore score periods while backup reads ignore channel names", async () => {
+  const networks = structuredClone(ESPN_SCOREBOARD.answers);
+  for (const answer of Object.values(networks))
+    for (const event of answer.events)
+      event.competitions[0].status = { type: { state: "in" }, period: "unused" };
+  const listingLeague = createLeague({ espn: networks });
+  const listed = await createSnapshotLoader({
+    fetchImpl: listingLeague.fetchImpl,
+    now: () => NOW,
+  }).loadSnapshot(2026);
+  assert.equal(listed.failures.networks, undefined);
+  assert.ok(listed.games.some((game) => game.networks.length));
+  const backup = structuredClone(ESPN.answers);
+  for (const answer of Object.values(backup))
+    for (const event of answer.events) event.competitions[0].broadcasts = [{ names: [42] }];
+  const backupLeague = createLeague({ refuse: { scoreboard: "error" }, espn: backup });
+  const scored = await createSnapshotLoader({
+    fetchImpl: backupLeague.fetchImpl,
+    now: () => Date.parse(ESPN.now),
+  }).loadSnapshot(2026);
+  assert.equal(scored.failures.backup, undefined);
+  assert.ok(scored.scoreboardCover);
+});
 
 test("a snapshot is reused only within the closing stretch's 5-second wait", async () => {
   const league = createLeague();
@@ -1169,4 +1237,14 @@ test("reminder verification refreshes open network months while reusing finalize
   const before = listNetworksReads(league).length;
   await loader.loadSnapshot(2026, { verify: true });
   assert.deepEqual(listNetworksReads(league).slice(before), [NETWORKS_REQUEST("202610")]);
+});
+
+test("a malformed scoreboard is named before snapshot composition and leaves the schedule usable", async () => {
+  const scoreboard = structuredClone(RESPONSES.scoreboard);
+  scoreboard.scoreboard.games[0].homeTeam.score = "invalid";
+  const league = createLeague({ answers: { scoreboard } });
+  const loader = createSnapshotLoader({ fetchImpl: league.fetchImpl, now: () => NOW });
+  const snapshot = await loader.loadSnapshot(2026);
+  assert.match(snapshot.failures.scoreboard, /Invalid sports data at 0.home.score/);
+  assert.equal(snapshot.games.length, 28);
 });

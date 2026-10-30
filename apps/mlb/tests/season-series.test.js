@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { buildSnapshot } from "../page/js/snapshot.js";
+import { buildSnapshot } from "../worker/src/adapters/mlb.js";
 import { renderSeasonSeries } from "../page/js/season-series.js";
 import { dropSpokenOnly } from "../../../tests/text.js";
 

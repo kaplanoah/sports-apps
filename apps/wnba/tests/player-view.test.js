@@ -10,7 +10,7 @@ import {
   renderPlayerHeading,
 } from "../page/js/player-view.js";
 import { renderPlayerButton } from "../page/js/player-button.js";
-import { buildSnapshot } from "../page/js/snapshot.js";
+import { buildSnapshot } from "../worker/src/adapters/wnba.js";
 import { stripTags } from "../../../tests/text.js";
 import { checkInTimeZone, EASTERN } from "../../../tests/time-zone.js";
 

@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import * as MLBSnapshot from "../../page/js/snapshot.js";
+import * as MLBSnapshot from "../../worker/src/adapters/mlb.js";
 
 async function fetchJson(request) {
   const response = await fetch(MLBSnapshot.MLB_API + request);

@@ -2,7 +2,7 @@ import { TEAMS } from "../../page/js/teams.js";
 import { describeError, respondError, respondJson } from "../../../../shared/worker/responses.js";
 import { createReusedLoader } from "../../../../shared/worker/upstream.js";
 import { fetchInjuries, listOutPlayers } from "./injuries.js";
-import { readNameLetters } from "../../../../shared/worker/injury-report.js";
+import { readNameLetters } from "../../../../shared/worker/espn-adapter.js";
 import { readKeptDoc } from "../../../../shared/worker/store-reads.js";
 import { splitName } from "./season-averages.js";
 import { SEASON_PARAM, fetchWnbaJson, hasTable, isCurrentSeason, readTable } from "./wnba.js";

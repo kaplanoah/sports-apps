@@ -1,5 +1,5 @@
 import { OFF_DAY_CHECK_MS } from "#shared/poll-schedule.js";
-import { choosePollDelay, listReminderGames } from "../../page/js/snapshot.js";
+import { choosePollDelay, listReminderGames } from "./adapters/mlb.js";
 import PAGE_FILES from "#page-files/mlb";
 import { readReleaseCommit } from "../../../../shared/worker/app-worker.js";
 import { createSeasonStore } from "../../../../shared/worker/season-store.js";
@@ -24,7 +24,7 @@ export {
 
 /**
  * @type {import("../../../../shared/worker/season-store.js").League<
- *   ReturnType<typeof import("../../page/js/snapshot.js").buildSnapshot>,
+ *   ReturnType<typeof import("./adapters/mlb.js").buildSnapshot>,
  *   Awaited<ReturnType<typeof SeasonUpdater.readUpdates>>
  * >}
  */

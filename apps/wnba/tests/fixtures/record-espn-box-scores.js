@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { ESPN_SITE } from "../../page/js/snapshot.js";
+import { ESPN_SITE } from "../../worker/src/adapters/wnba.js";
 import { TEAMS } from "../../page/js/teams.js";
 import { fetchEspnJson, recordEspnGame } from "./espn-recording.js";
 

@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { REQUESTS } from "../../page/js/snapshot.js";
+import { REQUESTS } from "../../worker/src/adapters/wnba.js";
 import { nameBoxScoreRequest } from "../../worker/src/box-score.js";
 import { FEED_HEADERS } from "../../worker/src/wnba.js";
 

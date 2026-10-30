@@ -1,4 +1,4 @@
-import { readGameState } from "../../page/js/snapshot.js";
+import { readGameState } from "./adapters/mlb.js";
 import { fetchMlbJson, LIVE_FEED_CACHE_SECONDS } from "./mlb.js";
 import { describeError, respondError, respondJson } from "../../../../shared/worker/responses.js";
 import { readKeptDoc } from "../../../../shared/worker/store-reads.js";

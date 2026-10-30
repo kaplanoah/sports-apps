@@ -1,5 +1,5 @@
 import { addDays } from "#shared/days.js";
-import { readClubId } from "../../page/js/snapshot.js";
+import { readClubId } from "./adapters/mlb.js";
 import { readLeagueRows } from "./pitchers.js";
 import { readInjury, trimHitting, trimPitching, trimStats } from "./rosters.js";
 

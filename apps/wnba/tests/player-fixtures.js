@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { buildSnapshot } from "../page/js/snapshot.js";
+import { buildSnapshot } from "../worker/src/adapters/wnba.js";
 import { indexRosters } from "../worker/src/player-index.js";
 import { describeRoster } from "../worker/src/roster.js";
 import { describeAverages, listLeaders } from "../worker/src/season-averages.js";

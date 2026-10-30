@@ -7,6 +7,7 @@ import {
 import { createFeedKeeper } from "../../../../shared/worker/feed-keeper.js";
 import { catchFailure, noteFailure, runWithStatus } from "../../../../shared/worker/job-status.js";
 import { nameCountKey } from "../../../../shared/worker/season-store.js";
+import { nameScheduleKey } from "../../page/js/snapshot.js";
 import { isStillPlaying } from "../../page/js/series.js";
 import { TEAMS } from "../../page/js/teams.js";
 import {
@@ -25,7 +26,6 @@ import {
 import { fetchInjuries, listOutPlayers } from "./injuries.js";
 import { namePlayerIndexKey } from "#shared/page-search.js";
 import { nameOvertimesKey } from "../../page/js/search-pages.js";
-import { nameScheduleKey } from "../../page/js/snapshot.js";
 import { describeOvertimes } from "./overtimes.js";
 import { describeAveragesDoc, listLeaders, nameAveragesKey } from "./season-averages.js";
 import { nameSeasonKey } from "./season-updater.js";

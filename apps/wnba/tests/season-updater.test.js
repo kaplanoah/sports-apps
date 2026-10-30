@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { buildSnapshot, readPlayoffGameId } from "../page/js/snapshot.js";
+import { buildSnapshot, readPlayoffGameId } from "../worker/src/adapters/wnba.js";
 import { listUpcomingMeetings } from "../worker/src/preview.js";
 import {
   describeSnapshotStatus,

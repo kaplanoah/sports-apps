@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { buildSnapshot } from "../page/js/snapshot.js";
+import { buildSnapshot } from "../worker/src/adapters/wnba.js";
 import { session } from "../page/js/session.js";
 import { listFreshUpdates, listPlayoffWins } from "../page/js/updates.js";
 import { useDeniedStorage, useKeptChoices, useSavedStorage } from "../../../tests/saved-storage.js";

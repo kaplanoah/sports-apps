@@ -1,12 +1,12 @@
 import { isSameJson } from "#shared/compare.js";
 import { readEasternDay } from "#shared/days.js";
+import { nameScheduleKey } from "../../page/js/snapshot.js";
 import { nameTeam } from "../../page/js/series.js";
 import { describeResult, describeWin, isPlayoffFinal } from "../../page/js/win-text.js";
 import {
   capNotifications,
   describeAsNotification,
 } from "../../../../shared/worker/notifications.js";
-import { nameScheduleKey } from "../../page/js/snapshot.js";
 import { nameMeetingsKey } from "./preview.js";
 import { describeFailures } from "./snapshot.js";
 
@@ -176,7 +176,7 @@ function readGameFeeds(snapshot) {
 
 // The games need both of their feeds: the schedule alone can be behind on today's, and the
 // scoreboard alone has only today's, unless ESPN stood in for the scoreboard, or the scoreboard
-// has no game to score (`isScoreboardGame` in page/js/snapshot.js). Series counted from games ESPN
+// has no game to score (`isScoreboardGame` in adapters/wnba.js). Series counted from games ESPN
 // may lack wait for the bracket. The record's leading scorers are the player job's, saved with
 // every player's averages (player-updater.js), so an update leaves them as they are.
 const saveSeason = (docs, snapshot) =>

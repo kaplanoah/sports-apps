@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { buildSnapshot, REQUESTS } from "../page/js/snapshot.js";
+import { buildSnapshot, REQUESTS } from "../worker/src/adapters/wnba.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { BACKGROUND_JOBS } from "../page/js/background-jobs.js";

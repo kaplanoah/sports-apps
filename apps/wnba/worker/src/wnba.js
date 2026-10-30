@@ -1,7 +1,8 @@
+import { fetchEspnJson as fetchSharedEspnJson } from "../../../../shared/worker/espn-adapter.js";
 import { readEasternDay } from "#shared/days.js";
 import { createSeasonParam } from "../../../../shared/worker/seasons.js";
 import { fetchFeedJson } from "../../../../shared/worker/upstream.js";
-import { ESPN_DAY_REQUEST } from "../../page/js/snapshot.js";
+import { ESPN_DAY_REQUEST } from "./adapters/wnba.js";
 
 // Reading the league's own feeds, which every route the Worker serves shares.
 
@@ -57,11 +58,7 @@ export const fetchWnbaJson = (fetchImpl, url, cacheSeconds, hasData) =>
  * @param {number} cacheSeconds
  */
 export const fetchEspnJson = (fetchImpl, url, cacheSeconds) =>
-  fetchFeedJson(fetchImpl, url, {
-    feed: "ESPN",
-    headers: ESPN_HEADERS,
-    cacheSeconds,
-  });
+  fetchSharedEspnJson(fetchImpl, url, cacheSeconds, ESPN_HEADERS);
 
 // How long the edge keeps an answer with live scores, the league's scoreboard and box score or
 // ESPN's backup for them, so each update of the snapshot and of a watched game reads fresh ones.

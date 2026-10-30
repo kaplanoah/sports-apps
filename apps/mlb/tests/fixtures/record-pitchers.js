@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { addDays, readEasternDay } from "#shared/days.js";
-import { MLB_API, readMlbTeamId } from "../../page/js/snapshot.js";
+import { MLB_API, readMlbTeamId } from "../../worker/src/adapters/mlb.js";
 import {
   fetchPeople,
   listAppearancesRequest,

@@ -3,7 +3,7 @@
 // league's own playoff rounds, its starting pitchers, the channels its games are on, and how to
 // read one of its games. Runs in the page and in Node, so it uses no DOM.
 
-import { readSeriesRound } from "./feed-postseason.js";
+import { readSeriesRound } from "./bracket-rules.js";
 import { readMinutesIntoDay } from "#shared/days.js";
 import { listSearchChannels, listSearchGames, listVenuePlaces } from "#shared/game-search.js";
 import { LEAGUE_WORDS } from "./league-words.js";
