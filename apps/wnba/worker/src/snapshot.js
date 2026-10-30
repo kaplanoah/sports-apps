@@ -113,7 +113,7 @@ export function createSnapshotLoader({
    * @param {keyof typeof SLOW_FEEDS} name
    * @param {string} url
    * @param {number} season
-   * @param {{ isBehind?: (answer: any) => boolean, readAgain?: boolean, onFailure: (reason: string) => void }} options
+   * @param {{ isBehind?: (answer: any) => boolean, readAgain?: boolean, onFailure: (reason: string, retryAt: number) => void }} options
    */
   const readSlowFeed = (name, url, season, options) =>
     slowFeeds.readFeed(name, url, () => fetchFeed(name, url, season), options);
@@ -198,10 +198,14 @@ export function createSnapshotLoader({
     await slowFeeds.forgetFeed("players", nameAveragesRequest(season));
     /** @type {Record<string, string>} */
     const failures = {};
+    let nextReadAt = Infinity;
     /** @param {keyof typeof FEED_DATA} name */
-    const noteReason = (name) => (/** @type {string} */ reason) => {
-      failures[name] = reason;
-    };
+    const noteReason =
+      (name) =>
+      (/** @type {string} */ reason, retryAt = Infinity) => {
+        failures[name] = reason;
+        nextReadAt = Math.min(nextReadAt, retryAt);
+      };
     /** @param {keyof typeof FEED_DATA} name */
     const noteFailure = (name) => (/** @type {unknown} */ error) => {
       noteReason(name)(describeError(error));
@@ -251,13 +255,18 @@ export function createSnapshotLoader({
         ? WNBASnapshot.isTodayOnScoreboard(scheduleAnswer, scoreboard, season, now())
         : WNBASnapshot.isTodayOnBackup(scheduleAnswer, backup, season, now()));
     const needsBackup = !scoreboard || (isScheduleConfirmed() && hasGamesLeftLive(scheduleAnswer));
-    const { backup, failure } = await readBackup(needsBackup);
+    const { backup, failure, nextReadAt: probeAt } = await readBackup(needsBackup);
+    nextReadAt = Math.min(nextReadAt, probeAt);
     if (failure) failures.backup = failure;
     const schedule = isScheduleConfirmed(backup) ? scheduleAnswer : null;
     throwIfNoneAnswered(schedule);
     // The networks are read only for a confirmed schedule, which may wait on ESPN's answer.
     const networks = await readNetworks(schedule, season, verify, failures);
-    return { responses: { scoreboard, schedule, bracket, standings, backup, networks }, failures };
+    return {
+      responses: { scoreboard, schedule, bracket, standings, backup, networks },
+      failures,
+      nextReadAt,
+    };
   }
 
   /**
@@ -266,12 +275,13 @@ export function createSnapshotLoader({
    * @param {boolean} [verify]
    */
   async function fetchSnapshot(season, requestedAt, verify = false) {
-    const { responses, failures } = await fetchResponses(season, verify);
+    const { responses, failures, nextReadAt } = await fetchResponses(season, verify);
     const snapshot = WNBASnapshot.buildSnapshot(responses, { season, now: requestedAt });
     const coverageGap = describeCoverageGap(responses, snapshot);
     const ended = await addGameEnds(snapshot);
     return {
       ...ended,
+      nextReadAt,
       failures: coverageGap ? { ...failures, backup: coverageGap } : failures,
       meetings: listUpcomingMeetings(responses.schedule, ended),
     };

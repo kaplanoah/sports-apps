@@ -15,6 +15,9 @@ export const FAILED_FEED_WAIT_MS = 5 * 60 * 1000;
 const BEHIND_FEED_WAIT_MS = 5 * 60 * 1000;
 const FINALS_KEY = "finals";
 
+/** @param {{ failedAt: number }} record */
+const findRetryAt = (record) => record.failedAt + FAILED_FEED_WAIT_MS;
+
 /**
  * What a keeper keeps its answers in.
  * @typedef {{ get: (key: string) => Promise<any>, put: (key: string, value: any) => Promise<void>, delete: (key: string) => Promise<unknown> }} FeedStorage
@@ -125,7 +128,7 @@ export function createFeedKeeper({ feeds, now, storage = createMemoryStorage() }
    * @param {(data: any) => boolean} isBehind
    */
   async function isDue(name, record, isBehind) {
-    if (record?.failedAt !== undefined) return now() - record.failedAt >= FAILED_FEED_WAIT_MS;
+    if (record?.failedAt !== undefined) return now() >= findRetryAt(record);
     const { maxAgeMs, changesWithGames } = feeds[name];
     if (!record?.answer || now() - record.answer.at >= maxAgeMs) return true;
     if (isBehindLong(record.answer, isBehind)) return true;
@@ -173,8 +176,8 @@ export function createFeedKeeper({ feeds, now, storage = createMemoryStorage() }
      *   stands in when the read fails
      * @param {(data: any) => boolean} [options.isBehind] whether a kept answer is behind what
      *   another feed already says
-     * @param {(reason: string) => void} [options.onFailure] told why the feed's last read failed
-     *   while no read since has answered, even when the kept answer stands in
+     * @param {(reason: string, retryAt: number) => void} [options.onFailure] told why the feed's last read failed
+     *   while no read since has answered, even when the kept answer stands in, and when its retry is due
      */
     async readFeed(
       name,
@@ -187,7 +190,7 @@ export function createFeedKeeper({ feeds, now, storage = createMemoryStorage() }
       const record = await readRecord(storageKey);
       const answer = record?.answer;
       if (!readAgain && !(await isDue(name, record, isBehind))) {
-        if (record?.reason !== undefined) onFailure(record.reason);
+        if (record?.reason !== undefined) onFailure(record.reason, findRetryAt(record));
         if (answer) return answer.data;
         throw new Error(record.reason);
       }
@@ -197,8 +200,9 @@ export function createFeedKeeper({ feeds, now, storage = createMemoryStorage() }
         return data;
       } catch (error) {
         const reason = describeError(error);
-        await saveRecord(storageKey, { answer, failedAt: now(), reason }, what);
-        onFailure(reason);
+        const failed = { answer, failedAt: now(), reason };
+        await saveRecord(storageKey, failed, what);
+        onFailure(reason, findRetryAt(failed));
         if (answer) return answer.data;
         throw error;
       }

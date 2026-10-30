@@ -47,7 +47,7 @@ import { describeError, respondError, respondJson, respondMethodNotAllowed } fro
 
 /**
  * The snapshot fields the store itself reads. Other fields belong to the league's callbacks.
- * @typedef {{ season: number, failures?: Record<string, string> }} SeasonSnapshot
+ * @typedef {{ season: number, failures?: Record<string, string>, nextReadAt?: number }} SeasonSnapshot
  */
 
 /**
@@ -587,7 +587,14 @@ export function createSeasonStore(league) {
       if (league.listReminderGames)
         await this.reminders.saveGames(league.listReminderGames(snapshot), verify);
       await this.saveStatus(league.describeSnapshotStatus(snapshot));
-      return { snapshot, delay: league.choosePollDelay(snapshot, this.now()) };
+      return { snapshot, delay: this.chooseNextPollDelay(snapshot) };
+    }
+
+    /** @param {Snapshot} snapshot */
+    chooseNextPollDelay(snapshot) {
+      const now = this.now();
+      const feedDelay = Math.max(0, (snapshot.nextReadAt ?? Infinity) - now);
+      return Math.min(league.choosePollDelay(snapshot, now), feedDelay);
     }
 
     // `listFailures` answers why each feed failing now does, from the feeds failing before.

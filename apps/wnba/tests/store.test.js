@@ -145,52 +145,59 @@ test("the real league store verifies reminders from the kept schedule when the s
   assert.ok(facts.games.some((game) => game.id === "1042600132"));
 });
 
+function createOffseasonStore() {
+  const fixture = JSON.parse(
+    readFileSync(new URL("./fixtures/2026-09-30-afternoon.json", import.meta.url), "utf8"),
+  );
+  fixture.responses.scoreboard.scoreboard.games = [];
+  for (const day of fixture.responses.schedule.leagueSchedule.gameDates)
+    for (const game of day.games) {
+      game.gameStatus = 3;
+      game.gameStatusText = "Final";
+    }
+  const clock = { now: Date.parse("2026-10-30T12:00:00Z") };
+  const feeds = new Map(
+    Object.entries(REQUESTS).map(([name, request]) => [
+      typeof request === "function" ? request(fixture.season) : request,
+      name,
+    ]),
+  );
+  const reads = new Map();
+  const downFeeds = new Set();
+  const fetchImpl = async (url) => {
+    const name =
+      feeds.get(url) ??
+      (new URL(url).searchParams.get("dates")?.length === 8 ? "backup" : "networks");
+    reads.set(name, (reads.get(name) ?? 0) + 1);
+    if (downFeeds.has(name)) {
+      if (name === "standings") throw new Error("No answer in 8000 ms");
+      return new Response("<title>WNBA.com - Official Site of the WNBA</title>");
+    }
+    return Response.json(fixture.responses[name] ?? { events: [] });
+  };
+  const { ctx, stored } = createDurableObjectContext();
+  const storage = createMemoryStorage();
+  const restartStore = () =>
+    new SeasonStore(
+      ctx,
+      {},
+      {
+        now: () => clock.now,
+        createLoadSnapshot: () =>
+          createSnapshotLoader({ fetchImpl, storage, now: () => clock.now }).loadSnapshot,
+      },
+    );
+  return { clock, reads, downFeeds, stored, restartStore };
+}
+
 test("offseason slow-feed failures retry on the store's schedule and recover across loader restarts", async (t) => {
   for (const failedFeeds of [["schedule"], ["standings"], ["bracket"], ["schedule", "standings"]]) {
     await t.test(failedFeeds.join(" and "), async () => {
-      const fixture = JSON.parse(
-        readFileSync(new URL("./fixtures/2026-09-30-afternoon.json", import.meta.url), "utf8"),
-      );
-      fixture.responses.scoreboard.scoreboard.games = [];
-      for (const day of fixture.responses.schedule.leagueSchedule.gameDates)
-        for (const game of day.games) {
-          game.gameStatus = 3;
-          game.gameStatusText = "Final";
-        }
-      const clock = { now: Date.parse("2026-10-30T12:00:00Z") };
-      const feeds = new Map(
-        Object.entries(REQUESTS).map(([name, request]) => [
-          typeof request === "function" ? request(fixture.season) : request,
-          name,
-        ]),
-      );
-      const reads = new Map();
-      const downFeeds = new Set();
-      const fetchImpl = async (url) => {
-        const name = feeds.get(url);
-        if (!name) return Response.json({ events: [] });
-        reads.set(name, (reads.get(name) ?? 0) + 1);
-        if (downFeeds.has(name)) {
-          if (name === "standings") throw new Error("No answer in 8000 ms");
-          return new Response("<title>WNBA.com - Official Site of the WNBA</title>");
-        }
-        return Response.json(fixture.responses[name]);
-      };
-      const { ctx, stored } = createDurableObjectContext();
-      const storage = createMemoryStorage();
-      const restartStore = () =>
-        new SeasonStore(
-          ctx,
-          {},
-          {
-            now: () => clock.now,
-            createLoadSnapshot: () =>
-              createSnapshotLoader({ fetchImpl, storage, now: () => clock.now }).loadSnapshot,
-          },
-        );
+      const { clock, reads, downFeeds, stored, restartStore } = createOffseasonStore();
       let store = restartStore();
       const dayMs = 24 * 60 * 60 * 1000;
-      assert.equal(await store.updateSeasonWhenDue(clock.now), clock.now + dayMs);
+      const hourMs = 60 * 60 * 1000;
+      assert.equal(await store.updateSeasonWhenDue(clock.now), clock.now + hourMs);
       const saved = structuredClone(stored.get("seasons/2026"));
       clock.now += dayMs;
       failedFeeds.forEach((name) => downFeeds.add(name));
@@ -216,7 +223,7 @@ test("offseason slow-feed failures retry on the store's schedule and recover acr
       downFeeds.clear();
       store = restartStore();
       clock.now += FAILED_FEED_WAIT_MS;
-      assert.equal(await store.updateSeasonWhenDue(clock.now), clock.now + dayMs);
+      assert.equal(await store.updateSeasonWhenDue(clock.now), failedAt + hourMs);
       assert.deepEqual(stored.get("live/feeds").failing, {});
       for (const name of failedFeeds) assert.equal(reads.get(name), failedReads.get(name) + 2);
       for (const name of ["schedule", "standings", "bracket"].filter(
@@ -227,27 +234,73 @@ test("offseason slow-feed failures retry on the store's schedule and recover acr
   }
 });
 
-test("slow-feed retries preserve faster live polling and other feeds keep their own cadence", async () => {
+test("offseason backup probes wake the store hourly and retry failures across restarts", async () => {
+  const { clock, reads, downFeeds, stored, restartStore } = createOffseasonStore();
+  const hourMs = 60 * 60 * 1000;
+  let store = restartStore();
+  const firstProbeAt = await store.updateSeasonWhenDue(clock.now);
+  assert.equal(firstProbeAt, clock.now + hourMs);
+  assert.equal(reads.has("backup"), false);
+  store = restartStore();
+  clock.now = firstProbeAt - 1;
+  await store.updateSeasonWhenDue(clock.now);
+  assert.equal(reads.has("backup"), false);
+  clock.now = firstProbeAt;
+  assert.equal(await store.updateSeasonWhenDue(clock.now), clock.now + hourMs);
+  assert.equal(reads.get("backup"), 2);
+  assert.deepEqual(stored.get("live/feeds")?.failing ?? {}, {});
+  clock.now += hourMs;
+  downFeeds.add("backup");
+  const failedAt = clock.now;
+  assert.equal(await store.updateSeasonWhenDue(clock.now), clock.now + FAILED_FEED_WAIT_MS);
+  assert.equal(reads.get("backup"), 4);
+  assert.deepEqual(Object.keys(stored.get("live/feeds").failing), ["backup"]);
+  store = restartStore();
+  clock.now += FAILED_FEED_WAIT_MS - 1;
+  await store.updateSeasonWhenDue(clock.now);
+  assert.equal(reads.get("backup"), 4);
+  clock.now += 1;
+  assert.equal(await store.updateSeasonWhenDue(clock.now), clock.now + FAILED_FEED_WAIT_MS);
+  assert.equal(reads.get("backup"), 6);
+  assert.equal(stored.get("live/feeds").failing.backup.since, new Date(failedAt).toISOString());
+  downFeeds.clear();
+  store = restartStore();
+  clock.now += FAILED_FEED_WAIT_MS;
+  assert.equal(await store.updateSeasonWhenDue(clock.now), clock.now + hourMs);
+  assert.equal(reads.get("backup"), 8);
+  assert.deepEqual(stored.get("live/feeds").failing, {});
+  for (const name of ["schedule", "standings", "bracket"]) assert.equal(reads.get(name), 1);
+});
+
+test("feed deadlines preserve faster live polling and do not turn unrelated failures into retries", async () => {
   const fixture = JSON.parse(
     readFileSync(new URL("./fixtures/2026-09-30-afternoon.json", import.meta.url), "utf8"),
   );
   const now = Date.parse(fixture.now);
   const snapshot = buildSnapshot(fixture.responses, { season: fixture.season, now });
-  for (const { games, failures, delay } of [
+  for (const { games, failures, nextReadAt, delay } of [
     { games: [], failures: {}, delay: 24 * 60 * 60 * 1000 },
     {
       games: [],
-      failures: { scoreboard: "idle", backup: "down", networks: "down" },
+      failures: { scoreboard: "idle", networks: "down" },
       delay: 24 * 60 * 60 * 1000,
+    },
+    {
+      games: [],
+      failures: { backup: "down" },
+      nextReadAt: now + FAILED_FEED_WAIT_MS,
+      delay: FAILED_FEED_WAIT_MS,
     },
     {
       games: [{ ...snapshot.games[0], state: "live", period: 3, clock: "6:00" }],
       failures: { standings: "down" },
+      nextReadAt: now + FAILED_FEED_WAIT_MS,
       delay: 15 * 1000,
     },
     {
       games: [{ ...snapshot.games[0], state: "live", period: 4, clock: "4:00" }],
       failures: { schedule: "down" },
+      nextReadAt: now + FAILED_FEED_WAIT_MS,
       delay: 5 * 1000,
     },
   ]) {
@@ -257,7 +310,13 @@ test("slow-feed retries preserve faster live polling and other feeds keep their 
       {},
       {
         now: () => now,
-        createLoadSnapshot: () => async () => ({ ...snapshot, games, nearestGames: [], failures }),
+        createLoadSnapshot: () => async () => ({
+          ...snapshot,
+          games,
+          nearestGames: [],
+          failures,
+          nextReadAt,
+        }),
       },
     );
     assert.equal(await store.updateSeason(), delay);

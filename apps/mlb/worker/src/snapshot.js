@@ -50,7 +50,7 @@ export function createSnapshotLoader({
   /**
    * @param {string} path
    * @param {string} name
-   * @param {{ readAgain: boolean, onFailure: (reason: string) => void }} options
+   * @param {{ readAgain: boolean, onFailure: (reason: string, retryAt?: number) => void }} options
    */
   function fetchSnapshotJson(path, name, options) {
     if (name === "schedule") return fetchSchedule(path);
@@ -75,11 +75,13 @@ export function createSnapshotLoader({
   async function fetchSnapshot(season, requestedAt, verify = false) {
     /** @type {Record<string, string>} */
     const failures = {};
+    let nextReadAt = Infinity;
     /** @param {string} path @param {string} name */
     function fetchNotingFailure(path, name) {
-      /** @param {string} reason */
-      const onFailure = (reason) => {
+      /** @param {string} reason @param {number} [retryAt] */
+      const onFailure = (reason, retryAt = Infinity) => {
         failures[name] = reason;
+        nextReadAt = Math.min(nextReadAt, retryAt);
       };
       const readAgain = verify && name === "postseason";
       return fetchSnapshotJson(path, name, { readAgain, onFailure }).catch((error) => {
@@ -88,7 +90,7 @@ export function createSnapshotLoader({
       });
     }
     const snapshot = await MLBSnapshot.fetchSnapshot(fetchNotingFailure, season, requestedAt);
-    return { ...snapshot, failures };
+    return { ...snapshot, failures, ...(Number.isFinite(nextReadAt) && { nextReadAt }) };
   }
   const loadCurrentSnapshot = createReusedLoader(fetchSnapshot, SNAPSHOT_REUSE_MS, now);
   /** @type {Map<number, any>} */

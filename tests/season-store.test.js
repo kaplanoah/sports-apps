@@ -42,6 +42,30 @@ test("a store waits as long as its league says before the next update", async ()
   assert.equal(await context.ctx.storage.getAlarm(), NOW + 60_000);
 });
 
+test("feed deadlines arm the actual alarm before a quiet league's next poll", async () => {
+  const context = createDurableObjectContext();
+  const clock = { now: NOW };
+  const feedAt = NOW + 5 * 60_000;
+  let reads = 0;
+  const SeasonStore = createSeasonStore({
+    ...QUIET_LEAGUE,
+    choosePollDelay: () => 24 * 60 * 60_000,
+    loadCurrentSnapshot: async () => {
+      reads += 1;
+      return { season: 2026, ...(reads === 1 && { nextReadAt: feedAt }) };
+    },
+  });
+  const store = new SeasonStore(context.ctx, {}, { now: () => clock.now });
+  await store.alarm();
+  assert.equal(await context.ctx.storage.getAlarm(), feedAt);
+  clock.now = feedAt - 1;
+  await store.alarm();
+  assert.equal(reads, 1);
+  await fireNextAlarm(store, context, clock);
+  assert.equal(reads, 2);
+  assert.equal(await context.ctx.storage.getAlarm(), clock.now + 24 * 60 * 60_000);
+});
+
 test("the Worker reads a document the store keeps, and null for one it doesn't", async () => {
   const context = createDurableObjectContext();
   const SeasonStore = createSeasonStore(QUIET_LEAGUE);

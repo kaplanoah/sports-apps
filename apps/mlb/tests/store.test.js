@@ -5,6 +5,8 @@ import assert from "node:assert/strict";
 import worker from "../worker/src/index.js";
 import { BACKGROUND_JOBS } from "../page/js/background-jobs.js";
 import { SeasonStore } from "../worker/src/store.js";
+import { createSnapshotLoader } from "../worker/src/snapshot.js";
+import { createMemoryStorage, FAILED_FEED_WAIT_MS } from "../../../shared/worker/feed-keeper.js";
 import { createDurableObjectContext } from "../../../tests/durable-object-context.js";
 
 const APP_KEY = "k3y";
@@ -254,4 +256,81 @@ test("the real league store keeps what its last update saved when a reminder ver
     saved,
   );
   assert.equal(stored.get("push:reminder-games").verifiedAt, null);
+});
+
+function nameMlbFeed(url) {
+  const { pathname, searchParams } = new URL(url);
+  if (pathname.includes("/seasons/")) return "season";
+  if (pathname.includes("/standings")) return "standings";
+  if (pathname.includes("/postseason")) return "postseason";
+  if (pathname.includes("/people")) return "pitchers";
+  return searchParams.has("gameType") ? "seasonGames" : "schedule";
+}
+
+test("MLB slow-feed failures schedule retries and retain saved data through restarts", async (t) => {
+  for (const failedFeed of ["season", "seasonGames", "standings", "postseason"]) {
+    await t.test(failedFeed, async () => {
+      const fixture = JSON.parse(
+        readFileSync(new URL("./fixtures/2026-09-24-evening.json", import.meta.url), "utf8"),
+      );
+      fixture.responses.schedule = { dates: [] };
+      fixture.responses.postseason = { dates: [] };
+      fixture.responses.seasonGames = JSON.parse(
+        readFileSync(new URL("./fixtures/2026-10-09-season.json", import.meta.url), "utf8"),
+      ).responses.seasonGames;
+      const clock = { now: Date.parse("2026-10-30T12:00:00Z") };
+      const downFeeds = new Set();
+      const reads = new Map();
+      const fetchImpl = async (url) => {
+        const name = nameMlbFeed(url);
+        reads.set(name, (reads.get(name) ?? 0) + 1);
+        if (downFeeds.has(name)) return new Response("", { status: 503 });
+        return Response.json(fixture.responses[name]);
+      };
+      const { ctx, stored } = createDurableObjectContext();
+      const storage = createMemoryStorage();
+      const restartStore = () =>
+        new SeasonStore(
+          ctx,
+          {},
+          {
+            now: () => clock.now,
+            createLoadSnapshot: () =>
+              createSnapshotLoader({ fetchImpl, storage, now: () => clock.now }).loadSnapshot,
+          },
+        );
+      const dayMs = 24 * 60 * 60 * 1000;
+      let store = restartStore();
+      assert.equal(await store.updateSeasonWhenDue(clock.now), clock.now + dayMs);
+      const saved = structuredClone(stored.get("seasons/2026"));
+      clock.now += dayMs;
+      downFeeds.add(failedFeed);
+      const failedAt = clock.now;
+      assert.equal(await store.updateSeasonWhenDue(clock.now), clock.now + FAILED_FEED_WAIT_MS);
+      assert.deepEqual(Object.keys(stored.get("live/feeds").failing), [failedFeed]);
+      assert.deepEqual(stored.get("seasons/2026").standings, saved.standings);
+      const failedReads = new Map(reads);
+      store = restartStore();
+      clock.now += FAILED_FEED_WAIT_MS - 1;
+      await store.updateSeasonWhenDue(clock.now);
+      assert.deepEqual(reads, failedReads);
+      clock.now += 1;
+      assert.equal(await store.updateSeasonWhenDue(clock.now), clock.now + FAILED_FEED_WAIT_MS);
+      assert.equal(reads.get(failedFeed), failedReads.get(failedFeed) + 1);
+      assert.equal(
+        stored.get("live/feeds").failing[failedFeed].since,
+        new Date(failedAt).toISOString(),
+      );
+      downFeeds.clear();
+      store = restartStore();
+      clock.now += FAILED_FEED_WAIT_MS;
+      assert.equal(await store.updateSeasonWhenDue(clock.now), clock.now + dayMs);
+      assert.deepEqual(stored.get("live/feeds").failing, {});
+      assert.equal(reads.get(failedFeed), failedReads.get(failedFeed) + 2);
+      for (const name of ["season", "seasonGames", "standings", "postseason"].filter(
+        (name) => name !== failedFeed,
+      ))
+        assert.equal(reads.get(name), failedReads.get(name));
+    });
+  }
 });
