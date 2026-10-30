@@ -58,10 +58,10 @@ const PLAYOFF_GAME_ID = new RegExp(`^${GAME_PREFIXES.playoffs}(\\d{2})00([1-3])(
 
 /** @param {string} id */
 export function readPlayoffGameId(id) {
-  const [, season, round, series, game] = String(id).match(PLAYOFF_GAME_ID) ?? [];
+  const [, , round, series, game] = String(id).match(PLAYOFF_GAME_ID) ?? [];
   if (!round) return null;
   return {
-    season: 2000 + Number(season),
+    season: readGameFacts(id).season,
     round: Number(round),
     series: Number(series),
     game: Number(game),
@@ -89,17 +89,13 @@ function readAllStarTeams(game) {
 
 /** @param {string} id */
 function readGameSeason(id) {
-  const [, season] = String(id).match(SEASON_GAME_ID) ?? [];
-  return season ? 2000 + Number(season) : null;
+  return SEASON_GAME_ID.test(String(id)) ? (readGameFacts(id).season ?? null) : null;
 }
 
 // The Games view leaves out the preseason, but the season starts with its first game.
-const PRESEASON_GAME_ID = new RegExp(`^${GAME_PREFIXES.preseason}(\\d{2})\\d{5}$`);
-
 /** @param {string} id */
 export function readAnyGameSeason(id) {
-  const [, preseason] = String(id).match(PRESEASON_GAME_ID) ?? [];
-  return preseason ? 2000 + Number(preseason) : readGameSeason(id);
+  return readGameFacts(id).season ?? null;
 }
 
 /**
