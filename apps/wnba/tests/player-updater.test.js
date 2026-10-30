@@ -14,7 +14,7 @@ import {
   nameTotalsRequest,
 } from "../worker/src/adapters/player.js";
 import { namePlayerIndexKey } from "#shared/page-search.js";
-import { createPlayerJob } from "../worker/src/player-updater.js";
+import { createPlayerJob, FEEDS } from "../worker/src/player-updater.js";
 import { addTurnovers, joinGameLogs } from "./player-fixtures.js";
 import { nameInjuriesRequest } from "../worker/src/injuries.js";
 import { createRosterServer } from "../worker/src/roster.js";
@@ -41,7 +41,6 @@ const INJURIES = JSON.parse(
 );
 const NOW = Date.parse(ROSTERS.recordedAt);
 const MINUTE_MS = 60 * 1000;
-const HOUR_MS = 60 * MINUTE_MS;
 const STEWART = "1627668";
 const SABALLY = "1630149";
 const FIEBICH = "1630142";
@@ -55,6 +54,7 @@ test("historical players and rosters fill incrementally across restarts within t
   const { createRequestBudget, HISTORY_REQUESTS_PER_RUN } =
     await import("../../../shared/worker/request-budget.js");
   const { docs, storage, league } = createRun();
+  const expiryStepMs = Math.max(...Object.values(FEEDS).map((feed) => feed.maxAgeMs)) + 1;
   await createFeedKeeper({ feeds: {}, storage, now: () => NOW }).noteFinalCount(0);
   for (let attempt = 0; attempt < 7; attempt += 1) {
     const before = league.requests.length;
@@ -63,7 +63,7 @@ test("historical players and rosters fill incrementally across restarts within t
       docs,
       storage,
       env: {},
-      now: () => NOW + attempt * 7 * HOUR_MS,
+      now: () => NOW + attempt * expiryStepMs,
       fetchImpl: budget.fetchImpl,
       createLoadSnapshot: () => async () => null,
     });
@@ -75,7 +75,7 @@ test("historical players and rosters fill incrementally across restarts within t
     await createFeedKeeper({
       feeds: {},
       storage,
-      now: () => NOW + (attempt + 1) * 7 * HOUR_MS,
+      now: () => NOW + (attempt + 1) * expiryStepMs,
     }).noteFinalCount(attempt + 1);
   }
   assert.ok(await storage.get("filled:2025"));

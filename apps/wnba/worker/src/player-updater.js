@@ -60,7 +60,7 @@ const STATUS_KEY = "players/status";
 export const PLAYER_JOB = "players";
 const TEAM_KEYS = Object.keys(TEAMS);
 
-const FEEDS = {
+export const FEEDS = {
   totals: { maxAgeMs: 6 * HOUR_MS, changesWithGames: true },
   playerGames: { maxAgeMs: 6 * HOUR_MS, changesWithGames: true },
   teamGames: { maxAgeMs: 6 * HOUR_MS, changesWithGames: true },
