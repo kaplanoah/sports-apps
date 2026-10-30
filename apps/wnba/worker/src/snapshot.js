@@ -6,8 +6,8 @@ import { describeError } from "../../../../shared/worker/responses.js";
 import { createReusedLoader } from "../../../../shared/worker/upstream.js";
 import { createBackupReader } from "./backup-probe.js";
 import { createGameEnds } from "./game-ends.js";
-import { createEspnGameReader, readEndTime } from "./lead.js";
-import { listUpcomingMeetings } from "./preview.js";
+import { createEspnGameReader, readEndTime, listEspnMatches } from "./adapters/lead.js";
+import { listUpcomingMeetings } from "./adapters/preview.js";
 import { fetchEspnDay, fetchEspnJson, fetchWnbaJson, LIVE_CACHE_SECONDS } from "./wnba.js";
 
 // No longer than the wait between updates in a game's closing stretch, so each one reads the league.
@@ -40,6 +40,7 @@ const nameAveragesRequest = (season) =>
 
 // Broadcast listings rarely change between ordinary season polls.
 export const NETWORKS_MS = 6 * 60 * 60 * 1000;
+const NETWORKS_EDITION = 1;
 
 const formatEspnMonth = (ms) => WNBASnapshot.formatEspnDay(ms).slice(0, 6);
 
@@ -81,11 +82,13 @@ const countFinals = (scoreboard) =>
  * @param {(input: string, init: object) => Promise<Response>} [options.fetchImpl]
  * @param {() => number} [options.now]
  * @param {import("../../../../shared/worker/feed-keeper.js").FeedStorage} [options.storage]
+ * @param {import("../../../../shared/worker/store-reads.js").ReadDoc} [options.readDoc]
  */
 export function createSnapshotLoader({
   fetchImpl = (input, init) => fetch(input, init),
   now = () => Date.now(),
   storage = createMemoryStorage(),
+  readDoc = async () => null,
 } = {}) {
   const slowFeeds = createFeedKeeper({ feeds: SLOW_FEEDS, now, storage });
   const networkMonths = new Map();
@@ -93,7 +96,10 @@ export function createSnapshotLoader({
   const gameEnds = createGameEnds({
     loadEndTime: (game) =>
       espnGames
-        .fetchSummary({ away: game.away.team, home: game.home.team, start: game.start })
+        .fetchSummary(
+          { id: game.id, away: game.away.team, home: game.home.team, start: game.start },
+          readDoc,
+        )
         .then(readEndTime),
     now,
     storage,
@@ -144,20 +150,22 @@ export function createSnapshotLoader({
 
   const readBackup = createBackupReader({ fetchBackup, now, storage });
 
-  // A month's answer from after the month ended is final, so it's kept for good. Any other month is
-  // read again now and then, and a read that fails waits as long as one that answers, with the
-  // last good answer standing in meanwhile.
+  // A current-format answer read after the month ended is final and kept for good. Other answers
+  // refresh now and then; a failed read waits just as long, keeping the last good answer.
   /**
-   * @param {{ answeredAt: number | null }} kept
+   * @param {{ answeredAt: number | null, edition?: number }} kept
    * @param {string} month
    */
   const isFinalAnswer = (kept, month) =>
-    kept.answeredAt !== null && formatEspnMonth(kept.answeredAt) > month;
+    kept.edition === NETWORKS_EDITION &&
+    kept.answeredAt !== null &&
+    formatEspnMonth(kept.answeredAt) > month;
 
   /** @param {string} month */
   function isDueForNetworksRead(month) {
     const kept = networkMonths.get(month);
     if (!kept) return true;
+    if (kept.edition !== NETWORKS_EDITION && !kept.failure) return true;
     if (isFinalAnswer(kept, month)) return false;
     return now() - kept.readAt >= NETWORKS_MS;
   }
@@ -173,6 +181,7 @@ export function createSnapshotLoader({
       const data = await fetchEspn(WNBASnapshot.NETWORKS_REQUEST(month));
       WNBASnapshot.validateFeedResponse("networks", data);
       networkMonths.set(month, {
+        edition: NETWORKS_EDITION,
         readAt: now(),
         answeredAt: now(),
         data: trimNetworkAnswer(data),
@@ -181,7 +190,13 @@ export function createSnapshotLoader({
     } catch (error) {
       const answeredAt = kept?.answeredAt ?? null;
       const data = kept?.data ?? null;
-      networkMonths.set(month, { readAt: now(), answeredAt, data, failure: describeError(error) });
+      networkMonths.set(month, {
+        edition: kept?.edition,
+        readAt: now(),
+        answeredAt,
+        data,
+        failure: describeError(error),
+      });
     }
     const updated = networkMonths.get(month);
     await storage
@@ -287,6 +302,10 @@ export function createSnapshotLoader({
     const ended = await addGameEnds(snapshot);
     return {
       ...ended,
+      espnMatches: listEspnMatches(ended, [
+        ...(responses.networks ?? []),
+        ...(responses.backup?.answers ?? []),
+      ]),
       nextReadAt,
       failures: coverageGap ? { ...failures, backup: coverageGap } : failures,
       meetings: listUpcomingMeetings(responses.schedule, ended),

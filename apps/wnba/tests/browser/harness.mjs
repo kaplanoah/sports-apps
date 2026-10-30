@@ -1,27 +1,28 @@
+import { createPlayerJob } from "../../worker/src/player-updater.js";
 import { readFileSync } from "node:fs";
 import { buildSnapshot, REQUESTS } from "../../worker/src/adapters/wnba.js";
-import { createBoxScoreServer, nameBoxScoreRequest } from "../../worker/src/box-score.js";
-import { createHighlightsServer, describeHighlights } from "../../worker/src/highlights.js";
-import {
-  createLeadServer,
-  nameScoreboardRequest,
-  nameSummaryRequest,
-} from "../../worker/src/lead.js";
+import { createBoxScoreServer } from "../../worker/src/box-score.js";
+import { nameBoxScoreRequest } from "../../worker/src/adapters/box-score.js";
+import { createHighlightsServer } from "../../worker/src/highlights.js";
+import { describeHighlights } from "../../worker/src/adapters/highlights.js";
+import { createLeadServer } from "../../worker/src/lead.js";
+import { nameScoreboardRequest, nameSummaryRequest } from "../../worker/src/adapters/lead.js";
+import { createPlayerServer } from "../../worker/src/player.js";
 import {
   PLAYOFFS,
   REGULAR_SEASON,
-  createPlayerServer,
   nameGameLogRequest,
   nameTeamGameLogRequest,
   nameTotalsRequest,
-} from "../../worker/src/player.js";
-import { createPreviewServer, listUpcomingMeetings } from "../../worker/src/preview.js";
+} from "../../worker/src/adapters/player.js";
+import { createPreviewServer } from "../../worker/src/preview.js";
+import { listUpcomingMeetings } from "../../worker/src/adapters/preview.js";
 import { nameInjuriesRequest } from "../../worker/src/injuries.js";
+import { createRosterServer } from "../../worker/src/roster.js";
 import {
-  createRosterServer,
   nameLeagueRosterRequest,
   namePlayerListRequest,
-} from "../../worker/src/roster.js";
+} from "../../worker/src/adapters/roster.js";
 import { SeasonStore } from "../../worker/src/store.js";
 import worker from "../../worker/src/index.js";
 import {
@@ -226,6 +227,7 @@ async function createAfternoonStore(league = {}) {
   // The store's jobs run beside the update, and finish before the page opens, so they never
   // overwrite what a test writes.
   await Promise.all(testStore.store.jobRuns.values());
+  await testStore.store.historyRun;
   return testStore;
 }
 
@@ -294,7 +296,10 @@ export async function openApp(
   const { context, store } = testStore;
   const readSeason = async () => structuredClone(await context.ctx.storage.get("seasons/2026"));
   for (const [year, change] of Object.entries(pastSeasons))
-    await context.ctx.storage.put(`seasons/${year}`, change(await readSeason()));
+    await context.ctx.storage.put(`seasons/${year}`, {
+      ...change(await readSeason()),
+      year: Number(year),
+    });
   if (isWholeSeason) await context.ctx.storage.put("schedules/2026", readWholeSeasonSchedule());
   const openSockets = await connectToStore(page, testStore);
   const fetchImpl = isLeagueDownForPage
@@ -310,6 +315,18 @@ export async function openApp(
     fetchImpl,
     now: () => Date.parse(NOW),
   });
+  const historyJob = createPlayerJob();
+  if (Object.keys(pastSeasons).length) await store.createJobStorage("players").delete("allFilled");
+  for (let index = 0; index < Object.keys(pastSeasons).length; index += 1) {
+    await historyJob.updateHistory({
+      docs: store.docs,
+      storage: store.createJobStorage("players"),
+      createLoadSnapshot: store.createLoadSnapshot,
+      env: {},
+      fetchImpl,
+      now: () => Date.parse(NOW),
+    });
+  }
   const readDoc = (/** @type {string} */ key) => store.docs.read(key);
   await page.route(matchPath("/lead"), (route) =>
     answerFromWorker(route, (url) => leads.serveLead(url, readDoc)),

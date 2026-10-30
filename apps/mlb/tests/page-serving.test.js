@@ -1,9 +1,23 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import worker from "../worker/src/index.js";
+import worker, { SeasonStore } from "../worker/src/index.js";
+import { createDurableObjectContext } from "../../../tests/durable-object-context.js";
 
-const ENV = { APP_KEY: "k3y" };
+const { ctx } = createDurableObjectContext();
+const store = new SeasonStore(
+  ctx,
+  {},
+  {
+    fetchImpl: async () => {
+      throw new Error("Unexpected vendor read");
+    },
+  },
+);
+const ENV = {
+  APP_KEY: "k3y",
+  STORE: { idFromName: (name) => name, get: () => ({ fetch: (request) => store.fetch(request) }) },
+};
 const ORIGIN = "https://mlb-app.example";
 const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47];
 

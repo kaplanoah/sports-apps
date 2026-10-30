@@ -2,8 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { TEAMS } from "../page/js/teams.js";
-import { describeBoxScore } from "../worker/src/box-score.js";
-import { describeEspnBoxScore } from "../worker/src/espn-box-score.js";
+import { describeBoxScore } from "../worker/src/adapters/box-score.js";
+import { describeEspnBoxScore } from "../worker/src/adapters/espn-box-score.js";
 import { readPlayerIndex } from "./player-fixtures.js";
 
 /** @param {string} name */

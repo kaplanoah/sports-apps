@@ -12,12 +12,22 @@ import {
   createEspnGameReader,
   nameScoreboardRequest,
   nameSummaryRequest,
-} from "../worker/src/lead.js";
-import { describePreview } from "../worker/src/preview.js";
-import { describeSnapshotStatus, listFeedFailures } from "../worker/src/season-updater.js";
+} from "../worker/src/adapters/lead.js";
+import { describePreview } from "../worker/src/adapters/preview.js";
+import { createDocs } from "../../../tests/job-context.js";
+import {
+  saveSnapshot,
+  describeSnapshotStatus,
+  listFeedFailures,
+} from "../worker/src/season-updater.js";
 import { NETWORKS_MS, createSnapshotLoader, describeFailures } from "../worker/src/snapshot.js";
+import { trimNetworkAnswer } from "../../../shared/worker/espn-adapter.js";
 import { ESPN, readAfternoonEspn, SEP_30 } from "./espn-fixtures.js";
-import { createMemoryStorage, nameFeedKey } from "../../../shared/worker/feed-keeper.js";
+import {
+  createMemoryStorage,
+  FAILED_FEED_WAIT_MS,
+  nameFeedKey,
+} from "../../../shared/worker/feed-keeper.js";
 
 const AFTERNOON = JSON.parse(
   readFileSync(`${import.meta.dirname}/fixtures/2026-09-30-afternoon.json`, "utf8"),
@@ -398,11 +408,14 @@ test("the backup and the game sheet keep a day's ESPN scoreboard at the edge as 
     ),
   );
 
-  await createEspnGameReader({ fetchImpl: league.fetchImpl }).fetchSummary({
-    away,
-    home,
-    start: game.date,
-  });
+  await createEspnGameReader({ fetchImpl: league.fetchImpl }).fetchSummary(
+    {
+      away,
+      home,
+      start: game.date,
+    },
+    async () => null,
+  );
 
   const cacheTimes = league.reads
     .filter((read) => read.url === OCT_1)
@@ -852,7 +865,7 @@ test("network listing budgets, failures and finalized answers survive loader res
   const first = await restart().loadSnapshot(2026);
   assert.equal(league.countReads("networks"), 2);
   const saved = (await storage.get("networks:202610")).data;
-  assert.deepEqual(Object.keys(saved.events[0]).sort(), ["competitions", "date"]);
+  assert.deepEqual(Object.keys(saved.events[0]).sort(), ["competitions", "date", "id"]);
   assert.deepEqual(Object.keys(saved.events[0].competitions[0]).sort(), [
     "broadcasts",
     "competitors",
@@ -881,6 +894,59 @@ test("network listing budgets, failures and finalized answers survive loader res
   assert.equal(league.countReads("networks"), 4);
   assert.equal(recovered.failures.networks, undefined);
 });
+
+for (const failsFirst of [false, true]) {
+  test(`an ended month saved without event IDs refreshes across restarts${failsFirst ? " after a failed upgrade" : " once"}`, async () => {
+    /** @type {Record<string, "page" | "error">} */
+    const refuse = {};
+    const league = createLeague({ refuse });
+    const storage = createMemoryStorage();
+    let now = Date.parse("2026-10-05T16:00:00Z");
+    const restart = () =>
+      createSnapshotLoader({ fetchImpl: league.fetchImpl, storage, now: () => now });
+    const first = await restart().loadSnapshot(2026);
+    const month = "202609";
+    const request = NETWORKS_REQUEST(month);
+    const legacy = trimNetworkAnswer(ESPN_SCOREBOARD.answers[request]);
+    for (const event of legacy.events) delete event.id;
+    await storage.put(`networks:${month}`, {
+      readAt: now,
+      answeredAt: now,
+      data: legacy,
+      failure: null,
+    });
+    const countMonthReads = () => league.reads.filter((read) => read.url === request).length;
+    const before = countMonthReads();
+    if (failsFirst) refuse.networks = "error";
+    let updated = await restart().loadSnapshot(2026);
+    assert.equal(countMonthReads(), before + 1);
+    if (failsFirst) {
+      assert.ok(updated.failures.networks);
+      assert.deepEqual(
+        updated.games.map((game) => game.networks),
+        first.games.map((game) => game.networks),
+      );
+      now += NETWORKS_MS - 1;
+      await restart().loadSnapshot(2026);
+      assert.equal(countMonthReads(), before + 1);
+      delete refuse.networks;
+      now += 1;
+      updated = await restart().loadSnapshot(2026);
+      assert.equal(countMonthReads(), before + 2);
+    }
+    const eventIds = new Set(ESPN_SCOREBOARD.answers[request].events.map((event) => event.id));
+    const matches = updated.espnMatches.filter((match) => eventIds.has(match.eventId));
+    assert.ok(matches.length > 0);
+    const docs = createDocs();
+    await saveSnapshot(docs, updated);
+    for (const match of matches)
+      assert.deepEqual(await docs.read(`espnMatches/${match.id}`), match);
+    const completedReads = countMonthReads();
+    now += 24 * HOUR_MS;
+    await restart().loadSnapshot(2026, { verify: true });
+    assert.equal(countMonthReads(), completedReads);
+  });
+}
 
 test("without ESPN's scoreboard, the games still show, with nowhere to watch them", async () => {
   const league = createLeague({ refuse: { networks: "error" } });
@@ -927,36 +993,45 @@ test("a game that ends has the slow feeds read again at once, and once more ten 
   assert.deepEqual(countSlowReads(league), [3, 3, 3]);
 });
 
-test("a game seen live and then final ends when ESPN logged its last play, as each team's last game too, looked up once", async () => {
-  const live = structuredClone(AFTERNOON.responses.scoreboard);
-  Object.assign(live.scoreboard.games[0], { gameStatus: 2, gameStatusText: "Q4 0:30" });
-  const start = live.scoreboard.games[0].gameTimeUTC;
-  const competitors = [
-    { homeAway: "away", team: { id: String(TEAMS.ATL.espnId) } },
-    { homeAway: "home", team: { id: String(TEAMS.WAS.espnId) } },
-  ];
-  const espn = {
-    [nameScoreboardRequest(start)]: { events: [{ id: "401", competitions: [{ competitors }] }] },
-    [nameSummaryRequest("401")]: {
-      plays: [{ type: { text: "End Game" }, wallclock: "2026-10-01T01:11:27Z" }],
-    },
-  };
-  const answers = { scoreboard: live };
-  const league = createLeague({ answers, espn });
-  let now = NOW;
-  const loader = createSnapshotLoader({ fetchImpl: league.fetchImpl, now: () => now });
-  await loader.loadSnapshot(2026);
+for (const isKept of [false, true]) {
+  test(`a game ending reuses a ${isKept ? "persisted" : "new"} ESPN match`, async () => {
+    const live = structuredClone(AFTERNOON.responses.scoreboard);
+    Object.assign(live.scoreboard.games[0], { gameStatus: 2, gameStatusText: "Q4 0:30" });
+    const start = live.scoreboard.games[0].gameTimeUTC;
+    const competitors = [
+      { homeAway: "away", team: { id: String(TEAMS.ATL.espnId) } },
+      { homeAway: "home", team: { id: String(TEAMS.WAS.espnId) } },
+    ];
+    const espn = {
+      [nameScoreboardRequest(start)]: { events: [{ id: "401", competitions: [{ competitors }] }] },
+      [nameSummaryRequest("401")]: {
+        plays: [{ type: { text: "End Game" }, wallclock: "2026-10-01T01:11:27Z" }],
+      },
+    };
+    const answers = { scoreboard: live };
+    const league = createLeague({ answers, espn });
+    let now = NOW;
+    const loader = createSnapshotLoader({
+      fetchImpl: league.fetchImpl,
+      now: () => now,
+      readDoc: async (key) =>
+        isKept && key === "espnMatches/1042600132"
+          ? { away: "ATL", home: "WAS", eventId: "401" }
+          : null,
+    });
+    await loader.loadSnapshot(2026);
 
-  answers.scoreboard = finishFirstGame(AFTERNOON.responses.scoreboard);
-  now += 11 * 1000;
-  const snapshot = await loader.loadSnapshot(2026);
+    answers.scoreboard = finishFirstGame(AFTERNOON.responses.scoreboard);
+    now += 11 * 1000;
+    const snapshot = await loader.loadSnapshot(2026);
 
-  const ended = snapshot.games.find((game) => game.id === "1042600132");
-  assert.equal(ended.end, "2026-10-01T01:11:27Z");
-  const last = snapshot.nearestGames.find((game) => game.id === "1042600132");
-  assert.equal(last.end, "2026-10-01T01:11:27Z");
-  assert.equal(league.countReads("espn"), 2);
-});
+    const ended = snapshot.games.find((game) => game.id === "1042600132");
+    assert.equal(ended.end, "2026-10-01T01:11:27Z");
+    const last = snapshot.nearestGames.find((game) => game.id === "1042600132");
+    assert.equal(last.end, "2026-10-01T01:11:27Z");
+    assert.equal(league.countReads("espn"), isKept ? 1 : 2);
+  });
+}
 
 test("a scoreboard that misses a read doesn't look like a game ending once it's back", async () => {
   /** @type {Record<string, "page" | "error">} */
@@ -1288,4 +1363,39 @@ test("a malformed scoreboard is named before snapshot composition and leaves the
   const snapshot = await loader.loadSnapshot(2026);
   assert.match(snapshot.failures.scoreboard, /Invalid sports data at 0.home.score/);
   assert.equal(snapshot.games.length, 28);
+});
+
+test("the snapshot loader keeps retry deadlines and persists ESPN matches together", async () => {
+  const league = createLeague({ espn: readAfternoonEspn(), refuse: { standings: "error" } });
+  const storage = createMemoryStorage();
+  const docs = createDocs();
+  const eventIds = new Set(
+    Object.values(ESPN_SCOREBOARD.answers).flatMap((answer) =>
+      answer.events.map((event) => String(event.id)),
+    ),
+  );
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const loader = createSnapshotLoader({ fetchImpl: league.fetchImpl, storage, now: () => NOW });
+    const snapshot = await loader.loadSnapshot(2026);
+    assert.equal(snapshot.nextReadAt, NOW + FAILED_FEED_WAIT_MS);
+    assert.ok(snapshot.espnMatches.length > 0);
+    await saveSnapshot(docs, snapshot);
+    for (const match of snapshot.espnMatches) {
+      assert.ok(eventIds.has(match.eventId));
+      assert.deepEqual(await docs.read(`espnMatches/${match.id}`), match);
+      assert.ok(snapshot.games.concat(snapshot.nearestGames).some((game) => game.id === match.id));
+    }
+    const [match] = snapshot.espnMatches;
+    const reads = [];
+    const reader = createEspnGameReader({
+      fetchImpl: async (url) => {
+        reads.push(url);
+        return Response.json({ id: match.eventId });
+      },
+    });
+    assert.deepEqual(await reader.fetchSummary(match, (key) => docs.read(key)), {
+      id: match.eventId,
+    });
+    assert.deepEqual(reads, [nameSummaryRequest(match.eventId)]);
+  }
 });

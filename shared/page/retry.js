@@ -3,6 +3,7 @@
 // it a note in that part's place. A tap on Try again, the phone coming back online, or the page
 // coming back reads again, so the part shows its placeholders until the read answers.
 
+import { NOT_AVAILABLE_YET, NOT_AVAILABLE_TITLE } from "./worker-error.js";
 import { html } from "./html.js";
 import { watchTimeAway } from "./resume.js";
 
@@ -48,22 +49,28 @@ export const renderRetryButton = ({ isFilled = false } = {}) =>
 export const renderRetryMessage = (message, className) =>
   html`<p class="${["retry-message", className].filter(Boolean).join(" ")}">${WARNING}<span>${message}</span></p>`;
 
-/** @typedef {"offline" | "unreachable" | "server"} ReadFailure */
+/** @typedef {"offline" | "unreachable" | "server" | "unavailable"} ReadFailure */
 
 /**
  * Why a read of the Worker failed: the phone is offline, the server is out of reach, or the server
- * answered with a problem, as a failure carrying the answer's status says.
+ * answered with a problem or has not filled the requested history.
  * @param {unknown} error
  * @returns {ReadFailure}
  */
 export function classifyReadFailure(error) {
   if (navigator.onLine === false) return "offline";
+  if (/** @type {any} */ (error)?.code === NOT_AVAILABLE_YET) return "unavailable";
   return typeof (/** @type {any} */ (error)?.status) === "number" ? "server" : "unreachable";
 }
 
 // A read that failed offline reads again as the phone comes back online; any other waits for a tap.
 /** @type {Record<ReadFailure, { icon: import("./html.js").Markup, title: string, next: (subject: string) => string }>} */
 const FAILURES = {
+  unavailable: {
+    icon: PLUGS,
+    title: NOT_AVAILABLE_TITLE,
+    next: () => "We're still adding this past season's details",
+  },
   offline: {
     icon: CELL_SIGNAL_SLASH,
     title: "Couldn't connect to the internet",

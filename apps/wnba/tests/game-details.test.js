@@ -2,19 +2,16 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { namePlayerIndexKey } from "#shared/page-search.js";
-import {
-  createBoxScoreServer,
-  describeBoxScore,
-  nameBoxScoreRequest,
-} from "../worker/src/box-score.js";
+import { createBoxScoreServer } from "../worker/src/box-score.js";
+import { describeBoxScore, nameBoxScoreRequest } from "../worker/src/adapters/box-score.js";
 import { REQUESTS } from "../worker/src/adapters/wnba.js";
-import { nameScoreboardRequest, nameSummaryRequest } from "../worker/src/lead.js";
+import { nameScoreboardRequest, nameSummaryRequest } from "../worker/src/adapters/lead.js";
+import { createPreviewServer } from "../worker/src/preview.js";
 import {
-  createPreviewServer,
   describePreview,
   listUpcomingMeetings,
   nameMeetingsKey,
-} from "../worker/src/preview.js";
+} from "../worker/src/adapters/preview.js";
 import { assertErrorAnswer } from "../../../tests/error-answer.js";
 import { readPlayerIndex } from "./player-fixtures.js";
 
@@ -81,9 +78,9 @@ function createLeague({ refuse = {}, espn = [] } = {}) {
 }
 
 const askBoxScore = (server, query) =>
-  server.serveBoxScore(new URL(`https://app.example/k3y/box-score?${query}`));
+  server.serveBoxScore(new URL(`https://app.example/k3y/box-score?${query}`), async () => null);
 const askPreview = (server, query) =>
-  server.servePreview(new URL(`https://app.example/k3y/preview?${query}`));
+  server.servePreview(new URL(`https://app.example/k3y/preview?${query}`), async () => null);
 
 test("a box score gives each team's points by quarter, its stats, and the players who got in", () => {
   const box = describeBoxScore(GAMES.boxScores[ACES_AT_FEVER]);
@@ -178,16 +175,17 @@ test("a live game's box score is read from the league every time", async () => {
   assert.equal(liveReads, 2);
 });
 
-test("a store that can't be read leaves the box score to the league", async () => {
-  const server = createBoxScoreServer({ fetchImpl: createLeague().fetchImpl });
+test("a store that can't be read stops before reading the league", async () => {
+  const league = createLeague();
+  const server = createBoxScoreServer({ fetchImpl: league.fetchImpl });
   const response = await server.serveBoxScore(
     new URL(`https://app.example/k3y/box-score?${nameGameQuery(ACES_AT_FEVER)}`),
     async () => {
       throw new Error("The store answered 500");
     },
   );
-  assert.equal(response.status, 200);
-  assert.equal((await response.json()).home.team, "IND");
+  assert.equal(response.status, 502);
+  assert.equal(league.reads.length, 0);
 });
 
 /**
@@ -457,23 +455,21 @@ test("a preview from the store is the one the schedule makes, either team at hom
   }
 });
 
-test("a preview the store doesn't keep, or can't read, comes from the schedule", async () => {
-  for (const readDoc of [
-    async () => null,
-    async () => {
-      throw new Error("The store answered 500");
-    },
-  ]) {
-    const league = createLeague();
-    const server = createPreviewServer({ fetchImpl: league.fetchImpl, now: () => NOW });
-    const response = await server.servePreview(
-      new URL("https://app.example/k3y/preview?season=2026&away=IND&home=LVA"),
-      readDoc,
-    );
-    assert.equal((await response.json()).meetings.length, 3);
-    assert.deepEqual(
-      league.reads.map((read) => read.url),
-      [REQUESTS.schedule],
-    );
-  }
+test("a missing preview is read through the adapter, and failed storage stops the read", async () => {
+  const league = createLeague();
+  const server = createPreviewServer({ fetchImpl: league.fetchImpl, now: () => NOW });
+  const url = new URL("https://app.example/k3y/preview?season=2026&away=IND&home=LVA");
+  const response = await server.servePreview(url, async () => null);
+  assert.equal((await response.json()).meetings.length, 3);
+  assert.deepEqual(
+    league.reads.map((read) => read.url),
+    [REQUESTS.schedule],
+  );
+  await assert.rejects(
+    server.servePreview(url, async () => {
+      throw new Error("Storage unavailable");
+    }),
+    /Storage unavailable/,
+  );
+  assert.equal(league.reads.length, 1);
 });

@@ -174,9 +174,9 @@ const BoxScoreSide = z.looseObject({
   score: Count,
   periods: z.array(Count),
   stats: z.object({
-    fieldGoals: z.tuple([Count, Count]),
-    threePointers: z.tuple([Count, Count]),
-    freeThrows: z.tuple([Count, Count]),
+    fieldGoals: z.tuple([Count, Count]).refine(([made, attempted]) => made <= attempted),
+    threePointers: z.tuple([Count, Count]).refine(([made, attempted]) => made <= attempted),
+    freeThrows: z.tuple([Count, Count]).refine(([made, attempted]) => made <= attempted),
     rebounds: Count,
     assists: Count,
     turnovers: Count,
@@ -200,13 +200,98 @@ const BoxScoreSide = z.looseObject({
 
 export const BasketballBoxScore = z.looseObject({
   id: Identifier,
-  source: z.literal("espn"),
-  state: z.enum(["live", "final"]),
+  source: z.literal("espn").optional(),
+  state: BasketballState,
   period: NullableCount,
   leadChanges: NullableCount,
-  timesTied: Count,
+  timesTied: NullableCount,
   away: BoxScoreSide,
   home: BoxScoreSide,
+});
+
+const BaseballBatter = z.object({
+  id: Count,
+  name: z.string(),
+  position: z.string(),
+  isSub: z.boolean(),
+  atBats: Count,
+  runs: Count,
+  hits: Count,
+  rbi: Count,
+  walks: Count,
+  strikeOuts: Count,
+});
+const BaseballLineupBatter = z.object({
+  id: Count,
+  name: z.string(),
+  position: z.string(),
+  average: z
+    .string()
+    .regex(/^(?:0?\.\d+|1\.0+)$/)
+    .nullable(),
+  homeRuns: NullableCount,
+  rbi: NullableCount,
+});
+const BaseballPitcher = z.object({
+  id: Count,
+  name: z.string(),
+  decision: z.enum(["W", "L", "S"]).nullable(),
+  inningsPitched: z.string().regex(/^\d+(?:\.[012])?$/),
+  pitches: Count,
+  hits: Count,
+  runs: Count,
+  earnedRuns: Count,
+  walks: Count,
+  strikeOuts: Count,
+});
+const BaseballTotals = z.object({ runs: Count, hits: Count, errors: Count });
+const ScoringPlay = z.object({
+  batter: z.string(),
+  event: z.string(),
+  reached: z.boolean(),
+  filledBases: z.boolean(),
+  scorers: z.array(
+    z.object({ name: z.string(), event: z.string(), pinchRunnerFor: z.string().nullable() }),
+  ),
+  score: z.object({ away: Count, home: Count }).nullable(),
+});
+const BaseballClub = z.object({
+  batters: z.array(z.union([BaseballBatter, BaseballLineupBatter])),
+  pitchers: z.array(BaseballPitcher),
+});
+export const BaseballBoxScore = z.object({
+  id: Identifier,
+  state: GameState,
+  innings: z.array(z.object({ away: NullableCount, home: NullableCount })),
+  totals: z.object({ away: BaseballTotals, home: BaseballTotals }),
+  away: BaseballClub,
+  home: BaseballClub,
+  scoringHalves: z
+    .array(
+      z.object({
+        side: z.enum(["away", "home"]),
+        inning: Count.positive(),
+        plays: z.array(ScoringPlay),
+      }),
+    )
+    .nullable(),
+  bases: z
+    .object({
+      half: z.enum(["top", "middle", "bottom", "end"]),
+      inning: Count.positive(),
+      outs: Count.max(3),
+      runners: z.array(
+        z.object({
+          base: z.enum(["1B", "2B", "3B"]),
+          name: z.string(),
+          reached: z.string().nullable(),
+          pinchRunnerFor: z.string().nullable(),
+        }),
+      ),
+      batter: z.string(),
+      pitcher: z.string(),
+    })
+    .nullable(),
 });
 
 export const ReportedPlayers = z.record(

@@ -1,8 +1,8 @@
 import { nameScheduleKey } from "../../page/js/snapshot.js";
 import { readFileSync } from "node:fs";
 import * as MLBSnapshot from "../../worker/src/adapters/mlb.js";
-import { describeBoxScore } from "../../worker/src/box-score.js";
-import { describeHighlights } from "../../worker/src/highlights.js";
+import { describeBoxScore } from "../../worker/src/adapters/box-score.js";
+import { describeHighlights } from "../../worker/src/adapters/highlights.js";
 import {
   indexInjuredPlayers,
   listInjuredPlayers,
@@ -15,7 +15,7 @@ import {
   listQualifiedRequest,
   nameStartersKey,
   readSpeeds,
-} from "../../worker/src/pitchers.js";
+} from "../../worker/src/adapters/pitchers.js";
 import {
   describeHitters,
   describeLastGames,

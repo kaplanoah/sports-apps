@@ -1,3 +1,9 @@
+import {
+  createRequestBudget,
+  RequestBudgetExhausted,
+  ALARM_REQUEST_ALLOWANCE,
+  HISTORY_REQUESTS_PER_RUN,
+} from "./request-budget.js";
 import { listFailureReasons, noteFeedFailures } from "./feed-failures.js";
 import { createGameReminders } from "./game-reminders.js";
 import { isSameJson } from "../page/compare.js";
@@ -16,8 +22,8 @@ import { describeError, respondError, respondJson, respondMethodNotAllowed } fro
 // the update it brings forward is coming and when each update is done. Each page says
 // which documents it watches, and hears only of changes to those. A league can keep
 // details of the games pages have open, like a box score, read with each update while they need
-// it, and run work of its own beside the season's updates, like reading the news. The Worker, and
-// never the page, can add to a count a job keeps, like how often a sheet had to read the league.
+// it, and run work of its own beside the season's updates, like reading the news. Detail services
+// count the reads a job would normally have spared.
 // Each update's status goes in `live/status`, and an update that fails is tried again after a wait
 // that grows with each failure in a row. Which of the league's feeds are failing, since when and
 // why, goes in `live/feeds`, for the Worker's health.
@@ -32,15 +38,19 @@ import { describeError, respondError, respondJson, respondMethodNotAllowed } fro
  *   requests counts these too
  * @property {{ get: (key: string) => Promise<any>, put: (key: string, value: any) => Promise<void>, delete: (key: string) => Promise<boolean>, list: (prefix: string) => Promise<Map<string, any>> }} storage
  * @property {Record<string, any>} env
+ * @property {() => number} [remainingRequests] how many history requests this run may still make
  * @property {typeof fetch} fetchImpl
  * @property {() => number} now
  */
+
+/** @typedef {JobContext & { countLeagueRead: (job: string) => Promise<void> }} DetailContext */
 
 /**
  * Work a league's store does on its own schedule. A run that takes long, like asking Claude, goes
  * on beside the season's updates and never holds them up.
  * @typedef {object} BackgroundJob
  * @property {(now: number) => number} chooseDelay the wait from one run's start to the next
+ * @property {(context: JobContext) => Promise<void>} [updateHistory] fills history after live jobs and reminders
  * @property {(context: JobContext) => Promise<void>} updateStore one run: brings what the job keeps
  *   in the store up to date
  */
@@ -71,7 +81,7 @@ import { describeError, respondError, respondJson, respondMethodNotAllowed } fro
  * @template {SeasonSnapshot} Snapshot
  * @template Updates
  * @typedef {object} League
- * @property {(storage: import("./feed-keeper.js").FeedStorage, fetchImpl: typeof fetch) => SnapshotLoader<Snapshot>} createLoadSnapshot
+ * @property {(storage: import("./feed-keeper.js").FeedStorage, fetchImpl: typeof fetch, readDoc: SeasonDocuments["read"]) => SnapshotLoader<Snapshot>} createLoadSnapshot
  *   reads the league through `fetchImpl`, keeping what it may read again in `storage`
  * @property {(loadSnapshot: SnapshotLoader<Snapshot>, now: number) => Promise<Snapshot>} loadCurrentSnapshot
  * @property {(docs: SeasonDocuments, season: number) => Promise<Updates>} readUpdates
@@ -87,13 +97,15 @@ import { describeError, respondError, respondJson, respondMethodNotAllowed } fro
  * @property {(change: { before: Updates, after: Updates, snapshot: Snapshot, now: number }) => object[]} listNotifications
  * @property {(snapshot: Snapshot) => ReturnType<typeof import("../page/reminder-games.js").listTimedReminderGames>} [listReminderGames]
  * @property {string} [detailsCollection] where the details of the games pages have open are kept
- * @property {() => (id: string, snapshot: Snapshot, stored: any, readDoc: SeasonDocuments["read"]) => Promise<object | null>} [createLoadDetails]
+ * @property {(options: { fetchImpl: typeof fetch }) => (id: string, snapshot: Snapshot, stored: any, readDoc: SeasonDocuments["read"]) => Promise<object | null>} [createLoadDetails]
  *   reads a game's details, or answers null while it needs none
+ * @property {(context: DetailContext) => (url: URL) => Promise<Response | null>} [createReadDetail]
  * @property {Record<string, BackgroundJob>} [backgroundJobs]
  * @property {string | null} [release] the commit the Worker was built from, or null outside a
  *   build
  */
 
+export const LEAGUE_READS_COUNT = "leagueReads";
 const MAX_LISTED = 100;
 const STATUS_KEY = "live/status";
 // Which season the league's updates are for, so pages never go by their own clocks.
@@ -118,7 +130,7 @@ const MAX_WATCHED = 50;
 const nameRunningKey = (name) => `job-running:${name}`;
 
 /**
- * Where a job's storage keeps a count the Worker adds to.
+ * Where a job's storage keeps a detail service's count.
  * @param {string} name
  */
 export const nameCountKey = (name) => `count:${name}`;
@@ -228,23 +240,35 @@ export function createSeasonStore(league) {
         now = () => Date.now(),
         fetchImpl = (input, init) => fetch(input, init),
         createLoadSnapshot = (/** @type {typeof fetch} */ fetchWith) =>
-          league.createLoadSnapshot(createFeedStorage(ctx.storage), fetchWith),
-        loadDetails = league.createLoadDetails?.() ?? null,
+          league.createLoadSnapshot(createFeedStorage(ctx.storage), fetchWith, (key) =>
+            ctx.storage.get(key),
+          ),
+        loadDetails = undefined,
       } = {},
     ) {
       this.ctx = ctx;
       this.env = env;
-      this.fetchImpl = fetchImpl;
+      this.requestCount = 0;
+      this.fetchImpl = (input, init) => {
+        this.requestCount += 1;
+        return fetchImpl(input, init);
+      };
+      this.historyRun = null;
+      this.historyGeneration = null;
+      this.alarmGeneration = 0;
       /** @type {Map<string, Promise<void>>} */
       this.jobRuns = new Map();
       this.openSocket = openSocket;
       this.createLoadSnapshot = createLoadSnapshot;
-      this.loadSnapshot = createLoadSnapshot(fetchImpl);
-      this.loadDetails = loadDetails;
+      this.loadSnapshot = createLoadSnapshot(this.fetchImpl);
+      this.loadDetails =
+        loadDetails === undefined
+          ? (league.createLoadDetails?.({ fetchImpl: this.fetchImpl }) ?? null)
+          : loadDetails;
       this.now = now;
       this.hasAlarm = false;
       this.failures = 0;
-      this.push = createPushService({ storage: ctx.storage, now, fetchImpl });
+      this.push = createPushService({ storage: ctx.storage, now, fetchImpl: this.fetchImpl });
       this.reminders = createGameReminders({
         storage: ctx.storage,
         push: this.push,
@@ -253,6 +277,7 @@ export function createSeasonStore(league) {
       });
       /** @type {Map<string, Promise<void>>} */
       this.docUpdates = new Map();
+      this.countUpdates = new Map();
       /** @type {SeasonDocuments} */
       this.docs = {
         read: async (key) => (await ctx.storage.get(key)) ?? null,
@@ -263,6 +288,17 @@ export function createSeasonStore(league) {
         update: (key, change) => this.updateDoc(key, change),
         remove: (key) => this.deleteDoc(key),
       };
+      this.readDetail = league.createReadDetail?.({
+        docs: this.docs,
+        storage: this.createJobStorage("details"),
+        countLeagueRead: async (job) => {
+          await this.incrementJobCount(job, LEAGUE_READS_COUNT);
+        },
+        createLoadSnapshot: this.createLoadSnapshot,
+        env,
+        fetchImpl: this.fetchImpl,
+        now,
+      });
     }
 
     async fetch(request) {
@@ -277,7 +313,11 @@ export function createSeasonStore(league) {
         }
         return response;
       }
-      if (pathname.startsWith("/count/")) return this.addToCount(request, pathname);
+      if (this.readDetail && !pathname.startsWith("/store/")) {
+        if (request.method !== "GET") return respondMethodNotAllowed(["GET"]);
+        const response = await this.readDetail(new URL(request.url));
+        if (response) return response;
+      }
       const path = readPath(pathname);
       if (!path) return respondError(404, "not_found", "No such path.");
       if (request.method !== "GET") return respondMethodNotAllowed(["GET"]);
@@ -308,17 +348,19 @@ export function createSeasonStore(league) {
       return dueAt <= now || isFromEarlierRelease(schedule);
     }
 
-    // Kept in the job's own storage, where its next run reads it.
-    async addToCount(request, pathname) {
-      if (request.method !== "POST") return respondMethodNotAllowed(["POST"]);
-      const [, , job, name, ...rest] = pathname.split("/");
-      const isJob = Object.hasOwn(league.backgroundJobs ?? {}, job);
-      if (!isJob || !isStoreName(name) || rest.length)
-        return respondError(404, "not_found", "No such count.");
-      const storage = this.createJobStorage(job);
-      const count = ((await storage.get(nameCountKey(name))) ?? 0) + 1;
-      await storage.put(nameCountKey(name), count);
-      return respondJson({ count });
+    incrementJobCount(job, name) {
+      const key = `${job}:${name}`;
+      const pending = (this.countUpdates.get(key) ?? Promise.resolve()).then(async () => {
+        const storage = this.createJobStorage(job);
+        const count = ((await storage.get(nameCountKey(name))) ?? 0) + 1;
+        await storage.put(nameCountKey(name), count);
+        return count;
+      });
+      this.countUpdates.set(
+        key,
+        pending.catch(() => {}),
+      );
+      return pending;
     }
 
     async listDocs(collection, searchParams) {
@@ -396,11 +438,14 @@ export function createSeasonStore(league) {
     // storage failed is set again for a retry, since one never set would stop every update.
     async alarm() {
       const now = this.now();
+      const generation = ++this.alarmGeneration;
+      const requestsBefore = this.requestCount;
       let nextAt = now + RETRY_MS[0];
       try {
         const seasonDueAt = await this.updateSeasonWhenDue(now);
-        const jobDueTimes = await this.startDueJobs(now);
         await this.reminders.checkDue();
+        const jobDueTimes = await this.startDueJobs(now);
+        this.startHistory(requestsBefore, generation);
         const updatedSeasonAt = (await this.ctx.storage.get(SCHEDULE_KEY))?.dueAt ?? seasonDueAt;
         const reminderAt = await this.reminders.findNextDeadline();
         nextAt = Math.min(
@@ -484,6 +529,48 @@ export function createSeasonStore(league) {
     startDueJobs(now) {
       const jobs = Object.entries(league.backgroundJobs ?? {});
       return Promise.all(jobs.map(([name, job]) => this.startJobWhenDue(name, job, now)));
+    }
+
+    startHistory(requestsBefore, generation) {
+      if (this.historyRun && this.historyGeneration === generation) return;
+      const pending = [...(this.historyRun ? [this.historyRun] : []), ...this.jobRuns.values()];
+      const history = Promise.allSettled(pending)
+        .then(async () => {
+          const limit = Math.min(
+            HISTORY_REQUESTS_PER_RUN,
+            Math.max(0, ALARM_REQUEST_ALLOWANCE - (this.requestCount - requestsBefore)),
+          );
+          const budget = createRequestBudget(
+            this.fetchImpl,
+            limit,
+            () => generation === this.alarmGeneration,
+          );
+          for (const [name, job] of Object.entries(league.backgroundJobs ?? {})) {
+            if (!job.updateHistory || !budget.remaining()) continue;
+            await job.updateHistory({
+              docs: this.docs,
+              storage: this.createJobStorage(name),
+              createLoadSnapshot: this.createLoadSnapshot,
+              env: this.env,
+              fetchImpl: budget.fetchImpl,
+              remainingRequests: budget.remaining,
+              now: this.now,
+            });
+          }
+        })
+        .catch((error) => {
+          if (!(error instanceof RequestBudgetExhausted))
+            console.error(`Filling history failed: ${describeError(error)}`);
+        })
+        .finally(() => {
+          if (this.historyRun === history) {
+            this.historyRun = null;
+            this.historyGeneration = null;
+          }
+        });
+      this.historyRun = history;
+      this.historyGeneration = generation;
+      this.ctx.waitUntil?.(history);
     }
 
     // The next run is set before this one starts, so a run that never ends can't stop the next. A
@@ -708,10 +795,15 @@ export function createSeasonStore(league) {
 const findStore = (env) => env.STORE.get(env.STORE.idFromName("store"));
 
 // Only the page's own origin talks to the store, so it gets no CORS headers.
-export function forwardToStore(request, env, storePath) {
+export async function forwardToStore(request, env, storePath) {
   const url = new URL(request.url);
   url.pathname = storePath;
-  return findStore(env).fetch(new Request(url, request));
+  try {
+    return await findStore(env).fetch(new Request(url, request));
+  } catch (error) {
+    console.error(`Reaching the store failed: ${describeError(error)}`);
+    return respondError(503, "store_unavailable", "Couldn't reach the store. Try again.");
+  }
 }
 
 /**
@@ -731,17 +823,4 @@ export async function readStoreDoc(env, key) {
   const response = await findStore(env).fetch(`https://store/store/${key}`);
   if (!response.ok) throw new Error(`The store answered ${response.status} for ${key}`);
   return (await response.json()).data;
-}
-
-/**
- * Adds one to a count a background job keeps, for the Worker's own routes.
- * @param {any} env the Worker's bindings
- * @param {string} job the job's name, as the league's `backgroundJobs` keys it
- * @param {string} name what it counts
- */
-export async function addToJobCount(env, job, name) {
-  const response = await findStore(env).fetch(`https://store/count/${job}/${name}`, {
-    method: "POST",
-  });
-  if (!response.ok) throw new Error(`The store answered ${response.status} for ${job}'s ${name}`);
 }

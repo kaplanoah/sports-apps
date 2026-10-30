@@ -15,7 +15,7 @@ import {
   readLeagueRows,
   readSpeeds,
   splitIntoBatches,
-} from "./pitchers.js";
+} from "./adapters/pitchers.js";
 import {
   LOOKBACK_DAYS,
   describeClubStarts,
@@ -24,7 +24,7 @@ import {
   listScheduleClubs,
   listScheduleRequest,
   nameRotationKey,
-} from "./rotations.js";
+} from "./adapters/rotations.js";
 import {
   createPerStoreJob,
   createSavedDocs,
@@ -34,7 +34,7 @@ import {
 } from "../../../../shared/worker/background-job.js";
 import { createFeedKeeper, isPlayerReadDue } from "../../../../shared/worker/feed-keeper.js";
 import { catchFailure, noteFailure, runWithStatus } from "../../../../shared/worker/job-status.js";
-import { nameCountKey } from "../../../../shared/worker/season-store.js";
+import { nameCountKey, LEAGUE_READS_COUNT } from "../../../../shared/worker/season-store.js";
 
 // Keeps what the matchup sheet shows, so a tap reads only the store and never waits on MLB. Each
 // run reads MLB's league-wide feeds again only as a game ends, or once they're old: every
@@ -53,8 +53,6 @@ const HOUR_MS = 60 * MINUTE_MS;
 const RUN_DELAY_MS = 5 * MINUTE_MS;
 const STATUS_KEY = "pitchers/status";
 export const PITCHER_JOB = "pitchers";
-// The count the Worker adds to each time a sheet reads MLB for what the store should have kept.
-export const LEAGUE_READS_COUNT = "leagueReads";
 // Every starter's first read spreads over a few runs, while a game's end needs only one batch.
 const BATCHES_PER_RUN = 4;
 

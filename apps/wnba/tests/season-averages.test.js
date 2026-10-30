@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { describeRanks, describeRegularSeason } from "../worker/src/player.js";
+import { describeRanks, describeRegularSeason } from "../worker/src/adapters/player.js";
 import { describeAverages, listLeaders } from "../worker/src/season-averages.js";
 import { readTable } from "../worker/src/wnba.js";
 

@@ -1,6 +1,6 @@
 import { nameScheduleCollection } from "../../page/js/snapshot.js";
 import { listSlateGames } from "../../page/js/slate.js";
-import { fetchBoxScore, nameGameDetailsKey } from "./box-score.js";
+import { fetchBoxScore, nameGameDetailsKey } from "./adapters/box-score.js";
 import { createGameDetailsJob } from "../../../../shared/worker/game-details-job.js";
 
 // Keeps each finished game's box score, as the shared job reads each final (game-details-job.js):
@@ -46,7 +46,7 @@ const keepFirstOfEach = (games) => [...new Map(games.map((game) => [game.id, gam
  * @param {JobContext} context
  * @param {number} season
  */
-async function listFinals(context, season) {
+export async function listFinals(context, season) {
   const slate = (await context.docs.read(`seasons/${season}`))?.slate;
   return keepFirstOfEach([
     ...(slate ? listSlateFinals(slate) : []),

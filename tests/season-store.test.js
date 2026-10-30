@@ -1,7 +1,8 @@
 import test, { mock } from "node:test";
 import assert from "node:assert/strict";
 import {
-  addToJobCount,
+  LEAGUE_READS_COUNT,
+  nameCountKey,
   createSeasonStore,
   readFeedFailures,
   readStoreDoc,
@@ -22,6 +23,57 @@ const QUIET_LEAGUE = {
 };
 
 const NOW = Date.parse("2026-09-30T20:00:00Z");
+
+test("history waits for live jobs and reminders and spends only the alarm's remaining requests", async () => {
+  const events = [];
+  let finishLive;
+  const pendingLive = new Promise((resolve) => {
+    finishLive = resolve;
+  });
+  let requests = 0;
+  const Store = createSeasonStore({
+    ...QUIET_LEAGUE,
+    backgroundJobs: {
+      details: {
+        chooseDelay: () => 60000,
+        async updateStore(context) {
+          events.push("live");
+          await pendingLive;
+          for (let index = 0; index < 38; index += 1)
+            await context.fetchImpl("https://feed.example/live");
+          events.push("live finished");
+        },
+        async updateHistory(context) {
+          events.push("history");
+          for (let index = 0; index < 4; index += 1)
+            await context.fetchImpl("https://feed.example/history");
+        },
+      },
+    },
+  });
+  const { ctx } = createDurableObjectContext();
+  const store = new Store(
+    ctx,
+    {},
+    {
+      now: () => NOW,
+      fetchImpl: async () => {
+        requests += 1;
+        return new Response();
+      },
+    },
+  );
+  store.reminders.checkDue = async () => {
+    events.push("reminders");
+  };
+  await store.alarm();
+  assert.deepEqual(events, ["reminders", "live"]);
+  const history = store.historyRun;
+  finishLive();
+  await history;
+  assert.deepEqual(events, ["reminders", "live", "live finished", "history"]);
+  assert.equal(requests, 40);
+});
 
 const patchSeason = (store, body) =>
   store.fetch(
@@ -650,7 +702,8 @@ test("a league reads through the fetch it's handed, and keeps what it reads in t
   const context = createDurableObjectContext();
   const SeasonStore = createSeasonStore({
     ...QUIET_LEAGUE,
-    createLoadSnapshot: (storage, fetchImpl) => async () => {
+    createLoadSnapshot: (storage, fetchImpl, readDoc) => async () => {
+      assert.deepEqual(await readDoc("espnMatches/game"), { eventId: "401" });
       const answer = await (await fetchImpl("https://league.example/standings")).json();
       await storage.put("standings", answer);
       await storage.put("old-standings", answer);
@@ -671,6 +724,7 @@ test("a league reads through the fetch it's handed, and keeps what it reads in t
   const storeFetch = createFetch("store");
   const store = new SeasonStore(context.ctx, {}, { fetchImpl: storeFetch.fetchImpl });
 
+  await store.docs.write("espnMatches/game", { eventId: "401" });
   assert.deepEqual(await store.loadSnapshot(2026), { readBy: "store" });
   assert.deepEqual(storeFetch.reads, ["https://league.example/standings"]);
   assert.deepEqual(await context.ctx.storage.get("feed:standings"), { readBy: "store" });
@@ -977,32 +1031,26 @@ test("a page that opens on the release that last updated the season keeps its sc
   assert.equal(updates.count, 0);
 });
 
-test("the Worker adds to a count a job keeps, which the job reads and the page can't change", async () => {
+test("store-owned detail reads count concurrently without a writable HTTP endpoint", async () => {
   const context = createDurableObjectContext();
+  let countLeagueRead;
   const SeasonStore = createSeasonStore({
     ...QUIET_LEAGUE,
-    backgroundJobs: { players: { chooseDelay: () => 5 * MINUTE_MS, updateStore: async () => {} } },
+    createReadDetail: (detailContext) => {
+      countLeagueRead = detailContext.countLeagueRead;
+      return async () => null;
+    },
   });
   const store = new SeasonStore(context.ctx, {}, { now: () => NOW });
-  const env = {
-    STORE: {
-      idFromName: (/** @type {string} */ name) => name,
-      get: () => ({
-        fetch: (/** @type {string} */ url, /** @type {RequestInit} */ init) =>
-          store.fetch(new Request(url, init)),
-      }),
-    },
-  };
-
-  await addToJobCount(env, "players", "leagueReads");
-  await addToJobCount(env, "players", "leagueReads");
-
-  assert.equal(await store.createJobStorage("players").get("count:leagueReads"), 2);
-  await assert.rejects(addToJobCount(env, "news", "leagueReads"), /The store answered 404/);
-  const read = await store.fetch(new Request(`${ORIGIN}/count/players/leagueReads`));
-  assert.equal(read.status, 405);
-  assert.equal(read.headers.get("allow"), "POST");
-  assert.equal(await store.createJobStorage("players").get("count:leagueReads"), 2);
+  await Promise.all(Array.from({ length: 5 }, () => countLeagueRead("players")));
+  assert.equal(await store.createJobStorage("players").get(nameCountKey(LEAGUE_READS_COUNT)), 5);
+  for (const method of ["GET", "POST"]) {
+    const response = await store.fetch(
+      new Request(`${ORIGIN}/count/players/${LEAGUE_READS_COUNT}`, { method }),
+    );
+    assert.equal(response.status, method === "GET" ? 404 : 405);
+  }
+  assert.equal(await store.createJobStorage("players").get(nameCountKey(LEAGUE_READS_COUNT)), 5);
 });
 
 test("a saved reminder wakes a sleeping store before the three-hour season poll, surviving a restart", async () => {
@@ -1298,4 +1346,61 @@ test("reading preferences and sending a test push do not replan device reminders
     assert.equal(response.ok, true);
   }
   assert.equal(plans, 0);
+});
+
+test("a new alarm cancels an older history continuation before it can fetch beside live work", async () => {
+  const context = createDurableObjectContext();
+  const clock = { now: NOW };
+  let releaseHistory;
+  let announceHistory;
+  const started = new Promise((resolve) => {
+    announceHistory = resolve;
+  });
+  const held = new Promise((resolve) => {
+    releaseHistory = resolve;
+  });
+  const reads = [];
+  let historyRuns = 0;
+  const SeasonStore = createSeasonStore({
+    ...QUIET_LEAGUE,
+    backgroundJobs: {
+      history: {
+        chooseDelay: () => 1000,
+        updateStore: async ({ fetchImpl }) => {
+          await fetchImpl("https://example.com/live");
+        },
+        updateHistory: async ({ fetchImpl }) => {
+          const invocation = ++historyRuns;
+          await fetchImpl(`https://example.com/history-${invocation}-first`);
+          announceHistory();
+          await held;
+          await fetchImpl(`https://example.com/history-${invocation}-second`);
+        },
+      },
+    },
+  });
+  const store = new SeasonStore(
+    context.ctx,
+    {},
+    {
+      now: () => clock.now,
+      fetchImpl: async (url) => {
+        reads.push(String(url));
+        return new Response("{}");
+      },
+    },
+  );
+  await store.alarm();
+  await started;
+  clock.now += 1000;
+  await store.alarm();
+  releaseHistory();
+  await store.historyRun;
+  assert.deepEqual(reads, [
+    "https://example.com/live",
+    "https://example.com/history-1-first",
+    "https://example.com/live",
+    "https://example.com/history-2-first",
+    "https://example.com/history-2-second",
+  ]);
 });

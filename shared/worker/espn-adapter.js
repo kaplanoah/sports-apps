@@ -208,6 +208,7 @@ export const readNetworkGames = (answers, findTeam) =>
 export function trimNetworkAnswer(answer) {
   return {
     events: (answer.events ?? []).map((event) => ({
+      id: event.id,
       date: event.date,
       competitions: (event.competitions ?? []).slice(0, 1).map((competition) => ({
         date: competition.date,
@@ -264,8 +265,10 @@ function countSecondsPlayed(period, clock, rules) {
  * @param {any} competition
  * @param {"away" | "home"} place
  */
-const findCompetitorCode = (competition, place, findTeam) =>
-  findTeam(competition?.competitors?.find((competitor) => competitor.homeAway === place)?.team?.id);
+const findCompetitorCode = (competition, place, findTeam) => {
+  const competitor = competition?.competitors?.find((each) => each.homeAway === place);
+  return findTeam(competitor?.team?.id ?? competitor?.id);
+};
 
 /**
  * The day's ESPN game between the two teams, home and away as asked.
@@ -280,7 +283,7 @@ export function findEventId(scoreboard, { away, home }, findTeam) {
       findCompetitorCode(competition, "home", findTeam) === home
     );
   });
-  return event ? String(event.id) : null;
+  return event?.id == null ? null : String(event.id);
 }
 
 /**

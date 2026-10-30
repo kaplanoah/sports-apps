@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { buildSnapshot } from "../worker/src/adapters/wnba.js";
 import { indexRosters } from "../worker/src/player-index.js";
-import { describeRoster } from "../worker/src/roster.js";
+import { describeRoster } from "../worker/src/adapters/roster.js";
 import { describeAverages, listLeaders } from "../worker/src/season-averages.js";
 
 // Every player's totals as the league answered the morning after the Liberty's last game.

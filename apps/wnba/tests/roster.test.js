@@ -2,12 +2,12 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { nameInjuriesRequest } from "../worker/src/injuries.js";
+import { createRosterServer } from "../worker/src/roster.js";
 import {
-  createRosterServer,
   describeRoster,
   nameLeagueRosterRequest,
   namePlayerListRequest,
-} from "../worker/src/roster.js";
+} from "../worker/src/adapters/roster.js";
 import { assertErrorAnswer } from "../../../tests/error-answer.js";
 
 // The league's rosters of the Liberty, Dream, Aces, Fever, and Wings this season and the Liberty's
@@ -54,7 +54,7 @@ async function askForRoster(answers, query) {
   const response = await createRosterServer({
     fetchImpl: createFetch(answers).fetchImpl,
     now: () => NOW,
-  }).serveRoster(new URL(`https://wnba.test/roster?${query}`));
+  }).serveRoster(new URL(`https://wnba.test/roster?${query}`), async () => null);
   return { status: response.status, body: await response.json() };
 }
 
@@ -124,6 +124,7 @@ test("a past season's roster is that season's, with each player's age then, and 
   const { fetchImpl, asked } = createFetch(listAnswers("NYL", 2025));
   const response = await createRosterServer({ fetchImpl, now: () => NOW }).serveRoster(
     new URL("https://wnba.test/roster?team=NYL&season=2025"),
+    async () => null,
   );
   const body = await response.json();
 

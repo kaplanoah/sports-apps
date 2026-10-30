@@ -3,25 +3,27 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { isStillPlaying } from "../page/js/series.js";
 import { TEAMS } from "../page/js/teams.js";
+import { createPlayerServer } from "../worker/src/player.js";
 import {
   PLAYOFFS,
   REGULAR_SEASON,
-  createPlayerServer,
   nameGameLogRequest,
   nameRanksKey,
+  nameNumbersKey,
   nameTeamGameLogRequest,
   nameTotalsRequest,
-} from "../worker/src/player.js";
+} from "../worker/src/adapters/player.js";
 import { namePlayerIndexKey } from "#shared/page-search.js";
-import { createPlayerJob } from "../worker/src/player-updater.js";
+import { createPlayerJob, FEEDS } from "../worker/src/player-updater.js";
 import { addTurnovers, joinGameLogs } from "./player-fixtures.js";
 import { nameInjuriesRequest } from "../worker/src/injuries.js";
+import { createRosterServer } from "../worker/src/roster.js";
 import {
-  createRosterServer,
   nameLeagueRosterRequest,
   namePlayerListRequest,
-} from "../worker/src/roster.js";
-import { nameFeedKey } from "../../../shared/worker/feed-keeper.js";
+  nameRosterKey,
+} from "../worker/src/adapters/roster.js";
+import { nameFeedKey, createFeedKeeper } from "../../../shared/worker/feed-keeper.js";
 import { createDocs, createJobStorage } from "../../../tests/job-context.js";
 import { findTeamLeaders } from "../page/js/team-view.js";
 
@@ -47,6 +49,42 @@ const IONESCU = "1629477";
 const STATS_FEEDS = 5;
 const TEAM_COUNT = Object.keys(TEAMS).length;
 const STATUS_KEY = "players/status";
+
+test("historical players and rosters fill incrementally across restarts within their request budget", async () => {
+  const { createRequestBudget, HISTORY_REQUESTS_PER_RUN } =
+    await import("../../../shared/worker/request-budget.js");
+  const { docs, storage, league } = createRun();
+  const expiryStepMs = Math.max(...Object.values(FEEDS).map((feed) => feed.maxAgeMs)) + 1;
+  await createFeedKeeper({ feeds: {}, storage, now: () => NOW }).noteFinalCount(0);
+  for (let attempt = 0; attempt < 7; attempt += 1) {
+    const before = league.requests.length;
+    const budget = createRequestBudget(league.fetchImpl, HISTORY_REQUESTS_PER_RUN);
+    await createPlayerJob().updateHistory({
+      docs,
+      storage,
+      env: {},
+      now: () => NOW + attempt * expiryStepMs,
+      fetchImpl: budget.fetchImpl,
+      createLoadSnapshot: () => async () => null,
+    });
+    const issued = league.requests.length - before;
+    assert.ok(issued <= HISTORY_REQUESTS_PER_RUN);
+    if (issued) assert.equal(docs.stored.get("players-history/status").requests, issued);
+    assert.equal(docs.stored.get("players-history/status").lastFailure, null);
+    assert.equal(Object.hasOwn(docs.stored.get("players-history/status"), "leagueReads"), false);
+    await createFeedKeeper({
+      feeds: {},
+      storage,
+      now: () => NOW + (attempt + 1) * expiryStepMs,
+    }).noteFinalCount(attempt + 1);
+  }
+  assert.ok(await storage.get("filled:2025"));
+  assert.ok(docs.stored.get(nameRanksKey(2025)));
+  assert.ok(docs.stored.get(nameRosterKey(2025, "NYL")));
+  assert.ok(docs.stored.get(nameNumbersKey(2025, STEWART)));
+  assert.ok(league.requests.every((url) => new URL(url).searchParams.get("Season") === "2025"));
+  assert.equal(new Set(league.requests).size, league.requests.length);
+});
 
 // The current season's feeds carry turnovers, and the past season's are as the fixture recorded
 // them, without.
@@ -128,15 +166,18 @@ function createRun({ series = [], answers = listAnswers(), job = createPlayerJob
   const storage = createJobStorage();
   const league = createLeagueFetch(answers);
   const clock = { now: NOW };
-  const runJob = () =>
-    job.updateStore({
+  const runJob = async () => {
+    const context = {
       docs,
       storage,
       createLoadSnapshot: () => async () => null,
       env: {},
       fetchImpl: league.fetchImpl,
       now: () => clock.now,
-    });
+    };
+    await job.updateStore(context);
+    await job.updateHistory(context);
+  };
   /** @param {number} minutes */
   const wait = (minutes) => {
     clock.now += minutes * MINUTE_MS;
@@ -172,7 +213,7 @@ async function askForPlayer(query, { docs, answers = listAnswers() } = {}) {
     now: () => NOW,
   }).servePlayer(
     new URL(`https://wnba.test/player?${query}`),
-    docs ? readFromStore(docs) : undefined,
+    docs ? readFromStore(docs) : async () => null,
   );
   return { status: response.status, body: await response.json(), requests };
 }
@@ -185,7 +226,7 @@ async function askForRoster(query, { docs } = {}) {
   const { requests, fetchImpl } = createLeagueFetch(listAnswers());
   const response = await createRosterServer({ fetchImpl, now: () => NOW }).serveRoster(
     new URL(`https://wnba.test/roster?${query}`),
-    docs ? readFromStore(docs) : undefined,
+    docs ? readFromStore(docs) : async () => null,
   );
   return { status: response.status, body: await response.json(), requests };
 }
@@ -465,7 +506,7 @@ test("ESPN's injury report isn't read once no team plays", async () => {
   );
 });
 
-test("a season the store hasn't filled, or a store that can't be read, has the sheet read the league", async () => {
+test("current store gaps can fetch through the adapter, and storage errors stop the read", async () => {
   const { docs, runJob } = createRun();
   await runJob();
   docs.stored.delete(nameRanksKey(2026));
@@ -476,11 +517,8 @@ test("a season the store hasn't filled, or a store that can't be read, has the s
 
   const broken = { read: async () => Promise.reject(new Error("The store answered 500")) };
   const unreadable = await askForPlayer(`id=${STEWART}&team=NYL&season=2026`, { docs: broken });
-  assert.equal(unreadable.status, 200);
-  assert.deepEqual(
-    unreadable.body,
-    (await askForPlayer(`id=${STEWART}&team=NYL&season=2026`)).body,
-  );
+  assert.equal(unreadable.status, 502);
+  assert.equal(unreadable.requests.length, 0);
 });
 
 test("each season's list of players names everyone on its rosters, with her team and number", async () => {
@@ -530,7 +568,7 @@ test("a past season filled before the store kept its list of players gets one fr
   await storage.put("allFilled", `2026 ${await storage.get("filled:2025")}`);
   const pastReads = league.requests.filter((url) => /Season=2025/.test(url)).length;
 
-  await createPlayerJob().updateStore({
+  await createPlayerJob().updateHistory({
     docs,
     storage,
     createLoadSnapshot: () => async () => null,
@@ -591,13 +629,16 @@ test("each run saves its status: the requests it made by feed, what it saved, an
 
   const first = docs.stored.get(STATUS_KEY);
   assert.equal(first.ranAt, new Date(NOW).toISOString());
-  assert.equal(first.requests, league.requests.length);
+  assert.equal(
+    first.requests + docs.stored.get("players-history/status").requests,
+    league.requests.length,
+  );
   assert.deepEqual(first.feeds, {
-    totals: 2,
-    playerGames: 4,
-    teamGames: 4,
-    roster: 2 * TEAM_COUNT,
-    playerList: 2,
+    totals: 1,
+    playerGames: 2,
+    teamGames: 2,
+    roster: TEAM_COUNT,
+    playerList: 1,
     out: 1,
   });
   assert.deepEqual(Object.keys(first.saved).sort(), [
@@ -609,10 +650,14 @@ test("each run saves its status: the requests it made by feed, what it saved, an
     "rosters",
     "seasons",
   ]);
-  assert.equal(first.saved.ranks, 2);
-  assert.equal(first.saved.seasons, 2);
-  assert.equal(first.saved["player-index"], 2);
-  assert.deepEqual(first.pastSeason, { season: 2025, isWhole: true });
+  assert.equal(first.saved.ranks, 1);
+  assert.equal(first.saved.seasons, 1);
+  assert.equal(first.saved["player-index"], 1);
+  assert.equal(Object.hasOwn(first, "pastSeason"), false);
+  assert.deepEqual(docs.stored.get("players-history/status").pastSeason, {
+    season: 2025,
+    isWhole: true,
+  });
   assert.equal(first.lastFailure, null);
   assert.equal(first.leagueReads, 0);
 
@@ -626,7 +671,7 @@ test("each run saves its status: the requests it made by feed, what it saved, an
   assert.equal(afterFinal.requests, STATS_FEEDS);
   assert.deepEqual(afterFinal.feeds, { totals: 1, playerGames: 2, teamGames: 2 });
   assert.deepEqual(afterFinal.saved, {});
-  assert.equal(afterFinal.pastSeason, null);
+  assert.equal(Object.hasOwn(afterFinal, "pastSeason"), false);
 });
 
 test("the status keeps a run's failure, with when it ran, until another run fails", async () => {
@@ -725,7 +770,7 @@ test("once every past season is filled, a run lists the seasons again only when 
   await runJob();
 
   assert.deepEqual(docs.lists.slice(listings), ["seasons"]);
-  assert.equal(docs.stored.get(STATUS_KEY).pastSeason.season, 2026);
+  assert.equal(docs.stored.get("players-history/status").pastSeason.season, 2026);
 });
 
 test("past seasons filled with other columns are listed again", async () => {

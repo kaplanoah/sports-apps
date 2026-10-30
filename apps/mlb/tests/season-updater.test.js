@@ -7,7 +7,14 @@ import { sortInScheduleOrder } from "../page/js/schedule-order.js";
 import * as MLBSnapshot from "../worker/src/adapters/mlb.js";
 import { OFF_DAY_CHECK_MS } from "#shared/poll-schedule.js";
 import { composeLog, createReading, sortParts } from "../worker/src/readings.js";
-import { loadCurrentSnapshot, saveSnapshot } from "../worker/src/season-updater.js";
+import { createDocs } from "../../../tests/job-context.js";
+import {
+  loadCurrentSnapshot,
+  saveSnapshot,
+  ensureScheduleRevision,
+  hasCurrentSchedule,
+  savePastSeason,
+} from "../worker/src/season-updater.js";
 import { testSeasonUpdater } from "../../../tests/season-updater-contract.js";
 import { SeasonStore } from "../worker/src/store.js";
 import {
@@ -330,7 +337,7 @@ test("each month of the season's games is saved apart from its record, and only 
   await updateSeasonAgain(store, context, clock);
   assert.deepEqual(
     sent.map((message) => message.path),
-    ["schedules-2026/2026-10"],
+    ["schedule-revisions/2026", "schedules-2026/2026-10", "schedule-revisions/2026"],
   );
   assert.deepEqual(read("schedules-2026/2026-10").games, october);
 });
@@ -352,7 +359,7 @@ test("a month whose every game MLB dropped goes, and tells open pages", async ()
   assert.equal(read("schedules-2026/2026-10"), null);
   assert.deepEqual(
     sent.map((message) => message.path),
-    ["schedules-2026/2026-10"],
+    ["schedule-revisions/2026", "schedules-2026/2026-10", "schedule-revisions/2026"],
   );
 });
 
@@ -459,4 +466,53 @@ test("a read without the season's whole schedule leaves its months as they were"
   harness.snapshot = { ...WHOLE_SEASON, asOf: "2026-10-10T23:40:00.000Z", schedule: null };
   await updateSeasonAgain(store, context, clock);
   assert.deepEqual(read("schedules-2026/2026-10"), saved);
+});
+
+test("a schedule revision changes only after its complete publication changes the game set", async () => {
+  const docs = createDocs();
+  assert.equal(await ensureScheduleRevision(docs, 2026), null);
+  const schedule = { "2026-09": SNAPSHOT.slate.today.games };
+  const snapshot = { ...SNAPSHOT, schedule, missing: [] };
+  await savePastSeason(docs, snapshot);
+  const first = await ensureScheduleRevision(docs, 2026);
+  assert.ok(first);
+  await savePastSeason(docs, snapshot);
+  assert.equal(await ensureScheduleRevision(docs, 2026), first);
+  await savePastSeason(docs, {
+    ...snapshot,
+    schedule: {
+      "2026-09": [...schedule["2026-09"], { ...schedule["2026-09"][0], id: "another-game" }],
+    },
+  });
+  assert.notEqual(await ensureScheduleRevision(docs, 2026), first);
+});
+
+test("an interrupted schedule publication stays incomplete until the writer repairs it", async () => {
+  const docs = createDocs();
+  const snapshot = {
+    ...SNAPSHOT,
+    schedule: { "2026-09": SNAPSHOT.slate.today.games },
+    missing: [],
+  };
+  await savePastSeason(docs, snapshot);
+  const originalWrite = docs.write;
+  docs.write = async (key, document) => {
+    if (key.startsWith("schedules-2026/")) throw new Error("Storage unavailable");
+    await originalWrite(key, document);
+  };
+  const changed = {
+    ...snapshot,
+    schedule: {
+      "2026-09": [
+        ...snapshot.schedule["2026-09"],
+        { ...snapshot.schedule["2026-09"][0], id: "another-game" },
+      ],
+    },
+  };
+  await assert.rejects(savePastSeason(docs, changed), /Storage unavailable/);
+  assert.equal(await ensureScheduleRevision(docs, 2026), null);
+  assert.equal(await hasCurrentSchedule(docs, 2026), false);
+  docs.write = originalWrite;
+  await savePastSeason(docs, changed);
+  assert.ok(await ensureScheduleRevision(docs, 2026));
 });

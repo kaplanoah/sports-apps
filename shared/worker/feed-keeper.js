@@ -1,3 +1,4 @@
+import { RequestBudgetExhausted } from "./request-budget.js";
 import { describeError } from "./responses.js";
 
 // A league's slower feeds, each read again only when it may have changed: as a game ends, for a
@@ -205,6 +206,10 @@ export function createFeedKeeper({ feeds, now, storage = createMemoryStorage() }
         onNextRead((await findReadTimes(name, updated, isBehind)).nextReadAt);
         return data;
       } catch (error) {
+        if (error instanceof RequestBudgetExhausted) {
+          if (answer) return answer.data;
+          throw error;
+        }
         const reason = describeError(error);
         const failed = { answer, failedAt: now(), reason };
         await saveRecord(storageKey, failed, what);

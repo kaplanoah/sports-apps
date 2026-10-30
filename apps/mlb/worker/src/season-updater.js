@@ -151,55 +151,66 @@ const keepPlayoffGames = (snapshot, games, doc) =>
         ...(doc?.games ?? []).filter((/** @type {any} */ game) => game.postseason),
       ]);
 
-/**
- * @param {any} docs
- * @param {any} snapshot
- * @param {Map<string, any>} saved each month the store keeps, by its month
- */
-async function writeListedMonths(docs, snapshot, saved) {
-  const year = snapshot.season;
-  for (const [month, listed] of Object.entries(snapshot.schedule)) {
-    const doc = saved.get(month);
-    const games = keepPlayoffGames(snapshot, listed, doc);
-    if (isSavedSchedule(doc, snapshot, games)) continue;
-    await docs.write(nameScheduleKey(year, month), {
-      version: snapshot.version,
-      edition: SCHEDULE_EDITION,
-      year,
-      month,
-      games,
-      updatedAt: snapshot.asOf,
-    });
-  }
+/** @param {any} snapshot @param {Map<string, any>} saved */
+function listScheduleWrites(snapshot, saved) {
+  return Object.entries(snapshot.schedule).flatMap(([month, listed]) => {
+    const previous = saved.get(month);
+    const games = keepPlayoffGames(snapshot, listed, previous);
+    return isSavedSchedule(previous, snapshot, games)
+      ? []
+      : [
+          {
+            key: nameScheduleKey(snapshot.season, month),
+            document: {
+              version: snapshot.version,
+              edition: SCHEDULE_EDITION,
+              year: snapshot.season,
+              month,
+              games,
+              updatedAt: snapshot.asOf,
+            },
+          },
+        ];
+  });
 }
 
 /** @param {any} doc a month of the season's games as the store keeps it */
-const holdsOnlyPlayoffGames = (doc) =>
-  (doc.games ?? []).every((/** @type {any} */ game) => game.postseason);
+const holdsOnlyPlayoffGames = (doc) => (doc.games ?? []).every((game) => game.postseason);
 
-// Only playoff games are ever dropped, so a month of nothing else that the schedule no longer
-// lists lost every game it held, like a World Series' last games after a sweep, unless a read
-// without the standings left out its playoff games.
-/**
- * @param {any} docs
- * @param {any} snapshot
- * @param {Map<string, any>} saved each month the store keeps, by its month
- */
-async function removeEmptiedMonths(docs, snapshot, saved) {
-  if (!snapshot.isSeriesKnown) return;
-  for (const [month, doc] of saved)
-    if (!Object.hasOwn(snapshot.schedule, month) && holdsOnlyPlayoffGames(doc))
-      await docs.remove(nameScheduleKey(snapshot.season, month));
+// Only playoff-only months can disappear when a series ends; a partial standings read keeps them.
+/** @param {any} snapshot @param {Map<string, any>} saved */
+function listDroppedMonths(snapshot, saved) {
+  if (!snapshot.isSeriesKnown) return [];
+  return [...saved]
+    .filter(
+      ([month, document]) =>
+        !Object.hasOwn(snapshot.schedule, month) && holdsOnlyPlayoffGames(document),
+    )
+    .map(([month]) => nameScheduleKey(snapshot.season, month));
 }
 
-// Each month of the season's games keeps a document of its own, saved only when its games change,
-// so a game's end sends open pages only its month.
+// Each month has its own document so a game update sends open pages only that month.
+// A publication revision lets historical consumers skip completed schedules, and an interrupted
+// publication remains incomplete so the past-season job repairs it.
 async function saveSchedule(docs, snapshot) {
   if (!snapshot.schedule) return;
-  const collection = nameScheduleCollection(snapshot.season);
-  const saved = new Map((await docs.list(collection)).map((doc) => [doc.month, doc]));
-  await writeListedMonths(docs, snapshot, saved);
-  await removeEmptiedMonths(docs, snapshot, saved);
+  const saved = new Map(
+    (await docs.list(nameScheduleCollection(snapshot.season))).map((doc) => [doc.month, doc]),
+  );
+  const writes = listScheduleWrites(snapshot, saved);
+  const removed = listDroppedMonths(snapshot, saved);
+  const key = nameScheduleRevisionKey(snapshot.season);
+  const previous = await docs.read(key);
+  const isWhole =
+    !snapshot.missing?.length ||
+    (previous?.isWhole === true && previous.edition === SCHEDULE_EDITION);
+  const changed = writes.length > 0 || removed.length > 0;
+  if (!changed && previous?.isWhole === isWhole && previous.edition === SCHEDULE_EDITION) return;
+  const revision = (previous?.revision ?? 0) + 1;
+  if (changed) await docs.write(key, { edition: SCHEDULE_EDITION, revision, isWhole: false });
+  for (const { key, document } of writes) await docs.write(key, document);
+  for (const key of removed) await docs.remove(key);
+  await docs.write(key, { edition: SCHEDULE_EDITION, revision, isWhole });
 }
 
 /**
@@ -252,6 +263,8 @@ export async function savePastSeason(docs, snapshot) {
 // Whether the store keeps a season's games as the page reads them now, which a season saved before
 // it kept them, or before they held what they hold now, lacks.
 export async function hasCurrentSchedule(docs, year) {
+  const revision = await docs.read(nameScheduleRevisionKey(year));
+  if (revision && !revision.isWhole) return false;
   const months = await docs.list(nameScheduleCollection(year));
   return months.length > 0 && months.every((month) => month.edition === SCHEDULE_EDITION);
 }
@@ -265,4 +278,27 @@ export async function readUpdates(docs, year) {
 export function describeSnapshotStatus(snapshot) {
   const missing = snapshot.missing || [];
   return { error: missing.length ? "mlb_fields_missing" : "", detail: missing.join(", ") };
+}
+
+/** @param {number} year */
+const nameScheduleRevisionKey = (year) => `schedule-revisions/${year}`;
+
+/**
+ * Reads a completed schedule's small publication revision. Legacy complete schedules acquire
+ * their initial revision once; a missing or obsolete schedule remains unfilled.
+ * @param {import("../../../../shared/worker/season-store.js").SeasonDocuments} docs
+ * @param {number} year
+ * @returns {Promise<string | null>}
+ */
+export async function ensureScheduleRevision(docs, year) {
+  const key = nameScheduleRevisionKey(year);
+  let revision = await docs.read(key);
+  if (!revision) {
+    if (!(await hasCurrentSchedule(docs, year))) return null;
+    revision = { edition: SCHEDULE_EDITION, revision: 0, isWhole: true };
+    await docs.write(key, revision);
+  }
+  return revision.isWhole && revision.edition === SCHEDULE_EDITION
+    ? `${revision.edition}:${revision.revision}`
+    : null;
 }

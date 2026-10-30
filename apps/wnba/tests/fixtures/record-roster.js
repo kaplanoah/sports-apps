@@ -1,7 +1,10 @@
 import fs from "node:fs";
 import path from "node:path";
 import { TEAMS } from "../../page/js/teams.js";
-import { nameLeagueRosterRequest, namePlayerListRequest } from "../../worker/src/roster.js";
+import {
+  nameLeagueRosterRequest,
+  namePlayerListRequest,
+} from "../../worker/src/adapters/roster.js";
 import { FEED_HEADERS } from "../../worker/src/wnba.js";
 
 // Records what a team's Roster page reads from the league for the teams and seasons named: the

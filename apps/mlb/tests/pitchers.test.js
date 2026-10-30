@@ -1,15 +1,15 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { createPitcherServer } from "../worker/src/pitchers.js";
 import {
   composePitcher,
-  createPitcherServer,
   describePitcher,
   describeStarters,
   listGameLogRequest,
   listPeopleRequest,
   listQualifiedRequest,
   readSpeeds,
-} from "../worker/src/pitchers.js";
+} from "../worker/src/adapters/pitchers.js";
 import { assertErrorAnswer } from "../../../tests/error-answer.js";
 
 const NOW = Date.parse("2026-09-30T16:00:00Z");
@@ -223,7 +223,7 @@ function createTestServer(options) {
   return {
     mlb,
     requestPitcher: (query) =>
-      server.servePitcher(new URL(`https://mlb-app.example/k3y/pitcher${query}`)),
+      server.servePitcher(new URL(`https://mlb-app.example/k3y/pitcher${query}`), async () => null),
     advanceClock: (milliseconds) => {
       now += milliseconds;
     },

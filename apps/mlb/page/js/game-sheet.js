@@ -41,7 +41,7 @@ import { openSheet, wireSheet } from "#shared/sheet.js";
 import { letGoOfGame, noteShownGame } from "#shared/sheet-memory.js";
 
 /** @typedef {import("./matchup.js").MatchupGame} MatchupGame */
-/** @typedef {{ game: MatchupGame, sides: any[], boxScore: any }} ShownGame */
+/** @typedef {{ game: MatchupGame, sides: any[], boxScore: any, season?: number | null }} ShownGame */
 
 const SIDES = ["away", "home"];
 const STATE_ORDER = ["pre", "live", "final"];
@@ -193,8 +193,8 @@ function describePlay(clip) {
   return [describeInning(clip), game && clip.score ? renderPlayScore(game, clip) : ""];
 }
 
-/** @param {string} id */
-const loadHighlights = (id) => () => fetchHighlights(id);
+/** @param {string} id @param {number | null | undefined} season */
+const loadHighlights = (id, season) => () => fetchHighlights(id, season);
 
 // A final offers its highlights, and any other game hides their pill, leaving the section if it
 // showed.
@@ -202,7 +202,7 @@ const loadHighlights = (id) => () => fetchHighlights(id);
 function offerHighlights(game) {
   const isFinal = game.state === "final" && Boolean(game.id);
   findElement("gameTabHighlights").hidden = !isFinal;
-  if (isFinal) highlights?.show(game.id, loadHighlights(game.id));
+  if (isFinal) highlights?.show(game.id, loadHighlights(game.id, shown?.season));
   else if (sections?.readShown() === "highlights") sections.showSection("game", true);
 }
 
@@ -295,9 +295,10 @@ const loadSides = (opened, sides, game) =>
  * @param {MatchupGame} game
  * @param {any[]} sides
  * @param {any} [boxScore] what the sheet showed before a reload
+ * @param {number | null} [season] the season this game was opened from
  */
-async function showGame(game, sides, boxScore = null) {
-  const opened = { game, sides, boxScore };
+async function showGame(game, sides, boxScore = null, season = session.season?.year ?? null) {
+  const opened = { game, sides, boxScore, season };
   shown = opened;
   stopWatchingBoxScore();
   renderSheet();
@@ -376,8 +377,8 @@ function reopenGameSheet(saved) {
   if (!saved?.game || !Array.isArray(saved.sides)) return false;
   const kept = saved.highlights;
   if (kept?.id === saved.game.id && kept.highlights)
-    highlights?.show(kept.id, loadHighlights(kept.id), kept.highlights);
-  showGame(saved.game, saved.sides, saved.boxScore ?? null);
+    highlights?.show(kept.id, loadHighlights(kept.id, saved.season), kept.highlights);
+  showGame(saved.game, saved.sides, saved.boxScore ?? null, saved.season);
   if (typeof saved.section === "string") sections?.showSection(saved.section, true);
   return true;
 }
@@ -427,7 +428,7 @@ export function startGameSheet() {
   findElement("gameBody").addEventListener("click", showMatchupOnTap);
   watchRetries(sheet, () => {
     retryFailedSides();
-    if (shown?.game.id) highlights?.retry(loadHighlights(shown.game.id));
+    if (shown?.game.id) highlights?.retry(loadHighlights(shown.game.id, shown.season));
   });
   wireSheet(sheet, {
     findScroller: sections.findShownSection,

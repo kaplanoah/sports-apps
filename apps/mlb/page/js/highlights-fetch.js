@@ -1,5 +1,5 @@
 // A finished game's highlights for its sheet, from the Worker, which answers from the store and
-// reads MLB for a game the store doesn't keep.
+// may read MLB for current-season details not yet kept.
 
 import { SHEET_FETCH_TIMEOUT_MS } from "#shared/sheet-reads.js";
 import { fetchFromWorker } from "#shared/worker-fetch.js";
@@ -7,10 +7,13 @@ import { fetchFromWorker } from "#shared/worker-fetch.js";
 // Highlights post over hours, so a sheet opened again in the next minute reuses them.
 const REUSE_MS = 60 * 1000;
 
-/** @param {string} id */
-export const fetchHighlights = (id) =>
-  fetchFromWorker(`highlights?id=${encodeURIComponent(id)}`, {
-    reuseMs: REUSE_MS,
-    timeoutMs: SHEET_FETCH_TIMEOUT_MS,
-    isExpected: (body) => body.id === id && Array.isArray(body.plays),
-  });
+/** @param {string} id @param {number | null | undefined} [season] */
+export const fetchHighlights = (id, season) =>
+  fetchFromWorker(
+    `highlights?id=${encodeURIComponent(id)}${Number.isInteger(season) ? `&season=${season}` : ""}`,
+    {
+      reuseMs: REUSE_MS,
+      timeoutMs: SHEET_FETCH_TIMEOUT_MS,
+      isExpected: (body) => body.id === id && Array.isArray(body.plays),
+    },
+  );

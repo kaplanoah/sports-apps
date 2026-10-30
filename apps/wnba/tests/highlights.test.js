@@ -2,13 +2,10 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { nameScheduleKey } from "../page/js/snapshot.js";
-import {
-  createHighlightsServer,
-  describeHighlights,
-  nameHighlightsKey,
-} from "../worker/src/highlights.js";
+import { createHighlightsServer } from "../worker/src/highlights.js";
+import { describeHighlights, nameHighlightsKey } from "../worker/src/adapters/highlights.js";
 import { createHighlightsUpdater } from "../worker/src/highlights-updater.js";
-import { nameScoreboardRequest, nameSummaryRequest } from "../worker/src/lead.js";
+import { nameScoreboardRequest, nameSummaryRequest } from "../worker/src/adapters/lead.js";
 import { assertErrorAnswer } from "../../../tests/error-answer.js";
 import { createDocs, createJobStorage } from "../../../tests/job-context.js";
 

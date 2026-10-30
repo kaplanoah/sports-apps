@@ -48,13 +48,15 @@ paths:
 - A final's Highlights section (`worker/src/highlights.js` and `highlights-updater.js`):
   - It holds MLB's recap video, MLB.com's story, and the clip of each play, with its inning and the score after a play that scored.
   - These come from MLB's content and the plays its live feed ties each clip to.
-  - The store keeps them for each of the current season's finals, read as it ends and again over the hours after, and reads them on a tap for a season before.
-  - Each still shows the moment, never a headline (`worker/src/headline-stills.js`):
+  - The store keeps them for each of the current season's finals, read as it ends and again over the hours after, and fills past seasons incrementally after live work and reminders, newest season first. An unfilled historical Highlights section says Not available yet.
+  - Current-season stills show the moment, never a headline (`worker/src/headline-stills.js`):
     - The recap's is a frame from its video.
     - A play's is MLB's own unless Claude Haiku finds a headline laid over it, then a frame from the play's video or, for a clip without frames, MLB.com's photo of the game.
     - The store asks once for each still, a few a run, since Cloudflare caps a run's requests.
     - It asks again a few times about one Claude doesn't answer, which shows as MLB's own meanwhile and then counts as clean.
-- The box score's store (`worker/src/box-score.js`, `game-details-updater.js`, and `watched-games.js`):
+  - Historical fills use MLB's own stills and ask Claude about none. Live and historical runs report separately in `highlights/status` and `highlights-history/status`.
+- Detail routes forward to the store; its services fetch through adapters. Live misses share store-owned reads, and usable saved answers survive failures and restarts.
+- The box score's store (`worker/src/box-score.js`, its `adapters/box-score.js`, `game-details-updater.js`, and `watched-games.js`):
   - The store keeps the box score for every finished game of each season it keeps, the slate's first, then the rest of the current season's and each past season's, newest first.
   - It reads the box score with each update for a game a page has open.
 - The Games tab (`page/js/games-view.js` and `worker/src/season-updater.js`):
@@ -98,3 +100,5 @@ paths:
   - It shows the news as the WNBA's does, from MLB's outlets and the Mets' own.
   - The same shared news job keeps it by MLB's prompt: anything about the Mets, and another club's news only when it matters across baseball.
   - It has a settings switch for each of its paid outlets.
+
+- Schedule publications keep a small `schedule-revisions/<year>` document. History completion is tied to that revision; an interrupted publication remains incomplete until repaired.

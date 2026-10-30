@@ -28,6 +28,17 @@ function setOnline(isOnline) {
 const CELL_SIGNAL_SLASH = 'd="M86,152v48a6,6';
 const PLUGS = 'd="M148.24,139.76a6,6';
 
+test("unfilled history explains availability and retains the shared retry control", () => {
+  setOnline(true);
+  const failure = classifyReadFailure({ status: 409, code: "not_available_yet" });
+  assert.equal(failure, "unavailable");
+  const block = renderRetryBlock("roster", failure);
+  assert.match(
+    readText(block),
+    /^Not available yet We're still adding this past season's details Try again$/,
+  );
+});
+
 test("a read that failed offline is the phone's, whatever the failure", () => {
   setOnline(false);
 

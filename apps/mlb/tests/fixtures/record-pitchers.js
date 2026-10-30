@@ -10,12 +10,12 @@ import {
   listQualifiedIds,
   listQualifiedRequest,
   readLeagueRows,
-} from "../../worker/src/pitchers.js";
+} from "../../worker/src/adapters/pitchers.js";
 import {
   LOOKBACK_DAYS,
   listClubStarterIds,
   listScheduleRequest,
-} from "../../worker/src/rotations.js";
+} from "../../worker/src/adapters/rotations.js";
 
 // Records what the matchup sheet reads this season and last for the clubs named: the league's
 // tables, the last two weeks of every club's games and of each named club's, and the pitchers the

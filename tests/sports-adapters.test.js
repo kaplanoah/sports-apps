@@ -17,7 +17,7 @@ import {
 } from "../apps/mlb/worker/src/snapshot.js";
 import { REQUESTS } from "../apps/wnba/worker/src/adapters/wnba.js";
 import { MLB_API, listMlbRequests } from "../apps/mlb/worker/src/adapters/mlb.js";
-import { describeEspnBoxScore } from "../apps/wnba/worker/src/espn-box-score.js";
+import { describeEspnBoxScore } from "../apps/wnba/worker/src/adapters/espn-box-score.js";
 
 const LEAGUES = [
   {

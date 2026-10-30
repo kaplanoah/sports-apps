@@ -6,7 +6,7 @@ import {
 } from "../../../../shared/worker/background-job.js";
 import { createFeedKeeper } from "../../../../shared/worker/feed-keeper.js";
 import { catchFailure, noteFailure, runWithStatus } from "../../../../shared/worker/job-status.js";
-import { nameCountKey } from "../../../../shared/worker/season-store.js";
+import { nameCountKey, LEAGUE_READS_COUNT } from "../../../../shared/worker/season-store.js";
 import { nameScheduleKey } from "../../page/js/snapshot.js";
 import { isStillPlaying } from "../../page/js/series.js";
 import { TEAMS } from "../../page/js/teams.js";
@@ -22,7 +22,7 @@ import {
   nameRanksKey,
   nameTeamGameLogRequest,
   nameTotalsRequest,
-} from "./player.js";
+} from "./adapters/player.js";
 import { fetchInjuries, listOutPlayers } from "./injuries.js";
 import { namePlayerIndexKey } from "#shared/page-search.js";
 import { nameOvertimesKey } from "../../page/js/search-pages.js";
@@ -35,7 +35,7 @@ import {
   nameLeagueRosterRequest,
   namePlayerListRequest,
   nameRosterKey,
-} from "./roster.js";
+} from "./adapters/roster.js";
 import { fetchWnbaJson, hasTable, trimColumns } from "./wnba.js";
 
 // Keeps what player and roster sheets show, and the list of players search finds, so a tap reads
@@ -48,21 +48,19 @@ import { fetchWnbaJson, hasTable, trimColumns } from "./wnba.js";
 // is whole, every player's averages, for her team's Roster, and with them each team's leading
 // scorers in the season's record, from the totals her sheet is worked out from, the finals that
 // went to overtime, for search, and, once every team's roster has answered, the season's list of
-// players. Each run also fills one season the
-// store keeps from before the current one, newest first, and a filled season is never read again,
-// since a past season doesn't change, unless the sheets come to read a column it was filled
-// without. Each run ends by saving how it went in `players/status`, with how often a sheet had to
-// read the league for a player the store hadn't saved.
+// players. Live runs report in `players/status`, including how often a sheet needed a league read.
+// A separate historical run fills one past season at a time, newest first, and reports its active
+// work in `players-history/status`. A completed season is read again only when its required
+// columns change.
 
 const MINUTE_MS = 60 * 1000;
 const HOUR_MS = 60 * MINUTE_MS;
 const RUN_DELAY_MS = 5 * MINUTE_MS;
 const STATUS_KEY = "players/status";
 export const PLAYER_JOB = "players";
-export const LEAGUE_READS_COUNT = "leagueReads";
 const TEAM_KEYS = Object.keys(TEAMS);
 
-const FEEDS = {
+export const FEEDS = {
   totals: { maxAgeMs: 6 * HOUR_MS, changesWithGames: true },
   playerGames: { maxAgeMs: 6 * HOUR_MS, changesWithGames: true },
   teamGames: { maxAgeMs: 6 * HOUR_MS, changesWithGames: true },
@@ -149,7 +147,7 @@ const nameOldTotalsRequest = (season) =>
   `https://stats.wnba.com/stats/leaguedashplayerstats?College=&Conference=&Country=&DateFrom=&DateTo=&Division=&DraftPick=&DraftYear=&GameScope=&GameSegment=&Height=&LastNGames=0&LeagueID=10&Location=&MeasureType=Base&Month=0&OpponentTeamID=0&Outcome=&PORound=0&PaceAdjust=N&PerMode=Totals&Period=0&PlayerExperience=&PlayerPosition=&PlusMinus=N&Rank=N&Season=${season}&SeasonSegment=&SeasonType=Regular+Season&ShotClockRange=&StarterBench=&TeamID=0&VsConference=&VsDivision=&Weight= PLAYER_ID PLAYER_NAME GP MIN PTS REB AST STL BLK TOV FGM FGA FG3M FG3A FTM FTA`;
 
 /** One store's update, with what it keeps between runs while it stays in memory. */
-function createStoreUpdate() {
+function createStoreUpdate(historyOnly = false) {
   /** @type {ReturnType<typeof createFeedKeeper> | null} */
   let keeper = null;
   const savedDocs = createSavedDocs();
@@ -410,19 +408,27 @@ function createStoreUpdate() {
   /** @param {RunContext} context */
   async function keepPlayers(context) {
     keeper ??= createFeedKeeper({
-      feeds: FEEDS,
+      feeds: historyOnly
+        ? Object.fromEntries(
+            Object.entries(FEEDS).map(([name, feed]) => [
+              name,
+              { ...feed, maxAgeMs: Infinity, changesWithGames: false },
+            ]),
+          )
+        : FEEDS,
       now: context.now,
       storage: context.storage,
     });
     const current = (await context.docs.read("live/current"))?.season;
     if (!Number.isInteger(current)) return;
+    if (historyOnly) {
+      await fillPastSeason(context, current);
+      return;
+    }
     const savedSeason = await context.docs.read(nameSeasonKey(current));
     await keeper.noteFinalCount(countFinals(await context.docs.read(nameScheduleKey(current))));
     await catchFailure(context.failures, `Keeping ${current}'s players`, () =>
       updateSeason(context, current, savedSeason?.series ?? []),
-    );
-    await catchFailure(context.failures, "Filling a past season's players", () =>
-      fillPastSeason(context, current),
     );
   }
 
@@ -430,13 +436,15 @@ function createStoreUpdate() {
   function updateStore(context) {
     const log = createRunLog();
     return runWithStatus(context, {
-      statusKey: STATUS_KEY,
+      onlyWhenActive: historyOnly,
+      statusKey: historyOnly ? "players-history/status" : STATUS_KEY,
       updateStore: (runContext) => keepPlayers({ ...runContext, log }),
       describeRun: async ({ storage }) => ({
         feeds: log.feeds,
         saved: log.saved,
-        pastSeason: log.pastSeason,
-        leagueReads: (await storage.get(nameCountKey(LEAGUE_READS_COUNT))) ?? 0,
+        ...(historyOnly
+          ? { pastSeason: log.pastSeason }
+          : { leagueReads: (await storage.get(nameCountKey(LEAGUE_READS_COUNT))) ?? 0 }),
       }),
     });
   }
@@ -444,4 +452,8 @@ function createStoreUpdate() {
   return updateStore;
 }
 
-export const createPlayerJob = () => createPerStoreJob(RUN_DELAY_MS, createStoreUpdate);
+export function createPlayerJob() {
+  const live = createPerStoreJob(RUN_DELAY_MS, createStoreUpdate);
+  const history = createPerStoreJob(RUN_DELAY_MS, () => createStoreUpdate(true));
+  return { ...live, updateHistory: history.updateStore };
+}

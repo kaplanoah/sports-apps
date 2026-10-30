@@ -258,7 +258,9 @@ Pages link these before their own stylesheet, and theme them with the tokens the
 - `game-details-job.js`: keeping each finished game's details
 - `espn-adapter.js`: shared ESPN requests and parsing, with league-supplied mappings and basketball rules
 - `sports-schema.js`: app-owned sports schemas and Worker-only validation with Zod configured without runtime compilation
-- `store-reads.js`: reading the documents the store keeps for a sheet
+- `store-reads.js`: reading the documents a store-owned detail service keeps for a sheet
+- `detail-reads.js`: sharing store-owned detail reads and retaining usable answers across restarts
+- `request-budget.js`: bounding historical requests after live work and reminders
 - `story-lead.js`: a story's first lines as plain text
 - `news-updater.js`: keeping a league's news from its outlets' feeds
 - `news-feeds.js`: reading a league's news outlets

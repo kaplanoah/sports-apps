@@ -9,27 +9,40 @@ import { createDurableObjectContext } from "../../../tests/durable-object-contex
 import { createMemoryStorage, FAILED_FEED_WAIT_MS } from "../../../shared/worker/feed-keeper.js";
 import { readAfternoonEspn } from "./espn-fixtures.js";
 
-test("every background job saves how its run went where the Diagnostics report reads it", async () => {
-  const { ctx, stored } = createDurableObjectContext();
-  const now = Date.parse("2026-09-30T20:00:00Z");
-  const store = new SeasonStore(
-    ctx,
-    {},
-    {
-      fetchImpl: async () => new Response("", { status: 503 }),
-      createLoadSnapshot: () => async () => {
-        throw new Error("The WNBA didn't answer");
+for (const withHistory of [false, true]) {
+  test(`${withHistory ? "active" : "idle"} history reports only background work that ran to Diagnostics`, async () => {
+    const { ctx, stored } = createDurableObjectContext();
+    const now = Date.parse("2026-09-30T20:00:00Z");
+    const store = new SeasonStore(
+      ctx,
+      {},
+      {
+        fetchImpl: async () => new Response("", { status: 503 }),
+        createLoadSnapshot: () => async () => {
+          throw new Error("The WNBA didn't answer");
+        },
+        now: () => now,
       },
-      now: () => now,
-    },
-  );
+    );
 
-  await store.startDueJobs(now);
-  await Promise.all(store.jobRuns.values());
+    await store.startDueJobs(now);
+    await Promise.all(store.jobRuns.values());
+    if (withHistory) {
+      await store.docs.write("live/current", { season: 2026 });
+      await store.docs.write("seasons/2025", { year: 2025, games: [], series: [], slate: null });
+    }
+    store.startHistory(0, store.alarmGeneration);
+    await store.historyRun;
 
-  const saved = [...stored.keys()].filter((key) => key.endsWith("/status"));
-  assert.deepEqual(saved.sort(), BACKGROUND_JOBS.map((name) => `${name}/status`).sort());
-});
+    const saved = [...stored.keys()].filter((key) => key.endsWith("/status"));
+    assert.deepEqual(
+      saved.sort(),
+      BACKGROUND_JOBS.filter((name) => withHistory || !name.endsWith("-history"))
+        .map((name) => `${name}/status`)
+        .sort(),
+    );
+  });
+}
 
 test("the real league store saves confirmed playoff reminder facts from its snapshot", async () => {
   const fixture = JSON.parse(
