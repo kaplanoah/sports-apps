@@ -204,7 +204,6 @@ export function describeRotation({ club, games, pitchers }, date) {
 /**
  * @param {object} [options]
  * @param {(input: string, init: object) => Promise<Response>} [options.fetchImpl]
- * @param {() => number} [options.now]
  */
 export function createRotationReader({ fetchImpl = (input, init) => fetch(input, init) } = {}) {
   /** @param {string} path */

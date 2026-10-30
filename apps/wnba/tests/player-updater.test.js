@@ -51,12 +51,13 @@ const TEAM_COUNT = Object.keys(TEAMS).length;
 const STATUS_KEY = "players/status";
 
 test("historical players and rosters fill incrementally across restarts within four requests", async () => {
-  const { createRequestBudget } = await import("../../../shared/worker/request-budget.js");
+  const { createRequestBudget, HISTORY_REQUESTS_PER_RUN } =
+    await import("../../../shared/worker/request-budget.js");
   const { docs, storage, league } = createRun();
   await createFeedKeeper({ feeds: {}, storage, now: () => NOW }).noteFinalCount(0);
   for (let attempt = 0; attempt < 7; attempt += 1) {
     const before = league.requests.length;
-    const budget = createRequestBudget(league.fetchImpl, 4);
+    const budget = createRequestBudget(league.fetchImpl, HISTORY_REQUESTS_PER_RUN);
     await createPlayerJob().updateHistory({
       docs,
       storage,
@@ -66,7 +67,7 @@ test("historical players and rosters fill incrementally across restarts within f
       createLoadSnapshot: () => async () => null,
     });
     const issued = league.requests.length - before;
-    assert.ok(issued <= 4);
+    assert.ok(issued <= HISTORY_REQUESTS_PER_RUN);
     if (issued) assert.equal(docs.stored.get("players-history/status").requests, issued);
     assert.equal(docs.stored.get("players-history/status").lastFailure, null);
     assert.equal(Object.hasOwn(docs.stored.get("players-history/status"), "leagueReads"), false);

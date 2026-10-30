@@ -45,4 +45,10 @@ test("highlights request the shown season and retry an unfilled archive without 
   await page.unroute(matchPath("/highlights"), unavailable);
   await sheet.locator("#highlightsBody").getByRole("button", { name: "Try again" }).click();
   await expect(sheet.locator("#highlightsBody .clip-row")).toHaveCount(15);
+  const unknownSeason = page.waitForRequest(/\/highlights\?/);
+  await page.evaluate(async () => {
+    const { fetchHighlights } = await import(new URL("js/highlights-fetch.js", location.href).href);
+    await fetchHighlights("849826", null);
+  });
+  expect(new URL((await unknownSeason).url()).searchParams.has("season")).toBe(false);
 });
