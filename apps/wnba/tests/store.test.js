@@ -88,7 +88,12 @@ test("the real league store keeps what its last update saved when a reminder ver
   assert.equal(stored.get("push:reminder-games").verifiedAt, null);
 });
 
-test("the real league store verifies reminders from the kept schedule when the schedule fails and the scoreboard lists today's games", async () => {
+/**
+ * A league store over the afternoon fixture's feeds, read through the real snapshot loader, with
+ * each feed named in `downFeeds` answering a page instead, and ESPN answering `espn` by URL.
+ * @param {{ espn?: Record<string, unknown> }} [options]
+ */
+function createLeagueStore({ espn = {} } = {}) {
   const fixture = JSON.parse(
     readFileSync(new URL("./fixtures/2026-09-30-afternoon.json", import.meta.url), "utf8"),
   );
@@ -99,41 +104,7 @@ test("the real league store verifies reminders from the kept schedule when the s
     [REQUESTS.bracket(fixture.season)]: "bracket",
     [REQUESTS.standings(fixture.season)]: "standings",
   };
-  let isScheduleDown = false;
-  /** @param {string} url */
-  const fetchImpl = async (url) => {
-    const feed = feeds[url];
-    if (!feed) return new Response("", { status: 404 });
-    if (feed === "schedule" && isScheduleDown) return new Response("<!DOCTYPE html><html></html>");
-    return new Response(JSON.stringify(fixture.responses[feed]));
-  };
-  const { ctx, stored } = createDurableObjectContext();
-  const { loadSnapshot } = createSnapshotLoader({ fetchImpl, now: () => now });
-  const store = new SeasonStore(
-    ctx,
-    {},
-    { now: () => now, createLoadSnapshot: () => loadSnapshot },
-  );
-  await store.updateSeason();
-  isScheduleDown = true;
-  await store.verifyReminderGames();
-  const facts = stored.get("push:reminder-games");
-  assert.equal(facts.verifiedAt, now);
-  assert.ok(facts.games.some((game) => game.id === "1042600132"));
-});
-
-test("the real league store verifies reminders from the kept schedule when the scoreboard and schedule fail and ESPN answers for today's games", async () => {
-  const fixture = JSON.parse(
-    readFileSync(new URL("./fixtures/2026-09-30-afternoon.json", import.meta.url), "utf8"),
-  );
-  const now = Date.parse(fixture.now);
-  const feeds = {
-    [REQUESTS.scoreboard]: "scoreboard",
-    [REQUESTS.schedule]: "schedule",
-    [REQUESTS.bracket(fixture.season)]: "bracket",
-    [REQUESTS.standings(fixture.season)]: "standings",
-  };
-  const espn = readAfternoonEspn();
+  /** @type {Set<string>} */
   const downFeeds = new Set();
   /** @param {string} url */
   const fetchImpl = async (url) => {
@@ -150,6 +121,21 @@ test("the real league store verifies reminders from the kept schedule when the s
     {},
     { now: () => now, createLoadSnapshot: () => loadSnapshot },
   );
+  return { store, stored, downFeeds, now };
+}
+
+test("the real league store verifies reminders from the kept schedule when the schedule fails and the scoreboard lists today's games", async () => {
+  const { store, stored, downFeeds, now } = createLeagueStore();
+  await store.updateSeason();
+  downFeeds.add("schedule");
+  await store.verifyReminderGames();
+  const facts = stored.get("push:reminder-games");
+  assert.equal(facts.verifiedAt, now);
+  assert.ok(facts.games.some((game) => game.id === "1042600132"));
+});
+
+test("the real league store verifies reminders from the kept schedule when the scoreboard and schedule fail and ESPN answers for today's games", async () => {
+  const { store, stored, downFeeds, now } = createLeagueStore({ espn: readAfternoonEspn() });
   await store.updateSeason();
   downFeeds.add("scoreboard").add("schedule");
   await store.verifyReminderGames();

@@ -968,7 +968,7 @@ test("a slow feed that didn't answer waits five minutes before it's asked again"
   assert.deepEqual(answered.missing, []);
 });
 
-test("a snapshot says why it couldn't be read when no feed answers", async () => {
+test("a snapshot says why it couldn't be read when no feed answers, without reading ESPN", async () => {
   const league = createLeague({
     refuse: { scoreboard: "error", schedule: "error", bracket: "error", standings: "error" },
   });
@@ -976,8 +976,9 @@ test("a snapshot says why it couldn't be read when no feed answers", async () =>
 
   await assert.rejects(
     loader.loadSnapshot(2026),
-    /None of the WNBA's feeds answered with data: scoreboard: The WNBA answered 503 for \/.+; schedule: The WNBA answered 503 for \/.+; bracket: .+; standings: .+/,
+    /^Error: None of the WNBA's feeds answered with data: scoreboard: The WNBA answered 503 for \/[^;]+; schedule: The WNBA answered 503 for \/[^;]+; bracket: [^;]+; standings: [^;]+$/,
   );
+  assert.equal(league.countReads("espn"), 0);
 });
 
 test("the Worker bundles with its page, and exports its store", async () => {
