@@ -1,4 +1,3 @@
-import { randomBytes } from "node:crypto";
 import { IdentityEntry, IdentityObservation, validateSportsData } from "./sports-schema.js";
 import { isSameJson } from "../page/compare.js";
 
@@ -146,7 +145,7 @@ export function createIdentityLookup(storage, league) {
         if (previous) return previous.internalId;
         let internalId;
         do {
-          internalId = `${asked.type === "game" ? "g" : "p"}_${randomBytes(9).toString("base64url")}`;
+          internalId = `${asked.type === "game" ? "g" : "p"}_${crypto.randomUUID().replaceAll("-", "").slice(0, 12)}`;
         } while (await transaction.get(nameEntityKey(league, asked.type, internalId)));
         const observation = { ...asked, internalId, evidence: { method: "discovery" } };
         validateSportsData(IdentityObservation, observation);

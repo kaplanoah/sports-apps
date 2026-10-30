@@ -1,3 +1,4 @@
+import { RequestBudgetExhausted } from "../shared/worker/request-budget.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -417,6 +418,10 @@ test("live work and reminders precede storage-only backfill, and a superseding a
         updateStore: async () => {
           order.push("job");
         },
+        updateHistory: async () => {
+          order.push("history");
+          throw new RequestBudgetExhausted("history allowance used");
+        },
       },
     },
   });
@@ -442,7 +447,7 @@ test("live work and reminders precede storage-only backfill, and a superseding a
   };
   await store.alarm();
   await store.historyRun;
-  assert.deepEqual(order, ["live", "reminders", "job", "backfill"]);
+  assert.deepEqual(order, ["live", "reminders", "job", "history", "backfill"]);
   assert.equal(requests, 0);
   const before = structuredClone([...stored]);
   await backfill(store.docs, () => false);

@@ -79,6 +79,7 @@ The Worker serves every file here, its `networks/` logos too, under `shared/`, b
 - `notification-status.js`: notification guidance and category control states
 - `save-queue.js`: saves that run one at a time, the newest choice last
 - `diagnostics.js`: the Diagnostics and their shared report
+- `job-status.js`: the shared background-run status shape, with no Worker imports
 - `sent-label.js`: how long a button that copies or shares says it did
 - `step-log.js`: a Diagnostics log of what one part of the page does
 - `report-addresses.js`: hiding private addresses in Diagnostics and submitted reports

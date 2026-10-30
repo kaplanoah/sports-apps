@@ -1,6 +1,6 @@
-import { readGameFacts } from "./game-facts.js";
 // WNBA's scoreboard, schedule, bracket, and standings adapted to app-owned records.
 // ESPN supplies channels and unset starts, and stands in for a failed scoreboard or games left live.
+import { readGameFacts } from "./game-facts.js";
 
 import {
   BasketballSnapshot,

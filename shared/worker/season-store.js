@@ -559,19 +559,22 @@ export function createSeasonStore(league) {
             limit,
             () => generation === this.alarmGeneration,
           );
-          for (const [name, job] of Object.entries(league.backgroundJobs ?? {})) {
-            if (!job.updateHistory || !budget.remaining()) continue;
-            await job.updateHistory({
-              docs: this.docs,
-              storage: this.createJobStorage(name),
-              createLoadSnapshot: this.createLoadSnapshot,
-              env: this.env,
-              fetchImpl: budget.fetchImpl,
-              remainingRequests: budget.remaining,
-              now: this.now,
-            });
+          try {
+            for (const [name, job] of Object.entries(league.backgroundJobs ?? {})) {
+              if (!job.updateHistory || !budget.remaining()) continue;
+              await job.updateHistory({
+                docs: this.docs,
+                storage: this.createJobStorage(name),
+                createLoadSnapshot: this.createLoadSnapshot,
+                env: this.env,
+                fetchImpl: budget.fetchImpl,
+                remainingRequests: budget.remaining,
+                now: this.now,
+              });
+            }
+          } finally {
+            await this.identities?.backfill(this.docs, () => generation === this.alarmGeneration);
           }
-          await this.identities?.backfill(this.docs, () => generation === this.alarmGeneration);
         })
         .catch((error) => {
           if (!(error instanceof RequestBudgetExhausted))

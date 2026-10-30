@@ -1,6 +1,6 @@
+// Shared ESPN sports-data adapter; league mappings and basketball rules are supplied by callers.
 import { readNameLetters } from "./player-name.js";
 export { readNameLetters } from "./player-name.js";
-// Shared ESPN sports-data adapter; league mappings and basketball rules are supplied by callers.
 import {
   ReportedPlayers,
   VendorGameIdentities,
@@ -227,7 +227,7 @@ export function trimNetworkAnswer(answer) {
       date: event.date,
       competitions: (event.competitions ?? []).slice(0, 1).map((competition) => ({
         date: competition.date,
-        gameNumber: competition.gameNumber,
+        ...(Number.isInteger(competition.gameNumber) && { gameNumber: competition.gameNumber }),
         timeValid: competition.timeValid,
         competitors: (competition.competitors ?? []).map(({ id, homeAway }) => ({ id, homeAway })),
         broadcasts: (competition.broadcasts ?? []).map(({ market, names }) => ({ market, names })),

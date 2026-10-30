@@ -5,19 +5,7 @@ import { describeError } from "./responses.js";
 // its own, so Diagnostics reads each job's the same way: when the run started, how long it took,
 // how many requests it made, and the last run that failed, kept until another fails.
 
-/**
- * @typedef {object} JobFailure
- * @property {string} at when the run that failed started
- * @property {string} message
- */
-
-/**
- * @typedef {object} JobRunStatus
- * @property {string} ranAt
- * @property {number} durationMs
- * @property {number} requests
- * @property {JobFailure | null} lastFailure
- */
+/** @typedef {import("../page/job-status.js").JobRunStatus} JobRunStatus */
 
 /**
  * A fetch that counts the requests made through it.

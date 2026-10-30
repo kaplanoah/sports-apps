@@ -501,7 +501,10 @@ for (const league of LEAGUES) {
     const cold = await store.docs.read(`games/${league.id}`);
     assert.ok(!cold || (league.app === "wnba" && cold.boxScore === null));
     const valid = league.describe(league.feed);
-    const kept = league.app === "wnba" ? { boxScore: valid, lead: null } : valid;
+    const kept =
+      league.app === "wnba"
+        ? { season: 2026, isCupFinal: false, boxScore: valid, lead: null }
+        : { ...valid, season: 2026 };
     await store.docs.write(`games/${league.id}`, kept);
     await store.refreshDetails(league.id, {
       games: [league.game],
