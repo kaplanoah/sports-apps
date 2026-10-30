@@ -1,6 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { listOutPlayers } from "../apps/wnba/worker/src/injuries.js";
+import { listInjuredPlayers } from "../apps/mlb/worker/src/injuries.js";
 import { findTeamCodeByEspnId } from "../apps/wnba/page/js/teams.js";
 import {
   describeBasketballLead,
@@ -112,7 +114,7 @@ function assertInvalidOutput(read, path) {
   });
 }
 
-test("recorded injuries reject an invalid fantasy status before it can enter either league's cache", async () => {
+test("recorded injuries reject an invalid fantasy status before a league keeps its shown players", () => {
   const report = readRecorded("2026-10-11-espn-injuries").report;
   const league = { findTeam: findTeamCodeByEspnId, isShown: () => true };
   assert.ok(listReportedPlayers(report, league).ATL.length);
@@ -121,10 +123,37 @@ test("recorded injuries reject an invalid fantasy status before it can enter eit
     () => listReportedPlayers(report, league),
     /Invalid sports data at ATL.0.fantasyStatus/,
   );
-  await assert.rejects(
-    () => fetchInjuryReport(async () => new Response(JSON.stringify(report)), "basketball/wnba"),
-    /Invalid sports data at 20.0.fantasyStatus/,
+  assertInvalidOutput(() => listOutPlayers(report), /Invalid sports data at ATL.0.fantasyStatus/);
+  const baseball = structuredClone(REPORT);
+  baseball.injuries[0].injuries[0].details.fantasyStatus.abbreviation = 42;
+  assertInvalidOutput(
+    () => listInjuredPlayers(baseball),
+    /Invalid sports data at LAD.0.fantasyStatus/,
   );
+});
+
+test("malformed injuries outside a league's shown players do not block its usable report", async () => {
+  const report = readRecorded("2026-10-11-espn-injuries").report;
+  const omitted = structuredClone(report.injuries[0].injuries[0]);
+  omitted.status = "Day-To-Day";
+  omitted.details.fantasyStatus.abbreviation = 42;
+  report.injuries[0].injuries.push(omitted);
+  report.injuries.push({ id: "unknown", injuries: [omitted] });
+  const fetched = await fetchInjuryReport(
+    async () => new Response(JSON.stringify(report)),
+    "basketball/wnba",
+  );
+  assert.deepEqual(
+    listOutPlayers(fetched),
+    listOutPlayers(readRecorded("2026-10-11-espn-injuries").report),
+  );
+  const baseball = structuredClone(REPORT);
+  baseball.injuries[1].injuries[0].details = { fantasyStatus: { abbreviation: 42 } };
+  const fetchedBaseball = await fetchInjuryReport(
+    async () => new Response(JSON.stringify(baseball)),
+    "baseball/mlb",
+  );
+  assert.deepEqual(listInjuredPlayers(fetchedBaseball), listInjuredPlayers(REPORT));
 });
 
 test("a recorded lead rejects a malformed scoring play without exposing its payload", () => {

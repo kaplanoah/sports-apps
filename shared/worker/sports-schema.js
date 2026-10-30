@@ -10,6 +10,7 @@ const Start = z
   .string()
   .refine((value) => Number.isFinite(Date.parse(value)))
   .nullable();
+const BasketballState = z.enum(["pre", "live", "final"]);
 const GameState = z.enum(["pre", "live", "final", "off"]);
 
 const BasketballSide = z.looseObject({
@@ -25,7 +26,7 @@ export const BasketballGame = z.looseObject({
   series: Identifier.nullable(),
   number: NullableCount,
   start: Start,
-  state: z.enum(["pre", "live", "final"]),
+  state: BasketballState,
   status: z.string(),
   isTimeSet: z.boolean(),
   period: NullableCount,
@@ -100,7 +101,7 @@ export const BaseballLiveState = z.object({
 const EspnSide = z.looseObject({ team: Identifier.nullable() });
 export const EspnGameState = z.object({
   start: Start.optional(),
-  state: GameState,
+  state: BasketballState,
   status: z.string(),
   period: NullableCount,
   clock: z.string().nullable(),

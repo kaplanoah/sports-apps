@@ -15,7 +15,7 @@ import {
 } from "../worker/src/lead.js";
 import { describePreview } from "../worker/src/preview.js";
 import { describeSnapshotStatus, listFeedFailures } from "../worker/src/season-updater.js";
-import { createSnapshotLoader, describeFailures } from "../worker/src/snapshot.js";
+import { NETWORKS_MS, createSnapshotLoader, describeFailures } from "../worker/src/snapshot.js";
 import { ESPN, readAfternoonEspn, SEP_30 } from "./espn-fixtures.js";
 import { nameFeedKey } from "../../../shared/worker/feed-keeper.js";
 
@@ -89,7 +89,7 @@ for (const isWarm of [false, true]) {
     let now = NOW;
     const loader = createSnapshotLoader({ fetchImpl: league.fetchImpl, now: () => now });
     const first = isWarm ? await loader.loadSnapshot(2026) : null;
-    if (isWarm) now += 6 * 60 * 60 * 1000 + 1;
+    if (isWarm) now += NETWORKS_MS + 1;
     for (const answer of Object.values(espn))
       for (const event of answer.events) {
         event.competitions[0].date = "unreadable-date";
@@ -124,6 +124,30 @@ test("an invalid ESPN backup period is a failed answer while the league season s
   assert.equal(snapshot.games.length, 28);
   assert.match(snapshot.failures.backup, /Invalid sports data at period/);
   assert.equal(league.countReads("espn"), 2);
+});
+
+test("ESPN listing reads ignore score periods while backup reads ignore channel names", async () => {
+  const networks = structuredClone(ESPN_SCOREBOARD.answers);
+  for (const answer of Object.values(networks))
+    for (const event of answer.events)
+      event.competitions[0].status = { type: { state: "in" }, period: "unused" };
+  const listingLeague = createLeague({ espn: networks });
+  const listed = await createSnapshotLoader({
+    fetchImpl: listingLeague.fetchImpl,
+    now: () => NOW,
+  }).loadSnapshot(2026);
+  assert.equal(listed.failures.networks, undefined);
+  assert.ok(listed.games.some((game) => game.networks.length));
+  const backup = structuredClone(ESPN.answers);
+  for (const answer of Object.values(backup))
+    for (const event of answer.events) event.competitions[0].broadcasts = [{ names: [42] }];
+  const backupLeague = createLeague({ refuse: { scoreboard: "error" }, espn: backup });
+  const scored = await createSnapshotLoader({
+    fetchImpl: backupLeague.fetchImpl,
+    now: () => Date.parse(ESPN.now),
+  }).loadSnapshot(2026);
+  assert.equal(scored.failures.backup, undefined);
+  assert.ok(scored.scoreboardCover);
 });
 
 test("a snapshot is reused only within the closing stretch's 5-second wait", async () => {

@@ -7,13 +7,17 @@ import { SeasonStore as BasketballStore } from "../apps/wnba/worker/src/store.js
 import { SeasonStore as BaseballStore } from "../apps/mlb/worker/src/store.js";
 import { createDurableObjectContext } from "./durable-object-context.js";
 import { FAILED_FEED_WAIT_MS, createMemoryStorage } from "../shared/worker/feed-keeper.js";
-import { createSnapshotLoader as createBasketballLoader } from "../apps/wnba/worker/src/snapshot.js";
-import { createSnapshotLoader as createBaseballLoader } from "../apps/mlb/worker/src/snapshot.js";
+import {
+  SLOW_FEEDS as BASKETBALL_FEEDS,
+  createSnapshotLoader as createBasketballLoader,
+} from "../apps/wnba/worker/src/snapshot.js";
+import {
+  SLOW_FEEDS as BASEBALL_FEEDS,
+  createSnapshotLoader as createBaseballLoader,
+} from "../apps/mlb/worker/src/snapshot.js";
 import { REQUESTS } from "../apps/wnba/worker/src/adapters/wnba.js";
 import { MLB_API, listMlbRequests } from "../apps/mlb/worker/src/adapters/mlb.js";
 import { describeEspnBoxScore } from "../apps/wnba/worker/src/espn-box-score.js";
-
-const DAY_MS = 24 * 60 * 60 * 1000;
 
 const LEAGUES = [
   {
@@ -43,7 +47,9 @@ function corruptStandings(app, response) {
 }
 
 for (const { app, fixture: name } of LEAGUES) {
-  for (const feed of app === "wnba" ? ["standings", "schedule", "bracket"] : ["standings"]) {
+  for (const feed of app === "wnba"
+    ? ["standings", "schedule", "bracket"]
+    : ["standings", "seasonGames", "postseason"]) {
     for (const isWarm of [false, true]) {
       test(`${app}: a malformed ${feed} feed never replaces its ${isWarm ? "good" : "empty"} cache and retries after correction`, async () => {
         const fixture = JSON.parse(
@@ -52,6 +58,21 @@ for (const { app, fixture: name } of LEAGUES) {
             "utf8",
           ),
         );
+        if (app === "mlb")
+          fixture.responses.seasonGames = JSON.parse(
+            readFileSync(
+              new URL("../apps/mlb/tests/fixtures/2026-10-09-season.json", import.meta.url),
+              "utf8",
+            ),
+          ).responses.seasonGames;
+        const field = {
+          standings: "standings",
+          schedule: "schedule",
+          bracket: "series",
+          seasonGames: "teams",
+          postseason: "series",
+        }[feed];
+        const feedPolicy = app === "wnba" ? BASKETBALL_FEEDS : BASEBALL_FEEDS;
         let now = Date.parse(fixture.now);
         let isMalformed = !isWarm;
         let feedReads = 0;
@@ -81,6 +102,10 @@ for (const { app, fixture: name } of LEAGUES) {
             feedReads++;
             if (isMalformed) {
               if (feed === "standings") corruptStandings(app, answer);
+              if (app === "mlb" && feed !== "standings") {
+                const game = answer.dates.flatMap((day) => day.games)[0];
+                game.linescore = { ...game.linescore, currentInning: "invalid" };
+              }
               if (feed === "schedule")
                 answer.leagueSchedule.gameDates[0].games[0].homeTeam.score = "bad";
               if (feed === "bracket")
@@ -95,23 +120,34 @@ for (const { app, fixture: name } of LEAGUES) {
         let loader = createLoader(options);
         if (isWarm) {
           first = await loader.loadSnapshot(fixture.season);
-          now += DAY_MS + 1;
+          now += feedPolicy[feed].maxAgeMs + 1;
           isMalformed = true;
         }
-        const failed = await loader.loadSnapshot(fixture.season);
-        assert.match(failed.failures[feed], /Invalid sports data/);
-        assert.equal(feedReads, isWarm ? 2 : 1);
-        if (isWarm) {
-          const field = { standings: "standings", schedule: "schedule", bracket: "series" }[feed];
-          assert.ok(first[field]);
-          assert.deepEqual(failed[field], first[field]);
+        if (app === "mlb" && feed === "postseason" && !isWarm) {
+          await assert.rejects(
+            () => loader.loadSnapshot(fixture.season),
+            /Invalid sports data at inning/,
+          );
+        } else {
+          const failed = await loader.loadSnapshot(fixture.season);
+          assert.match(failed.failures[feed], /Invalid sports data/);
+          if (isWarm) {
+            assert.ok(first[field]);
+            assert.deepEqual(failed[field], first[field]);
+          }
         }
+        assert.equal(feedReads, isWarm ? 2 : 1);
         isMalformed = false;
         now += FAILED_FEED_WAIT_MS + 1;
         loader = createLoader(options);
         const recovered = await loader.loadSnapshot(fixture.season);
         assert.equal(recovered.failures[feed], undefined);
-        assert.ok(recovered.standings);
+        assert.ok(recovered[field]);
+        const expected = app === "wnba" ? buildBasketball : buildBaseball;
+        assert.deepEqual(
+          recovered[field],
+          expected(fixture.responses, { season: fixture.season, now })[field],
+        );
         assert.equal(feedReads, isWarm ? 3 : 2);
       });
     }

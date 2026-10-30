@@ -1,8 +1,8 @@
-import { SCHEDULE_EDITION } from "../page/js/snapshot.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { isDeepStrictEqual } from "node:util";
+import { SCHEDULE_EDITION } from "../page/js/snapshot.js";
 import { sortInScheduleOrder } from "../page/js/schedule-order.js";
 import * as MLBSnapshot from "../worker/src/adapters/mlb.js";
 import { OFF_DAY_CHECK_MS } from "#shared/poll-schedule.js";

@@ -1,6 +1,5 @@
 // MLB feed adaptation and snapshot composition.
 
-import { countSeriesWinsNeeded } from "../../../page/js/bracket-rules.js";
 import {
   BaseballSnapshot,
   BaseballGame,
@@ -10,12 +9,13 @@ import {
   BaseballLiveState,
   validateSportsData,
 } from "../../../../../shared/worker/sports-schema.js";
-
 import { listTimedReminderGames } from "#shared/reminder-games.js";
 import { isNecessaryPlayoffGame } from "#shared/series-text.js";
-import { TEAMS } from "../../../page/js/teams.js";
 import { readEasternDay } from "#shared/days.js";
 import * as PollSchedule from "#shared/poll-schedule.js";
+import { countSeriesWinsNeeded } from "../../../page/js/bracket-rules.js";
+import { TEAMS } from "../../../page/js/teams.js";
+import { SNAPSHOT_VERSION } from "../../../page/js/snapshot.js";
 import {
   normalizeGame,
   describeStarter,
@@ -51,8 +51,6 @@ import {
   projectField,
   readRecords,
 } from "./feed-standings.js";
-
-import { SNAPSHOT_VERSION } from "../../../page/js/snapshot.js";
 
 // MLB caches its responses for 20 seconds, so polling much faster only refetches the same answer.
 export const POLL_LIVE_MS = 30 * 1000;

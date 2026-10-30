@@ -43,14 +43,12 @@ export const fetchInjuryReport = async (
   sport,
   { headers = JSON_HEADERS, cacheSeconds = null } = {},
 ) => {
-  const report = await fetchFeedJson(fetchImpl, nameInjuryReportRequest(sport), {
+  return fetchFeedJson(fetchImpl, nameInjuryReportRequest(sport), {
     feed: "ESPN",
     path: "its injury report",
     headers,
     cacheSeconds,
   });
-  listReportedPlayers(report, { findTeam: (id) => id, isShown: () => true });
-  return report;
 };
 
 /**
@@ -202,6 +200,10 @@ export function readNetworkGame(event, findTeam) {
   });
 }
 
+/** @param {any[]} answers @param {(id: string) => string | null} findTeam */
+export const readNetworkGames = (answers, findTeam) =>
+  answers.flatMap((answer) => answer.events ?? []).map((event) => readNetworkGame(event, findTeam));
+
 /** @param {string} sport */
 export const nameEspnSite = (sport) => `${ESPN_SITE}/${sport}`;
 /** @param {number} ms */
@@ -220,19 +222,8 @@ export const nameEspnSummaryRequest = (sport, eventId) =>
  * @param {number} cacheSeconds
  * @param {Record<string, string>} headers
  */
-export const fetchEspnJson = async (fetchImpl, url, cacheSeconds, headers) => {
-  const answer = await fetchFeedJson(fetchImpl, url, { feed: "ESPN", headers, cacheSeconds });
-  if (new URL(url).pathname.endsWith("/scoreboard")) validateScoreboard(answer);
-  return answer;
-};
-
-/** @param {any} answer */
-function validateScoreboard(answer) {
-  for (const event of answer.events ?? []) {
-    readBackupGame(event, () => null);
-    readNetworkGame(event, () => null);
-  }
-}
+export const fetchEspnJson = (fetchImpl, url, cacheSeconds, headers) =>
+  fetchFeedJson(fetchImpl, url, { feed: "ESPN", headers, cacheSeconds });
 
 /** @param {number} period */
 const measurePeriod = (period, rules) =>

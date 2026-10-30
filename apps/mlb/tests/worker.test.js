@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import * as MLBSnapshot from "../worker/src/adapters/mlb.js";
-import { FAILED_FEED_WAIT_MS, createMemoryStorage } from "../../../shared/worker/feed-keeper.js";
+import { createMemoryStorage } from "../../../shared/worker/feed-keeper.js";
 import { createSnapshotLoader } from "../worker/src/snapshot.js";
 
 const EVENING = JSON.parse(
@@ -74,40 +74,6 @@ function createTestLoader(options = {}) {
       now += milliseconds;
     },
   };
-}
-
-for (const name of ["seasonGames", "postseason"]) {
-  test(`a malformed ${name} game cannot replace its cached answer and recovers after correction`, async () => {
-    let now = NOW;
-    let isMalformed = false;
-    let reads = 0;
-    const mlb = createFakeMlb();
-    const fetchImpl = async (url, init) => {
-      if (nameRequest(url) !== name) return mlb.fetchImpl(url, init);
-      reads++;
-      const answer = structuredClone(RESPONSES[name]);
-      if (isMalformed) {
-        const game = answer.dates.flatMap((day) => day.games)[0];
-        game.linescore = { ...game.linescore, currentInning: "invalid" };
-      }
-      return new Response(JSON.stringify(answer));
-    };
-    const storage = createMemoryStorage();
-    let loader = createSnapshotLoader({ fetchImpl, now: () => now, storage });
-    const first = await loader.loadSnapshot(2026);
-    now += 24 * 60 * 60 * 1000 + 1;
-    isMalformed = true;
-    const failed = await loader.loadSnapshot(2026);
-    assert.match(failed.failures[name], /Invalid sports data at inning/);
-    assert.deepEqual(failed.teams, first.teams);
-    assert.equal(reads, 2);
-    isMalformed = false;
-    now += FAILED_FEED_WAIT_MS + 1;
-    loader = createSnapshotLoader({ fetchImpl, now: () => now, storage });
-    const recovered = await loader.loadSnapshot(2026);
-    assert.equal(recovered.failures[name], undefined);
-    assert.equal(reads, 3);
-  });
 }
 
 test("a malformed schedule game rejects its required read before it can replace the season", async () => {

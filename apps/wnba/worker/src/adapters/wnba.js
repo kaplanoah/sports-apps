@@ -10,7 +10,7 @@ import {
 } from "../../../../../shared/worker/sports-schema.js";
 import {
   readBackupGames,
-  readNetworkGame,
+  readNetworkGames,
   nameEspnSite,
   nameEspnDayRequest,
   nameEspnNetworksRequest,
@@ -29,7 +29,6 @@ import {
   mapSeriesById,
 } from "../../../page/js/nearest-games.js";
 import { REGULATION_PERIODS } from "../../../page/js/periods.js";
-
 import { SNAPSHOT_VERSION, countWinsNeeded, GAME_PREFIXES } from "../../../page/js/snapshot.js";
 
 export { formatEspnDay } from "../../../../../shared/worker/espn-adapter.js";
@@ -53,8 +52,7 @@ export const REQUESTS = {
     `${WNBA_STATS}/stats/leaguestandingsv3?LeagueID=10&Season=${season}&SeasonType=Regular+Season`,
 };
 
-// A playoff game's ID spells out where it sits: 104, the season's last two digits, 00, then its
-// round, its series in that round from 0, and its game in the series.
+// The playoff suffix locates a game's round, series from zero, and game within that series.
 const PLAYOFF_GAME_ID = new RegExp(`^${GAME_PREFIXES.playoffs}(\\d{2})00([1-3])(\\d)(\\d)$`);
 
 /** @param {string} id */
@@ -70,8 +68,7 @@ export function readPlayoffGameId(id) {
 }
 
 // The games of a season the Games view lists: its regular season's, the Commissioner's Cup final,
-// which has a number of its own, the All-Star Game, and its playoffs'. The ID's 102, 105, 103, or
-// 104 comes before the season's last two digits.
+// which has a number of its own, the All-Star Game, and its playoffs'.
 const SEASON_GAME_ID = new RegExp(
   `^(?:${[GAME_PREFIXES.regularSeason, GAME_PREFIXES.allStar, GAME_PREFIXES.playoffs, GAME_PREFIXES.cupFinal].join("|")})(\\d{2})\\d{5}$`,
 );
@@ -95,8 +92,7 @@ function readGameSeason(id) {
   return season ? 2000 + Number(season) : null;
 }
 
-// The Games view leaves out the preseason, whose games are numbered 101 and then the season's last
-// two digits, but the season starts with its first game.
+// The Games view leaves out the preseason, but the season starts with its first game.
 const PRESEASON_GAME_ID = new RegExp(`^${GAME_PREFIXES.preseason}(\\d{2})\\d{5}$`);
 
 /** @param {string} id */
@@ -672,9 +668,7 @@ export function buildSnapshot(responses, { season, now = Date.now() }) {
     leagueGames.map((game) =>
       standIns.has(game.id) ? applyBackupGame(game, standIns.get(game.id)) : game,
     ),
-    (responses.networks ?? [])
-      .flatMap((answer) => answer.events ?? [])
-      .map((event) => readNetworkGame(event, findTeamCodeByEspnId)),
+    readNetworkGames(responses.networks ?? [], findTeamCodeByEspnId),
   );
   const playoffGames = listedGames.filter(isPlayoffGame);
   const bracket = responses.bracket?.bracket?.playoffBracketSeries;
@@ -768,7 +762,7 @@ const isReminderFeedHeard = (snapshot, name) =>
 const isConfirmedReminderGame = (game, seriesById) =>
   game.state === "pre" && game.isTimeSet && isToBePlayed(game, seriesById) && !game.isIfNeeded;
 
-/** @param {string} name @param {any} answer @param {{ season: number, now: number }} options */
+/** @param {string} name @param {any} answer @param {{ season: number }} options */
 export function validateFeedResponse(name, answer, { season }) {
   if (name === "scoreboard")
     validateSportsData(

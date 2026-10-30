@@ -16,6 +16,7 @@ export const ROUNDS = {
 /** @param {number} round */
 export const countWinsNeeded = (round) => Math.ceil(ROUNDS[round].bestOf / 2);
 
+// Legacy vendor IDs put a competition prefix before the season's last two digits and game suffix.
 export const GAME_PREFIXES = {
   preseason: "101",
   regularSeason: "102",

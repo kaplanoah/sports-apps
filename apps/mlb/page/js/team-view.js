@@ -1,4 +1,3 @@
-import { countSeasonGames } from "./standings-rules.js";
 // The sheet a club's name or dot opens: its division, seed, and record, the cards of its nearest
 // games, then once the field is set how far it has gone in the postseason, its race this season,
 // and every World Series it won.
@@ -44,7 +43,7 @@ import { listCountedGames, listSeasonGames, nameGameKey } from "./season-games.j
 import { nameRound } from "./series-games.js";
 import { isFieldSet, session } from "./session.js";
 import { listSlateGames } from "./slate.js";
-
+import { countSeasonGames } from "./standings-rules.js";
 import { describeDivisionLead } from "./standings.js";
 import { nameTeam, TEAMS } from "./teams.js";
 

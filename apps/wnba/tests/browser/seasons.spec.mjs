@@ -1,6 +1,5 @@
-import { SNAPSHOT_VERSION } from "../../page/js/snapshot.js";
 import { test, expect, expectDayAtTop, openApp, matchPath } from "./harness.mjs";
-
+import { SNAPSHOT_VERSION } from "../../page/js/snapshot.js";
 import { listStrayPeriods } from "../../../../tests/browser/stray-periods.mjs";
 import { readYearTracking } from "../../../../tests/browser/title-row.mjs";
 import { SETTINGS, openSettings } from "../../../../tests/browser/settings.mjs";

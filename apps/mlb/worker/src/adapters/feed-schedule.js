@@ -1,7 +1,7 @@
-import { countSeriesWinsNeeded } from "../../../page/js/bracket-rules.js";
 // The season's whole schedule, which the Games view lists, kept by the store a month to a document.
 
 import { isStillIfNecessary } from "#shared/series-text.js";
+import { countSeriesWinsNeeded } from "../../../page/js/bracket-rules.js";
 import { sortInScheduleOrder } from "../../../page/js/schedule-order.js";
 import {
   LISTED_GAME_TYPES,

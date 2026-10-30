@@ -13,7 +13,7 @@ const HOUR_MS = 60 * 60 * 1000;
 // the starters' numbers with each game, and the postseason as its games are set. The season's
 // whole schedule changes only as games are moved, since the days around today, read every time,
 // bring each game's end.
-const SLOW_FEEDS = {
+export const SLOW_FEEDS = {
   season: { maxAgeMs: 24 * HOUR_MS, changesWithGames: false },
   seasonGames: { maxAgeMs: 24 * HOUR_MS, changesWithGames: false },
   standings: { maxAgeMs: 24 * HOUR_MS, changesWithGames: true },
