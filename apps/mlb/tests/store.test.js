@@ -52,7 +52,10 @@ function createFakeStore() {
  * @param {{ method?: string, body?: unknown, headers?: Record<string, string> }} [options]
  */
 function requestStore(env, path, { method = "GET", body, headers = {} } = {}) {
-  const init = { method, headers: { "content-type": "application/json", ...headers } };
+  const init = {
+    method,
+    headers: { "content-type": "application/json", origin: ORIGIN, ...headers },
+  };
   if (body !== undefined) init.body = typeof body === "string" ? body : JSON.stringify(body);
   return worker.fetch(new Request(`${ORIGIN}/${APP_KEY}${path}`, init), env);
 }

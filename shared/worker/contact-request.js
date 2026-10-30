@@ -1,7 +1,5 @@
-// Takes a Contact report from a page behind the app's access gate and hands it to the email
-// service. A POST must come from the page's own origin, so another site can't send reports with a
-// signed-in phone's cookie, and the sender's address reaches the service only as a hash, which is
-// enough to limit how often one sender writes.
+// Takes a Contact report behind the app Worker's access and origin checks and hands it to email.
+// The sender's address reaches the service only as a hash to limit how often one sender writes.
 
 import {
   CONTACT_CATEGORIES,
@@ -119,8 +117,6 @@ export async function serveContact(request, env, app) {
     }
   }
   if (request.method !== "POST") return respondMethodNotAllowed(["GET", "POST"]);
-  if (request.headers.get("origin") !== new URL(request.url).origin)
-    return respondJson({ problem: "origin" }, 403);
   if (!env.EMAIL) return respondJson({ problem: "unavailable" }, 503);
   let submission;
   try {

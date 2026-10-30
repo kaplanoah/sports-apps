@@ -23,11 +23,16 @@ export const readTitleGaps = (page) =>
         return range.getBoundingClientRect().left;
       });
     const kerned = readLefts();
-    const even = document.createElement("style");
-    even.textContent = "header.top h1 .title-letter { margin: 0 !important; }";
-    document.head.append(even);
+    const saved = [...title.querySelectorAll(".title-letter")].map((letter) => ({
+      letter: /** @type {HTMLElement} */ (letter),
+      style: letter.getAttribute("style"),
+    }));
+    for (const { letter } of saved) letter.style.setProperty("margin", "0", "important");
     const unkerned = readLefts();
-    even.remove();
+    for (const { letter, style: original } of saved) {
+      if (original === null) letter.removeAttribute("style");
+      else letter.setAttribute("style", original);
+    }
     const shifts = kerned.map((left, index) => left - unkerned[index]);
     const STEP = 0.005;
     return shifts

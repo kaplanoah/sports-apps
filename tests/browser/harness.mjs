@@ -16,6 +16,26 @@ const pageErrorsFixture = {
   ],
 };
 
+/** @type {import("@playwright/test").Fixtures<{ securityViolations: string[] }, {}, import("@playwright/test").PlaywrightTestArgs>} */
+const securityFixture = {
+  securityViolations: [
+    async ({ page }, use) => {
+      const violations = [];
+      page.on("console", (message) => {
+        if (message.text().startsWith("CSP violation:")) violations.push(message.text());
+      });
+      await page.addInitScript(() =>
+        document.addEventListener("securitypolicyviolation", (event) =>
+          console.error(`CSP violation: ${event.effectiveDirective} ${event.blockedURI}`),
+        ),
+      );
+      await use(violations);
+      expect(violations).toEqual([]);
+    },
+    { auto: true },
+  ],
+};
+
 // A page the test wrote itself, or one it closed, isn't the app's, so the rule can't apply to it.
 /** @param {import("@playwright/test").Page} page */
 const isOnApp = (page) => !page.isClosed() && /^https?:/.test(page.url());
@@ -32,7 +52,10 @@ const finalScreenPeriodsFixture = {
   ],
 };
 
-export const test = base.extend(pageErrorsFixture).extend(finalScreenPeriodsFixture);
+export const test = base
+  .extend(pageErrorsFixture)
+  .extend(securityFixture)
+  .extend(finalScreenPeriodsFixture);
 export { expect };
 
 /**

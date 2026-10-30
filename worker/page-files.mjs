@@ -2,10 +2,12 @@
 // where the page's import map points #shared/. Node reads them from disk through the app's
 // #page-files/<app> import; the Worker bundle gets the same data embedded by worker/build.mjs.
 // The page's index.html also names every module its entry loads, to fetch them all at once.
+import { createHash } from "node:crypto";
 import { readdirSync, readFileSync } from "node:fs";
 import { extname, join, posix, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parse } from "parse5";
+import { buildSync } from "esbuild";
 import { html, joinWithSeparator } from "../shared/page/html.js";
 import { nameReleaseFolder } from "../shared/worker/app-worker.js";
 
@@ -93,6 +95,30 @@ function readElementText(page, element) {
     endTag?.startOffset ?? element.sourceCodeLocation.endOffset,
   );
 }
+/** @param {string} page */
+function listScriptHashes(page) {
+  return listPageElements(page)
+    .filter(
+      (element) =>
+        element.tagName === "script" &&
+        !readAttribute(element, "src") &&
+        !isScriptType(element, "application/json"),
+    )
+    .map((element) => createHash("sha256").update(readElementText(page, element)).digest("base64"));
+}
+
+/** @param {ReturnType<typeof readFolder>} files */
+function addScriptHashes(files) {
+  return Object.fromEntries(
+    Object.entries(files).map(([path, file]) => [
+      path,
+      file.contentType.startsWith("text/html")
+        ? { ...file, scriptHashes: listScriptHashes(file.text) }
+        : file,
+    ]),
+  );
+}
+
 const MODULE_IMPORT =
   /^(?:import\s[^;]*?\sfrom|export\s*(?:\*|\{)[^;]*?\sfrom|import)\s*"([^"]+)"/gm;
 
@@ -182,14 +208,30 @@ function addHomeScreenIcons(files) {
   return { ...files, "home-screen-icons.css": { contentType: TEXT_TYPES[".css"], text } };
 }
 
+/** @param {{ contentType: string, text?: string }} file */
+function bundleOfflineWorker(file) {
+  const bundled = buildSync({
+    stdin: { contents: file.text, resolveDir: SHARED_PAGE_ROOT, sourcefile: "offline-worker.js" },
+    bundle: true,
+    format: "iife",
+    target: "safari15.4",
+    write: false,
+  });
+  return { ...file, text: bundled.outputFiles[0].text };
+}
+
 /** @param {string} pageRoot the app's page/ folder */
 export function readPageFiles(pageRoot) {
   const shared = Object.entries(readFolder(SHARED_PAGE_ROOT)).map(([path, file]) => [
     `shared/${path}`,
     file,
   ]);
-  return addModulePreloads(
-    addHomeScreenIcons({ ...readFolder(pageRoot), ...Object.fromEntries(shared) }),
+  const sharedFiles = Object.fromEntries(shared);
+  sharedFiles["shared/offline-worker.js"] = bundleOfflineWorker(
+    sharedFiles["shared/offline-worker.js"],
+  );
+  return addScriptHashes(
+    addModulePreloads(addHomeScreenIcons({ ...readFolder(pageRoot), ...sharedFiles })),
   );
 }
 
@@ -326,5 +368,5 @@ export function pinPageFiles(files, release) {
         throw new Error(`The head of ${path} must load shared/release-guard.js.`);
       return [path, { ...file, text: pinPage(writeRelease(file.text, release), guard, folder) }];
     });
-  return { ...files, ...Object.fromEntries(pinned) };
+  return addScriptHashes({ ...files, ...Object.fromEntries(pinned) });
 }

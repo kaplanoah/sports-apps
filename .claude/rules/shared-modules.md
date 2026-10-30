@@ -56,7 +56,8 @@ The Worker serves every file here, its `networks/` logos too, under `shared/`, b
 ### Service worker
 
 - `service-worker.js`: what the page reads of its service worker
-- `offline-worker.js`: the offline copy of the page and its files
+- `offline-worker.js`: the offline copy of the page and its files, bundled for the classic service worker
+- `security-headers.js`: security settings for HTTP responses, deployment checks and offline documents
 - `push-worker.js`: showing push messages and opening the page from one
 - `service-worker-steps.js`: the service worker's last steps, for Diagnostics
 

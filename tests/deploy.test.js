@@ -1,3 +1,8 @@
+import {
+  TRANSPORT_SECURITY,
+  SECURITY_HEADERS,
+  REQUIRED_CSP_DIRECTIVES,
+} from "../shared/page/security-headers.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
@@ -797,7 +802,21 @@ test("a thrown page check leaves the upload live but unverified and masks its ac
 function createCleanupFailureBrowser(cleanup, result) {
   const page = {
     on: () => {},
-    goto: async () => ({ ok: () => result !== "broken response", status: () => 500 }),
+    goto: async () => ({
+      ok: () => result !== "broken response",
+      status: () => 500,
+      headers: () => ({
+        ...SECURITY_HEADERS,
+        "content-security-policy": Object.values(REQUIRED_CSP_DIRECTIVES).join("; "),
+        "strict-transport-security": TRANSPORT_SECURITY,
+      }),
+    }),
+    request: {
+      get: async (address) => ({
+        status: () => 301,
+        headers: () => ({ location: address.replace("http:", "https:") }),
+      }),
+    },
     url: () => ENV.MLB_PAGE_URL,
     evaluate: async () => 204,
     locator: () => ({

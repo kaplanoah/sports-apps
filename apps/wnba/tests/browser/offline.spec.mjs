@@ -1,3 +1,9 @@
+import {
+  checkOfflineSecurity,
+  waitForCopy,
+  waitForController,
+  askForFreshCopy,
+} from "../../../../tests/browser/offline-security.mjs";
 import { NEXT_RELEASE, serveReleases } from "../../../../tests/browser/serve-releases.mjs";
 import { readLog } from "../../../../tests/browser/diagnostics-records.mjs";
 import { findDiagnosticsSwitch } from "../../../../tests/browser/diagnostics-switch.mjs";
@@ -5,14 +11,6 @@ import { takeAwayPush } from "../../../../tests/browser/devices.mjs";
 import { test, expect, openApp } from "./harness.mjs";
 
 test.use({ serviceWorkers: "allow", contextOptions: { reducedMotion: "reduce" } });
-
-// The service worker keeps its copy of the page behind the page's own load.
-const waitForCopy = (page) =>
-  expect
-    .poll(() =>
-      page.evaluate(async () => !!(await caches.match(location.href, { cacheName: "page" }))),
-    )
-    .toBe(true);
 
 // A reload clears whatever the test left on the window.
 /** @param {import("@playwright/test").Page} page */
@@ -23,27 +21,12 @@ const isSameLoad = (page) => page.evaluate(() => "isSameLoad" in window);
 /** @param {import("@playwright/test").Page} page */
 const comeBack = (page) => page.evaluate(() => dispatchEvent(new Event("focus")));
 
-// What the service worker answers a page asking it to read the page again. A page asking while
-// another's read is under way shares it, so this answer comes once that one's has.
-/** @param {import("@playwright/test").Page} page */
-const askForFreshCopy = (page) =>
-  page.evaluate(
-    () =>
-      new Promise((resolve) => {
-        const channel = new MessageChannel();
-        channel.port1.onmessage = ({ data }) => resolve(data);
-        navigator.serviceWorker.controller.postMessage({ type: "refreshPageCopy" }, [
-          channel.port2,
-        ]);
-      }),
-  );
-
 /** @param {import("@playwright/test").Page} page */
 async function openKeptApp(page) {
   const served = await serveReleases(page);
   await openApp(page);
   await waitForCopy(page);
-  await expect.poll(() => page.evaluate(() => !!navigator.serviceWorker.controller)).toBe(true);
+  await waitForController(page);
   await markPage(page);
   return served;
 }
@@ -110,4 +93,8 @@ test("Diagnostics show the steps the service worker kept: its start, install, an
     "Activated",
     "Opened the page from the copy",
   ]);
+});
+
+test("an old cached page upgrades to enforced CSP and keeps it offline", async ({ page }) => {
+  await checkOfflineSecurity(page, openApp);
 });

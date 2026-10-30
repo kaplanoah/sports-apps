@@ -1,5 +1,6 @@
 import { createServer } from "node:http";
 import { join } from "node:path";
+import { createAppWorker } from "../../shared/worker/app-worker.js";
 import { readPageFiles } from "../../worker/page-files.mjs";
 
 // Serves one app's page, named from the repo's root, as its Worker bundles it, at the server's root.
@@ -8,32 +9,40 @@ if (!port || !pageFolder) {
   console.error("usage: node tests/browser/serve.mjs <port> apps/<app>/page");
   process.exit(1);
 }
-const PAGE_FILES = new Map(
-  Object.entries(readPageFiles(join(import.meta.dirname, "..", "..", pageFolder))),
-);
+const worker = createAppWorker({
+  name: "test",
+  pageFiles: readPageFiles(join(import.meta.dirname, "..", "..", pageFolder)),
+  forwardToStore: () => new Response(null, { status: 404 }),
+  readFeedFailures: async () => ({}),
+});
 
-/** @param {string} requestUrl */
-function findPageFile(requestUrl) {
-  try {
-    const { pathname } = new URL(requestUrl, "http://localhost");
-    return PAGE_FILES.get(pathname === "/" ? "index.html" : pathname.slice(1)) ?? null;
-  } catch {
-    return null;
-  }
+/** @param {import("node:http").IncomingMessage} request */
+async function createWorkerRequest(request) {
+  const headers = new Headers();
+  for (let index = 0; index < request.rawHeaders.length; index += 2)
+    headers.append(request.rawHeaders[index], request.rawHeaders[index + 1]);
+  const url = new URL(`/test-key${request.url}`, `http://${request.headers.host}`);
+  const chunks = [];
+  for await (const chunk of request) chunks.push(chunk);
+  const body = ["GET", "HEAD"].includes(request.method) ? undefined : Buffer.concat(chunks);
+  return new Request(url, { method: request.method, headers, body });
 }
 
 /**
  * @param {import("node:http").IncomingMessage} request
  * @param {import("node:http").ServerResponse} response
  */
-function servePageFile(request, response) {
-  const file = findPageFile(request.url);
-  if (!file) {
-    response.writeHead(404).end("not found");
-    return;
+async function servePageFile(request, response) {
+  try {
+    const forwarded = await createWorkerRequest(request);
+    const answer = await worker.fetch(forwarded, { APP_KEY: "test-key" });
+    const body = Buffer.from(await answer.arrayBuffer());
+    response.writeHead(answer.status, Object.fromEntries(answer.headers));
+    response.end(body);
+  } catch {
+    response.writeHead(500, { "content-type": "text/plain" });
+    response.end("The test Worker could not answer.");
   }
-  response.writeHead(200, { "content-type": file.contentType });
-  response.end(file.text ?? Buffer.from(file.base64, "base64"));
 }
 
 createServer(servePageFile).listen(Number(port), "127.0.0.1");

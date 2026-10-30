@@ -67,7 +67,7 @@ function createPushStore({ pushStatus = 201 } = {}) {
  */
 function requestApp(env, path, { method = "GET", body } = {}) {
   /** @type {RequestInit} */
-  const init = { method, headers: { "content-type": "application/json" } };
+  const init = { method, headers: { "content-type": "application/json", origin: ORIGIN } };
   if (body !== undefined) init.body = JSON.stringify(body);
   return worker.fetch(new Request(`${ORIGIN}/${APP_KEY}${path}`, init), env);
 }

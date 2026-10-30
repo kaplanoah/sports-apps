@@ -421,3 +421,62 @@ for (const app of listApps()) {
     assert.ok(page.indexOf("drawChannelTagAge();") > tag);
   });
 }
+
+for (const app of listApps()) {
+  test(`${app}: final page and gate scripts match their CSP hashes after release rewriting`, async () => {
+    const { createHash } = await import("node:crypto");
+    const { listBundledFiles } = await import("../worker/build.mjs");
+    const { createAppWorker } = await import("../shared/worker/app-worker.js");
+    const files = listBundledFiles(app, {
+      version: "1.0.0",
+      commit: "abc1234",
+      builtAt: "2026-10-29T12:00:00Z",
+      label: null,
+    });
+    const worker = createAppWorker({
+      name: app,
+      pageFiles: files,
+      forwardToStore: () => new Response(),
+      readFeedFailures: async () => ({}),
+    });
+    for (const path of ["index.html", "gate.html"]) {
+      const page = files[path].text;
+      const scripts = listParsedNodes(page).flatMap((node) => {
+        if (!("tagName" in node) || node.tagName !== "script") return [];
+        const attributes = Object.fromEntries(node.attrs.map(({ name, value }) => [name, value]));
+        if ("src" in attributes || attributes.type === "application/json") return [];
+        return node.childNodes.map((child) => ("value" in child ? child.value : "")).join("");
+      });
+      assert.ok(scripts.length > 0);
+      const response = await worker.fetch(new Request(`https://worker.example/k3y/${path}`), {
+        APP_KEY: "k3y",
+      });
+      const policy = response.headers.get("content-security-policy");
+      for (const script of scripts) {
+        const hash = createHash("sha256").update(script).digest("base64");
+        assert.ok(policy.includes(`'sha256-${hash}'`), path);
+      }
+      assert.ok(policy.includes("connect-src 'self' wss://worker.example;"));
+      const local = await worker.fetch(new Request(`http://localhost:4173/k3y/${path}`), {
+        APP_KEY: "k3y",
+      });
+      assert.equal(local.status, 200);
+      assert.ok(
+        local.headers
+          .get("content-security-policy")
+          .includes("connect-src 'self' ws://localhost:4173;"),
+      );
+      assert.ok(policy.includes("frame-ancestors 'none'"));
+      assert.ok(policy.includes("script-src-attr 'none'"));
+      assert.ok(!/script-src[^;]*unsafe-inline/.test(policy));
+      const cached = await worker.fetch(
+        new Request(`https://worker.example/k3y/${path}`, {
+          headers: { "if-none-match": response.headers.get("etag") },
+        }),
+        { APP_KEY: "k3y" },
+      );
+      assert.equal(cached.status, 304);
+      assert.equal(cached.headers.get("content-security-policy"), policy);
+    }
+  });
+}

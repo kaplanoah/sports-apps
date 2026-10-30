@@ -1,3 +1,5 @@
+import { OFFLINE_HEADER_NAMES } from "./security-headers.js";
+
 // The service worker keeps a copy of the page and every file it loads, so the page opens at once
 // on a weak connection or none, and draws what it last showed. It opens the copy and reads the
 // page again behind it, and a newer page replaces the copy only once all of its files are kept,
@@ -110,7 +112,12 @@ async function keepPage(response) {
   await keepMissingFiles(cache, listPageFiles(page));
   const files = await listCopyFiles(cache, page);
   await keepMissingFiles(cache, files);
-  const headers = { "content-type": response.headers.get("content-type") ?? "text/html" };
+  const headers = new Headers();
+  for (const name of OFFLINE_HEADER_NAMES) {
+    const value = response.headers.get(name);
+    if (value !== null) headers.set(name, value);
+  }
+  if (!headers.has("content-type")) headers.set("content-type", "text/html");
   await cache.put(findPageAddress(), new Response(page, { headers }));
   await forgetOtherFiles(cache, files);
 }

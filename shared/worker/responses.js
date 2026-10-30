@@ -1,4 +1,5 @@
 // What the Worker's JSON endpoints answer with.
+import { SECURITY_HEADERS } from "../page/security-headers.js";
 
 export const respondJson = (body, status = 200) =>
   new Response(JSON.stringify(body), {
@@ -6,7 +7,7 @@ export const respondJson = (body, status = 200) =>
     headers: {
       "content-type": "application/json",
       "cache-control": "no-store",
-      "x-content-type-options": "nosniff",
+      "x-content-type-options": SECURITY_HEADERS["x-content-type-options"],
     },
   });
 

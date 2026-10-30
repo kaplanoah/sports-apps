@@ -1,3 +1,4 @@
+import { addTestStyles } from "./test-styles.mjs";
 import { expect } from "@playwright/test";
 import { THEMES, showTheme } from "./theme-layout.mjs";
 import { SCREENS } from "./themes.mjs";
@@ -98,10 +99,10 @@ async function checkShownChannelTagDots(page, app) {
   ]);
   const tag = page.locator("#channelTag");
   const painted = app === "wnba" ? await tag.screenshot() : null;
-  const native = await page.addStyleTag({
-    content:
-      ".channel-tag .sep { display:inline; position:static; text-box:normal; visibility:visible } .channel-tag .sep::after { content:none }",
-  });
+  const native = await addTestStyles(
+    page,
+    ".channel-tag .sep { display:inline; position:static; text-box:normal; visibility:visible } .channel-tag .sep::after { content:none }",
+  );
   expect(await readTagLayout(page)).toEqual(layout);
   if (app === "wnba") expect(await tag.screenshot()).toEqual(painted);
   await native.evaluate((style) => style.parentNode.removeChild(style));

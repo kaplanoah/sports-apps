@@ -151,7 +151,7 @@ function requestLocked(
   path,
   { method = "GET", cookie, body, env = LOCKED_ENV, origin = "https://worker.example" } = {},
 ) {
-  const headers = { "cf-connecting-ip": "203.0.113.7", ...(cookie && { cookie }) };
+  const headers = { origin, "cf-connecting-ip": "203.0.113.7", ...(cookie && { cookie }) };
   const init = { method, headers, ...(body !== undefined && { body: JSON.stringify(body) }) };
   return createLockedWorker().fetch(new Request(`${origin}/key${path}`, init), env);
 }
@@ -337,6 +337,7 @@ test("a phone signed in under the key counts with the app's name and the key add
     new Request("https://worker.example/key/count?team=NYM", {
       method: "POST",
       headers: {
+        origin: "https://worker.example",
         cookie,
         "cf-connecting-ip": "203.0.113.7",
         "user-agent": IPHONE_AGENT,
@@ -525,7 +526,11 @@ test("without a page host a Worker keeps the page under its key and offers no mo
  * @param {{ method?: string, cookie?: string, body?: unknown, env?: object }} [options]
  */
 function requestAtPageHost(path, { method = "GET", cookie, body, env = PAGE_HOST_ENV } = {}) {
-  const headers = { "cf-connecting-ip": "203.0.113.7", ...(cookie && { cookie }) };
+  const headers = {
+    origin: `https://${PAGE_HOST}`,
+    "cf-connecting-ip": "203.0.113.7",
+    ...(cookie && { cookie }),
+  };
   const init = { method, headers, ...(body !== undefined && { body: JSON.stringify(body) }) };
   return createLockedWorker().fetch(new Request(`https://${PAGE_HOST}${path}`, init), env);
 }
@@ -643,7 +648,10 @@ test("a move's handoff is made only by a POST from a phone signed in, and only w
   );
   await assertNoMoveRoute(
     await createLockedWorker().fetch(
-      new Request(`https://${PAGE_HOST}/access/move`, { method: "POST", headers: { cookie } }),
+      new Request(`https://${PAGE_HOST}/access/move`, {
+        method: "POST",
+        headers: { cookie, origin: `https://${PAGE_HOST}` },
+      }),
       PAGE_HOST_ENV,
     ),
   );
@@ -713,4 +721,112 @@ test("Safari's manifest leaves out start_url, so a Home Screen app opens at the 
   const chrome = await requestManifest(AGENTS.android);
   assert.notEqual(safari.headers.get("etag"), chrome.headers.get("etag"));
   assert.equal(safari.headers.get("vary"), "user-agent");
+});
+
+test("writes and watch reject missing, null, sibling and unrelated origins before doing work", async () => {
+  const cookie = await signIn();
+  const worker = createLockedWorker();
+  for (const origin of [
+    undefined,
+    "null",
+    "https://sibling.worker.example",
+    "https://elsewhere.example",
+  ]) {
+    for (const [path, method] of [
+      ["access", "POST"],
+      ["access/handoff", "POST"],
+      ["access/move", "POST"],
+      ["count", "POST"],
+      ["contact", "POST"],
+      ["push/subscription", "POST"],
+      ["push/subscription", "DELETE"],
+      ["watch", "GET"],
+      ["push/subscription", "OPTIONS"],
+    ]) {
+      const response = await worker.fetch(
+        new Request(`https://worker.example/key/${path}`, {
+          method,
+          headers: { cookie, ...(origin === undefined ? {} : { origin }) },
+        }),
+        LOCKED_ENV,
+      );
+      assert.equal(response.status, 403, `${method} ${path}: ${origin}`);
+      assert.equal(response.headers.get("access-control-allow-origin"), null);
+    }
+  }
+  const allowed = await worker.fetch(
+    new Request("https://worker.example/key/watch", {
+      headers: { cookie, origin: "https://worker.example" },
+    }),
+    LOCKED_ENV,
+  );
+  assert.equal(allowed.status, 200);
+  assert.equal(
+    (
+      await worker.fetch(
+        new Request("https://worker.example/key/", { headers: { cookie } }),
+        LOCKED_ENV,
+      )
+    ).status,
+    200,
+  );
+  assert.equal(
+    (
+      await worker.fetch(
+        new Request("https://worker.example/key/not-watch/watch", { headers: { cookie } }),
+        LOCKED_ENV,
+      )
+    ).status,
+    404,
+  );
+});
+
+test("security headers cover HTTPS pages, errors, redirects and health without setting HSTS on HTTP", async () => {
+  const worker = createLockedWorker();
+  for (const path of ["/key/", "/key", "/missing", "/health", "/key/access/handoff"]) {
+    const response = await worker.fetch(new Request(`https://worker.example${path}`), LOCKED_ENV);
+    assert.equal(response.headers.get("x-frame-options"), "DENY");
+    assert.equal(response.headers.get("strict-transport-security"), "max-age=31536000");
+  }
+  const local = await worker.fetch(new Request("http://localhost/key/"), LOCKED_ENV);
+  assert.equal(local.status, 200);
+  assert.equal(local.headers.get("strict-transport-security"), null);
+});
+
+test("forwarded immutable responses receive headers while WebSocket upgrades retain their socket", async () => {
+  const redirect = Response.redirect("https://worker.example/next");
+  const upgrade = /** @type {Response} */ (/** @type {unknown} */ ({ status: 101, webSocket: {} }));
+  let answer = redirect;
+  const worker = createAppWorker({
+    name: "mlb",
+    pageFiles: {},
+    readFeedFailures: storeAnswers,
+    forwardToStore: () => answer,
+  });
+  const request = new Request("https://worker.example/key/watch", {
+    headers: { origin: "https://worker.example" },
+  });
+  const secured = await worker.fetch(request, { APP_KEY: "key" });
+  assert.equal(secured.status, 302);
+  assert.equal(secured.headers.get("location"), "https://worker.example/next");
+  assert.equal(secured.headers.get("x-frame-options"), "DENY");
+  assert.equal(redirect.headers.get("x-frame-options"), null);
+  answer = upgrade;
+  assert.equal(await worker.fetch(request, { APP_KEY: "key" }), upgrade);
+});
+
+test("public HTTP requests redirect to HTTPS before page access, without affecting local development", async () => {
+  const worker = createLockedWorker();
+  for (const path of ["/robots.txt", "/health", "/key/?theme=dark", "/missing"]) {
+    const response = await worker.fetch(new Request(`http://worker.example${path}`), LOCKED_ENV);
+    assert.equal(response.status, 308);
+    assert.equal(response.headers.get("location"), `https://worker.example${path}`);
+    assert.equal(response.headers.get("strict-transport-security"), null);
+    assert.equal(response.headers.get("set-cookie"), null);
+  }
+  for (const host of ["localhost", "127.0.0.1", "[::1]"]) {
+    const response = await worker.fetch(new Request(`http://${host}/key/`), LOCKED_ENV);
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get("location"), null);
+  }
 });

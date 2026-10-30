@@ -5,6 +5,11 @@
 // commit. Browsers keep its code and styles for good, but always revalidate index.html.
 
 import {
+  TRANSPORT_SECURITY,
+  SECURITY_HEADERS,
+  REQUIRED_CSP_DIRECTIVES,
+} from "../page/security-headers.js";
+import {
   ACCESS_PATH,
   buildPageHostAddress,
   createAccessCookie,
@@ -21,14 +26,57 @@ import { serveContact } from "./contact-request.js";
 import { COUNT_PATH, serveCount } from "./daily-count.js";
 import { createHealthServer } from "./health.js";
 
+const WATCH_PATH = "/watch";
 const CONTACT_PATH = `/${CONTACT_ROUTE}`;
 
 const PAGE_HEADERS = {
   "cache-control": "no-cache",
   "x-robots-tag": "noindex, nofollow",
-  "referrer-policy": "no-referrer",
-  "x-content-type-options": "nosniff",
 };
+/** @param {string[]} hashes @param {Request} request */
+function createContentSecurityPolicy(hashes, request) {
+  const socket = new URL(request.url);
+  socket.protocol = socket.protocol === "https:" ? "wss:" : "ws:";
+  return [
+    "default-src 'self'",
+    `${REQUIRED_CSP_DIRECTIVES.scripts} ${hashes.map((hash) => `'sha256-${hash}'`).join(" ")}`.trim(),
+    "script-src-attr 'none'",
+    "style-src 'self'",
+    "style-src-attr 'unsafe-inline'",
+    "img-src 'self' https: data: blob:",
+    "media-src 'self' https:",
+    `connect-src 'self' ${socket.origin}`,
+    "object-src 'none'",
+    "base-uri 'none'",
+    "form-action 'self'",
+    REQUIRED_CSP_DIRECTIVES.frames,
+  ].join("; ");
+}
+
+/** @param {Request} request @param {URL} url @param {string} appPath */
+function isUntrustedRequest(request, url, appPath) {
+  const needsOrigin = !["GET", "HEAD"].includes(request.method) || appPath === WATCH_PATH;
+  return needsOrigin && request.headers.get("origin") !== url.origin;
+}
+
+/** @param {URL} url */
+function redirectToHttps(url) {
+  if (url.protocol !== "http:" || ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname))
+    return null;
+  url.protocol = "https:";
+  return new Response(null, { status: 308, headers: { location: url.href } });
+}
+
+/** @param {Response} response @param {Request} request */
+function addSecurityHeaders(response, request) {
+  if (response.status === 101) return response;
+  const secured = new Response(response.body, response);
+  for (const [name, value] of Object.entries(SECURITY_HEADERS)) secured.headers.set(name, value);
+  if (new URL(request.url).protocol === "https:")
+    secured.headers.set("strict-transport-security", TRANSPORT_SECURITY);
+  return secured;
+}
+
 // No other release uses these addresses, so a browser keeps release files except index.html for good.
 const RELEASE_FILE_HEADERS = {
   ...PAGE_HEADERS,
@@ -45,11 +93,11 @@ export const nameReleaseFolder = (commit) => `release/${commit}/`;
 const decodeBase64 = (text) => Uint8Array.from(atob(text), (character) => character.charCodeAt(0));
 const textEncoder = new TextEncoder();
 
-/** @param {Record<string, { contentType: string, text?: string, base64?: string }>} pageFiles */
+/** @param {Record<string, { contentType: string, text?: string, base64?: string, scriptHashes?: string[] }>} pageFiles */
 function decodePageFiles(pageFiles) {
   const files = new Map();
-  for (const [path, { contentType, text, base64 }] of Object.entries(pageFiles)) {
-    files.set(path, { contentType, body: text ?? decodeBase64(base64), etag: null });
+  for (const [path, { contentType, text, base64, scriptHashes }] of Object.entries(pageFiles)) {
+    files.set(path, { contentType, body: text ?? decodeBase64(base64), etag: null, scriptHashes });
   }
   return files;
 }
@@ -156,6 +204,14 @@ function createPageServer(pageFiles, releaseFolder) {
     const etag = body === file.body ? await file.etag : await hashBody(body);
     const headers = {
       "content-type": file.contentType,
+      ...(file.contentType.startsWith("text/html")
+        ? {
+            "content-security-policy": createContentSecurityPolicy(
+              file.scriptHashes ?? [],
+              request,
+            ),
+          }
+        : {}),
       etag,
       ...(path === "index.html" ? PAGE_HEADERS : cacheHeaders),
       ...(path === MANIFEST_PATH ? { vary: "user-agent" } : {}),
@@ -232,7 +288,7 @@ function redirectToPageHost(url, appPath, env) {
 }
 
 const isStorePath = (appPath) =>
-  appPath === "/watch" || appPath.startsWith("/store/") || appPath.startsWith("/push/");
+  appPath === WATCH_PATH || appPath.startsWith("/store/") || appPath.startsWith("/push/");
 
 const GATE_PATH = "/gate.html";
 
@@ -283,14 +339,17 @@ export function createAppWorker({ name, pageFiles, forwardToStore, readFeedFailu
     return page;
   }
 
-  return {
+  const worker = {
     async fetch(request, env = {}) {
       const url = new URL(request.url);
+      const redirect = redirectToHttps(url);
+      if (redirect) return redirect;
       if (url.pathname === "/robots.txt") return serveRobots(releaseCommit);
       if (url.pathname === "/health") return serveHealth(env);
       const prefix = findAppPrefix(url, env);
       const appPath = prefix === null ? null : findAppPath(url.pathname, prefix);
       if (appPath === null) return serveNotFound();
+      if (isUntrustedRequest(request, url, appPath)) return respondText("Forbidden.\n", 403);
       if (appPath === "") return redirectToFolder(url);
       if (appPath === ACCESS_PATH) return serveAccess(request, env, prefix);
       if (appPath === HANDOFF_PATH) return serveHandoff(request, env, prefix);
@@ -305,6 +364,11 @@ export function createAppWorker({ name, pageFiles, forwardToStore, readFeedFailu
         return reads[appPath](url, env);
       if (isIndexPath(appPath)) return servePage(request, env, appPath, prefix);
       return servePageFile(request, appPath);
+    },
+  };
+  return {
+    async fetch(request, env = {}) {
+      return addSecurityHeaders(await worker.fetch(request, env), request);
     },
   };
 }
