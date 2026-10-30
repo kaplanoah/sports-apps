@@ -10,6 +10,7 @@ import { findTeamCodeByEspnId } from "../../page/js/teams.js";
 export const identityPolicy = {
   league: "wnba",
   vendor: "wnba",
+  gameFactFields: ["season", "isCupFinal"],
   nameMatchKey: nameEspnMatchKey,
   readGameFacts: (game, season) => ({ ...(season && { season }), ...readGameFacts(game.id) }),
   readSeriesFacts,

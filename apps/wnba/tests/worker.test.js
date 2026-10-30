@@ -1432,5 +1432,38 @@ test("live snapshot identity records use existing ESPN answers and isolate malfo
   }).loadSnapshot(2026);
   assert.equal(malformed.games.length, snapshot.games.length);
   assert.equal(malformed.identityRecords.records.length, 0);
-  assert.ok(malformed.identityRecords.rejected > 0);
+  assert.equal(malformed.identityRecords.rejected, 0);
+});
+
+test("one rejected kept network event is counted once across loading and saving a season", async () => {
+  const espn = structuredClone(ESPN_SCOREBOARD.answers);
+  const month = espn[NETWORKS_REQUEST("202609")];
+  month.events[0].id = "";
+  const league = createLeague({ espn });
+  const { ctx } = createDurableObjectContext();
+  const store = new SeasonStore(ctx, {}, { now: () => NOW, fetchImpl: league.fetchImpl });
+  const snapshot = await store.loadSnapshot(2026);
+  assert.equal((await store.identities.readStatus()).errors, 1);
+  assert.ok((await store.saveSeason(snapshot)).snapshot);
+  assert.equal((await store.identities.readStatus()).errors, 1);
+  const reads = listNetworksReads(league).length;
+  const repeated = await store.loadSnapshot(2026);
+  await store.saveSeason(repeated);
+  assert.equal(listNetworksReads(league).length, reads);
+  assert.equal((await store.identities.readStatus()).errors, 1);
+});
+
+test("rejected backup event identities remain visible separately from stored network answers", async () => {
+  const espn = structuredClone(ESPN.answers);
+  for (const answer of Object.values(espn)) for (const event of answer.events) event.id = "";
+  const league = createLeague({ refuse: { scoreboard: "error" }, espn });
+  const snapshot = await createSnapshotLoader({
+    fetchImpl: league.fetchImpl,
+    now: () => Date.parse(ESPN.now),
+  }).loadSnapshot(2026);
+  assert.ok(snapshot.identityRecords.rejected > 0);
+  const { ctx } = createDurableObjectContext();
+  const store = new SeasonStore(ctx, {}, { now: () => NOW });
+  await store.saveSeason(snapshot);
+  assert.equal((await store.identities.readStatus()).errors, snapshot.identityRecords.rejected);
 });

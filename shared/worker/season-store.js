@@ -268,7 +268,7 @@ export function createSeasonStore(league) {
     ) {
       this.ctx = ctx;
       this.identities = league.identity
-        ? createIdentityDocuments(ctx.storage, league.identity)
+        ? createIdentityDocuments(ctx.storage, league.identity, now)
         : null;
       this.env = env;
       this.requestCount = 0;

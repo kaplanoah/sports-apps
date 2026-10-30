@@ -4,6 +4,7 @@ import { readSeriesFacts } from "../../page/js/bracket-rules.js";
 export const identityPolicy = {
   league: "mlb",
   vendor: "mlb",
+  gameFactFields: ["season", "round", "league"],
   readGameFacts: (game, season) => ({
     ...(season && { season }),
     ...(game.series && readSeriesFacts(game.series)),

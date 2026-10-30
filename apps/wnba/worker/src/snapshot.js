@@ -302,10 +302,17 @@ export function createSnapshotLoader({
     const snapshot = WNBASnapshot.buildSnapshot(responses, { season, now: requestedAt });
     const coverageGap = describeCoverageGap(responses, snapshot);
     const ended = await addGameEnds(snapshot);
-    const espnAnswers = [...(responses.networks ?? []), ...(responses.backup?.answers ?? [])];
+    const networkIdentities = readIdentityGames(responses.networks ?? [], findTeamCodeByEspnId);
+    const backupIdentities = readIdentityGames(
+      responses.backup?.answers ?? [],
+      findTeamCodeByEspnId,
+    );
     return {
       ...ended,
-      identityRecords: readIdentityGames(espnAnswers, findTeamCodeByEspnId),
+      identityRecords: {
+        records: [...networkIdentities.records, ...backupIdentities.records],
+        rejected: backupIdentities.rejected,
+      },
       nextReadAt,
       failures: coverageGap ? { ...failures, backup: coverageGap } : failures,
       meetings: listUpcomingMeetings(responses.schedule, ended),

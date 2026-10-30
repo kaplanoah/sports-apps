@@ -50,7 +50,11 @@ async function ensureEntity(transaction, league, observation) {
     status[type === "game" ? "games" : "players"] += 1;
     await transaction.put(nameStatusKey(league), status);
   }
-  return updated;
+  return {
+    entry: updated,
+    created: !previous,
+    addedFacts: Object.keys(updated.facts).filter((field) => previous?.facts?.[field] == null),
+  };
 }
 
 /** @param {any} transaction @param {string} league @param {any} observation */
@@ -58,7 +62,7 @@ async function saveAssociation(transaction, league, observation) {
   const { type, vendor, vendorId, internalId, evidence, decisive = false } = observation;
   const key = nameVendorKey(league, type, vendor, vendorId);
   const previous = await transaction.get(key);
-  const entry = await ensureEntity(transaction, league, observation);
+  const { entry, created, addedFacts } = await ensureEntity(transaction, league, observation);
   const competingId = entry.vendors[vendor];
   if (
     (previous && previous.internalId !== internalId) ||
@@ -66,7 +70,12 @@ async function saveAssociation(transaction, league, observation) {
   ) {
     if (!decisive) {
       await saveProblem(transaction, league, key, "disputed");
-      return { internalId: previous?.internalId ?? internalId, disputed: true };
+      return {
+        internalId: previous?.internalId ?? internalId,
+        disputed: true,
+        created,
+        addedFacts,
+      };
     }
     if (previous && previous.internalId !== internalId) {
       const oldKey = nameEntityKey(league, type, previous.internalId);
@@ -98,7 +107,7 @@ async function saveAssociation(transaction, league, observation) {
     vendorId,
   });
   if (!observation.preserveProblem) await saveProblem(transaction, league, key, null);
-  return { internalId, disputed: false };
+  return { internalId, disputed: false, created, addedFacts };
 }
 
 /**
@@ -167,20 +176,27 @@ export function createIdentityLookup(storage, league) {
     },
     /** @param {"game" | "player"} type @param {string} id */
     readEntry: (type, id) => storage.get(nameEntityKey(league, type, id)),
-    async listMappingConflicts(key) {
+    async countMappingConflicts(key) {
       return storage.transaction(async (transaction) => {
         const value = await transaction.get(key);
-        if (!value) return [];
-        const conflicts = [];
+        if (!value) return 0;
+        let conflicts = 0;
         if (key.startsWith(`identity:entity:${league}:`)) {
           for (const [vendor, id] of Object.entries(value.vendors)) {
-            const vendorKey = nameVendorKey(league, value.type, vendor, id);
-            if ((await transaction.get(vendorKey))?.internalId !== value.id)
-              conflicts.push(vendorKey);
+            const mapping = await transaction.get(nameVendorKey(league, value.type, vendor, id));
+            if (mapping?.internalId === value.id) continue;
+            if (mapping) {
+              const owner = await transaction.get(
+                nameEntityKey(league, value.type, mapping.internalId),
+              );
+              // A broken forward relation is counted from its vendor key.
+              if (owner?.vendors[vendor] !== id) continue;
+            }
+            conflicts += 1;
           }
         } else if (key.startsWith("identity:vendor:") && value.league === league) {
           const entry = await transaction.get(nameEntityKey(league, value.type, value.internalId));
-          if (entry?.vendors[value.vendor] !== value.vendorId) conflicts.push(key);
+          if (entry?.vendors[value.vendor] !== value.vendorId) conflicts += 1;
         }
         return conflicts;
       });
