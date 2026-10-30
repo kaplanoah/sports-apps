@@ -621,6 +621,12 @@ test("a kept schedule is confirmed only while the scoreboard lists each game it 
   assert.equal(WNBASnapshot.isTodayOnScoreboard(schedule, null, AFTERNOON.season, now), false);
 });
 
+/** @param {any} competition An ESPN event's competition. */
+const postponeCompetition = (competition) => {
+  competition.status = structuredClone(competition.status);
+  competition.status.type.shortDetail = "Postponed";
+};
+
 test("while the scoreboard doesn't answer, the reminders' games are confirmed from ESPN only while it lists each game on the league's today", () => {
   const now = Date.parse(AFTERNOON.now);
   /** @param {(events: any[]) => any[]} [changeEvents] */
@@ -666,11 +672,7 @@ test("ESPN confirms a kept schedule only while each game it has between named te
     const [competition] = event.competitions;
     competition.date = new Date(Date.parse(competition.date) - 24 * 60 * 60 * 1000).toISOString();
   };
-  const postpone = (event) => {
-    const [competition] = event.competitions;
-    competition.status = structuredClone(competition.status);
-    competition.status.type.shortDetail = "Postponed";
-  };
+  const postpone = (event) => postponeCompetition(event.competitions[0]);
   assert.equal(isConfirmed(leaveAsIs), false);
   assert.equal(isConfirmed(unnameTeams), true);
   assert.equal(isConfirmed(dayEarlier), true);
@@ -697,10 +699,6 @@ test("ESPN confirms a kept schedule's game it hasn't started only while it start
   const hourEarlier = (competition) => {
     competition.date = new Date(Date.parse(competition.date) - 60 * 60 * 1000).toISOString();
   };
-  const postpone = (competition) => {
-    competition.status = structuredClone(competition.status);
-    competition.status.type.shortDetail = "Postponed";
-  };
   const startHourEarlier = (competition) => {
     hourEarlier(competition);
     competition.status = {
@@ -719,7 +717,7 @@ test("ESPN confirms a kept schedule's game it hasn't started only while it start
   const leaveAsIs = () => {};
   assert.equal(isConfirmed(leaveAsIs), true);
   assert.equal(isConfirmed(hourEarlier), false);
-  assert.equal(isConfirmed(postpone), false);
+  assert.equal(isConfirmed(postponeCompetition), false);
   assert.equal(isConfirmed(startHourEarlier), true);
   assert.equal(isConfirmed(hourEarlier, tbdSchedule), true);
 });
