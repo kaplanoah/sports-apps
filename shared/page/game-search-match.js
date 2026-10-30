@@ -270,7 +270,7 @@ function createConditionsCheck(search, context) {
     search.isCrossConference && ((game) => isCrossConference(context, game)),
     starters.length > 0 && ((game) => hasStartersAsked(starters, game)),
     gameNumber !== null && ((game) => game.number === gameNumber),
-    search.isIfNeeded && ((game) => game.isIfNeeded),
+    search.isIfNeeded && ((game) => game.state === "pre" && game.isIfNeeded),
     search.isDoubleheader && ((game) => !!game.isDoubleheader),
     states.length > 0 && ((game) => states.includes(game.state)),
     !!search.outcome && createOutcomeCheck(search),

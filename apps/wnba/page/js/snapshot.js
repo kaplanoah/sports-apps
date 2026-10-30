@@ -7,7 +7,7 @@
 // time to be decided.
 
 import { listTimedReminderGames } from "#shared/reminder-games.js";
-import { isNecessaryPlayoffGame } from "#shared/series-text.js";
+import { isStillIfNecessary } from "#shared/series-text.js";
 import { addDays, readEasternDay } from "#shared/days.js";
 import * as PollSchedule from "#shared/poll-schedule.js";
 import { readLeagueDate } from "./days.js";
@@ -666,6 +666,22 @@ export function listScheduledStarts(schedule, season) {
 }
 
 /**
+ * @param {any} game
+ * @param {Map<string, any>} seriesById
+ */
+function isStillIfNeeded(game, seriesById) {
+  if (!isPlayoffGame(game)) return false;
+  const series = seriesById.get(game.series);
+  return isStillIfNecessary({
+    state: game.state,
+    ifNecessary: game.isIfNeeded,
+    number: game.number,
+    winsNeeded: countWinsNeeded(game.round),
+    wins: [series?.top?.wins ?? 0, series?.bottom?.wins ?? 0],
+  });
+}
+
+/**
  * @param {{ scoreboard?: any, schedule?: any, bracket?: any, standings?: any, backup?: { answers: any[] } | null, networks?: any[] | null }} responses
  * @param {{ season: number, now?: number }} options
  */
@@ -678,19 +694,24 @@ export function buildSnapshot(responses, { season, now = Date.now() }) {
     listGamesForBackup(leagueGames, responses, season),
     backupGames,
   );
-  const seasonGames = addEspnListings(
+  const listedGames = addEspnListings(
     leagueGames.map((game) =>
       standIns.has(game.id) ? applyBackupGame(game, standIns.get(game.id)) : game,
     ),
     (responses.networks ?? []).flatMap((answer) => answer.events ?? []).map(readNetworkGame),
   );
-  const games = seasonGames.filter(isPlayoffGame);
+  const playoffGames = listedGames.filter(isPlayoffGame);
   const bracket = responses.bracket?.bracket?.playoffBracketSeries;
-  const countedSeries = countSeriesFromGames(games);
+  const countedSeries = countSeriesFromGames(playoffGames);
   const series = bracket
-    ? combineSeries(bracket.map(readBracketSeries), countedSeries, games)
+    ? combineSeries(bracket.map(readBracketSeries), countedSeries, playoffGames)
     : countedSeries;
   const seriesById = mapSeriesById(series);
+  const seasonGames = listedGames.map((game) => ({
+    ...game,
+    isIfNeeded: isStillIfNeeded(game, seriesById),
+  }));
+  const games = seasonGames.filter(isPlayoffGame);
   return {
     version: SNAPSHOT_VERSION,
     season,
@@ -762,17 +783,5 @@ export function listReminderGames(snapshot) {
   );
 }
 
-function isConfirmedReminderGame(game, seriesById) {
-  const series = seriesById.get(game.series);
-  return (
-    game.state === "pre" &&
-    game.isTimeSet &&
-    isToBePlayed(game, seriesById) &&
-    isNecessaryPlayoffGame({
-      ifNecessary: game.isIfNeeded,
-      number: game.number,
-      winsNeeded: countWinsNeeded(game.round),
-      wins: [series?.top?.wins ?? 0, series?.bottom?.wins ?? 0],
-    })
-  );
-}
+const isConfirmedReminderGame = (game, seriesById) =>
+  game.state === "pre" && game.isTimeSet && isToBePlayed(game, seriesById) && !game.isIfNeeded;

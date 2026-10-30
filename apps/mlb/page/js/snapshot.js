@@ -217,6 +217,7 @@ export function buildSnapshot(rawResponses, { season, now = Date.now() }) {
   const schedule = buildSchedule(responses, {
     games: postseasonGames,
     gamesBySeries,
+    series,
     calledOff: calledOffIds,
   });
 

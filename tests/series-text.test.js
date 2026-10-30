@@ -7,6 +7,8 @@ import {
   describeSeriesGame,
   describeSeriesLead,
   describeSeriesWin,
+  isNecessaryPlayoffGame,
+  isStillIfNecessary,
 } from "#shared/series-text.js";
 
 const readGame = (own, theirs) =>
@@ -75,4 +77,29 @@ test("a game's winner tells where the series stood after it: ahead, level, behin
   assert.equal(readAfterWin(2, 2), "Guardians won to tie 2-2");
   assert.equal(readAfterWin(1, 2), "Guardians won but trail 1-2");
   assert.equal(readAfterWin(3, 2), "Guardians won the series 3-2");
+});
+
+test("an if-needed game is necessary once the games played reach it, until a side wins the series", () => {
+  const isNecessary = (number, wins) =>
+    isNecessaryPlayoffGame({ ifNecessary: true, number, winsNeeded: 4, wins });
+  assert.equal(isNecessary(7, [3, 3]), true);
+  assert.equal(isNecessary(7, [3, 2]), false);
+  assert.equal(isNecessary(6, [3, 2]), true);
+  assert.equal(isNecessary(5, [3, 1]), true);
+  assert.equal(isNecessary(5, [4, 0]), false);
+  assert.equal(isNecessary(7, [4, 2]), false);
+  assert.equal(
+    isNecessaryPlayoffGame({ ifNecessary: false, number: 7, winsNeeded: 4, wins: [0, 0] }),
+    true,
+  );
+});
+
+test("a game stays marked if necessary only while it's still to come and its series may not need it", () => {
+  const isMarked = (state, ifNecessary, wins) =>
+    isStillIfNecessary({ state, ifNecessary, number: 7, winsNeeded: 4, wins });
+  assert.equal(isMarked("pre", true, [3, 2]), true);
+  assert.equal(isMarked("pre", true, [3, 3]), false);
+  assert.equal(isMarked("pre", false, [3, 2]), false);
+  assert.equal(isMarked("live", true, [3, 2]), false);
+  assert.equal(isMarked("final", true, [4, 2]), false);
 });

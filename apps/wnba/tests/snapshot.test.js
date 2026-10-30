@@ -555,50 +555,51 @@ test("reminders require confirmed necessary playoff games and successful source 
     { isTimeSet: false },
     { away: { team: null } },
     { start: null },
-    { isIfNeeded: true, number: 99 },
+    { isIfNeeded: true },
   ])
     assert.deepEqual(listChanged(change), []);
-  assert.deepEqual(
-    WNBASnapshot.listReminderGames({
-      ...snapshot,
-      games: snapshot.games.map((game) => ({ ...game, isIfNeeded: true })),
-      series: snapshot.series.map((series) => ({ ...series, winner: "NYL" })),
-    }),
-    [],
-  );
   for (const missing of ["schedule", "scoreboard", "bracket"])
     assert.equal(WNBASnapshot.listReminderGames({ ...snapshot, missing: [missing] }), null);
 });
 
-test("an if-needed first-round Game 3 is confirmed when its series reaches 1-1", () => {
-  const snapshot = buildAfternoon();
-  const candidate = snapshot.games.find((game) => game.round === 1);
-  assert.ok(candidate);
-  const game = {
-    ...candidate,
-    state: "pre",
-    status: "Scheduled",
-    isTimeSet: true,
-    isIfNeeded: true,
-    number: 3,
-  };
-  const listWithWins = (top, bottom) =>
-    WNBASnapshot.listReminderGames({
-      ...snapshot,
-      games: [game],
-      series: snapshot.series.map((series) =>
-        series.id === game.series
-          ? {
-              ...series,
-              winner: null,
-              top: { ...series.top, wins: top },
-              bottom: { ...series.bottom, wins: bottom },
-            }
-          : series,
-      ),
-    });
-  assert.equal(listWithWins(1, 0).length, 0);
-  assert.equal(listWithWins(1, 1).length, 1);
+/**
+ * The afternoon's responses, with the league's schedule marking each game named if necessary or not.
+ * @param {Record<string, boolean>} marks
+ */
+function markIfNecessary(marks) {
+  const schedule = structuredClone(RESPONSES.schedule);
+  for (const game of schedule.leagueSchedule.gameDates.flatMap((day) => day.games))
+    if (game.gameId in marks) game.ifNecessary = marks[game.gameId];
+  return { ...RESPONSES, schedule };
+}
+
+test("a game the league still marks if necessary once its series needs it isn't marked, and is reminded of", () => {
+  const snapshot = buildAfternoon(markIfNecessary({ 1042600123: true }));
+  const tiedGameThree = (games) => games.find((game) => game.id === "1042600123");
+  assert.equal(tiedGameThree(snapshot.games).isIfNeeded, false, "series tied 1-1");
+  assert.equal(tiedGameThree(snapshot.schedule).isIfNeeded, false, "series tied 1-1");
+  assert.ok(WNBASnapshot.listReminderGames(snapshot).some((game) => game.id === "1042600123"));
+  const leadGameThree = snapshot.games.find((game) => game.id === "1042600133");
+  assert.equal(leadGameThree.isIfNeeded, true, "series led 1-0");
+});
+
+test("a regular season game still to come that the league marks if necessary isn't marked", () => {
+  const schedule = structuredClone(GAMES.preview.schedule);
+  const listings = schedule.leagueSchedule.gameDates.flatMap((day) => day.games);
+  const opener = listings.find((game) => game.gameId === "1022600001");
+  Object.assign(opener, { gameStatus: 1, ifNecessary: true });
+  const game = buildWithWholeSeason({ schedule }).schedule.find(
+    (each) => each.id === opener.gameId,
+  );
+  assert.deepEqual([game.round, game.state, game.isIfNeeded], [null, "pre", false]);
+});
+
+test("a final the league still marks if necessary isn't marked", () => {
+  const snapshot = buildAfternoon(markIfNecessary({ 1042600102: true }));
+  for (const games of [snapshot.games, snapshot.schedule]) {
+    const seriesWinner = games.find((game) => game.id === "1042600102");
+    assert.deepEqual([seriesWinner.state, seriesWinner.isIfNeeded], ["final", false]);
+  }
 });
 
 const FINALS_GAME = {

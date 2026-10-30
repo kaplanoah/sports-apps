@@ -1644,26 +1644,41 @@ test("a postseason game names its series and its game before both its clubs are 
   );
 });
 
+/**
+ * @param {any} fixture
+ * @param {number} gamePk
+ * @param {string} flag
+ */
+function markIfNecessary(fixture, gamePk, flag) {
+  const { postseason, schedule } = fixture.responses;
+  for (const listing of [findListing(postseason, gamePk), findListing(schedule, gamePk)])
+    if (listing) listing.ifNecessary = flag;
+}
+
 test("a postseason game MLB marks If Necessary says so until it's played", () => {
   const fixture = structuredClone(SEASON_GAMES);
-  const { postseason, schedule } = fixture.responses;
-  /** @param {number} gamePk @param {string} flag */
-  const markGame = (gamePk, flag) => {
-    for (const listing of [findListing(postseason, gamePk), findListing(schedule, gamePk)])
-      if (listing) listing.ifNecessary = flag;
-  };
-  markGame(849831, "Y");
-  markGame(849845, "Y");
+  markIfNecessary(fixture, 849808, "Y");
+  markIfNecessary(fixture, 849845, "Y");
   const games = listScheduled(buildSnapshot(fixture));
   const findGame = (id) => games.find((game) => game.id === id);
-  assert.equal(findGame("849831").state, "pre");
-  assert.equal(findGame("849831").ifNecessary, true);
-  assert.equal(findGame("849845").state, "final");
-  assert.equal(findGame("849845").ifNecessary, undefined);
+  assert.deepEqual([findGame("849808").state, findGame("849808").ifNecessary], ["pre", true]);
+  assert.deepEqual(
+    [findGame("849845").state, findGame("849845").ifNecessary],
+    ["final", undefined],
+  );
 
-  markGame(849831, "N");
-  const needed = listScheduled(buildSnapshot(fixture)).find((game) => game.id === "849831");
+  markIfNecessary(fixture, 849808, "N");
+  const needed = listScheduled(buildSnapshot(fixture)).find((game) => game.id === "849808");
   assert.equal(needed.ifNecessary, undefined);
+});
+
+test("a game MLB still marks If Necessary once its series needs it isn't marked", () => {
+  const fixture = structuredClone(SEASON_GAMES);
+  markIfNecessary(fixture, 849831, "Y");
+  const snapshot = buildSnapshot(fixture);
+  assert.deepEqual([snapshot.series.AL_DS2.winsA, snapshot.series.AL_DS2.winsB], [2, 2]);
+  const deciding = listScheduled(snapshot).find((game) => game.id === "849831");
+  assert.deepEqual([deciding.state, deciding.number, deciding.ifNecessary], ["pre", 5, undefined]);
 });
 
 test("a final that went extra innings, or was called short, says in which inning it ended", () => {

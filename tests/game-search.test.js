@@ -312,6 +312,10 @@ test("playoff words, a game number, if needed, wins, and a season's landmarks", 
   assert.equal(search("finals").line, "Finals | 1 game");
   assert.deepEqual(search("game 2").ids, ["g7"]);
   assert.deepEqual(search("if needed").ids, ["g8"]);
+  const playedFlagged = GAMES.map((game) =>
+    game.id === "g5" ? { ...game, isIfNeeded: true } : game,
+  );
+  assert.deepEqual(search("if needed", NOW, playedFlagged).ids, ["g8"]);
   assert.deepEqual(search("Hawks wins").ids, ["g2", "g4", "g5"]);
   assert.deepEqual(search("Owls losses").ids, ["g2", "g5"]);
   assert.deepEqual(search("all-star").ids, ["g11"]);
