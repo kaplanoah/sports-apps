@@ -758,10 +758,14 @@ export function createSeasonStore(league) {
 const findStore = (env) => env.STORE.get(env.STORE.idFromName("store"));
 
 // Only the page's own origin talks to the store, so it gets no CORS headers.
-export function forwardToStore(request, env, storePath) {
+export async function forwardToStore(request, env, storePath) {
   const url = new URL(request.url);
   url.pathname = storePath;
-  return findStore(env).fetch(new Request(url, request));
+  try {
+    return await findStore(env).fetch(new Request(url, request));
+  } catch {
+    return respondError(503, "store_unavailable", "Couldn't reach the store. Try again.");
+  }
 }
 
 /**

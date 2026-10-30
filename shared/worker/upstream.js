@@ -132,6 +132,9 @@ export function createReusedLoader(load, reuseMs, now) {
   const recentLoads = new Map();
   return (key) => {
     const requestedAt = now();
+    for (const [loadedKey, loaded] of recentLoads) {
+      if (!loaded.pending && requestedAt - loaded.at >= reuseMs) recentLoads.delete(loadedKey);
+    }
     const recent = recentLoads.get(key);
     if (recent && (recent.pending || requestedAt - recent.at < reuseMs)) return recent.promise;
     const promise = load(key, requestedAt);

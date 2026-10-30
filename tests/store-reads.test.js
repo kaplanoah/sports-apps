@@ -17,15 +17,11 @@ test("a season's documents come with whether it's the store's current season", a
   });
 });
 
-test("a store that can't be read, or no store, keeps no documents and no current season", async (t) => {
+test("a failed store read propagates, while an absent reader has no documents", async () => {
   const failing = async () => {
     throw new Error("storage is down");
   };
-  t.mock.method(console, "error", () => {});
-  assert.deepEqual(await readSeasonDocs(failing, 2026, ["a/2026"]), {
-    docs: null,
-    isCurrentSeason: false,
-  });
+  await assert.rejects(readSeasonDocs(failing, 2026, ["a/2026"]), /storage is down/);
   assert.deepEqual(await readSeasonDocs(undefined, 2026, ["a/2026"]), {
     docs: null,
     isCurrentSeason: false,

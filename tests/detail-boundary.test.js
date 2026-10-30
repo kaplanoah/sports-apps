@@ -314,6 +314,34 @@ function createHarness(league, fetchImpl) {
 }
 
 for (const league of LEAGUES) {
+  test(`${league.app}: an unreachable store is retryable and never bypassed with vendor reads`, async (context) => {
+    let requests = 0;
+    context.mock.method(globalThis, "fetch", async () => {
+      requests += 1;
+      throw new Error("Unexpected vendor read");
+    });
+    const request = () => new Request(`https://app.example/k3y/box-score?${league.query}`);
+    for (const env of [
+      { APP_KEY: "k3y" },
+      {
+        APP_KEY: "k3y",
+        STORE: {
+          idFromName: (name) => name,
+          get: () => ({
+            fetch: async () => {
+              throw new Error("Store unavailable");
+            },
+          }),
+        },
+      },
+    ]) {
+      const response = await league.worker.fetch(request(), env);
+      assert.equal(response.status, 503);
+      assert.equal((await response.json()).error.code, "store_unavailable");
+    }
+    assert.equal(requests, 0);
+  });
+
   test(`${league.app}: concurrent store-gap reads update the local diagnostics counter`, async () => {
     let reads = 0;
     const harness = createHarness(league, async () => {
