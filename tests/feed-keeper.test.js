@@ -4,11 +4,111 @@ import {
   createFeedKeeper,
   createMemoryStorage,
   findSettledTime,
+  FAILED_FEED_WAIT_MS,
   isPlayerReadDue,
 } from "../shared/worker/feed-keeper.js";
 
 const MINUTE_MS = 60 * 1000;
 const HOUR_MS = 60 * MINUTE_MS;
+
+test("successful feeds publish behind and final-settle deadlines without waking for age alone", async () => {
+  const storage = createMemoryStorage();
+  const clock = { now: 0 };
+  const restart = () =>
+    createFeedKeeper({
+      feeds: { standings: { maxAgeMs: 24 * HOUR_MS, changesWithGames: true } },
+      storage,
+      now: () => clock.now,
+    });
+  let keeper = restart();
+  let nextAt;
+  let reads = 0;
+  let behind = false;
+  const read = () =>
+    keeper.readFeed(
+      "standings",
+      "/standings",
+      async () => {
+        reads += 1;
+        return { behind };
+      },
+      {
+        isBehind: (answer) => answer.behind,
+        onNextRead: (at) => {
+          nextAt = at;
+        },
+      },
+    );
+  await keeper.noteFinalCount(0);
+  await read();
+  assert.equal(nextAt, Infinity);
+  clock.now = MINUTE_MS;
+  await keeper.noteFinalCount(1);
+  behind = true;
+  await read();
+  assert.equal(nextAt, 6 * MINUTE_MS);
+  keeper = restart();
+  clock.now = nextAt - 1;
+  await read();
+  assert.equal(reads, 2);
+  assert.equal(nextAt, 6 * MINUTE_MS);
+  clock.now += 1;
+  behind = false;
+  await read();
+  assert.equal(nextAt, 11 * MINUTE_MS);
+  clock.now = nextAt;
+  await read();
+  assert.equal(reads, 4);
+  assert.equal(nextAt, Infinity);
+});
+
+test("failed reads publish their absolute retry deadline across restarts", async () => {
+  const storage = createMemoryStorage();
+  const clock = { now: 0 };
+  const restart = () =>
+    createFeedKeeper({
+      feeds: { standings: { maxAgeMs: MINUTE_MS, changesWithGames: false } },
+      now: () => clock.now,
+      storage,
+    });
+  const deadlines = [];
+  const reasons = [];
+  const options = {
+    onFailure: (...args) => reasons.push(args),
+    onNextRead: (at) => deadlines.push(at),
+  };
+  let keeper = restart();
+  await keeper.readFeed("standings", "/standings", async () => "saved");
+  clock.now = MINUTE_MS;
+  assert.equal(
+    await keeper.readFeed(
+      "standings",
+      "/standings",
+      async () => {
+        throw new Error("down");
+      },
+      options,
+    ),
+    "saved",
+  );
+  const retryAt = clock.now + FAILED_FEED_WAIT_MS;
+  keeper = restart();
+  clock.now = retryAt - 1;
+  let reads = 0;
+  const load = async () => {
+    reads += 1;
+    return "recovered";
+  };
+  assert.equal(await keeper.readFeed("standings", "/standings", load, options), "saved");
+  assert.deepEqual(deadlines, [retryAt, retryAt]);
+  assert.deepEqual(reasons, [["down"], ["down"]]);
+  assert.equal(reads, 0);
+  clock.now = retryAt;
+  assert.equal(await keeper.readFeed("standings", "/standings", load, options), "recovered");
+  assert.equal(reads, 1);
+  assert.deepEqual(deadlines, [retryAt, retryAt, Infinity]);
+  assert.equal(reasons.length, 2);
+});
 
 function createKeeper() {
   const clock = { now: 0 };

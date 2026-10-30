@@ -22,7 +22,11 @@ import {
 } from "../worker/src/season-updater.js";
 import { NETWORKS_MS, createSnapshotLoader, describeFailures } from "../worker/src/snapshot.js";
 import { ESPN, readAfternoonEspn, SEP_30 } from "./espn-fixtures.js";
-import { nameFeedKey } from "../../../shared/worker/feed-keeper.js";
+import {
+  createMemoryStorage,
+  FAILED_FEED_WAIT_MS,
+  nameFeedKey,
+} from "../../../shared/worker/feed-keeper.js";
 
 const AFTERNOON = JSON.parse(
   readFileSync(`${import.meta.dirname}/fixtures/2026-09-30-afternoon.json`, "utf8"),
@@ -849,6 +853,47 @@ test("ESPN's scoreboard is read again only after 6 hours, even after a failed re
   assert.equal(league.countReads("networks"), 6);
 });
 
+test("network listing budgets, failures and finalized answers survive loader restarts", async () => {
+  /** @type {Record<string, "page" | "error">} */
+  const refuse = {};
+  const league = createLeague({ refuse });
+  const storage = createMemoryStorage();
+  let now = Date.parse("2026-10-05T16:00:00Z");
+  const restart = () =>
+    createSnapshotLoader({ fetchImpl: league.fetchImpl, storage, now: () => now });
+  const first = await restart().loadSnapshot(2026);
+  assert.equal(league.countReads("networks"), 2);
+  const saved = (await storage.get("networks:202610")).data;
+  assert.deepEqual(Object.keys(saved.events[0]).sort(), ["competitions", "date"]);
+  assert.deepEqual(Object.keys(saved.events[0].competitions[0]).sort(), [
+    "broadcasts",
+    "competitors",
+    "date",
+    "timeValid",
+  ]);
+  now += HOUR_MS;
+  await restart().loadSnapshot(2026);
+  assert.equal(league.countReads("networks"), 2);
+  refuse.networks = "error";
+  now += NETWORKS_MS;
+  const failed = await restart().loadSnapshot(2026);
+  assert.equal(league.countReads("networks"), 3);
+  assert.ok(failed.failures.networks);
+  assert.deepEqual(
+    failed.games.map((game) => game.networks),
+    first.games.map((game) => game.networks),
+  );
+  now += HOUR_MS;
+  const kept = await restart().loadSnapshot(2026);
+  assert.equal(league.countReads("networks"), 3);
+  assert.equal(kept.failures.networks, failed.failures.networks);
+  delete refuse.networks;
+  now += NETWORKS_MS;
+  const recovered = await restart().loadSnapshot(2026);
+  assert.equal(league.countReads("networks"), 4);
+  assert.equal(recovered.failures.networks, undefined);
+});
+
 test("without ESPN's scoreboard, the games still show, with nowhere to watch them", async () => {
   const league = createLeague({ refuse: { networks: "error" } });
   const loader = createSnapshotLoader({ fetchImpl: league.fetchImpl, now: () => NOW });
@@ -1266,10 +1311,11 @@ test("a malformed scoreboard is named before snapshot composition and leaves the
   assert.equal(snapshot.games.length, 28);
 });
 
-test("the snapshot loader supplies persisted ESPN matches from recorded network answers", async () => {
-  const league = createLeague({ espn: readAfternoonEspn() });
+test("the snapshot loader keeps retry deadlines and persists ESPN matches together", async () => {
+  const league = createLeague({ espn: readAfternoonEspn(), refuse: { standings: "error" } });
   const loader = createSnapshotLoader({ fetchImpl: league.fetchImpl, now: () => NOW });
   const snapshot = await loader.loadSnapshot(2026);
+  assert.equal(snapshot.nextReadAt, NOW + FAILED_FEED_WAIT_MS);
   assert.ok(snapshot.espnMatches.length > 0);
   const docs = createDocs();
   await saveSnapshot(docs, snapshot);

@@ -252,7 +252,7 @@ Pages link these before their own stylesheet, and theme them with the tokens the
 - `job-status.js`: what each job's status says of its last run
 - `upstream.js`: reading a league's feeds and reusing a recent load
 - `feed-keeper.js`: reading slower feeds again only when they may have changed
-- `feed-failures.js`: which of a league's feeds have been failing, since when, and why
+- `feed-failures.js`: each update's failures and read deadlines, and which feeds have been failing, since when, and why
 - `timeout.js`: giving up on a call that doesn't answer in time
 - `highlights-job.js`: keeping each final's highlights
 - `game-details-job.js`: keeping each finished game's details
