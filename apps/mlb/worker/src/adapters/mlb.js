@@ -45,11 +45,7 @@ import {
 } from "./feed-standings.js";
 
 import { SNAPSHOT_VERSION } from "../../../page/js/snapshot.js";
-export {
-  SNAPSHOT_VERSION,
-  SCHEDULE_EDITION,
-  nameScheduleCollection,
-} from "../../../page/js/snapshot.js";
+export { SCHEDULE_EDITION, nameScheduleCollection } from "../../../page/js/snapshot.js";
 export * from "../../../page/js/bracket-rules.js";
 export * from "../../../page/js/standings-rules.js";
 

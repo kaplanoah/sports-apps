@@ -1,3 +1,4 @@
+// Shared ESPN sports-data adapter; league mappings and basketball rules are supplied by callers.
 import {
   ReportedPlayers,
   GameLead,
@@ -132,7 +133,7 @@ const BACKUP_STATES = { pre: "pre", in: "live", post: "final" };
  * A game's state as ESPN's status names it.
  * @param {any} status ESPN's status of a game
  */
-export const readEspnGameState = (status) => BACKUP_STATES[status?.type?.state] ?? "pre";
+const readEspnGameState = (status) => BACKUP_STATES[status?.type?.state] ?? "pre";
 
 // ESPN's scoreboard gives each score as text, and a stand-in game takes one only as a number.
 /** @param {unknown} score */
