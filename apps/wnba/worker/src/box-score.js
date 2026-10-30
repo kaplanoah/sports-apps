@@ -1,9 +1,7 @@
-import { createEspnGameReader } from "./adapters/lead.js";
+import { createEspnGameReader, readGame } from "./adapters/lead.js";
 import { createBoxScoreReader, NOT_YET_STATUSES } from "./adapters/box-score.js";
 import { describeError, respondError, respondJson } from "../../../../shared/worker/responses.js";
 import { readKeptDoc } from "../../../../shared/worker/store-reads.js";
-
-import { readGame } from "./adapters/lead.js";
 import { nameGameDetailsKey } from "./store-docs.js";
 /** @typedef {import("../../../../shared/worker/store-reads.js").ReadDoc} ReadDoc */
 /** @typedef {NonNullable<ReturnType<typeof readGame>>} Game */
@@ -16,22 +14,17 @@ export function createBoxScoreServer({
 
   /**
    * @param {Game} game
-   * @param {ReadDoc | undefined} readDoc
+   * @param {ReadDoc} readDoc
    */
   async function loadBoxScore(game, readDoc) {
     const kept = (await readKeptDoc(readDoc, nameGameDetailsKey(game.id)))?.boxScore;
     if (kept?.state === "final") return kept;
-    try {
-      return await readBoxScore(game, readDoc);
-    } catch (error) {
-      if (kept) return kept;
-      throw error;
-    }
+    return readBoxScore(game, readDoc);
   }
 
   /**
    * @param {URL} url
-   * @param {ReadDoc} [readDoc] the store's documents, when the Worker has a store
+   * @param {ReadDoc} readDoc the store's documents
    */
   async function serveBoxScore(url, readDoc) {
     const game = readGame(url.searchParams);

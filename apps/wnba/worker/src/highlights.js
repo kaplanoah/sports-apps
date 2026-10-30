@@ -1,9 +1,7 @@
-import { createEspnGameReader } from "./adapters/lead.js";
+import { createEspnGameReader, readGame } from "./adapters/lead.js";
 import { createHighlightsReader, nameHighlightsKey } from "./adapters/highlights.js";
 import { describeError, respondError, respondJson } from "../../../../shared/worker/responses.js";
 import { readKeptDoc } from "../../../../shared/worker/store-reads.js";
-
-import { readGame } from "./adapters/lead.js";
 
 /** @typedef {import("../../../../shared/worker/store-reads.js").ReadDoc} ReadDoc */
 
@@ -15,7 +13,7 @@ export function createHighlightsServer({
 
   /**
    * @param {URL} url
-   * @param {ReadDoc} [readDoc] the store's documents, when the Worker has a store
+   * @param {ReadDoc} readDoc the store's documents
    */
   async function serveHighlights(url, readDoc) {
     const game = readGame(url.searchParams);

@@ -5,6 +5,8 @@ import {
   BOX_SCORES,
   BROADCASTS_FIXTURE,
   buildFixtureSnapshot,
+  buildSeasonRecord,
+  openSettings,
   matchPath,
 } from "./harness.mjs";
 
@@ -13,11 +15,17 @@ test.use({ contextOptions: { reducedMotion: "reduce" } });
 test("highlights request the shown season and retry an unfilled archive without a feed-error message", async ({
   page,
 }) => {
+  const past = { ...buildFixtureSnapshot(BROADCASTS_FIXTURE), season: 2025 };
   await openApp(page, {
     now: BROADCASTS_FIXTURE.now,
-    snapshots: { 2026: buildFixtureSnapshot(BROADCASTS_FIXTURE) },
+    store: { "seasons/2025": buildSeasonRecord(past) },
+    snapshots: { 2026: buildFixtureSnapshot(BROADCASTS_FIXTURE), 2025: past },
     boxScores: BOX_SCORES,
   });
+  await openSettings(page);
+  await page.locator("#seasonPicker").selectOption("2025");
+  await page.keyboard.press("Escape");
+  await expect(page.locator("#titleYear")).toHaveText("2025");
   const unavailable = (route) =>
     route.fulfill({
       status: 409,
@@ -32,7 +40,7 @@ test("highlights request the shown season and retry an unfilled archive without 
     .click();
   const sheet = page.locator("#gameSheet");
   await sheet.getByRole("tab", { name: "Highlights" }).click();
-  expect(new URL((await request).url()).searchParams.get("season")).toBe("2026");
+  expect(new URL((await request).url()).searchParams.get("season")).toBe("2025");
   await expect(sheet.locator("#highlightsBody .retry-title")).toHaveText("Not available yet");
   await page.unroute(matchPath("/highlights"), unavailable);
   await sheet.locator("#highlightsBody").getByRole("button", { name: "Try again" }).click();

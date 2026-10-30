@@ -1,7 +1,6 @@
 import { createEspnGameReader, describeGameLead, readGame } from "./adapters/lead.js";
 import { describeError, respondError, respondJson } from "../../../../shared/worker/responses.js";
 import { readKeptDoc } from "../../../../shared/worker/store-reads.js";
-
 import { nameGameDetailsKey } from "./store-docs.js";
 /** @typedef {import("../../../../shared/worker/store-reads.js").ReadDoc} ReadDoc */
 
@@ -15,22 +14,17 @@ export function createLeadServer({
 
   /**
    * @param {{ id: string, away: string, home: string, start: string }} game
-   * @param {ReadDoc | undefined} readDoc
+   * @param {ReadDoc} readDoc
    */
   async function loadLead(game, readDoc) {
     const kept = (await readKeptDoc(readDoc, nameGameDetailsKey(game.id)))?.lead;
     if (kept?.isOver) return kept;
-    try {
-      return await readLead(game, readDoc);
-    } catch (error) {
-      if (kept) return kept;
-      throw error;
-    }
+    return readLead(game, readDoc);
   }
 
   /**
    * @param {URL} url
-   * @param {ReadDoc} [readDoc] the store's documents, when the Worker has a store
+   * @param {ReadDoc} readDoc the store's documents
    */
   async function serveLead(url, readDoc) {
     const game = readGame(url.searchParams);

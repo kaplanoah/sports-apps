@@ -1,6 +1,9 @@
 // What the Worker said went wrong, which each of its routes and its store say as
 // `{ error: { code, message } }`.
 
+export const NOT_AVAILABLE_YET = "not_available_yet";
+export const NOT_AVAILABLE_TITLE = "Not available yet";
+
 /**
  * The Worker's code and message for a failed answer, or its status in their place when the answer
  * names neither.

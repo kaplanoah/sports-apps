@@ -84,14 +84,16 @@ export function listEspnMatches(snapshot, answers) {
 
 export { readEndTime } from "../../../../../shared/worker/espn-adapter.js";
 
+const SCOREBOARD_REUSE_MS = 15000;
+
 /**
- * Reads ESPN's summary of a WNBA game, finding the game on ESPN's scoreboard for its day once.
+ * Reads a saved ESPN match, or finds one from a briefly reused day scoreboard.
  * @param {{ fetchImpl?: (input: string, init: object) => Promise<Response> }} [options]
  */
 export function createEspnGameReader({ fetchImpl = (input, init) => fetch(input, init) } = {}) {
   const loadDay = createReusedLoader(
     (day) => fetchEspnDay(fetchImpl, day),
-    15000,
+    SCOREBOARD_REUSE_MS,
     () => Date.now(),
   );
 

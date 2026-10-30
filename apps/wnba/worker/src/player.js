@@ -19,8 +19,7 @@ export function createPlayerServer({
   const readPlayerFromLeague = createPlayerReader({ loadRoster, fetchImpl, now });
 
   /**
-   * Her sheet from what the store keeps, undefined when it doesn't keep the season, or can't be
-   * read, and whether the season is the store's current one.
+   * Her sheet from what the store keeps, undefined when it does not keep the season, and whether the season is the store's current one.
    * @param {{ id: string, team: string, season: number }} asked
    * @param {ReadDoc} readDoc
    */
@@ -34,6 +33,7 @@ export function createPlayerServer({
     return {
       player: ranks ? composePlayer({ id, team, season, numbers, roster, ranks }) : undefined,
       isCurrentSeason: kept.isCurrentSeason,
+      unavailable: kept.unavailable,
     };
   }
 
@@ -41,15 +41,13 @@ export function createPlayerServer({
    * Her sheet from the store, or from the league for a season the store hasn't saved, counted when
    * the season is the store's current one, which the store keeps as it goes.
    * @param {{ id: string, team: string, season: number }} asked
-   * @param {ReadDoc} [readDoc]
+   * @param {ReadDoc} readDoc
    * @param {() => Promise<void>} [countLeagueRead]
    */
   async function readPlayer(asked, readDoc, countLeagueRead) {
-    if (!readDoc) return readPlayerFromLeague(asked);
     const saved = await readPlayerFromStore(asked, readDoc);
     if (saved.player !== undefined) return saved.player;
-    const current = (await readDoc("live/current"))?.season;
-    if (current && asked.season < current) return "not_available_yet";
+    if (saved.unavailable) return saved.unavailable;
     const [player] = await Promise.all([
       readPlayerFromLeague(asked),
       saved.isCurrentSeason && countLeagueRead && noteLeagueRead("a player", countLeagueRead),
@@ -59,7 +57,7 @@ export function createPlayerServer({
 
   /**
    * @param {URL} url
-   * @param {ReadDoc} [readDoc] the store's documents, when the Worker has a store
+   * @param {ReadDoc} readDoc the store's documents
    * @param {() => Promise<void>} [countLeagueRead] adds one to the store's count of sheets read
    *   from the league
    */
@@ -77,8 +75,7 @@ export function createPlayerServer({
     if (season == null) return respondError(400, "invalid_argument", SEASON_PARAM.rule);
     try {
       const player = await readPlayer({ id, team, season }, readDoc, countLeagueRead);
-      if (player === "not_available_yet")
-        return respondError(409, "not_available_yet", "Not available yet");
+      if (player instanceof Response) return player;
       if (!player)
         return respondError(404, "not_found", `The WNBA has no player ${id} in ${season}`);
       return respondJson(player);

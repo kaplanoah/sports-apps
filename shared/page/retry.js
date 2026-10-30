@@ -3,6 +3,7 @@
 // it a note in that part's place. A tap on Try again, the phone coming back online, or the page
 // coming back reads again, so the part shows its placeholders until the read answers.
 
+import { NOT_AVAILABLE_YET, NOT_AVAILABLE_TITLE } from "./worker-error.js";
 import { html } from "./html.js";
 import { watchTimeAway } from "./resume.js";
 
@@ -52,13 +53,13 @@ export const renderRetryMessage = (message, className) =>
 
 /**
  * Why a read of the Worker failed: the phone is offline, the server is out of reach, or the server
- * answered with a problem, as a failure carrying the answer's status says.
+ * answered with a problem or has not filled the requested history.
  * @param {unknown} error
  * @returns {ReadFailure}
  */
 export function classifyReadFailure(error) {
   if (navigator.onLine === false) return "offline";
-  if (/** @type {any} */ (error)?.code === "not_available_yet") return "unavailable";
+  if (/** @type {any} */ (error)?.code === NOT_AVAILABLE_YET) return "unavailable";
   return typeof (/** @type {any} */ (error)?.status) === "number" ? "server" : "unreachable";
 }
 
@@ -67,7 +68,7 @@ export function classifyReadFailure(error) {
 const FAILURES = {
   unavailable: {
     icon: PLUGS,
-    title: "Not available yet",
+    title: NOT_AVAILABLE_TITLE,
     next: () => "We're still adding this past season's details",
   },
   offline: {

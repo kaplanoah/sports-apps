@@ -5,9 +5,6 @@ import {
 import { readGameState } from "./mlb.js";
 import { fetchMlbJson, LIVE_FEED_CACHE_SECONDS } from "../mlb.js";
 
-/** @typedef {import("../../../../../shared/worker/store-reads.js").ReadDoc} ReadDoc */
-
-export const GAME_ID = /^\d{1,9}$/;
 const FEED_FIELDS = [
   "gameData",
   "status",
@@ -140,7 +137,7 @@ function describeLineupBatter(id, player, name) {
     id,
     name,
     position: player.position?.abbreviation ?? "",
-    average: season.avg ?? null,
+    average: season.avg === ".---" ? null : (season.avg ?? null),
     homeRuns: season.homeRuns ?? null,
     rbi: season.rbi ?? null,
   };

@@ -227,6 +227,7 @@ async function createAfternoonStore(league = {}) {
   // The store's jobs run beside the update, and finish before the page opens, so they never
   // overwrite what a test writes.
   await Promise.all(testStore.store.jobRuns.values());
+  await testStore.store.historyRun;
   return testStore;
 }
 
@@ -314,8 +315,10 @@ export async function openApp(
     fetchImpl,
     now: () => Date.parse(NOW),
   });
-  if (Object.keys(pastSeasons).length) {
-    await createPlayerJob().updateHistory({
+  const historyJob = createPlayerJob();
+  if (Object.keys(pastSeasons).length) await store.createJobStorage("players").delete("allFilled");
+  for (let index = 0; index < Object.keys(pastSeasons).length; index += 1) {
+    await historyJob.updateHistory({
       docs: store.docs,
       storage: store.createJobStorage("players"),
       createLoadSnapshot: store.createLoadSnapshot,

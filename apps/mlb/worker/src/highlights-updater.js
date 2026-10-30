@@ -1,7 +1,8 @@
-import { RequestBudgetExhausted } from "../../../../shared/worker/request-budget.js";
-import { listPastSeasons } from "../../../../shared/worker/background-job.js";
-import { noteFailure, runWithStatus } from "../../../../shared/worker/job-status.js";
-import { createHighlightsJob } from "../../../../shared/worker/highlights-job.js";
+import {
+  createHighlightsJob,
+  createHistoricalHighlightsJob,
+} from "../../../../shared/worker/highlights-job.js";
+import { ensureScheduleRevision } from "./season-updater.js";
 import { listCurrentFinals, listFinals } from "./game-details-updater.js";
 import { findHeadlineStills, forgetOtherSeasonsStills } from "./headline-stills.js";
 import {
@@ -20,7 +21,6 @@ import {
 const HIGHLIGHTS_VERSION = 1;
 // A game MLB hasn't timed yet ends about three hours after it starts.
 const GAME_LENGTH_MS = 3 * 60 * 60 * 1000;
-const HISTORY_RETRY_MS = 10 * 60 * 1000;
 
 /**
  * @param {import("../../../../shared/worker/job-status.js").RunContext} context
@@ -52,36 +52,21 @@ function createLiveJob() {
   });
 }
 
-/** @param {import("../../../../shared/worker/job-status.js").RunContext} context */
-async function fillHistory(context) {
-  const current = (await context.docs.read("live/current"))?.season;
-  if (!Number.isInteger(current)) return;
-  for (const season of await listPastSeasons(context.docs, current)) {
-    for (const game of await listFinals(context, season)) {
-      const key = nameHighlightsKey(game.id);
-      if (await context.docs.read(key)) continue;
-      const triedKey = `history-tried:${game.id}`;
-      if (context.now() - ((await context.storage.get(triedKey)) ?? -Infinity) < HISTORY_RETRY_MS)
-        continue;
-      try {
-        const { content, feed } = await fetchGameMedia(context.fetchImpl, game.id);
-        await context.docs.write(key, describeHighlights(game.id, content, feed));
-      } catch (error) {
-        if (error instanceof RequestBudgetExhausted) return;
-        await context.storage.put(triedKey, context.now());
-        noteFailure(context.failures, "Reading historical highlights", error);
-      }
-    }
-  }
-}
-
 export function createHighlightsUpdater() {
   return {
     ...createLiveJob(),
-    updateHistory: (context) =>
-      runWithStatus(context, {
-        statusKey: "highlights-history/status",
-        updateStore: fillHistory,
-      }),
+    updateHistory: createHistoricalHighlightsJob({
+      listFinals: listCurrentFinals,
+      listSeasonFinals: listFinals,
+      readSeasonRevision: ({ docs }, season) => ensureScheduleRevision(docs, season),
+      gameLengthMs: GAME_LENGTH_MS,
+      nameKey: nameHighlightsKey,
+      version: HIGHLIGHTS_VERSION,
+      requestsPerGame: 2,
+      readHighlights: async (context, game) => {
+        const { content, feed } = await fetchGameMedia(context.fetchImpl, game.id);
+        return { highlights: describeHighlights(game.id, content, feed), isFinished: true };
+      },
+    }),
   };
 }

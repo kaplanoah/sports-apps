@@ -11,7 +11,9 @@ import { createDurableObjectContext } from "./durable-object-context.js";
 import { listEspnMatches, nameSummaryRequest } from "../apps/wnba/worker/src/adapters/lead.js";
 import { buildSnapshot } from "../apps/wnba/worker/src/adapters/wnba.js";
 import { createHighlightsUpdater } from "../apps/mlb/worker/src/highlights-updater.js";
-import { createRequestBudget } from "../shared/worker/request-budget.js";
+import { DETAIL_REUSE_MS } from "../shared/worker/detail-reads.js";
+import { UPSTREAM_TIMEOUT_MS } from "../shared/worker/upstream.js";
+import { createRequestBudget, HISTORY_REQUESTS_PER_RUN } from "../shared/worker/request-budget.js";
 
 const readFixture = (app, file) =>
   JSON.parse(
@@ -80,6 +82,8 @@ test("native baseball box scores reject malformed batting, pitching, innings, li
   const team = lineup.liveData.boxscore.teams.home;
   team.players[`ID${team.batters[0]}`].seasonStats.batting.avg = "1.000";
   assert.equal(describeBaseball("849838", lineup).home.batters[0].average, "1.000");
+  team.players[`ID${team.batters[0]}`].seasonStats.batting.avg = ".---";
+  assert.equal(describeBaseball("849838", lineup).home.batters[0].average, null);
   team.players[`ID${team.batters[0]}`].seasonStats.batting.avg = "bad";
   assert.throws(() => describeBaseball("849838", lineup), /Invalid sports data/);
 });
@@ -259,12 +263,13 @@ test("MLB historical highlights fill newest season first in the remaining budget
       env: {},
       now: () => NOW,
       fetchImpl: budget.fetchImpl,
+      remainingRequests: budget.remaining,
       createLoadSnapshot: () => async () => null,
     });
   };
   await fillArchive(0);
   assert.equal(requests.length, 0);
-  await fillArchive(4);
+  await fillArchive(HISTORY_REQUESTS_PER_RUN);
   assert.equal(requests.length, 4);
   assert.ok(await store.docs.read("highlights/849826"));
   assert.ok(await store.docs.read("highlights/849838"));
@@ -273,12 +278,24 @@ test("MLB historical highlights fill newest season first in the remaining budget
   assert.equal(requests.length, 6);
   assert.ok(await store.docs.read("highlights/111"));
   assert.ok(requests.every((url) => url.startsWith("https://statsapi.mlb.com/")));
-  await fillArchive(4);
+  await fillArchive(HISTORY_REQUESTS_PER_RUN);
   assert.equal(requests.length, 6);
   const before = requests.length;
   assert.equal((await harness.request("highlights?id=111&season=2024")).status, 200);
   assert.equal(requests.length, before);
 });
+
+function describeLiveFeed(league) {
+  const feed = structuredClone(league.feed);
+  if (league.app === "wnba") feed.game.gameStatus = 2;
+  else
+    feed.gameData.status = {
+      abstractGameState: "Live",
+      codedGameState: "I",
+      detailedState: "In Progress",
+    };
+  return feed;
+}
 
 function createHarness(league, fetchImpl) {
   const context = createDurableObjectContext();
@@ -303,7 +320,7 @@ function createHarness(league, fetchImpl) {
     forwarded,
     getStore: () => store,
     advance: () => {
-      now += 6000;
+      now += DETAIL_REUSE_MS + 1;
     },
     restart: () => {
       store = new league.Store(context.ctx, {}, options);
@@ -379,29 +396,33 @@ for (const league of LEAGUES) {
   });
 
   test(`${league.app}: concurrent and repeated route reads share the store's adapter request, survive restart and recover`, async () => {
+    const feed = describeLiveFeed(league);
     let reads = 0;
+    let nativeReads = 0;
     let refusal = 0;
     const harness = createHarness(league, async (url) => {
       reads += 1;
+      if (url.includes("boxscore") || url.includes("feed/live")) nativeReads += 1;
       if (refusal || (!url.includes("boxscore") && !url.includes("feed/live")))
         return new Response(null, { status: refusal || 503 });
-      return Response.json(league.feed);
+      return Response.json(feed);
     });
     const results = await Promise.all(Array.from({ length: 5 }, () => harness.request()));
     assert.deepEqual(
       results.map((response) => response.status),
       [200, 200, 200, 200, 200],
     );
-    const expected = league.describe(league.feed);
+    const expected = league.describe(feed);
     for (const response of results) assert.deepEqual(await response.json(), expected);
     assert.equal(reads, 1);
     assert.equal((await harness.request()).status, 200);
     assert.equal(reads, 1);
     for (const status of [403, 404, 503]) {
       refusal = status;
+      const readsBefore = nativeReads;
       harness.restart();
       assert.deepEqual(await (await harness.request()).json(), expected);
-      assert.ok(reads > 1);
+      assert.equal(nativeReads, readsBefore + 1);
     }
     const failedReads = reads;
     refusal = 0;
@@ -411,6 +432,7 @@ for (const league of LEAGUES) {
   });
 
   test(`${league.app}: a timed out cold read is retryable, and a stored live answer survives a timeout`, async (context) => {
+    const feed = describeLiveFeed(league);
     context.mock.timers.enable({ apis: ["setTimeout"] });
     let announce;
     let started = new Promise((resolve) => {
@@ -420,7 +442,7 @@ for (const league of LEAGUES) {
     const harness = createHarness(league, async (url, options) => {
       if (!url.includes("boxscore") && !url.includes("feed/live"))
         return new Response(null, { status: 503 });
-      if (!hangs) return Response.json(league.feed);
+      if (!hangs) return Response.json(feed);
       announce();
       return new Promise((resolve, reject) =>
         options.signal.addEventListener("abort", () => reject(options.signal.reason), {
@@ -430,7 +452,7 @@ for (const league of LEAGUES) {
     });
     const pending = harness.request();
     await started;
-    context.mock.timers.tick(8000);
+    context.mock.timers.tick(UPSTREAM_TIMEOUT_MS);
     assert.equal((await pending).status, 502);
     hangs = false;
     assert.equal((await harness.request()).status, 200);
@@ -441,8 +463,8 @@ for (const league of LEAGUES) {
     });
     const kept = harness.request();
     await started;
-    context.mock.timers.tick(8000);
-    assert.deepEqual(await (await kept).json(), league.describe(league.feed));
+    context.mock.timers.tick(UPSTREAM_TIMEOUT_MS);
+    assert.deepEqual(await (await kept).json(), league.describe(feed));
   });
 
   test(`${league.app}: actual watched-game and background writers reject malformed native scores and preserve usable finals`, async () => {
@@ -492,3 +514,28 @@ for (const league of LEAGUES) {
     assert.deepEqual(await store.docs.read(`games/${league.id}`), kept);
   });
 }
+
+for (const league of LEAGUES) {
+  test(`${league.app}: a previously stored live box score survives failure before any detail cache exists`, async () => {
+    const harness = createHarness(league, async () => new Response(null, { status: 503 }));
+    const boxScore = league.describe(describeLiveFeed(league));
+    const stored = league.app === "wnba" ? { boxScore, lead: null } : boxScore;
+    await harness.getStore().docs.write(`games/${league.id}`, stored);
+    const response = await harness.request();
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), boxScore);
+    assert.equal(
+      (await harness.getStore().createJobStorage("details").list("detail-answer:")).size,
+      0,
+    );
+  });
+}
+
+test("WNBA keeps a stored live lead through a failed summary with no secondary cache", async () => {
+  const harness = createHarness(LEAGUES[0], async () => new Response(null, { status: 503 }));
+  const lead = { periods: 2, isOver: false, scores: [[1, 12, 9]] };
+  await harness.getStore().docs.write(`games/${LEAGUES[0].id}`, { lead, boxScore: null });
+  const response = await harness.request(`lead?${LEAGUES[0].query}`);
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), lead);
+});

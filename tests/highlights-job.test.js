@@ -1,6 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createHighlightsJob } from "../shared/worker/highlights-job.js";
+import {
+  createHighlightsJob,
+  createHistoricalHighlightsJob,
+} from "../shared/worker/highlights-job.js";
 import { createDocs, createJobStorage } from "./job-context.js";
 
 const MINUTE_MS = 60 * 1000;
@@ -321,4 +324,88 @@ test("a read the league couldn't finish saves what it has and is read again next
     if (takeReads().length) readsByHour.push((minutes + 4) / 60);
   }
   assert.deepEqual(readsByHour, [1, 3, 12]);
+});
+
+test("completed historical seasons refill only when the reader version changes", async () => {
+  const docs = createDocs({ "live/current": { season: 2026 }, "seasons/2025": { year: 2025 } });
+  const storage = createJobStorage();
+  let now = NOW;
+  let reads = 0;
+  const run = async (version) => {
+    const updateHistory = createHistoricalHighlightsJob({
+      version,
+      gameLengthMs: GAME_LENGTH_MS,
+      requestsPerGame: 1,
+      listFinals: async () => null,
+      listSeasonFinals: async () => [endGame("one", 24 * 365)],
+      nameKey: (id) => `highlights/${id}`,
+      readHighlights: async (context, game) => {
+        await context.fetchImpl("https://example.com/media");
+        reads += 1;
+        return { highlights: { id: game.id, version: version ?? 0 }, isFinished: true };
+      },
+    });
+    await updateHistory({
+      docs,
+      storage,
+      env: {},
+      now: () => now,
+      fetchImpl: async () => new Response("{}"),
+      createLoadSnapshot: () => async () => null,
+    });
+  };
+  await run(undefined);
+  assert.equal(reads, 1);
+  await run(undefined);
+  assert.equal(reads, 1);
+  now += 10 * MINUTE_MS;
+  await run(2);
+  assert.equal(reads, 2);
+  assert.equal((await docs.read("highlights/one")).version, 2);
+  await run(2);
+  assert.equal(reads, 2);
+});
+
+test("historical completion waits for a complete schedule and follows its later revisions", async () => {
+  const docs = createDocs({ "live/current": { season: 2026 }, "seasons/2025": { year: 2025 } });
+  const storage = createJobStorage();
+  let revision = null;
+  let games = [];
+  const reads = [];
+  const updateHistory = createHistoricalHighlightsJob({
+    version: 1,
+    gameLengthMs: GAME_LENGTH_MS,
+    requestsPerGame: 1,
+    listFinals: async () => null,
+    listSeasonFinals: async () => games,
+    readSeasonRevision: async () => revision,
+    nameKey: (id) => `highlights/${id}`,
+    readHighlights: async (context, game) => {
+      await context.fetchImpl("https://example.com/media");
+      reads.push(game.id);
+      return { highlights: { id: game.id }, isFinished: true };
+    },
+  });
+  const run = () =>
+    updateHistory({
+      docs,
+      storage,
+      env: {},
+      now: () => NOW,
+      fetchImpl: async () => new Response("{}"),
+      createLoadSnapshot: () => async () => null,
+    });
+  await run();
+  assert.equal(await storage.get("highlights-filled:2025"), undefined);
+  games = [endGame("one", 24 * 365)];
+  await run();
+  assert.deepEqual(reads, ["one"]);
+  assert.equal(await storage.get("highlights-filled:2025"), undefined);
+  revision = "complete:1";
+  await run();
+  assert.ok(await storage.get("highlights-filled:2025"));
+  games.push(endGame("two", 24 * 365));
+  revision = "complete:2";
+  await run();
+  assert.deepEqual(reads, ["one", "two"]);
 });

@@ -78,9 +78,9 @@ function createLeague({ refuse = {}, espn = [] } = {}) {
 }
 
 const askBoxScore = (server, query) =>
-  server.serveBoxScore(new URL(`https://app.example/k3y/box-score?${query}`));
+  server.serveBoxScore(new URL(`https://app.example/k3y/box-score?${query}`), async () => null);
 const askPreview = (server, query) =>
-  server.servePreview(new URL(`https://app.example/k3y/preview?${query}`));
+  server.servePreview(new URL(`https://app.example/k3y/preview?${query}`), async () => null);
 
 test("a box score gives each team's points by quarter, its stats, and the players who got in", () => {
   const box = describeBoxScore(GAMES.boxScores[ACES_AT_FEVER]);
@@ -176,7 +176,8 @@ test("a live game's box score is read from the league every time", async () => {
 });
 
 test("a store that can't be read stops before reading the league", async () => {
-  const server = createBoxScoreServer({ fetchImpl: createLeague().fetchImpl });
+  const league = createLeague();
+  const server = createBoxScoreServer({ fetchImpl: league.fetchImpl });
   const response = await server.serveBoxScore(
     new URL(`https://app.example/k3y/box-score?${nameGameQuery(ACES_AT_FEVER)}`),
     async () => {
@@ -184,6 +185,7 @@ test("a store that can't be read stops before reading the league", async () => {
     },
   );
   assert.equal(response.status, 502);
+  assert.equal(league.reads.length, 0);
 });
 
 /**

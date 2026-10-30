@@ -14,7 +14,12 @@ import {
   nameSummaryRequest,
 } from "../worker/src/adapters/lead.js";
 import { describePreview } from "../worker/src/adapters/preview.js";
-import { describeSnapshotStatus, listFeedFailures } from "../worker/src/season-updater.js";
+import { createDocs } from "../../../tests/job-context.js";
+import {
+  saveSnapshot,
+  describeSnapshotStatus,
+  listFeedFailures,
+} from "../worker/src/season-updater.js";
 import { NETWORKS_MS, createSnapshotLoader, describeFailures } from "../worker/src/snapshot.js";
 import { ESPN, readAfternoonEspn, SEP_30 } from "./espn-fixtures.js";
 import { nameFeedKey } from "../../../shared/worker/feed-keeper.js";
@@ -1256,4 +1261,17 @@ test("a malformed scoreboard is named before snapshot composition and leaves the
   const snapshot = await loader.loadSnapshot(2026);
   assert.match(snapshot.failures.scoreboard, /Invalid sports data at 0.home.score/);
   assert.equal(snapshot.games.length, 28);
+});
+
+test("the snapshot loader supplies persisted ESPN matches from recorded network answers", async () => {
+  const league = createLeague({ espn: readAfternoonEspn() });
+  const loader = createSnapshotLoader({ fetchImpl: league.fetchImpl, now: () => NOW });
+  const snapshot = await loader.loadSnapshot(2026);
+  assert.ok(snapshot.espnMatches.length > 0);
+  const docs = createDocs();
+  await saveSnapshot(docs, snapshot);
+  for (const match of snapshot.espnMatches) {
+    assert.deepEqual(await docs.read(`espnMatches/${match.id}`), match);
+    assert.ok(snapshot.games.concat(snapshot.nearestGames).some((game) => game.id === match.id));
+  }
 });

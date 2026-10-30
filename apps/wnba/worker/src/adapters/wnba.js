@@ -121,8 +121,12 @@ const nameSeries = (round, series) => `${round}-${series}`;
 
 const GAME_STATES = { 1: "pre", 2: "live", 3: "final" };
 
+/** @param {number} gameStatus */
+export const readStrictGameState = (gameStatus) =>
+  typeof gameStatus === "number" ? GAME_STATES[gameStatus] : undefined;
+
 /** @param {number} gameStatus the feeds' 1, 2, or 3 */
-export const readGameState = (gameStatus) => GAME_STATES[gameStatus] ?? "pre";
+export const readGameState = (gameStatus) => readStrictGameState(gameStatus) ?? "pre";
 
 // The CDN's clock reads like PT04M32.00S; the page shows 4:32, and tenths under a minute.
 export function readClock(clock) {

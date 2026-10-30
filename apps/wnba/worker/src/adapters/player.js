@@ -490,8 +490,6 @@ export function readId(searchParams) {
   return /^\d{1,12}$/.test(id) ? id : null;
 }
 
-/** @typedef {import("../../../../../shared/worker/store-reads.js").ReadDoc} ReadDoc */
-
 /**
  * @param {object} options
  * @param {(key: string) => Promise<{ players: any[] }>} options.loadRoster a team's roster for a

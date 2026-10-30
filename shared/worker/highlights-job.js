@@ -1,3 +1,5 @@
+import { listPastSeasons } from "./background-job.js";
+import { RequestBudgetExhausted } from "./request-budget.js";
 import { isSameJson } from "../page/compare.js";
 import { noteFailure, runWithStatus } from "./job-status.js";
 
@@ -121,6 +123,7 @@ async function keepGame(context, league, { game, season }, read) {
     read?.version,
   );
   const brought = await league.readHighlights(context, game, season).catch((error) => {
+    if (error instanceof RequestBudgetExhausted) throw error;
     noteFailure(context.failures, `Reading game ${game.id}'s highlights`, error);
     return undefined;
   });
@@ -169,4 +172,82 @@ export function createHighlightsJob(league) {
     updateStore: (context) =>
       runWithStatus(context, { statusKey: STATUS_KEY, updateStore: keepHighlights }),
   };
+}
+
+/**
+ * A bounded historical fill reuses the live highlights reader's retry and version rules. A
+ * completed season is never scanned again until the reader's version changes.
+ * @param {HighlightsLeague & { listSeasonFinals: (context: JobContext, season: number) => Promise<any[]>, readSeasonRevision?: (context: JobContext, season: number) => Promise<string | null>, requestsPerGame: number }} league
+ */
+export function createHistoricalHighlightsJob(league) {
+  const version = league.version ?? 0;
+  const isFinished = (read) =>
+    read &&
+    (read.version ?? 0) === version &&
+    read.readAt !== null &&
+    !read.tries &&
+    !read.isUnfinished;
+  const hasBudget = (context) =>
+    (context.remainingRequests?.() ?? Infinity) >= league.requestsPerGame;
+
+  async function readHistoricalGames(context, season, games, reads) {
+    for (const game of games) {
+      if (isFinished(reads[game.id])) continue;
+      if (!reads[game.id] && (await context.docs.read(league.nameKey(game.id)))) {
+        reads[game.id] = stampVersion({ readAt: context.now(), triedAt: context.now() }, version);
+        continue;
+      }
+      if (
+        !isDue(findEnd(game, league.gameLengthMs), reads[game.id], { now: context.now(), version })
+      )
+        continue;
+      if (!hasBudget(context)) return;
+      try {
+        reads[game.id] = await keepGame(context, league, { game, season }, reads[game.id]);
+      } catch (error) {
+        if (error instanceof RequestBudgetExhausted) return;
+        throw error;
+      }
+    }
+  }
+
+  async function keepHistoricalSeason(context, season) {
+    const filledKey = `highlights-filled:${season}`;
+    const revision = league.readSeasonRevision
+      ? await league.readSeasonRevision(context, season)
+      : "complete";
+    const completed = { version, revision };
+    if (revision !== null && isSameJson(await context.storage.get(filledKey), completed)) return;
+    const readsKey = `history-highlight-reads:${season}`;
+    const stored = (await context.storage.get(readsKey)) ?? {};
+    const reads = { ...stored };
+    const games = await league.listSeasonFinals(context, season);
+    await readHistoricalGames(context, season, games, reads);
+    if (!isSameJson(stored, reads)) await context.storage.put(readsKey, reads);
+    const currentRevision = league.readSeasonRevision
+      ? await league.readSeasonRevision(context, season)
+      : revision;
+    if (
+      revision !== null &&
+      revision === currentRevision &&
+      games.every((game) => isFinished(reads[game.id]))
+    )
+      await context.storage.put(filledKey, completed);
+  }
+
+  async function fillHistory(context) {
+    const current = (await context.docs.read("live/current"))?.season;
+    if (!Number.isInteger(current)) return;
+    for (const season of await listPastSeasons(context.docs, current)) {
+      await keepHistoricalSeason(context, season);
+      if (!hasBudget(context)) return;
+    }
+  }
+
+  return (context) =>
+    runWithStatus(context, {
+      statusKey: "highlights-history/status",
+      updateStore: fillHistory,
+      onlyWhenActive: true,
+    });
 }

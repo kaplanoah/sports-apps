@@ -17,7 +17,7 @@ export function createPreviewServer({
 
   /**
    * @param {URL} url
-   * @param {ReadDoc} [readDoc] the store's documents, when the Worker has a store
+   * @param {ReadDoc} readDoc the store's documents
    */
   async function servePreview(url, readDoc) {
     const season = SEASON_PARAM.readSeason(url.searchParams, now());

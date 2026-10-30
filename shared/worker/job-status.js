@@ -96,23 +96,48 @@ function describeJobRun({ startedAt, endedAt, requests, failure }, stored) {
  * @param {object} job
  * @param {string} job.statusKey where the job saves its status, as `<name>/status`
  * @param {(context: RunContext) => Promise<void>} job.updateStore one run
+ * @param {boolean} [job.onlyWhenActive] omit status writes when no requests or documents changed
  * @param {(context: RunContext) => Promise<Record<string, unknown>>} [job.describeRun] what the
  *   job adds of its own to the status
  */
-export async function runWithStatus(context, { statusKey, updateStore, describeRun }) {
+export async function runWithStatus(
+  context,
+  { statusKey, updateStore, describeRun, onlyWhenActive = false },
+) {
   const startedAt = context.now();
   const counter = countRequests(context.fetchImpl);
   /** @type {((season: number) => Promise<any>) | undefined} */
   let loadSnapshot;
+  let changed = false;
   /** @type {RunContext} */
   const runContext = {
     ...context,
+    docs: onlyWhenActive
+      ? {
+          ...context.docs,
+          write: async (key, document) => {
+            await context.docs.write(key, document);
+            changed = true;
+          },
+          update: (key, change) =>
+            context.docs.update(key, (document) => {
+              const next = change(document);
+              if (next) changed = true;
+              return next;
+            }),
+          remove: async (key) => {
+            await context.docs.remove(key);
+            changed = true;
+          },
+        }
+      : context.docs,
     fetchImpl: counter.fetchImpl,
     loadSnapshot: (season) =>
       (loadSnapshot ??= context.createLoadSnapshot(counter.fetchImpl))(season),
     failures: [],
   };
   await catchFailure(runContext.failures, "The run", () => updateStore(runContext));
+  if (onlyWhenActive && !counter.count && !changed && !runContext.failures.length) return;
   const stored = await context.docs.read(statusKey);
   const failure = runContext.failures.join("; ");
   const requests = counter.count;

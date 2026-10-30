@@ -1,3 +1,4 @@
+import { SCHEDULE_EDITION } from "../page/js/snapshot.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -147,6 +148,23 @@ test("the recap's still is the frame from the middle of its video, in place of M
   );
 });
 
+test("the frame filename is filled without changing escaped URL paths or query values", () => {
+  const content = structuredClone(RECORDED.content[BREWERS_AT_PADRES]);
+  const recapItem = content.highlights.highlights.items.find((/** @type {any} */ item) =>
+    /Game 3 Highlights/.test(item.headline),
+  );
+  recapItem.playbacks.find((/** @type {any} */ playback) => playback.name === "trickplay").url =
+    "https://example.com/clips%20archive/05s.%.jpg?token=a%25b";
+
+  const { recap } = describeHighlights(
+    BREWERS_AT_PADRES,
+    content,
+    RECORDED.plays[BREWERS_AT_PADRES],
+  );
+
+  assert.equal(recap?.still, "https://example.com/clips%20archive/05s.0000018.jpg?token=a%25b");
+});
+
 test("a recap without frames from its video shows MLB.com's photo of the game", () => {
   const content = structuredClone(RECORDED.content[BREWERS_AT_PADRES]);
   const recapItem = content.highlights.highlights.items.find((/** @type {any} */ item) =>
@@ -266,7 +284,10 @@ test("the route turns away an id that isn't MLB's, and says when MLB doesn't ans
   const mlb = createMlbFetch();
   const server = createHighlightsServer({ fetchImpl: mlb.fetchImpl });
 
-  const response = await server.serveHighlights(new URL("https://app.test/highlights?id=x"));
+  const response = await server.serveHighlights(
+    new URL("https://app.test/highlights?id=x"),
+    async () => null,
+  );
   await assertErrorAnswer(response, 400, "invalid_argument");
   assert.deepEqual(mlb.requests, []);
 
@@ -420,4 +441,95 @@ test("a game whose stills Claude didn't answer for saves its highlights with MLB
     findPlay(stored.get(nameHighlightsKey(BREWERS_AT_PADRES)), title).still,
     contreras.frames?.replace("%", "0000003"),
   );
+});
+
+test("historical highlights back off failed games, fill later games and stop scanning completed seasons", async () => {
+  const { createRequestBudget, HISTORY_REQUESTS_PER_RUN } =
+    await import("../../../shared/worker/request-budget.js");
+  const docs = createDocs({
+    "live/current": { season: 2026 },
+    "seasons/2025": { year: 2025, slate: null },
+    "seasons/2024": { year: 2024, slate: null },
+    "schedule-revisions/2025": { edition: SCHEDULE_EDITION, revision: 1, isWhole: true },
+    "schedule-revisions/2024": { edition: SCHEDULE_EDITION, revision: 1, isWhole: true },
+    "schedules-2025/10": {
+      games: ["1", "2", "3"].map((id) => ({
+        id,
+        state: "final",
+        start: `2025-10-0${4 - Number(id)}T20:00:00Z`,
+      })),
+    },
+    "schedules-2024/10": { games: [{ id: "4", state: "final", start: "2024-10-01T20:00:00Z" }] },
+  });
+  const storage = createJobStorage();
+  let now = Date.parse("2026-10-30T12:00:00Z");
+  let fails = true;
+  const requests = [];
+  const fetchImpl = async (url) => {
+    requests.push(url);
+    const id = /game\/(\d+)/.exec(url)?.[1];
+    if (id === "1" && fails) return new Response(null, { status: 503 });
+    return Response.json(
+      url.includes("/content")
+        ? RECORDED.content[BREWERS_AT_PADRES]
+        : RECORDED.plays[BREWERS_AT_PADRES],
+    );
+  };
+  const job = createHighlightsUpdater();
+  const runHistory = async (limit = HISTORY_REQUESTS_PER_RUN) => {
+    const budget = createRequestBudget(fetchImpl, limit);
+    await job.updateHistory({
+      docs,
+      storage,
+      env: {},
+      now: () => now,
+      fetchImpl: budget.fetchImpl,
+      remainingRequests: budget.remaining,
+      createLoadSnapshot: () => async () => null,
+    });
+  };
+  await runHistory(1);
+  assert.equal(requests.length, 0);
+  await runHistory();
+  assert.equal(requests.length, HISTORY_REQUESTS_PER_RUN);
+  assert.ok(await docs.read("highlights/2"));
+  await runHistory();
+  assert.ok(await docs.read("highlights/3"));
+  assert.ok(await docs.read("highlights/4"));
+  const readDoc = docs.read;
+  const readKeys = [];
+  docs.read = async (key) => {
+    readKeys.push(key);
+    return readDoc(key);
+  };
+  const writes = docs.writes.length;
+  docs.lists.length = 0;
+  await runHistory();
+  assert.deepEqual(docs.writes.slice(writes), []);
+  assert.ok(!docs.lists.includes("schedules-2024"));
+  assert.ok(!readKeys.some((key) => key.startsWith("schedules-2024/") || key === "highlights/4"));
+  const failedRequests = () => requests.filter((url) => /game\/1\//.test(url)).length;
+  assert.equal(failedRequests(), 2);
+  now += 10 * 60 * 1000;
+  await runHistory();
+  assert.equal(failedRequests(), 4);
+  now += 10 * 60 * 1000;
+  await runHistory();
+  assert.equal(failedRequests(), 4);
+  now += 10 * 60 * 1000;
+  await runHistory();
+  assert.equal(failedRequests(), 6);
+  fails = false;
+  now += 40 * 60 * 1000;
+  await runHistory();
+  assert.ok(await docs.read("highlights/1"));
+  assert.equal((await storage.get("history-highlight-reads:2025"))["1"].tries, undefined);
+  assert.equal(typeof (await storage.get("highlights-filled:2025")).version, "number");
+  readKeys.length = 0;
+  docs.lists.length = 0;
+  const before = requests.length;
+  await runHistory();
+  assert.equal(requests.length, before);
+  assert.ok(!docs.lists.some((collection) => collection.startsWith("schedules-")));
+  assert.ok(!readKeys.some((key) => key.startsWith("schedules-") || key.startsWith("highlights/")));
 });

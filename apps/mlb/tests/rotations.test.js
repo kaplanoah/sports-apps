@@ -139,7 +139,10 @@ function createTestServer(options) {
   return {
     mlb,
     requestRotation: (query) =>
-      server.serveRotation(new URL(`https://mlb-app.example/k3y/rotation${query}`)),
+      server.serveRotation(
+        new URL(`https://mlb-app.example/k3y/rotation${query}`),
+        async () => null,
+      ),
   };
 }
 

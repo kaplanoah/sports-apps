@@ -223,7 +223,7 @@ function createTestServer(options) {
   return {
     mlb,
     requestPitcher: (query) =>
-      server.servePitcher(new URL(`https://mlb-app.example/k3y/pitcher${query}`)),
+      server.servePitcher(new URL(`https://mlb-app.example/k3y/pitcher${query}`), async () => null),
     advanceClock: (milliseconds) => {
       now += milliseconds;
     },

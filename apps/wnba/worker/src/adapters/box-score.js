@@ -3,7 +3,7 @@ import {
   validateSportsData,
 } from "../../../../../shared/worker/sports-schema.js";
 import { namePlayerIndexKey } from "#shared/page-search.js";
-import { readAnyGameSeason, readGameState } from "./wnba.js";
+import { readAnyGameSeason, readStrictGameState } from "./wnba.js";
 import { describeEspnBoxScore } from "./espn-box-score.js";
 import { createEspnGameReader } from "./lead.js";
 
@@ -62,11 +62,10 @@ const hasBoxScore = (answer) => !!answer?.game?.homeTeam && !!answer.game.awayTe
 /** @param {any} response the league's box score */
 export function describeBoxScore(response) {
   const { game } = response;
-  if (![1, 2, 3].includes(game.gameStatus)) throw new Error("Invalid sports data at state");
   const stats = game.homeTeam.statistics ?? {};
   return validateSportsData(BasketballBoxScore, {
     id: String(game.gameId),
-    state: readGameState(game.gameStatus),
+    state: readStrictGameState(game.gameStatus),
     period: game.period ?? null,
     leadChanges: stats.leadChanges ?? null,
     timesTied: stats.timesTied ?? null,

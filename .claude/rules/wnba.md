@@ -36,7 +36,7 @@ paths:
     - It shows her regular season's averages, ranked among the players who meet the WNBA's rule for its leaders, from every player's totals.
   - The store keeps the game logs and the totals (`worker/src/player-updater.js`):
     - It keeps both for the current season and each one it keeps from before, reading the league as a game ends. Past rosters and players fill incrementally after live work and reminders, newest season first. An unfilled sheet says Not available yet.
-    - It saves how each run went, with how often a sheet still had to read the league, in `players/status`.
+    - Live runs report in `players/status`, including how often a sheet still read the league. Historical runs report only when active in `players-history/status`, without repeating that count.
 - Injuries:
   - ESPN's injury report, read once for the whole league, says who is out and why (`worker/src/injuries.js`).
   - On her sheet, while a player is out, the box saying why carries RotoWire's sentence on it.
@@ -49,8 +49,8 @@ paths:
     - The store keeps the schedule apart from its record in `schedules/<year>`, and saves it again only as a game ends or the schedule changes.
   - Scores show in scoreboard digits (`page/js/scoreboard.js`).
   - The game sheet:
-    - The Worker serves each game's box score and preview for the game sheet (`worker/src/adapters/box-score.js` and `preview.js`).
-    - While the league refuses a game's box score, the Worker reads it from ESPN's game summary, giving each player the league's id from the season's list of players (`worker/src/adapters/espn-box-score.js`). The store reads a final kept from ESPN's again, every ten minutes for two hours and every hour after, until the league's answers, and never replaces the league's with ESPN's.
+    - The store serves each game's box score and preview for the game sheet (`worker/src/box-score.js`, `worker/src/preview.js` and their adapters).
+    - While the league refuses a game's box score, the store reads it from ESPN's game summary, giving each player the league's id from the season's list of players (`worker/src/adapters/espn-box-score.js`). The store reads a final kept from ESPN's again, every ten minutes for two hours and every hour after, until the league's answers, and never replaces the league's with ESPN's.
     - The store reads a live game's box score and lead with each update while a page has its sheet open, and pushes them to that page (`worker/src/watched-games.js`).
     - The store keeps each finished game's box score and lead for good, read as it ends and once more after the league and ESPN catch up, and a few at a time back through each season it keeps (`worker/src/game-details-updater.js`).
     - The store keeps each upcoming game's meetings from the schedule each update reads, so the store-owned detail service can serve them without another league read.

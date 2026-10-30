@@ -19,8 +19,7 @@ export function createRotationServer({
 
   /**
    * The club's starts the store keeps, null when they don't reach the two weeks before `date` or
-   * the store can't be read, and whether `date` is in the store's current season, false when the
-   * store can't be read.
+   * the store has not filled it, and whether `date` is in the store's current season. Storage errors stop the read.
    * @param {string} club
    * @param {string} date
    * @param {((key: string) => Promise<any>) | undefined} readDoc
@@ -39,8 +38,7 @@ export function createRotationServer({
 
   /**
    * @param {URL} url
-   * @param {(key: string) => Promise<any>} [readDoc] the store's documents, when the Worker has a
-   *   store
+   * @param {ReadDoc} readDoc the store's documents
    * @param {() => Promise<void>} [countLeagueRead] adds one to the store's count of sheets read
    *   from MLB
    */

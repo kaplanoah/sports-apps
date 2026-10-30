@@ -66,8 +66,9 @@ test("historical players and rosters fill incrementally across restarts within f
     });
     const issued = league.requests.length - before;
     assert.ok(issued <= 4);
-    assert.equal(docs.stored.get("players-history/status").requests, issued);
+    if (issued) assert.equal(docs.stored.get("players-history/status").requests, issued);
     assert.equal(docs.stored.get("players-history/status").lastFailure, null);
+    assert.equal(Object.hasOwn(docs.stored.get("players-history/status"), "leagueReads"), false);
   }
   assert.ok(await storage.get("filled:2025"));
   assert.ok(docs.stored.get(nameRanksKey(2025)));
@@ -203,7 +204,7 @@ async function askForPlayer(query, { docs, answers = listAnswers() } = {}) {
     now: () => NOW,
   }).servePlayer(
     new URL(`https://wnba.test/player?${query}`),
-    docs ? readFromStore(docs) : undefined,
+    docs ? readFromStore(docs) : async () => null,
   );
   return { status: response.status, body: await response.json(), requests };
 }
@@ -216,7 +217,7 @@ async function askForRoster(query, { docs } = {}) {
   const { requests, fetchImpl } = createLeagueFetch(listAnswers());
   const response = await createRosterServer({ fetchImpl, now: () => NOW }).serveRoster(
     new URL(`https://wnba.test/roster?${query}`),
-    docs ? readFromStore(docs) : undefined,
+    docs ? readFromStore(docs) : async () => null,
   );
   return { status: response.status, body: await response.json(), requests };
 }
@@ -330,7 +331,7 @@ test("a run that finds nothing new reads nothing from the league and saves nothi
   await runJob();
 
   assert.equal(league.requests.length, firstRuns);
-  assert.deepEqual(docs.writes.slice(firstWrites), [STATUS_KEY, "players-history/status"]);
+  assert.deepEqual(docs.writes.slice(firstWrites), [STATUS_KEY]);
 });
 
 test("a game's end has the next run read the five stats feeds, and once more as the stats settle, and nothing else", async () => {
@@ -368,7 +369,7 @@ test("a final the feeds answer the same for saves no document but the status", a
   wait(5);
   await runJob();
 
-  assert.deepEqual(docs.writes.slice(writes), [STATUS_KEY, "players-history/status"]);
+  assert.deepEqual(docs.writes.slice(writes), [STATUS_KEY]);
 });
 
 test("a past season the store keeps is filled once, after the current one, and never read again", async () => {
@@ -597,7 +598,7 @@ test("a feed that stops answering leaves what the store saved from it", async ()
   wait(5);
   await runJob();
 
-  assert.deepEqual(docs.writes.slice(writes), [STATUS_KEY, "players-history/status"]);
+  assert.deepEqual(docs.writes.slice(writes), [STATUS_KEY]);
   assert.deepEqual(docs.stored.get(nameRanksKey(2026)), ranks);
 });
 
@@ -643,7 +644,7 @@ test("each run saves its status: the requests it made by feed, what it saved, an
   assert.equal(first.saved.ranks, 1);
   assert.equal(first.saved.seasons, 1);
   assert.equal(first.saved["player-index"], 1);
-  assert.equal(first.pastSeason, null);
+  assert.equal(Object.hasOwn(first, "pastSeason"), false);
   assert.deepEqual(docs.stored.get("players-history/status").pastSeason, {
     season: 2025,
     isWhole: true,
@@ -661,7 +662,7 @@ test("each run saves its status: the requests it made by feed, what it saved, an
   assert.equal(afterFinal.requests, STATS_FEEDS);
   assert.deepEqual(afterFinal.feeds, { totals: 1, playerGames: 2, teamGames: 2 });
   assert.deepEqual(afterFinal.saved, {});
-  assert.equal(afterFinal.pastSeason, null);
+  assert.equal(Object.hasOwn(afterFinal, "pastSeason"), false);
 });
 
 test("the status keeps a run's failure, with when it ran, until another run fails", async () => {

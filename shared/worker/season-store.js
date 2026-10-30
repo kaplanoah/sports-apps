@@ -1,4 +1,9 @@
-import { createRequestBudget } from "./request-budget.js";
+import {
+  createRequestBudget,
+  RequestBudgetExhausted,
+  ALARM_REQUEST_ALLOWANCE,
+  HISTORY_REQUESTS_PER_RUN,
+} from "./request-budget.js";
 import { listFailureReasons, noteFeedFailures } from "./feed-failures.js";
 import { createGameReminders } from "./game-reminders.js";
 import { isSameJson } from "../page/compare.js";
@@ -17,8 +22,8 @@ import { describeError, respondError, respondJson, respondMethodNotAllowed } fro
 // the update it brings forward is coming and when each update is done. Each page says
 // which documents it watches, and hears only of changes to those. A league can keep
 // details of the games pages have open, like a box score, read with each update while they need
-// it, and run work of its own beside the season's updates, like reading the news. The Worker, and
-// never the page, can add to a count a job keeps, like how often a sheet had to read the league.
+// it, and run work of its own beside the season's updates, like reading the news. Detail services
+// count the reads a job would normally have spared.
 // Each update's status goes in `live/status`, and an update that fails is tried again after a wait
 // that grows with each failure in a row. Which of the league's feeds are failing, since when and
 // why, goes in `live/feeds`, for the Worker's health.
@@ -33,6 +38,7 @@ import { describeError, respondError, respondJson, respondMethodNotAllowed } fro
  *   requests counts these too
  * @property {{ get: (key: string) => Promise<any>, put: (key: string, value: any) => Promise<void>, delete: (key: string) => Promise<boolean>, list: (prefix: string) => Promise<Map<string, any>> }} storage
  * @property {Record<string, any>} env
+ * @property {() => number} [remainingRequests] how many history requests this run may still make
  * @property {typeof fetch} fetchImpl
  * @property {() => number} now
  */
@@ -99,6 +105,7 @@ import { describeError, respondError, respondJson, respondMethodNotAllowed } fro
  *   build
  */
 
+export const LEAGUE_READS_COUNT = "leagueReads";
 const MAX_LISTED = 100;
 const STATUS_KEY = "live/status";
 // Which season the league's updates are for, so pages never go by their own clocks.
@@ -123,7 +130,7 @@ const MAX_WATCHED = 50;
 const nameRunningKey = (name) => `job-running:${name}`;
 
 /**
- * Where a job's storage keeps a count the Worker adds to.
+ * Where a job's storage keeps a detail service's count.
  * @param {string} name
  */
 export const nameCountKey = (name) => `count:${name}`;
@@ -247,6 +254,7 @@ export function createSeasonStore(league) {
         return fetchImpl(input, init);
       };
       this.historyRun = null;
+      this.alarmGeneration = 0;
       /** @type {Map<string, Promise<void>>} */
       this.jobRuns = new Map();
       this.openSocket = openSocket;
@@ -283,7 +291,7 @@ export function createSeasonStore(league) {
         docs: this.docs,
         storage: this.createJobStorage("details"),
         countLeagueRead: async (job) => {
-          await this.incrementJobCount(job, "leagueReads");
+          await this.incrementJobCount(job, LEAGUE_READS_COUNT);
         },
         createLoadSnapshot: this.createLoadSnapshot,
         env,
@@ -304,7 +312,6 @@ export function createSeasonStore(league) {
         }
         return response;
       }
-      if (pathname.startsWith("/count/")) return this.addToCount(request, pathname);
       if (this.readDetail && !pathname.startsWith("/store/")) {
         if (request.method !== "GET") return respondMethodNotAllowed(["GET"]);
         const response = await this.readDetail(new URL(request.url));
@@ -338,16 +345,6 @@ export function createSeasonStore(league) {
       const alarmAt = await this.ctx.storage.getAlarm();
       if (alarmAt === null || alarmAt > dueAt) await this.ctx.storage.setAlarm(dueAt);
       return dueAt <= now || isFromEarlierRelease(schedule);
-    }
-
-    // Kept in the job's own storage, where its next run reads it.
-    async addToCount(request, pathname) {
-      if (request.method !== "POST") return respondMethodNotAllowed(["POST"]);
-      const [, , job, name, ...rest] = pathname.split("/");
-      const isJob = Object.hasOwn(league.backgroundJobs ?? {}, job);
-      if (!isJob || !isStoreName(name) || rest.length)
-        return respondError(404, "not_found", "No such count.");
-      return respondJson({ count: await this.incrementJobCount(job, name) });
     }
 
     incrementJobCount(job, name) {
@@ -440,13 +437,14 @@ export function createSeasonStore(league) {
     // storage failed is set again for a retry, since one never set would stop every update.
     async alarm() {
       const now = this.now();
+      const generation = ++this.alarmGeneration;
       const requestsBefore = this.requestCount;
       let nextAt = now + RETRY_MS[0];
       try {
         const seasonDueAt = await this.updateSeasonWhenDue(now);
         await this.reminders.checkDue();
         const jobDueTimes = await this.startDueJobs(now);
-        this.startHistory(requestsBefore);
+        this.startHistory(requestsBefore, generation);
         const reminderAt = await this.reminders.findNextDeadline();
         nextAt = Math.min(
           seasonDueAt,
@@ -517,13 +515,20 @@ export function createSeasonStore(league) {
       return Promise.all(jobs.map(([name, job]) => this.startJobWhenDue(name, job, now)));
     }
 
-    startHistory(requestsBefore) {
+    startHistory(requestsBefore, generation) {
       if (this.historyRun) return;
       const pending = [...this.jobRuns.values()];
       this.historyRun = Promise.allSettled(pending)
         .then(async () => {
-          const limit = Math.min(4, Math.max(0, 40 - (this.requestCount - requestsBefore)));
-          const budget = createRequestBudget(this.fetchImpl, limit);
+          const limit = Math.min(
+            HISTORY_REQUESTS_PER_RUN,
+            Math.max(0, ALARM_REQUEST_ALLOWANCE - (this.requestCount - requestsBefore)),
+          );
+          const budget = createRequestBudget(
+            this.fetchImpl,
+            limit,
+            () => generation === this.alarmGeneration,
+          );
           for (const [name, job] of Object.entries(league.backgroundJobs ?? {})) {
             if (!job.updateHistory || !budget.remaining()) continue;
             await job.updateHistory({
@@ -532,11 +537,15 @@ export function createSeasonStore(league) {
               createLoadSnapshot: this.createLoadSnapshot,
               env: this.env,
               fetchImpl: budget.fetchImpl,
+              remainingRequests: budget.remaining,
               now: this.now,
             });
           }
         })
-        .catch((error) => console.error(`Filling history failed: ${describeError(error)}`))
+        .catch((error) => {
+          if (!(error instanceof RequestBudgetExhausted))
+            console.error(`Filling history failed: ${describeError(error)}`);
+        })
         .finally(() => {
           this.historyRun = null;
         });
@@ -763,7 +772,8 @@ export async function forwardToStore(request, env, storePath) {
   url.pathname = storePath;
   try {
     return await findStore(env).fetch(new Request(url, request));
-  } catch {
+  } catch (error) {
+    console.error(`Reaching the store failed: ${describeError(error)}`);
     return respondError(503, "store_unavailable", "Couldn't reach the store. Try again.");
   }
 }
@@ -785,17 +795,4 @@ export async function readStoreDoc(env, key) {
   const response = await findStore(env).fetch(`https://store/store/${key}`);
   if (!response.ok) throw new Error(`The store answered ${response.status} for ${key}`);
   return (await response.json()).data;
-}
-
-/**
- * Adds one to a count a background job keeps, for the Worker's own routes.
- * @param {any} env the Worker's bindings
- * @param {string} job the job's name, as the league's `backgroundJobs` keys it
- * @param {string} name what it counts
- */
-export async function addToJobCount(env, job, name) {
-  const response = await findStore(env).fetch(`https://store/count/${job}/${name}`, {
-    method: "POST",
-  });
-  if (!response.ok) throw new Error(`The store answered ${response.status} for ${job}'s ${name}`);
 }

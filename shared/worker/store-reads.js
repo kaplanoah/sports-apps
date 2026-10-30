@@ -1,4 +1,5 @@
-import { describeError } from "./responses.js";
+import { NOT_AVAILABLE_YET, NOT_AVAILABLE_TITLE } from "../page/worker-error.js";
+import { describeError, respondError } from "./responses.js";
 
 // Documents read by store-owned detail services. A storage failure stops the read.
 
@@ -8,37 +9,31 @@ import { describeError } from "./responses.js";
  */
 
 /**
- * The documents the store keeps at `keys`, each null when it keeps none, or null for them all
- * when no reader is supplied. Storage errors propagate to the store-owned service.
- * @param {ReadDoc | undefined} readDoc
- * @param {string[]} keys
- * @returns {Promise<any[] | null>}
- */
-async function readKeptDocs(readDoc, keys) {
-  if (!readDoc) return null;
-  return Promise.all(keys.map((key) => readDoc(key)));
-}
-
-/**
- * The document the store keeps at `key`, or null when it keeps none or no reader is supplied.
- * @param {ReadDoc | undefined} readDoc
+ * The document the store keeps at `key`, or null when it keeps none.
+ * @param {ReadDoc} readDoc
  * @param {string} key
  */
-export const readKeptDoc = async (readDoc, key) =>
-  (await readKeptDocs(readDoc, [key]))?.[0] ?? null;
+export const readKeptDoc = async (readDoc, key) => (await readDoc(key)) ?? null;
 
 /**
- * The documents the store keeps at `keys` for `season`, as `readKeptDocs` reads them, and whether
- * `season` is the store's current one.
- * @param {ReadDoc | undefined} readDoc
- * @param {number} season
+ * Reads the season's documents and availability from one current-season read. The first document
+ * establishes whether that season's requested data has been filled.
+ * @param {ReadDoc} readDoc
+ * @param {number | null | undefined} season an omitted season uses the store's current season
  * @param {string[]} keys
- * @returns {Promise<{ docs: any[] | null, isCurrentSeason: boolean }>}
  */
 export async function readSeasonDocs(readDoc, season, keys) {
-  const kept = await readKeptDocs(readDoc, [...keys, "live/current"]);
-  if (!kept) return { docs: null, isCurrentSeason: false };
-  return { docs: kept.slice(0, -1), isCurrentSeason: season === kept.at(-1)?.season };
+  const kept = await Promise.all([...keys, "live/current"].map((key) => readDoc(key)));
+  const current = kept.at(-1)?.season;
+  const requested = season ?? current;
+  return {
+    docs: kept.slice(0, -1),
+    isCurrentSeason: requested === current,
+    unavailable:
+      current && requested < current && !kept[0]
+        ? respondError(409, NOT_AVAILABLE_YET, NOT_AVAILABLE_TITLE)
+        : null,
+  };
 }
 
 /**

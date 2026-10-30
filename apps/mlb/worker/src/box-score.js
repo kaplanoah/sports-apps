@@ -1,4 +1,5 @@
-import { fetchBoxScore, nameGameDetailsKey, GAME_ID } from "./adapters/box-score.js";
+import { GAME_ID } from "./adapters/mlb.js";
+import { fetchBoxScore, nameGameDetailsKey } from "./adapters/box-score.js";
 import { describeError, respondError, respondJson } from "../../../../shared/worker/responses.js";
 import { readKeptDoc } from "../../../../shared/worker/store-reads.js";
 
@@ -7,7 +8,7 @@ import { readKeptDoc } from "../../../../shared/worker/store-reads.js";
 export function createBoxScoreServer({ fetchImpl = (input, init) => fetch(input, init) } = {}) {
   /**
    * @param {URL} url
-   * @param {ReadDoc} [readDoc] the store's documents, when the Worker has a store
+   * @param {ReadDoc} readDoc the store's documents
    */
   async function serveBoxScore(url, readDoc) {
     const id = url.searchParams.get("id") ?? "";
@@ -16,12 +17,7 @@ export function createBoxScoreServer({ fetchImpl = (input, init) => fetch(input,
     try {
       const kept = await readKeptDoc(readDoc, nameGameDetailsKey(id));
       if (kept?.state === "final") return respondJson(kept);
-      try {
-        return respondJson(await fetchBoxScore(fetchImpl, id));
-      } catch (error) {
-        if (kept) return respondJson(kept);
-        throw error;
-      }
+      return respondJson(await fetchBoxScore(fetchImpl, id));
     } catch (error) {
       return respondError(502, "upstream_error", `Couldn't read MLB: ${describeError(error)}`);
     }

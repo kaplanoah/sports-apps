@@ -86,7 +86,7 @@ async function askForPlayer(answers, query) {
     loadRoster: rosters.loadRoster,
     fetchImpl,
     now,
-  }).servePlayer(new URL(`https://wnba.test/player?${query}`));
+  }).servePlayer(new URL(`https://wnba.test/player?${query}`), async () => null);
   return { status: response.status, body: await response.json() };
 }
 

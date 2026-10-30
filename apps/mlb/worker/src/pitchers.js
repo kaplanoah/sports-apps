@@ -17,10 +17,10 @@ export function createPitcherServer({
   const { fetchPitcher, loadQualified } = createPitcherReader({ fetchImpl, now });
 
   /**
-   * What the store keeps of the sheet, each part null when it doesn't keep it, or can't be read.
+   * What the store keeps of the sheet, each part null when it doesn't keep it, when it has not been filled.
    * @param {number} id
    * @param {number} season
-   * @param {ReadDoc | undefined} readDoc
+   * @param {ReadDoc} readDoc
    */
   async function readSaved(id, season, readDoc) {
     const { docs, isCurrentSeason } = await readSeasonDocs(readDoc, season, [
@@ -33,7 +33,7 @@ export function createPitcherServer({
 
   /**
    * @param {URL} url
-   * @param {ReadDoc} [readDoc] the store's documents, when the Worker has a store
+   * @param {ReadDoc} readDoc the store's documents
    * @param {() => Promise<void>} [countLeagueRead] adds one to the store's count of sheets read
    *   from MLB
    */

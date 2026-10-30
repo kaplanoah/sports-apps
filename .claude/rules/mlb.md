@@ -54,9 +54,9 @@ paths:
     - A play's is MLB's own unless Claude Haiku finds a headline laid over it, then a frame from the play's video or, for a clip without frames, MLB.com's photo of the game.
     - The store asks once for each still, a few a run, since Cloudflare caps a run's requests.
     - It asks again a few times about one Claude doesn't answer, which shows as MLB's own meanwhile and then counts as clean.
-  - Historical reads keep the previous on-tap media policy and make no paid still checks.
+  - Historical fills use MLB's own stills and ask Claude about none. Live and historical runs report separately in `highlights/status` and `highlights-history/status`.
 - Detail routes forward to the store; its services fetch through adapters. Live misses share store-owned reads, and usable saved answers survive failures and restarts.
-- The box score's store (`worker/src/adapters/box-score.js`, `game-details-updater.js`, and `watched-games.js`):
+- The box score's store (`worker/src/box-score.js`, its `adapters/box-score.js`, `game-details-updater.js`, and `watched-games.js`):
   - The store keeps the box score for every finished game of each season it keeps, the slate's first, then the rest of the current season's and each past season's, newest first.
   - It reads the box score with each update for a game a page has open.
 - The Games tab (`page/js/games-view.js` and `worker/src/season-updater.js`):
@@ -100,3 +100,5 @@ paths:
   - It shows the news as the WNBA's does, from MLB's outlets and the Mets' own.
   - The same shared news job keeps it by MLB's prompt: anything about the Mets, and another club's news only when it matters across baseball.
   - It has a settings switch for each of its paid outlets.
+
+- Schedule publications keep a small `schedule-revisions/<year>` document. History completion is tied to that revision; an interrupted publication remains incomplete until repaired.

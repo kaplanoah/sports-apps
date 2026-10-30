@@ -6,7 +6,7 @@ import {
 } from "../../../../shared/worker/background-job.js";
 import { createFeedKeeper } from "../../../../shared/worker/feed-keeper.js";
 import { catchFailure, noteFailure, runWithStatus } from "../../../../shared/worker/job-status.js";
-import { nameCountKey } from "../../../../shared/worker/season-store.js";
+import { nameCountKey, LEAGUE_READS_COUNT } from "../../../../shared/worker/season-store.js";
 import { nameScheduleKey } from "../../page/js/snapshot.js";
 import { isStillPlaying } from "../../page/js/series.js";
 import { TEAMS } from "../../page/js/teams.js";
@@ -48,18 +48,15 @@ import { fetchWnbaJson, hasTable, trimColumns } from "./wnba.js";
 // is whole, every player's averages, for her team's Roster, and with them each team's leading
 // scorers in the season's record, from the totals her sheet is worked out from, the finals that
 // went to overtime, for search, and, once every team's roster has answered, the season's list of
-// players. Each run also fills one season the
-// store keeps from before the current one, newest first, and a filled season is never read again,
-// since a past season doesn't change, unless the sheets come to read a column it was filled
-// without. Each run ends by saving how it went in `players/status`, with how often a sheet had to
-// read the league for a player the store hadn't saved.
+// players. Live runs report in `players/status`, including how often a sheet needed a league read.
+// A separate historical run fills one past season at a time, newest first, and reports its active
+// work in `players-history/status`. Completed seasons are read again only when required columns change.
 
 const MINUTE_MS = 60 * 1000;
 const HOUR_MS = 60 * MINUTE_MS;
 const RUN_DELAY_MS = 5 * MINUTE_MS;
 const STATUS_KEY = "players/status";
 export const PLAYER_JOB = "players";
-const LEAGUE_READS_COUNT = "leagueReads";
 const TEAM_KEYS = Object.keys(TEAMS);
 
 const FEEDS = {
@@ -410,7 +407,14 @@ function createStoreUpdate(historyOnly = false) {
   /** @param {RunContext} context */
   async function keepPlayers(context) {
     keeper ??= createFeedKeeper({
-      feeds: FEEDS,
+      feeds: historyOnly
+        ? Object.fromEntries(
+            Object.entries(FEEDS).map(([name, feed]) => [
+              name,
+              { ...feed, maxAgeMs: Infinity, changesWithGames: false },
+            ]),
+          )
+        : FEEDS,
       now: context.now,
       storage: context.storage,
     });
@@ -431,13 +435,15 @@ function createStoreUpdate(historyOnly = false) {
   function updateStore(context) {
     const log = createRunLog();
     return runWithStatus(context, {
+      onlyWhenActive: historyOnly,
       statusKey: historyOnly ? "players-history/status" : STATUS_KEY,
       updateStore: (runContext) => keepPlayers({ ...runContext, log }),
       describeRun: async ({ storage }) => ({
         feeds: log.feeds,
         saved: log.saved,
-        pastSeason: log.pastSeason,
-        leagueReads: (await storage.get(nameCountKey(LEAGUE_READS_COUNT))) ?? 0,
+        ...(historyOnly
+          ? { pastSeason: log.pastSeason }
+          : { leagueReads: (await storage.get(nameCountKey(LEAGUE_READS_COUNT))) ?? 0 }),
       }),
     });
   }

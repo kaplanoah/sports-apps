@@ -193,8 +193,8 @@ function describePlay(clip) {
   return [describeInning(clip), game && clip.score ? renderPlayScore(game, clip) : ""];
 }
 
-/** @param {string} id */
-const loadHighlights = (id) => () => fetchHighlights(id, session.activeYear);
+/** @param {string} id @param {number | null | undefined} season */
+const loadHighlights = (id, season) => () => fetchHighlights(id, season);
 
 // A final offers its highlights, and any other game hides their pill, leaving the section if it
 // showed.
@@ -202,7 +202,8 @@ const loadHighlights = (id) => () => fetchHighlights(id, session.activeYear);
 function offerHighlights(game) {
   const isFinal = game.state === "final" && Boolean(game.id);
   findElement("gameTabHighlights").hidden = !isFinal;
-  if (isFinal) highlights?.show(game.id, loadHighlights(game.id));
+  if (isFinal)
+    highlights?.show(game.id, loadHighlights(game.id, game.season ?? session.season?.year));
   else if (sections?.readShown() === "highlights") sections.showSection("game", true);
 }
 

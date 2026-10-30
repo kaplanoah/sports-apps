@@ -248,8 +248,10 @@ function countSecondsPlayed(period, clock, rules) {
  * @param {any} competition
  * @param {"away" | "home"} place
  */
-const findCompetitorCode = (competition, place, findTeam) =>
-  findTeam(competition?.competitors?.find((competitor) => competitor.homeAway === place)?.team?.id);
+const findCompetitorCode = (competition, place, findTeam) => {
+  const competitor = competition?.competitors?.find((each) => each.homeAway === place);
+  return findTeam(competitor?.team?.id ?? competitor?.id);
+};
 
 /**
  * The day's ESPN game between the two teams, home and away as asked.

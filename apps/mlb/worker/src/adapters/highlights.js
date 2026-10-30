@@ -1,9 +1,6 @@
 import { readStoryLead } from "../../../../../shared/worker/story-lead.js";
 import { fetchMlbJson } from "../mlb.js";
 
-/** @typedef {import("../../../../../shared/worker/store-reads.js").ReadDoc} ReadDoc */
-
-export const GAME_ID = /^\d{1,9}$/;
 const CONTENT_CACHE_SECONDS = 60;
 const PLAY_FIELDS = [
   "liveData",
@@ -78,7 +75,8 @@ function findFrame(item) {
   const count = Math.floor((readSeconds(item.duration) ?? 0) / FRAME_SECONDS);
   if (!frames || count === 0) return null;
   const middle = String(Math.round(count / 2)).padStart(FRAME_NUMBER_DIGITS, "0");
-  return frames.replace("%", middle);
+  // Only the frame filename's token is a placeholder; URL escapes elsewhere stay intact.
+  return frames.replace(/%(?=\.jpg(?:[?#]|$))/g, middle);
 }
 
 /** @param {any} item */

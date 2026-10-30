@@ -346,8 +346,6 @@ export function readPersonId(searchParams) {
   return Number.isInteger(id) && id > 0 && id <= LARGEST_PERSON_ID ? id : null;
 }
 
-/** @typedef {import("../../../../../shared/worker/store-reads.js").ReadDoc} ReadDoc */
-
 /**
  * @param {object} [options]
  * @param {(input: string, init: object) => Promise<Response>} [options.fetchImpl]

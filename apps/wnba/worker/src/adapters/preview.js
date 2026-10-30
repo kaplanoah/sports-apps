@@ -2,8 +2,6 @@ import { REQUESTS } from "./wnba.js";
 import { TEAMS } from "../../../page/js/teams.js";
 import { fetchWnbaJson } from "../wnba.js";
 
-/** @typedef {import("../../../../../shared/worker/store-reads.js").ReadDoc} ReadDoc */
-
 // The schedule changes at most a few times a day, so its answer is kept an hour once it's checked.
 // Cloudflare's edge would keep a refusal for the hour too, and the page's snapshot reads the same
 // address.

@@ -52,6 +52,8 @@ import {
   readRecords,
 } from "./feed-standings.js";
 
+export const GAME_ID = /^\d{1,9}$/;
+
 // MLB caches its responses for 20 seconds, so polling much faster only refetches the same answer.
 export const POLL_LIVE_MS = 30 * 1000;
 // From the 9th inning on, any pitch can end a game, so it's followed a little faster than MLB's
