@@ -94,7 +94,8 @@ test("a malformed live answer leaves the schedule's coherent game state and name
     return Promise.resolve(new Response(JSON.stringify(answer)));
   };
   const loader = createSnapshotLoader({ fetchImpl, now: () => NOW });
-  const { failures, ...snapshot } = await loader.loadSnapshot(2026);
+  const { failures, nextReadAt, ...snapshot } = await loader.loadSnapshot(2026);
+  assert.equal(nextReadAt, NOW + HOUR_MS);
   assert.match(failures.liveGame, /Invalid sports data at inning/);
   assert.deepEqual(snapshot, MLBSnapshot.buildSnapshot(RESPONSES, { season: 2026, now: NOW }));
   assert.equal(liveReads, LIVE_GAME_IDS.length);
@@ -125,7 +126,7 @@ test("the snapshot is built from MLB, with a timeout and a short edge cache", as
   const { mlb, loadSnapshot } = createTestLoader();
   const snapshot = await loadSnapshot();
   const expected = MLBSnapshot.buildSnapshot(RESPONSES, { season: 2026, now: NOW });
-  assert.deepEqual(snapshot, { ...expected, failures: {} });
+  assert.deepEqual(snapshot, { ...expected, failures: {}, nextReadAt: NOW + HOUR_MS });
   assert.equal(mlb.calls.length, 5 + LIVE_GAME_IDS.length);
   assert.equal(mlb.calls[0].init.cf.cacheTtl, 15);
   assert.ok(mlb.calls[0].init.signal);
@@ -146,7 +147,8 @@ test("each game being played is read from MLB's live feed, reused only moments, 
       ? Promise.resolve(new Response("", { status: 503 }))
       : down.fetchImpl(url, init);
   const loader = createSnapshotLoader({ fetchImpl, now: () => NOW });
-  const { failures, ...snapshot } = await loader.loadSnapshot(2026);
+  const { failures, nextReadAt, ...snapshot } = await loader.loadSnapshot(2026);
+  assert.equal(nextReadAt, NOW + HOUR_MS);
   const expected = MLBSnapshot.buildSnapshot(RESPONSES, { season: 2026, now: NOW });
   assert.deepEqual(snapshot, expected);
   assert.deepEqual(Object.keys(failures), ["liveGame"]);
@@ -273,7 +275,8 @@ test("a game that ends has the slow requests read again at once, and once more t
 
 test("a past season read whole is kept", async () => {
   const { mlb, loader, advanceClock } = createTestLoader();
-  await loader.loadSnapshot(2025);
+  const snapshot = await loader.loadSnapshot(2025);
+  assert.equal(snapshot.nextReadAt, undefined);
   const reads = mlb.calls.length;
 
   advanceClock(24 * HOUR_MS);

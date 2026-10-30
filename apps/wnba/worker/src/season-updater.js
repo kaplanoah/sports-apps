@@ -9,6 +9,7 @@ import {
 } from "../../../../shared/worker/notifications.js";
 import { nameMeetingsKey } from "./preview.js";
 import { describeFailures } from "./snapshot.js";
+import { carryReadDeadline } from "../../../../shared/worker/feed-failures.js";
 
 // Keeps the current season's saved data up to date from the league, whether or not a page is
 // open, and says which finished games and series are news. `docs` reads and writes the store's
@@ -30,7 +31,9 @@ const hasSeasonStarted = (snapshot, now) =>
 export async function loadCurrentSnapshot(loadSnapshot, now) {
   const { year } = readEasternDay(now);
   const upcoming = await loadSnapshot(year);
-  return hasSeasonStarted(upcoming, now) ? upcoming : loadSnapshot(year - 1);
+  return hasSeasonStarted(upcoming, now)
+    ? upcoming
+    : carryReadDeadline(await loadSnapshot(year - 1), upcoming);
 }
 
 const STATE_ORDER = { pre: 0, live: 1, final: 2 };

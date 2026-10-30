@@ -10,6 +10,7 @@ import * as Readings from "./readings.js";
 import { guessSeasonYear, hasSpringStarted } from "../../page/js/session.js";
 import { sortInScheduleOrder } from "../../page/js/schedule-order.js";
 import * as MLBSnapshot from "./adapters/mlb.js";
+import { carryReadDeadline } from "../../../../shared/worker/feed-failures.js";
 
 // Keeps the current season's saved data up to date from MLB, whether or not a page is open.
 // `docs` reads and writes the store's documents: read(key), list(collection), write(key, doc),
@@ -22,6 +23,7 @@ export async function loadCurrentSnapshot(loadSnapshot, now) {
   if (year !== guess) {
     const upcoming = await loadSnapshot(year);
     if (hasSpringStarted(upcoming.springStart, now)) return upcoming;
+    return carryReadDeadline(await loadSnapshot(guess), upcoming);
   }
   return loadSnapshot(guess);
 }

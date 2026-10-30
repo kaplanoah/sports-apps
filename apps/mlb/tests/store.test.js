@@ -300,8 +300,9 @@ test("MLB slow-feed failures schedule retries and retain saved data through rest
           },
         );
       const dayMs = 24 * 60 * 60 * 1000;
+      const hourMs = 60 * 60 * 1000;
       let store = restartStore();
-      assert.equal(await store.updateSeasonWhenDue(clock.now), clock.now + dayMs);
+      assert.equal(await store.updateSeasonWhenDue(clock.now), clock.now + hourMs);
       const saved = structuredClone(stored.get("seasons/2026"));
       clock.now += dayMs;
       downFeeds.add(failedFeed);
@@ -324,7 +325,10 @@ test("MLB slow-feed failures schedule retries and retain saved data through rest
       downFeeds.clear();
       store = restartStore();
       clock.now += FAILED_FEED_WAIT_MS;
-      assert.equal(await store.updateSeasonWhenDue(clock.now), clock.now + dayMs);
+      assert.equal(
+        await store.updateSeasonWhenDue(clock.now),
+        (failedFeed === "postseason" ? clock.now : failedAt) + hourMs,
+      );
       assert.deepEqual(stored.get("live/feeds").failing, {});
       assert.equal(reads.get(failedFeed), failedReads.get(failedFeed) + 2);
       for (const name of ["season", "seasonGames", "standings", "postseason"].filter(

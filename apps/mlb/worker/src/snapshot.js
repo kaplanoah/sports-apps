@@ -2,6 +2,7 @@ import * as MLBSnapshot from "./adapters/mlb.js";
 import { guessSeasonYear } from "../../page/js/session.js";
 import { fetchMlbJson, LIVE_FEED_CACHE_SECONDS } from "./mlb.js";
 import { createFeedKeeper } from "../../../../shared/worker/feed-keeper.js";
+import { createFeedReadStatus } from "../../../../shared/worker/feed-failures.js";
 import { describeError } from "../../../../shared/worker/responses.js";
 import { createReusedLoader } from "../../../../shared/worker/upstream.js";
 
@@ -50,7 +51,7 @@ export function createSnapshotLoader({
   /**
    * @param {string} path
    * @param {string} name
-   * @param {{ readAgain: boolean, onFailure: (reason: string, retryAt?: number) => void }} options
+   * @param {{ readAgain: boolean, onFailure: (reason: string) => void, onNextRead: (at: number) => void }} options
    */
   function fetchSnapshotJson(path, name, options) {
     if (name === "schedule") return fetchSchedule(path);
@@ -73,24 +74,22 @@ export function createSnapshotLoader({
    * @param {boolean} [verify]
    */
   async function fetchSnapshot(season, requestedAt, verify = false) {
-    /** @type {Record<string, string>} */
-    const failures = {};
-    let nextReadAt = Infinity;
+    const status = createFeedReadStatus();
     /** @param {string} path @param {string} name */
     function fetchNotingFailure(path, name) {
-      /** @param {string} reason @param {number} [retryAt] */
-      const onFailure = (reason, retryAt = Infinity) => {
-        failures[name] = reason;
-        nextReadAt = Math.min(nextReadAt, retryAt);
-      };
+      const onFailure = status.noteFailure(name);
       const readAgain = verify && name === "postseason";
-      return fetchSnapshotJson(path, name, { readAgain, onFailure }).catch((error) => {
+      return fetchSnapshotJson(path, name, {
+        readAgain,
+        onFailure,
+        onNextRead: status.noteNextRead,
+      }).catch((error) => {
         onFailure(describeError(error));
         throw error;
       });
     }
     const snapshot = await MLBSnapshot.fetchSnapshot(fetchNotingFailure, season, requestedAt);
-    return { ...snapshot, failures, ...(Number.isFinite(nextReadAt) && { nextReadAt }) };
+    return { ...snapshot, ...status.readStatus() };
   }
   const loadCurrentSnapshot = createReusedLoader(fetchSnapshot, SNAPSHOT_REUSE_MS, now);
   /** @type {Map<number, any>} */
@@ -100,7 +99,10 @@ export function createSnapshotLoader({
   async function loadPastSnapshot(season) {
     if (pastSnapshots.has(season)) return pastSnapshots.get(season);
     const snapshot = await loadCurrentSnapshot(season);
-    if (!snapshot.missing.length) pastSnapshots.set(season, snapshot);
+    if (!snapshot.missing.length && !Object.keys(snapshot.failures).length) {
+      delete snapshot.nextReadAt;
+      pastSnapshots.set(season, snapshot);
+    }
     return snapshot;
   }
 

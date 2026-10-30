@@ -1,5 +1,7 @@
 import * as WNBASnapshot from "./adapters/wnba.js";
 import { createFeedKeeper, createMemoryStorage } from "../../../../shared/worker/feed-keeper.js";
+import { createFeedReadStatus } from "../../../../shared/worker/feed-failures.js";
+import { trimNetworkAnswer } from "../../../../shared/worker/espn-adapter.js";
 import { describeError } from "../../../../shared/worker/responses.js";
 import { createReusedLoader } from "../../../../shared/worker/upstream.js";
 import { createBackupReader } from "./backup-probe.js";
@@ -113,7 +115,7 @@ export function createSnapshotLoader({
    * @param {keyof typeof SLOW_FEEDS} name
    * @param {string} url
    * @param {number} season
-   * @param {{ isBehind?: (answer: any) => boolean, readAgain?: boolean, onFailure: (reason: string, retryAt: number) => void }} options
+   * @param {{ isBehind?: (answer: any) => boolean, readAgain?: boolean, onFailure: (reason: string) => void, onNextRead: (at: number) => void }} options
    */
   const readSlowFeed = (name, url, season, options) =>
     slowFeeds.readFeed(name, url, () => fetchFeed(name, url, season), options);
@@ -162,20 +164,30 @@ export function createSnapshotLoader({
 
   /** @param {string} month @param {boolean} [verify] */
   async function readNetworkMonth(month, verify = false) {
+    const key = `networks:${month}`;
+    if (!networkMonths.has(month)) networkMonths.set(month, await storage.get(key));
     const kept = networkMonths.get(month);
     // A reminder needs current listings, but a finalized month cannot change.
     if (!isDueForNetworksRead(month) && (!verify || isFinalAnswer(kept, month))) return kept.data;
     try {
       const data = await fetchEspn(WNBASnapshot.NETWORKS_REQUEST(month));
       WNBASnapshot.validateFeedResponse("networks", data);
-      networkMonths.set(month, { readAt: now(), answeredAt: now(), data, failure: null });
-      return data;
+      networkMonths.set(month, {
+        readAt: now(),
+        answeredAt: now(),
+        data: trimNetworkAnswer(data),
+        failure: null,
+      });
     } catch (error) {
       const answeredAt = kept?.answeredAt ?? null;
       const data = kept?.data ?? null;
       networkMonths.set(month, { readAt: now(), answeredAt, data, failure: describeError(error) });
-      return data;
     }
+    const updated = networkMonths.get(month);
+    await storage
+      .put(key, updated)
+      .catch((error) => console.error(`Keeping network listings failed: ${describeError(error)}`));
+    return updated.data;
   }
 
   // Each month with a playoff game or a team's nearest game, and yesterday's and today's, since a
@@ -196,16 +208,8 @@ export function createSnapshotLoader({
 
   async function fetchResponses(season, verify = false) {
     await slowFeeds.forgetFeed("players", nameAveragesRequest(season));
-    /** @type {Record<string, string>} */
-    const failures = {};
-    let nextReadAt = Infinity;
-    /** @param {keyof typeof FEED_DATA} name */
-    const noteReason =
-      (name) =>
-      (/** @type {string} */ reason, retryAt = Infinity) => {
-        failures[name] = reason;
-        nextReadAt = Math.min(nextReadAt, retryAt);
-      };
+    const status = createFeedReadStatus();
+    const { failures, noteFailure: noteReason, noteNextRead: onNextRead } = status;
     /** @param {keyof typeof FEED_DATA} name */
     const noteFailure = (name) => (/** @type {unknown} */ error) => {
       noteReason(name)(describeError(error));
@@ -224,15 +228,18 @@ export function createSnapshotLoader({
         isBehind: hasGamesLeftLive,
         readAgain: verify,
         onFailure: noteReason("schedule"),
+        onNextRead,
       }).catch(noteFailure("schedule")),
       // A kept bracket can only hold a reminder back: a series' wins only grow, and the games
       // played count them too.
       readSlowFeed("bracket", WNBASnapshot.REQUESTS.bracket(season), season, {
         readAgain: verify,
         onFailure: noteReason("bracket"),
+        onNextRead,
       }).catch(noteFailure("bracket")),
       readSlowFeed("standings", WNBASnapshot.REQUESTS.standings(season), season, {
         onFailure: noteReason("standings"),
+        onNextRead,
       }).catch(noteFailure("standings")),
     ]);
     /** @param {any} schedule */
@@ -256,7 +263,7 @@ export function createSnapshotLoader({
         : WNBASnapshot.isTodayOnBackup(scheduleAnswer, backup, season, now()));
     const needsBackup = !scoreboard || (isScheduleConfirmed() && hasGamesLeftLive(scheduleAnswer));
     const { backup, failure, nextReadAt: probeAt } = await readBackup(needsBackup);
-    nextReadAt = Math.min(nextReadAt, probeAt);
+    onNextRead(probeAt);
     if (failure) failures.backup = failure;
     const schedule = isScheduleConfirmed(backup) ? scheduleAnswer : null;
     throwIfNoneAnswered(schedule);
@@ -264,8 +271,7 @@ export function createSnapshotLoader({
     const networks = await readNetworks(schedule, season, verify, failures);
     return {
       responses: { scoreboard, schedule, bracket, standings, backup, networks },
-      failures,
-      nextReadAt,
+      ...status.readStatus(),
     };
   }
 

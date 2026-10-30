@@ -287,6 +287,21 @@ test("before April, the new season is followed once spring training has started"
   assert.deepEqual(requested, [2027]);
 });
 
+test("a new season's retry deadline survives choosing the previous MLB season", async () => {
+  const now = Date.parse("2027-02-10T17:00:00Z");
+  const retryAt = now + 5 * 60_000;
+  const snapshot = await loadCurrentSnapshot(
+    async (season) => ({
+      season,
+      springStart: "2027-02-20",
+      ...(season === 2027 && { nextReadAt: retryAt }),
+    }),
+    now,
+  );
+  assert.equal(snapshot.season, 2026);
+  assert.equal(snapshot.nextReadAt, retryAt);
+});
+
 const SEASON_GAMES = JSON.parse(
   readFileSync(`${import.meta.dirname}/fixtures/2026-10-09-season.json`, "utf8"),
 );

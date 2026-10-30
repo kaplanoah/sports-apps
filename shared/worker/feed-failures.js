@@ -5,6 +5,37 @@
 
 export const FEED_FAILURE_MS = 15 * 60 * 1000;
 
+// Collects the read status that both leagues hand their store after an update.
+export function createFeedReadStatus() {
+  /** @type {Record<string, string>} */
+  const failures = {};
+  let nextReadAt = Infinity;
+  return {
+    failures,
+    /** @param {number} at */
+    noteNextRead(at) {
+      nextReadAt = Math.min(nextReadAt, at);
+    },
+    /** @param {string} name */
+    noteFailure: (name) => (/** @type {string} */ reason) => {
+      failures[name] = reason;
+    },
+    readStatus: () => ({ failures, ...(Number.isFinite(nextReadAt) && { nextReadAt }) }),
+  };
+}
+
+/**
+ * Keeps a read's deadline even when another season remains current.
+ * @template {{ nextReadAt?: number }} Snapshot
+ * @param {Snapshot} snapshot
+ * @param {{ nextReadAt?: number }} other
+ * @returns {Snapshot}
+ */
+export function carryReadDeadline(snapshot, other) {
+  const at = Math.min(snapshot.nextReadAt ?? Infinity, other.nextReadAt ?? Infinity);
+  return Number.isFinite(at) ? { ...snapshot, nextReadAt: at } : snapshot;
+}
+
 /**
  * Since when a feed has failed, as an ISO time, and why it failed last.
  * @typedef {{ since: string, reason: string }} FeedFailure

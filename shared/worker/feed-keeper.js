@@ -109,32 +109,23 @@ export function createFeedKeeper({ feeds, now, storage = createMemoryStorage() }
   }
 
   /**
-   * @param {number} readAt
-   * @param {number} lastFinalAt
-   */
-  const isReadBeforeFinalSettled = (readAt, lastFinalAt) =>
-    readAt < lastFinalAt || (readAt < lastFinalAt + SETTLE_MS && now() >= lastFinalAt + SETTLE_MS);
-
-  /**
-   * @param {{ at: number, data: any }} answer
-   * @param {(data: any) => boolean} isBehind
-   */
-  const isBehindLong = (answer, isBehind) =>
-    now() - answer.at >= BEHIND_FEED_WAIT_MS && isBehind(answer.data);
-
-  /**
    * @param {string} name
    * @param {any} record
    * @param {(data: any) => boolean} isBehind
    */
-  async function isDue(name, record, isBehind) {
-    if (record?.failedAt !== undefined) return now() >= findRetryAt(record);
+  async function findNextReadAt(name, record, isBehind) {
+    if (record?.failedAt !== undefined) return findRetryAt(record);
     const { maxAgeMs, changesWithGames } = feeds[name];
-    if (!record?.answer || now() - record.answer.at >= maxAgeMs) return true;
-    if (isBehindLong(record.answer, isBehind)) return true;
-    if (!changesWithGames) return false;
+    if (!record?.answer) return -Infinity;
+    const { at, data } = record.answer;
+    let nextAt = at + maxAgeMs;
+    if (isBehind(data)) nextAt = Math.min(nextAt, at + BEHIND_FEED_WAIT_MS);
+    if (!changesWithGames) return nextAt;
     const finals = await readRecord(await digestKey(FINALS_KEY));
-    return isReadBeforeFinalSettled(record.answer.at, finals?.at ?? -Infinity);
+    const finalAt = finals?.at ?? -Infinity;
+    if (at < finalAt) return -Infinity;
+    if (at < finalAt + SETTLE_MS) nextAt = Math.min(nextAt, finalAt + SETTLE_MS);
+    return nextAt;
   }
 
   return {
@@ -178,31 +169,41 @@ export function createFeedKeeper({ feeds, now, storage = createMemoryStorage() }
      *   another feed already says
      * @param {(reason: string, retryAt: number) => void} [options.onFailure] told why the feed's last read failed
      *   while no read since has answered, even when the kept answer stands in, and when its retry is due
+     * @param {(at: number) => void} [options.onNextRead] told when this feed next needs a read
      */
     async readFeed(
       name,
       key,
       load,
-      { isBehind = () => false, readAgain = false, onFailure = () => {} } = {},
+      {
+        isBehind = () => false,
+        readAgain = false,
+        onFailure = () => {},
+        onNextRead = () => {},
+      } = {},
     ) {
       const storageKey = await nameFeedKey(name, key);
       const what = `${name} ${key}`;
       const record = await readRecord(storageKey);
       const answer = record?.answer;
-      if (!readAgain && !(await isDue(name, record, isBehind))) {
+      if (!readAgain && now() < (await findNextReadAt(name, record, isBehind))) {
         if (record?.reason !== undefined) onFailure(record.reason, findRetryAt(record));
+        onNextRead(await findNextReadAt(name, record, isBehind));
         if (answer) return answer.data;
         throw new Error(record.reason);
       }
       try {
         const data = await load();
-        await saveRecord(storageKey, { answer: { at: now(), data } }, what);
+        const updated = { answer: { at: now(), data } };
+        await saveRecord(storageKey, updated, what);
+        onNextRead(await findNextReadAt(name, updated, isBehind));
         return data;
       } catch (error) {
         const reason = describeError(error);
         const failed = { answer, failedAt: now(), reason };
         await saveRecord(storageKey, failed, what);
         onFailure(reason, findRetryAt(failed));
+        onNextRead(findRetryAt(failed));
         if (answer) return answer.data;
         throw error;
       }

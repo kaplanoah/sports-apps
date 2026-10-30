@@ -241,6 +241,8 @@ test("offseason backup probes wake the store hourly and retry failures across re
   const firstProbeAt = await store.updateSeasonWhenDue(clock.now);
   assert.equal(firstProbeAt, clock.now + hourMs);
   assert.equal(reads.has("backup"), false);
+  const networkReads = reads.get("networks");
+  assert.equal(reads.get("scoreboard"), 1);
   store = restartStore();
   clock.now = firstProbeAt - 1;
   await store.updateSeasonWhenDue(clock.now);
@@ -248,6 +250,8 @@ test("offseason backup probes wake the store hourly and retry failures across re
   clock.now = firstProbeAt;
   assert.equal(await store.updateSeasonWhenDue(clock.now), clock.now + hourMs);
   assert.equal(reads.get("backup"), 2);
+  assert.equal(reads.get("networks"), networkReads);
+  assert.equal(reads.get("scoreboard"), 2);
   assert.deepEqual(stored.get("live/feeds")?.failing ?? {}, {});
   clock.now += hourMs;
   downFeeds.add("backup");
@@ -270,6 +274,8 @@ test("offseason backup probes wake the store hourly and retry failures across re
   assert.equal(reads.get("backup"), 8);
   assert.deepEqual(stored.get("live/feeds").failing, {});
   for (const name of ["schedule", "standings", "bracket"]) assert.equal(reads.get(name), 1);
+  assert.equal(reads.get("networks"), networkReads);
+  assert.equal(reads.get("scoreboard"), 5);
 });
 
 test("feed deadlines preserve faster live polling and do not turn unrelated failures into retries", async () => {

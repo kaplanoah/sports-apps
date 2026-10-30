@@ -11,6 +11,57 @@ import {
 const MINUTE_MS = 60 * 1000;
 const HOUR_MS = 60 * MINUTE_MS;
 
+test("successful feeds publish absolute age, behind and final-settle deadlines across restarts", async () => {
+  const storage = createMemoryStorage();
+  const clock = { now: 0 };
+  const restart = () =>
+    createFeedKeeper({
+      feeds: { standings: { maxAgeMs: 24 * HOUR_MS, changesWithGames: true } },
+      storage,
+      now: () => clock.now,
+    });
+  let keeper = restart();
+  let nextAt;
+  let reads = 0;
+  let behind = false;
+  const read = () =>
+    keeper.readFeed(
+      "standings",
+      "/standings",
+      async () => {
+        reads += 1;
+        return { behind };
+      },
+      {
+        isBehind: (answer) => answer.behind,
+        onNextRead: (at) => {
+          nextAt = at;
+        },
+      },
+    );
+  await keeper.noteFinalCount(0);
+  await read();
+  assert.equal(nextAt, 24 * HOUR_MS);
+  clock.now = MINUTE_MS;
+  await keeper.noteFinalCount(1);
+  behind = true;
+  await read();
+  assert.equal(nextAt, 6 * MINUTE_MS);
+  keeper = restart();
+  clock.now = nextAt - 1;
+  await read();
+  assert.equal(reads, 2);
+  assert.equal(nextAt, 6 * MINUTE_MS);
+  clock.now += 1;
+  behind = false;
+  await read();
+  assert.equal(nextAt, 11 * MINUTE_MS);
+  clock.now = nextAt;
+  await read();
+  assert.equal(reads, 4);
+  assert.equal(nextAt, clock.now + 24 * HOUR_MS);
+});
+
 test("failure callbacks report the keeper's absolute retry deadline across restarts", async () => {
   const storage = createMemoryStorage();
   const clock = { now: 0 };
