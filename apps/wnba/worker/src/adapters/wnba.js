@@ -1,3 +1,4 @@
+import { readGameFacts } from "./game-facts.js";
 // WNBA's scoreboard, schedule, bracket, and standings adapted to app-owned records.
 // ESPN supplies channels and unset starts, and stands in for a failed scoreboard or games left live.
 
@@ -166,6 +167,7 @@ function normalizeGame(game) {
   const state = readGameState(game.gameStatus);
   return {
     id: String(game.gameId),
+    ...readGameFacts(game.gameId),
     round: place?.round ?? null,
     series: place ? nameSeries(place.round, place.series) : null,
     number: place?.game ?? null,
@@ -266,6 +268,8 @@ function readScheduledGame(game) {
   const isFinal = game.state === "final";
   return {
     id: game.id,
+    season: game.season,
+    isCupFinal: game.isCupFinal,
     round: game.round,
     series: game.series,
     number: game.number,

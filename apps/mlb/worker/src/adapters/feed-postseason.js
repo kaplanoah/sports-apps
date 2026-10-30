@@ -138,7 +138,12 @@ function findNextGame(games, today) {
 }
 
 function tallySeries(seriesId, games, round, teamA, teamB, today) {
-  const record = { winsA: 0, winsB: 0 };
+  const record = {
+    round,
+    league: seriesId === "WS" ? null : seriesId.split("_")[0],
+    winsA: 0,
+    winsB: 0,
+  };
   const log = [];
   const need = countWinsNeeded(round);
   let winner = null;

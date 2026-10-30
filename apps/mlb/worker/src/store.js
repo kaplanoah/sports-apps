@@ -1,3 +1,4 @@
+import { identityPolicy } from "./identity-policy.js";
 import { createReadDetail } from "./detail-reads.js";
 import { OFF_DAY_CHECK_MS } from "#shared/poll-schedule.js";
 import { choosePollDelay, listReminderGames } from "./adapters/mlb.js";
@@ -16,7 +17,7 @@ import * as SeasonUpdater from "./season-updater.js";
 import { createSnapshotLoader } from "./snapshot.js";
 import { createWatchedGameLoader } from "./watched-games.js";
 
-export { forwardToStore, readFeedFailures } from "../../../../shared/worker/season-store.js";
+export { forwardToStore, readFeedFailures, readIdentityStatus } from "../../../../shared/worker/season-store.js";
 
 /**
  * @type {import("../../../../shared/worker/season-store.js").League<
@@ -25,6 +26,7 @@ export { forwardToStore, readFeedFailures } from "../../../../shared/worker/seas
  * >}
  */
 const league = {
+  identity: identityPolicy,
   release: readReleaseCommit(PAGE_FILES),
   createLoadSnapshot: (storage, fetchImpl) =>
     createSnapshotLoader({ storage, fetchImpl }).loadSnapshot,

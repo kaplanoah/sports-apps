@@ -153,6 +153,9 @@ export function normalizeGame(game) {
   return {
     id: String(game.gamePk),
     type: game.gameType,
+    season: Number(game.season ?? game.officialDate?.slice(0, 4)),
+    round: { F: "WC", D: "DS", L: "CS", W: "WS" }[game.gameType] ?? null,
+    gameNumber: game.gameNumber ?? 1,
     date: game.officialDate,
     start: game.gameDate,
     tbd: !!status.startTimeTBD,
@@ -254,6 +257,9 @@ const isWatchable = (game) =>
 export function summarizeGame(game, pitchers) {
   const summary = {
     id: game.id,
+    season: game.season,
+    round: game.round,
+    gameNumber: game.gameNumber,
     away: game.away.id,
     home: game.home.id,
     state: game.state,

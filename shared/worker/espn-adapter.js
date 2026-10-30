@@ -1,6 +1,7 @@
 // Shared ESPN sports-data adapter; league mappings and basketball rules are supplied by callers.
 import {
   ReportedPlayers,
+  VendorGameIdentities,
   GameLead,
   Highlights,
   BasketballBoxScore,
@@ -182,6 +183,28 @@ export const readBackupGames = (backup, findTeam) =>
     .flatMap((answer) => answer.events ?? [])
     .map((event) => readBackupGame(event, findTeam));
 
+/** @param {any[]} answers @param {(id: string) => string | null} findTeam */
+export function readIdentityGames(answers, findTeam) {
+  return validateSportsData(
+    VendorGameIdentities,
+    answers
+      .flatMap((answer) => answer?.events ?? [])
+      .flatMap((event) => {
+        if (event.id == null) return [];
+        const { competition, start, home, away } = readEspnEvent(event, () => ({}), findTeam);
+        return [
+          {
+            id: String(event.id),
+            start,
+            home: home?.team ?? null,
+            away: away?.team ?? null,
+            ...(Number.isInteger(competition.gameNumber) && { gameNumber: competition.gameNumber }),
+          },
+        ];
+      }),
+  );
+}
+
 const isNational = (broadcast) => broadcast.market === "national";
 const isLocal = (broadcast) => !isNational(broadcast);
 
@@ -212,6 +235,7 @@ export function trimNetworkAnswer(answer) {
       date: event.date,
       competitions: (event.competitions ?? []).slice(0, 1).map((competition) => ({
         date: competition.date,
+        gameNumber: competition.gameNumber,
         timeValid: competition.timeValid,
         competitors: (competition.competitors ?? []).map(({ id, homeAway }) => ({ id, homeAway })),
         broadcasts: (competition.broadcasts ?? []).map(({ market, names }) => ({ market, names })),
@@ -454,6 +478,17 @@ function describeEspnPlayer({ athlete, stats }, keys, named) {
   const [firstName, ...lastNames] = athlete.displayName.split(" ");
   return {
     id: listed ? Number(listed.id) : null,
+    ...(athlete.id != null && {
+      espnIdentity: {
+        id: String(athlete.id),
+        facts: {
+          firstName,
+          lastName: lastNames.join(" "),
+          number: athlete.jersey ?? null,
+          birthdate: athlete.dateOfBirth?.slice(0, 10) ?? null,
+        },
+      },
+    }),
     firstName: listed?.firstName ?? firstName,
     lastName: listed?.lastName ?? lastNames.join(" "),
     minutes: read("minutes"),

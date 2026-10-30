@@ -13,6 +13,35 @@ const Start = z
 const BasketballState = z.enum(["pre", "live", "final"]);
 const GameState = z.enum(["pre", "live", "final", "off"]);
 
+const IdentityEvidence = z.looseObject({
+  method: z.enum(["existing-id", "discovery", "teams-day", "game-number", "player-facts"]),
+});
+export const IdentityEntry = z.looseObject({
+  id: Identifier,
+  league: Identifier,
+  type: z.enum(["game", "player"]),
+  vendors: z.record(Identifier, Identifier),
+  evidence: z.record(Identifier, IdentityEvidence),
+});
+export const IdentityObservation = z.looseObject({
+  type: z.enum(["game", "player"]),
+  vendor: Identifier,
+  vendorId: Identifier,
+  internalId: Identifier.optional(),
+  evidence: IdentityEvidence,
+  decisive: z.boolean().optional(),
+  facts: z.record(z.string(), z.unknown()).optional(),
+});
+export const VendorGameIdentities = z.array(
+  z.object({
+    id: Identifier,
+    start: Start.optional(),
+    away: Identifier.nullable(),
+    home: Identifier.nullable(),
+    gameNumber: Count.positive().optional(),
+  }),
+);
+
 const BasketballSide = z.looseObject({
   team: Identifier.nullable(),
   seed: NullableCount,
@@ -22,6 +51,8 @@ const BasketballSide = z.looseObject({
 
 export const BasketballGame = z.looseObject({
   id: Identifier,
+  season: Count.optional(),
+  isCupFinal: z.boolean().optional(),
   round: NullableCount,
   series: Identifier.nullable(),
   number: NullableCount,
@@ -43,6 +74,9 @@ const BaseballSide = z.union([
 
 export const BaseballGame = z.looseObject({
   id: Identifier,
+  season: Count.optional(),
+  round: z.enum(["WC", "DS", "CS", "WS"]).nullable().optional(),
+  gameNumber: Count.positive().optional(),
   state: GameState,
   start: Start,
   away: BaseballSide,
@@ -200,6 +234,7 @@ const BoxScoreSide = z.looseObject({
 
 export const BasketballBoxScore = z.looseObject({
   id: Identifier,
+  season: Count.optional(),
   source: z.literal("espn").optional(),
   state: BasketballState,
   period: NullableCount,
@@ -261,6 +296,7 @@ const BaseballClub = z.object({
 });
 export const BaseballBoxScore = z.object({
   id: Identifier,
+  season: Count.optional(),
   state: GameState,
   innings: z.array(z.object({ away: NullableCount, home: NullableCount })),
   totals: z.object({ away: BaseballTotals, home: BaseballTotals }),

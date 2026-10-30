@@ -1,7 +1,8 @@
+import { findTeamCodeByEspnId } from "../../page/js/teams.js";
 import * as WNBASnapshot from "./adapters/wnba.js";
 import { createFeedKeeper, createMemoryStorage } from "../../../../shared/worker/feed-keeper.js";
 import { createFeedReadStatus } from "../../../../shared/worker/feed-failures.js";
-import { trimNetworkAnswer } from "../../../../shared/worker/espn-adapter.js";
+import { readIdentityGames, trimNetworkAnswer } from "../../../../shared/worker/espn-adapter.js";
 import { describeError } from "../../../../shared/worker/responses.js";
 import { createReusedLoader } from "../../../../shared/worker/upstream.js";
 import { createBackupReader } from "./backup-probe.js";
@@ -302,6 +303,10 @@ export function createSnapshotLoader({
     const ended = await addGameEnds(snapshot);
     return {
       ...ended,
+      identityRecords: readIdentityGames(
+        [...(responses.networks ?? []), ...(responses.backup?.answers ?? [])],
+        findTeamCodeByEspnId,
+      ),
       espnMatches: listEspnMatches(ended, [
         ...(responses.networks ?? []),
         ...(responses.backup?.answers ?? []),

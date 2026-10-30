@@ -7,6 +7,45 @@ import { listServices } from "../worker/apps.mjs";
 
 const ENV = { STORE: "the store" };
 
+test("identity uncertainty and coverage reach health independently of feed failures and share its reuse window", async () => {
+  let reads = 0;
+  let now = 0;
+  const identity = {
+    games: 12,
+    players: 8,
+    unmatched: 3,
+    disputed: 1,
+    checks: { verified: false },
+    backfill: { complete: false },
+  };
+  const serve = createHealthServer({
+    readFeedFailures: async () => ({}),
+    readIdentityStatus: async () => {
+      reads += 1;
+      return identity;
+    },
+    release: "abc1234",
+    now: () => now,
+  });
+  for (let hit = 0; hit < 3; hit += 1) {
+    const response = await serve(ENV);
+    assert.equal(response.status, 200);
+    assert.deepEqual((await response.json()).identity, identity);
+  }
+  assert.equal(reads, 1);
+  now = HEALTH_REUSE_MS;
+  await serve(ENV);
+  assert.equal(reads, 2);
+  const failed = createHealthServer({
+    readFeedFailures: async () => ({}),
+    readIdentityStatus: async () => {
+      throw new Error("storage failed");
+    },
+    release: "abc1234",
+  });
+  assert.deepEqual((await (await failed(ENV)).json()).identity, { unavailable: true });
+});
+
 /**
  * A health server over a store that answers its failing feeds as told, counting its calls.
  * @param {(env: any) => Promise<Record<string, import("../shared/worker/feed-failures.js").FeedFailure>>} answer

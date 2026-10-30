@@ -1,3 +1,4 @@
+import { createIdentityDocuments } from "./identity-documents.js";
 import {
   createRequestBudget,
   RequestBudgetExhausted,
@@ -57,7 +58,7 @@ import { describeError, respondError, respondJson, respondMethodNotAllowed } fro
 
 /**
  * The snapshot fields the store itself reads. Other fields belong to the league's callbacks.
- * @typedef {{ season: number, failures?: Record<string, string>, nextReadAt?: number }} SeasonSnapshot
+ * @typedef {{ season: number, identityRecords?: any[], failures?: Record<string, string>, nextReadAt?: number }} SeasonSnapshot
  */
 
 /**
@@ -101,6 +102,7 @@ import { describeError, respondError, respondJson, respondMethodNotAllowed } fro
  *   reads a game's details, or answers null while it needs none
  * @property {(context: DetailContext) => (url: URL) => Promise<Response | null>} [createReadDetail]
  * @property {Record<string, BackgroundJob>} [backgroundJobs]
+ * @property {import("./identity-documents.js").IdentityPolicy} [identity]
  * @property {string | null} [release] the commit the Worker was built from, or null outside a
  *   build
  */
@@ -247,6 +249,9 @@ export function createSeasonStore(league) {
       } = {},
     ) {
       this.ctx = ctx;
+      this.identities = league.identity
+        ? createIdentityDocuments(ctx.storage, league.identity)
+        : null;
       this.env = env;
       this.requestCount = 0;
       this.fetchImpl = (input, init) => {
@@ -375,12 +380,19 @@ export function createSeasonStore(league) {
     }
 
     async readDoc(key) {
-      const data = await this.ctx.storage.get(key);
+      const data =
+        key === "identity/status" && this.identities
+          ? await this.identities.readStatus()
+          : await this.ctx.storage.get(key);
       return respondJson({ data: data ?? null });
     }
 
     async putDoc(key, doc) {
-      const data = sortKeys(doc);
+      const prepared =
+        this.identities && key !== "identity/status"
+          ? await this.identities.prepareDocument(key, doc)
+          : doc;
+      const data = sortKeys(prepared);
       await this.ctx.storage.put(key, data);
       this.announceChange(key, data);
     }
@@ -557,6 +569,7 @@ export function createSeasonStore(league) {
               now: this.now,
             });
           }
+          await this.identities?.backfill(this.docs, () => generation === this.alarmGeneration);
         })
         .catch((error) => {
           if (!(error instanceof RequestBudgetExhausted))
@@ -622,7 +635,13 @@ export function createSeasonStore(league) {
       const { storage } = this.ctx;
       return {
         get: (key) => storage.get(prefix + key),
-        put: (key, value) => storage.put(prefix + key, value),
+        put: async (key, value) => {
+          const prepared =
+            name === "details" && key.startsWith("detail-answer:") && this.identities
+              ? await this.identities.prepareDetailAnswer(key, value)
+              : value;
+          await storage.put(prefix + key, prepared);
+        },
         delete: (key) => storage.delete(prefix + key),
         list: async (keyPrefix) =>
           new Map(
@@ -677,6 +696,7 @@ export function createSeasonStore(league) {
       try {
         before = await league.readUpdates(this.docs, snapshot.season);
         await league.saveSnapshot(this.docs, snapshot);
+        await this.identities?.saveVendorGames(snapshot.identityRecords ?? []);
         await this.saveCurrentSeason(snapshot.season);
       } catch (error) {
         await this.reminders.saveGames(null);
@@ -824,3 +844,6 @@ export async function readStoreDoc(env, key) {
   if (!response.ok) throw new Error(`The store answered ${response.status} for ${key}`);
   return (await response.json()).data;
 }
+
+/** @param {any} env */
+export const readIdentityStatus = async (env) => await readStoreDoc(env, "identity/status");

@@ -7,6 +7,8 @@ import { fetchMlbJson, LIVE_FEED_CACHE_SECONDS } from "../mlb.js";
 
 const FEED_FIELDS = [
   "gameData",
+  "game",
+  "season",
   "status",
   "abstractGameState",
   "codedGameState",
@@ -413,6 +415,7 @@ export function describeBoxScore(id, feed) {
   const hasStarted = state !== "pre";
   return validateSportsData(BaseballBoxScore, {
     id,
+    ...(feed?.gameData?.game?.season && { season: Number(feed.gameData.game.season) }),
     state,
     innings: (hasStarted ? (linescore.innings ?? []) : []).map((/** @type {any} */ inning) => ({
       away: inning.away?.runs ?? null,

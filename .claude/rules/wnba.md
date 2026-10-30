@@ -92,3 +92,5 @@ paths:
 - The Updates box (`page/js/updates.js`):
   - The page lists each playoff final in an Updates box only on phones and tablets, and only for the current season.
   - Each device keeps when its box counts from, its first look or last dismissal, and a final counts as new by when the Worker first found it.
+
+- `worker/src/identity-policy.js` supplies the league facts to shared additive identity registration and backfill. Existing IDs and readers remain supported. Health reports identity coverage and keeps unmatched vendor records separate from disputed associations.

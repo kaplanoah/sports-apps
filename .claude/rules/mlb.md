@@ -102,3 +102,5 @@ paths:
   - It has a settings switch for each of its paid outlets.
 
 - Schedule publications keep a small `schedule-revisions/<year>` document. History completion is tied to that revision; an interrupted publication remains incomplete until repaired.
+
+- `worker/src/identity-policy.js` supplies the league facts to shared additive identity registration and backfill. Existing IDs and readers remain supported. Health reports identity coverage and keeps unmatched vendor records separate from disputed associations.
