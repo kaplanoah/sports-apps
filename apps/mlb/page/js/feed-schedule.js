@@ -1,6 +1,7 @@
 // The season's whole schedule, which the Games view lists, kept by the store a month to a document.
 // Runs in both the browser page and the Worker, so it uses no DOM and no globals.
 
+import { isStillIfNecessary } from "#shared/series-text.js";
 import { sortInScheduleOrder } from "./schedule-order.js";
 import {
   LISTED_GAME_TYPES,
@@ -11,7 +12,7 @@ import {
   normalizeGame,
   summarizeGame,
 } from "./feed-games.js";
-import { listSeriesIds } from "./feed-postseason.js";
+import { countSeriesWinsNeeded, listSeriesIds } from "./feed-postseason.js";
 
 // The Games view lists every game of the season, which the store keeps a month to a document, apart
 // from the season's record that pages follow through every live game, and saves again only as a
@@ -119,17 +120,25 @@ function listListedStarters(game, people) {
   return starters?.some(Boolean) ? starters : null;
 }
 
-// A postseason game names its series and its game in it, and, while MLB says the series may not
-// need it, that it's played only if necessary.
+// A postseason game names its series and its game in it, and, while the series may not need it,
+// that it's played only if necessary.
 /**
  * @param {ReturnType<typeof normalizeGame>} game
  * @param {Map<string, string>} seriesIds each postseason game's series, by the game's id
+ * @param {Record<string, { winsA: number, winsB: number }>} series each series' record, by its id
  */
-function describeSeriesPlace(game, seriesIds) {
-  const series = seriesIds.get(game.id);
-  if (!series) return null;
-  const place = { series, number: game.number };
-  return game.state === "pre" && game.ifNecessary ? { ...place, ifNecessary: true } : place;
+function describeSeriesPlace(game, seriesIds, series) {
+  const id = seriesIds.get(game.id);
+  if (!id) return null;
+  const place = { series: id, number: game.number };
+  const isIfNecessary = isStillIfNecessary({
+    state: game.state,
+    ifNecessary: game.ifNecessary,
+    number: game.number,
+    winsNeeded: countSeriesWinsNeeded(id),
+    wins: [series[id]?.winsA ?? 0, series[id]?.winsB ?? 0],
+  });
+  return isIfNecessary ? { ...place, ifNecessary: true } : place;
 }
 
 // A game under way is listed as it was before it started, since the slate carries it while it's
@@ -138,16 +147,18 @@ function describeSeriesPlace(game, seriesIds) {
  * @param {any} listing MLB's listing of a game
  * @param {Map<number, any>} people each starter MLB describes, by id
  * @param {Map<string, string>} seriesIds each postseason game's series, by the game's id
+ * @param {Record<string, { winsA: number, winsB: number }>} series each series' record, by its id
  * @param {Map<number, number>} homeBallparks each club's own ballpark, by the club's MLB id
  */
-function describeListedGame(listing, people, seriesIds, homeBallparks) {
+function describeListedGame(listing, people, seriesIds, series, homeBallparks) {
   const isAllStar = listing.gameType === "A";
   const game = isAllStar ? normalizeAllStarGame(listing) : normalizeGame(listing);
   const { starters, networks, inning, half, outs, end, delay, postseason, score, ...summary } =
     summarizeGame(game, new Map());
   const records = listRecords(game);
   const listedStarters = isAllStar ? null : listListedStarters(game, people);
-  const seriesPlace = postseason && !isAllStar ? describeSeriesPlace(game, seriesIds) : null;
+  const seriesPlace =
+    postseason && !isAllStar ? describeSeriesPlace(game, seriesIds, series) : null;
   const ballpark = describeBallpark(listing.venue);
   return {
     date: game.date,
@@ -195,10 +206,14 @@ const hasDates = (response) => (response?.dates ?? []).length > 0;
 // postseason MLB answers with none drops no game.
 /**
  * @param {any} responses
- * @param {{ games: { id: string }[], gamesBySeries: Record<string, any[]>, calledOff: Set<string> }} postseason
- *   the playoff games those list, each series' games, and the games a decided series didn't need
+ * @param {{ games: { id: string }[], gamesBySeries: Record<string, any[]>, series: Record<string, { winsA: number, winsB: number }>, calledOff: Set<string> }} postseason
+ *   the playoff games those list, each series' games and record, and the games a decided series
+ *   didn't need
  */
-export function buildSchedule(responses, { games: playoffGames, gamesBySeries, calledOff }) {
+export function buildSchedule(
+  responses,
+  { games: playoffGames, gamesBySeries, series, calledOff },
+) {
   if (!hasDates(responses.seasonGames)) return null;
   const seasonListings = listSeasonListings(responses.seasonGames);
   const people = listScheduledPeople(responses, seasonListings);
@@ -208,7 +223,7 @@ export function buildSchedule(responses, { games: playoffGames, gamesBySeries, c
   const isStillListed = (game) =>
     !game.postseason || !hasDates(responses.postseason) || playoffIds.has(game.id);
   const games = listSeasonListings(responses.seasonGames, responses.postseason, responses.schedule)
-    .map((listing) => describeListedGame(listing, people, seriesIds, homeBallparks))
+    .map((listing) => describeListedGame(listing, people, seriesIds, series, homeBallparks))
     .filter((game) => isStillListed(game) && !calledOff.has(game.id));
   return groupByMonth(sortInScheduleOrder(games));
 }

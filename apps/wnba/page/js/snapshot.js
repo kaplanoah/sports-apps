@@ -7,7 +7,7 @@
 // time to be decided.
 
 import { listTimedReminderGames } from "#shared/reminder-games.js";
-import { isNecessaryPlayoffGame } from "#shared/series-text.js";
+import { isStillIfNecessary } from "#shared/series-text.js";
 import { addDays, readEasternDay } from "#shared/days.js";
 import * as PollSchedule from "#shared/poll-schedule.js";
 import { readLeagueDate } from "./days.js";
@@ -659,17 +659,16 @@ export function listScheduledStarts(schedule, season) {
   return [...new Set([...playoffs, ...nearest])].map((game) => game.start).filter(Boolean);
 }
 
-// The league's schedule can go on marking a game if necessary for hours after its series came to
-// need it, so only a game still to come that its series may not need stays marked.
 /**
  * @param {any} game
  * @param {Map<string, any>} seriesById
  */
 function isStillIfNeeded(game, seriesById) {
-  if (!game.isIfNeeded || game.state !== "pre") return false;
+  if (!isPlayoffGame(game)) return false;
   const series = seriesById.get(game.series);
-  return !isNecessaryPlayoffGame({
-    ifNecessary: true,
+  return isStillIfNecessary({
+    state: game.state,
+    ifNecessary: game.isIfNeeded,
     number: game.number,
     winsNeeded: countWinsNeeded(game.round),
     wins: [series?.top?.wins ?? 0, series?.bottom?.wins ?? 0],

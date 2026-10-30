@@ -8,6 +8,7 @@ import {
   describeSeriesLead,
   describeSeriesWin,
   isNecessaryPlayoffGame,
+  isStillIfNecessary,
 } from "#shared/series-text.js";
 
 const readGame = (own, theirs) =>
@@ -91,4 +92,14 @@ test("an if-needed game is necessary once the games played reach it, until a sid
     isNecessaryPlayoffGame({ ifNecessary: false, number: 7, winsNeeded: 4, wins: [0, 0] }),
     true,
   );
+});
+
+test("a game stays marked if necessary only while it's still to come and its series may not need it", () => {
+  const isMarked = (state, ifNecessary, wins) =>
+    isStillIfNecessary({ state, ifNecessary, number: 7, winsNeeded: 4, wins });
+  assert.equal(isMarked("pre", true, [3, 2]), true);
+  assert.equal(isMarked("pre", true, [3, 3]), false);
+  assert.equal(isMarked("pre", false, [3, 2]), false);
+  assert.equal(isMarked("live", true, [3, 2]), false);
+  assert.equal(isMarked("final", true, [4, 2]), false);
 });

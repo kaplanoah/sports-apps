@@ -72,3 +72,11 @@ export const isNecessaryPlayoffGame = ({ ifNecessary, number, winsNeeded, wins }
   !ifNecessary ||
   (Math.max(...wins) < winsNeeded &&
     number <= Math.max(winsNeeded, wins.reduce((total, won) => total + won, 0) + 1));
+
+// A league can go on marking a game if necessary for hours after its series came to need it, so
+// only a game still to come that its series may not need stays marked.
+/**
+ * @param {{ state: string, ifNecessary: boolean, number: number, winsNeeded: number, wins: number[] }} game
+ */
+export const isStillIfNecessary = ({ state, ...game }) =>
+  state === "pre" && game.ifNecessary && !isNecessaryPlayoffGame(game);

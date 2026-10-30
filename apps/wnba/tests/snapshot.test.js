@@ -583,6 +583,17 @@ test("a game the league still marks if necessary once its series needs it isn't 
   assert.equal(leadGameThree.isIfNeeded, true, "series led 1-0");
 });
 
+test("a regular season game still to come that the league marks if necessary isn't marked", () => {
+  const schedule = structuredClone(GAMES.preview.schedule);
+  const listings = schedule.leagueSchedule.gameDates.flatMap((day) => day.games);
+  const opener = listings.find((game) => game.gameId === "1022600001");
+  Object.assign(opener, { gameStatus: 1, ifNecessary: true });
+  const game = buildWithWholeSeason({ schedule }).schedule.find(
+    (each) => each.id === opener.gameId,
+  );
+  assert.deepEqual([game.round, game.state, game.isIfNeeded], [null, "pre", false]);
+});
+
 test("a final the league still marks if necessary isn't marked", () => {
   const snapshot = buildAfternoon(markIfNecessary({ 1042600102: true }));
   for (const games of [snapshot.games, snapshot.schedule]) {
