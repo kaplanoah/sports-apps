@@ -40,6 +40,7 @@ const nameAveragesRequest = (season) =>
 
 // Broadcast listings rarely change between ordinary season polls.
 export const NETWORKS_MS = 6 * 60 * 60 * 1000;
+const NETWORKS_EDITION = 1;
 
 const formatEspnMonth = (ms) => WNBASnapshot.formatEspnDay(ms).slice(0, 6);
 
@@ -149,20 +150,22 @@ export function createSnapshotLoader({
 
   const readBackup = createBackupReader({ fetchBackup, now, storage });
 
-  // A month's answer from after the month ended is final, so it's kept for good. Any other month is
-  // read again now and then, and a read that fails waits as long as one that answers, with the
-  // last good answer standing in meanwhile.
+  // A current-format answer read after the month ended is final and kept for good. Other answers
+  // refresh now and then; a failed read waits just as long, keeping the last good answer.
   /**
-   * @param {{ answeredAt: number | null }} kept
+   * @param {{ answeredAt: number | null, edition?: number }} kept
    * @param {string} month
    */
   const isFinalAnswer = (kept, month) =>
-    kept.answeredAt !== null && formatEspnMonth(kept.answeredAt) > month;
+    kept.edition === NETWORKS_EDITION &&
+    kept.answeredAt !== null &&
+    formatEspnMonth(kept.answeredAt) > month;
 
   /** @param {string} month */
   function isDueForNetworksRead(month) {
     const kept = networkMonths.get(month);
     if (!kept) return true;
+    if (kept.edition !== NETWORKS_EDITION && !kept.failure) return true;
     if (isFinalAnswer(kept, month)) return false;
     return now() - kept.readAt >= NETWORKS_MS;
   }
@@ -178,6 +181,7 @@ export function createSnapshotLoader({
       const data = await fetchEspn(WNBASnapshot.NETWORKS_REQUEST(month));
       WNBASnapshot.validateFeedResponse("networks", data);
       networkMonths.set(month, {
+        edition: NETWORKS_EDITION,
         readAt: now(),
         answeredAt: now(),
         data: trimNetworkAnswer(data),
@@ -186,7 +190,13 @@ export function createSnapshotLoader({
     } catch (error) {
       const answeredAt = kept?.answeredAt ?? null;
       const data = kept?.data ?? null;
-      networkMonths.set(month, { readAt: now(), answeredAt, data, failure: describeError(error) });
+      networkMonths.set(month, {
+        edition: kept?.edition,
+        readAt: now(),
+        answeredAt,
+        data,
+        failure: describeError(error),
+      });
     }
     const updated = networkMonths.get(month);
     await storage

@@ -21,6 +21,7 @@ import {
   listFeedFailures,
 } from "../worker/src/season-updater.js";
 import { NETWORKS_MS, createSnapshotLoader, describeFailures } from "../worker/src/snapshot.js";
+import { trimNetworkAnswer } from "../../../shared/worker/espn-adapter.js";
 import { ESPN, readAfternoonEspn, SEP_30 } from "./espn-fixtures.js";
 import {
   createMemoryStorage,
@@ -893,6 +894,59 @@ test("network listing budgets, failures and finalized answers survive loader res
   assert.equal(league.countReads("networks"), 4);
   assert.equal(recovered.failures.networks, undefined);
 });
+
+for (const failsFirst of [false, true]) {
+  test(`an ended month saved without event IDs refreshes across restarts${failsFirst ? " after a failed upgrade" : " once"}`, async () => {
+    /** @type {Record<string, "page" | "error">} */
+    const refuse = {};
+    const league = createLeague({ refuse });
+    const storage = createMemoryStorage();
+    let now = Date.parse("2026-10-05T16:00:00Z");
+    const restart = () =>
+      createSnapshotLoader({ fetchImpl: league.fetchImpl, storage, now: () => now });
+    const first = await restart().loadSnapshot(2026);
+    const month = "202609";
+    const request = NETWORKS_REQUEST(month);
+    const legacy = trimNetworkAnswer(ESPN_SCOREBOARD.answers[request]);
+    for (const event of legacy.events) delete event.id;
+    await storage.put(`networks:${month}`, {
+      readAt: now,
+      answeredAt: now,
+      data: legacy,
+      failure: null,
+    });
+    const countMonthReads = () => league.reads.filter((read) => read.url === request).length;
+    const before = countMonthReads();
+    if (failsFirst) refuse.networks = "error";
+    let updated = await restart().loadSnapshot(2026);
+    assert.equal(countMonthReads(), before + 1);
+    if (failsFirst) {
+      assert.ok(updated.failures.networks);
+      assert.deepEqual(
+        updated.games.map((game) => game.networks),
+        first.games.map((game) => game.networks),
+      );
+      now += NETWORKS_MS - 1;
+      await restart().loadSnapshot(2026);
+      assert.equal(countMonthReads(), before + 1);
+      delete refuse.networks;
+      now += 1;
+      updated = await restart().loadSnapshot(2026);
+      assert.equal(countMonthReads(), before + 2);
+    }
+    const eventIds = new Set(ESPN_SCOREBOARD.answers[request].events.map((event) => event.id));
+    const matches = updated.espnMatches.filter((match) => eventIds.has(match.eventId));
+    assert.ok(matches.length > 0);
+    const docs = createDocs();
+    await saveSnapshot(docs, updated);
+    for (const match of matches)
+      assert.deepEqual(await docs.read(`espnMatches/${match.id}`), match);
+    const completedReads = countMonthReads();
+    now += 24 * HOUR_MS;
+    await restart().loadSnapshot(2026, { verify: true });
+    assert.equal(countMonthReads(), completedReads);
+  });
+}
 
 test("without ESPN's scoreboard, the games still show, with nowhere to watch them", async () => {
   const league = createLeague({ refuse: { networks: "error" } });
