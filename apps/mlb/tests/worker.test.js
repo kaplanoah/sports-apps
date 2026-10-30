@@ -94,7 +94,8 @@ test("a malformed live answer leaves the schedule's coherent game state and name
     return Promise.resolve(new Response(JSON.stringify(answer)));
   };
   const loader = createSnapshotLoader({ fetchImpl, now: () => NOW });
-  const { failures, ...snapshot } = await loader.loadSnapshot(2026);
+  const { failures, nextReadAt, ...snapshot } = await loader.loadSnapshot(2026);
+  assert.equal(nextReadAt, undefined);
   assert.match(failures.liveGame, /Invalid sports data at inning/);
   assert.deepEqual(snapshot, MLBSnapshot.buildSnapshot(RESPONSES, { season: 2026, now: NOW }));
   assert.equal(liveReads, LIVE_GAME_IDS.length);
@@ -146,7 +147,8 @@ test("each game being played is read from MLB's live feed, reused only moments, 
       ? Promise.resolve(new Response("", { status: 503 }))
       : down.fetchImpl(url, init);
   const loader = createSnapshotLoader({ fetchImpl, now: () => NOW });
-  const { failures, ...snapshot } = await loader.loadSnapshot(2026);
+  const { failures, nextReadAt, ...snapshot } = await loader.loadSnapshot(2026);
+  assert.equal(nextReadAt, undefined);
   const expected = MLBSnapshot.buildSnapshot(RESPONSES, { season: 2026, now: NOW });
   assert.deepEqual(snapshot, expected);
   assert.deepEqual(Object.keys(failures), ["liveGame"]);

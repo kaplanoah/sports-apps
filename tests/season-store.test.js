@@ -42,6 +42,61 @@ test("a store waits as long as its league says before the next update", async ()
   assert.equal(await context.ctx.storage.getAlarm(), NOW + 60_000);
 });
 
+test("feed deadlines arm the actual alarm before a quiet league's next poll", async () => {
+  const context = createDurableObjectContext();
+  const clock = { now: NOW };
+  const feedAt = NOW + 5 * 60_000;
+  let reads = 0;
+  const SeasonStore = createSeasonStore({
+    ...QUIET_LEAGUE,
+    choosePollDelay: () => 24 * 60 * 60_000,
+    loadCurrentSnapshot: async () => {
+      reads += 1;
+      return { season: 2026, ...(reads === 1 && { nextReadAt: feedAt }) };
+    },
+  });
+  const store = new SeasonStore(context.ctx, {}, { now: () => clock.now });
+  await store.alarm();
+  assert.equal(await context.ctx.storage.getAlarm(), feedAt);
+  clock.now = feedAt - 1;
+  await store.alarm();
+  assert.equal(reads, 1);
+  await fireNextAlarm(store, context, clock);
+  assert.equal(reads, 2);
+  assert.equal(await context.ctx.storage.getAlarm(), clock.now + 24 * 60 * 60_000);
+});
+
+for (const verified of [true, false]) {
+  test(`reminder verification preserves feed deadlines when games are ${verified ? "confirmed" : "unconfirmed"}`, async () => {
+    const context = createDurableObjectContext();
+    const clock = { now: NOW };
+    const feedAt = NOW + 5 * 60_000;
+    let reads = 0;
+    const SeasonStore = createSeasonStore({
+      ...QUIET_LEAGUE,
+      choosePollDelay: () => 3 * 60 * 60_000,
+      listReminderGames: (snapshot) => snapshot.games,
+      loadCurrentSnapshot: async () => {
+        reads += 1;
+        return { season: 2026, games: verified ? [] : null, nextReadAt: feedAt };
+      },
+    });
+    let store = new SeasonStore(context.ctx, {}, { now: () => clock.now });
+    await context.ctx.storage.put("poll:schedule", { dueAt: NOW + 3 * 60 * 60_000 });
+    await context.ctx.storage.setAlarm(NOW);
+    store.reminders.checkDue = () => store.verifyReminderGames();
+    await store.alarm();
+    assert.equal(await context.ctx.storage.getAlarm(), feedAt);
+    assert.equal((await context.ctx.storage.get("poll:schedule")).dueAt, feedAt);
+    store = new SeasonStore(context.ctx, {}, { now: () => clock.now });
+    clock.now = feedAt - 1;
+    await store.alarm();
+    assert.equal(reads, 1);
+    await fireNextAlarm(store, context, clock);
+    assert.equal(reads, 2);
+  });
+}
+
 test("the Worker reads a document the store keeps, and null for one it doesn't", async () => {
   const context = createDurableObjectContext();
   const SeasonStore = createSeasonStore(QUIET_LEAGUE);

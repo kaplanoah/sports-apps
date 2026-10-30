@@ -47,7 +47,7 @@ import { describeError, respondError, respondJson, respondMethodNotAllowed } fro
 
 /**
  * The snapshot fields the store itself reads. Other fields belong to the league's callbacks.
- * @typedef {{ season: number, failures?: Record<string, string> }} SeasonSnapshot
+ * @typedef {{ season: number, failures?: Record<string, string>, nextReadAt?: number }} SeasonSnapshot
  */
 
 /**
@@ -401,9 +401,10 @@ export function createSeasonStore(league) {
         const seasonDueAt = await this.updateSeasonWhenDue(now);
         const jobDueTimes = await this.startDueJobs(now);
         await this.reminders.checkDue();
+        const updatedSeasonAt = (await this.ctx.storage.get(SCHEDULE_KEY))?.dueAt ?? seasonDueAt;
         const reminderAt = await this.reminders.findNextDeadline();
         nextAt = Math.min(
-          seasonDueAt,
+          updatedSeasonAt,
           ...jobDueTimes,
           reminderAt <= this.now() ? this.now() + RETRY_MS[0] : reminderAt,
         );
@@ -432,10 +433,24 @@ export function createSeasonStore(league) {
         return null;
       });
       if (!snapshot || !league.listReminderGames(snapshot)) {
+        if (snapshot?.nextReadAt !== undefined)
+          await this.advanceSeasonPoll(snapshot.nextReadAt - this.now());
         await this.reminders.saveGames(null);
         return;
       }
-      await this.saveSeason(snapshot, { verify: true });
+      const { delay } = await this.saveSeason(snapshot, { verify: true });
+      await this.advanceSeasonPoll(delay);
+    }
+
+    /** @param {number} delay */
+    async advanceSeasonPoll(delay) {
+      const at = this.now();
+      const dueAt = at + this.slowWhenUnwatched(Math.max(0, delay));
+      const schedule = await this.ctx.storage.get(SCHEDULE_KEY);
+      if (schedule?.dueAt <= dueAt) return;
+      await this.ctx.storage.put(SCHEDULE_KEY, { at, delay, dueAt, release });
+      const alarmAt = await this.ctx.storage.getAlarm();
+      if (alarmAt === null || dueAt < alarmAt) await this.ctx.storage.setAlarm(dueAt);
     }
 
     /** @param {{ verify?: boolean }} [options] */
@@ -587,7 +602,14 @@ export function createSeasonStore(league) {
       if (league.listReminderGames)
         await this.reminders.saveGames(league.listReminderGames(snapshot), verify);
       await this.saveStatus(league.describeSnapshotStatus(snapshot));
-      return { snapshot, delay: league.choosePollDelay(snapshot, this.now()) };
+      return { snapshot, delay: this.chooseNextPollDelay(snapshot) };
+    }
+
+    /** @param {Snapshot} snapshot */
+    chooseNextPollDelay(snapshot) {
+      const now = this.now();
+      const feedDelay = Math.max(0, (snapshot.nextReadAt ?? Infinity) - now);
+      return Math.min(league.choosePollDelay(snapshot, now), feedDelay);
     }
 
     // `listFailures` answers why each feed failing now does, from the feeds failing before.

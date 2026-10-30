@@ -40,10 +40,9 @@ async function fetchBackupOrFailure(fetchBackup) {
 
 /**
  * @param {{ at: number, failure: string | null }} probe
- * @param {number} now
  */
-const isProbeDue = (probe, now) =>
-  now - probe.at >= (probe.failure === null ? BACKUP_PROBE_MS : FAILED_FEED_WAIT_MS);
+const findNextProbeAt = (probe) =>
+  probe.at + (probe.failure === null ? BACKUP_PROBE_MS : FAILED_FEED_WAIT_MS);
 
 /**
  * @param {object} options
@@ -68,10 +67,12 @@ export function createBackupReader({ fetchBackup, now, storage }) {
   return async function readBackup(isNeeded) {
     if (!isNeeded) {
       const probe = await readProbe();
-      if (!isProbeDue(probe, now())) return { backup: null, failure: probe.failure };
+      const nextReadAt = findNextProbeAt(probe);
+      if (now() < nextReadAt) return { backup: null, failure: probe.failure, nextReadAt };
     }
     const { backup, failure } = await fetchBackupOrFailure(fetchBackup);
-    await storage.put(STORAGE_KEY, { at: now(), failure });
-    return { backup: isNeeded ? backup : null, failure };
+    const probe = { at: now(), failure };
+    await storage.put(STORAGE_KEY, probe);
+    return { backup: isNeeded ? backup : null, failure, nextReadAt: findNextProbeAt(probe) };
   };
 }

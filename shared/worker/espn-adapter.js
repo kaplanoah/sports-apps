@@ -203,6 +203,22 @@ export function readNetworkGame(event, findTeam) {
 export const readNetworkGames = (answers, findTeam) =>
   answers.flatMap((answer) => answer.events ?? []).map((event) => readNetworkGame(event, findTeam));
 
+// A stored month's listings need no scores, team profiles, links or media.
+/** @param {any} answer */
+export function trimNetworkAnswer(answer) {
+  return {
+    events: (answer.events ?? []).map((event) => ({
+      date: event.date,
+      competitions: (event.competitions ?? []).slice(0, 1).map((competition) => ({
+        date: competition.date,
+        timeValid: competition.timeValid,
+        competitors: (competition.competitors ?? []).map(({ id, homeAway }) => ({ id, homeAway })),
+        broadcasts: (competition.broadcasts ?? []).map(({ market, names }) => ({ market, names })),
+      })),
+    })),
+  };
+}
+
 /** @param {string} sport */
 export const nameEspnSite = (sport) => `${ESPN_SITE}/${sport}`;
 /** @param {number} ms */
