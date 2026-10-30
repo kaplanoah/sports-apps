@@ -101,6 +101,7 @@
   cursor: pointer;
 }
 .contact-secondary {
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -112,6 +113,13 @@
   color: var(--ink);
   font-size: var(--type-body-size);
   font-weight: var(--type-body-weight);
+}
+/* iOS moves a tap that lands just outside a label onto it, but that moved tap never opens the
+ * picker, so the label's own hit area reaches past its edge to catch the tap first. */
+.contact-secondary::before {
+  content: "";
+  position: absolute;
+  inset: -10px;
 }
 .contact-secondary svg {
   width: 18px;
