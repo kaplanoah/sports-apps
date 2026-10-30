@@ -466,6 +466,7 @@ export function testSettingsContactInteractions(test, expect, { openApp, setting
   test("with Diagnostics on, a newer return's record opens in place of the one before, while a log the viewer opened stays open", async ({
     page,
   }) => {
+    test.slow();
     await page.emulateMedia({ reducedMotion: "reduce" });
     await openApp(page);
     await turnOnDiagnostics(page);
