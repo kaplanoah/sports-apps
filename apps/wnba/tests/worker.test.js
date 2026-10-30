@@ -16,7 +16,7 @@ import {
 import { describePreview } from "../worker/src/preview.js";
 import { describeSnapshotStatus, listFeedFailures } from "../worker/src/season-updater.js";
 import { createSnapshotLoader, describeFailures } from "../worker/src/snapshot.js";
-import { readAfternoonEspn } from "./espn-fixtures.js";
+import { ESPN, readAfternoonEspn, SEP_30 } from "./espn-fixtures.js";
 import { nameFeedKey } from "../../../shared/worker/feed-keeper.js";
 
 const AFTERNOON = JSON.parse(
@@ -28,10 +28,6 @@ const GAMES = JSON.parse(
   readFileSync(`${import.meta.dirname}/fixtures/2026-10-01-games.json`, "utf8"),
 );
 const RESPONSES = AFTERNOON.responses;
-// ESPN's scoreboards of Sep 30 and Oct 1 the next morning, with both games of Sep 30 finished.
-const ESPN = JSON.parse(
-  readFileSync(`${import.meta.dirname}/fixtures/2026-10-01-espn-days.json`, "utf8"),
-);
 
 // Where ESPN says the afternoon's games, and the day before's, were on.
 const ESPN_SCOREBOARD = JSON.parse(
@@ -186,7 +182,6 @@ const readBackupReason = (snapshot) =>
     .find((reason) => reason.startsWith("backup: "))
     ?.slice("backup: ".length) ?? null;
 
-const SEP_30 = ESPN_DAY_REQUEST("20260930");
 const OCT_1 = ESPN_DAY_REQUEST("20261001");
 const BACKUP_PATH = new URL(SEP_30).pathname;
 

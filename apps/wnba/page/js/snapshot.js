@@ -503,10 +503,11 @@ export function isTodayOnScoreboard(schedule, scoreboard, season, now) {
 }
 
 /**
- * Whether ESPN's backup, which answered, answers for every game the schedule has on the league's
- * day of `now`, as the scoreboard would while it doesn't answer. Its word on a game it has started
- * replaces the schedule's, so a schedule kept from an earlier read then holds nothing older than
- * ESPN for today's games.
+ * Whether ESPN's backup, which answered, agrees with the schedule on every game it has on the
+ * league's day of `now`, as the scoreboard would while it doesn't answer. ESPN's word on a game it
+ * has started replaces the schedule's, and one it hasn't must start when the schedule says and not
+ * be put off, so a schedule kept from an earlier read then holds nothing older than ESPN for
+ * today's games.
  * @param {any} schedule
  * @param {{ answers: any[] } | null | undefined} backup
  * @param {number} season
@@ -515,10 +516,18 @@ export function isTodayOnScoreboard(schedule, scoreboard, season, now) {
 export function isTodayOnBackup(schedule, backup, season, now) {
   if (!backup) return false;
   const backupGames = readBackupGames(backup);
-  return listTodayGames(schedule, season, now).every(
-    (game) => !!findAnsweringGame(game, backupGames),
+  return listTodayGames(schedule, season, now).every((game) =>
+    isBackupAgreeing(game, findAnsweringGame(game, backupGames)),
   );
 }
+
+// A game whose time isn't set gets no reminder, so only a set time has to match ESPN's.
+/** @param {any} game @param {any} backup */
+const isBackupAgreeing = (game, backup) =>
+  !!backup &&
+  (backup.state !== "pre" ||
+    (!isPutOff(backup) &&
+      (!game.isTimeSet || Date.parse(game.start) === Date.parse(backup.start))));
 
 /** @param {any} schedule @param {number} season @param {number} now */
 function listTodayGames(schedule, season, now) {
@@ -770,8 +779,7 @@ export function buildSnapshot(responses, { season, now = Date.now() }) {
     missing: LEAGUE_FEEDS.filter((name) => !responses[name]),
     standIn: standIns.size ? "espn" : null,
     scoreboardCover: isEspnCovering(leagueGames, responses, backupGames) ? "espn" : null,
-    isTodayOnBackup:
-      !responses.scoreboard && isTodayOnBackup(responses.schedule, responses.backup, season, now),
+    isTodayOnBackup: isTodayOnBackup(responses.schedule, responses.backup, season, now),
     hasNoScoreboardGame:
       !!responses.schedule && !seasonGames.some((game) => isScoreboardGame(game, seriesById, now)),
     // Without the schedule, which says when each game starts, a score may be due.

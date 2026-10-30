@@ -2,11 +2,11 @@ import { readFileSync } from "node:fs";
 import { ESPN_DAY_REQUEST } from "../page/js/snapshot.js";
 
 // ESPN's scoreboards of Sep 30 and Oct 1 the next morning, with both games of Sep 30 finished.
-const ESPN = JSON.parse(
+export const ESPN = JSON.parse(
   readFileSync(`${import.meta.dirname}/fixtures/2026-10-01-espn-days.json`, "utf8"),
 );
 
-const SEP_30 = ESPN_DAY_REQUEST("20260930");
+export const SEP_30 = ESPN_DAY_REQUEST("20260930");
 
 const SCHEDULED = {
   clock: 0,

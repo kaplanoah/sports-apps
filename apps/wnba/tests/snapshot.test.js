@@ -643,6 +643,30 @@ test("while the scoreboard doesn't answer, the reminders' games are confirmed fr
   assert.equal(listGames(null), null);
 });
 
+test("ESPN confirms a kept schedule's game it hasn't started only while it starts then and isn't put off", () => {
+  const now = Date.parse(AFTERNOON.now);
+  /** @param {(competition: any) => void} changeFirst */
+  const isConfirmed = (changeFirst) => {
+    const espn = readAfternoonEspn((events) => {
+      changeFirst(events[0].competitions[0]);
+      return events;
+    });
+    const backup = { answers: Object.values(espn) };
+    return WNBASnapshot.isTodayOnBackup(RESPONSES.schedule, backup, AFTERNOON.season, now);
+  };
+  const hourEarlier = (competition) => {
+    competition.date = new Date(Date.parse(competition.date) - 60 * 60 * 1000).toISOString();
+  };
+  const postpone = (competition) => {
+    competition.status = structuredClone(competition.status);
+    competition.status.type.shortDetail = "Postponed";
+  };
+  const leaveAsIs = () => {};
+  assert.equal(isConfirmed(leaveAsIs), true);
+  assert.equal(isConfirmed(hourEarlier), false);
+  assert.equal(isConfirmed(postpone), false);
+});
+
 const FINALS_GAME = {
   id: "1042600406",
   state: "pre",

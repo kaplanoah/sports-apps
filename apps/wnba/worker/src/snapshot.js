@@ -216,21 +216,21 @@ export function createSnapshotLoader({
     ]);
     // A reminder goes out only on what the league says now. Each game a reminder can be due for is
     // played on the league's today, so a kept schedule stands in once the scoreboard lists them all,
-    // or, while the scoreboard doesn't answer, once ESPN answers for them all.
-    /** @param {import("./backup-probe.js").Backup | null} backup */
-    const isScheduleConfirmed = (backup) =>
+    // or, while the scoreboard doesn't answer, once ESPN agrees with it on them all.
+    /** @param {import("./backup-probe.js").Backup | null} [backup] */
+    const isScheduleConfirmed = (backup = null) =>
       !verify ||
       !failures.schedule ||
       (scoreboard
         ? WNBASnapshot.isTodayOnScoreboard(scheduleAnswer, scoreboard, season, now())
         : WNBASnapshot.isTodayOnBackup(scheduleAnswer, backup, season, now()));
-    const needsBackup =
-      !scoreboard || (isScheduleConfirmed(null) && hasGamesLeftLive(scheduleAnswer));
+    const needsBackup = !scoreboard || (isScheduleConfirmed() && hasGamesLeftLive(scheduleAnswer));
     const { backup, failure } = await readBackup(needsBackup);
     if (failure) failures.backup = failure;
     const schedule = isScheduleConfirmed(backup) ? scheduleAnswer : null;
     if (!scoreboard && !schedule && !bracket)
       throw new Error(`None of the WNBA's feeds answered with data: ${describeFailures(failures)}`);
+    // The networks are read only for a confirmed schedule, which may wait on ESPN's answer.
     const networks = await readNetworks(schedule, season, verify);
     return { responses: { scoreboard, schedule, bracket, standings, backup, networks }, failures };
   }
