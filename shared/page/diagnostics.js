@@ -585,28 +585,37 @@ const renderLine = (line) =>
   </li>`;
 
 /**
- * Each record's open state as the viewer left it, by its `data-record` key, since a redraw puts
- * back each record's markup.
+ * Each record's open state the viewer chose, by its `data-record` key, since a redraw puts back
+ * each record's markup.
  * @type {Map<string, boolean>}
  */
-let shownOpen = new Map();
+const chosenOpen = new Map();
+/**
+ * Each record's open state as the last draw drew it, so only what the viewer changed since counts
+ * as a choice, never a record drawn open as the newest.
+ * @type {Map<string, boolean>}
+ */
+let drawnOpen = new Map();
 
 /** @param {Element} section */
-const readShownOpen = (section) =>
-  new Map(
-    [...section.querySelectorAll("details[data-record]")].map((details) => [
-      /** @type {HTMLDetailsElement} */ (details).dataset.record ?? "",
-      /** @type {HTMLDetailsElement} */ (details).open,
-    ]),
-  );
+function noteChosenOpen(section) {
+  for (const details of section.querySelectorAll("details[data-record]")) {
+    const { open } = /** @type {HTMLDetailsElement} */ (details);
+    const key = /** @type {HTMLDetailsElement} */ (details).dataset.record ?? "";
+    if (open !== drawnOpen.get(key)) chosenOpen.set(key, open);
+  }
+}
 
 /**
- * The attributes that key a record and open it as the viewer left it, or as it opens at first.
+ * The attributes that key a record and open it as the viewer chose, or as it opens at first.
  * @param {string} key
  * @param {boolean} isOpenAtFirst
  */
-const renderRecordState = (key, isOpenAtFirst) =>
-  html`data-record="${key}" ${(shownOpen.get(key) ?? isOpenAtFirst) ? "open" : ""}`;
+function renderRecordState(key, isOpenAtFirst) {
+  const isOpen = chosenOpen.get(key) ?? isOpenAtFirst;
+  drawnOpen.set(key, isOpen);
+  return html`data-record="${key}" ${isOpen ? "open" : ""}`;
+}
 
 /**
  * @param {OpenRecord} openRecord
@@ -720,7 +729,8 @@ function drawRecords() {
   const section = findElement("diagnostics");
   section.hidden = !isOn;
   if (!findSettings()?.open) return;
-  shownOpen = readShownOpen(section);
+  noteChosenOpen(section);
+  drawnOpen = new Map();
   setHtml(section, isOn ? renderRecords() : html``);
 }
 

@@ -1,9 +1,11 @@
+import { RECORD_MS } from "../../shared/page/diagnostics.js";
 import { holdClock } from "./harness.mjs";
 import { openContact, serveContact } from "./contact-views.mjs";
 import { SCREENSHOT } from "./contact.mjs";
 import { findRecords, readLog } from "./diagnostics-records.mjs";
 import { turnOnDiagnostics } from "./diagnostics-switch.mjs";
 import { openSettings } from "./settings.mjs";
+import { passTime, setHidden } from "./visibility.mjs";
 
 /**
  * Measures each page row in a dialog, its words, how far it lifts them over its middle, and its
@@ -458,6 +460,39 @@ export function testSettingsContactInteractions(test, expect, { openApp, setting
     await page.locator("#settingsTitle").tap();
     await page.clock.runFor(1000);
     await expect.poll(() => log.locator("li").count()).toBeGreaterThan(linesBefore);
+    await expect(log).toHaveAttribute("open", "");
+  });
+
+  test("with Diagnostics on, a newer return's record opens in place of the one before, while a log the viewer opened stays open", async ({
+    page,
+  }) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await openApp(page);
+    await turnOnDiagnostics(page);
+    const comeBack = async () => {
+      await setHidden(page, true);
+      await passTime(page, 5 * 60 * 1000);
+      await setHidden(page, false);
+      await page.clock.runFor(RECORD_MS + 1000);
+    };
+    await comeBack();
+    await openSettings(page);
+    const returns = findRecords(page).locator(".diagnostics-record", { hasText: "Back after" });
+    await expect(returns).toHaveCount(1);
+    await expect(returns.first()).toHaveAttribute("open", "");
+    await findRecords(page).getByRole("heading", { name: "Recent opens" }).tap();
+    const log = findRecords(page).locator(".diagnostics-record", {
+      hasText: "Settings and Contact",
+    });
+    await log.locator("summary").tap();
+    await expect(log).toHaveAttribute("open", "");
+    await page.keyboard.press("Escape");
+
+    await comeBack();
+    await openSettings(page);
+    await expect(returns).toHaveCount(2);
+    await expect(returns.first()).toHaveAttribute("open", "");
+    await expect(returns.nth(1)).not.toHaveAttribute("open");
     await expect(log).toHaveAttribute("open", "");
   });
 

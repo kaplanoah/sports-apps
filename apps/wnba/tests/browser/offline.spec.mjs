@@ -1,4 +1,5 @@
 import { NEXT_RELEASE, serveReleases } from "../../../../tests/browser/serve-releases.mjs";
+import { readLog } from "../../../../tests/browser/diagnostics-records.mjs";
 import { findDiagnosticsSwitch } from "../../../../tests/browser/diagnostics-switch.mjs";
 import { takeAwayPush } from "../../../../tests/browser/devices.mjs";
 import { test, expect, openApp } from "./harness.mjs";
@@ -103,10 +104,7 @@ test("Diagnostics show the steps the service worker kept: its start, install, an
 
   await findDiagnosticsSwitch(page).click();
 
-  const steps = page.locator("#diagnostics .diagnostics-record", { hasText: "Service worker" });
-  await expect(steps).toHaveCount(1);
-  const lines = await steps.locator("li").allTextContents();
-  expect(lines.toReversed().map((line) => line.replace(/^\s*\S+\s[AP]M\s*/, "").trim())).toEqual([
+  expect(await readLog(page, "Service worker")).toEqual([
     "Started",
     "Installed",
     "Activated",
