@@ -864,7 +864,7 @@ test("network listing budgets, failures and finalized answers survive loader res
   const first = await restart().loadSnapshot(2026);
   assert.equal(league.countReads("networks"), 2);
   const saved = (await storage.get("networks:202610")).data;
-  assert.deepEqual(Object.keys(saved.events[0]).sort(), ["competitions", "date"]);
+  assert.deepEqual(Object.keys(saved.events[0]).sort(), ["competitions", "date", "id"]);
   assert.deepEqual(Object.keys(saved.events[0].competitions[0]).sort(), [
     "broadcasts",
     "competitors",
@@ -1313,14 +1313,35 @@ test("a malformed scoreboard is named before snapshot composition and leaves the
 
 test("the snapshot loader keeps retry deadlines and persists ESPN matches together", async () => {
   const league = createLeague({ espn: readAfternoonEspn(), refuse: { standings: "error" } });
-  const loader = createSnapshotLoader({ fetchImpl: league.fetchImpl, now: () => NOW });
-  const snapshot = await loader.loadSnapshot(2026);
-  assert.equal(snapshot.nextReadAt, NOW + FAILED_FEED_WAIT_MS);
-  assert.ok(snapshot.espnMatches.length > 0);
+  const storage = createMemoryStorage();
   const docs = createDocs();
-  await saveSnapshot(docs, snapshot);
-  for (const match of snapshot.espnMatches) {
-    assert.deepEqual(await docs.read(`espnMatches/${match.id}`), match);
-    assert.ok(snapshot.games.concat(snapshot.nearestGames).some((game) => game.id === match.id));
+  const eventIds = new Set(
+    Object.values(ESPN_SCOREBOARD.answers).flatMap((answer) =>
+      answer.events.map((event) => String(event.id)),
+    ),
+  );
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const loader = createSnapshotLoader({ fetchImpl: league.fetchImpl, storage, now: () => NOW });
+    const snapshot = await loader.loadSnapshot(2026);
+    assert.equal(snapshot.nextReadAt, NOW + FAILED_FEED_WAIT_MS);
+    assert.ok(snapshot.espnMatches.length > 0);
+    await saveSnapshot(docs, snapshot);
+    for (const match of snapshot.espnMatches) {
+      assert.ok(eventIds.has(match.eventId));
+      assert.deepEqual(await docs.read(`espnMatches/${match.id}`), match);
+      assert.ok(snapshot.games.concat(snapshot.nearestGames).some((game) => game.id === match.id));
+    }
+    const [match] = snapshot.espnMatches;
+    const reads = [];
+    const reader = createEspnGameReader({
+      fetchImpl: async (url) => {
+        reads.push(url);
+        return Response.json({ id: match.eventId });
+      },
+    });
+    assert.deepEqual(await reader.fetchSummary(match, (key) => docs.read(key)), {
+      id: match.eventId,
+    });
+    assert.deepEqual(reads, [nameSummaryRequest(match.eventId)]);
   }
 });

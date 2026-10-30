@@ -208,6 +208,7 @@ export const readNetworkGames = (answers, findTeam) =>
 export function trimNetworkAnswer(answer) {
   return {
     events: (answer.events ?? []).map((event) => ({
+      id: event.id,
       date: event.date,
       competitions: (event.competitions ?? []).slice(0, 1).map((competition) => ({
         date: competition.date,
@@ -282,7 +283,7 @@ export function findEventId(scoreboard, { away, home }, findTeam) {
       findCompetitorCode(competition, "home", findTeam) === home
     );
   });
-  return event ? String(event.id) : null;
+  return event?.id == null ? null : String(event.id);
 }
 
 /**

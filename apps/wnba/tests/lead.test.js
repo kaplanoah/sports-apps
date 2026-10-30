@@ -55,6 +55,14 @@ test("ESPN's game is the day's one between the same away and home teams, on the 
   assert.equal(findEventId(LEAD.scoreboard, { away: "DAL", home: "GSV" }), null);
 });
 
+test("an ESPN listing without an event ID cannot become a stored match", () => {
+  for (const id of [undefined, null]) {
+    const scoreboard = structuredClone(LEAD.scoreboard);
+    scoreboard.events.find((event) => event.id === LEAD.eventId).id = id;
+    assert.equal(findEventId(scoreboard, TEAMS), null);
+  }
+});
+
 test("the lead is each basket's seconds from tip-off with the score after it, overtime included", () => {
   const lead = describeLead(LEAD.summary);
 
