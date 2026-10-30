@@ -29,3 +29,14 @@ export const comeBackTo = (page, selector) =>
     document.dispatchEvent(new Event("visibilitychange"));
     return /** @type {HTMLDialogElement} */ (document.querySelector(dialogSelector)).open;
   }, selector);
+
+/**
+ * Has the page leave the screen for `ms` while the phone holds its timers, then come back.
+ * @param {import("@playwright/test").Page} page
+ * @param {number} ms
+ */
+export async function leaveFor(page, ms) {
+  await setHidden(page, true);
+  await passTime(page, ms);
+  await setHidden(page, false);
+}

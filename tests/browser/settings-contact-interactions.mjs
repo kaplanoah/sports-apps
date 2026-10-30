@@ -5,7 +5,7 @@ import { SCREENSHOT } from "./contact.mjs";
 import { findRecords, readLog } from "./diagnostics-records.mjs";
 import { turnOnDiagnostics } from "./diagnostics-switch.mjs";
 import { openSettings } from "./settings.mjs";
-import { passTime, setHidden } from "./visibility.mjs";
+import { leaveFor } from "./visibility.mjs";
 
 /**
  * Measures each page row in a dialog, its words, how far it lifts them over its middle, and its
@@ -470,9 +470,7 @@ export function testSettingsContactInteractions(test, expect, { openApp, setting
     await openApp(page);
     await turnOnDiagnostics(page);
     const comeBack = async () => {
-      await setHidden(page, true);
-      await passTime(page, 5 * 60 * 1000);
-      await setHidden(page, false);
+      await leaveFor(page, 5 * 60 * 1000);
       await page.clock.runFor(RECORD_MS + 1000);
     };
     await comeBack();

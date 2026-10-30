@@ -6,7 +6,7 @@ import { serveReleases } from "../../../../tests/browser/serve-releases.mjs";
 import { readTagOffset } from "../../../../tests/browser/title-row.mjs";
 import { listTextOffRoles } from "../../../../tests/browser/type-roles.mjs";
 import { listChipsOffCenter } from "../../../../tests/browser/chip-centering.mjs";
-import { passTime, setHidden } from "../../../../tests/browser/visibility.mjs";
+import { leaveFor } from "../../../../tests/browser/visibility.mjs";
 import { checkChannelTagDots } from "../../../../tests/browser/channel-tag-dots.mjs";
 
 test.use({ contextOptions: { reducedMotion: "reduce" } });
@@ -50,9 +50,7 @@ test("coming back after an hour away, the tag says how long ago the release went
   const tag = page.locator("#channelTag");
   await expect(tag).toHaveText("beta•3f2a91c•4 min ago");
 
-  await setHidden(page, true);
-  await passTime(page, HOUR_MS);
-  await setHidden(page, false);
+  await leaveFor(page, HOUR_MS);
 
   await expect(tag).toHaveText("beta•3f2a91c•1 h ago");
 });

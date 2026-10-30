@@ -1,6 +1,6 @@
 import { test, expect, findGameButton, openApp, NOW } from "./harness.mjs";
 import { serveReleases } from "../../../../tests/browser/serve-releases.mjs";
-import { passTime, setHidden } from "../../../../tests/browser/visibility.mjs";
+import { leaveFor } from "../../../../tests/browser/visibility.mjs";
 import {
   findDiagnosticsSwitch,
   turnOnDiagnostics,
@@ -178,10 +178,7 @@ test("each record's flag stands out as AA asks, in Maple and Walnut", async ({ p
 test("a return to the page is recorded with how long it was away", async ({ page }) => {
   await openApp(page);
   await turnOnDiagnostics(page);
-  await setHidden(page, true);
-  await passTime(page, 5 * 60 * 1000);
-
-  await setHidden(page, false);
+  await leaveFor(page, 5 * 60 * 1000);
   await page.clock.runFor(RECORD_MS + 1000);
   await openSettings(page);
 
