@@ -30,7 +30,7 @@ const createMonth = (events) => ({ edition: 1, data: { events } });
 
 function createHarness(app = "wnba") {
   const context = createDurableObjectContext();
-  const { ctx, stored } = context;
+  const { ctx } = context;
   const calls = { mutations: [], lists: [], reads: [], vendor: 0, store: 0 };
   const Store = app === "wnba" ? WnbaStore : MlbStore;
   const clock = { now: 0 };
