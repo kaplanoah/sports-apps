@@ -1,7 +1,16 @@
+import {
+  PlayerId,
+  BasketballPlayerNumbers,
+  BasketballPlayerTotals,
+  BasketballPlayerGame,
+  BasketballTeamGame,
+  BasketballRanks,
+  validateSportsData,
+} from "../../../../../shared/worker/sports-schema.js";
 import { createReusedLoader } from "../../../../../shared/worker/upstream.js";
 
 import { averageTotals, readPerGame, readShare, splitName } from "../season-averages.js";
-import { fetchWnbaJson, hasTable, isCurrentSeason, readTable } from "../wnba.js";
+import { fetchWnbaJson, hasTable, isCurrentSeason, readRequiredTable, readTable } from "../wnba.js";
 
 const WNBA_STATS = "https://stats.wnba.com/stats";
 export const REGULAR_SEASON = "Regular Season";
@@ -19,10 +28,14 @@ const FULL_SEASON_GAMES = 44;
 const LEADER_GAMES = 31;
 
 /**
+ * @typedef {Partial<Omit<NonNullable<import("../../../../../shared/worker/sports-schema.js").PlayerNumbersRecord["totals"]>, "PLAYER_NAME">>} NumericTotals
+ */
+
+/**
  * @typedef {object} RankedStat
  * @property {string} key what the page calls it
- * @property {(row: Record<string, number>) => number | null} read her number, from her totals
- * @property {(row: Record<string, number>) => number} [count] what the rule counts, from her
+ * @property {(row: NumericTotals) => number | null} read her number, from her totals
+ * @property {(row: NumericTotals) => number} [count] what the rule counts, from her
  *   totals, for a stat a season's total ranks her in short of the games
  * @property {number} [needed] how many of it the rule asks for over a whole season
  * @property {boolean} [isShare] whether the rule counts only what she counts, not her games
@@ -92,6 +105,32 @@ export const GAME_LOG_COLUMNS = [
   "WL",
 ];
 export const TEAM_GAME_COLUMNS = ["TEAM_ID", "GAME_ID", "PTS", "PLUS_MINUS", "MIN"];
+
+/**
+ * @param {any} answer
+ * @param {string} table
+ */
+export function validatePlayerFeed(answer, table) {
+  for (const row of readRequiredTable(answer, table)) {
+    if (table === "LeagueGameLog") {
+      validateSportsData(BasketballTeamGame, {
+        teamId: row.TEAM_ID,
+        gameId: row.GAME_ID,
+        points: row.PTS,
+        plusMinus: row.PLUS_MINUS,
+        opponentPoints: row.PTS - row.PLUS_MINUS,
+        minutes: row.MIN,
+      });
+    } else {
+      validateSportsData(BasketballPlayerTotals.shape.PLAYER_ID, row.PLAYER_ID);
+      validateSportsData(BasketballPlayerTotals.shape.PLAYER_NAME, row.PLAYER_NAME);
+      validateSportsData(BasketballPlayerNumbers.shape.name, splitName(row.PLAYER_NAME));
+      if (table === "LeagueDashPlayerStats") validateSportsData(BasketballPlayerTotals, row);
+      else validateSportsData(BasketballPlayerGame, describeGame(row, false, []));
+    }
+  }
+  return answer;
+}
 
 /**
  * A season's game logs: one player's, or every player's when no player is named.
@@ -201,7 +240,7 @@ const prorate = (seasonGames, needed) => Math.ceil((needed * seasonGames) / FULL
 
 /**
  * Whether a player's totals reach the season's total that ranks her in a stat short of the games.
- * @param {Record<string, number>} row
+ * @param {NumericTotals} row
  * @param {RankedStat} stat
  * @param {number} seasonGames
  */
@@ -210,7 +249,7 @@ const hasCount = (row, stat, seasonGames) =>
 
 /**
  * Whether a player's totals meet the rule for a stat.
- * @param {Record<string, number>} row
+ * @param {NumericTotals} row
  * @param {RankedStat} stat
  * @param {number} seasonGames
  */
@@ -222,7 +261,7 @@ function meetsRule(row, stat, seasonGames) {
 /**
  * How far into the season it is, and each ranked stat's numbers among the players who meet the
  * rule for it, from the lowest.
- * @typedef {{ seasonGames: number, values: Record<string, number[]> }} Ranks
+ * @typedef {import("../../../../../shared/worker/sports-schema.js").BasketballRanksRecord} Ranks
  */
 
 /**
@@ -231,6 +270,8 @@ function meetsRule(row, stat, seasonGames) {
  * @returns {Ranks}
  */
 export function describeRanks(totals, teamGames) {
+  validatePlayerFeed(totals, "LeagueDashPlayerStats");
+  validatePlayerFeed(teamGames, "LeagueGameLog");
   const everyone = readTable(totals, "LeagueDashPlayerStats");
   const seasonGames = countSeasonGames(readTable(teamGames, "LeagueGameLog"));
   /** @param {RankedStat} stat */
@@ -240,10 +281,12 @@ export function describeRanks(totals, teamGames) {
       .map(stat.read)
       .filter((value) => value != null)
       .sort((first, second) => first - second);
-  return {
+  return validateSportsData(BasketballRanks, {
     seasonGames,
-    values: Object.fromEntries(RANKED_STATS.map((stat) => [stat.key, listValues(stat)])),
-  };
+    values: /** @type {Ranks["values"]} */ (
+      Object.fromEntries(RANKED_STATS.map((stat) => [stat.key, listValues(stat)]))
+    ),
+  });
 }
 
 // The page draws the spread a few dozen points wide, so four places are plenty.
@@ -265,7 +308,7 @@ const countAhead = (values, value, stat) =>
  * How far she is toward the rule for a stat, as a share of what it asks this far into the season,
  * to two places: of the games or the season's total, whichever she's nearer, or for a percentage
  * of the shots made.
- * @param {Record<string, number>} her
+ * @param {NumericTotals} her
  * @param {RankedStat} stat
  * @param {number} seasonGames
  */
@@ -281,7 +324,7 @@ function measureProgress(her, stat, seasonGames) {
 /**
  * Her number in a stat, and, among the players who meet the rule, her place and every number, from
  * the lowest, for the page to draw how they spread, with how far she is toward the rule.
- * @param {Record<string, number>} her
+ * @param {NumericTotals} her
  * @param {Ranks} ranks
  * @param {RankedStat} stat
  */
@@ -303,7 +346,7 @@ function rankStat(her, ranks, stat) {
 /**
  * Whether her totals have a stat: a per-game stat is missing only from totals saved before the
  * store kept its column, while a percentage she took no shots for is kept, shown with no number.
- * @param {Record<string, number>} her
+ * @param {NumericTotals} her
  * @param {RankedStat} stat
  */
 const hasStat = (her, stat) => !!stat.isShare || stat.read(her) != null;
@@ -311,7 +354,7 @@ const hasStat = (her, stat) => !!stat.isShare || stat.read(her) != null;
 /**
  * Her regular season: her games, her averages, and her place in each ranked stat, or null before
  * she has played.
- * @param {Record<string, number> | null} her her totals in the regular season
+ * @param {NumericTotals | null} her her totals in the regular season
  * @param {Ranks} ranks
  */
 export function describeRegularSeason(her, ranks) {
@@ -377,11 +420,7 @@ const findLatest = (games) =>
 /**
  * A player's numbers in a season, as the store keeps them: her name as the feeds write it, her
  * regular season's totals, her last game, and her points in each playoff game.
- * @typedef {object} PlayerNumbers
- * @property {{ firstName: string, lastName: string } | null} name
- * @property {Record<string, number> | null} totals
- * @property {ReturnType<typeof describeGame> | null} lastGame
- * @property {Record<string, number>} playoffPoints
+ * @typedef {import("../../../../../shared/worker/sports-schema.js").PlayerNumbersRecord} PlayerNumbers
  */
 
 /**
@@ -396,12 +435,16 @@ function describePlayerNumbers({ totals, regularGames, playoffGames }, teamGames
   const isPlayoffs = playoffGames.length > 0;
   const latest = findLatest(isPlayoffs ? playoffGames : regularGames);
   const named = [...playoffGames, ...regularGames, totals].find((row) => row?.PLAYER_NAME);
-  return {
+  return validateSportsData(BasketballPlayerNumbers, {
     name: named ? splitName(named.PLAYER_NAME) : null,
-    totals: totals && Object.fromEntries(TOTALS_COLUMNS.map((column) => [column, totals[column]])),
+    totals:
+      totals &&
+      /** @type {PlayerNumbers["totals"]} */ (
+        Object.fromEntries(TOTALS_COLUMNS.map((column) => [column, totals[column]]))
+      ),
     lastGame: latest && describeGame(latest, isPlayoffs, teamGames(isPlayoffs)),
     playoffPoints: Object.fromEntries(playoffGames.map((game) => [game.GAME_ID, game.PTS])),
-  };
+  });
 }
 
 /**
@@ -412,6 +455,7 @@ function groupByPlayer(rows) {
   const groups = new Map();
   for (const row of rows) {
     const id = String(row.PLAYER_ID);
+    validateSportsData(PlayerId, id);
     if (!groups.has(id)) groups.set(id, []);
     groups.get(id).push(row);
   }
@@ -430,11 +474,17 @@ export function describeSeasonPlayers({
   teamRegularGames,
   teamPlayoffGames,
 }) {
+  for (const [answer, table] of [
+    [regularGames, "PlayerGameLogs"],
+    [playoffGames, "PlayerGameLogs"],
+    [teamPlayoffGames, "LeagueGameLog"],
+  ])
+    validatePlayerFeed(answer, table);
   const totalsById = new Map(
-    readTable(totals, "LeagueDashPlayerStats").map((row) => [String(row.PLAYER_ID), row]),
+    readRequiredTable(totals, "LeagueDashPlayerStats").map((row) => [String(row.PLAYER_ID), row]),
   );
-  const regularById = groupByPlayer(readTable(regularGames, "PlayerGameLogs"));
-  const playoffsById = groupByPlayer(readTable(playoffGames, "PlayerGameLogs"));
+  const regularById = groupByPlayer(readRequiredTable(regularGames, "PlayerGameLogs"));
+  const playoffsById = groupByPlayer(readRequiredTable(playoffGames, "PlayerGameLogs"));
   const teamGames = {
     regular: readTable(teamRegularGames, "LeagueGameLog"),
     playoffs: readTable(teamPlayoffGames, "LeagueGameLog"),
@@ -487,7 +537,7 @@ export function composePlayer({ id, team, season, numbers, roster, ranks }) {
 /** @param {URLSearchParams} searchParams */
 export function readId(searchParams) {
   const id = searchParams.get("id") ?? "";
-  return /^\d{1,12}$/.test(id) ? id : null;
+  return PlayerId.safeParse(id).success ? id : null;
 }
 
 /**

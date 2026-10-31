@@ -56,6 +56,7 @@ paths:
     - It asks again a few times about one Claude doesn't answer, which shows as MLB's own meanwhile and then counts as clean.
   - Historical fills use MLB's own stills and ask Claude about none. Live and historical runs report separately in `highlights/status` and `highlights-history/status`.
 - Detail routes forward to the store; its services fetch through adapters. Live misses share store-owned reads, and usable saved answers survive failures and restarts.
+- Shared detail contracts cover highlights, pitchers, starters, rotations, club starts, rosters, player sheets, last games, and hitter rankings; see `worker.md` for validation policy.
 - The box score's store (`worker/src/box-score.js`, its `adapters/box-score.js`, `game-details-updater.js`, and `watched-games.js`):
   - The store keeps the box score for every finished game of each season it keeps, the slate's first, then the rest of the current season's and each past season's, newest first.
   - It reads the box score with each update for a game a page has open.

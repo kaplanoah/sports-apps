@@ -1,3 +1,4 @@
+import { createDeferred } from "./deferred.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -76,14 +77,8 @@ for (const field of [null, "boxScore"]) {
   test(`a late ${field ?? "whole-document"} read preserves a newer canonical final`, async () => {
     const docs = createDocs();
     const storage = createJobStorage();
-    let release;
-    let announce;
-    const started = new Promise((resolve) => {
-      announce = resolve;
-    });
-    const held = new Promise((resolve) => {
-      release = resolve;
-    });
+    const { promise: started, resolve: announce } = createDeferred();
+    const { promise: held, resolve: release } = createDeferred();
     const read = createDetailReads(
       {
         "/detail": {

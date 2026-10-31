@@ -15,6 +15,7 @@ paths:
   - The health's `feeds` counts the league's scoreboard as failing only while a score is due, so an idle scoreboard never reads as one.
   - Detail routes forward to the store; its services fetch through adapters. ESPN game matches come from the identity ledger, persist in `espnMatches/<game-id>`, and survive restarts. New links wait while the ledger fails; existing links remain usable.
   - The page saves nothing to the store.
+  - Shared detail contracts cover rosters, player numbers, and rank records; see `worker.md` for validation policy.
   - The settings pick any season the store keeps, once it keeps more than one.
 - A team's sheet:
   - It opens on cards of its last game, the one it's playing, and its next, from the whole season, regular season and all (`page/js/nearest-games.js`).

@@ -112,6 +112,21 @@ export function createFeedKeeper({ feeds, now, storage = createMemoryStorage() }
     }
   }
 
+  /** @param {string} name @param {string} key @param {unknown} error */
+  async function rejectFeed(name, key, error) {
+    const storageKey = await nameFeedKey(name, key);
+    const record = await readRecord(storageKey);
+    await saveRecord(
+      storageKey,
+      {
+        failedAt:
+          record?.failedAt !== undefined && now() < findRetryAt(record) ? record.failedAt : now(),
+        reason: describeError(error),
+      },
+      `feed ${name}`,
+    );
+  }
+
   /**
    * @param {string} name
    * @param {any} record
@@ -165,6 +180,8 @@ export function createFeedKeeper({ feeds, now, storage = createMemoryStorage() }
       await storage.delete(storageKey);
     },
 
+    rejectFeed,
+
     /**
      * The feed's kept answer while it's still good, or a new one from `load`.
      * @param {string} name which feed's limit applies
@@ -179,6 +196,7 @@ export function createFeedKeeper({ feeds, now, storage = createMemoryStorage() }
      *   while no read since has answered, even when the kept answer stands in
      * @param {(at: number) => void} [options.onNextRead] told when a retry or settling answer needs
      *   an update before the ordinary poll; age alone waits for that poll
+     * @param {(data: any) => unknown} [options.validate] checks usable rows for the current consumers
      */
     async readFeed(
       name,
@@ -189,26 +207,46 @@ export function createFeedKeeper({ feeds, now, storage = createMemoryStorage() }
         readAgain = false,
         onFailure = () => {},
         onNextRead = () => {},
+        validate = () => {},
       } = {},
     ) {
       const storageKey = await nameFeedKey(name, key);
       const what = `${name} ${key}`;
-      const record = await readRecord(storageKey);
-      const answer = record?.answer;
-      const times = await findReadTimes(name, record, isBehind);
-      if (!readAgain && now() < times.dueAt) {
-        if (record?.reason !== undefined) onFailure(record.reason);
-        onNextRead(times.nextReadAt);
-        if (answer) return answer.data;
-        throw new Error(record.reason);
+      let record = await readRecord(storageKey);
+      let answer = record?.answer;
+      let hasCheckedAnswer = false;
+      async function validateKeptAnswer() {
+        if (hasCheckedAnswer || !answer) return;
+        hasCheckedAnswer = true;
+        try {
+          await validate(answer.data);
+        } catch (error) {
+          answer = undefined;
+          await rejectFeed(name, key, error);
+        }
+      }
+      // A due refresh starts before waiting for context needed only by a cached stand-in.
+      const scheduledTimes = await findReadTimes(name, record, () => false);
+      if (!readAgain && now() < scheduledTimes.dueAt) {
+        await validateKeptAnswer();
+        record = await readRecord(storageKey);
+        const times = await findReadTimes(name, record, isBehind);
+        if (now() < times.dueAt) {
+          if (record?.reason !== undefined) onFailure(record.reason);
+          onNextRead(times.nextReadAt);
+          if (answer) return answer.data;
+          throw new Error(record.reason);
+        }
       }
       try {
         const data = await load();
+        await validate(data);
         const updated = { answer: { at: now(), data } };
         await saveRecord(storageKey, updated, what);
         onNextRead((await findReadTimes(name, updated, isBehind)).nextReadAt);
         return data;
       } catch (error) {
+        await validateKeptAnswer();
         if (error instanceof RequestBudgetExhausted) {
           if (answer) return answer.data;
           throw error;

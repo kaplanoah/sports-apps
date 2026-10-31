@@ -11,6 +11,8 @@ import {
 } from "../worker/src/players.js";
 import {
   indexSeasonStats,
+  trimHitting,
+  trimPitching,
   listRosterRequest,
   listSeasonStatsRequest,
 } from "../worker/src/rosters.js";
@@ -22,13 +24,15 @@ const FIXTURE = JSON.parse(
 );
 const { season, answers } = FIXTURE;
 const NUMBERS = {
-  hitting: indexSeasonStats(answers[listSeasonStatsRequest(season, "hitting")]),
-  pitching: indexSeasonStats(answers[listSeasonStatsRequest(season, "pitching")]),
+  hitting: indexSeasonStats(answers[listSeasonStatsRequest(season, "hitting")], trimHitting),
+  pitching: indexSeasonStats(answers[listSeasonStatsRequest(season, "pitching")], trimPitching),
   postseasonHitting: indexSeasonStats(
     answers[listSeasonStatsRequest(season, "hitting", { gameType: "P" })],
+    trimHitting,
   ),
   postseasonPitching: indexSeasonStats(
     answers[listSeasonStatsRequest(season, "pitching", { gameType: "P" })],
+    trimPitching,
   ),
 };
 const PEOPLE = indexPeople(answers[listPeopleRequest(season)]);
@@ -42,7 +46,16 @@ function describeRostered(mlbTeamId, club, name) {
   const entry = answers[listRosterRequest(mlbTeamId, season)].roster.find(
     (/** @type {any} */ each) => each.person.fullName === name,
   );
-  return describePlayer({ ...NUMBERS, entry, club, season, person: PEOPLE.get(entry.person.id) });
+  return describePlayer({
+    onFactsFailure: (error) => {
+      throw error;
+    },
+    ...NUMBERS,
+    entry,
+    club,
+    season,
+    person: PEOPLE.get(entry.person.id),
+  });
 }
 
 test("a hitter's sheet has his facts, and his regular season and postseason at the plate", () => {
@@ -77,7 +90,16 @@ test("a two-way player's sheet has his seasons at the plate and on the mound, an
 
 test("a player MLB's list doesn't have yet has no facts", () => {
   const entry = answers[listRosterRequest(114, season)].roster[0];
-  const player = describePlayer({ ...NUMBERS, entry, club: "CLE", season, person: null });
+  const player = describePlayer({
+    onFactsFailure: (error) => {
+      throw error;
+    },
+    ...NUMBERS,
+    entry,
+    club: "CLE",
+    season,
+    person: null,
+  });
   assert.equal(player.facts, null);
 });
 

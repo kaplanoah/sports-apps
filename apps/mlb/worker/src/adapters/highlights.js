@@ -1,3 +1,8 @@
+import { settleReads } from "../../../../../shared/worker/upstream.js";
+import {
+  BaseballHighlights,
+  validateSportsData,
+} from "../../../../../shared/worker/sports-schema.js";
 import { readStoryLead } from "../../../../../shared/worker/story-lead.js";
 import { fetchMlbJson } from "../mlb.js";
 
@@ -46,10 +51,9 @@ export const namePlaysRequest = (id) => `/api/v1.1/game/${id}/feed/live?fields=$
  * @param {string | undefined} duration
  */
 function readSeconds(duration) {
-  const parts = String(duration ?? "")
-    .split(":")
-    .map(Number);
-  if (parts.length === 0 || parts.some((part) => !Number.isFinite(part))) return null;
+  if (duration == null || duration === "") return null;
+  const parts = String(duration).split(":").map(Number);
+  if (parts.some((part) => !Number.isFinite(part))) return NaN;
   return parts.reduce((total, part) => total * 60 + part, 0);
 }
 
@@ -111,16 +115,17 @@ const isRecap = (item) =>
  * @param {any} feed
  */
 function listPlaysById(feed) {
+  if (!Array.isArray(feed?.liveData?.plays?.allPlays)) throw new Error("Invalid sports plays");
   /** @type {Map<string, any>} */
   const plays = new Map();
-  (feed?.liveData?.plays?.allPlays ?? []).forEach((/** @type {any} */ play, order) => {
+  feed.liveData.plays.allPlays.forEach((/** @type {any} */ play, order) => {
     const isTop = play.about?.halfInning === "top";
     const scored = play.about?.isScoringPlay === true;
     const facts = {
       order,
-      half: isTop ? "top" : "bottom",
+      half: play.about?.halfInning,
       inning: play.about?.inning ?? null,
-      score: scored ? [play.result?.awayScore ?? 0, play.result?.homeScore ?? 0] : null,
+      score: scored ? [play.result?.awayScore, play.result?.homeScore] : null,
       scorer: scored ? (isTop ? "away" : "home") : null,
     };
     for (const event of play.playEvents ?? []) if (event.playId) plays.set(event.playId, facts);
@@ -144,7 +149,11 @@ function listPlayItems(items, plays) {
 }
 
 /** @param {any} content MLB's content for the game */
-const listItems = (content) => content?.highlights?.highlights?.items ?? [];
+function listItems(content) {
+  const items = content?.highlights?.highlights?.items;
+  if (!Array.isArray(items)) throw new Error("Invalid sports highlights");
+  return items;
+}
 
 /** @param {any} content MLB's content for the game */
 const findStoryImage = (content) => content?.editorial?.recap?.mlb?.image;
@@ -216,7 +225,7 @@ function describeRecap(items, storyPhoto) {
 export function describeHighlights(id, content, feed, withHeadlines = new Set()) {
   const items = listItems(content);
   const storyImage = findStoryImage(content);
-  return {
+  return validateSportsData(BaseballHighlights, {
     id,
     recap: describeRecap(items, findStill(storyImage, RECAP_STILL_WIDTH)),
     story: describeStory(content?.editorial?.recap?.mlb),
@@ -224,7 +233,7 @@ export function describeHighlights(id, content, feed, withHeadlines = new Set())
       withHeadlines,
       storyPhoto: findStill(storyImage, PLAY_STILL_WIDTH),
     }),
-  };
+  });
 }
 
 /**
@@ -233,10 +242,11 @@ export function describeHighlights(id, content, feed, withHeadlines = new Set())
  * @param {string} id
  */
 export async function fetchGameMedia(fetchImpl, id) {
-  const [content, feed] = await Promise.all([
+  const [content, feed] = await settleReads([
     fetchMlbJson(fetchImpl, nameContentRequest(id), CONTENT_CACHE_SECONDS),
     fetchMlbJson(fetchImpl, namePlaysRequest(id), CONTENT_CACHE_SECONDS),
   ]);
+  describeHighlights(id, content, feed);
   return { content, feed };
 }
 

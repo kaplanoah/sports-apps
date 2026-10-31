@@ -236,3 +236,25 @@ test("a reused loader forgets a load that failed, so the next call tries again",
   assert.equal(await loadReused(2026), "answered");
   assert.equal(attempts, 2);
 });
+
+test("settling a failed feed batch waits for sibling reads and preserves successful input order", async () => {
+  const { settleReads } = await import("../shared/worker/upstream.js");
+  let release;
+  const sibling = new Promise((resolve) => {
+    release = resolve;
+  });
+  let finished = false;
+  const failure = new Error("unavailable");
+  const batch = settleReads([Promise.reject(failure), sibling]).finally(() => {
+    finished = true;
+  });
+  const rejected = assert.rejects(batch, (error) => error === failure);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(finished, false);
+  release("late answer");
+  await rejected;
+  assert.deepEqual(await settleReads([Promise.resolve("first"), Promise.resolve("second")]), [
+    "first",
+    "second",
+  ]);
+});

@@ -12,6 +12,8 @@ import {
 import { EASTERN, useTimeZone } from "../../../tests/time-zone.js";
 import {
   indexSeasonStats,
+  trimHitting,
+  trimPitching,
   listRosterRequest,
   listSeasonStatsRequest,
 } from "../worker/src/rosters.js";
@@ -25,7 +27,10 @@ const { season, answers } = FIXTURE;
 useTimeZone(EASTERN);
 /** @param {"hitting" | "pitching"} group @param {object} [options] */
 const index = (group, options) =>
-  indexSeasonStats(answers[listSeasonStatsRequest(season, group, options)]);
+  indexSeasonStats(
+    answers[listSeasonStatsRequest(season, group, options)],
+    group === "hitting" ? trimHitting : trimPitching,
+  );
 const NUMBERS = {
   hitting: index("hitting"),
   pitching: index("pitching"),
@@ -75,7 +80,17 @@ function describeRostered(mlbTeamId, club, name) {
   );
   const id = entry.person.id;
   const lastGames = describeLastGames(FIXTURE.gameLogs[id]);
-  return describePlayer({ ...NUMBERS, entry, club, season, person: PEOPLE.get(id), lastGames });
+  return describePlayer({
+    onFactsFailure: (error) => {
+      throw error;
+    },
+    ...NUMBERS,
+    entry,
+    club,
+    season,
+    person: PEOPLE.get(id),
+    lastGames,
+  });
 }
 
 /**
@@ -304,6 +319,9 @@ function describeTreinen(out = TREINEN_OUT) {
     (/** @type {any} */ each) => each.person.fullName === "Blake Treinen",
   );
   return describePlayer({
+    onFactsFailure: (error) => {
+      throw error;
+    },
     ...NUMBERS,
     entry,
     club: "LAD",

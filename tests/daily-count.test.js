@@ -1,3 +1,4 @@
+import { createDeferred } from "./deferred.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { isCountOwed, startDailyCount } from "../shared/page/daily-count.js";
@@ -124,8 +125,7 @@ test("a browser sends one empty POST a day, and keeps the day only once the Work
 
 test("a browser whose storage refuses sends one count while one is out, and one a load", async (context) => {
   let sentCount = 0;
-  /** @type {(response: Response) => void} */
-  let answer = () => {};
+  const { promise: held, resolve: answer } = createDeferred();
   context.mock.timers.enable({ apis: ["Date"], now: EASTERN_MIDNIGHT + DAY_MS });
   const refuse = () => {
     throw new Error("storage refused");
@@ -136,7 +136,7 @@ test("a browser whose storage refuses sends one count while one is out, and one 
     navigator: { webdriver: false },
     fetch: () => {
       sentCount += 1;
-      return new Promise((resolve) => (answer = resolve));
+      return held;
     },
   };
   replaceGlobals(context, globals);

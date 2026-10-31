@@ -5,6 +5,8 @@ import { describeError } from "./responses.js";
 // its own, so Diagnostics reads each job's the same way: when the run started, how long it took,
 // how many requests it made, and the last run that failed, kept until another fails.
 
+class ReportedJobError extends Error {}
+
 /** @typedef {import("../page/job-status.js").JobRunStatus} JobRunStatus */
 
 /**
@@ -31,10 +33,32 @@ function countRequests(fetchImpl) {
  * @param {unknown} error
  */
 export function noteFailure(failures, what, error) {
-  if (error instanceof RequestBudgetExhausted) return;
+  if (error instanceof RequestBudgetExhausted || error instanceof ReportedJobError) return;
   const failure = `${what} failed: ${describeError(error)}`;
   console.error(failure);
   failures.push(failure);
+}
+
+/**
+ * @param {Pick<RunContext, "failures">} context
+ * @param {ReturnType<typeof import("./feed-keeper.js").createFeedKeeper>} keeper
+ * @param {{ name: string, key: string, label: string, load: () => Promise<any>, isBehind?: (answer: any) => boolean, validate?: (answer: any) => unknown }} feed
+ */
+export async function readJobFeed({ failures }, keeper, { name, key, label, load, ...options }) {
+  let reported = false;
+  try {
+    return await keeper.readFeed(name, key, load, {
+      ...options,
+      onFailure: (reason) => {
+        reported = true;
+        noteFailure(failures, `Reading ${label}`, new Error(reason));
+      },
+    });
+  } catch (error) {
+    if (error instanceof RequestBudgetExhausted) throw error;
+    if (!reported) noteFailure(failures, `Reading ${label}`, error);
+    throw new ReportedJobError(describeError(error), { cause: error });
+  }
 }
 
 /**

@@ -6,7 +6,11 @@ import {
   createVersionForgetter,
   listPastSeasons,
   nameVersionedKey,
+  tryPastSeason,
 } from "../shared/worker/background-job.js";
+
+import { createJobStorage } from "./job-context.js";
+import { RequestBudgetExhausted } from "../shared/worker/request-budget.js";
 
 const MINUTE_MS = 60 * 1000;
 
@@ -115,4 +119,49 @@ test("a version forgetter deletes each earlier version's key once while the stor
   await forgetEarlierVersions(storage, nameKey, 3);
 
   assert.deepEqual(deleted, ["game-logs:2026", "game-logs:2026:v2"]);
+});
+
+test("past-season attempts share persisted retry timing, incomplete fills, failure and recovery", async () => {
+  const storage = createJobStorage();
+  const context = { storage, now: () => time };
+  let time = 0;
+  let attempts = 0;
+  const fill = async () => {
+    attempts += 1;
+    return false;
+  };
+  assert.equal(await tryPastSeason(context, 2025, fill), true);
+  const retryAt = storage.stored.get("past-retry:2025");
+  assert.ok(retryAt > time);
+  time = retryAt - 1;
+  assert.equal(await tryPastSeason(context, 2025, fill), false);
+  assert.equal(attempts, 1);
+  assert.equal(await tryPastSeason(context, 2024, async () => true), true);
+  time = retryAt;
+  await assert.rejects(
+    tryPastSeason(context, 2025, async () => {
+      throw new Error("unavailable");
+    }),
+    /unavailable/,
+  );
+  assert.ok(storage.stored.get("past-retry:2025") > time);
+  time = storage.stored.get("past-retry:2025");
+  assert.equal(await tryPastSeason(context, 2025, async () => true), true);
+  assert.equal(storage.stored.has("past-retry:2025"), false);
+});
+
+test("explicit budget stops resume immediately while a failed fill with no budget backs off", async () => {
+  const storage = createJobStorage();
+  const context = { storage, now: () => 0, remainingRequests: () => 0 };
+  assert.equal(await tryPastSeason(context, 2025, async () => false), true);
+  assert.ok((await storage.get("past-retry:2025")) > 0);
+  await storage.delete("past-retry:2025");
+  await assert.rejects(
+    tryPastSeason(context, 2025, async () => {
+      throw new RequestBudgetExhausted("No requests left");
+    }),
+    RequestBudgetExhausted,
+  );
+  assert.equal(await storage.get("past-retry:2025"), undefined);
+  assert.equal(await tryPastSeason(context, 2025, async () => true), true);
 });

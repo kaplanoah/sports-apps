@@ -249,10 +249,10 @@ Pages link these before their own stylesheet, and theme them with the tokens the
 - `health.js`: the Worker's health, for an uptime monitor, what each service it binds answers, and which league feeds are failing
 - `services.js`: the services an app may bind, and each one's binding name
 - `season-store.js`: the store's Durable Object, which each app's store hands its league
-- `background-job.js`: what a league's background jobs share
-- `job-status.js`: what each job's status says of its last run
+- `background-job.js`: per-store jobs, saved documents, and past-season retry attempts
+- `job-status.js`: run status and named feed-failure reporting
 - `upstream.js`: reading a league's feeds and reusing a recent load
-- `feed-keeper.js`: reading slower feeds again only when they may have changed
+- `feed-keeper.js`: slower feed retention, validation, and retry timing
 - `feed-failures.js`: each update's failures and read deadlines, and which feeds have been failing, since when, and why
 - `timeout.js`: giving up on a call that doesn't answer in time
 - `highlights-job.js`: keeping each final's highlights
@@ -263,7 +263,7 @@ Pages link these before their own stylesheet, and theme them with the tokens the
 - `identity-matching.js`: confident game and player matches with explicit doubleheader evidence
 - `identity-diagnostics.js`: bounded aggregate diagnosis from retained identity evidence without writes or vendor reads
 - `identity-documents.js`: additive facts and identity coverage for stored sports documents, with resumable backfill
-- `sports-schema.js`: app-owned sports schemas and Worker-only validation with Zod configured without runtime compilation
+- `sports-schema.js`: shared sports contracts and detail records, validated only in Workers with Zod configured without runtime compilation
 - `store-reads.js`: reading the documents a store-owned detail service keeps for a sheet
 - `detail-reads.js`: sharing store-owned detail reads and retaining usable answers across restarts
 - `request-budget.js`: bounding historical requests after live work and reminders
