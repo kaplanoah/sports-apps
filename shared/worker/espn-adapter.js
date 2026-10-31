@@ -1,6 +1,8 @@
 // Shared ESPN sports-data adapter; league mappings and basketball rules are supplied by callers.
+import { readNameLetters } from "./player-name.js";
 import {
   ReportedPlayers,
+  VendorGameIdentities,
   GameLead,
   Highlights,
   BasketballBoxScore,
@@ -49,16 +51,6 @@ export const fetchInjuryReport = (
     headers,
     cacheSeconds,
   });
-
-/**
- * A name's letters alone, in lowercase, to match one player across two spellings of his name.
- * @param {string} name
- */
-export const readNameLetters = (name) =>
-  name
-    .normalize("NFD")
-    .replace(/[^a-z]/gi, "")
-    .toLowerCase();
 
 // A word in capitals, like ACL, or a name keeps its capitals; any other drops its first.
 /** @param {string} word */
@@ -151,7 +143,10 @@ function readEspnEvent(event, readCompetitorDetails, findTeam) {
   const sides = Object.fromEntries(
     (competition.competitors ?? []).map((competitor) => [
       competitor.homeAway,
-      { team: findTeam(competitor.id), ...readCompetitorDetails(competitor) },
+      {
+        team: findTeam(competitor.id ?? competitor.team?.id),
+        ...readCompetitorDetails(competitor),
+      },
     ]),
   );
   return { competition, start: competition.date ?? event.date, home: sides.home, away: sides.away };
@@ -181,6 +176,34 @@ export const readBackupGames = (backup, findTeam) =>
   (backup?.answers ?? [])
     .flatMap((answer) => answer.events ?? [])
     .map((event) => readBackupGame(event, findTeam));
+
+const readGameNumberFacts = (gameNumber) =>
+  Number.isInteger(gameNumber) && gameNumber > 0 ? { gameNumber } : {};
+
+/** @param {any[]} answers @param {(id: string) => string | null} findTeam */
+export function readIdentityGames(answers, findTeam) {
+  const records = [];
+  let rejected = 0;
+  for (const event of answers.flatMap((answer) => answer?.events ?? [])) {
+    try {
+      const { competition, start, home, away } = readEspnEvent(event, () => ({}), findTeam);
+      records.push(
+        ...validateSportsData(VendorGameIdentities, [
+          {
+            id: event.id == null ? "" : String(event.id),
+            start,
+            home: home?.team ?? null,
+            away: away?.team ?? null,
+            ...readGameNumberFacts(competition.gameNumber),
+          },
+        ]),
+      );
+    } catch {
+      rejected += 1;
+    }
+  }
+  return { records, rejected };
+}
 
 const isNational = (broadcast) => broadcast.market === "national";
 const isLocal = (broadcast) => !isNational(broadcast);
@@ -212,6 +235,7 @@ export function trimNetworkAnswer(answer) {
       date: event.date,
       competitions: (event.competitions ?? []).slice(0, 1).map((competition) => ({
         date: competition.date,
+        ...readGameNumberFacts(competition.gameNumber),
         timeValid: competition.timeValid,
         competitors: (competition.competitors ?? []).map(({ id, homeAway }) => ({ id, homeAway })),
         broadcasts: (competition.broadcasts ?? []).map(({ market, names }) => ({ market, names })),
@@ -454,6 +478,17 @@ function describeEspnPlayer({ athlete, stats }, keys, named) {
   const [firstName, ...lastNames] = athlete.displayName.split(" ");
   return {
     id: listed ? Number(listed.id) : null,
+    ...(athlete.id != null && {
+      espnIdentity: {
+        id: String(athlete.id),
+        facts: {
+          firstName,
+          lastName: lastNames.join(" "),
+          number: athlete.jersey ?? null,
+          birthdate: athlete.dateOfBirth?.slice(0, 10) ?? null,
+        },
+      },
+    }),
     firstName: listed?.firstName ?? firstName,
     lastName: listed?.lastName ?? lastNames.join(" "),
     minutes: read("minutes"),

@@ -1,3 +1,5 @@
+import { nameStoredFeedKey } from "./feed-keeper.js";
+import { createIdentityDocuments } from "./identity-documents.js";
 import {
   createRequestBudget,
   RequestBudgetExhausted,
@@ -57,7 +59,7 @@ import { describeError, respondError, respondJson, respondMethodNotAllowed } fro
 
 /**
  * The snapshot fields the store itself reads. Other fields belong to the league's callbacks.
- * @typedef {{ season: number, failures?: Record<string, string>, nextReadAt?: number }} SeasonSnapshot
+ * @typedef {{ season: number, identityRecords?: { records: any[], rejected: number }, failures?: Record<string, string>, nextReadAt?: number }} SeasonSnapshot
  */
 
 /**
@@ -101,6 +103,7 @@ import { describeError, respondError, respondJson, respondMethodNotAllowed } fro
  *   reads a game's details, or answers null while it needs none
  * @property {(context: DetailContext) => (url: URL) => Promise<Response | null>} [createReadDetail]
  * @property {Record<string, BackgroundJob>} [backgroundJobs]
+ * @property {import("./identity-documents.js").IdentityPolicy} [identity]
  * @property {string | null} [release] the commit the Worker was built from, or null outside a
  *   build
  */
@@ -192,10 +195,20 @@ function isWatching(socket, path) {
 }
 
 // What a league's reads keep between updates, under keys the store's paths can't name.
-const createFeedStorage = (storage) => ({
-  get: (key) => storage.get(`feed:${key}`),
-  put: (key, value) => storage.put(`feed:${key}`, value),
-  delete: (key) => storage.delete(`feed:${key}`),
+/**
+ * @param {any} storage
+ * @param {{ forgetIdentity: (key: string) => Promise<unknown>, noteIdentityAnswer: (key: string, value: any) => Promise<unknown> }} identity
+ */
+const createFeedStorage = (storage, { forgetIdentity, noteIdentityAnswer }) => ({
+  get: (key) => storage.get(nameStoredFeedKey(key)),
+  put: async (key, value) => {
+    await storage.put(nameStoredFeedKey(key), value);
+    await noteIdentityAnswer(nameStoredFeedKey(key), value);
+  },
+  delete: async (key) => {
+    await storage.delete(nameStoredFeedKey(key));
+    await forgetIdentity(nameStoredFeedKey(key));
+  },
 });
 
 function openWatchSocket(ctx) {
@@ -240,13 +253,23 @@ export function createSeasonStore(league) {
         now = () => Date.now(),
         fetchImpl = (input, init) => fetch(input, init),
         createLoadSnapshot = (/** @type {typeof fetch} */ fetchWith) =>
-          league.createLoadSnapshot(createFeedStorage(ctx.storage), fetchWith, (key) =>
-            ctx.storage.get(key),
+          league.createLoadSnapshot(
+            createFeedStorage(ctx.storage, {
+              forgetIdentity: async (key) =>
+                await this.identities?.forgetSource(key).catch(() => {}),
+              noteIdentityAnswer: async (key, value) =>
+                await this.identities?.noteFeedAnswer(key, value),
+            }),
+            fetchWith,
+            (key) => ctx.storage.get(key),
           ),
         loadDetails = undefined,
       } = {},
     ) {
       this.ctx = ctx;
+      this.identities = league.identity
+        ? createIdentityDocuments(ctx.storage, league.identity, now)
+        : null;
       this.env = env;
       this.requestCount = 0;
       this.fetchImpl = (input, init) => {
@@ -375,12 +398,23 @@ export function createSeasonStore(league) {
     }
 
     async readDoc(key) {
-      const data = await this.ctx.storage.get(key);
+      const data =
+        key === "health/status"
+          ? {
+              feeds: (await this.ctx.storage.get(FEEDS_KEY))?.failing ?? {},
+              ...(this.identities && { identity: await this.identities.readStatus() }),
+            }
+          : await this.ctx.storage.get(key);
       return respondJson({ data: data ?? null });
     }
 
     async putDoc(key, doc) {
-      const data = sortKeys(doc);
+      const previous = await this.ctx.storage.get(key);
+      const prepared = this.identities
+        ? await this.identities.prepareDocument(key, doc, previous)
+        : doc;
+      const data = sortKeys(prepared);
+      if (isSameJson(previous, data)) return;
       await this.ctx.storage.put(key, data);
       this.announceChange(key, data);
     }
@@ -407,6 +441,7 @@ export function createSeasonStore(league) {
 
     async deleteDoc(key) {
       await this.ctx.storage.delete(key);
+      await this.identities?.forgetSource(key).catch(() => {});
       this.announceChange(key, null);
     }
 
@@ -416,9 +451,15 @@ export function createSeasonStore(league) {
     async startUpdating() {
       if (this.hasAlarm) return;
       const alarmAt = await this.ctx.storage.getAlarm();
+      await this.prepareIdentityBackfill();
       if (alarmAt === null || (alarmAt > this.now() && (await this.isBehindDeploy())))
         await this.ctx.storage.setAlarm(this.now());
       this.hasAlarm = true;
+    }
+
+    async prepareIdentityBackfill() {
+      if (this.identities && isFromEarlierRelease(await this.ctx.storage.get(SCHEDULE_KEY)))
+        await this.identities.restartBackfill();
     }
 
     async isBehindDeploy() {
@@ -442,6 +483,7 @@ export function createSeasonStore(league) {
       const requestsBefore = this.requestCount;
       let nextAt = now + RETRY_MS[0];
       try {
+        await this.prepareIdentityBackfill();
         const seasonDueAt = await this.updateSeasonWhenDue(now);
         await this.reminders.checkDue();
         const jobDueTimes = await this.startDueJobs(now);
@@ -545,17 +587,21 @@ export function createSeasonStore(league) {
             limit,
             () => generation === this.alarmGeneration,
           );
-          for (const [name, job] of Object.entries(league.backgroundJobs ?? {})) {
-            if (!job.updateHistory || !budget.remaining()) continue;
-            await job.updateHistory({
-              docs: this.docs,
-              storage: this.createJobStorage(name),
-              createLoadSnapshot: this.createLoadSnapshot,
-              env: this.env,
-              fetchImpl: budget.fetchImpl,
-              remainingRequests: budget.remaining,
-              now: this.now,
-            });
+          try {
+            for (const [name, job] of Object.entries(league.backgroundJobs ?? {})) {
+              if (!job.updateHistory || !budget.remaining()) continue;
+              await job.updateHistory({
+                docs: this.docs,
+                storage: this.createJobStorage(name),
+                createLoadSnapshot: this.createLoadSnapshot,
+                env: this.env,
+                fetchImpl: budget.fetchImpl,
+                remainingRequests: budget.remaining,
+                now: this.now,
+              });
+            }
+          } finally {
+            await this.identities?.backfill(this.docs, () => generation === this.alarmGeneration);
           }
         })
         .catch((error) => {
@@ -622,8 +668,18 @@ export function createSeasonStore(league) {
       const { storage } = this.ctx;
       return {
         get: (key) => storage.get(prefix + key),
-        put: (key, value) => storage.put(prefix + key, value),
-        delete: (key) => storage.delete(prefix + key),
+        put: async (key, value) => {
+          const prepared =
+            name === "details" && key.startsWith("detail-answer:") && this.identities
+              ? await this.identities.prepareDetailAnswer(prefix + key, value)
+              : value;
+          await storage.put(prefix + key, prepared);
+        },
+        delete: async (key) => {
+          const removed = await storage.delete(prefix + key);
+          await this.identities?.forgetSource(prefix + key).catch(() => {});
+          return removed;
+        },
         list: async (keyPrefix) =>
           new Map(
             [...(await storage.list({ prefix: prefix + keyPrefix }))].map(([key, value]) => [
@@ -677,6 +733,11 @@ export function createSeasonStore(league) {
       try {
         before = await league.readUpdates(this.docs, snapshot.season);
         await league.saveSnapshot(this.docs, snapshot);
+        await this.identities?.saveVendorGames(
+          snapshot.identityRecords?.records ?? [],
+          snapshot.identityRecords?.rejected ?? 0,
+          this.docs,
+        );
         await this.saveCurrentSeason(snapshot.season);
       } catch (error) {
         await this.reminders.saveGames(null);
@@ -807,12 +868,12 @@ export async function forwardToStore(request, env, storePath) {
 }
 
 /**
- * Which of the league's feeds are failing, since when and why, for the Worker's health, which
- * learns from this read too whether the store answers. Throws when it doesn't.
+ * The store's failing feeds and identity coverage, for the Worker's single reused health read.
+ * Throws when the store does not answer.
  * @param {any} env the Worker's bindings
- * @returns {Promise<Record<string, import("./feed-failures.js").FeedFailure>>}
+ * @returns {Promise<{ feeds: Record<string, import("./feed-failures.js").FeedFailure>, identity?: any }>}
  */
-export const readFeedFailures = async (env) => (await readStoreDoc(env, FEEDS_KEY))?.failing ?? {};
+export const readStoreHealth = async (env) => await readStoreDoc(env, "health/status");
 
 /**
  * A document the store keeps, as null when it has none, for the Worker's own reads.

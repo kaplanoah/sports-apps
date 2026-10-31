@@ -69,21 +69,21 @@ const askService = (binding) =>
   }));
 
 /**
- * @typedef {{ answered: true, feeds: Record<string, import("./feed-failures.js").FeedFailure> } | { answered: false }} StoreHealth
+ * @typedef {{ answered: true, feeds: Record<string, import("./feed-failures.js").FeedFailure>, identity?: any } | { answered: false }} StoreHealth
  */
 
 /**
  * @param {object} options
- * @param {(env: any) => Promise<Record<string, import("./feed-failures.js").FeedFailure>>} options.readFeedFailures
- *   which of the league's feeds the store says are failing, throwing when the store doesn't answer
+ * @param {(env: any) => Promise<{ feeds: Record<string, import("./feed-failures.js").FeedFailure>, identity?: any }>} options.readStoreHealth
+ *   the failing feeds and identity status, throwing when the store does not answer
  * @param {string | null} options.release the commit the Worker was built from
  * @param {() => number} [options.now]
  */
-export function createHealthServer({ readFeedFailures, release, now = Date.now }) {
+export function createHealthServer({ readStoreHealth, release, now = Date.now }) {
   /** @returns {Promise<StoreHealth>} */
   const askStore = (env) =>
-    askInTime(() => readFeedFailures(env)).then(
-      (feeds) => ({ answered: true, feeds }),
+    askInTime(() => readStoreHealth(env)).then(
+      (health) => ({ answered: true, ...health }),
       () => ({ answered: false }),
     );
   const checkStore = createReusedLoader(askStore, HEALTH_REUSE_MS, now);
@@ -108,6 +108,7 @@ export function createHealthServer({ readFeedFailures, release, now = Date.now }
       ok: store.answered,
       release,
       store: store.answered ? "ok" : "no answer",
+      ...(store.answered && store.identity && { identity: store.identity }),
       ...(store.answered && { feeds: listLongFailures(store.feeds, now()) }),
       ...(Object.keys(serviceHealths).length && { services: serviceHealths }),
     };

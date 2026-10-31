@@ -6,11 +6,13 @@ export const BEST_OF = { WC: 3, DS: 5, CS: 7, WS: 7 };
 export const countWinsNeeded = (round) => Math.ceil(BEST_OF[round] / 2);
 
 /** @param {string} seriesId */
-export const readSeriesRound = (seriesId) =>
-  seriesId === "WS" ? "WS" : seriesId.split("_")[1].replace(/\d$/, "");
+export function readSeriesFacts(seriesId) {
+  const match = /^(?:(AL|NL)_)?(WC|DS|CS|WS)\d?$/.exec(seriesId);
+  return match ? { league: match[1] ?? null, round: match[2] } : {};
+}
 
 /** @param {string} seriesId */
-export const countSeriesWinsNeeded = (seriesId) => countWinsNeeded(readSeriesRound(seriesId));
+export const countSeriesWinsNeeded = (seriesId) => countWinsNeeded(readSeriesFacts(seriesId).round);
 
 // The bracket is fixed, not reseeded: 1 draws the 4/5 winner, 2 the 3/6.
 const LEAGUE_SERIES = [

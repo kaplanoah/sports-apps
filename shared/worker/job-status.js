@@ -7,19 +7,7 @@ import { describeError } from "./responses.js";
 
 class ReportedJobError extends Error {}
 
-/**
- * @typedef {object} JobFailure
- * @property {string} at when the run that failed started
- * @property {string} message
- */
-
-/**
- * @typedef {object} JobRunStatus
- * @property {string} ranAt
- * @property {number} durationMs
- * @property {number} requests
- * @property {JobFailure | null} lastFailure
- */
+/** @typedef {import("../page/job-status.js").JobRunStatus} JobRunStatus */
 
 /**
  * A fetch that counts the requests made through it.

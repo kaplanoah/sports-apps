@@ -390,3 +390,14 @@ test("lineup averages use the same supported no-value rates as roster and pitche
     );
   }
 });
+
+test("box scores request the feed's game and season and retain its explicit season", () => {
+  const feed = structuredClone(GAMES.feeds[DODGERS_AT_BRAVES]);
+  feed.gameData.game = { season: "2026" };
+  assert.equal(describeBoxScore(DODGERS_AT_BRAVES, feed).season, 2026);
+  const fields = new URL(nameFeedRequest(DODGERS_AT_BRAVES), "https://example.test").searchParams
+    .get("fields")
+    .split(",");
+  assert.ok(fields.includes("game"));
+  assert.ok(fields.includes("season"));
+});

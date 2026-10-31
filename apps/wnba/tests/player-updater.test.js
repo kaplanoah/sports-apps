@@ -28,6 +28,8 @@ import {
 import { nameFeedKey, createFeedKeeper } from "../../../shared/worker/feed-keeper.js";
 import { createDocs, createJobStorage } from "../../../tests/job-context.js";
 import { findTeamLeaders } from "../page/js/team-view.js";
+import { SeasonStore } from "../worker/src/store.js";
+import { createDurableObjectContext } from "../../../tests/durable-object-context.js";
 
 // Every player's totals and every team's games as the league answered the morning after the
 // Liberty's last game, with the game logs of a few players standing in for every player's, beside
@@ -789,11 +791,19 @@ test("actual live player writes and historical refills reject malformed feeds an
   for (const historical of [false, true]) {
     const season = historical ? 2025 : 2026;
     const answers = listAnswers();
-    const docs = createDocs({
+    const context = createDurableObjectContext();
+    const store = new SeasonStore(context.ctx, {});
+    const docs = { ...store.docs, stored: context.stored };
+    const seeds = {
       "live/current": { season: 2026 },
       "seasons/2026": { year: 2026, games: [], series: [] },
       "seasons/2025": { year: 2025, games: [], series: [] },
-    });
+    };
+    for (const [key, value] of Object.entries(seeds)) await docs.write(key, value);
+    const publications = [];
+    store.announceChange = (key) => {
+      if (keys.includes(key)) publications.push(key);
+    };
     const storage = createJobStorage();
     const league = createLeagueFetch(answers);
     const totals = answers[nameTotalsRequest(season)].resultSets[0];
@@ -808,6 +818,7 @@ test("actual live player writes and historical refills reject malformed feeds an
       nameRanksKey(season),
       nameNumbersKey(season, String(totals.rowSet[0][totals.headers.indexOf("PLAYER_ID")])),
       nameRosterKey(season, "NYL"),
+      nameNumbersKey(season, historical ? IONESCU : STEWART),
     ];
     const update = async () => {
       if (historical) {
@@ -841,6 +852,17 @@ test("actual live player writes and historical refills reject malformed feeds an
     await update();
     const valid = keys.map((key) => structuredClone(docs.stored.get(key)));
     assert.ok(valid.every(Boolean));
+    const playerId = keys[1].split("-").at(-1);
+    const identity = await store.identities.lookup.readEntry("player", playerId);
+    assert.equal(identity.facts.season, season);
+    assert.ok(valid[3].lastGame);
+    assert.equal(valid[3].lastGame.season, season);
+    const gameId = valid[3].lastGame.gameId;
+    const gameIdentity = await store.identities.lookup.readEntry("game", gameId);
+    assert.equal(gameIdentity.facts.season, season);
+    publications.length = 0;
+    await update();
+    assert.deepEqual(publications, []);
     const cacheKey = await nameFeedKey(
       "totals",
       `${nameTotalsRequest(season)} ${TOTALS_FEED_COLUMNS.join(" ")}`,
@@ -853,6 +875,9 @@ test("actual live player writes and historical refills reject malformed feeds an
       keys.map((key) => docs.stored.get(key)),
       valid,
     );
+    assert.deepEqual(await store.identities.lookup.readEntry("player", playerId), identity);
+    assert.deepEqual(await store.identities.lookup.readEntry("game", gameId), gameIdentity);
+    assert.deepEqual(publications, []);
     if (!historical) assert.deepEqual(storage.stored.get(cacheKey).answer.data, cached);
     totals.rowSet[0][pointsColumn] = originalPoints + 1;
     roster.rowSet[0][idColumn] = originalId;

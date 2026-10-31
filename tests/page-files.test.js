@@ -437,7 +437,7 @@ for (const app of listApps()) {
       name: app,
       pageFiles: files,
       forwardToStore: () => new Response(),
-      readFeedFailures: async () => ({}),
+      readStoreHealth: async () => ({ feeds: {} }),
     });
     for (const path of ["index.html", "gate.html"]) {
       const page = files[path].text;

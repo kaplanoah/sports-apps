@@ -21,7 +21,7 @@ function serveBundledFiles(pageFiles) {
     name: "mlb",
     pageFiles,
     forwardToStore: answerNothing,
-    readFeedFailures: refuseStore,
+    readStoreHealth: refuseStore,
   });
   return async (url) =>
     worker.fetch(new Request(new URL(`/${APP_KEY}${url.pathname}${url.search}`, url)), {

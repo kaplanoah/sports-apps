@@ -132,6 +132,8 @@ test("2025: the log has every game, oldest first, a clinch closing each series",
     log.every((entry, index) => !index || Date.parse(log[index - 1].at) <= Date.parse(entry.at)),
   );
   assert.deepEqual(log[0], {
+    round: "WC",
+    league: "AL",
     at: "2025-09-30T19:42:00Z",
     kind: "game",
     series: "AL_WC1",
@@ -147,6 +149,8 @@ test("2025: the log has every game, oldest first, a clinch closing each series",
     {
       at: undefined,
       kind: "clinch",
+      round: "WS",
+      league: null,
       series: "WS",
       team: "LAD",
       over: "TOR",
@@ -169,6 +173,8 @@ test("a bracket just set: twelve real clubs, division series opponents still pla
   assert.equal(snapshot.teams.DET.seed, 6);
   assert.deepEqual(snapshot.log, []);
   assert.deepEqual(snapshot.series.AL_WC1, {
+    round: "WC",
+    league: "AL",
     winsA: 0,
     winsB: 0,
     next: { at: "2025-09-30T17:08:00Z", date: "2025-09-30", tbd: false, game: 1 },
@@ -435,6 +441,7 @@ test("September: the day's games, in the shape the stamp reads, each with MLB's 
   const [first] = slate.today.games;
   assert.deepEqual(first, {
     id: "823326",
+    season: 2026,
     away: "STL",
     home: "PIT",
     state: "final",
@@ -995,7 +1002,7 @@ test("fetchSnapshot fails when the postseason or the schedule doesn't answer", a
 });
 
 test("a snapshot is small enough to poll", () => {
-  assert.ok(JSON.stringify(buildSnapshot(EVENING)).length < 20000);
+  assert.ok(JSON.stringify(buildSnapshot(EVENING)).length < 22000);
 });
 
 test("a set bracket still builds when a club is missing from the standings", () => {
@@ -1202,6 +1209,7 @@ test("a live All-Star Game is followed as closely as any live game", () => {
   const now = Date.parse("2026-07-15T01:00:00Z");
   const allStar = {
     id: "823443",
+    season: 2026,
     away: "AL",
     home: "NL",
     state: "live",
@@ -1413,6 +1421,7 @@ test("the season's whole schedule lists every game by month, from Opening Day to
   assert.deepEqual(games[0], {
     date: "2026-03-25",
     id: "823244",
+    season: 2026,
     away: "NYY",
     home: "SF",
     state: "final",
@@ -1430,6 +1439,7 @@ test("the season's whole schedule lists every game by month, from Opening Day to
       {
         date: "2026-07-14",
         id: "823443",
+        season: 2026,
         away: "AL",
         home: "NL",
         state: "final",
@@ -1453,6 +1463,7 @@ test("a postponed game is listed on the day it was to be played and on the day i
       {
         date: "2026-06-25",
         id: "823042",
+        season: 2026,
         away: "ARI",
         home: "STL",
         state: "off",
@@ -1462,6 +1473,7 @@ test("a postponed game is listed on the day it was to be played and on the day i
       {
         date: "2026-07-23",
         id: "823042",
+        season: 2026,
         away: "ARI",
         home: "STL",
         state: "final",
@@ -1617,6 +1629,9 @@ test("a postseason final names its series and its game in it, and shows its star
     {
       date: "2026-09-29",
       id: "849845",
+      season: 2026,
+      round: "WC",
+      league: "NL",
       away: "PHI",
       home: "ATL",
       state: "final",

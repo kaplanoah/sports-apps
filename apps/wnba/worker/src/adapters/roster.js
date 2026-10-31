@@ -5,10 +5,10 @@ import {
   BasketballRoster,
   validateSportsData,
 } from "../../../../../shared/worker/sports-schema.js";
+import { readNameLetters } from "../../../../../shared/worker/player-name.js";
 import { TEAMS } from "../../../page/js/teams.js";
 import { createReusedLoader } from "../../../../../shared/worker/upstream.js";
 import { fetchInjuries, listOutPlayers } from "../injuries.js";
-import { readNameLetters } from "../../../../../shared/worker/espn-adapter.js";
 import { splitName } from "../season-averages.js";
 import { fetchWnbaJson, hasTable, isCurrentSeason, readRequiredTable, readTable } from "../wnba.js";
 

@@ -124,6 +124,7 @@
     "tests/health.test.js",
     "tests/highlights-job.test.js",
     "tests/highlights-view.test.js",
+    "tests/identity.test.js",
     "tests/install-browsers.test.js",
     "tests/install-packages.test.js",
     "tests/job-status.test.js",

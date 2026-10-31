@@ -16,6 +16,8 @@ import { STILLS_PER_READ } from "../worker/src/headline-stills.js";
 import { buildSnapshot } from "../worker/src/adapters/mlb.js";
 import { assertErrorAnswer } from "../../../tests/error-answer.js";
 import { createDocs, createJobStorage } from "../../../tests/job-context.js";
+import { SeasonStore } from "../worker/src/store.js";
+import { createDurableObjectContext } from "../../../tests/durable-object-context.js";
 
 // MLB's content and plays for two Division Series games of Oct 7, as it had them the next day.
 const RECORDED = JSON.parse(
@@ -560,12 +562,20 @@ test("actual live and historical highlight writers preserve usable media after m
   for (const historical of [false, true]) {
     const game = { id: BREWERS_AT_PADRES, state: "final", start: "2026-10-07T20:00:00Z" };
     const season = historical ? 2025 : 2026;
-    const docs = createDocs({
+    const context = createDurableObjectContext();
+    const store = new SeasonStore(context.ctx, {});
+    const docs = { ...store.docs, stored: context.stored };
+    const seeds = {
       "live/current": { season: 2026 },
       [`seasons/${season}`]: { year: season, slate: { today: { games: [game] } } },
       [`schedule-revisions/${season}`]: { edition: SCHEDULE_EDITION, revision: 1, isWhole: true },
       [`schedules-${season}/10`]: { games: [game] },
-    });
+    };
+    for (const [key, value] of Object.entries(seeds)) await docs.write(key, value);
+    const publications = [];
+    store.announceChange = (key) => {
+      if (key.startsWith("highlights/") && !key.endsWith("status")) publications.push(key);
+    };
     let phase = "malformed";
     const requests = [];
     const fetchImpl = async (url) => {
@@ -608,11 +618,19 @@ test("actual live and historical highlight writers preserve usable media after m
     assert.equal(docs.stored.has(key), false);
     phase = "valid";
     await update();
+    await docs.write(key, { ...docs.stored.get(key), season });
     const valid = structuredClone(docs.stored.get(key));
+    const identity = await store.identities.lookup.readEntry("game", game.id);
+    assert.equal(identity.facts.season, season);
+    publications.length = 0;
+    await update();
+    assert.deepEqual(publications, []);
     assert.ok(valid.plays.length);
     phase = "malformed";
     await update();
     assert.deepEqual(docs.stored.get(key), valid);
+    assert.deepEqual(await store.identities.lookup.readEntry("game", game.id), identity);
+    assert.deepEqual(publications, []);
     phase = "recovery";
     await update();
     assert.notDeepEqual(docs.stored.get(key), valid);

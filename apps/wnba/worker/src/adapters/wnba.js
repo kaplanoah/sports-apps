@@ -1,5 +1,6 @@
 // WNBA's scoreboard, schedule, bracket, and standings adapted to app-owned records.
 // ESPN supplies channels and unset starts, and stands in for a failed scoreboard or games left live.
+import { readGameFacts } from "./game-facts.js";
 
 import {
   BasketballSnapshot,
@@ -29,7 +30,13 @@ import {
   mapSeriesById,
 } from "../../../page/js/nearest-games.js";
 import { REGULATION_PERIODS } from "../../../page/js/periods.js";
-import { SNAPSHOT_VERSION, countWinsNeeded, GAME_PREFIXES } from "../../../page/js/snapshot.js";
+import {
+  SNAPSHOT_VERSION,
+  countWinsNeeded,
+  GAME_PREFIXES,
+  ROUNDS,
+  nameSeries,
+} from "../../../page/js/snapshot.js";
 
 export { formatEspnDay } from "../../../../../shared/worker/espn-adapter.js";
 export const ESPN_SPORT = "basketball/wnba";
@@ -53,14 +60,16 @@ export const REQUESTS = {
 };
 
 // The playoff suffix locates a game's round, series from zero, and game within that series.
-const PLAYOFF_GAME_ID = new RegExp(`^${GAME_PREFIXES.playoffs}(\\d{2})00([1-3])(\\d)(\\d)$`);
+const PLAYOFF_GAME_ID = new RegExp(
+  `^${GAME_PREFIXES.playoffs}\\d{2}00([${Object.keys(ROUNDS).join("")}])(\\d)(\\d)$`,
+);
 
 /** @param {string} id */
 export function readPlayoffGameId(id) {
-  const [, season, round, series, game] = String(id).match(PLAYOFF_GAME_ID) ?? [];
+  const [, round, series, game] = String(id).match(PLAYOFF_GAME_ID) ?? [];
   if (!round) return null;
   return {
-    season: 2000 + Number(season),
+    season: readGameFacts(id).season,
     round: Number(round),
     series: Number(series),
     game: Number(game),
@@ -70,7 +79,7 @@ export function readPlayoffGameId(id) {
 // The games of a season the Games view lists: its regular season's, the Commissioner's Cup final,
 // which has a number of its own, the All-Star Game, and its playoffs'.
 const SEASON_GAME_ID = new RegExp(
-  `^(?:${[GAME_PREFIXES.regularSeason, GAME_PREFIXES.allStar, GAME_PREFIXES.playoffs, GAME_PREFIXES.cupFinal].join("|")})(\\d{2})\\d{5}$`,
+  `^(?:${[GAME_PREFIXES.regularSeason, GAME_PREFIXES.allStar, GAME_PREFIXES.playoffs, GAME_PREFIXES.cupFinal].join("|")})\\d{2}\\d{5}$`,
 );
 
 const ALL_STAR_GAME_ID = new RegExp(`^${GAME_PREFIXES.allStar}`);
@@ -88,17 +97,13 @@ function readAllStarTeams(game) {
 
 /** @param {string} id */
 function readGameSeason(id) {
-  const [, season] = String(id).match(SEASON_GAME_ID) ?? [];
-  return season ? 2000 + Number(season) : null;
+  return SEASON_GAME_ID.test(String(id)) ? (readGameFacts(id).season ?? null) : null;
 }
 
 // The Games view leaves out the preseason, but the season starts with its first game.
-const PRESEASON_GAME_ID = new RegExp(`^${GAME_PREFIXES.preseason}(\\d{2})\\d{5}$`);
-
 /** @param {string} id */
 export function readAnyGameSeason(id) {
-  const [, preseason] = String(id).match(PRESEASON_GAME_ID) ?? [];
-  return preseason ? 2000 + Number(preseason) : readGameSeason(id);
+  return readGameFacts(id).season ?? null;
 }
 
 /**
@@ -116,8 +121,6 @@ function readOpeningDay(schedule, season) {
     .filter(Number.isFinite);
   return starts.length ? readEasternDay(Math.min(...starts)).date : null;
 }
-
-const nameSeries = (round, series) => `${round}-${series}`;
 
 const GAME_STATES = { 1: "pre", 2: "live", 3: "final" };
 
@@ -166,6 +169,7 @@ function normalizeGame(game) {
   const state = readGameState(game.gameStatus);
   return {
     id: String(game.gameId),
+    ...readGameFacts(game.gameId),
     round: place?.round ?? null,
     series: place ? nameSeries(place.round, place.series) : null,
     number: place?.game ?? null,
@@ -266,6 +270,8 @@ function readScheduledGame(game) {
   const isFinal = game.state === "final";
   return {
     id: game.id,
+    season: game.season,
+    isCupFinal: game.isCupFinal,
     round: game.round,
     series: game.series,
     number: game.number,

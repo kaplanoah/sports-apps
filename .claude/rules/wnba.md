@@ -13,7 +13,7 @@ paths:
     - ESPN's scores and clocks while the league's scoreboard isn't answering, or for a game the league's schedule still holds as under way once its scoreboard no longer lists it, reading the schedule again every five minutes until it catches up
     - ESPN's scores and clocks once an hour even while the league's scoreboard answers, so a backup that stopped answering shows in the health's `feeds` before it's needed, and again five minutes after a read of them fails until one answers (`worker/src/backup-probe.js`)
   - The health's `feeds` counts the league's scoreboard as failing only while a score is due, so an idle scoreboard never reads as one.
-  - Detail routes forward to the store; its services fetch through adapters. ESPN game matches are persisted during ingestion in `espnMatches/<game-id>` and reused after restarts.
+  - Detail routes forward to the store; its services fetch through adapters. ESPN game matches come from the identity ledger, persist in `espnMatches/<game-id>`, and survive restarts. New links wait while the ledger fails; existing links remain usable.
   - The page saves nothing to the store.
   - Shared detail contracts cover rosters, player numbers, and rank records; see `worker.md` for validation policy.
   - The settings pick any season the store keeps, once it keeps more than one.
@@ -93,3 +93,5 @@ paths:
 - The Updates box (`page/js/updates.js`):
   - The page lists each playoff final in an Updates box only on phones and tablets, and only for the current season.
   - Each device keeps when its box counts from, its first look or last dismissal, and a final counts as new by when the Worker first found it.
+
+- `worker/src/identity-policy.js` supplies league facts to the shared identity facility described in worker.md.
