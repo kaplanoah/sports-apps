@@ -1,9 +1,9 @@
+import { readNameLetters } from "../../../../shared/worker/player-name.js";
 import { findClubByEspnId } from "../../page/js/teams.js";
 import {
   fetchInjuryReport,
   listReportedPlayers,
   nameInjuryReportRequest,
-  readNameLetters,
 } from "../../../../shared/worker/espn-adapter.js";
 
 // Why each player on the injured list is there, from ESPN's injury report for all of MLB

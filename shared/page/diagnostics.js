@@ -99,7 +99,7 @@ const SERVICE_WORKER_TITLE = "Service worker";
  * @typedef {{
  *   name: string,
  *   status:
- *     | Partial<import("../worker/job-status.js").JobRunStatus & { leagueReads: number }>
+ *     | Partial<import("./job-status.js").JobRunStatus & { leagueReads: number }>
  *     | null
  *     | undefined,
  * }} JobStatus

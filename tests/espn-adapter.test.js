@@ -11,7 +11,6 @@ import {
   fetchInjuryReport,
   listReportedPlayers,
   nameInjuryReportRequest,
-  readNameLetters,
 } from "../shared/worker/espn-adapter.js";
 
 const REPORT = {
@@ -80,15 +79,6 @@ test("a status the league doesn't show, a team it doesn't know, and an entry wit
     ["teoscarhernandez"],
   );
   assert.deepEqual(listReportedPlayers(null, { findTeam, isShown: () => true }), {});
-});
-
-test("a name's letters match it across accents and punctuation, and each league's report has its own address", () => {
-  assert.equal(readNameLetters("Teoscar Hernández"), readNameLetters("Teoscar Hernandez"));
-  assert.equal(readNameLetters("Ke'Bryan Hayes Jr."), "kebryanhayesjr");
-  assert.equal(
-    nameInjuryReportRequest("baseball/mlb"),
-    "https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/injuries",
-  );
 });
 
 test("a report ESPN answers with something other than JSON says what came back", async () => {
@@ -190,5 +180,12 @@ test("a recorded ESPN listing rejects malformed channels before it can enter a m
   assertInvalidOutput(
     () => readNetworkGame(event, findTeamCodeByEspnId),
     /Invalid sports data at networks/,
+  );
+});
+
+test("each league injury report has its own address", () => {
+  assert.equal(
+    nameInjuryReportRequest("baseball/mlb"),
+    "https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/injuries",
   );
 });

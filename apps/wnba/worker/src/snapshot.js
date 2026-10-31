@@ -1,12 +1,14 @@
+import { nameNetworkMonthKey } from "./network-storage.js";
+import { findTeamCodeByEspnId } from "../../page/js/teams.js";
 import * as WNBASnapshot from "./adapters/wnba.js";
 import { createFeedKeeper, createMemoryStorage } from "../../../../shared/worker/feed-keeper.js";
 import { createFeedReadStatus } from "../../../../shared/worker/feed-failures.js";
-import { trimNetworkAnswer } from "../../../../shared/worker/espn-adapter.js";
+import { readIdentityGames, trimNetworkAnswer } from "../../../../shared/worker/espn-adapter.js";
 import { describeError } from "../../../../shared/worker/responses.js";
 import { createReusedLoader } from "../../../../shared/worker/upstream.js";
 import { createBackupReader } from "./backup-probe.js";
 import { createGameEnds } from "./game-ends.js";
-import { createEspnGameReader, readEndTime, listEspnMatches } from "./adapters/lead.js";
+import { createEspnGameReader, readEndTime } from "./adapters/lead.js";
 import { listUpcomingMeetings } from "./adapters/preview.js";
 import { fetchEspnDay, fetchEspnJson, fetchWnbaJson, LIVE_CACHE_SECONDS } from "./wnba.js";
 
@@ -172,7 +174,7 @@ export function createSnapshotLoader({
 
   /** @param {string} month @param {boolean} [verify] */
   async function readNetworkMonth(month, verify = false) {
-    const key = `networks:${month}`;
+    const key = nameNetworkMonthKey(month);
     if (!networkMonths.has(month)) networkMonths.set(month, await storage.get(key));
     const kept = networkMonths.get(month);
     // A reminder needs current listings, but a finalized month cannot change.
@@ -300,12 +302,17 @@ export function createSnapshotLoader({
     const snapshot = WNBASnapshot.buildSnapshot(responses, { season, now: requestedAt });
     const coverageGap = describeCoverageGap(responses, snapshot);
     const ended = await addGameEnds(snapshot);
+    const networkIdentities = readIdentityGames(responses.networks ?? [], findTeamCodeByEspnId);
+    const backupIdentities = readIdentityGames(
+      responses.backup?.answers ?? [],
+      findTeamCodeByEspnId,
+    );
     return {
       ...ended,
-      espnMatches: listEspnMatches(ended, [
-        ...(responses.networks ?? []),
-        ...(responses.backup?.answers ?? []),
-      ]),
+      identityRecords: {
+        records: [...networkIdentities.records, ...backupIdentities.records],
+        rejected: backupIdentities.rejected,
+      },
       nextReadAt,
       failures: coverageGap ? { ...failures, backup: coverageGap } : failures,
       meetings: listUpcomingMeetings(responses.schedule, ended),

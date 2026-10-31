@@ -5,7 +5,7 @@ import { createAppWorker } from "../shared/worker/app-worker.js";
 import { ANDROID_AGENT, IPAD_AGENT, IPHONE_AGENT } from "./browser/devices.mjs";
 
 const answerNothing = () => new Response(null, { status: 500 });
-const storeAnswers = async () => ({});
+const storeAnswers = async () => ({ feeds: {} });
 const refuseStore = async () => {
   throw new Error("The store answered 500");
 };
@@ -22,7 +22,7 @@ const createPageWorker = (pageFiles) =>
     name: "mlb",
     pageFiles,
     forwardToStore: answerNothing,
-    readFeedFailures: storeAnswers,
+    readStoreHealth: storeAnswers,
   });
 
 /** @param {Record<string, { contentType: string, text?: string }>} pageFiles */
@@ -63,7 +63,7 @@ test("health answers without the key, saying whether the store answers and which
     name: "mlb",
     pageFiles,
     forwardToStore: answerNothing,
-    readFeedFailures: refuseStore,
+    readStoreHealth: refuseStore,
   }).fetch(new Request("https://worker.example/health"), env);
   assert.equal(unhealthy.status, 503);
   assert.deepEqual(await unhealthy.json(), { ok: false, release: "abc1234", store: "no answer" });
@@ -136,7 +136,7 @@ function createLockedWorker() {
     name: "mlb",
     pageFiles: PAGE_FILES,
     forwardToStore: answerOk,
-    readFeedFailures: storeAnswers,
+    readStoreHealth: storeAnswers,
     reads: { "/box-score": answerOk },
   });
 }
@@ -174,7 +174,7 @@ test("an app's own read gets the Worker's bindings, so it can read the store", a
     name: "mlb",
     pageFiles: PAGE_FILES,
     forwardToStore: answerNothing,
-    readFeedFailures: storeAnswers,
+    readStoreHealth: storeAnswers,
     reads: {
       "/roster": (url, env) => {
         handed.push([url.searchParams.get("team"), env.STORE]);
@@ -228,7 +228,7 @@ test("the page's address in its release's folder shows the gate too, until the c
       "version.json": { contentType: "application/json", text: JSON.stringify(RELEASE) },
     },
     forwardToStore: answerOk,
-    readFeedFailures: storeAnswers,
+    readStoreHealth: storeAnswers,
   });
   const request = () =>
     new Request("https://worker.example/key/release/abc1234/index.html", {
@@ -800,7 +800,7 @@ test("forwarded immutable responses receive headers while WebSocket upgrades ret
   const worker = createAppWorker({
     name: "mlb",
     pageFiles: {},
-    readFeedFailures: storeAnswers,
+    readStoreHealth: storeAnswers,
     forwardToStore: () => answer,
   });
   const request = new Request("https://worker.example/key/watch", {

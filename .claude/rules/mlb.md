@@ -102,3 +102,5 @@ paths:
   - It has a settings switch for each of its paid outlets.
 
 - Schedule publications keep a small `schedule-revisions/<year>` document. History completion is tied to that revision; an interrupted publication remains incomplete until repaired.
+
+- `worker/src/identity-policy.js` supplies league facts to the shared identity facility described in worker.md.

@@ -1,3 +1,5 @@
+import { SeasonStore } from "../worker/src/store.js";
+import { createDurableObjectContext } from "../../../tests/durable-object-context.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -14,12 +16,7 @@ import {
   nameSummaryRequest,
 } from "../worker/src/adapters/lead.js";
 import { describePreview } from "../worker/src/adapters/preview.js";
-import { createDocs } from "../../../tests/job-context.js";
-import {
-  saveSnapshot,
-  describeSnapshotStatus,
-  listFeedFailures,
-} from "../worker/src/season-updater.js";
+import { describeSnapshotStatus, listFeedFailures } from "../worker/src/season-updater.js";
 import { NETWORKS_MS, createSnapshotLoader, describeFailures } from "../worker/src/snapshot.js";
 import { trimNetworkAnswer } from "../../../shared/worker/espn-adapter.js";
 import { ESPN, readAfternoonEspn, SEP_30 } from "./espn-fixtures.js";
@@ -935,12 +932,15 @@ for (const failsFirst of [false, true]) {
       assert.equal(countMonthReads(), before + 2);
     }
     const eventIds = new Set(ESPN_SCOREBOARD.answers[request].events.map((event) => event.id));
-    const matches = updated.espnMatches.filter((match) => eventIds.has(match.eventId));
+    const { ctx } = createDurableObjectContext();
+    const store = new SeasonStore(ctx, {}, { now: () => now });
+    await store.saveSeason(updated);
+    const matches = (await store.docs.list("espnMatches")).filter((match) =>
+      eventIds.has(match.eventId),
+    );
     assert.ok(matches.length > 0);
-    const docs = createDocs();
-    await saveSnapshot(docs, updated);
     for (const match of matches)
-      assert.deepEqual(await docs.read(`espnMatches/${match.id}`), match);
+      assert.equal(await store.identities.lookup.read("game", "espn", match.eventId), match.id);
     const completedReads = countMonthReads();
     now += 24 * HOUR_MS;
     await restart().loadSnapshot(2026, { verify: true });
@@ -1368,7 +1368,9 @@ test("a malformed scoreboard is named before snapshot composition and leaves the
 test("the snapshot loader keeps retry deadlines and persists ESPN matches together", async () => {
   const league = createLeague({ espn: readAfternoonEspn(), refuse: { standings: "error" } });
   const storage = createMemoryStorage();
-  const docs = createDocs();
+  const { ctx } = createDurableObjectContext();
+  const store = new SeasonStore(ctx, {}, { now: () => NOW });
+  const docs = store.docs;
   const eventIds = new Set(
     Object.values(ESPN_SCOREBOARD.answers).flatMap((answer) =>
       answer.events.map((event) => String(event.id)),
@@ -1378,14 +1380,16 @@ test("the snapshot loader keeps retry deadlines and persists ESPN matches togeth
     const loader = createSnapshotLoader({ fetchImpl: league.fetchImpl, storage, now: () => NOW });
     const snapshot = await loader.loadSnapshot(2026);
     assert.equal(snapshot.nextReadAt, NOW + FAILED_FEED_WAIT_MS);
-    assert.ok(snapshot.espnMatches.length > 0);
-    await saveSnapshot(docs, snapshot);
-    for (const match of snapshot.espnMatches) {
+    assert.ok(snapshot.identityRecords.records.length > 0);
+    await store.saveSeason(snapshot);
+    const matches = await docs.list("espnMatches");
+    assert.ok(matches.length > 0);
+    for (const match of matches) {
       assert.ok(eventIds.has(match.eventId));
-      assert.deepEqual(await docs.read(`espnMatches/${match.id}`), match);
+      assert.equal(await store.identities.lookup.read("game", "espn", match.eventId), match.id);
       assert.ok(snapshot.games.concat(snapshot.nearestGames).some((game) => game.id === match.id));
     }
-    const [match] = snapshot.espnMatches;
+    const [match] = matches;
     const reads = [];
     const reader = createEspnGameReader({
       fetchImpl: async (url) => {
@@ -1398,4 +1402,68 @@ test("the snapshot loader keeps retry deadlines and persists ESPN matches togeth
     });
     assert.deepEqual(reads, [nameSummaryRequest(match.eventId)]);
   }
+});
+
+test("live snapshot identity records use existing ESPN answers and isolate malformed event identities", async () => {
+  const espn = structuredClone(ESPN_SCOREBOARD.answers);
+  const league = createLeague({ espn });
+  const loader = createSnapshotLoader({ fetchImpl: league.fetchImpl, now: () => NOW });
+  const snapshot = await loader.loadSnapshot(2026);
+  assert.ok(snapshot.identityRecords.records.length > 0);
+  assert.equal(snapshot.identityRecords.rejected, 0);
+  const { ctx } = createDurableObjectContext();
+  const store = new SeasonStore(ctx, {}, { now: () => NOW });
+  await store.saveSeason(snapshot);
+  const matches = await store.docs.list("espnMatches");
+  assert.ok(matches.length > 0);
+  for (const match of matches)
+    assert.ok(snapshot.identityRecords.records.some((record) => record.id === match.eventId));
+  const before = league.reads.length;
+  await loader.loadSnapshot(2026);
+  assert.equal(league.reads.length, before);
+  for (const answer of Object.values(espn))
+    for (const event of answer.events) {
+      event.id = "";
+      event.competitions[0].gameNumber = 0;
+    }
+  const malformed = await createSnapshotLoader({
+    fetchImpl: createLeague({ espn }).fetchImpl,
+    now: () => NOW,
+  }).loadSnapshot(2026);
+  assert.equal(malformed.games.length, snapshot.games.length);
+  assert.equal(malformed.identityRecords.records.length, 0);
+  assert.equal(malformed.identityRecords.rejected, 0);
+});
+
+test("one rejected kept network event is counted once across loading and saving a season", async () => {
+  const espn = structuredClone(ESPN_SCOREBOARD.answers);
+  const month = espn[NETWORKS_REQUEST("202609")];
+  month.events[0].id = "";
+  const league = createLeague({ espn });
+  const { ctx } = createDurableObjectContext();
+  const store = new SeasonStore(ctx, {}, { now: () => NOW, fetchImpl: league.fetchImpl });
+  const snapshot = await store.loadSnapshot(2026);
+  assert.equal((await store.identities.readStatus()).errors, 1);
+  assert.ok((await store.saveSeason(snapshot)).snapshot);
+  assert.equal((await store.identities.readStatus()).errors, 1);
+  const reads = listNetworksReads(league).length;
+  const repeated = await store.loadSnapshot(2026);
+  await store.saveSeason(repeated);
+  assert.equal(listNetworksReads(league).length, reads);
+  assert.equal((await store.identities.readStatus()).errors, 1);
+});
+
+test("rejected backup event identities remain visible separately from stored network answers", async () => {
+  const espn = structuredClone(ESPN.answers);
+  for (const answer of Object.values(espn)) for (const event of answer.events) event.id = "";
+  const league = createLeague({ refuse: { scoreboard: "error" }, espn });
+  const snapshot = await createSnapshotLoader({
+    fetchImpl: league.fetchImpl,
+    now: () => Date.parse(ESPN.now),
+  }).loadSnapshot(2026);
+  assert.ok(snapshot.identityRecords.rejected > 0);
+  const { ctx } = createDurableObjectContext();
+  const store = new SeasonStore(ctx, {}, { now: () => NOW });
+  await store.saveSeason(snapshot);
+  assert.equal((await store.identities.readStatus()).errors, snapshot.identityRecords.rejected);
 });

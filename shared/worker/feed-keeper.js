@@ -11,6 +11,9 @@ import { describeError } from "./responses.js";
 // fails for the same reason its last read did. What it keeps goes in
 // `storage`, since a Durable Object leaves memory between updates.
 
+/** @param {string} key */
+export const nameStoredFeedKey = (key) => `feed:${key}`;
+
 const SETTLE_MS = 10 * 60 * 1000;
 export const FAILED_FEED_WAIT_MS = 5 * 60 * 1000;
 const BEHIND_FEED_WAIT_MS = 5 * 60 * 1000;

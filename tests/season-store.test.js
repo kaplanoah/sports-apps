@@ -4,7 +4,7 @@ import {
   LEAGUE_READS_COUNT,
   nameCountKey,
   createSeasonStore,
-  readFeedFailures,
+  readStoreHealth,
   readStoreDoc,
 } from "../shared/worker/season-store.js";
 import { createDurableObjectContext, fireNextAlarm } from "./durable-object-context.js";
@@ -180,8 +180,8 @@ test("the Worker reads which feeds are failing, as none before the store has sav
     STORE: { idFromName: () => "store", get: () => ({ fetch: async () => Response.error() }) },
   };
 
-  assert.deepEqual(await readFeedFailures(env), {});
-  await assert.rejects(readFeedFailures(broken));
+  assert.deepEqual(await readStoreHealth(env), { feeds: {} });
+  await assert.rejects(readStoreHealth(broken));
 });
 
 test("a store keeps each failing feed from its first failure in a row, and drops it once it answers", async () => {

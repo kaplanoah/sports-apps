@@ -1,3 +1,4 @@
+import { identityPolicy } from "./identity-policy.js";
 import { createReadDetail } from "./detail-reads.js";
 import { choosePollDelay, listReminderGames } from "./adapters/wnba.js";
 import PAGE_FILES from "#page-files/wnba";
@@ -12,7 +13,7 @@ import { createSnapshotLoader } from "./snapshot.js";
 import { GAME_DETAILS_COLLECTION } from "./store-docs.js";
 import { createWatchedGameLoader } from "./watched-games.js";
 
-export { forwardToStore, readFeedFailures } from "../../../../shared/worker/season-store.js";
+export { forwardToStore, readStoreHealth } from "../../../../shared/worker/season-store.js";
 
 /**
  * @type {import("../../../../shared/worker/season-store.js").League<
@@ -21,6 +22,7 @@ export { forwardToStore, readFeedFailures } from "../../../../shared/worker/seas
  * >}
  */
 const league = {
+  identity: identityPolicy,
   release: readReleaseCommit(PAGE_FILES),
   createLoadSnapshot: (storage, fetchImpl, readDoc) =>
     createSnapshotLoader({ storage, fetchImpl, readDoc }).loadSnapshot,

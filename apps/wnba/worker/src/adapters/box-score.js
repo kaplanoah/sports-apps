@@ -1,3 +1,4 @@
+import { readGameFacts } from "./game-facts.js";
 import {
   BasketballBoxScore,
   validateSportsData,
@@ -68,6 +69,7 @@ export function describeBoxScore(response) {
   const stats = game.homeTeam.statistics ?? {};
   return validateSportsData(BasketballBoxScore, {
     id: String(game.gameId),
+    ...readGameFacts(game.gameId),
     state: readStrictGameState(game.gameStatus),
     period: game.period ?? null,
     leadChanges: stats.leadChanges ?? null,

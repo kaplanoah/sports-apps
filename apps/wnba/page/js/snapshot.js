@@ -27,3 +27,13 @@ export const GAME_PREFIXES = {
 
 /** Whether a game is the Commissioner's Cup final. @param {{ id: string }} game */
 export const isCupFinal = (game) => game.id.startsWith(GAME_PREFIXES.cupFinal);
+
+export const nameSeries = (round, series) => `${round}-${series}`;
+
+/** @param {string} id */
+export function readSeriesFacts(id) {
+  const [round, series, extra] = id.split("-");
+  return Object.hasOwn(ROUNDS, round) && /^\d$/.test(series ?? "") && !extra
+    ? { round: Number(round) }
+    : {};
+}

@@ -371,3 +371,14 @@ test("a request that names no game is refused, and MLB not answering says so", a
   const answer = await askForBoxScore(RAYS_AT_YANKEES, { isDown: true });
   assert.match(await assertErrorAnswer(answer, 502, "upstream_error"), /^Couldn't read MLB: /);
 });
+
+test("box scores request the feed's game and season and retain its explicit season", () => {
+  const feed = structuredClone(GAMES.feeds[DODGERS_AT_BRAVES]);
+  feed.gameData.game = { season: "2026" };
+  assert.equal(describeBoxScore(DODGERS_AT_BRAVES, feed).season, 2026);
+  const fields = new URL(nameFeedRequest(DODGERS_AT_BRAVES), "https://example.test").searchParams
+    .get("fields")
+    .split(",");
+  assert.ok(fields.includes("game"));
+  assert.ok(fields.includes("season"));
+});

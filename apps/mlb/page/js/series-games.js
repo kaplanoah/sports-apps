@@ -5,13 +5,12 @@ import { describeSeriesAfterWin, describeSeriesLead } from "#shared/series-text.
 import { nameSeries } from "./bracket.js";
 import { nameTeam } from "./teams.js";
 import { listCountedGames } from "./season-games.js";
-import { countSeriesWinsNeeded, readSeriesRound } from "./bracket-rules.js";
+import { countSeriesWinsNeeded, readSeriesFacts } from "./bracket-rules.js";
 
 // Short names, since the label shares the row's middle with the time or score.
 /** @param {string} seriesId */
 export function nameRound(seriesId) {
-  const [league] = seriesId.split("_");
-  const round = readSeriesRound(seriesId);
+  const { league, round } = readSeriesFacts(seriesId);
   if (round === "WC") return `${league} WC`;
   if (round === "WS") return "WS";
   return `${league}${round}`;
