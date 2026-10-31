@@ -5,6 +5,7 @@ import {
   leavePageFractionDown,
 } from "../../../../tests/browser/page-left-down.mjs";
 import { countScrollHoldersAt } from "../../../../tests/browser/held-scrolls.mjs";
+import { waitForScrollEnd } from "../../../../tests/browser/scroll-end.mjs";
 import {
   findMiddle,
   findSeasonPart,
@@ -300,10 +301,9 @@ test("on Games, a swipe down inside the list scrolled down scrolls it, while at 
   const before = await readScroll(list);
   await app.holdStore();
 
-  await (
-    await drag(page, middle, { y: 120 })
-  )();
-  await expect.poll(() => readScroll(list)).toBeLessThan(before);
+  // The flick's fling outlasts the finger, and an instant scroll during it is lost to it.
+  await waitForScrollEnd(list, async () => (await drag(page, middle, { y: 120 }))());
+  expect(await readScroll(list)).toBeLessThan(before);
   await expect(page.locator(".pull-refresh")).toBeHidden();
   await scrollElementTo(list, 0);
   await (
