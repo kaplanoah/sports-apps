@@ -102,6 +102,49 @@ const SeriesSide = z.looseObject({ team: Identifier, wins: Count }).nullable();
 export const BasketballSeries = z.array(
   z.looseObject({ id: Identifier, round: Count, top: SeriesSide, bottom: SeriesSide }),
 );
+const Conference = z.enum(["East", "West"]);
+const BracketSide = z.object({
+  team: Identifier.nullable(),
+  seed: Count.min(1).max(10).nullable(),
+});
+export const BasketballPlayoffField = z.object({
+  season: Count,
+  series: z.array(
+    z.object({
+      id: Identifier,
+      round: Count.min(1).max(4),
+      number: Count,
+      conference: Conference.nullable(),
+      high: BracketSide.extend({ wins: Count.max(4) }),
+      low: BracketSide.extend({ wins: Count.max(4) }),
+    }),
+  ),
+});
+export const BasketballPlayInField = z.object({
+  season: Count,
+  matchups: z.array(
+    z.object({
+      id: Identifier,
+      conference: Conference,
+      stage: z.enum(["seven-eight", "nine-ten", "eighth-seed"]),
+      high: BracketSide,
+      low: BracketSide,
+      game: z
+        .object({
+          id: Identifier,
+          season: Count,
+          competition: z.literal("play-in"),
+          round: z.literal(0),
+          gameNumber: z.literal(1),
+          isCupFinal: z.literal(false),
+          start: Start,
+        })
+        .nullable(),
+    }),
+  ),
+});
+/** @typedef {z.infer<typeof BasketballPlayoffField>} BasketballPlayoffFieldRecord */
+/** @typedef {z.infer<typeof BasketballPlayInField>} BasketballPlayInFieldRecord */
 export const BasketballStandings = z.array(
   z.looseObject({ team: Identifier, wins: Count, losses: Count }),
 );
