@@ -224,10 +224,7 @@ export function createIdentityBackfill(storage, options, now) {
   }
 
   async function advanceSource(docs, key, value, source, progress, work, isActive) {
-    const signature = await describeSignature({
-      value,
-      retryEvidence: source.retryEvidence ?? null,
-    });
+    const signature = await describeSignature(source.records ?? []);
     if (progress.pending?.key !== key) {
       progress.pending = {
         key,

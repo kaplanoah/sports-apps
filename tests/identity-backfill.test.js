@@ -1095,3 +1095,34 @@ test("a new retained-player batch restarts matching slices without losing its un
   assert.equal(harness.stored.has(retryKey), false);
   assert.equal((await store.identities.readStatus()).checks.verified, true);
 });
+
+test("unrelated changes to a hot cached document preserve complete candidate-group progress", async () => {
+  const harness = createMeasuredContext();
+  const store = new WnbaStore(harness.ctx, {}, harness.options);
+  const key = "job:details:detail-answer:/box-score?id=kept&season=2026";
+  const retryKey = `identity:retry:${encodeURIComponent(key)}`;
+  const records = Array.from({ length: 60 }, (_, index) => ({
+    id: `vendor-${index}`,
+    firstName: `Alex${index}`,
+    lastName: "Jones",
+    team: "NYL",
+    number: "7",
+  }));
+  harness.stored.set(key, { at: 1, body: { kept: true } });
+  harness.stored.set(retryKey, { revision: "kept", records });
+  harness.stored.set(`identity:error:failed:${encodeURIComponent(key)}`, 1);
+  let complete = false;
+  for (let step = 0; step < 100; step += 1) {
+    await store.identities.backfill(store.docs);
+    if ((await store.identities.readStatus()).backfill.complete) {
+      complete = true;
+      break;
+    }
+    const current = harness.stored.get(key);
+    harness.stored.set(key, { ...current, at: step + 2, body: { ...current.body, score: step } });
+  }
+  assert.equal(complete, true);
+  assert.equal((await store.identities.readStatus()).unmatched, records.length);
+  assert.equal((await store.identities.readStatus()).checks.verified, true);
+  assert.equal(harness.stored.has(retryKey), false);
+});
