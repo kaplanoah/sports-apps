@@ -9,12 +9,14 @@ import { isSameJson } from "../page/compare.js";
 
 const VENDOR_PREFIX = "identity:vendor:";
 const nameStatusKey = (league) => `identity:status:${encodeURIComponent(league)}`;
+const nameFactsRevisionKey = (league) => `identity:facts-revision:${encodeURIComponent(league)}`;
 const nameEntityKey = (league, type, id) =>
   `identity:entity:${encodeURIComponent(league)}:${type}:${encodeURIComponent(id)}`;
 const nameVendorKey = (league, type, vendor, id) =>
   `${VENDOR_PREFIX}${encodeURIComponent(vendor)}:${encodeURIComponent(league)}:${type}:${encodeURIComponent(id)}`;
 const nameProblemKey = (key) => `identity:problem:${key}`;
 const PROBLEM_PREFIX = nameProblemKey(VENDOR_PREFIX);
+export class IdentityFactsChanged extends Error {}
 const createBlankStatus = () => ({ games: 0, players: 0, unmatched: 0, disputed: 0 });
 
 function readProblem(key, value, league) {
@@ -106,6 +108,8 @@ async function ensureEntity(transaction, league, observation) {
   };
   validateSportsData(IdentityEntry, updated);
   await saveChanged(transaction, key, updated);
+  if (!isSameJson(previous?.facts, updated.facts))
+    await transaction.put(nameFactsRevisionKey(league), crypto.randomUUID());
   if (!previous) {
     const status = (await transaction.get(nameStatusKey(league))) ?? createBlankStatus();
     status[type === "game" ? "games" : "players"] += 1;
@@ -178,10 +182,15 @@ async function saveAssociation(transaction, league, observation) {
  */
 export function createIdentityLookup(storage, league) {
   return {
-    /** @param {any[]} observations */
-    async save(observations) {
+    /** @param {any[]} observations @param {string | null} [factsRevision] */
+    async save(observations, factsRevision = undefined) {
       observations.forEach((observation) => validateSportsData(IdentityObservation, observation));
       return storage.transaction(async (transaction) => {
+        if (
+          factsRevision !== undefined &&
+          ((await transaction.get(nameFactsRevisionKey(league))) ?? null) !== factsRevision
+        )
+          throw new IdentityFactsChanged("Identity facts changed during reconciliation");
         const results = [];
         for (const observation of observations) {
           const key = nameVendorKey(
@@ -237,13 +246,14 @@ export function createIdentityLookup(storage, league) {
     },
     /** @param {"game" | "player"} type @param {string} id */
     readEntry: (type, id) => storage.get(nameEntityKey(league, type, id)),
-    async countMappingConflicts(key) {
+    async countMappingConflicts(key, vendors = null) {
       return storage.transaction(async (transaction) => {
         const value = await transaction.get(key);
         if (!value) return 0;
         let conflicts = 0;
         if (key.startsWith(`identity:entity:${league}:`)) {
           for (const [vendor, id] of Object.entries(value.vendors)) {
+            if (vendors && !vendors.includes(vendor)) continue;
             const mapping = await transaction.get(nameVendorKey(league, value.type, vendor, id));
             if (mapping?.internalId === value.id) continue;
             if (mapping) {
@@ -292,5 +302,6 @@ export function createIdentityLookup(storage, league) {
       };
     },
     readStatus: async () => (await storage.get(nameStatusKey(league))) ?? createBlankStatus(),
+    readFactsRevision: async () => (await storage.get(nameFactsRevisionKey(league))) ?? null,
   };
 }

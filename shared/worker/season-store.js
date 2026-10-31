@@ -74,6 +74,7 @@ import { describeError, respondError, respondJson, respondMethodNotAllowed } fro
  * @property {(collection: string) => Promise<any[]>} list
  * @property {(key: string, document: object) => Promise<void>} write
  * @property {(key: string, change: (document: any) => object | null) => Promise<void>} update
+ * @property {(key: string, previous: object, document: object) => Promise<boolean>} replaceIfUnchanged
  * @property {(key: string) => Promise<void>} remove
  */
 
@@ -309,6 +310,8 @@ export function createSeasonStore(league) {
         ],
         write: (key, doc) => this.putDoc(key, doc),
         update: (key, change) => this.updateDoc(key, change),
+        replaceIfUnchanged: (key, previous, document) =>
+          this.replaceDocIfUnchanged(key, previous, document),
         remove: (key) => this.deleteDoc(key),
       };
       this.readDetail = league.createReadDetail?.({
@@ -439,6 +442,32 @@ export function createSeasonStore(league) {
       return updating;
     }
 
+    async replaceDocIfUnchanged(key, previous, document) {
+      const data = sortKeys(document);
+      let changed = false;
+      const replacing = (this.docUpdates.get(key) ?? Promise.resolve()).then(() =>
+        this.ctx.storage.transaction(async (transaction) => {
+          const latest = await transaction.get(key);
+          if (!isSameJson(latest, previous)) return false;
+          if (!isSameJson(latest, data)) {
+            await transaction.put(key, data);
+            changed = true;
+          }
+          return true;
+        }),
+      );
+      this.docUpdates.set(
+        key,
+        replacing.then(
+          () => {},
+          () => {},
+        ),
+      );
+      const matched = await replacing;
+      if (changed) this.announceChange(key, data);
+      return matched;
+    }
+
     async deleteDoc(key) {
       await this.ctx.storage.delete(key);
       await this.identities?.forgetSource(key).catch(() => {});
@@ -451,15 +480,9 @@ export function createSeasonStore(league) {
     async startUpdating() {
       if (this.hasAlarm) return;
       const alarmAt = await this.ctx.storage.getAlarm();
-      await this.prepareIdentityBackfill();
       if (alarmAt === null || (alarmAt > this.now() && (await this.isBehindDeploy())))
         await this.ctx.storage.setAlarm(this.now());
       this.hasAlarm = true;
-    }
-
-    async prepareIdentityBackfill() {
-      if (this.identities && isFromEarlierRelease(await this.ctx.storage.get(SCHEDULE_KEY)))
-        await this.identities.restartBackfill();
     }
 
     async isBehindDeploy() {
@@ -483,7 +506,6 @@ export function createSeasonStore(league) {
       const requestsBefore = this.requestCount;
       let nextAt = now + RETRY_MS[0];
       try {
-        await this.prepareIdentityBackfill();
         const seasonDueAt = await this.updateSeasonWhenDue(now);
         await this.reminders.checkDue();
         const jobDueTimes = await this.startDueJobs(now);
@@ -601,7 +623,10 @@ export function createSeasonStore(league) {
               });
             }
           } finally {
-            await this.identities?.backfill(this.docs, () => generation === this.alarmGeneration);
+            await this.identities?.backfillWhenDue(
+              this.docs,
+              () => generation === this.alarmGeneration,
+            );
           }
         })
         .catch((error) => {

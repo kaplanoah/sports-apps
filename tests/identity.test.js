@@ -7,6 +7,7 @@ import { RequestBudgetExhausted } from "../shared/worker/request-budget.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { IDENTITY_AUDIT_VERSION } from "../shared/worker/identity-backfill.js";
 import { createIdentityLookup } from "../shared/worker/identity.js";
 import { reconcileIdentities } from "../shared/worker/identity-matching.js";
 import { createDurableObjectContext } from "./durable-object-context.js";
@@ -455,8 +456,8 @@ test("live work and reminders precede storage-only backfill, and a superseding a
   store.reminders.checkDue = async () => {
     order.push("reminders");
   };
-  const backfill = store.identities.backfill;
-  store.identities.backfill = async (...args) => {
+  const backfill = store.identities.backfillWhenDue;
+  store.identities.backfillWhenDue = async (...args) => {
     order.push("backfill");
     await backfill(...args);
   };
@@ -550,7 +551,11 @@ test("contradictory evidence marks an established association disputed even with
 
 test("redeployment after older writers ran invalidates completed coverage and rechecks preserved historical progress", async () => {
   const { ctx, stored } = createDurableObjectContext();
-  stored.set("identity:backfill", { complete: true, checkedDocuments: 123 });
+  stored.set("identity:backfill", {
+    version: IDENTITY_AUDIT_VERSION - 1,
+    complete: true,
+    checkedDocuments: 123,
+  });
   stored.set("poll:schedule", { release: "old-writer", dueAt: 9999 });
   stored.set("schedules-2025/2025-06", {
     year: 2025,
@@ -873,10 +878,19 @@ test("completed coverage requires zero missing entries, facts and competing mapp
   const { ctx, stored } = createDurableObjectContext();
   const store = new WnbaStore(ctx, {});
   for (const field of ["missingEntries", "missingFacts", "conflicts"]) {
-    stored.set("identity:backfill", { complete: true, checkedDocuments: 1, [field]: 1 });
+    stored.set("identity:backfill", {
+      version: IDENTITY_AUDIT_VERSION,
+      complete: true,
+      checkedDocuments: 1,
+      [field]: 1,
+    });
     assert.equal((await store.identities.readStatus()).checks.verified, false, field);
   }
-  stored.set("identity:backfill", { complete: true, checkedDocuments: 1 });
+  stored.set("identity:backfill", {
+    version: IDENTITY_AUDIT_VERSION,
+    complete: true,
+    checkedDocuments: 1,
+  });
   assert.equal((await store.identities.readStatus()).checks.verified, true);
 });
 
@@ -922,7 +936,7 @@ test("a recovered cached-detail identity write clears only its failure and permi
   )
     await store.identities.backfill(store.docs);
   assert.equal((await store.identities.readStatus()).checks.verified, true);
-  stored.set("identity:backfill", { complete: true });
+  stored.set("identity:backfill", { version: IDENTITY_AUDIT_VERSION, complete: true });
   await store.docs.write("games/1022600001", {
     boxScore: { id: "1022600001", away: { players: [{ id: 44, espnIdentity: { id: "" } }] } },
   });
@@ -1096,9 +1110,16 @@ test("bounded recovery passes advance past persistent failures instead of starvi
   const { ctx } = createDurableObjectContext();
   const store = new WnbaStore(ctx, {});
   const transaction = ctx.storage.transaction;
-  ctx.storage.transaction = async () => {
-    throw new Error("identity unavailable");
-  };
+  ctx.storage.transaction = (callback) =>
+    transaction((inner) =>
+      callback({
+        ...inner,
+        get: async (key) => {
+          if (key.startsWith("identity:entity:")) throw new Error("identity unavailable");
+          return inner.get(key);
+        },
+      }),
+    );
   for (let number = 1; number <= 25; number += 1) {
     const id = String(number).padStart(2, "0");
     await store.createJobStorage("details").put(`detail-answer:/player?id=${id}&season=2026`, {
@@ -1177,9 +1198,16 @@ test("recovered backfill repeats dependent facts and audits before declaring cov
     games: [createGame("7", { state: "final" })],
   });
   const transaction = ctx.storage.transaction;
-  ctx.storage.transaction = async () => {
-    throw new Error("identity unavailable");
-  };
+  ctx.storage.transaction = (callback) =>
+    transaction((inner) =>
+      callback({
+        ...inner,
+        get: async (key) => {
+          if (key.startsWith("identity:entity:")) throw new Error("identity unavailable");
+          return inner.get(key);
+        },
+      }),
+    );
   const store = new MlbStore(ctx, {});
   for (
     let iteration = 0;
@@ -1334,7 +1362,14 @@ test("a new game without season facts cannot inherit an older completed coverage
 test("completed backfill clears orphaned physical-source failures without restarting coverage", async () => {
   const { ctx, stored } = createDurableObjectContext();
   const store = new WnbaStore(ctx, {});
-  const progress = { complete: true, checkedDocuments: 77, phase: "vendors", cursor: "z" };
+  const progress = {
+    version: IDENTITY_AUDIT_VERSION,
+    factsRevision: null,
+    complete: true,
+    checkedDocuments: 77,
+    phase: "vendors",
+    cursor: "z",
+  };
   stored.set("identity:backfill", structuredClone(progress));
   const source = "job:details:detail-answer:/player?id=44&season=2026";
   stored.set("identity:error:failed:" + encodeURIComponent(source), 1);
@@ -1352,11 +1387,18 @@ test("persistent physical-source failures back off full recovery scans up to one
   const store = new WnbaStore(ctx, {}, { now: () => now });
   await store.docs.write("players/2026-44", { id: "44", season: 2026, firstName: "Alex" });
   stored.set("identity:error:failed:" + encodeURIComponent("players/2026-44"), 1);
-  stored.set("identity:backfill", { complete: true });
+  stored.set("identity:backfill", { version: IDENTITY_AUDIT_VERSION, complete: true });
   const transaction = ctx.storage.transaction;
-  ctx.storage.transaction = async () => {
-    throw new Error("persistent failure");
-  };
+  ctx.storage.transaction = (callback) =>
+    transaction((inner) =>
+      callback({
+        ...inner,
+        get: async (key) => {
+          if (key.startsWith("identity:entity:")) throw new Error("persistent failure");
+          return inner.get(key);
+        },
+      }),
+    );
   for (let attempt = 1; attempt <= 8; attempt += 1) {
     await store.identities.backfill(store.docs);
     for (
@@ -1488,6 +1530,8 @@ test("a seasonless game arriving during an active audit invalidates its generati
   const { ctx, stored } = createDurableObjectContext();
   const store = new MlbStore(ctx, {});
   stored.set("identity:backfill", {
+    version: IDENTITY_AUDIT_VERSION,
+    factsRevision: null,
     complete: false,
     phase: "vendors",
     cursor: "",
@@ -1551,6 +1595,8 @@ test("a superseded coverage revision cannot verify when its in-flight pass finis
   const { ctx, stored } = createDurableObjectContext();
   const store = new MlbStore(ctx, {});
   stored.set("identity:backfill", {
+    version: IDENTITY_AUDIT_VERSION,
+    factsRevision: null,
     complete: false,
     phase: "vendors",
     cursor: "z",

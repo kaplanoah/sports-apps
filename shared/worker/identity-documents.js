@@ -5,23 +5,11 @@ import { createIdentityLookup } from "./identity.js";
 import { ESPN_VENDOR } from "./espn-adapter.js";
 import { readIdentityDiagnosis } from "./identity-diagnostics.js";
 import { readPlayerName } from "./player-name.js";
-import { reconcileIdentities, readIdentityDay } from "./identity-matching.js";
+import { reconcileIdentities, nameIdentityGameGroup } from "./identity-matching.js";
+import { createIdentityBackfill } from "./identity-backfill.js";
 
-const BACKFILL_KEY = "identity:backfill";
 const COVERAGE_KEY = "identity:coverage-revision";
-const BATCH_SIZE = 20;
-const RETRY_DELAY_MS = 60_000;
-const MAX_RETRY_DELAY_MS = 60 * RETRY_DELAY_MS;
-const createBackfillProgress = () => ({
-  cursor: "",
-  checkedDocuments: 0,
-  complete: false,
-  phase: "documents",
-  missingEntries: 0,
-  missingFacts: 0,
-  conflicts: 0,
-  coverageRevision: null,
-});
+const ERROR_SCAN_LIMIT = 20;
 const PLAYER_FIELDS = new Set(["players", "batters", "pitchers", "starters", "leaders"]);
 const GAME_FIELDS = new Set([
   "games",
@@ -79,44 +67,35 @@ export function createIdentityDocuments(storage, policy, now = Date.now) {
 
   const vendorBatches = new Map();
   const nativeEntries = new Map();
+  let nativeRevision;
+  async function refreshNativeRevision() {
+    const revision = await lookup.readFactsRevision();
+    if (nativeRevision !== revision) {
+      nativeEntries.clear();
+      vendorBatches.clear();
+      nativeRevision = revision;
+    }
+    return revision;
+  }
   async function listNatives(type) {
+    await refreshNativeRevision();
     if (!nativeEntries.has(type)) {
       const entries = await storage.list({ prefix: `identity:entity:${policy.league}:${type}:` });
       nativeEntries.set(type, new Map([...entries.values()].map((entry) => [entry.id, entry])));
     }
     return [...nativeEntries.get(type).values()];
   }
-  function rememberNatives(observations) {
-    for (const observation of observations) {
-      const entries = nativeEntries.get(observation.type);
-      if (!entries) continue;
-      const previous = entries.get(observation.internalId);
-      const facts = {
-        ...previous?.facts,
-        ...Object.fromEntries(
-          Object.entries(observation.facts).filter(([, value]) => value != null),
-        ),
-      };
-      if (isSameJson(previous?.facts, facts)) continue;
-      entries.set(observation.internalId, {
-        id: observation.internalId,
-        facts,
-        vendors: { ...previous?.vendors, [policy.vendor]: observation.internalId },
-      });
-      vendorBatches.clear();
-    }
-  }
   async function saveVendorGames(records, key = "snapshot", rejected = 0, docs = null) {
     await saveErrors(key, rejected);
     if (!records?.length) return;
-    const nameGameGroup = (record) =>
-      JSON.stringify([record.away, record.home, readIdentityDay(record)]);
-    const groups = new Set(records.map(nameGameGroup));
+    const factsRevision = await refreshNativeRevision();
+    const groups = new Set(records.map(nameIdentityGameGroup));
     const signature = JSON.stringify(records);
     if (vendorBatches.get(key) === signature) return;
     const natives = (await listNatives("game"))
       .filter(
-        (entry) => entry.vendors[policy.vendor] && groups.has(nameGameGroup(entry.facts ?? {})),
+        (entry) =>
+          entry.vendors[policy.vendor] && groups.has(nameIdentityGameGroup(entry.facts ?? {})),
       )
       .map((entry) => ({ id: entry.id, ...entry.facts }));
     const results = await reconcileIdentities(lookup, {
@@ -124,7 +103,13 @@ export function createIdentityDocuments(storage, policy, now = Date.now) {
       vendor: ESPN_VENDOR,
       natives,
       records,
+      factsRevision,
     });
+    await saveGameMatches(results, docs);
+    vendorBatches.set(key, signature);
+  }
+
+  async function saveGameMatches(results, docs) {
     if (docs && policy.nameMatchKey) {
       for (const result of results) {
         if (!result.internalId || result.disputed) continue;
@@ -140,7 +125,6 @@ export function createIdentityDocuments(storage, policy, now = Date.now) {
         });
       }
     }
-    vendorBatches.set(key, signature);
   }
 
   /** @param {string} key @param {any} document */
@@ -283,12 +267,29 @@ export function createIdentityDocuments(storage, policy, now = Date.now) {
     };
   }
 
-  async function registerDocument(key, sourceKey, prepared, audit, trackCoverage) {
+  function listGameMatchObservations(key, document) {
+    if (!key.startsWith("espnMatches/") || !document?.eventId) return [];
+    return [
+      {
+        type: "game",
+        vendor: ESPN_VENDOR,
+        vendorId: String(document.eventId),
+        internalId: String(document.id),
+        evidence: {
+          method: "existing-id",
+          away: document.away,
+          home: document.home,
+          start: document.start,
+        },
+      },
+    ];
+  }
+
+  async function registerDocument(key, sourceKey, prepared) {
     const { document, observations, rejected, espnPlayers } = prepared;
     const results = observations.length ? await lookup.save(observations) : [];
     await saveErrors(sourceKey, rejected);
     if (
-      trackCoverage &&
       observations.some(
         (observation, index) =>
           observation.type === "game" &&
@@ -297,21 +298,8 @@ export function createIdentityDocuments(storage, policy, now = Date.now) {
       )
     )
       await storage.put(COVERAGE_KEY, crypto.randomUUID());
-    rememberNatives(observations);
-    if (audit)
-      for (const observation of observations) {
-        if (
-          (await lookup.read(observation.type, policy.vendor, observation.internalId)) !==
-          observation.internalId
-        )
-          audit.missingEntries += 1;
-        if (
-          observation.type === "game" &&
-          !Number.isInteger((await lookup.readEntry("game", observation.internalId))?.facts?.season)
-        )
-          audit.missingFacts += 1;
-      }
     if (espnPlayers.length) {
+      const factsRevision = await refreshNativeRevision();
       const names = new Set(espnPlayers.map(readPlayerName));
       const natives = (await listNatives("player"))
         .filter((entry) => names.has(readPlayerName(entry.facts ?? {})))
@@ -321,34 +309,14 @@ export function createIdentityDocuments(storage, policy, now = Date.now) {
         vendor: ESPN_VENDOR,
         natives,
         records: espnPlayers,
+        factsRevision,
       });
     }
-    if (key.startsWith("espnMatches/") && document?.eventId) {
-      await lookup.save([
-        {
-          type: "game",
-          vendor: ESPN_VENDOR,
-          vendorId: String(document.eventId),
-          internalId: String(document.id),
-          evidence: {
-            method: "existing-id",
-            away: document.away,
-            home: document.home,
-            start: document.start,
-          },
-        },
-      ]);
-    }
+    const matches = listGameMatchObservations(key, document);
+    if (matches.length) await lookup.save(matches);
     return prepared.document;
   }
-  async function prepareDocument(
-    key,
-    document,
-    audit = null,
-    sourceKey = key,
-    known = null,
-    trackCoverage = true,
-  ) {
+  async function prepareDocument(key, document, known = null, sourceKey = key) {
     let prepared = expandDocument(key, document, known);
     return attemptIdentity(
       sourceKey,
@@ -357,23 +325,16 @@ export function createIdentityDocuments(storage, policy, now = Date.now) {
           const entry = await lookup.readEntry("game", String(prepared.rootId));
           if (entry?.facts) prepared = expandDocument(key, document, entry.facts);
         }
-        return registerDocument(key, sourceKey, prepared, audit, trackCoverage);
+        return registerDocument(key, sourceKey, prepared);
       },
       () => prepared.document,
     );
   }
 
-  async function prepareDetailAnswer(key, value, audit = null, trackCoverage = true) {
+  async function prepareDetailAnswer(key, value) {
     const url = new URL(key.slice("job:details:detail-answer:".length), "https://store");
     const season = Number(url.searchParams.get("season")) || value.body?.season;
-    const body = await prepareDocument(
-      `details/${season ?? "answer"}`,
-      value.body,
-      audit,
-      key,
-      null,
-      trackCoverage,
-    );
+    const body = await prepareDocument(`details/${season ?? "answer"}`, value.body, null, key);
     return { ...value, body };
   }
 
@@ -382,37 +343,40 @@ export function createIdentityDocuments(storage, policy, now = Date.now) {
     await saveErrors(key, 0, "rejected");
   }
 
-  async function backfillSource(docs, key, value, audit = null, vendors = false) {
-    try {
-      if (isStoreDocumentPath(key) && !vendors) {
-        const previous = await docs.read(key);
-        if (!previous) return forgetSource(key);
-        const expanded = await prepareDocument(key, previous, audit, key, previous, false);
-        await docs.update(key, (latest) =>
-          isSameJson(latest, previous) && !isSameJson(latest, expanded) ? expanded : null,
-        );
-      } else if (key.startsWith("job:details:detail-answer:") && !vendors) {
-        const expanded = await prepareDetailAnswer(key, value, audit, false);
-        await storage.transaction(async (transaction) => {
-          const latest = await transaction.get(key);
-          if (isSameJson(latest, value) && !isSameJson(value, expanded))
-            await transaction.put(key, expanded);
-        });
-      } else if (vendors) {
-        const saved = policy.readSavedVendorGames?.(key, value);
-        if (saved)
-          await attemptIdentity(key, () =>
-            saveVendorGames(saved.records, key, saved.rejected, docs),
-          );
-        if (key.startsWith("identity:entity:") || key.startsWith("identity:vendor:")) {
-          await attemptIdentity(key, async () => {
-            audit.conflicts += await lookup.countMappingConflicts(key);
-          });
-        }
-      }
-    } catch {
-      await saveErrors(key, 1, "failed").catch(() => {});
+  async function describeBackfillSource(key, value, phase, docs) {
+    if (phase === "vendors") {
+      const saved = policy.readSavedVendorGames?.(key, value);
+      if (saved) return { kind: "vendor", type: "game", ...saved };
+      return key.startsWith("identity:entity:") || key.startsWith("identity:vendor:")
+        ? { kind: "mappings" }
+        : null;
     }
+    const cached = key.startsWith("job:details:detail-answer:");
+    if (!cached && !isStoreDocumentPath(key)) return null;
+    if (!cached && !isSameJson(await docs.read(key), value)) return { kind: "changed" };
+    const url = cached
+      ? new URL(key.slice("job:details:detail-answer:".length), "https://store")
+      : null;
+    const season = cached ? Number(url.searchParams.get("season")) || value.body?.season : null;
+    const documentKey = cached ? `details/${season ?? "answer"}` : key;
+    const document = cached ? value.body : value;
+    let prepared = expandDocument(documentKey, document, cached ? null : document);
+    if (prepared.rootId && !prepared.document.season) {
+      const entry = await lookup.readEntry("game", String(prepared.rootId));
+      if (entry?.facts) prepared = expandDocument(documentKey, document, entry.facts);
+    }
+    return {
+      kind: "document",
+      cached,
+      type: "player",
+      document: cached ? { ...value, body: prepared.document } : prepared.document,
+      observations: [
+        ...prepared.observations,
+        ...listGameMatchObservations(key, prepared.document),
+      ],
+      records: prepared.espnPlayers,
+      rejected: prepared.rejected,
+    };
   }
 
   async function noteFeedAnswer(key, value) {
@@ -425,7 +389,10 @@ export function createIdentityDocuments(storage, policy, now = Date.now) {
   }
 
   async function hasFailedSources() {
-    const errors = await storage.list({ prefix: "identity:error:failed:", limit: BATCH_SIZE });
+    const errors = await storage.list({
+      prefix: "identity:error:failed:",
+      limit: ERROR_SCAN_LIMIT,
+    });
     let retry = false;
     for (const [path] of errors) {
       const key = decodeURIComponent(path.slice("identity:error:failed:".length));
@@ -436,73 +403,20 @@ export function createIdentityDocuments(storage, policy, now = Date.now) {
     return retry;
   }
 
-  /** @param {import("./season-store.js").SeasonDocuments} docs */
-  async function backfill(docs, isActive = () => true) {
-    if (!isActive()) return;
-    const coverageRevision = (await storage.get(COVERAGE_KEY)) ?? null;
-    let progress = (await storage.get(BACKFILL_KEY)) ?? createBackfillProgress();
-    if ((progress.coverageRevision ?? null) !== coverageRevision)
-      progress = { ...createBackfillProgress(), coverageRevision };
-    if (progress.complete) {
-      if (progress.retryAfter > now() || !(await hasFailedSources())) return;
-      progress = {
-        ...createBackfillProgress(),
-        coverageRevision,
-        recoveryAttempt: (progress.recoveryAttempt ?? 0) + 1,
-      };
-      if (!isActive()) return;
-      await storage.put(BACKFILL_KEY, progress);
-    }
-    const entries = await storage.list({
-      prefix: "",
-      startAfter: progress.cursor,
-      limit: BATCH_SIZE,
-    });
-    for (const [key, value] of entries) {
-      if (!isActive()) return;
-      if (progress.phase !== "vendors" && key.startsWith("identity:")) {
-        progress.cursor = "identity;";
-        await storage.put(BACKFILL_KEY, progress);
-        return;
-      }
-      await backfillSource(
-        docs,
-        key,
-        value,
-        progress.phase === "facts" || progress.phase === "vendors" ? progress : null,
-        progress.phase === "vendors",
-      );
-      if (!isActive()) return;
-      progress.cursor = key;
-      progress.checkedDocuments += 1;
-      await storage.put(BACKFILL_KEY, progress);
-    }
-    if (!isActive()) return;
-    if (entries.size < BATCH_SIZE) {
-      if (progress.phase === "documents") {
-        progress.phase = "facts";
-        progress.cursor = "";
-      } else if (progress.phase === "facts") {
-        progress.phase = "vendors";
-        progress.cursor = "";
-      } else {
-        progress.complete = true;
-        if (progress.recoveryAttempt && (await hasFailedSources()))
-          progress.retryAfter =
-            now() +
-            Math.min(
-              MAX_RETRY_DELAY_MS,
-              RETRY_DELAY_MS * 2 ** Math.min(progress.recoveryAttempt - 1, 6),
-            );
-      }
-      if (!isActive()) return;
-      await storage.put(BACKFILL_KEY, progress);
-    }
-  }
+  const backfill = createIdentityBackfill(
+    storage,
+    {
+      lookup,
+      policy,
+      describeSource: describeBackfillSource,
+      saveErrors,
+      hasFailedSources,
+      saveGameMatches,
+    },
+    now,
+  );
 
   async function readStatus() {
-    const progress = await storage.get(BACKFILL_KEY);
-    const coverageRevision = (await storage.get(COVERAGE_KEY)) ?? null;
     const errors = [...(await storage.list({ prefix: "identity:error:" })).values()].reduce(
       (total, count) => total + count,
       0,
@@ -511,40 +425,20 @@ export function createIdentityDocuments(storage, policy, now = Date.now) {
       ...(await lookup.readStatus()),
       errors,
       diagnosis: await readIdentityDiagnosis(storage, policy),
-      checks: {
-        verified:
-          !!progress?.complete &&
-          (progress.coverageRevision ?? null) === coverageRevision &&
-          !progress.missingEntries &&
-          !progress.missingFacts &&
-          !progress.conflicts &&
-          !errors,
-        missingEntries: progress?.missingEntries ?? 0,
-        missingFacts: progress?.missingFacts ?? 0,
-        competingMappings: progress?.conflicts ?? 0,
-      },
-      backfill: {
-        complete: !!progress?.complete && (progress.coverageRevision ?? null) === coverageRevision,
-        checkedDocuments: progress?.checkedDocuments ?? 0,
-      },
+      ...(await backfill.readStatus(errors)),
     };
   }
 
-  async function restartBackfill() {
-    await storage.put(BACKFILL_KEY, createBackfillProgress());
-  }
-
   return {
-    prepareDocument: (key, document, known = null) =>
-      prepareDocument(key, document, null, key, known),
+    prepareDocument,
     prepareDetailAnswer,
     saveVendorGames: (records, rejected = 0, docs = null) =>
       attemptIdentity("snapshot", () => saveVendorGames(records, "snapshot", rejected, docs)),
     forgetSource,
     noteFeedAnswer,
-    backfill,
+    backfill: backfill.backfill,
+    backfillWhenDue: backfill.backfillWhenDue,
     lookup,
     readStatus,
-    restartBackfill,
   };
 }
