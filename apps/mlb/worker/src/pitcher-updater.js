@@ -176,13 +176,13 @@ function createStoreUpdate() {
    */
   const readSeasonFeeds = (context, season) =>
     settleReads([
-      ...[listAppearancesRequest(season, "R"), listAppearancesRequest(season, "P")].map((path) =>
+      .../** @type {const} */ (["R", "P"]).map((gameType) =>
         readFeed(
           context,
           "appearances",
-          path,
-          `${season}'s ${path.includes("gameType=P") ? "postseason" : "regular-season"} appearances`,
-          () => fetchJson(context, path),
+          listAppearancesRequest(season, gameType),
+          `${season}'s ${gameType === "P" ? "postseason" : "regular-season"} appearances`,
+          () => fetchJson(context, listAppearancesRequest(season, gameType)),
         ),
       ),
       readFeed(

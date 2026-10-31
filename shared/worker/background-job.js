@@ -1,3 +1,4 @@
+import { RequestBudgetExhausted } from "./request-budget.js";
 import { isSameJson } from "../page/compare.js";
 
 // What a league's background jobs share: one job serving every store with what each keeps in memory
@@ -7,19 +8,19 @@ import { isSameJson } from "../page/compare.js";
 const PAST_RETRY_MS = 60 * 60 * 1000;
 
 /**
- * @param {Pick<JobContext, "storage" | "now">} context
+ * @param {Pick<JobContext, "storage" | "now" | "remainingRequests">} context
  * @param {number} season
  * @param {() => Promise<boolean>} fill whether the season is complete
  * @returns {Promise<boolean>} whether a fill was attempted
  */
-export async function tryPastSeason({ storage, now }, season, fill) {
+export async function tryPastSeason({ storage, now, remainingRequests }, season, fill) {
   const key = `past-retry:${season}`;
   if (((await storage.get(key)) ?? -Infinity) > now()) return false;
   try {
     if (await fill()) await storage.delete(key);
-    else await storage.put(key, now() + PAST_RETRY_MS);
+    else if (remainingRequests?.() !== 0) await storage.put(key, now() + PAST_RETRY_MS);
   } catch (error) {
-    await storage.put(key, now() + PAST_RETRY_MS);
+    if (!(error instanceof RequestBudgetExhausted)) await storage.put(key, now() + PAST_RETRY_MS);
     throw error;
   }
   return true;

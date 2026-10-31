@@ -1,4 +1,4 @@
-// App-owned sports records, validated only in the Worker before persistence.
+// Shared sports contracts and detail records, validated only in Workers before persistence.
 import { z } from "zod";
 
 z.config({ jitless: true });

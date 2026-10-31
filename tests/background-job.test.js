@@ -10,6 +10,7 @@ import {
 } from "../shared/worker/background-job.js";
 
 import { createJobStorage } from "./job-context.js";
+import { RequestBudgetExhausted } from "../shared/worker/request-budget.js";
 
 const MINUTE_MS = 60 * 1000;
 
@@ -147,4 +148,19 @@ test("past-season attempts share persisted retry timing, incomplete fills, failu
   time = storage.stored.get("past-retry:2025");
   assert.equal(await tryPastSeason(context, 2025, async () => true), true);
   assert.equal(storage.stored.has("past-retry:2025"), false);
+});
+
+test("history budget stops leave the newest season immediately resumable", async () => {
+  const storage = createJobStorage();
+  const context = { storage, now: () => 0, remainingRequests: () => 0 };
+  assert.equal(await tryPastSeason(context, 2025, async () => false), true);
+  assert.equal(await storage.get("past-retry:2025"), undefined);
+  await assert.rejects(
+    tryPastSeason(context, 2025, async () => {
+      throw new RequestBudgetExhausted("No requests left");
+    }),
+    RequestBudgetExhausted,
+  );
+  assert.equal(await storage.get("past-retry:2025"), undefined);
+  assert.equal(await tryPastSeason(context, 2025, async () => true), true);
 });

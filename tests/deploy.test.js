@@ -1,3 +1,4 @@
+import { createDeferred } from "./deferred.js";
 import {
   TRANSPORT_SECURITY,
   SECURITY_HEADERS,
@@ -1460,9 +1461,7 @@ test(
     const { deployWorkers } = await loadDeployModule();
     const started = [];
     const errors = [];
-    /** @type {(value?: unknown) => void} */
-    let releaseMlb = () => {};
-    const mlbHeld = new Promise((resolve) => (releaseMlb = resolve));
+    const { promise: mlbHeld, resolve: releaseMlb } = createDeferred();
     const isDeployed = await deployWorkers(
       ["mlb", "wnba"],
       async (app) => {

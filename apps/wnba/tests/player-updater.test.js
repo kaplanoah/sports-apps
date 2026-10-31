@@ -1,4 +1,5 @@
 import test from "node:test";
+import { setTimeout as delay } from "node:timers/promises";
 import { createDeferred } from "../../../tests/deferred.js";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -25,7 +26,11 @@ import {
   namePlayerListRequest,
   nameRosterKey,
 } from "../worker/src/adapters/roster.js";
-import { nameFeedKey, createFeedKeeper } from "../../../shared/worker/feed-keeper.js";
+import {
+  nameFeedKey,
+  createFeedKeeper,
+  FAILED_FEED_WAIT_MS,
+} from "../../../shared/worker/feed-keeper.js";
 import { createDocs, createJobStorage } from "../../../tests/job-context.js";
 import { findTeamLeaders } from "../page/js/team-view.js";
 import { SeasonStore } from "../worker/src/store.js";
@@ -45,7 +50,6 @@ const INJURIES = JSON.parse(
 );
 const NOW = Date.parse(ROSTERS.recordedAt);
 const MINUTE_MS = 60 * 1000;
-const HISTORY_RECOVERY_MS = 2 * 60 * MINUTE_MS;
 const STEWART = "1627668";
 const SABALLY = "1630149";
 const FIEBICH = "1630142";
@@ -59,7 +63,7 @@ test("historical players and rosters fill incrementally across restarts within t
   const { createRequestBudget, HISTORY_REQUESTS_PER_RUN } =
     await import("../../../shared/worker/request-budget.js");
   const { docs, storage, league } = createRun();
-  const expiryStepMs = Math.max(...Object.values(FEEDS).map((feed) => feed.maxAgeMs)) + 1;
+  const expiryStepMs = 5 * MINUTE_MS;
   await createFeedKeeper({ feeds: {}, storage, now: () => NOW }).noteFinalCount(0);
   for (let attempt = 0; attempt < 7; attempt += 1) {
     const before = league.requests.length;
@@ -70,6 +74,7 @@ test("historical players and rosters fill incrementally across restarts within t
       env: {},
       now: () => NOW + attempt * expiryStepMs,
       fetchImpl: budget.fetchImpl,
+      remainingRequests: budget.remaining,
       createLoadSnapshot: () => async () => null,
     });
     const issued = league.requests.length - before;
@@ -954,7 +959,10 @@ test("historical malformed roster facts and opponent scores recover with the sam
       /Invalid sports data/,
     );
     row[column] = original;
-    time += HISTORY_RECOVERY_MS + 1;
+    time =
+      Math.max(time, (await storage.get("past-retry:2025")) ?? time) +
+      FEEDS.playerList.maxAgeMs +
+      1;
     await update();
     assert.ok(await storage.get("filled:2025"), corrupted);
     assert.ok(docs.stored.get(nameRosterKey(2025, "NYL")), corrupted);
@@ -988,12 +996,12 @@ test("a malformed player list preserves a complete kept roster when its raw cach
   await run.runJob();
   assert.deepEqual(run.docs.stored.get(key), kept);
   assert.equal(await run.storage.get("filled:2025"), undefined);
-  run.wait(HISTORY_RECOVERY_MS / MINUTE_MS + 1);
+  run.wait(((await run.storage.get("past-retry:2025")) - NOW) / MINUTE_MS + 1);
   await run.runJob();
   assert.deepEqual(run.docs.stored.get(key), kept);
   assert.equal(await run.storage.get("filled:2025"), undefined);
   listed[column] = original;
-  run.wait(HISTORY_RECOVERY_MS / MINUTE_MS + 1);
+  run.wait(FEEDS.playerList.maxAgeMs / MINUTE_MS + 1);
   await run.runJob();
   assert.deepEqual(run.docs.stored.get(key), kept);
   assert.ok(await run.storage.get("filled:2025"));
@@ -1051,7 +1059,7 @@ test("a failed player-list transport preserves a canonical roster without a raw 
   assert.deepEqual(run.docs.stored.get(key), kept);
   assert.equal(await run.storage.get("filled:2025"), undefined);
   answers[path] = original;
-  run.wait(HISTORY_RECOVERY_MS / MINUTE_MS + 1);
+  run.wait(((await run.storage.get("past-retry:2025")) - NOW) / MINUTE_MS + 1);
   await run.runJob();
   assert.deepEqual(run.docs.stored.get(key), kept);
   assert.ok(await run.storage.get("filled:2025"));
@@ -1090,12 +1098,12 @@ test("a malformed newest WNBA season backs off across restarts while older histo
   assert.equal(attempts(), 1);
   assert.equal(await run.storage.get("allFilled"), undefined);
   totals.rowSet[0][column] = original;
-  await update(NOW + HISTORY_RECOVERY_MS + 1);
+  await update((await run.storage.get("past-retry:2025")) + 1);
   assert.ok(await run.storage.get("filled:2025"));
   assert.equal(await run.storage.get("past-retry:2025"), undefined);
 });
 
-test("a persistently malformed joined list retries within its backoff without discarding roster feeds", async () => {
+test("a rostered player with persistently bad list facts does not refetch the all-time list early", async () => {
   const answers = structuredClone(listAnswers());
   const run = createRun({ answers });
   await run.runJob();
@@ -1122,15 +1130,15 @@ test("a persistently malformed joined list retries within its backoff without di
   assert.equal(requests(nameLeagueRosterRequest("NYL", 2026)), rosters);
   run.wait(1);
   await run.runJob();
-  assert.equal(requests(path), lists + 1);
+  assert.equal(requests(path), lists);
   assert.equal(requests(nameLeagueRosterRequest("NYL", 2026)), rosters);
   assert.deepEqual(run.docs.stored.get(key), kept);
   row[column] = original;
   row[table.headers.indexOf("COLLEGE")] = "Recovered College";
-  run.wait(5);
+  run.wait(FEEDS.playerList.maxAgeMs / MINUTE_MS + 1);
   await run.runJob();
-  assert.equal(requests(path), lists + 2);
-  assert.equal(requests(nameLeagueRosterRequest("NYL", 2026)), rosters);
+  assert.equal(requests(path), lists + 1);
+  assert.equal(requests(nameLeagueRosterRequest("NYL", 2026)), rosters + 1);
   assert.equal(
     run.docs.stored.get(key).players.find((player) => player.id === STEWART).college,
     "Recovered College",
@@ -1166,13 +1174,13 @@ test("raw shifted stat rows cannot become valid through trimming in the actual w
   assert.equal(run.docs.stored.get(key).totals.PTS, original[column] + 1);
 });
 
-test("cold roster and player-list requests stay concurrent while list validation waits for roster consumers", async () => {
+test("cold roster and player-list requests stay concurrent", async () => {
   const run = createRun();
   const pending = createDeferred();
   const started = createDeferred();
-  let lists = 0;
+  const listStarted = createDeferred();
   const fetchImpl = async (url) => {
-    if (url === namePlayerListRequest(2026)) lists += 1;
+    if (url === namePlayerListRequest(2026)) listStarted.resolve();
     if (url === nameLeagueRosterRequest("NYL", 2026)) {
       started.resolve();
       await pending.promise;
@@ -1188,10 +1196,16 @@ test("cold roster and player-list requests stay concurrent while list validation
     createLoadSnapshot: () => async () => null,
   });
   await started.promise;
-  await new Promise((resolve) => setImmediate(resolve));
+  const deadline = new AbortController();
   try {
-    assert.equal(lists, 1);
+    await Promise.race([
+      listStarted.promise,
+      delay(2000, null, { signal: deadline.signal }).then(() =>
+        assert.fail("player list waits for a roster"),
+      ),
+    ]);
   } finally {
+    deadline.abort();
     pending.resolve();
   }
   await update;
@@ -1205,9 +1219,9 @@ test("stale roster and player-list refreshes retain upstream concurrency", async
   run.wait(25 * 60);
   const pending = createDeferred();
   const started = createDeferred();
-  let lists = 0;
+  const listStarted = createDeferred();
   const fetchImpl = async (url) => {
-    if (url === namePlayerListRequest(2026)) lists += 1;
+    if (url === namePlayerListRequest(2026)) listStarted.resolve();
     if (url === nameLeagueRosterRequest("NYL", 2026)) {
       started.resolve();
       await pending.promise;
@@ -1223,12 +1237,198 @@ test("stale roster and player-list refreshes retain upstream concurrency", async
     createLoadSnapshot: () => async () => null,
   });
   await started.promise;
-  await new Promise((resolve) => setImmediate(resolve));
+  const deadline = new AbortController();
   try {
-    assert.equal(lists, 1);
+    await Promise.race([
+      listStarted.promise,
+      delay(2000, null, { signal: deadline.signal }).then(() =>
+        assert.fail("player list waits for a roster"),
+      ),
+    ]);
   } finally {
+    deadline.abort();
     pending.resolve();
     await update;
   }
   assert.ok(run.docs.stored.get(nameRosterKey(2026, "NYL")));
+});
+
+test("cold bad player-list facts affect only that player while teammates, other rosters and search keep their facts", async () => {
+  for (const damage of ["debut", "name", "unused"]) {
+    const answers = structuredClone(listAnswers());
+    const table = answers[namePlayerListRequest(2026)].resultSets[0];
+    const row = table.rowSet.find(
+      (row) => row[table.headers.indexOf("PERSON_ID")] === Number(STEWART),
+    );
+    if (damage === "debut") row[table.headers.indexOf("FROM_YEAR")] = "2016.5";
+    if (damage === "name") {
+      row[table.headers.indexOf("PLAYER_FIRST_NAME")] = "";
+      row[table.headers.indexOf("PLAYER_LAST_NAME")] = "";
+    }
+    if (damage === "unused") {
+      const unused = [...row];
+      unused[table.headers.indexOf("PERSON_ID")] = 999999999;
+      unused[table.headers.indexOf("PLAYER_FIRST_NAME")] = null;
+      unused[table.headers.indexOf("FROM_YEAR")] = "bad";
+      table.rowSet.push(unused);
+    }
+    const run = createRun({ answers });
+    await run.runJob();
+    const roster = run.docs.stored.get(nameRosterKey(2026, "NYL"));
+    const listed = table.rowSet.find(
+      (row) => row[table.headers.indexOf("PERSON_ID")] === Number(IONESCU),
+    );
+    const teammate = roster.players.find((player) => player.id === IONESCU);
+    assert.equal(teammate.college, listed[table.headers.indexOf("COLLEGE")]);
+    assert.ok(teammate.debut);
+    assert.ok(
+      run.docs.stored.get(nameRosterKey(2026, "LVA")).players.some((player) => player.debut),
+    );
+    const index = run.docs.stored.get(namePlayerIndexKey(2026));
+    assert.ok(index.players.some((player) => player.id === IONESCU));
+    assert.equal(
+      roster.players.find((player) => player.id === STEWART).debut === null,
+      damage !== "unused",
+    );
+    if (damage !== "unused")
+      assert.match(
+        run.docs.stored.get(STATUS_KEY).lastFailure.message,
+        /roster player failed: Invalid sports data/,
+      );
+    else assert.equal(run.docs.stored.get(STATUS_KEY).lastFailure, null);
+  }
+});
+
+test("a joined roster failure preserves the kept roster, retries only after its wait and recovers", async () => {
+  const answers = structuredClone(listAnswers());
+  const run = createRun({ answers });
+  await run.runJob();
+  const key = nameRosterKey(2026, "NYL");
+  const kept = structuredClone(run.docs.stored.get(key));
+  const path = nameLeagueRosterRequest("NYL", 2026);
+  const table = answers[path].resultSets[0];
+  const row = table.rowSet[0];
+  const original = [...row];
+  row[table.headers.indexOf("PLAYER_ID")] = 999999999;
+  row[table.headers.indexOf("PLAYER")] = "";
+  let time = NOW + FEEDS.playerList.maxAgeMs + MINUTE_MS;
+  const update = () =>
+    createPlayerJob().updateStore({
+      docs: run.docs,
+      storage: run.storage,
+      env: {},
+      now: () => time,
+      fetchImpl: run.league.fetchImpl,
+      createLoadSnapshot: () => async () => null,
+    });
+  const requests = () => run.league.requests.filter((url) => url === path).length;
+  await update();
+  const reads = requests();
+  assert.deepEqual(run.docs.stored.get(key), kept);
+  assert.match(
+    run.docs.stored.get(STATUS_KEY).lastFailure.message,
+    /Keeping NYL's 2026 roster failed: Invalid sports data/,
+  );
+  const retryAt = time + FAILED_FEED_WAIT_MS;
+  for (let checkAt = time + MINUTE_MS; checkAt < retryAt; checkAt += MINUTE_MS) {
+    time = checkAt;
+    await update();
+    assert.equal(requests(), reads);
+    assert.deepEqual(run.docs.stored.get(key), kept);
+  }
+  row.splice(0, row.length, ...original);
+  row[table.headers.indexOf("NUM")] = "99";
+  time = retryAt;
+  await update();
+  assert.equal(requests(), reads + 1);
+  assert.equal(run.docs.stored.get(key).players[0].number, "99");
+});
+
+test("budget-limited history resumes the newest season each run before reading older history", async () => {
+  const { createRequestBudget, HISTORY_REQUESTS_PER_RUN } =
+    await import("../../../shared/worker/request-budget.js");
+  const answers = structuredClone(listAnswers());
+  for (const [url, answer] of Object.entries(answers))
+    if (url.includes("Season=2025"))
+      answers[url.replace("Season=2025", "Season=2024")] = structuredClone(answer);
+  const run = createRun({ answers });
+  run.docs.stored.set("seasons/2024", { year: 2024, games: [], series: [] });
+  for (let attempt = 0; attempt < 10 && !(await run.storage.get("filled:2025")); attempt += 1) {
+    const budget = createRequestBudget(run.league.fetchImpl, HISTORY_REQUESTS_PER_RUN);
+    const before = run.league.requests.length;
+    await createPlayerJob().updateHistory({
+      docs: run.docs,
+      storage: run.storage,
+      env: {},
+      now: () => NOW + attempt * 5 * MINUTE_MS,
+      fetchImpl: budget.fetchImpl,
+      remainingRequests: budget.remaining,
+      createLoadSnapshot: () => async () => null,
+    });
+    assert.ok(run.league.requests.length - before <= HISTORY_REQUESTS_PER_RUN);
+    assert.ok(run.league.requests.every((url) => !url.includes("Season=2024")));
+    assert.equal(await run.storage.get("past-retry:2025"), undefined);
+  }
+  assert.ok(await run.storage.get("filled:2025"));
+  const budget = createRequestBudget(run.league.fetchImpl, HISTORY_REQUESTS_PER_RUN);
+  await createPlayerJob().updateHistory({
+    docs: run.docs,
+    storage: run.storage,
+    env: {},
+    now: () => NOW + 60 * MINUTE_MS,
+    fetchImpl: budget.fetchImpl,
+    remainingRequests: budget.remaining,
+    createLoadSnapshot: () => async () => null,
+  });
+  assert.ok(run.league.requests.some((url) => url.includes("Season=2024")));
+});
+
+test("a historical malformed roster name rejects its cached feed despite a matching kept player and recovers", async () => {
+  const { describeRoster } = await import("../worker/src/adapters/roster.js");
+  const answers = structuredClone(listAnswers());
+  const path = nameLeagueRosterRequest("NYL", 2025);
+  const roster = answers[path].resultSets[0];
+  const row = roster.rowSet[0];
+  const id = row[roster.headers.indexOf("PLAYER_ID")];
+  const listed = answers[namePlayerListRequest(2025)].resultSets[0];
+  const key = nameRosterKey(2025, "NYL");
+  const kept = describeRoster({
+    team: "NYL",
+    season: 2025,
+    leagueRoster: answers[path],
+    playerList: answers[namePlayerListRequest(2025)],
+    outPlayers: [],
+    now: NOW,
+  });
+  listed.rowSet = listed.rowSet.filter(
+    (person) => person[listed.headers.indexOf("PERSON_ID")] !== id,
+  );
+  const original = row[roster.headers.indexOf("PLAYER")];
+  row[roster.headers.indexOf("PLAYER")] = "";
+  const run = createRun({ answers });
+  run.docs.stored.set(key, kept);
+  let time = NOW;
+  const update = () =>
+    createPlayerJob().updateHistory({
+      docs: run.docs,
+      storage: run.storage,
+      env: {},
+      now: () => time,
+      fetchImpl: run.league.fetchImpl,
+      createLoadSnapshot: () => async () => null,
+    });
+  await update();
+  assert.deepEqual(run.docs.stored.get(key), kept);
+  assert.equal(await run.storage.get("filled:2025"), undefined);
+  assert.match(
+    run.docs.stored.get("players-history/status").lastFailure.message,
+    /Keeping NYL's 2025 roster failed/,
+  );
+  row[roster.headers.indexOf("PLAYER")] = original;
+  row[roster.headers.indexOf("NUM")] = "99";
+  time = (await run.storage.get("past-retry:2025")) + 1;
+  await update();
+  assert.ok(await run.storage.get("filled:2025"));
+  assert.equal(run.docs.stored.get(key).players[0].number, "99");
+  assert.equal(run.league.requests.filter((url) => url === path).length, 2);
 });

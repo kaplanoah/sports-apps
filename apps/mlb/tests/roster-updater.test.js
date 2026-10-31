@@ -19,6 +19,7 @@ import {
 } from "../worker/src/roster-updater.js";
 import {
   describeRoster,
+  isOnRoster,
   indexSeasonStats,
   trimHitting,
   trimPitching,
@@ -830,11 +831,12 @@ test("actual roster, player and hitter writers reject malformed cold reads, reta
     for (const [key, player] of players)
       assert.deepEqual(run.docs.stored.get(key), player, `${target}: ${key}`);
     const after = run.storage.stored.get(cacheKey);
-    assert.deepEqual(
-      target === "roster" ? after : after.answer,
-      target === "roster" ? cached : cached.answer,
-      target,
-    );
+    if (target !== "people")
+      assert.deepEqual(
+        target === "roster" ? after : after.answer,
+        target === "roster" ? cached : cached.answer,
+        target,
+      );
     assert.match(run.docs.stored.get("rosters/status").lastFailure.message, /Invalid sports/);
     run.answers[path] = structuredClone(original);
     if (target === "roster")
@@ -884,6 +886,10 @@ test("a malformed last-game row or identity preserves its log without blocking o
     run.gameLogs[id].stats[0].splits.at(-1).stat.hits = 3;
     run.wait(6);
     await run.runJob();
+    assert.match(
+      run.docs.stored.get("rosters/status").lastFailure.message,
+      /Reading 2026's player game logs failed/,
+    );
     assert.notDeepEqual(run.docs.stored.get(key).lastGames, valid, target);
     assert.ok((await run.storage.get(nameGameLogReadsKey(SEASON)))[id], target);
   }
@@ -948,11 +954,40 @@ test("unused player facts cannot freeze rostered players and newly used bad cach
   run.wait(6);
   await run.runJob();
   assert.equal(run.takeRequests().filter((path) => path === PEOPLE).length, 1);
-  assert.equal(run.docs.stored.get(namePlayerKey(SEASON, unused.id)).facts, null);
+  assert.equal(run.docs.stored.has(namePlayerKey(SEASON, unused.id)), false);
   unused.currentAge = 25;
   unused.weight = 180;
   unused.mlbDebutDate = "2026-01-01";
-  run.wait(6);
+  run.wait(24 * 60 + 1);
   await run.runJob();
   assert.equal(run.docs.stored.get(namePlayerKey(SEASON, unused.id)).facts.age, 25);
+});
+
+test("one rostered player's bad facts leave other cold player facts and search names usable", async () => {
+  const run = createRun();
+  const roster = run.answers[nameClubRequest("CLE")].roster;
+  const ids = new Set(roster.filter(isOnRoster).map((row) => row.person.id));
+  const people = run.answers[PEOPLE].people.filter((person) => ids.has(person.id));
+  const [bad, good] = people;
+  bad.currentAge = -1;
+  good.useName = "Multi Given";
+  good.useLastName = "Good";
+  roster.find((row) => row.person.id === good.id).person.fullName = "Multi Given Good";
+  await run.runJob();
+  assert.equal(run.takeRequests().filter((path) => path === PEOPLE).length, 1);
+  await fillRosters(run);
+  assert.equal(run.docs.stored.has(namePlayerKey(SEASON, bad.id)), false);
+  assert.ok(run.docs.stored.get(namePlayerKey(SEASON, good.id)).facts);
+  const index = run.docs.stored.get(namePlayerIndexKey(SEASON));
+  assert.equal(
+    index.players.find((player) => player.id === String(good.id)).firstName,
+    "Multi Given",
+  );
+  assert.match(
+    run.docs.stored.get("rosters/status").lastFailure.message,
+    /Keeping a player failed: Invalid sports data/,
+  );
+  run.wait(6);
+  await run.runJob();
+  assert.equal(run.takeRequests().filter((path) => path === PEOPLE).length, 0);
 });

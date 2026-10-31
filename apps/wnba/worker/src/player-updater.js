@@ -41,7 +41,6 @@ import { indexRosters } from "./player-index.js";
 import {
   describeRoster,
   validateRosterFeed,
-  validatePlayerList,
   nameLeagueRosterRequest,
   namePlayerListRequest,
   nameRosterKey,
@@ -319,8 +318,7 @@ function createStoreUpdate(historyOnly = false) {
     for (const [index, team] of TEAM_KEYS.entries()) {
       const leagueRoster = leagueRosters[index];
       const key = nameRosterKey(season, team);
-      const kept = !playerList ? await savedDocs.readDoc(context.docs, key) : null;
-      if (!leagueRoster || (!playerList && kept)) {
+      if (!leagueRoster || !playerList) {
         isWhole = false;
         continue;
       }
@@ -332,6 +330,11 @@ function createStoreUpdate(historyOnly = false) {
           playerList,
           outPlayers: outPlayers[index],
           now: context.now(),
+          kept: await savedDocs.readDoc(context.docs, key),
+          onPlayerFailure: (error) => {
+            isWhole = false;
+            noteFailure(context.failures, `Keeping ${team}'s ${season} roster player`, error);
+          },
         });
         await saveDoc(context, key, roster);
         rosters.push(roster);
@@ -410,7 +413,8 @@ function createStoreUpdate(historyOnly = false) {
       url: namePlayerListRequest(season),
       table: "PlayerIndex",
       columns: PLAYER_LIST_COLUMNS,
-      validate: async (answer) => validatePlayerList(answer, await rosterReads),
+      validate: (answer) =>
+        validateRosterFeed(answer, "PlayerIndex", { season, now: context.now() }),
     }).catch(() => null);
     const [stats, leagueRosters, outPlayers, playerList] = await Promise.all([
       readSeasonFeeds(context, season).catch(() => null),
@@ -424,10 +428,9 @@ function createStoreUpdate(historyOnly = false) {
       playerList,
     });
     if (stats) await savePlayers(context, season, stats);
-    const hasEveryRoster = isWhole;
-    if (hasEveryRoster)
+    if (rosters.length === TEAM_KEYS.length)
       await saveDoc(context, namePlayerIndexKey(season), indexRosters(season, rosters));
-    return !!stats && !!playerList && hasEveryRoster;
+    return !!stats && !!playerList && isWhole;
   }
 
   /**
@@ -480,7 +483,11 @@ function createStoreUpdate(historyOnly = false) {
         ? Object.fromEntries(
             Object.entries(FEEDS).map(([name, feed]) => [
               name,
-              { ...feed, maxAgeMs: Infinity, changesWithGames: false },
+              {
+                ...feed,
+                maxAgeMs: name === "playerList" ? feed.maxAgeMs : Infinity,
+                changesWithGames: false,
+              },
             ]),
           )
         : FEEDS,

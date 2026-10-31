@@ -31,7 +31,6 @@ const NOW = Date.parse(FIXTURE.recordedAt);
 const TODAY = "2026-10-06";
 const TOMORROW = "2026-10-07";
 const MINUTE_MS = 60 * 1000;
-const HISTORY_RECOVERY_MS = 2 * 60 * MINUTE_MS;
 const MLB_API = "https://statsapi.mlb.com";
 const LEAGUE_FEEDS = 4;
 const QUALIFIED_IDS = listQualifiedIds(FIXTURE.answers[listQualifiedRequest(2026)]);
@@ -673,7 +672,7 @@ test("the actual historical starter writer does not mark malformed data filled a
   assert.equal(run.docs.stored.has(nameStartersKey(2025)), false);
   assert.equal(await run.storage.get("filled:2025"), undefined);
   qualified.stats[0].splits[0].stat.era = original;
-  run.wait(HISTORY_RECOVERY_MS / MINUTE_MS + 1);
+  run.wait(((await run.storage.get("past-retry:2025")) - NOW) / MINUTE_MS + 1);
   await run.runJob();
   assert.ok(run.docs.stored.get(nameStartersKey(2025)));
   assert.equal(await run.storage.get("filled:2025"), true);
@@ -746,7 +745,7 @@ test("a bad newest historical season backs off across restarts while an older se
   answers[listQualifiedRequest(2025)] = structuredClone(
     FIXTURE.answers[listQualifiedRequest(2025)],
   );
-  run.wait(HISTORY_RECOVERY_MS / MINUTE_MS + 1);
+  run.wait(((await run.storage.get("past-retry:2025")) - NOW) / MINUTE_MS + 1);
   await run.runJob();
   assert.equal(attempts(), 2);
   assert.equal(await run.storage.get("filled:2025"), true);

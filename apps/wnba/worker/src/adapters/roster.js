@@ -1,6 +1,5 @@
 import {
   PositiveId,
-  BasketballPlayerName,
   BasketballRosterFacts,
   BasketballRoster,
   validateSportsData,
@@ -38,27 +37,6 @@ export function validateRosterFeed(answer, table, { season, now }) {
     }
   } else {
     for (const row of rows) validateSportsData(PositiveId, row.PERSON_ID);
-  }
-  return answer;
-}
-
-/** @param {any} answer @param {any[]} leagueRosters */
-export function validatePlayerList(answer, leagueRosters) {
-  const ids = new Set(
-    leagueRosters
-      .filter(Boolean)
-      .flatMap((roster) =>
-        readRequiredTable(roster, "CommonTeamRoster").map((row) => row.PLAYER_ID),
-      ),
-  );
-  for (const row of readRequiredTable(answer, "PlayerIndex")) {
-    validateSportsData(PositiveId, row.PERSON_ID);
-    if (!ids.has(row.PERSON_ID)) continue;
-    validateSportsData(BasketballPlayerName, {
-      firstName: row.PLAYER_FIRST_NAME,
-      lastName: row.PLAYER_LAST_NAME,
-    });
-    validateSportsData(BasketballRosterFacts.shape.debut, readDebut(row.FROM_YEAR));
   }
   return answer;
 }
@@ -184,6 +162,24 @@ function describePlayer(row, listed, { outByName, ageDay }) {
   };
 }
 
+/** @param {any} row @param {Map<number, any>} listed @param {any} context */
+function describeRosterPlayer(row, listed, context) {
+  try {
+    return validateSportsData(
+      BasketballRoster.shape.players.element,
+      describePlayer(row, listed, context),
+    );
+  } catch (error) {
+    if (!context.onPlayerFailure || !listed.has(row.PLAYER_ID)) throw error;
+    context.onPlayerFailure(error);
+    const kept = context.kept?.players.find((player) => player.id === String(row.PLAYER_ID));
+    return validateSportsData(
+      BasketballRoster.shape.players.element,
+      kept ?? describePlayer(row, new Map(), context),
+    );
+  }
+}
+
 /** @param {any} leagueRoster */
 function nameHeadCoach(leagueRoster) {
   const coach = readTable(leagueRoster, "Coaches").find((row) => row.COACH_TYPE === "Head Coach");
@@ -191,10 +187,19 @@ function nameHeadCoach(leagueRoster) {
 }
 
 /**
- * @param {{ team: string, season: number, leagueRoster: any, playerList: any, outPlayers: import("../injuries.js").OutPlayer[], now: number }} reads
+ * @param {{ team: string, season: number, leagueRoster: any, playerList: any, outPlayers: import("../injuries.js").OutPlayer[], now: number, kept?: any, onPlayerFailure?: (error: unknown) => void }} reads
  *   `outPlayers` are the team's players ESPN lists as out
  */
-export function describeRoster({ team, season, leagueRoster, playerList, outPlayers, now }) {
+export function describeRoster({
+  team,
+  season,
+  leagueRoster,
+  playerList,
+  outPlayers,
+  now,
+  kept,
+  onPlayerFailure,
+}) {
   const rosterRows = readRequiredTable(leagueRoster, "CommonTeamRoster");
   for (const row of rosterRows) validateSportsData(PositiveId, row.PLAYER_ID);
   if (playerList) validateRosterFeed(playerList, "PlayerIndex", { season, now });
@@ -205,12 +210,12 @@ export function describeRoster({ team, season, leagueRoster, playerList, outPlay
     ]),
   );
   const outByName = new Map(outPlayers.map(({ name, ...out }) => [name, out]));
-  const context = { outByName, ageDay: chooseAgeDay(season, now) };
+  const context = { outByName, ageDay: chooseAgeDay(season, now), kept, onPlayerFailure };
   return validateSportsData(BasketballRoster, {
     team,
     season,
     coach: nameHeadCoach(leagueRoster),
-    players: rosterRows.map((row) => describePlayer(row, listed, context)),
+    players: rosterRows.map((row) => describeRosterPlayer(row, listed, context)),
   });
 }
 

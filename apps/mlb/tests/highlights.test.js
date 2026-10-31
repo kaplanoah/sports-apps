@@ -618,7 +618,6 @@ test("actual live and historical highlight writers preserve usable media after m
     assert.equal(docs.stored.has(key), false);
     phase = "valid";
     await update();
-    await docs.write(key, { ...docs.stored.get(key), season });
     const valid = structuredClone(docs.stored.get(key));
     const identity = await store.identities.lookup.readEntry("game", game.id);
     assert.equal(identity.facts.season, season);
