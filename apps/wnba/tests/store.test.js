@@ -6,7 +6,11 @@ import { BACKGROUND_JOBS } from "../page/js/background-jobs.js";
 import { createSnapshotLoader } from "../worker/src/snapshot.js";
 import { SeasonStore } from "../worker/src/store.js";
 import { createDurableObjectContext } from "../../../tests/durable-object-context.js";
-import { createMemoryStorage, FAILED_FEED_WAIT_MS } from "../../../shared/worker/feed-keeper.js";
+import {
+  FAILED_FEED_WAIT_MS,
+  nameFeedKey,
+  nameStoredFeedKey,
+} from "../../../shared/worker/feed-keeper.js";
 import { readAfternoonEspn } from "./espn-fixtures.js";
 
 for (const withHistory of [false, true]) {
@@ -193,18 +197,90 @@ function createOffseasonStore(time = "2026-10-30T12:00:00Z") {
     return Response.json(fixture.responses[name] ?? { events: [] });
   };
   const { ctx, stored } = createDurableObjectContext();
-  const storage = createMemoryStorage();
+  const storage = {
+    get: (key) => ctx.storage.get(nameStoredFeedKey(key)),
+    put: (key, value) => ctx.storage.put(nameStoredFeedKey(key), value),
+    delete: (key) => ctx.storage.delete(nameStoredFeedKey(key)),
+  };
   const restartStore = () =>
     new SeasonStore(
       ctx,
       {},
       {
         now: () => clock.now,
-        createLoadSnapshot: () =>
-          createSnapshotLoader({ fetchImpl, storage, now: () => clock.now }).loadSnapshot,
+        fetchImpl,
+        createLoadSnapshot: (fetchWith) =>
+          createSnapshotLoader({ fetchImpl: fetchWith, storage, now: () => clock.now })
+            .loadSnapshot,
       },
     );
-  return { clock, reads, downFeeds, stored, restartStore };
+  return { clock, reads, downFeeds, stored, storage, restartStore };
+}
+
+const damageFeedAnswer = {
+  schedule: (answer) => {
+    answer.leagueSchedule.gameDates[0].games[0].homeTeam.score = -1;
+  },
+  bracket: (answer) => {
+    answer.bracket.playoffBracketSeries[0].highSeedSeriesWins = -1;
+  },
+  standings: (answer) => {
+    const table = answer.resultSets[0];
+    table.rowSet[0][table.headers.indexOf("WINS")] = -1;
+  },
+};
+
+for (const name of ["schedule", "bracket", "standings"]) {
+  for (const isDue of [false, true]) {
+    for (const hasShape of [false, true]) {
+      test(`the store rejects a ${isDue ? "due" : "young"} saved ${name} with ${hasShape ? "invalid facts" : "no feed data"} and recovers across restarts`, async () => {
+        const { clock, reads, downFeeds, stored, storage, restartStore } = createOffseasonStore();
+        await restartStore().updateSeasonWhenDue(clock.now);
+        const saved = structuredClone(stored.get("seasons/2026"));
+        const request = REQUESTS[name];
+        const key = await nameFeedKey(
+          name,
+          typeof request === "function" ? request(2026) : request,
+        );
+        const record = await storage.get(key);
+        if (hasShape) damageFeedAnswer[name](record.answer.data);
+        else record.answer.data = "<title>Unavailable</title>";
+        if (isDue) record.answer.at -= 24 * 60 * 60_000;
+        await storage.put(key, record);
+        clock.now += 60 * 60_000;
+        downFeeds.add(name);
+        let store = restartStore();
+        const failedAt = clock.now;
+        assert.equal(await store.updateSeasonWhenDue(clock.now), failedAt + FAILED_FEED_WAIT_MS);
+        assert.ok(stored.get("live/feeds").failing[name]);
+        assert.deepEqual(stored.get("seasons/2026").games, saved.games);
+        assert.deepEqual(stored.get("seasons/2026").standings, saved.standings);
+        assert.equal((await storage.get(key)).answer, undefined);
+        assert.equal(reads.get(name), isDue ? 2 : 1);
+        assert.equal(store.requestCount, isDue ? 4 : 3);
+        const failedReads = new Map(reads);
+        downFeeds.clear();
+        store = restartStore();
+        clock.now += FAILED_FEED_WAIT_MS - 1;
+        await store.updateSeasonWhenDue(clock.now);
+        assert.deepEqual(reads, failedReads);
+        clock.now += 1;
+        await store.updateSeasonWhenDue(clock.now);
+        assert.deepEqual(stored.get("live/feeds").failing, {});
+        assert.equal(reads.get(name), failedReads.get(name) + 1);
+        assert.equal(store.requestCount, 2);
+        assert.ok((await storage.get(key)).answer);
+        assert.deepEqual(stored.get("seasons/2026").games, saved.games);
+        assert.deepEqual(stored.get("seasons/2026").series, saved.series);
+        assert.deepEqual(stored.get("seasons/2026").standings, saved.standings);
+        store = restartStore();
+        const recoveredReads = new Map(reads);
+        clock.now += FAILED_FEED_WAIT_MS;
+        await store.updateSeasonWhenDue(clock.now);
+        assert.deepEqual(reads, recoveredReads);
+      });
+    }
+  }
 }
 
 test("offseason slow-feed failures retry on the store's schedule and recover across loader restarts", async (t) => {

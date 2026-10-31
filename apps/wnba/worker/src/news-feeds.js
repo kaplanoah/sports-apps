@@ -1,7 +1,6 @@
 import { readNewsFeeds } from "../../../../shared/worker/news-feeds.js";
 import { parseAtom, parseEspnNews, parseRss } from "../../../../shared/worker/news-parse.js";
 import { ESPN_SITE } from "./adapters/wnba.js";
-import { ESPN_HEADERS } from "./wnba.js";
 
 // The outlets the WNBA's news reads, the Liberty's own beat writers among them.
 
@@ -64,4 +63,4 @@ export const NEWS_FEEDS = [
 
 /** @param {typeof fetch} fetchImpl */
 export const readWnbaNews = (fetchImpl) =>
-  readNewsFeeds(fetchImpl, NEWS_FEEDS, { userAgent: ESPN_HEADERS["user-agent"] });
+  readNewsFeeds(fetchImpl, NEWS_FEEDS, { userAgent: "sports-apps" });
