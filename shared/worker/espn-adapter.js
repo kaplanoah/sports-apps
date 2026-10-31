@@ -14,6 +14,7 @@ import { fetchFeedJson } from "./upstream.js";
 import { readEasternDay } from "#shared/days.js";
 import { readStoryLead } from "./story-lead.js";
 
+export const ESPN_VENDOR = "espn";
 const ESPN_SITE = "https://site.api.espn.com/apis/site/v2/sports";
 // ESPN answers any caller, so it needs only to be asked for JSON.
 const JSON_HEADERS = { accept: "application/json" };
@@ -180,11 +181,26 @@ export const readBackupGames = (backup, findTeam) =>
 const readGameNumberFacts = (gameNumber) =>
   Number.isInteger(gameNumber) && gameNumber > 0 ? { gameNumber } : {};
 
-/** @param {any[]} answers @param {(id: string) => string | null} findTeam */
-export function readIdentityGames(answers, findTeam) {
+function* listIdentityEvents(answers) {
+  for (const answer of answers) {
+    const events = answer?.events ?? [];
+    if (Array.isArray(events)) yield* events;
+    else yield events;
+  }
+}
+
+/** @param {any[]} answers @param {(id: string) => string | null} findTeam @param {number} [limit] */
+export function readIdentityGames(answers, findTeam, limit) {
   const records = [];
   let rejected = 0;
-  for (const event of answers.flatMap((answer) => answer?.events ?? [])) {
+  let examined = 0;
+  let truncated = false;
+  for (const event of listIdentityEvents(answers)) {
+    if (limit !== undefined && examined >= limit) {
+      truncated = true;
+      break;
+    }
+    examined += 1;
     try {
       const { competition, start, home, away } = readEspnEvent(event, () => ({}), findTeam);
       records.push(
@@ -202,7 +218,7 @@ export function readIdentityGames(answers, findTeam) {
       rejected += 1;
     }
   }
-  return { records, rejected };
+  return { records, rejected, ...(limit !== undefined && { truncated }) };
 }
 
 const isNational = (broadcast) => broadcast.market === "national";
@@ -407,13 +423,11 @@ export function describeHighlights(id, summary) {
   });
 }
 
-const ESPN_SOURCE = "espn";
-
 /**
  * Whether a box score is ESPN's, standing in for the league's.
  * @param {any} boxScore
  */
-export const isFromEspn = (boxScore) => boxScore?.source === ESPN_SOURCE;
+export const isFromEspn = (boxScore) => boxScore?.source === ESPN_VENDOR;
 
 // ESPN numbers players differently; match the league's season list by name and team.
 // A player absent from that list keeps no league ID.
@@ -576,7 +590,7 @@ export function describeEspnBoxScore(summary, id, index, findTeam) {
   const leadChanges = readStat(summary.boxscore.teams?.[0]?.statistics ?? [], "leadChanges");
   return validateSportsData(BasketballBoxScore, {
     id,
-    source: ESPN_SOURCE,
+    source: ESPN_VENDOR,
     state,
     period: Math.max(away.periods.length, home.periods.length) || null,
     leadChanges: leadChanges === undefined ? null : Number(leadChanges),

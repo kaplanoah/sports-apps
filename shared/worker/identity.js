@@ -221,7 +221,11 @@ export function createIdentityLookup(storage, league) {
       });
     },
     async readProblems(limit) {
-      const entries = await storage.list({ prefix: PROBLEM_PREFIX, limit: limit + 1 });
+      const entries = await storage.list({
+        prefix: PROBLEM_PREFIX,
+        reverse: true,
+        limit: limit + 1,
+      });
       return {
         problems: [...entries]
           .slice(0, limit)

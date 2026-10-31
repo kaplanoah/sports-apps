@@ -10,6 +10,7 @@ import { createHealthServer, HEALTH_REUSE_MS } from "../shared/worker/health.js"
 import { readStoreHealth } from "../shared/worker/season-store.js";
 import { readIdentityDiagnosis } from "../shared/worker/identity-diagnostics.js";
 import { buildSnapshot } from "../apps/wnba/worker/src/adapters/wnba.js";
+import { readIdentityGames } from "../shared/worker/espn-adapter.js";
 
 const nameProblem = (league, type, id, vendor = "espn") =>
   `identity:problem:identity:vendor:${encodeURIComponent(vendor)}:${league}:${type}:${encodeURIComponent(id)}`;
@@ -112,7 +113,7 @@ for (const app of ["mlb", "wnba"]) {
     const { stored } = harness;
     stored.set(nameProblem(app, "game", "private-event"), "unmatched");
     stored.set(nameProblem(app, "player", "private-player"), "unmatched");
-    stored.set(nameProblem(app, "game", "private-dispute", "balldontlie"), "disputed");
+    stored.set(nameProblem(app, "game", "private-dispute", app), "disputed");
     stored.set(nameProblem(app, "private-type", "private-id", "private-vendor"), "private-value");
     stored.set("identity:problem:identity:vendor:%ZZ", "private-malformed");
     stored.set(nameProblem("foreign", "game", "private-foreign"), "unmatched");
@@ -148,7 +149,10 @@ for (const app of ["mlb", "wnba"]) {
     );
     assert.ok(
       diagnosis.groups.some(
-        (group) => group.problem === "disputed" && group.reason === "disputed_association",
+        (group) =>
+          group.vendor === app &&
+          group.problem === "disputed" &&
+          group.reason === "disputed_association",
       ),
     );
     assert.ok(
@@ -180,6 +184,50 @@ test("the problem sample is capped with honest truncation and query parameters c
     ),
   );
   assert.ok(!harness.calls.lists.some(({ prefix }) => prefix.startsWith("feed:")));
+  assertReadOnly(harness, before);
+});
+
+test("diagnosis takes the native vendor label from its trusted league policy", async () => {
+  const { ctx, stored } = createDurableObjectContext();
+  stored.set(nameProblem("wnba", "player", "private-player", "native"), "unmatched");
+  const diagnosis = await readIdentityDiagnosis(ctx.storage, {
+    ...identityPolicy,
+    vendor: "native",
+  });
+  assert.deepEqual(diagnosis.groups, [
+    {
+      vendor: "native",
+      type: "player",
+      problem: "unmatched",
+      reason: "evidence_unavailable",
+      count: 1,
+    },
+  ]);
+});
+
+test("a capped problem sample follows descending keys toward evidence retained for newer game IDs", async () => {
+  const harness = createHarness();
+  const events = [];
+  for (let number = 1; number <= 60; number += 1) {
+    const id = String(number).padStart(6, "0");
+    harness.stored.set(nameProblem("wnba", "game", id), "unmatched");
+    if (number > 10) events.push(createEvent(id, { away: "-1" }));
+  }
+  harness.stored.set("feed:networks:202610", createMonth(events));
+  const before = structuredClone([...harness.stored]);
+  const diagnosis = (await harness.read()).identity.diagnosis;
+  assert.equal(diagnosis.sampled, 50);
+  assert.equal(diagnosis.truncated, true);
+  assert.equal(diagnosis.evidenceTruncated, false);
+  assert.deepEqual(diagnosis.groups, [
+    {
+      vendor: "espn",
+      type: "game",
+      problem: "unmatched",
+      reason: "missing_team_evidence",
+      count: 50,
+    },
+  ]);
   assertReadOnly(harness, before);
 });
 
@@ -289,6 +337,52 @@ test("the total event budget is shared across sources and counts rejected record
   assert.equal(diagnosis.groups[0].reason, "evidence_limited");
   assert.equal(diagnosis.evidenceTruncated, true);
   assert.deepEqual([...stored], before);
+});
+
+test("bounded and unbounded reads count malformed retained months consistently", () => {
+  for (const [data, rejected] of [
+    [null, 0],
+    [{}, 0],
+    [{ events: null }, 0],
+    [{ events: "malformed" }, 1],
+    [{ events: [null] }, 1],
+  ]) {
+    const full = identityPolicy.readSavedVendorGames("feed:networks:202610", { data });
+    assert.deepEqual(full, { records: [], rejected });
+    const { truncated, ...bounded } = identityPolicy.readSavedVendorGames(
+      "feed:networks:202610",
+      { data },
+      500,
+    );
+    assert.deepEqual(bounded, full);
+    assert.equal(truncated, false);
+  }
+});
+
+test("the shared ESPN reader bounds examined events across answers and never parses beyond its limit", () => {
+  const after = createEvent("after");
+  Object.defineProperty(after, "id", {
+    get: () => assert.fail("parsed an event beyond the limit"),
+  });
+  const answers = [
+    { events: [createEvent(""), createEvent("one")] },
+    { events: [createEvent("two"), after] },
+  ];
+  const result = readIdentityGames(answers, (id) => id, 3);
+  assert.deepEqual(
+    result.records.map(({ id }) => id),
+    ["one", "two"],
+  );
+  assert.equal(result.rejected, 1);
+  assert.equal(result.truncated, true);
+  assert.deepEqual(
+    readIdentityGames([{ events: [after] }], (id) => id, 0),
+    {
+      records: [],
+      rejected: 0,
+      truncated: true,
+    },
+  );
 });
 
 test("malformed retained answers remain unavailable evidence without failing sports health", async () => {

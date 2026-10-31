@@ -17,14 +17,8 @@ export const identityPolicy = {
   readGameFacts: (game, season) => ({ ...(season && { season }), ...readGameFacts(game.id) }),
   readSeriesFacts,
   vendorGameSourcePrefix: NETWORK_PREFIX,
-  readSavedVendorGames: (key, value, limit) => {
-    if (!key.startsWith(NETWORK_PREFIX)) return null;
-    if (limit === undefined) return readIdentityGames([value?.data], findTeamCodeByEspnId);
-    const events = value?.data?.events;
-    if (!Array.isArray(events)) return { records: [], rejected: 1 };
-    return {
-      ...readIdentityGames([{ events: events.slice(0, limit) }], findTeamCodeByEspnId),
-      truncated: events.length > limit,
-    };
-  },
+  readSavedVendorGames: (key, value, limit) =>
+    key.startsWith(NETWORK_PREFIX)
+      ? readIdentityGames([value?.data], findTeamCodeByEspnId, limit)
+      : null,
 };
