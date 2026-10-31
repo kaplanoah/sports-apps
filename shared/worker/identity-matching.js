@@ -3,7 +3,7 @@ import { readPlayerName } from "./player-name.js";
 import { readEasternDay } from "../page/days.js";
 
 /** @param {any} game */
-export const readIdentityDay = (game) =>
+const readIdentityDay = (game) =>
   game.date ??
   (Number.isFinite(Date.parse(game.start)) ? readEasternDay(Date.parse(game.start)).date : null);
 
