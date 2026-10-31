@@ -150,11 +150,12 @@ test("past-season attempts share persisted retry timing, incomplete fills, failu
   assert.equal(storage.stored.has("past-retry:2025"), false);
 });
 
-test("history budget stops leave the newest season immediately resumable", async () => {
+test("explicit budget stops resume immediately while a failed fill with no budget backs off", async () => {
   const storage = createJobStorage();
   const context = { storage, now: () => 0, remainingRequests: () => 0 };
   assert.equal(await tryPastSeason(context, 2025, async () => false), true);
-  assert.equal(await storage.get("past-retry:2025"), undefined);
+  assert.ok((await storage.get("past-retry:2025")) > 0);
+  await storage.delete("past-retry:2025");
   await assert.rejects(
     tryPastSeason(context, 2025, async () => {
       throw new RequestBudgetExhausted("No requests left");

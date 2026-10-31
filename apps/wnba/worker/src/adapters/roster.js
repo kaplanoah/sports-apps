@@ -4,6 +4,7 @@ import {
   BasketballRoster,
   validateSportsData,
 } from "../../../../../shared/worker/sports-schema.js";
+import { describeError } from "../../../../../shared/worker/responses.js";
 import { readNameLetters } from "../../../../../shared/worker/player-name.js";
 import { TEAMS } from "../../../page/js/teams.js";
 import { createReusedLoader } from "../../../../../shared/worker/upstream.js";
@@ -140,6 +141,16 @@ function readNames(row, listed) {
   return splitName(row.PLAYER);
 }
 
+/** @param {{ firstName: string, lastName: string }} names @param {Map<string, any>} outByName */
+const readOut = (names, outByName) =>
+  outByName.get(readNameLetters(`${names.firstName} ${names.lastName}`)) ?? null;
+
+/** @param {any} player */
+function readListFacts(player) {
+  const { firstName, lastName, college, country, debut } = player;
+  return { firstName, lastName, college, country, debut };
+}
+
 /**
  * @param {any} row the league roster's row for a player
  * @param {Map<number, any>} listed every player the league has had, by id
@@ -157,7 +168,7 @@ function describePlayer(row, listed, { outByName, ageDay }) {
     age: measureAge(readBirthday(row.BIRTH_DATE), ageDay),
     college: readText(entry?.COLLEGE),
     country: readText(entry?.COUNTRY),
-    out: outByName.get(readNameLetters(`${names.firstName} ${names.lastName}`)) ?? null,
+    out: readOut(names, outByName),
     debut: readDebut(entry?.FROM_YEAR),
   };
 }
@@ -171,12 +182,14 @@ function describeRosterPlayer(row, listed, context) {
     );
   } catch (error) {
     if (!context.onPlayerFailure || !listed.has(row.PLAYER_ID)) throw error;
-    context.onPlayerFailure(error);
+    context.onPlayerFailure(error, String(row.PLAYER_ID));
     const kept = context.kept?.players.find((player) => player.id === String(row.PLAYER_ID));
-    return validateSportsData(
-      BasketballRoster.shape.players.element,
-      kept ?? describePlayer(row, new Map(), context),
-    );
+    const current = describePlayer(row, new Map(), context);
+    const player = { ...current, ...readListFacts(kept ?? current) };
+    return validateSportsData(BasketballRoster.shape.players.element, {
+      ...player,
+      out: readOut(player, context.outByName),
+    });
   }
 }
 
@@ -187,7 +200,7 @@ function nameHeadCoach(leagueRoster) {
 }
 
 /**
- * @param {{ team: string, season: number, leagueRoster: any, playerList: any, outPlayers: import("../injuries.js").OutPlayer[], now: number, kept?: any, onPlayerFailure?: (error: unknown) => void }} reads
+ * @param {{ team: string, season: number, leagueRoster: any, playerList: any, outPlayers: import("../injuries.js").OutPlayer[], now: number, kept?: any, onPlayerFailure?: (error: unknown, id: string) => void }} reads
  *   `outPlayers` are the team's players ESPN lists as out
  */
 export function describeRoster({
@@ -261,7 +274,18 @@ export function createRosterReader({
       ),
       isCurrent ? readOutPlayers(team) : [],
     ]);
-    return describeRoster({ team, season, leagueRoster, playerList, outPlayers, now: now() });
+    return describeRoster({
+      team,
+      season,
+      leagueRoster,
+      playerList,
+      outPlayers,
+      now: now(),
+      onPlayerFailure: (error, id) =>
+        console.error(
+          `Reading ${team}'s ${season} roster player ${id} failed: ${describeError(error)}`,
+        ),
+    });
   }
 
   const loadRoster = createReusedLoader(readRoster, ROSTER_REUSE_MS, now);

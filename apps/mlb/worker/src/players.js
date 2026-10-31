@@ -178,10 +178,21 @@ const readNumbers = (table, id, trim) => (table.has(id) ? trim(table.get(id)) : 
  * @typedef {{ hitting: Map<number, any>, pitching: Map<number, any>, postseasonHitting: Map<number, any>, postseasonPitching: Map<number, any> }} PlayerNumbers
  */
 
+/** @param {any} person @param {any} kept @param {((error: unknown) => void) | undefined} onFailure */
+function describeRetainedFacts(person, kept, onFailure) {
+  try {
+    return validateSportsData(BaseballPlayer.shape.facts, person ? describeFacts(person) : null);
+  } catch (error) {
+    if (!onFailure) throw error;
+    onFailure(error);
+    return kept?.facts ?? null;
+  }
+}
+
 /**
  * A player's sheet: his facts, his stay on the injured list and why, and his season at the plate
  * and on the mound, regular and post.
- * @param {PlayerNumbers & { entry: any, club: string, season: number, person: any, lastGames?: any, out?: import("./injuries.js").OutReason | null, kept?: any, failed?: Set<string> }} sources
+ * @param {PlayerNumbers & { entry: any, club: string, season: number, person: any, lastGames?: any, out?: import("./injuries.js").OutReason | null, kept?: any, failed?: Set<string>, onFactsFailure?: (error: unknown) => void }} sources
  *   `entry` is his line on the club's roster, `lastGames` what describeLastGames found, and `out`
  *   what ESPN's injury report says of him
  */
@@ -194,6 +205,7 @@ export function describePlayer({
   out = null,
   kept = null,
   failed = new Set(),
+  onFactsFailure,
   ...numbers
 }) {
   const id = entry.person.id;
@@ -205,7 +217,9 @@ export function describePlayer({
     name: entry.person.fullName ?? person?.fullName ?? "",
     number: entry.jerseyNumber ?? "",
     position: entry.position?.abbreviation ?? "",
-    facts: failed.has("people") ? (kept?.facts ?? null) : person ? describeFacts(person) : null,
+    facts: failed.has("people")
+      ? (kept?.facts ?? null)
+      : describeRetainedFacts(person, kept, onFactsFailure),
     injury,
     out: injury ? out : null,
     hitting: readNumbers(numbers.hitting, id, trimHitting),

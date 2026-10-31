@@ -801,11 +801,7 @@ test("actual roster, player and hitter writers reject malformed cold reads, reta
     await fillRosters(run);
     if (target === "people") {
       const id = selectPerson().id;
-      assert.ok(
-        [...run.docs.stored.values()]
-          .filter((doc) => doc?.id === id)
-          .every((doc) => doc.facts == null),
-      );
+      assert.equal(run.docs.stored.get(namePlayerKey(SEASON, id)).facts, null);
     } else assert.equal(run.docs.stored.has(key), false, target);
     run.answers[path] = structuredClone(original);
     run.wait(24 * 60 + 1);
@@ -927,7 +923,7 @@ test("malformed statistic containers are rejected without exposing vendor values
   assert.equal(run.docs.stored.has(nameRosterKey("CLE")), false);
 });
 
-test("unused player facts cannot freeze rostered players and newly used bad cached facts retry", async () => {
+test("unused bad facts leave rostered players usable and a newly rostered player recovers on the daily list read", async () => {
   const run = createRun();
   const unused = { id: 99999999, currentAge: -1, weight: -1, mlbDebutDate: "bad" };
   run.answers[PEOPLE].people.push(unused);
@@ -954,7 +950,7 @@ test("unused player facts cannot freeze rostered players and newly used bad cach
   run.wait(6);
   await run.runJob();
   assert.equal(run.takeRequests().filter((path) => path === PEOPLE).length, 1);
-  assert.equal(run.docs.stored.has(namePlayerKey(SEASON, unused.id)), false);
+  assert.equal(run.docs.stored.get(namePlayerKey(SEASON, unused.id)).facts, null);
   unused.currentAge = 25;
   unused.weight = 180;
   unused.mlbDebutDate = "2026-01-01";
@@ -976,7 +972,7 @@ test("one rostered player's bad facts leave other cold player facts and search n
   await run.runJob();
   assert.equal(run.takeRequests().filter((path) => path === PEOPLE).length, 1);
   await fillRosters(run);
-  assert.equal(run.docs.stored.has(namePlayerKey(SEASON, bad.id)), false);
+  assert.equal(run.docs.stored.get(namePlayerKey(SEASON, bad.id)).facts, null);
   assert.ok(run.docs.stored.get(namePlayerKey(SEASON, good.id)).facts);
   const index = run.docs.stored.get(namePlayerIndexKey(SEASON));
   assert.equal(
@@ -985,9 +981,32 @@ test("one rostered player's bad facts leave other cold player facts and search n
   );
   assert.match(
     run.docs.stored.get("rosters/status").lastFailure.message,
-    /Keeping a player failed: Invalid sports data/,
+    /Keeping 2026's player \d+ facts failed: Invalid sports data/,
   );
   run.wait(6);
   await run.runJob();
   assert.equal(run.takeRequests().filter((path) => path === PEOPLE).length, 0);
+});
+
+test("a player's bad list facts retain only his facts while his current numbers keep changing", async () => {
+  const run = createRun();
+  await fillRosters(run);
+  const id = 694197;
+  const key = namePlayerKey(SEASON, id);
+  const kept = structuredClone(run.docs.stored.get(key));
+  const person = run.answers[PEOPLE].people.find((person) => person.id === id);
+  const line = run.answers[HITTING].stats[0].splits.find((row) => row.player.id === id).stat;
+  person.currentAge = -1;
+  for (let changed = 1; changed <= 2; changed += 1) {
+    line.homeRuns = kept.hitting.homeRuns + changed;
+    run.wait(24 * 60 + 1);
+    await run.runJob();
+    const current = run.docs.stored.get(key);
+    assert.deepEqual(current.facts, kept.facts);
+    assert.equal(current.hitting.homeRuns, kept.hitting.homeRuns + changed);
+    assert.match(
+      run.docs.stored.get("rosters/status").lastFailure.message,
+      /Keeping 2026's player 694197 facts failed/,
+    );
+  }
 });

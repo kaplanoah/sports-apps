@@ -397,6 +397,8 @@ function createStoreUpdate() {
           season,
           person,
           kept,
+          onFactsFailure: (error) =>
+            noteFailure(context.failures, `Keeping ${season}'s player ${id} facts`, error),
           lastGames: lastGames.get(`${nameLastGamesPrefix(season)}${id}`) ?? null,
           out: numbers.outPlayers.get(nameInjuredKey(club, entry.person.fullName ?? "")) ?? null,
         });

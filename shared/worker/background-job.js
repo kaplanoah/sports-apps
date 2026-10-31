@@ -8,17 +8,17 @@ import { isSameJson } from "../page/compare.js";
 const PAST_RETRY_MS = 60 * 60 * 1000;
 
 /**
- * @param {Pick<JobContext, "storage" | "now" | "remainingRequests">} context
+ * @param {Pick<JobContext, "storage" | "now">} context
  * @param {number} season
  * @param {() => Promise<boolean>} fill whether the season is complete
  * @returns {Promise<boolean>} whether a fill was attempted
  */
-export async function tryPastSeason({ storage, now, remainingRequests }, season, fill) {
+export async function tryPastSeason({ storage, now }, season, fill) {
   const key = `past-retry:${season}`;
   if (((await storage.get(key)) ?? -Infinity) > now()) return false;
   try {
     if (await fill()) await storage.delete(key);
-    else if (remainingRequests?.() !== 0) await storage.put(key, now() + PAST_RETRY_MS);
+    else await storage.put(key, now() + PAST_RETRY_MS);
   } catch (error) {
     if (!(error instanceof RequestBudgetExhausted)) await storage.put(key, now() + PAST_RETRY_MS);
     throw error;

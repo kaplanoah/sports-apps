@@ -22,6 +22,7 @@ import { addTurnovers, joinGameLogs } from "./player-fixtures.js";
 import { nameInjuriesRequest } from "../worker/src/injuries.js";
 import { createRosterServer } from "../worker/src/roster.js";
 import {
+  createRosterReader,
   nameLeagueRosterRequest,
   namePlayerListRequest,
   nameRosterKey,
@@ -1293,7 +1294,7 @@ test("cold bad player-list facts affect only that player while teammates, other 
     if (damage !== "unused")
       assert.match(
         run.docs.stored.get(STATUS_KEY).lastFailure.message,
-        /roster player failed: Invalid sports data/,
+        /roster player \d+ failed: Invalid sports data/,
       );
     else assert.equal(run.docs.stored.get(STATUS_KEY).lastFailure, null);
   }
@@ -1368,6 +1369,11 @@ test("budget-limited history resumes the newest season each run before reading o
     assert.ok(run.league.requests.length - before <= HISTORY_REQUESTS_PER_RUN);
     assert.ok(run.league.requests.every((url) => !url.includes("Season=2024")));
     assert.equal(await run.storage.get("past-retry:2025"), undefined);
+    assert.equal(run.docs.stored.get("players-history/status").pastSeason.season, 2025);
+    assert.equal(
+      run.docs.stored.get("players-history/status").pastSeason.isWhole,
+      !!(await run.storage.get("filled:2025")),
+    );
   }
   assert.ok(await run.storage.get("filled:2025"));
   const budget = createRequestBudget(run.league.fetchImpl, HISTORY_REQUESTS_PER_RUN);
@@ -1431,4 +1437,119 @@ test("a historical malformed roster name rejects its cached feed despite a match
   assert.ok(await run.storage.get("filled:2025"));
   assert.equal(run.docs.stored.get(key).players[0].number, "99");
   assert.equal(run.league.requests.filter((url) => url === path).length, 2);
+});
+
+test("bad list facts retain only list fields while current roster fields and injury status change", async () => {
+  const answers = structuredClone(listAnswers());
+  const series = [
+    {
+      round: 1,
+      top: { team: "LVA", seed: 3, wins: 1 },
+      bottom: { team: "IND", seed: 6, wins: 1 },
+      winner: null,
+    },
+  ];
+  const run = createRun({ answers, series });
+  await run.runJob();
+  const key = nameRosterKey(2026, "IND");
+  const kept = structuredClone(
+    run.docs.stored.get(key).players.find((player) => player.lastName === "Harris"),
+  );
+  assert.ok(kept.out);
+  const table = answers[nameLeagueRosterRequest("IND", 2026)].resultSets[0];
+  const row = table.rowSet.find(
+    (row) => String(row[table.headers.indexOf("PLAYER_ID")]) === kept.id,
+  );
+  const listed = answers[namePlayerListRequest(2026)].resultSets[0];
+  const entry = listed.rowSet.find(
+    (row) => String(row[listed.headers.indexOf("PERSON_ID")]) === kept.id,
+  );
+  entry[listed.headers.indexOf("FROM_YEAR")] = "2016.5";
+  row[table.headers.indexOf("NUM")] = "99";
+  row[table.headers.indexOf("PLAYER")] = "Roster Alias";
+  row[table.headers.indexOf("POSITION")] = "F";
+  row[table.headers.indexOf("BIRTH_DATE")] = "JAN 01, 1990";
+  run.wait(FEEDS.playerList.maxAgeMs / MINUTE_MS + 1);
+  await run.runJob();
+  const stillOut = run.docs.stored.get(key).players.find((player) => player.id === kept.id);
+  assert.equal(stillOut.number, "99");
+  assert.ok(stillOut.out);
+  answers[nameInjuriesRequest()] = { injuries: [] };
+  run.wait(FEEDS.out.maxAgeMs / MINUTE_MS + 1);
+  await run.runJob();
+  const current = run.docs.stored.get(key).players.find((player) => player.id === kept.id);
+  assert.equal(current.number, "99");
+  assert.equal(current.position, "F");
+  assert.notEqual(current.age, kept.age);
+  assert.equal(current.out, null);
+  for (const field of ["college", "country", "debut", "firstName", "lastName"])
+    assert.equal(current[field], kept[field]);
+  assert.match(
+    run.docs.stored.get(STATUS_KEY).lastFailure.message,
+    new RegExp(`roster player ${kept.id} failed`),
+  );
+});
+
+test("the live roster reader isolates a bad list fact and identifies the player in its report", async (context) => {
+  const answers = structuredClone(listAnswers());
+  const listed = answers[namePlayerListRequest(2026)].resultSets[0];
+  const row = listed.rowSet.find(
+    (row) => row[listed.headers.indexOf("PERSON_ID")] === Number(STEWART),
+  );
+  row[listed.headers.indexOf("FROM_YEAR")] = "2016.5";
+  const logged = [];
+  context.mock.method(console, "error", (message) => logged.push(message));
+  const roster = await createRosterReader({
+    fetchImpl: createLeagueFetch(answers).fetchImpl,
+    now: () => NOW,
+  })("NYL:2026");
+  assert.equal(roster.players.find((player) => player.id === STEWART).debut, null);
+  assert.ok(roster.players.find((player) => player.id === IONESCU).debut);
+  assert.ok(
+    logged.some((message) =>
+      message.includes(`roster player ${STEWART} failed: Invalid sports data`),
+    ),
+  );
+});
+
+test("a malformed historical feed that spends the last request backs off so older history can fill", async () => {
+  const { createRequestBudget, HISTORY_REQUESTS_PER_RUN } =
+    await import("../../../shared/worker/request-budget.js");
+  const answers = structuredClone(listAnswers());
+  for (const [url, answer] of Object.entries(answers))
+    if (url.includes("Season=2025"))
+      answers[url.replace("Season=2025", "Season=2024")] = structuredClone(answer);
+  const run = createRun({ answers });
+  run.docs.stored.set("seasons/2024", { year: 2024, games: [], series: [] });
+  const readFeed = async (url) => {
+    const response = await run.league.fetchImpl(url);
+    if (!url.includes("Season=2025")) return response;
+    const answer = await response.json();
+    const table = answer.resultSets[0];
+    table.headers.push(table.headers[0]);
+    return Response.json(answer);
+  };
+  const update = (time, limit) => {
+    const budget = createRequestBudget(readFeed, limit);
+    return createPlayerJob().updateHistory({
+      docs: run.docs,
+      storage: run.storage,
+      env: {},
+      now: () => time,
+      fetchImpl: budget.fetchImpl,
+      remainingRequests: budget.remaining,
+      createLoadSnapshot: () => async () => null,
+    });
+  };
+  await update(NOW, 1);
+  assert.equal(run.league.requests.length, 1);
+  assert.ok((await run.storage.get("past-retry:2025")) > NOW);
+  assert.match(
+    run.docs.stored.get("players-history/status").lastFailure.message,
+    /Invalid sports table/,
+  );
+  const before = run.league.requests.length;
+  await update(NOW + 5 * MINUTE_MS, HISTORY_REQUESTS_PER_RUN);
+  assert.ok(run.league.requests.length > before);
+  assert.ok(run.league.requests.slice(before).every((url) => url.includes("Season=2024")));
 });
