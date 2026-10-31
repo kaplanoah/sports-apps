@@ -6,6 +6,19 @@ import { abortAfter } from "./timeout.js";
 export const UPSTREAM_TIMEOUT_MS = 8000;
 
 /**
+ * Keep sibling reads within the job's lifetime even when one fails.
+ * @template Value
+ * @param {Promise<Value>[]} reads
+ * @returns {Promise<Value[]>}
+ */
+export async function settleReads(reads) {
+  const results = await Promise.allSettled(reads);
+  const failure = results.find((result) => result.status === "rejected");
+  if (failure?.status === "rejected") throw failure.reason;
+  return results.map((result) => /** @type {PromiseFulfilledResult<Value>} */ (result).value);
+}
+
+/**
  * Asks a feed for `url` and reads its whole answer, giving up after UPSTREAM_TIMEOUT_MS, and
  * letting Cloudflare's edge keep the answer for `cacheSeconds`, or not at all when it's null.
  * @param {(input: string, init: object) => Promise<Response>} fetchImpl

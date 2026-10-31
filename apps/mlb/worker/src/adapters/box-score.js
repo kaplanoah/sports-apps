@@ -2,6 +2,7 @@ import {
   BaseballBoxScore,
   validateSportsData,
 } from "../../../../../shared/worker/sports-schema.js";
+import { readBaseballRate } from "./pitchers.js";
 import { readGameState } from "./mlb.js";
 import { fetchMlbJson, LIVE_FEED_CACHE_SECONDS } from "../mlb.js";
 
@@ -139,7 +140,7 @@ function describeLineupBatter(id, player, name) {
     id,
     name,
     position: player.position?.abbreviation ?? "",
-    average: season.avg === ".---" ? null : (season.avg ?? null),
+    average: readBaseballRate(season.avg) == null ? null : season.avg,
     homeRuns: season.homeRuns ?? null,
     rbi: season.rbi ?? null,
   };

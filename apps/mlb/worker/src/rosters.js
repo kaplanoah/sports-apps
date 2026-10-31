@@ -1,3 +1,8 @@
+import {
+  BaseballRoster,
+  BaseballPlayer,
+  validateSportsData,
+} from "../../../../shared/worker/sports-schema.js";
 import { readLeagueRows } from "./adapters/pitchers.js";
 
 // Each club's roster for its sheet's Roster section: its active players and who is on the injured
@@ -81,24 +86,37 @@ export function listSeasonStatsRequest(season, group, { gameType = "R", pool = "
  * @param {any} stat
  * @param {string[]} columns
  */
-export const trimStats = (stat, columns) =>
-  Object.fromEntries(
+export function trimStats(stat, columns) {
+  if (stat == null || typeof stat !== "object" || Array.isArray(stat))
+    throw new Error("Invalid sports statistics");
+  return Object.fromEntries(
     columns.filter((column) => column in stat).map((column) => [column, stat[column]]),
   );
+}
 
 /** @param {any} stat */
-export const trimHitting = (stat) => trimStats(stat, PLAYER_HITTING_COLUMNS);
+export const trimHitting = (stat) =>
+  validateSportsData(BaseballPlayer.shape.hitting, trimStats(stat, PLAYER_HITTING_COLUMNS));
 
 /** @param {any} stat */
-export const trimPitching = (stat) => trimStats(stat, PLAYER_PITCHING_COLUMNS);
+export const trimPitching = (stat) =>
+  validateSportsData(BaseballPlayer.shape.pitching, trimStats(stat, PLAYER_PITCHING_COLUMNS));
 
 /**
  * Each player's numbers in one of MLB's league tables, by id.
  * @param {any} table
+ * @param {(stat: any) => any} trim
  * @returns {Map<number, any>}
  */
-export const indexSeasonStats = (table) =>
-  new Map(readLeagueRows(table).map((row) => [row.player.id, row.stat]));
+export const indexSeasonStats = (table, trim) =>
+  new Map(
+    table == null
+      ? []
+      : readLeagueRows(table).map((row) => {
+          validateSportsData(BaseballRoster.shape.players.element.shape.id, row.player.id);
+          return [row.player.id, trim(row.stat)];
+        }),
+  );
 
 /**
  * A player's stay on the injured list as the sheets name it, as "15-day IL", or null while he
@@ -143,10 +161,13 @@ export const isOnRoster = (entry) => {
  * A club's active players and its injured list, each with his season so far.
  * @param {{ club: string, season: number, roster: any, hitting: Map<number, any>, pitching: Map<number, any> }} sources
  */
-export const describeRoster = ({ club, season, roster, hitting, pitching }) => ({
-  club,
-  season,
-  players: (roster?.roster ?? [])
-    .filter(isOnRoster)
-    .map((/** @type {any} */ entry) => describePlayer(entry, hitting, pitching)),
-});
+export function describeRoster({ club, season, roster, hitting, pitching }) {
+  if (!Array.isArray(roster?.roster)) throw new Error("Invalid sports roster");
+  return validateSportsData(BaseballRoster, {
+    club,
+    season,
+    players: roster.roster
+      .filter(isOnRoster)
+      .map((entry) => describePlayer(entry, hitting, pitching)),
+  });
+}

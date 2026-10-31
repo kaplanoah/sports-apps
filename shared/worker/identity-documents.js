@@ -2,6 +2,8 @@
 import { isStoreDocumentPath } from "../page/store-path.js";
 import { isSameJson } from "../page/compare.js";
 import { createIdentityLookup } from "./identity.js";
+import { ESPN_VENDOR } from "./espn-adapter.js";
+import { readIdentityDiagnosis } from "./identity-diagnostics.js";
 import { readPlayerName } from "./player-name.js";
 import { reconcileIdentities, readIdentityDay } from "./identity-matching.js";
 
@@ -46,7 +48,8 @@ const hasIdentifier = (value) =>
  * @property {string[]} gameFactFields
  * @property {(record: any, season: number | null) => object} readGameFacts
  * @property {(id: string) => object} readSeriesFacts
- * @property {(key: string, value: any) => { records: any[], rejected: number } | null} [readSavedVendorGames]
+ * @property {string} [vendorGameSourcePrefix]
+ * @property {(key: string, value: any, limit?: number) => { records: any[], rejected: number, truncated?: boolean } | null} [readSavedVendorGames]
  * @property {(id: string) => string} [nameMatchKey]
  */
 
@@ -118,7 +121,7 @@ export function createIdentityDocuments(storage, policy, now = Date.now) {
       .map((entry) => ({ id: entry.id, ...entry.facts }));
     const results = await reconcileIdentities(lookup, {
       type: "game",
-      vendor: "espn",
+      vendor: ESPN_VENDOR,
       natives,
       records,
     });
@@ -315,7 +318,7 @@ export function createIdentityDocuments(storage, policy, now = Date.now) {
         .map((entry) => ({ id: entry.id, ...entry.facts }));
       await reconcileIdentities(lookup, {
         type: "player",
-        vendor: "espn",
+        vendor: ESPN_VENDOR,
         natives,
         records: espnPlayers,
       });
@@ -324,7 +327,7 @@ export function createIdentityDocuments(storage, policy, now = Date.now) {
       await lookup.save([
         {
           type: "game",
-          vendor: "espn",
+          vendor: ESPN_VENDOR,
           vendorId: String(document.eventId),
           internalId: String(document.id),
           evidence: {
@@ -507,6 +510,7 @@ export function createIdentityDocuments(storage, policy, now = Date.now) {
     return {
       ...(await lookup.readStatus()),
       errors,
+      diagnosis: await readIdentityDiagnosis(storage, policy),
       checks: {
         verified:
           !!progress?.complete &&

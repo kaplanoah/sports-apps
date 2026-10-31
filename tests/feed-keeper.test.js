@@ -1,4 +1,5 @@
 import test from "node:test";
+import { createDeferred } from "./deferred.js";
 import assert from "node:assert/strict";
 import {
   createFeedKeeper,
@@ -381,4 +382,156 @@ test("a read again with no kept answer fails as its read did", async () => {
     ),
     /Source down/,
   );
+});
+
+test("rejected normalization retries only its own feed after the normal wait across restarts", async () => {
+  const storage = createMemoryStorage();
+  let time = 0;
+  let reads = 0;
+  const restart = () =>
+    createFeedKeeper({
+      feeds: { people: { maxAgeMs: Infinity, changesWithGames: false } },
+      now: () => time,
+      storage,
+    });
+  let keeper = restart();
+  const load = async () => ({ revision: ++reads });
+  assert.equal((await keeper.readFeed("people", "/people", load)).revision, 1);
+  await keeper.readFeed("people", "/other", async () => "kept");
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    await keeper.rejectFeed("people", "/people", new Error("Invalid sports data"));
+    time += FAILED_FEED_WAIT_MS - 1;
+    keeper = restart();
+    await assert.rejects(keeper.readFeed("people", "/people", load), /Invalid sports data/);
+    assert.equal(reads, attempt + 1);
+    assert.equal(
+      await keeper.readFeed("people", "/other", async () => assert.fail("unrelated feed reloaded")),
+      "kept",
+    );
+    time += 1;
+    assert.equal((await keeper.readFeed("people", "/people", load)).revision, attempt + 2);
+  }
+});
+
+test("feed validation rejects newly used cached rows and malformed refreshes preserve a valid stand-in", async () => {
+  let time = 0;
+  let value = 1;
+  let reads = 0;
+  let needsPositive = false;
+  const keeper = createFeedKeeper({
+    feeds: { people: { maxAgeMs: 1, changesWithGames: false } },
+    now: () => time,
+  });
+  const read = () =>
+    keeper.readFeed(
+      "people",
+      "/people",
+      async () => {
+        reads += 1;
+        return value;
+      },
+      {
+        validate: (answer) => {
+          if (needsPositive && answer < 0) throw new Error("Invalid sports data");
+        },
+      },
+    );
+  assert.equal(await read(), 1);
+  needsPositive = true;
+  value = -1;
+  time += 2;
+  assert.equal(await read(), 1);
+  assert.equal(reads, 2);
+  time += FAILED_FEED_WAIT_MS;
+  value = 2;
+  assert.equal(await read(), 2);
+  value = -1;
+  needsPositive = false;
+  time += 2;
+  assert.equal(await read(), -1);
+  needsPositive = true;
+  await assert.rejects(read(), /Invalid sports data/);
+  const before = reads;
+  time += FAILED_FEED_WAIT_MS - 1;
+  await assert.rejects(read(), /Invalid sports data/);
+  assert.equal(reads, before);
+  time += 1;
+  value = 3;
+  assert.equal(await read(), 3);
+});
+
+test("feed answers wait for asynchronous consumer validation before cache retention", async () => {
+  for (const cached of [false, true]) {
+    const gate = createDeferred();
+    const storage = createMemoryStorage();
+    const keeper = createFeedKeeper({
+      feeds: { people: { maxAgeMs: Infinity, changesWithGames: false } },
+      now: () => 0,
+      storage,
+    });
+    if (cached) await keeper.readFeed("people", "/people", async () => "answer");
+    let finished = false;
+    const read = keeper
+      .readFeed("people", "/people", async () => "answer", {
+        validate: async () => {
+          await gate.promise;
+          throw new Error("Invalid sports data");
+        },
+      })
+      .finally(() => {
+        finished = true;
+      });
+    const rejected = assert.rejects(read, /Invalid sports data/);
+    await new Promise((resolve) => setImmediate(resolve));
+    try {
+      assert.equal(finished, false);
+    } finally {
+      gate.resolve();
+    }
+    await rejected;
+    await assert.rejects(
+      keeper.readFeed("people", "/people", async () => assert.fail("retry ignored backoff")),
+      /Invalid sports data/,
+    );
+  }
+});
+
+test("a failed due refresh cannot return a cached answer invalid for its current consumers", async () => {
+  let time = 0;
+  let reads = 0;
+  let needsPositive = false;
+  let unavailable = false;
+  let value = -1;
+  const keeper = createFeedKeeper({
+    feeds: { people: { maxAgeMs: 1, changesWithGames: false } },
+    now: () => time,
+  });
+  const read = () =>
+    keeper.readFeed(
+      "people",
+      "/people",
+      async () => {
+        reads += 1;
+        if (unavailable) throw new Error("upstream unavailable");
+        return value;
+      },
+      {
+        validate: (answer) => {
+          if (needsPositive && answer < 0) throw new Error("Invalid sports data");
+        },
+      },
+    );
+  assert.equal(await read(), -1);
+  needsPositive = true;
+  unavailable = true;
+  time += 2;
+  await assert.rejects(read(), /upstream unavailable/);
+  assert.equal(reads, 2);
+  time += FAILED_FEED_WAIT_MS - 1;
+  await assert.rejects(read(), /upstream unavailable/);
+  assert.equal(reads, 2);
+  time += 1;
+  unavailable = false;
+  value = 3;
+  assert.equal(await read(), 3);
 });

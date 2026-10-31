@@ -1,5 +1,6 @@
 import { SCHEDULE_EDITION } from "../page/js/snapshot.js";
 import test from "node:test";
+import { createDeferred } from "../../../tests/deferred.js";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { createHighlightsServer } from "../worker/src/highlights.js";
@@ -15,6 +16,8 @@ import { STILLS_PER_READ } from "../worker/src/headline-stills.js";
 import { buildSnapshot } from "../worker/src/adapters/mlb.js";
 import { assertErrorAnswer } from "../../../tests/error-answer.js";
 import { createDocs, createJobStorage } from "../../../tests/job-context.js";
+import { SeasonStore } from "../worker/src/store.js";
+import { createDurableObjectContext } from "../../../tests/durable-object-context.js";
 
 // MLB's content and plays for two Division Series games of Oct 7, as it had them the next day.
 const RECORDED = JSON.parse(
@@ -389,8 +392,11 @@ test("the store's job asks Claude about a few stills a run, saving the game's hi
   await runJob();
 
   const games = [...new Set(mlb.requests.map((path) => /\/game\/(\d+)\//.exec(path)?.[1] ?? ""))];
-  const listStills = (id) => listStillsToCheck(RECORDED.content[id], RECORDED.plays[id]);
-  const askedFirst = games.map((id) => Math.min(listStills(id).length, STILLS_PER_READ));
+  const listStills = (id) =>
+    RECORDED.content[id] ? listStillsToCheck(RECORDED.content[id], RECORDED.plays[id]) : [];
+  const askedFirst = games
+    .filter((id) => RECORDED.content[id])
+    .map((id) => Math.min(listStills(id).length, STILLS_PER_READ));
   assert.equal(
     mlb.stillsAsked.length,
     askedFirst.reduce((sum, count) => sum + count, 0),
@@ -550,4 +556,102 @@ test("an unsupported frame template falls back to MLB's photo", () => {
     recap.still,
     content.editorial.recap.mlb.image.cuts.find((cut) => cut.width === 960).src,
   );
+});
+
+test("actual live and historical highlight writers preserve usable media after malformed updates and recover", async () => {
+  for (const historical of [false, true]) {
+    const game = { id: BREWERS_AT_PADRES, state: "final", start: "2026-10-07T20:00:00Z" };
+    const season = historical ? 2025 : 2026;
+    const context = createDurableObjectContext();
+    const store = new SeasonStore(context.ctx, {});
+    const docs = { ...store.docs, stored: context.stored };
+    const seeds = {
+      "live/current": { season: 2026 },
+      [`seasons/${season}`]: { year: season, slate: { today: { games: [game] } } },
+      [`schedule-revisions/${season}`]: { edition: SCHEDULE_EDITION, revision: 1, isWhole: true },
+      [`schedules-${season}/10`]: { games: [game] },
+    };
+    for (const [key, value] of Object.entries(seeds)) await docs.write(key, value);
+    const publications = [];
+    store.announceChange = (key) => {
+      if (key.startsWith("highlights/") && !key.endsWith("status")) publications.push(key);
+    };
+    let phase = "malformed";
+    const requests = [];
+    const fetchImpl = async (url) => {
+      requests.push(url);
+      const answer = structuredClone(
+        url.includes("/content") ? RECORDED.content[game.id] : RECORDED.plays[game.id],
+      );
+      if (!url.includes("/content")) {
+        const play = answer.liveData.plays.allPlays.find((play) => play.about.isScoringPlay);
+        if (phase === "malformed") play.result.awayScore = -1;
+        if (phase === "recovery") play.result.awayScore += 1;
+      }
+      return Response.json(answer);
+    };
+    const update = async () => {
+      const before = requests.length;
+      const job = createHighlightsUpdater();
+      const storage = createJobStorage();
+      if (historical)
+        await storage.put(`history-highlight-reads:${season}`, {
+          [game.id]: { readAt: null, triedAt: 0, version: 0 },
+        });
+      const context = {
+        docs,
+        storage,
+        env: {},
+        fetchImpl,
+        now: () => Date.parse("2026-10-30T12:00:00Z"),
+        createLoadSnapshot: () => async () => null,
+      };
+      await (historical ? job.updateHistory(context) : job.updateStore(context));
+      assert.equal(requests.length - before, 2);
+      assert.equal(
+        docs.stored.get(historical ? "highlights-history/status" : "highlights/status").requests,
+        2,
+      );
+    };
+    const key = nameHighlightsKey(game.id);
+    await update();
+    assert.equal(docs.stored.has(key), false);
+    phase = "valid";
+    await update();
+    const valid = structuredClone(docs.stored.get(key));
+    const identity = await store.identities.lookup.readEntry("game", game.id);
+    assert.equal(identity.facts.season, season);
+    publications.length = 0;
+    await update();
+    assert.deepEqual(publications, []);
+    assert.ok(valid.plays.length);
+    phase = "malformed";
+    await update();
+    assert.deepEqual(docs.stored.get(key), valid);
+    assert.deepEqual(await store.identities.lookup.readEntry("game", game.id), identity);
+    assert.deepEqual(publications, []);
+    phase = "recovery";
+    await update();
+    assert.notDeepEqual(docs.stored.get(key), valid);
+  }
+});
+
+test("a failed media read settles pending plays before the highlight writer can finish", async () => {
+  const { fetchGameMedia } = await import("../worker/src/adapters/highlights.js");
+  const pending = createDeferred();
+  let finished = false;
+  const read = fetchGameMedia(
+    async (url) => (url.includes("/content") ? new Response("", { status: 503 }) : pending.promise),
+    BREWERS_AT_PADRES,
+  ).finally(() => {
+    finished = true;
+  });
+  const rejected = assert.rejects(read, /MLB Stats API answered 503/);
+  await new Promise((resolve) => setImmediate(resolve));
+  try {
+    assert.equal(finished, false);
+  } finally {
+    pending.resolve(Response.json(RECORDED.plays[BREWERS_AT_PADRES]));
+  }
+  await rejected;
 });

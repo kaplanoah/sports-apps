@@ -1,14 +1,75 @@
 // Atomic, vendor-scoped associations retain matching evidence and independent uncertainty counts.
-import { IdentityEntry, IdentityObservation, validateSportsData } from "./sports-schema.js";
+import {
+  IDENTITY_TYPES,
+  IdentityEntry,
+  IdentityObservation,
+  validateSportsData,
+} from "./sports-schema.js";
 import { isSameJson } from "../page/compare.js";
 
+const VENDOR_PREFIX = "identity:vendor:";
 const nameStatusKey = (league) => `identity:status:${encodeURIComponent(league)}`;
 const nameEntityKey = (league, type, id) =>
   `identity:entity:${encodeURIComponent(league)}:${type}:${encodeURIComponent(id)}`;
 const nameVendorKey = (league, type, vendor, id) =>
-  `identity:vendor:${encodeURIComponent(vendor)}:${encodeURIComponent(league)}:${type}:${encodeURIComponent(id)}`;
+  `${VENDOR_PREFIX}${encodeURIComponent(vendor)}:${encodeURIComponent(league)}:${type}:${encodeURIComponent(id)}`;
 const nameProblemKey = (key) => `identity:problem:${key}`;
+const PROBLEM_PREFIX = nameProblemKey(VENDOR_PREFIX);
 const createBlankStatus = () => ({ games: 0, players: 0, unmatched: 0, disputed: 0 });
+
+function readProblem(key, value, league) {
+  try {
+    const parts = key.slice(PROBLEM_PREFIX.length).split(":").map(decodeURIComponent);
+    if (parts.length !== 4 || !parts.every(Boolean)) return { reason: "invalid_problem" };
+    const [vendor, storedLeague, type, id] = parts;
+    if (storedLeague !== league) return null;
+    return {
+      vendor,
+      type,
+      id,
+      problem: value === "unmatched" || value === "disputed" ? value : "other",
+    };
+  } catch {
+    return { reason: "invalid_problem" };
+  }
+}
+
+const namePrefixEnd = (prefix) =>
+  prefix.slice(0, -1) + String.fromCharCode(prefix.charCodeAt(prefix.length - 1) + 1);
+
+function listOtherProblemRanges(prefixes) {
+  const ranges = [];
+  let start = PROBLEM_PREFIX;
+  for (const prefix of [...prefixes].sort()) {
+    ranges.push({ start, end: prefix });
+    start = namePrefixEnd(prefix);
+  }
+  ranges.push({ start, end: namePrefixEnd(PROBLEM_PREFIX) });
+  return ranges;
+}
+
+function readUniqueProblems(entries, league, seen) {
+  const problems = [];
+  for (const [key, value] of entries) {
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const problem = readProblem(key, value, league);
+    if (problem) problems.push(problem);
+  }
+  return problems;
+}
+
+function selectProblemSample(pools, limit) {
+  const problems = [];
+  const rows = Math.max(0, ...pools.map((pool) => pool.length));
+  for (let row = 0; row < rows && problems.length < limit; row += 1) {
+    for (const pool of pools) {
+      if (pool[row]) problems.push(pool[row]);
+      if (problems.length === limit) break;
+    }
+  }
+  return problems;
+}
 
 /** @param {any} storage @param {string} key @param {any} value */
 async function saveChanged(storage, key, value) {
@@ -194,12 +255,41 @@ export function createIdentityLookup(storage, league) {
             }
             conflicts += 1;
           }
-        } else if (key.startsWith("identity:vendor:") && value.league === league) {
+        } else if (key.startsWith(VENDOR_PREFIX) && value.league === league) {
           const entry = await transaction.get(nameEntityKey(league, value.type, value.internalId));
           if (entry?.vendors[value.vendor] !== value.vendorId) conflicts += 1;
         }
         return conflicts;
       });
+    },
+    async readProblems(limit, vendors) {
+      const probe = await storage.list({ prefix: PROBLEM_PREFIX, limit: 1 });
+      if (!probe.size) return { problems: [], truncated: false };
+      const prefixes = [...new Set(vendors)].flatMap((vendor) =>
+        IDENTITY_TYPES.map((type) => nameProblemKey(nameVendorKey(league, type, vendor, ""))),
+      );
+      const windows = [
+        ...prefixes.map((prefix) => ({ prefix })),
+        ...listOtherProblemRanges(prefixes),
+      ];
+      const entries = await Promise.all(
+        windows.map((window) =>
+          storage.list({
+            prefix: PROBLEM_PREFIX,
+            reverse: true,
+            limit: limit + 1,
+            ...window,
+          }),
+        ),
+      );
+      const seen = new Set();
+      const pools = entries.map((window) => readUniqueProblems(window, league, seen));
+      return {
+        problems: selectProblemSample(pools, limit),
+        truncated:
+          entries.some((window) => window.size > limit) ||
+          pools.reduce((total, pool) => total + pool.length, 0) > limit,
+      };
     },
     readStatus: async () => (await storage.get(nameStatusKey(league))) ?? createBlankStatus(),
   };

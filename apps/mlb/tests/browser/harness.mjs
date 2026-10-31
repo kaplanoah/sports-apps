@@ -28,6 +28,8 @@ import {
 import {
   describeRoster,
   indexSeasonStats,
+  trimHitting,
+  trimPitching,
   isOnRoster,
   listRosterRequest,
   listSeasonStatsRequest,
@@ -89,8 +91,8 @@ export const ROSTER_DOCS = Object.fromEntries(
       club,
       season,
       roster: answers[listRosterRequest(mlbTeamId, season)],
-      hitting: indexSeasonStats(answers[listSeasonStatsRequest(season, "hitting")]),
-      pitching: indexSeasonStats(answers[listSeasonStatsRequest(season, "pitching")]),
+      hitting: indexSeasonStats(answers[listSeasonStatsRequest(season, "hitting")], trimHitting),
+      pitching: indexSeasonStats(answers[listSeasonStatsRequest(season, "pitching")], trimPitching),
     });
     return [nameRosterKey(club), roster];
   }),
@@ -113,7 +115,10 @@ function buildPlayerDocs() {
   const { season, answers } = ROSTERS_FIXTURE;
   /** @param {object} [options] */
   const index = (group, options) =>
-    indexSeasonStats(answers[listSeasonStatsRequest(season, group, options)]);
+    indexSeasonStats(
+      answers[listSeasonStatsRequest(season, group, options)],
+      group === "hitting" ? trimHitting : trimPitching,
+    );
   const numbers = {
     hitting: index("hitting"),
     pitching: index("pitching"),
@@ -124,6 +129,9 @@ function buildPlayerDocs() {
   const players = Object.entries(RECORDED_CLUBS).flatMap(([club, mlbTeamId]) =>
     answers[listRosterRequest(mlbTeamId, season)].roster.filter(isOnRoster).map((entry) => {
       const player = describePlayer({
+        onFactsFailure: (error) => {
+          throw error;
+        },
         ...numbers,
         entry,
         club,

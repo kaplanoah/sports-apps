@@ -1,3 +1,4 @@
+import { createDeferred } from "./deferred.js";
 import test, { mock } from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -1351,14 +1352,8 @@ test("reading preferences and sending a test push do not replan device reminders
 test("a new alarm cancels an older history continuation before it can fetch beside live work", async () => {
   const context = createDurableObjectContext();
   const clock = { now: NOW };
-  let releaseHistory;
-  let announceHistory;
-  const started = new Promise((resolve) => {
-    announceHistory = resolve;
-  });
-  const held = new Promise((resolve) => {
-    releaseHistory = resolve;
-  });
+  const { promise: started, resolve: announceHistory } = createDeferred();
+  const { promise: held, resolve: releaseHistory } = createDeferred();
   const reads = [];
   let historyRuns = 0;
   const SeasonStore = createSeasonStore({

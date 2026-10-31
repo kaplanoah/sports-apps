@@ -91,6 +91,30 @@ export function readTable(answer, name) {
   );
 }
 
+/** @param {any} table */
+function validateTable(table) {
+  if (
+    !Array.isArray(table?.headers) ||
+    !Array.isArray(table?.rowSet) ||
+    !table.headers.every((/** @type {unknown} */ header) => typeof header === "string") ||
+    new Set(table.headers).size !== table.headers.length ||
+    !table.rowSet.every(
+      (/** @type {unknown} */ row) => Array.isArray(row) && row.length === table.headers.length,
+    )
+  )
+    throw new Error("Invalid sports table");
+}
+
+/** @param {any} answer @param {string} name */
+export function readRequiredTable(answer, name) {
+  validateTable(
+    Array.isArray(answer?.resultSets)
+      ? answer.resultSets.find((entry) => entry?.name === name)
+      : null,
+  );
+  return readTable(answer, name);
+}
+
 /**
  * An answer from the stats site with only the named columns in each of its tables, so what's kept
  * of it stays small.
@@ -98,8 +122,10 @@ export function readTable(answer, name) {
  * @param {string[]} columns
  */
 export function trimColumns(answer, columns) {
+  if (!Array.isArray(answer?.resultSets)) throw new Error("Invalid sports table");
   return {
     resultSets: answer.resultSets.map((/** @type {any} */ table) => {
+      validateTable(table);
       const kept = table.headers.flatMap(
         (/** @type {string} */ header, /** @type {number} */ index) =>
           columns.includes(header) ? [index] : [],
