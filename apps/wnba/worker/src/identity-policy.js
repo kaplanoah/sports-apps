@@ -6,6 +6,8 @@ import { readGameFacts } from "./adapters/game-facts.js";
 import { readIdentityGames } from "../../../../shared/worker/espn-adapter.js";
 import { findTeamCodeByEspnId } from "../../page/js/teams.js";
 
+const NETWORK_PREFIX = nameStoredFeedKey(nameNetworkMonthKey(""));
+
 /** @type {import("../../../../shared/worker/identity-documents.js").IdentityPolicy} */
 export const identityPolicy = {
   league: "wnba",
@@ -14,8 +16,9 @@ export const identityPolicy = {
   nameMatchKey: nameEspnMatchKey,
   readGameFacts: (game, season) => ({ ...(season && { season }), ...readGameFacts(game.id) }),
   readSeriesFacts,
-  readSavedVendorGames: (key, value) =>
-    key.startsWith(nameStoredFeedKey(nameNetworkMonthKey("")))
-      ? readIdentityGames([value?.data], findTeamCodeByEspnId)
+  vendorGameSourcePrefix: NETWORK_PREFIX,
+  readSavedVendorGames: (key, value, limit) =>
+    key.startsWith(NETWORK_PREFIX)
+      ? readIdentityGames([value?.data], findTeamCodeByEspnId, limit)
       : null,
 };

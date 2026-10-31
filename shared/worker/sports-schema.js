@@ -15,18 +15,20 @@ const GameState = z.enum(["pre", "live", "final", "off"]);
 const BaseballRound = z.enum(["WC", "DS", "CS", "WS"]);
 const BaseballLeague = z.enum(["AL", "NL"]).nullable();
 
+export const IDENTITY_TYPES = /** @type {const} */ (["game", "player"]);
+
 const IdentityEvidence = z.looseObject({
   method: z.enum(["existing-id", "discovery", "teams-day", "game-number", "player-facts"]),
 });
 export const IdentityEntry = z.looseObject({
   id: Identifier,
   league: Identifier,
-  type: z.enum(["game", "player"]),
+  type: z.enum(IDENTITY_TYPES),
   vendors: z.record(Identifier, Identifier),
   evidence: z.record(Identifier, IdentityEvidence),
 });
 export const IdentityObservation = z.looseObject({
-  type: z.enum(["game", "player"]),
+  type: z.enum(IDENTITY_TYPES),
   vendor: Identifier,
   vendorId: Identifier,
   internalId: Identifier.optional(),
