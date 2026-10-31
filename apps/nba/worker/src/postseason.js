@@ -55,7 +55,7 @@ export function createPostseasonReader({ storage, docs, identities, fetchImpl, n
   async function readField(season, kind) {
     let failure = "";
     let nextReadAt = Infinity;
-    let data = null;
+    let data;
     const key = `postseason/${season}-${kind}`;
     try {
       data = await keeper.readFeed(
