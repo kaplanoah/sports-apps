@@ -10,6 +10,9 @@ import {
   IDENTITY_CANDIDATE_PREFIX,
   IDENTITY_CANDIDATE_END,
   isIdentityNativeCandidate,
+  isIdentityEntityKey,
+  IDENTITY_PREFIX,
+  IDENTITY_PREFIX_END,
 } from "./identity.js";
 
 export const IDENTITY_AUDIT_VERSION = 2;
@@ -17,9 +20,9 @@ export const IDENTITY_WORK_PER_RUN = 20;
 export const IDENTITY_WORK_PER_DAY = 10_000;
 export const IDENTITY_WORK_INTERVAL_MS = 60_000;
 const DAY_MS = 24 * 60 * 60 * 1000;
-const BACKFILL_KEY = "identity:backfill";
-const WORK_KEY = "identity:work";
-export const IDENTITY_COVERAGE_KEY = "identity:coverage-revision";
+const BACKFILL_KEY = `${IDENTITY_PREFIX}backfill`;
+const WORK_KEY = `${IDENTITY_PREFIX}work`;
+export const IDENTITY_COVERAGE_KEY = `${IDENTITY_PREFIX}coverage-revision`;
 const MAX_CANDIDATE_BYTES = 512 * 1024;
 const RETRY_DELAY_MS = 60_000;
 const MAX_RETRY_MS = 60 * 60 * 1000;
@@ -217,7 +220,7 @@ export function createIdentityBackfill(storage, options, now) {
   }
 
   async function checkMappingBatch(key, value, pending, work) {
-    const vendors = key.startsWith("identity:entity:") ? Object.keys(value.vendors).sort() : null;
+    const vendors = isIdentityEntityKey(key) ? Object.keys(value.vendors).sort() : null;
     const batch = vendors?.slice(pending.offset, pending.offset + work.remaining) ?? null;
     const consumed = Math.max(1, batch?.length ?? 1);
     work.remaining -= consumed;
@@ -335,8 +338,8 @@ export function createIdentityBackfill(storage, options, now) {
         progress.pending = null;
         continue;
       }
-      if (progress.phase !== "vendors" && key.startsWith("identity:")) {
-        progress.cursor = "identity;";
+      if (progress.phase !== "vendors" && key.startsWith(IDENTITY_PREFIX)) {
+        progress.cursor = IDENTITY_PREFIX_END;
         progress.pending = null;
         continue;
       }

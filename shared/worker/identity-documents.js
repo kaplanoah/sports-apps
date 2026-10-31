@@ -7,12 +7,17 @@ import {
   nameIdentityEntityPrefix,
   nameIdentityCandidateGroup,
   isIdentityNativeCandidate,
+  isIdentityEntityKey,
+  isIdentityVendorKey,
+  IDENTITY_PREFIX,
 } from "./identity.js";
 import { ESPN_VENDOR } from "./espn-adapter.js";
 import { readIdentityDiagnosis } from "./identity-diagnostics.js";
 import { reconcileIdentities } from "./identity-matching.js";
 import { createIdentityBackfill, IDENTITY_COVERAGE_KEY } from "./identity-backfill.js";
 
+const ERROR_PREFIX = `${IDENTITY_PREFIX}error:`;
+const FAILED_PREFIX = `${ERROR_PREFIX}failed:`;
 const ERROR_SCAN_LIMIT = 20;
 const LIVE_RECONCILIATION_ATTEMPTS = 3;
 const PLAYER_FIELDS = new Set(["players", "batters", "pitchers", "starters", "leaders"]);
@@ -50,8 +55,8 @@ const hasIdentifier = (value) =>
 export function createIdentityDocuments(storage, policy, now = Date.now) {
   const lookup = createIdentityLookup(storage, policy.league);
 
-  const nameRetryKey = (key) => `identity:retry:${encodeURIComponent(key)}`;
-  const nameErrorKey = (key, kind) => `identity:error:${kind}:${encodeURIComponent(key)}`;
+  const nameRetryKey = (key) => `${IDENTITY_PREFIX}retry:${encodeURIComponent(key)}`;
+  const nameErrorKey = (key, kind) => `${ERROR_PREFIX}${kind}:${encodeURIComponent(key)}`;
   async function saveErrors(key, count, kind = "rejected", processedRetry = null) {
     const path = nameErrorKey(key, kind);
     if (kind === "failed" && !count) {
@@ -426,9 +431,7 @@ export function createIdentityDocuments(storage, policy, now = Date.now) {
     if (phase === "vendors") {
       const saved = policy.readSavedVendorGames?.(key, value);
       if (saved) return { kind: "vendor", type: "game", ...saved };
-      return key.startsWith("identity:entity:") || key.startsWith("identity:vendor:")
-        ? { kind: "mappings" }
-        : null;
+      return isIdentityEntityKey(key) || isIdentityVendorKey(key) ? { kind: "mappings" } : null;
     }
     const cached = key.startsWith("job:details:detail-answer:");
     if (!cached && !isStoreDocumentPath(key)) return null;
@@ -466,12 +469,12 @@ export function createIdentityDocuments(storage, policy, now = Date.now) {
 
   async function hasFailedSources() {
     const errors = await storage.list({
-      prefix: "identity:error:failed:",
+      prefix: FAILED_PREFIX,
       limit: ERROR_SCAN_LIMIT,
     });
     let retry = false;
     for (const [path] of errors) {
-      const key = decodeURIComponent(path.slice("identity:error:failed:".length));
+      const key = decodeURIComponent(path.slice(FAILED_PREFIX.length));
       if (key === "snapshot") continue;
       if ((await storage.get(key)) === undefined) await forgetSource(key);
       else retry = true;
@@ -493,7 +496,7 @@ export function createIdentityDocuments(storage, policy, now = Date.now) {
   );
 
   async function readStatus() {
-    const errors = [...(await storage.list({ prefix: "identity:error:" })).values()].reduce(
+    const errors = [...(await storage.list({ prefix: ERROR_PREFIX })).values()].reduce(
       (total, count) => total + count,
       0,
     );

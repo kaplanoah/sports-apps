@@ -9,17 +9,24 @@ import { isSameJson } from "../page/compare.js";
 import { nameIdentityGameGroup } from "./identity-matching.js";
 import { readPlayerName } from "./player-name.js";
 
-const VENDOR_PREFIX = "identity:vendor:";
-const nameStatusKey = (league) => `identity:status:${encodeURIComponent(league)}`;
-export const IDENTITY_CANDIDATE_PREFIX = "identity:candidate:";
+export const IDENTITY_PREFIX = "identity:";
+export const IDENTITY_PREFIX_END = namePrefixEnd(IDENTITY_PREFIX);
+const VENDOR_PREFIX = `${IDENTITY_PREFIX}vendor:`;
+const ENTITY_PREFIX = `${IDENTITY_PREFIX}entity:`;
+export const isIdentityVendorKey = (key) => key.startsWith(VENDOR_PREFIX);
+const nameStatusKey = (league) => `${IDENTITY_PREFIX}status:${encodeURIComponent(league)}`;
+export const IDENTITY_CANDIDATE_PREFIX = `${IDENTITY_PREFIX}candidate:`;
 export const IDENTITY_CANDIDATE_END = namePrefixEnd(IDENTITY_CANDIDATE_PREFIX);
 export const nameIdentityCandidateGroup = (type, record) =>
   type === "game" ? nameIdentityGameGroup(record) : readPlayerName(record);
 export const isIdentityNativeCandidate = (type, entry, vendor) =>
   type !== "game" || !!entry.vendors[vendor];
-const nameFactsRevisionKey = (league) => `identity:facts-revision:${encodeURIComponent(league)}`;
+const nameFactsRevisionKey = (league) =>
+  `${IDENTITY_PREFIX}facts-revision:${encodeURIComponent(league)}`;
 export const nameIdentityEntityPrefix = (league, type) =>
-  `identity:entity:${encodeURIComponent(league)}:${type}:`;
+  `${ENTITY_PREFIX}${encodeURIComponent(league)}:${type}:`;
+export const isIdentityEntityKey = (key, league = null, type = null) =>
+  key.startsWith(league === null ? ENTITY_PREFIX : nameIdentityEntityPrefix(league, type));
 const nameEntityKey = (league, type, id) =>
   `${nameIdentityEntityPrefix(league, type)}${encodeURIComponent(id)}`;
 export const nameIdentityCandidatePrefix = (league, type, record) =>
@@ -35,7 +42,7 @@ async function saveCandidateIndex(transaction, previous, entry) {
 }
 const nameVendorKey = (league, type, vendor, id) =>
   `${VENDOR_PREFIX}${encodeURIComponent(vendor)}:${encodeURIComponent(league)}:${type}:${encodeURIComponent(id)}`;
-const nameProblemKey = (key) => `identity:problem:${key}`;
+const nameProblemKey = (key) => `${IDENTITY_PREFIX}problem:${key}`;
 const PROBLEM_PREFIX = nameProblemKey(VENDOR_PREFIX);
 export class IdentityFactsChanged extends Error {}
 const createBlankStatus = () => ({ games: 0, players: 0, unmatched: 0, disputed: 0 });
@@ -303,7 +310,7 @@ export function createIdentityLookup(storage, league) {
         const value = await transaction.get(key);
         if (!value) return 0;
         let conflicts = 0;
-        if (key.startsWith(nameIdentityEntityPrefix(league, value.type))) {
+        if (isIdentityEntityKey(key, league, value.type)) {
           for (const [vendor, id] of Object.entries(value.vendors)) {
             if (vendors && !vendors.includes(vendor)) continue;
             const mapping = await transaction.get(nameVendorKey(league, value.type, vendor, id));
@@ -317,7 +324,7 @@ export function createIdentityLookup(storage, league) {
             }
             conflicts += 1;
           }
-        } else if (key.startsWith(VENDOR_PREFIX) && value.league === league) {
+        } else if (isIdentityVendorKey(key) && value.league === league) {
           const entry = await transaction.get(nameEntityKey(league, value.type, value.internalId));
           if (entry?.vendors[value.vendor] !== value.vendorId) conflicts += 1;
         }

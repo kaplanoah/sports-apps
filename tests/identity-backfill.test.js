@@ -342,7 +342,7 @@ test("a source with hundreds of vendor references is checked in bounded slices",
   for (let step = 0; step < 100; step += 1) {
     harness.resetCalls();
     await store.identities.backfill(store.docs);
-    assert.ok(harness.calls.get < IDENTITY_WORK_PER_RUN * 12 + 30);
+    assert.ok(harness.calls.get < IDENTITY_WORK_PER_RUN * 2 + 30);
     if ((await store.identities.readStatus()).backfill.complete) break;
   }
   assert.equal((await store.identities.readStatus()).checks.competingMappings, 200);
