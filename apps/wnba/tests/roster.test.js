@@ -175,7 +175,9 @@ test("a roster read again soon reuses the one just read", async () => {
 
 test("a player the list doesn't have yet keeps her roster name, with no college, country, or first season", () => {
   const described = describeRoster({
-    onPlayerFailure: () => {},
+    onPlayerFailure: (error) => {
+      throw error;
+    },
     team: "NYL",
     season: 2026,
     leagueRoster: ROSTERS.rosters["NYL:2026"],

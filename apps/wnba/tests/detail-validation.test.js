@@ -36,7 +36,9 @@ test("all recorded WNBA rosters validate and malformed identities and nested fac
     const team = key.split(":")[0];
     assert.ok(
       describeRoster({
-        onPlayerFailure: () => {},
+        onPlayerFailure: (error) => {
+          throw error;
+        },
         team,
         season: 2026,
         leagueRoster,
@@ -49,7 +51,9 @@ test("all recorded WNBA rosters validate and malformed identities and nested fac
   const leagueRoster = structuredClone(ROSTERS.rosters["NYL:2026"]);
   corruptColumn(leagueRoster, "PLAYER_ID", "invalid");
   const parts = {
-    onPlayerFailure: () => {},
+    onPlayerFailure: (error) => {
+      throw error;
+    },
     team: "NYL",
     season: 2026,
     leagueRoster,
@@ -154,7 +158,9 @@ test("WNBA records allow mononyms and null optional columns without checking unu
   unused[table.headers.indexOf("FROM_YEAR")] = "bad";
   table.rowSet.push(unused);
   const roster = describeRoster({
-    onPlayerFailure: () => {},
+    onPlayerFailure: (error) => {
+      throw error;
+    },
     team: "NYL",
     season: 2026,
     leagueRoster,
@@ -168,7 +174,9 @@ test("WNBA records allow mononyms and null optional columns without checking unu
   used[table.headers.indexOf("PLAYER_FIRST_NAME")] = "";
   used[table.headers.indexOf("PLAYER_LAST_NAME")] = "Mononym";
   const reversed = describeRoster({
-    onPlayerFailure: () => {},
+    onPlayerFailure: (error) => {
+      throw error;
+    },
     team: "NYL",
     season: 2026,
     leagueRoster,

@@ -129,7 +129,9 @@ function buildPlayerDocs() {
   const players = Object.entries(RECORDED_CLUBS).flatMap(([club, mlbTeamId]) =>
     answers[listRosterRequest(mlbTeamId, season)].roster.filter(isOnRoster).map((entry) => {
       const player = describePlayer({
-        onFactsFailure: () => {},
+        onFactsFailure: (error) => {
+          throw error;
+        },
         ...numbers,
         entry,
         club,

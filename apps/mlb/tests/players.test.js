@@ -47,7 +47,9 @@ function describeRostered(mlbTeamId, club, name) {
     (/** @type {any} */ each) => each.person.fullName === name,
   );
   return describePlayer({
-    onFactsFailure: () => {},
+    onFactsFailure: (error) => {
+      throw error;
+    },
     ...NUMBERS,
     entry,
     club,
@@ -89,7 +91,9 @@ test("a two-way player's sheet has his seasons at the plate and on the mound, an
 test("a player MLB's list doesn't have yet has no facts", () => {
   const entry = answers[listRosterRequest(114, season)].roster[0];
   const player = describePlayer({
-    onFactsFailure: () => {},
+    onFactsFailure: (error) => {
+      throw error;
+    },
     ...NUMBERS,
     entry,
     club: "CLE",

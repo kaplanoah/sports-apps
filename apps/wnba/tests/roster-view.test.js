@@ -32,7 +32,9 @@ const { series: SERIES } = buildSnapshot(AFTERNOON.responses, {
 });
 const { averages: AVERAGES } = readSeasonAverages();
 const LIBERTY = describeRoster({
-  onPlayerFailure: () => {},
+  onPlayerFailure: (error) => {
+    throw error;
+  },
   team: "NYL",
   season: 2026,
   leagueRoster: ROSTERS.rosters["NYL:2026"],
