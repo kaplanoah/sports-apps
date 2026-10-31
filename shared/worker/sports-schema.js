@@ -316,7 +316,7 @@ export const BaseballClubStarts = z.object({
 const PlayerNameFields = { firstName: z.string(), lastName: z.string() };
 /** @param {{ firstName: string, lastName: string }} name */
 const hasPlayerName = ({ firstName, lastName }) => !!(firstName.trim() || lastName.trim());
-export const BasketballPlayerName = z.object(PlayerNameFields).refine(hasPlayerName);
+const BasketballPlayerName = z.object(PlayerNameFields).refine(hasPlayerName);
 export const BasketballRosterFacts = z.object({
   id: PlayerId,
   number: z.string().nullable(),
