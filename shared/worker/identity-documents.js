@@ -5,11 +5,12 @@ import {
   createIdentityLookup,
   IdentityFactsChanged,
   nameIdentityEntityPrefix,
+  nameIdentityCandidateGroup,
+  isIdentityNativeCandidate,
 } from "./identity.js";
 import { ESPN_VENDOR } from "./espn-adapter.js";
 import { readIdentityDiagnosis } from "./identity-diagnostics.js";
-import { readPlayerName } from "./player-name.js";
-import { reconcileIdentities, nameIdentityGameGroup } from "./identity-matching.js";
+import { reconcileIdentities } from "./identity-matching.js";
 import { createIdentityBackfill, IDENTITY_COVERAGE_KEY } from "./identity-backfill.js";
 
 const ERROR_SCAN_LIMIT = 20;
@@ -118,16 +119,12 @@ export function createIdentityDocuments(storage, policy, now = Date.now) {
   async function reconcileLiveRecords(type, records) {
     for (let attempt = 0; attempt < LIVE_RECONCILIATION_ATTEMPTS; attempt += 1) {
       const factsRevision = await refreshNativeRevision();
-      const groups = new Set(records.map(type === "game" ? nameIdentityGameGroup : readPlayerName));
+      const groups = new Set(records.map((record) => nameIdentityCandidateGroup(type, record)));
       const natives = (await listNatives(type))
         .filter(
           (entry) =>
-            (type !== "game" || entry.vendors[policy.vendor]) &&
-            groups.has(
-              type === "game"
-                ? nameIdentityGameGroup(entry.facts ?? {})
-                : readPlayerName(entry.facts ?? {}),
-            ),
+            isIdentityNativeCandidate(type, entry, policy.vendor) &&
+            groups.has(nameIdentityCandidateGroup(type, entry.facts ?? {})),
         )
         .map((entry) => ({ id: entry.id, ...entry.facts }));
       try {
@@ -358,8 +355,7 @@ export function createIdentityDocuments(storage, policy, now = Date.now) {
     if (matches.length) await lookup.save(matches);
     return prepared.document;
   }
-  async function expandWithKnownFacts(key, document, known = null) {
-    let prepared = expandDocument(key, document, known);
+  async function expandWithKnownFacts(key, document, prepared) {
     if (prepared.rootId && !prepared.document.season) {
       const entry = await lookup.readEntry("game", String(prepared.rootId));
       if (entry?.facts) prepared = expandDocument(key, document, entry.facts);
@@ -398,7 +394,7 @@ export function createIdentityDocuments(storage, policy, now = Date.now) {
     return attemptIdentity(
       sourceKey,
       async () => {
-        prepared = await expandWithKnownFacts(key, document, known);
+        prepared = await expandWithKnownFacts(key, document, prepared);
         retryEvidence = (await storage.get(nameRetryKey(sourceKey))) ?? null;
         return registerDocument(key, sourceKey, {
           ...prepared,
@@ -438,7 +434,11 @@ export function createIdentityDocuments(storage, policy, now = Date.now) {
     if (!cached && !isStoreDocumentPath(key)) return null;
     if (!cached && !isSameJson(await docs.read(key), value)) return { kind: "changed" };
     const source = cached ? describeDetailAnswer(key, value) : { key, document: value };
-    const prepared = await expandWithKnownFacts(source.key, source.document, cached ? null : value);
+    const prepared = await expandWithKnownFacts(
+      source.key,
+      source.document,
+      expandDocument(source.key, source.document, cached ? null : value),
+    );
     const retryEvidence = (await storage.get(nameRetryKey(key))) ?? null;
     return {
       kind: "document",

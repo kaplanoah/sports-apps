@@ -11,13 +11,19 @@ import { readPlayerName } from "./player-name.js";
 
 const VENDOR_PREFIX = "identity:vendor:";
 const nameStatusKey = (league) => `identity:status:${encodeURIComponent(league)}`;
+export const IDENTITY_CANDIDATE_PREFIX = "identity:candidate:";
+export const IDENTITY_CANDIDATE_END = namePrefixEnd(IDENTITY_CANDIDATE_PREFIX);
+export const nameIdentityCandidateGroup = (type, record) =>
+  type === "game" ? nameIdentityGameGroup(record) : readPlayerName(record);
+export const isIdentityNativeCandidate = (type, entry, vendor) =>
+  type !== "game" || !!entry.vendors[vendor];
 const nameFactsRevisionKey = (league) => `identity:facts-revision:${encodeURIComponent(league)}`;
 export const nameIdentityEntityPrefix = (league, type) =>
   `identity:entity:${encodeURIComponent(league)}:${type}:`;
 const nameEntityKey = (league, type, id) =>
   `${nameIdentityEntityPrefix(league, type)}${encodeURIComponent(id)}`;
 export const nameIdentityCandidatePrefix = (league, type, record) =>
-  `identity:candidate:${encodeURIComponent(league)}:${type}:${encodeURIComponent(type === "game" ? nameIdentityGameGroup(record) : readPlayerName(record))}:`;
+  `${IDENTITY_CANDIDATE_PREFIX}${encodeURIComponent(league)}:${type}:${encodeURIComponent(nameIdentityCandidateGroup(type, record))}:`;
 const nameCandidateKey = (entry) =>
   `${nameIdentityCandidatePrefix(entry.league, entry.type, entry.facts ?? {})}${encodeURIComponent(entry.id)}`;
 
@@ -51,8 +57,9 @@ function readProblem(key, value, league) {
   }
 }
 
-const namePrefixEnd = (prefix) =>
-  prefix.slice(0, -1) + String.fromCharCode(prefix.charCodeAt(prefix.length - 1) + 1);
+function namePrefixEnd(prefix) {
+  return prefix.slice(0, -1) + String.fromCharCode(prefix.charCodeAt(prefix.length - 1) + 1);
+}
 
 function listOtherProblemRanges(prefixes) {
   const ranges = [];
@@ -123,7 +130,8 @@ async function ensureEntity(transaction, league, observation) {
   };
   validateSportsData(IdentityEntry, updated);
   await saveChanged(transaction, key, updated);
-  await saveCandidateIndex(transaction, previous, updated);
+  if (!previous || nameCandidateKey(previous) !== nameCandidateKey(updated))
+    await saveCandidateIndex(transaction, previous, updated);
   if (!isSameJson(previous?.facts, updated.facts))
     await transaction.put(nameFactsRevisionKey(league), crypto.randomUUID());
   if (!previous) {

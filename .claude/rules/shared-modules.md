@@ -263,7 +263,7 @@ Pages link these before their own stylesheet, and theme them with the tokens the
 - `identity-matching.js`: confident game and player matches with explicit doubleheader evidence
 - `identity-diagnostics.js`: bounded aggregate diagnosis from retained identity evidence without writes or vendor reads
 - `identity-documents.js`: additive facts and identity registration for stored sports documents
-- `identity-backfill.js`: versioned coverage checks, nested checkpoints, complete candidate scans and persisted optional-work pacing
+- `identity-backfill.js`: versioned coverage checks, nested checkpoints, candidate-group indexes and persisted optional-work pacing
 - `sports-schema.js`: shared sports contracts and detail records, validated only in Workers with Zod configured without runtime compilation
 - `store-reads.js`: reading the documents a store-owned detail service keeps for a sheet
 - `detail-reads.js`: sharing store-owned detail reads and retaining usable answers across restarts

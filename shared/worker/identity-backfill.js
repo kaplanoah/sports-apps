@@ -7,6 +7,9 @@ import {
   IdentityFactsChanged,
   nameIdentityEntityPrefix,
   nameIdentityCandidatePrefix,
+  IDENTITY_CANDIDATE_PREFIX,
+  IDENTITY_CANDIDATE_END,
+  isIdentityNativeCandidate,
 } from "./identity.js";
 
 export const IDENTITY_AUDIT_VERSION = 2;
@@ -134,7 +137,7 @@ export function createIdentityBackfill(storage, options, now) {
       });
       for (const [key, id] of entries) {
         const entry = await lookup.readEntry(source.type, id);
-        if (entry && (source.type !== "game" || entry.vendors[policy.vendor]))
+        if (entry && isIdentityNativeCandidate(source.type, entry, policy.vendor))
           pending.candidates.push({ id: entry.id, ...entry.facts });
         pending.candidateCursor = key;
       }
@@ -269,7 +272,6 @@ export function createIdentityBackfill(storage, options, now) {
           })
         : await docs.replaceIfUnchanged(key, value, source.document);
       published = matched;
-      if (!matched && !isActive()) return false;
     }
     if (!isActive()) return false;
     await saveErrors(key, source.rejected ?? 0);
@@ -296,17 +298,25 @@ export function createIdentityBackfill(storage, options, now) {
     }
   }
 
-  async function backfill(docs, isActive = () => true, currentProgress = null) {
-    if (!isActive()) return;
-    const { previous, progress: current } = currentProgress ?? (await readCurrentProgress());
-    let progress = current;
-    if (progress.complete) {
-      if (progress.retryAfter > now() || !(await hasFailedSources())) return;
-      progress = {
+  async function readDueProgress() {
+    const current = await readCurrentProgress();
+    const progress = current.progress;
+    if (!progress.complete) return current;
+    if (progress.retryAfter > now() || !(await hasFailedSources())) return null;
+    return {
+      ...current,
+      progress: {
         ...createProgress(progress.coverageRevision),
         recoveryAttempt: (progress.recoveryAttempt ?? 0) + 1,
-      };
-    }
+      },
+    };
+  }
+
+  async function backfill(docs, isActive = () => true, currentProgress = null) {
+    if (!isActive()) return;
+    const current = currentProgress ?? (await readDueProgress());
+    if (!current) return;
+    const { previous, progress } = current;
     const work = { remaining: IDENTITY_WORK_PER_RUN };
     while (work.remaining && isActive()) {
       const pendingKey = progress.pending?.key;
@@ -320,8 +330,8 @@ export function createIdentityBackfill(storage, options, now) {
         break;
       }
       const [key, value] = [...entries][0];
-      if (key.startsWith("identity:candidate:")) {
-        progress.cursor = "identity:candidate;";
+      if (key.startsWith(IDENTITY_CANDIDATE_PREFIX)) {
+        progress.cursor = IDENTITY_CANDIDATE_END;
         progress.pending = null;
         continue;
       }
@@ -380,12 +390,8 @@ export function createIdentityBackfill(storage, options, now) {
     backfill,
     backfillWhenDue: async (docs, isActive = () => true) => {
       if (!isActive()) return;
-      const current = await readCurrentProgress();
-      if (
-        current.progress.complete &&
-        (current.progress.retryAfter > now() || !(await hasFailedSources()))
-      )
-        return;
+      const current = await readDueProgress();
+      if (!current) return;
       if (isActive() && (await reserveWork(isActive))) await backfill(docs, isActive, current);
     },
     readStatus,

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { SeasonStore as MlbStore } from "../apps/mlb/worker/src/store.js";
 import { SeasonStore as WnbaStore } from "../apps/wnba/worker/src/store.js";
 import { identityPolicy } from "../apps/wnba/worker/src/identity-policy.js";
+import { createIdentityDocuments } from "../shared/worker/identity-documents.js";
 import { createSeasonStore } from "../shared/worker/season-store.js";
 import {
   IDENTITY_AUDIT_VERSION,
@@ -11,7 +12,11 @@ import {
   IDENTITY_WORK_INTERVAL_MS,
 } from "../shared/worker/identity-backfill.js";
 import { reconcileIdentities } from "../shared/worker/identity-matching.js";
-import { createIdentityLookup, nameIdentityCandidatePrefix } from "../shared/worker/identity.js";
+import {
+  createIdentityLookup,
+  nameIdentityCandidatePrefix,
+  IDENTITY_CANDIDATE_PREFIX,
+} from "../shared/worker/identity.js";
 import { createDurableObjectContext } from "./durable-object-context.js";
 
 function createMeasuredContext() {
@@ -144,7 +149,7 @@ for (const [app, Store] of /** @type {const} */ ([
   });
 }
 
-test("an interrupted source retains progress while live writers replace its content", async () => {
+test("a concurrent writer's content and IDs survive and the interrupted pass verifies", async () => {
   const harness = createMeasuredContext();
   const key = "seasons/2026";
   harness.stored.set(key, {
@@ -1126,3 +1131,139 @@ test("unrelated changes to a hot cached document preserve complete candidate-gro
   assert.equal((await store.identities.readStatus()).checks.verified, true);
   assert.equal(harness.stored.has(retryKey), false);
 });
+
+test("the mapping audit skips derived candidate entries rather than charging every indexed row", async () => {
+  const harness = createMeasuredContext();
+  const store = new WnbaStore(harness.ctx, {}, harness.options);
+  await store.identities.lookup.save(
+    Array.from({ length: 200 }, (_, index) => ({
+      type: "game",
+      vendor: "wnba",
+      vendorId: String(index),
+      internalId: String(index),
+      facts: { season: 2026 },
+      evidence: { method: "existing-id" },
+    })),
+  );
+  const list = harness.ctx.storage.list;
+  const visited = [];
+  harness.ctx.storage.list = async (options) => {
+    const entries = await list(options);
+    if (options.prefix === "" && harness.stored.get("identity:backfill")?.phase === "vendors")
+      for (const key of entries.keys())
+        if (key.startsWith(IDENTITY_CANDIDATE_PREFIX)) visited.push(key);
+    return entries;
+  };
+  await finishBackfill(store);
+  assert.equal(visited.length, 1);
+  assert.equal((await store.identities.readStatus()).checks.verified, true);
+});
+
+test("unchanged native registrations read no derived candidate keys", async () => {
+  const harness = createMeasuredContext();
+  const lookup = createIdentityLookup(harness.ctx.storage, "wnba");
+  const observations = Array.from({ length: 200 }, (_, index) => ({
+    type: "game",
+    vendor: "wnba",
+    vendorId: String(index),
+    internalId: String(index),
+    facts: { season: 2026, away: "NYL", home: "LVA", start: "2026-06-01T18:00:00Z" },
+    evidence: { method: "existing-id" },
+  }));
+  await lookup.save(observations);
+  const transaction = harness.ctx.storage.transaction;
+  let indexReads = 0;
+  harness.ctx.storage.transaction = (callback) =>
+    transaction((inner) =>
+      callback({
+        ...inner,
+        get: async (key) => {
+          if (key.startsWith(IDENTITY_CANDIDATE_PREFIX)) indexReads += 1;
+          return inner.get(key);
+        },
+      }),
+    );
+  await lookup.save(observations);
+  assert.equal(indexReads, 0);
+  assert.equal((await lookup.readStatus()).games, observations.length);
+});
+
+for (const cached of [false, true]) {
+  test(`${cached ? "cached" : "canonical"} writes expand each known-season game's facts once, including ledger outages`, async () => {
+    const harness = createMeasuredContext();
+    let expansions = 0;
+    const identities = createIdentityDocuments(harness.ctx.storage, {
+      ...identityPolicy,
+      readGameFacts: (...args) => {
+        expansions += 1;
+        return identityPolicy.readGameFacts(...args);
+      },
+    });
+    const document = {
+      season: 2026,
+      games: Array.from({ length: 30 }, (_, index) => createGame(String(index))),
+    };
+    const prepare = () =>
+      cached
+        ? identities.prepareDetailAnswer("job:details:detail-answer:/season?season=2026", {
+            body: document,
+            at: 1,
+          })
+        : identities.prepareDocument("seasons/2026", document);
+    await prepare();
+    assert.equal(expansions, document.games.length);
+    harness.ctx.storage.transaction = async () => {
+      throw new Error("Ledger unavailable");
+    };
+    expansions = 0;
+    const fallback = await prepare();
+    assert.equal(expansions, document.games.length);
+    assert.deepEqual(
+      (cached ? fallback.body : fallback).games.map((game) => game.id),
+      document.games.map((game) => game.id),
+    );
+  });
+}
+
+test("one paced recovery slice scans failed sources only once", async () => {
+  const harness = createMeasuredContext();
+  const store = new WnbaStore(harness.ctx, {}, { ...harness.options, now: () => 0 });
+  const key = "players/2026-44";
+  await store.docs.write(key, { id: "44", season: 2026, firstName: "Alex" });
+  await finishBackfill(store);
+  harness.stored.set(`identity:error:failed:${encodeURIComponent(key)}`, 1);
+  const list = harness.ctx.storage.list;
+  let failedScans = 0;
+  harness.ctx.storage.list = async (options) => {
+    if (options.prefix === "identity:error:failed:") failedScans += 1;
+    return list(options);
+  };
+  await store.identities.backfillWhenDue(store.docs);
+  assert.equal(failedScans, 1);
+  assert.equal(harness.stored.get("identity:work").used, IDENTITY_WORK_PER_RUN);
+});
+
+for (const live of [false, true]) {
+  test(`${live ? "live matching" : "backfill"} excludes a vendor-only game from native candidate groups`, async () => {
+    const harness = createMeasuredContext();
+    const store = new WnbaStore(harness.ctx, {}, harness.options);
+    const facts = { season: 2026, away: "NYL", home: "LVA", start: "2026-06-01T18:00:00Z" };
+    await store.identities.lookup.save([
+      {
+        type: "game",
+        vendor: "balldontlie",
+        vendorId: "foreign",
+        internalId: "foreign",
+        facts,
+        evidence: { method: "existing-id" },
+      },
+    ]);
+    if (live) await store.identities.saveVendorGames([{ ...facts, id: "espn-event" }]);
+    else {
+      harness.stored.set("feed:networks:202606", createSavedNetworkMonth());
+      await finishBackfill(store);
+    }
+    assert.equal(await store.identities.lookup.read("game", "espn", "espn-event"), null);
+    assert.equal((await store.identities.readStatus()).unmatched, 1);
+  });
+}
