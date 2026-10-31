@@ -6,10 +6,6 @@ import { html } from "#shared/html.js";
 /** @type {import("#shared/updates.js").ReleaseNote[]} */
 export const RELEASE_NOTES = [
   {
-    at: "2026-10-30T02:54:50Z",
-    text: "Some game data hasn't been loading as expected recently. Improvements are underway for reliability and speed, targeting before the last finals game and certainly for next season.",
-  },
-  {
     at: "2026-10-29T04:13:00Z",
     text: html`Send a feature request, bug report, or anything else. From settings in the top right, tap <b>Contact</b>.`,
   },
