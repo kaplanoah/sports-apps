@@ -331,7 +331,9 @@ test("diagnostic storage failures expose no error payload and leave sports healt
 
 test("a recorded whole WNBA schedule retains its unmatched observations while diagnosis describes only saved evidence", async () => {
   const readFixture = (file) =>
-    JSON.parse(readFileSync(new URL(`../apps/wnba/tests/fixtures/${file}.json`, import.meta.url)));
+    JSON.parse(
+      readFileSync(new URL(`../apps/wnba/tests/fixtures/${file}.json`, import.meta.url), "utf8"),
+    );
   const fixture = readFixture("2026-09-30-afternoon");
   const schedule = readFixture("2026-10-01-games").preview.schedule;
   const answers = readFixture("2026-10-02-espn-scoreboard").answers;
