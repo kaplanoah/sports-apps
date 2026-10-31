@@ -6,12 +6,27 @@ import {
   validateSportsData,
 } from "./sports-schema.js";
 import { isSameJson } from "../page/compare.js";
+import { nameIdentityGameGroup } from "./identity-matching.js";
+import { readPlayerName } from "./player-name.js";
 
 const VENDOR_PREFIX = "identity:vendor:";
 const nameStatusKey = (league) => `identity:status:${encodeURIComponent(league)}`;
 const nameFactsRevisionKey = (league) => `identity:facts-revision:${encodeURIComponent(league)}`;
+export const nameIdentityEntityPrefix = (league, type) =>
+  `identity:entity:${encodeURIComponent(league)}:${type}:`;
 const nameEntityKey = (league, type, id) =>
-  `identity:entity:${encodeURIComponent(league)}:${type}:${encodeURIComponent(id)}`;
+  `${nameIdentityEntityPrefix(league, type)}${encodeURIComponent(id)}`;
+export const nameIdentityCandidatePrefix = (league, type, record) =>
+  `identity:candidate:${encodeURIComponent(league)}:${type}:${encodeURIComponent(type === "game" ? nameIdentityGameGroup(record) : readPlayerName(record))}:`;
+const nameCandidateKey = (entry) =>
+  `${nameIdentityCandidatePrefix(entry.league, entry.type, entry.facts ?? {})}${encodeURIComponent(entry.id)}`;
+
+async function saveCandidateIndex(transaction, previous, entry) {
+  const key = nameCandidateKey(entry);
+  if (previous && nameCandidateKey(previous) !== key)
+    await transaction.delete(nameCandidateKey(previous));
+  await saveChanged(transaction, key, entry.id);
+}
 const nameVendorKey = (league, type, vendor, id) =>
   `${VENDOR_PREFIX}${encodeURIComponent(vendor)}:${encodeURIComponent(league)}:${type}:${encodeURIComponent(id)}`;
 const nameProblemKey = (key) => `identity:problem:${key}`;
@@ -108,6 +123,7 @@ async function ensureEntity(transaction, league, observation) {
   };
   validateSportsData(IdentityEntry, updated);
   await saveChanged(transaction, key, updated);
+  await saveCandidateIndex(transaction, previous, updated);
   if (!isSameJson(previous?.facts, updated.facts))
     await transaction.put(nameFactsRevisionKey(league), crypto.randomUUID());
   if (!previous) {
@@ -181,47 +197,75 @@ async function saveAssociation(transaction, league, observation) {
  * @param {string} league
  */
 export function createIdentityLookup(storage, league) {
+  /** @param {any[]} observations @param {string | null} [factsRevision] @param {boolean} [includeEntries] */
+  async function saveObservations(observations, factsRevision = undefined, includeEntries = false) {
+    observations.forEach((observation) => validateSportsData(IdentityObservation, observation));
+    return storage.transaction(async (transaction) => {
+      if (
+        factsRevision !== undefined &&
+        ((await transaction.get(nameFactsRevisionKey(league))) ?? null) !== factsRevision
+      )
+        throw new IdentityFactsChanged("Identity facts changed during reconciliation");
+      const beforeRevision = includeEntries
+        ? ((await transaction.get(nameFactsRevisionKey(league))) ?? null)
+        : null;
+      const results = [];
+      for (const observation of observations) {
+        const key = nameVendorKey(
+          league,
+          observation.type,
+          observation.vendor,
+          observation.vendorId,
+        );
+        if (observation.disputed) {
+          await saveProblem(transaction, league, key, "disputed");
+          results.push({
+            vendorId: observation.vendorId,
+            internalId: observation.internalId ?? null,
+            disputed: true,
+          });
+          continue;
+        }
+        if (!observation.internalId) {
+          await saveProblem(transaction, league, key, "unmatched");
+          results.push({ vendorId: observation.vendorId, internalId: null, disputed: false });
+          continue;
+        }
+        const result = await saveAssociation(transaction, league, observation);
+        results.push({
+          ...result,
+          vendorId: observation.vendorId,
+          disputed: result.disputed || (await transaction.get(nameProblemKey(key))) === "disputed",
+        });
+      }
+      const entries = [];
+      if (includeEntries)
+        for (const observation of observations)
+          if (observation.internalId)
+            entries.push(
+              await transaction.get(
+                nameEntityKey(league, observation.type, observation.internalId),
+              ),
+            );
+      return {
+        results,
+        entries,
+        beforeRevision,
+        revision: includeEntries
+          ? ((await transaction.get(nameFactsRevisionKey(league))) ?? null)
+          : null,
+      };
+    });
+  }
   return {
     /** @param {any[]} observations @param {string | null} [factsRevision] */
-    async save(observations, factsRevision = undefined) {
-      observations.forEach((observation) => validateSportsData(IdentityObservation, observation));
-      return storage.transaction(async (transaction) => {
-        if (
-          factsRevision !== undefined &&
-          ((await transaction.get(nameFactsRevisionKey(league))) ?? null) !== factsRevision
-        )
-          throw new IdentityFactsChanged("Identity facts changed during reconciliation");
-        const results = [];
-        for (const observation of observations) {
-          const key = nameVendorKey(
-            league,
-            observation.type,
-            observation.vendor,
-            observation.vendorId,
-          );
-          if (observation.disputed) {
-            await saveProblem(transaction, league, key, "disputed");
-            results.push({
-              vendorId: observation.vendorId,
-              internalId: observation.internalId ?? null,
-              disputed: true,
-            });
-            continue;
-          }
-          if (!observation.internalId) {
-            await saveProblem(transaction, league, key, "unmatched");
-            results.push({ vendorId: observation.vendorId, internalId: null, disputed: false });
-            continue;
-          }
-          const result = await saveAssociation(transaction, league, observation);
-          results.push({
-            ...result,
-            vendorId: observation.vendorId,
-            disputed:
-              result.disputed || (await transaction.get(nameProblemKey(key))) === "disputed",
-          });
-        }
-        return results;
+    save: async (observations, factsRevision = undefined) =>
+      (await saveObservations(observations, factsRevision)).results,
+    saveWithEntries: (observations) => saveObservations(observations, undefined, true),
+    async indexCandidate(type, id) {
+      await storage.transaction(async (transaction) => {
+        const entry = await transaction.get(nameEntityKey(league, type, id));
+        if (entry) await saveCandidateIndex(transaction, null, entry);
       });
     },
     /** @param {{ type: "game" | "player", vendor: string, vendorId: string, facts?: object }} asked */
@@ -251,7 +295,7 @@ export function createIdentityLookup(storage, league) {
         const value = await transaction.get(key);
         if (!value) return 0;
         let conflicts = 0;
-        if (key.startsWith(`identity:entity:${league}:`)) {
+        if (key.startsWith(nameIdentityEntityPrefix(league, value.type))) {
           for (const [vendor, id] of Object.entries(value.vendors)) {
             if (vendors && !vendors.includes(vendor)) continue;
             const mapping = await transaction.get(nameVendorKey(league, value.type, vendor, id));

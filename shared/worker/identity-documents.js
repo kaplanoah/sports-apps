@@ -1,15 +1,19 @@
-// Additive identity registration, fact expansion and bounded storage-only coverage checks.
+// Additive facts and identity registration for stored sports documents.
 import { isStoreDocumentPath } from "../page/store-path.js";
 import { isSameJson } from "../page/compare.js";
-import { createIdentityLookup } from "./identity.js";
+import {
+  createIdentityLookup,
+  IdentityFactsChanged,
+  nameIdentityEntityPrefix,
+} from "./identity.js";
 import { ESPN_VENDOR } from "./espn-adapter.js";
 import { readIdentityDiagnosis } from "./identity-diagnostics.js";
 import { readPlayerName } from "./player-name.js";
 import { reconcileIdentities, nameIdentityGameGroup } from "./identity-matching.js";
-import { createIdentityBackfill } from "./identity-backfill.js";
+import { createIdentityBackfill, IDENTITY_COVERAGE_KEY } from "./identity-backfill.js";
 
-const COVERAGE_KEY = "identity:coverage-revision";
 const ERROR_SCAN_LIMIT = 20;
+const LIVE_RECONCILIATION_ATTEMPTS = 3;
 const PLAYER_FIELDS = new Set(["players", "batters", "pitchers", "starters", "leaders"]);
 const GAME_FIELDS = new Set([
   "games",
@@ -45,19 +49,35 @@ const hasIdentifier = (value) =>
 export function createIdentityDocuments(storage, policy, now = Date.now) {
   const lookup = createIdentityLookup(storage, policy.league);
 
+  const nameRetryKey = (key) => `identity:retry:${encodeURIComponent(key)}`;
   const nameErrorKey = (key, kind) => `identity:error:${kind}:${encodeURIComponent(key)}`;
-  async function saveErrors(key, count, kind = "rejected") {
+  async function saveErrors(key, count, kind = "rejected", processedRetry = null) {
     const path = nameErrorKey(key, kind);
+    if (kind === "failed" && !count) {
+      if (!(await storage.get(path))) return;
+      await storage.transaction(async (transaction) => {
+        const latestRetry = (await transaction.get(nameRetryKey(key))) ?? null;
+        if (!isSameJson(latestRetry, processedRetry)) return;
+        if (latestRetry) await transaction.delete(nameRetryKey(key));
+        if (await transaction.get(path)) await transaction.delete(path);
+      });
+      return;
+    }
     const previous = await storage.get(path);
     if (previous === count || (!previous && !count)) return;
     if (count) await storage.put(path, count);
     else await storage.delete(path);
   }
 
-  async function attemptIdentity(key, action, fallback = () => null) {
+  async function attemptIdentity(
+    key,
+    action,
+    fallback = () => null,
+    readProcessedRetry = () => null,
+  ) {
     try {
       const result = await action();
-      await saveErrors(key, 0, "failed");
+      await saveErrors(key, 0, "failed", readProcessedRetry());
       return result;
     } catch {
       await saveErrors(key, 1, "failed").catch(() => {});
@@ -80,31 +100,61 @@ export function createIdentityDocuments(storage, policy, now = Date.now) {
   async function listNatives(type) {
     await refreshNativeRevision();
     if (!nativeEntries.has(type)) {
-      const entries = await storage.list({ prefix: `identity:entity:${policy.league}:${type}:` });
+      const entries = await storage.list({ prefix: nameIdentityEntityPrefix(policy.league, type) });
       nativeEntries.set(type, new Map([...entries.values()].map((entry) => [entry.id, entry])));
     }
     return [...nativeEntries.get(type).values()];
   }
+  function rememberNatives(saved) {
+    if (nativeRevision !== saved.beforeRevision) {
+      nativeEntries.clear();
+      vendorBatches.clear();
+    }
+    if (saved.revision !== saved.beforeRevision) vendorBatches.clear();
+    for (const entry of saved.entries) nativeEntries.get(entry.type)?.set(entry.id, entry);
+    nativeRevision = saved.revision;
+  }
+
+  async function reconcileLiveRecords(type, records) {
+    for (let attempt = 0; attempt < LIVE_RECONCILIATION_ATTEMPTS; attempt += 1) {
+      const factsRevision = await refreshNativeRevision();
+      const groups = new Set(records.map(type === "game" ? nameIdentityGameGroup : readPlayerName));
+      const natives = (await listNatives(type))
+        .filter(
+          (entry) =>
+            (type !== "game" || entry.vendors[policy.vendor]) &&
+            groups.has(
+              type === "game"
+                ? nameIdentityGameGroup(entry.facts ?? {})
+                : readPlayerName(entry.facts ?? {}),
+            ),
+        )
+        .map((entry) => ({ id: entry.id, ...entry.facts }));
+      try {
+        return await reconcileIdentities(lookup, {
+          type,
+          vendor: ESPN_VENDOR,
+          natives,
+          records,
+          factsRevision,
+        });
+      } catch (error) {
+        if (
+          !(error instanceof IdentityFactsChanged) ||
+          attempt === LIVE_RECONCILIATION_ATTEMPTS - 1
+        )
+          throw error;
+      }
+    }
+  }
+
   async function saveVendorGames(records, key = "snapshot", rejected = 0, docs = null) {
     await saveErrors(key, rejected);
     if (!records?.length) return;
-    const factsRevision = await refreshNativeRevision();
-    const groups = new Set(records.map(nameIdentityGameGroup));
+    await refreshNativeRevision();
     const signature = JSON.stringify(records);
     if (vendorBatches.get(key) === signature) return;
-    const natives = (await listNatives("game"))
-      .filter(
-        (entry) =>
-          entry.vendors[policy.vendor] && groups.has(nameIdentityGameGroup(entry.facts ?? {})),
-      )
-      .map((entry) => ({ id: entry.id, ...entry.facts }));
-    const results = await reconcileIdentities(lookup, {
-      type: "game",
-      vendor: ESPN_VENDOR,
-      natives,
-      records,
-      factsRevision,
-    });
+    const results = await reconcileLiveRecords("game", records);
     await saveGameMatches(results, docs);
     vendorBatches.set(key, signature);
   }
@@ -287,7 +337,12 @@ export function createIdentityDocuments(storage, policy, now = Date.now) {
 
   async function registerDocument(key, sourceKey, prepared) {
     const { document, observations, rejected, espnPlayers } = prepared;
-    const results = observations.length ? await lookup.save(observations) : [];
+    let results = [];
+    if (observations.length) {
+      const saved = await lookup.saveWithEntries(observations);
+      results = saved.results;
+      rememberNatives(saved);
+    }
     await saveErrors(sourceKey, rejected);
     if (
       observations.some(
@@ -297,48 +352,76 @@ export function createIdentityDocuments(storage, policy, now = Date.now) {
             (!results[index].created && results[index].addedFacts.includes("season"))),
       )
     )
-      await storage.put(COVERAGE_KEY, crypto.randomUUID());
-    if (espnPlayers.length) {
-      const factsRevision = await refreshNativeRevision();
-      const names = new Set(espnPlayers.map(readPlayerName));
-      const natives = (await listNatives("player"))
-        .filter((entry) => names.has(readPlayerName(entry.facts ?? {})))
-        .map((entry) => ({ id: entry.id, ...entry.facts }));
-      await reconcileIdentities(lookup, {
-        type: "player",
-        vendor: ESPN_VENDOR,
-        natives,
-        records: espnPlayers,
-        factsRevision,
-      });
-    }
+      await storage.put(IDENTITY_COVERAGE_KEY, crypto.randomUUID());
+    if (espnPlayers.length) await reconcileLiveRecords("player", espnPlayers);
     const matches = listGameMatchObservations(key, document);
     if (matches.length) await lookup.save(matches);
     return prepared.document;
   }
+  async function expandWithKnownFacts(key, document, known = null) {
+    let prepared = expandDocument(key, document, known);
+    if (prepared.rootId && !prepared.document.season) {
+      const entry = await lookup.readEntry("game", String(prepared.rootId));
+      if (entry?.facts) prepared = expandDocument(key, document, entry.facts);
+    }
+    return prepared;
+  }
+
+  function describeDetailAnswer(key, value) {
+    const url = new URL(key.slice("job:details:detail-answer:".length), "https://store");
+    const season = Number(url.searchParams.get("season")) || value.body?.season;
+    return { key: `details/${season ?? "answer"}`, document: value.body };
+  }
+
+  function mergePlayerEvidence(retained, current) {
+    return [
+      ...new Map(
+        [...(retained?.records ?? []), ...current].map((record) => [String(record.id), record]),
+      ).values(),
+    ];
+  }
+
+  async function saveRetryEvidence(key, records) {
+    await storage.transaction(async (transaction) => {
+      const retained = await transaction.get(nameRetryKey(key));
+      await transaction.put(nameRetryKey(key), {
+        revision: crypto.randomUUID(),
+        records: mergePlayerEvidence(retained, records),
+      });
+      await transaction.put(nameErrorKey(key, "failed"), 1);
+    });
+  }
+
   async function prepareDocument(key, document, known = null, sourceKey = key) {
     let prepared = expandDocument(key, document, known);
+    let retryEvidence = null;
     return attemptIdentity(
       sourceKey,
       async () => {
-        if (prepared.rootId && !prepared.document.season) {
-          const entry = await lookup.readEntry("game", String(prepared.rootId));
-          if (entry?.facts) prepared = expandDocument(key, document, entry.facts);
-        }
-        return registerDocument(key, sourceKey, prepared);
+        prepared = await expandWithKnownFacts(key, document, known);
+        retryEvidence = (await storage.get(nameRetryKey(sourceKey))) ?? null;
+        return registerDocument(key, sourceKey, {
+          ...prepared,
+          espnPlayers: mergePlayerEvidence(retryEvidence, prepared.espnPlayers),
+        });
       },
-      () => prepared.document,
+      async () => {
+        if (prepared.espnPlayers.length)
+          await saveRetryEvidence(sourceKey, prepared.espnPlayers).catch(() => {});
+        return prepared.document;
+      },
+      () => retryEvidence,
     );
   }
 
   async function prepareDetailAnswer(key, value) {
-    const url = new URL(key.slice("job:details:detail-answer:".length), "https://store");
-    const season = Number(url.searchParams.get("season")) || value.body?.season;
-    const body = await prepareDocument(`details/${season ?? "answer"}`, value.body, null, key);
+    const source = describeDetailAnswer(key, value);
+    const body = await prepareDocument(source.key, source.document, null, key);
     return { ...value, body };
   }
 
   async function forgetSource(key) {
+    await storage.delete(nameRetryKey(key));
     await saveErrors(key, 0, "failed");
     await saveErrors(key, 0, "rejected");
   }
@@ -354,17 +437,9 @@ export function createIdentityDocuments(storage, policy, now = Date.now) {
     const cached = key.startsWith("job:details:detail-answer:");
     if (!cached && !isStoreDocumentPath(key)) return null;
     if (!cached && !isSameJson(await docs.read(key), value)) return { kind: "changed" };
-    const url = cached
-      ? new URL(key.slice("job:details:detail-answer:".length), "https://store")
-      : null;
-    const season = cached ? Number(url.searchParams.get("season")) || value.body?.season : null;
-    const documentKey = cached ? `details/${season ?? "answer"}` : key;
-    const document = cached ? value.body : value;
-    let prepared = expandDocument(documentKey, document, cached ? null : document);
-    if (prepared.rootId && !prepared.document.season) {
-      const entry = await lookup.readEntry("game", String(prepared.rootId));
-      if (entry?.facts) prepared = expandDocument(documentKey, document, entry.facts);
-    }
+    const source = cached ? describeDetailAnswer(key, value) : { key, document: value };
+    const prepared = await expandWithKnownFacts(source.key, source.document, cached ? null : value);
+    const retryEvidence = (await storage.get(nameRetryKey(key))) ?? null;
     return {
       kind: "document",
       cached,
@@ -374,7 +449,8 @@ export function createIdentityDocuments(storage, policy, now = Date.now) {
         ...prepared.observations,
         ...listGameMatchObservations(key, prepared.document),
       ],
-      records: prepared.espnPlayers,
+      records: mergePlayerEvidence(retryEvidence, prepared.espnPlayers),
+      retryEvidence,
       rejected: prepared.rejected,
     };
   }

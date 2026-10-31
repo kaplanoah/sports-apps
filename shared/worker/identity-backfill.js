@@ -1,10 +1,13 @@
 // Resumable identity work with independent writer versions and a conservative storage-work allowance.
 import { isSameJson } from "../page/compare.js";
 import { hashTextInFull } from "./hash-text.js";
-import { reconcileIdentities, nameIdentityGameGroup } from "./identity-matching.js";
-import { readPlayerName } from "./player-name.js";
+import { reconcileIdentities } from "./identity-matching.js";
 import { ESPN_VENDOR } from "./espn-adapter.js";
-import { IdentityFactsChanged } from "./identity.js";
+import {
+  IdentityFactsChanged,
+  nameIdentityEntityPrefix,
+  nameIdentityCandidatePrefix,
+} from "./identity.js";
 
 export const IDENTITY_AUDIT_VERSION = 2;
 export const IDENTITY_WORK_PER_RUN = 20;
@@ -13,9 +16,10 @@ export const IDENTITY_WORK_INTERVAL_MS = 60_000;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const BACKFILL_KEY = "identity:backfill";
 const WORK_KEY = "identity:work";
-const COVERAGE_KEY = "identity:coverage-revision";
+export const IDENTITY_COVERAGE_KEY = "identity:coverage-revision";
 const MAX_CANDIDATE_BYTES = 512 * 1024;
-const MAX_RETRY_MS = 60 * IDENTITY_WORK_INTERVAL_MS;
+const RETRY_DELAY_MS = 60_000;
+const MAX_RETRY_MS = 60 * 60 * 1000;
 
 const createProgress = (coverageRevision = null) => ({
   version: IDENTITY_AUDIT_VERSION,
@@ -27,7 +31,7 @@ const createProgress = (coverageRevision = null) => ({
   missingFacts: 0,
   conflicts: 0,
   coverageRevision,
-  factsRevision: null,
+  indexes: {},
   pending: null,
 });
 
@@ -40,7 +44,7 @@ function chooseSourceStage(source) {
 
 /**
  * @param {any} storage
- * @param {{ lookup: any, policy: any, describeSource: (key: string, value: any, phase: string, docs: any) => Promise<any>, saveErrors: (key: string, count: number, kind?: string) => Promise<void>, hasFailedSources: () => Promise<boolean>, saveGameMatches: (results: any[], docs: any) => Promise<void> }} options
+ * @param {{ lookup: any, policy: any, describeSource: (key: string, value: any, phase: string, docs: any) => Promise<any>, saveErrors: (key: string, count: number, kind?: string, processedRetry?: any) => Promise<void>, hasFailedSources: () => Promise<boolean>, saveGameMatches: (results: any[], docs: any) => Promise<void> }} options
  * @param {() => number} now
  */
 export function createIdentityBackfill(storage, options, now) {
@@ -48,30 +52,12 @@ export function createIdentityBackfill(storage, options, now) {
 
   async function readCurrentProgress() {
     const previous = await storage.get(BACKFILL_KEY);
-    const coverageRevision = (await storage.get(COVERAGE_KEY)) ?? null;
-    const factsRevision = await lookup.readFactsRevision();
-    let progress =
+    const coverageRevision = (await storage.get(IDENTITY_COVERAGE_KEY)) ?? null;
+    const progress =
       previous?.version === IDENTITY_AUDIT_VERSION &&
       (previous.coverageRevision ?? null) === coverageRevision
         ? { ...createProgress(coverageRevision), ...structuredClone(previous) }
         : createProgress(coverageRevision);
-    if (
-      !progress.complete &&
-      progress.phase !== "documents" &&
-      progress.factsRevision !== factsRevision
-    ) {
-      progress = {
-        ...progress,
-        phase: "facts",
-        cursor: "",
-        pending: null,
-        complete: false,
-        missingEntries: 0,
-        missingFacts: 0,
-        conflicts: 0,
-        factsRevision,
-      };
-    }
     return { previous, progress };
   }
 
@@ -102,33 +88,65 @@ export function createIdentityBackfill(storage, options, now) {
     });
   }
 
-  async function collectCandidates(source, pending, work) {
+  async function buildCandidateIndex(type, progress, work) {
+    const index = (progress.indexes[type] ??= { cursor: "", complete: false });
+    if (index.complete) return true;
+    const limit = work.remaining;
+    work.remaining = 0;
+    const entries = await storage.list({
+      prefix: nameIdentityEntityPrefix(policy.league, type),
+      startAfter: index.cursor,
+      limit,
+    });
+    for (const [key, entry] of entries) {
+      await lookup.indexCandidate(type, entry.id);
+      index.cursor = key;
+    }
+    work.remaining = limit - Math.max(1, entries.size);
+    index.complete = entries.size < limit;
+    return index.complete;
+  }
+
+  async function collectCandidates(source, pending, progress, work) {
+    if (!(await buildCandidateIndex(source.type, progress, work)) || !work.remaining) return;
     const revision = await lookup.readFactsRevision();
     if (pending.nativeRevision !== revision) {
       pending.nativeRevision = revision;
       pending.candidateCursor = "";
+      pending.groupOffset = 0;
       pending.candidates = [];
       pending.offset = 0;
     }
-    const prefix = `identity:entity:${encodeURIComponent(policy.league)}:${source.type}:`;
-    const limit = work.remaining;
-    work.remaining = 0;
-    const entries = await storage.list({ prefix, startAfter: pending.candidateCursor, limit });
-    work.remaining = limit - Math.max(1, entries.size);
-    const groups = new Set(
-      source.records.map(source.type === "game" ? nameIdentityGameGroup : readPlayerName),
-    );
-    for (const [key, entry] of entries) {
-      const matches =
-        source.type === "game"
-          ? entry.vendors[policy.vendor] && groups.has(nameIdentityGameGroup(entry.facts ?? {}))
-          : groups.has(readPlayerName(entry.facts ?? {}));
-      if (matches) pending.candidates.push({ id: entry.id, ...entry.facts });
-      pending.candidateCursor = key;
+    const prefixes = [
+      ...new Set(
+        source.records.map((record) =>
+          nameIdentityCandidatePrefix(policy.league, source.type, record),
+        ),
+      ),
+    ];
+    while (work.remaining && pending.groupOffset < prefixes.length) {
+      const limit = work.remaining;
+      work.remaining = 0;
+      const entries = await storage.list({
+        prefix: prefixes[pending.groupOffset],
+        startAfter: pending.candidateCursor,
+        limit,
+      });
+      for (const [key, id] of entries) {
+        const entry = await lookup.readEntry(source.type, id);
+        if (entry && (source.type !== "game" || entry.vendors[policy.vendor]))
+          pending.candidates.push({ id: entry.id, ...entry.facts });
+        pending.candidateCursor = key;
+      }
+      work.remaining = limit - Math.max(1, entries.size);
+      if (new TextEncoder().encode(JSON.stringify(pending.candidates)).length > MAX_CANDIDATE_BYTES)
+        throw new Error("Identity candidate evidence exceeds the checkpoint limit");
+      if (entries.size < limit) {
+        pending.groupOffset += 1;
+        pending.candidateCursor = "";
+      }
     }
-    if (new TextEncoder().encode(JSON.stringify(pending.candidates)).length > MAX_CANDIDATE_BYTES)
-      throw new Error("Identity candidate evidence exceeds the checkpoint limit");
-    if (entries.size < limit) pending.stage = "vendor";
+    if (pending.groupOffset === prefixes.length) pending.stage = "vendor";
   }
 
   async function saveVendorBatch(source, pending, work, docs) {
@@ -206,8 +224,11 @@ export function createIdentityBackfill(storage, options, now) {
   }
 
   async function advanceSource(docs, key, value, source, progress, work, isActive) {
-    const signature = await describeSignature(value);
-    if (progress.pending?.key !== key || progress.pending.signature !== signature) {
+    const signature = await describeSignature({
+      value,
+      retryEvidence: source.retryEvidence ?? null,
+    });
+    if (progress.pending?.key !== key) {
       progress.pending = {
         key,
         signature,
@@ -215,6 +236,7 @@ export function createIdentityBackfill(storage, options, now) {
         stage: chooseSourceStage(source),
         candidates: [],
         candidateCursor: "",
+        groupOffset: 0,
         nativeRevision: null,
         missingEntries: 0,
         missingFacts: 0,
@@ -222,20 +244,25 @@ export function createIdentityBackfill(storage, options, now) {
       };
     }
     const pending = progress.pending;
+    if (pending.signature !== signature) {
+      pending.signature = signature;
+      if (pending.stage === "candidates" || pending.stage === "vendor") {
+        pending.stage = "candidates";
+        delete pending.nativeRevision;
+      }
+    }
     while (work.remaining && pending.stage !== "done" && isActive()) {
       if (source.kind === "mappings") await checkMappingBatch(key, value, pending, work);
-      else if (pending.stage === "candidates") await collectCandidates(source, pending, work);
+      else if (pending.stage === "candidates")
+        await collectCandidates(source, pending, progress, work);
       else if (pending.stage === "vendor") await saveVendorBatch(source, pending, work, docs);
       else if (progress.phase === "facts") await checkNativeBatch(source, pending, work);
       else await registerNativeBatch(source, pending, work);
     }
     if (!isActive() || pending.stage !== "done") return false;
     const latest = await storage.get(key);
-    if (!isSameJson(latest, value)) {
-      progress.pending = null;
-      return false;
-    }
-    if (source.kind === "document" && !isSameJson(source.document, value)) {
+    let published = isSameJson(latest, value);
+    if (published && source.kind === "document" && !isSameJson(source.document, value)) {
       const matched = source.cached
         ? await storage.transaction(async (transaction) => {
             const current = await transaction.get(key);
@@ -244,14 +271,13 @@ export function createIdentityBackfill(storage, options, now) {
             return true;
           })
         : await docs.replaceIfUnchanged(key, value, source.document);
-      if (!matched) {
-        progress.pending = null;
-        return false;
-      }
+      published = matched;
+      if (!matched && !isActive()) return false;
     }
     if (!isActive()) return false;
     await saveErrors(key, source.rejected ?? 0);
-    if (progress.phase !== "facts") await saveErrors(key, 0, "failed");
+    if (progress.phase !== "facts" && published)
+      await saveErrors(key, 0, "failed", source.retryEvidence ?? null);
     progress.missingEntries += pending.missingEntries;
     progress.missingFacts += pending.missingFacts;
     progress.conflicts += pending.conflicts;
@@ -263,23 +289,19 @@ export function createIdentityBackfill(storage, options, now) {
     progress.pending = null;
     if (progress.phase === "documents") {
       progress.phase = "facts";
-      progress.factsRevision = await lookup.readFactsRevision();
     } else if (progress.phase === "facts") progress.phase = "vendors";
     else {
       progress.complete = true;
       if (progress.recoveryAttempt && (await hasFailedSources()))
         progress.retryAfter =
           now() +
-          Math.min(
-            MAX_RETRY_MS,
-            IDENTITY_WORK_INTERVAL_MS * 2 ** Math.min(progress.recoveryAttempt - 1, 6),
-          );
+          Math.min(MAX_RETRY_MS, RETRY_DELAY_MS * 2 ** Math.min(progress.recoveryAttempt - 1, 6));
     }
   }
 
-  async function backfill(docs, isActive = () => true) {
+  async function backfill(docs, isActive = () => true, currentProgress = null) {
     if (!isActive()) return;
-    const { previous, progress: current } = await readCurrentProgress();
+    const { previous, progress: current } = currentProgress ?? (await readCurrentProgress());
     let progress = current;
     if (progress.complete) {
       if (progress.retryAfter > now() || !(await hasFailedSources())) return;
@@ -301,6 +323,11 @@ export function createIdentityBackfill(storage, options, now) {
         break;
       }
       const [key, value] = [...entries][0];
+      if (key.startsWith("identity:candidate:")) {
+        progress.cursor = "identity:candidate;";
+        progress.pending = null;
+        continue;
+      }
       if (progress.phase !== "vendors" && key.startsWith("identity:")) {
         progress.cursor = "identity;";
         progress.pending = null;
@@ -331,7 +358,7 @@ export function createIdentityBackfill(storage, options, now) {
 
   async function readStatus(errors) {
     const progress = await storage.get(BACKFILL_KEY);
-    const coverageRevision = (await storage.get(COVERAGE_KEY)) ?? null;
+    const coverageRevision = (await storage.get(IDENTITY_COVERAGE_KEY)) ?? null;
     const complete =
       !!progress?.complete &&
       progress.version === IDENTITY_AUDIT_VERSION &&
@@ -355,7 +382,14 @@ export function createIdentityBackfill(storage, options, now) {
   return {
     backfill,
     backfillWhenDue: async (docs, isActive = () => true) => {
-      if (isActive() && (await reserveWork(isActive))) await backfill(docs, isActive);
+      if (!isActive()) return;
+      const current = await readCurrentProgress();
+      if (
+        current.progress.complete &&
+        (current.progress.retryAfter > now() || !(await hasFailedSources()))
+      )
+        return;
+      if (isActive() && (await reserveWork(isActive))) await backfill(docs, isActive, current);
     },
     readStatus,
   };

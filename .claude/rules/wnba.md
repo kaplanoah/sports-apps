@@ -94,4 +94,4 @@ paths:
   - The page lists each playoff final in an Updates box only on phones and tablets, and only for the current season.
   - Each device keeps when its box counts from, its first look or last dismissal, and a final counts as new by when the Worker first found it.
 
-- `worker/src/identity-policy.js` supplies league facts to the shared identity facility described in worker.md. Optional identity audits resume within large documents and keep their progress across unrelated releases; live ingestion and reminders retain priority.
+- `worker/src/identity-policy.js` supplies league facts to the shared identity facility described in worker.md.

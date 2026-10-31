@@ -549,14 +549,13 @@ test("contradictory evidence marks an established association disputed even with
   }
 });
 
-test("redeployment after older writers ran invalidates completed coverage and rechecks preserved historical progress", async () => {
+test("an older audit version invalidates completed coverage and rechecks preserved historical progress", async () => {
   const { ctx, stored } = createDurableObjectContext();
   stored.set("identity:backfill", {
     version: IDENTITY_AUDIT_VERSION - 1,
     complete: true,
     checkedDocuments: 123,
   });
-  stored.set("poll:schedule", { release: "old-writer", dueAt: 9999 });
   stored.set("schedules-2025/2025-06", {
     year: 2025,
     games: [createGame("7", { state: "final" })],
@@ -578,7 +577,7 @@ test("redeployment after older writers ran invalidates completed coverage and re
   assert.equal((await store.identities.readStatus()).checks.verified, true);
 });
 
-test("an alarm after older writers ran restarts incomplete coverage before replacing the poll release", async () => {
+test("an alarm restarts incomplete coverage from an older audit version", async () => {
   const { ctx, stored } = createDurableObjectContext();
   stored.set("identity:backfill", {
     complete: false,
@@ -586,7 +585,6 @@ test("an alarm after older writers ran restarts incomplete coverage before repla
     cursor: "z",
     checkedDocuments: 123,
   });
-  stored.set("poll:schedule", { release: "old-writer", dueAt: 0 });
   stored.set("schedules-2025/2025-06", {
     year: 2025,
     games: [createGame("7", { state: "final" })],
@@ -1364,7 +1362,6 @@ test("completed backfill clears orphaned physical-source failures without restar
   const store = new WnbaStore(ctx, {});
   const progress = {
     version: IDENTITY_AUDIT_VERSION,
-    factsRevision: null,
     complete: true,
     checkedDocuments: 77,
     phase: "vendors",
@@ -1531,7 +1528,6 @@ test("a seasonless game arriving during an active audit invalidates its generati
   const store = new MlbStore(ctx, {});
   stored.set("identity:backfill", {
     version: IDENTITY_AUDIT_VERSION,
-    factsRevision: null,
     complete: false,
     phase: "vendors",
     cursor: "",
@@ -1596,7 +1592,6 @@ test("a superseded coverage revision cannot verify when its in-flight pass finis
   const store = new MlbStore(ctx, {});
   stored.set("identity:backfill", {
     version: IDENTITY_AUDIT_VERSION,
-    factsRevision: null,
     complete: false,
     phase: "vendors",
     cursor: "z",

@@ -259,7 +259,7 @@ Pages link these before their own stylesheet, and theme them with the tokens the
 - `game-details-job.js`: keeping each finished game's details
 - `espn-adapter.js`: shared ESPN requests and parsing, with league-supplied mappings and basketball rules
 - `player-name.js`: normalized player-name letters shared by matching and injury reports
-- `identity.js`: atomic scoped vendor mappings, matching evidence, discovery and reconciliation
+- `identity.js`: atomic scoped vendor mappings, candidate-group indexes, matching evidence, discovery and reconciliation
 - `identity-matching.js`: confident game and player matches with explicit doubleheader evidence
 - `identity-diagnostics.js`: bounded aggregate diagnosis from retained identity evidence without writes or vendor reads
 - `identity-documents.js`: additive facts and identity registration for stored sports documents

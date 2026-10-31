@@ -11,7 +11,7 @@ import {
   IDENTITY_WORK_INTERVAL_MS,
 } from "../shared/worker/identity-backfill.js";
 import { reconcileIdentities } from "../shared/worker/identity-matching.js";
-import { createIdentityLookup } from "../shared/worker/identity.js";
+import { createIdentityLookup, nameIdentityCandidatePrefix } from "../shared/worker/identity.js";
 import { createDurableObjectContext } from "./durable-object-context.js";
 
 function createMeasuredContext() {
@@ -144,7 +144,7 @@ for (const [app, Store] of /** @type {const} */ ([
   });
 }
 
-test("an interrupted source restarts its own identities when the saved document changes", async () => {
+test("an interrupted source retains progress while live writers replace its content", async () => {
   const harness = createMeasuredContext();
   const key = "seasons/2026";
   harness.stored.set(key, {
@@ -157,7 +157,7 @@ test("an interrupted source restarts its own identities when the saved document 
   const changed = structuredClone(harness.stored.get(key));
   changed.games[0] = createGame("changed");
   changed.kept = "a concurrent writer's value";
-  harness.stored.set(key, changed);
+  await store.docs.write(key, changed);
   store = new MlbStore(harness.ctx, {}, harness.options);
   await finishBackfill(store);
   assert.equal(await store.identities.lookup.read("game", "mlb", "changed"), "changed");
@@ -241,9 +241,9 @@ test("a candidate scan restarts on changed native evidence before any vendor ass
   harness.stored.set("feed:networks:202606", createSavedNetworkMonth());
   for (let step = 0; step < 20; step += 1) {
     await store.identities.backfill(store.docs);
-    if (harness.stored.get("identity:backfill").pending?.candidateCursor) break;
+    if (harness.stored.get("identity:backfill").pending?.stage === "candidates") break;
   }
-  assert.ok(harness.stored.get("identity:backfill").pending.candidateCursor);
+  assert.equal(harness.stored.get("identity:backfill").pending.stage, "candidates");
   await store.identities.lookup.save([
     {
       type: "game",
@@ -693,4 +693,405 @@ test("live matching refreshes cached native candidates changed by another lookup
   assert.equal(await store.identities.lookup.read("game", "espn", "first-vendor"), "native");
   assert.equal((await store.identities.readStatus()).unmatched, 1);
   assert.equal((await store.identities.readStatus()).disputed, 0);
+});
+
+test("hot documents and changing native facts cannot restart or starve an active coverage pass", async () => {
+  const harness = createMeasuredContext();
+  const store = new WnbaStore(harness.ctx, {}, harness.options);
+  const key = "seasons/2026";
+  await store.docs.write(key, {
+    year: 2026,
+    games: Array.from({ length: 90 }, (_, index) =>
+      createGame(`10226${String(index).padStart(5, "0")}`),
+    ),
+  });
+  let complete = false;
+  for (let step = 0; step < 200; step += 1) {
+    await store.identities.backfill(store.docs);
+    if ((await store.identities.readStatus()).backfill.complete) {
+      complete = true;
+      break;
+    }
+    const document = structuredClone(harness.stored.get(key));
+    document.games[0].start = step % 2 ? "2026-06-01T18:00:00Z" : "2026-06-01T19:00:00Z";
+    document.liveScore = step;
+    await store.docs.write(key, document);
+    await store.identities.lookup.save([
+      {
+        type: "player",
+        vendor: "wnba",
+        vendorId: "live-player",
+        internalId: "live-player",
+        facts: { number: String(step) },
+        evidence: { method: "existing-id" },
+      },
+    ]);
+  }
+  assert.equal(complete, true);
+  assert.equal((await store.identities.readStatus()).checks.verified, true);
+  assert.equal((await store.identities.readStatus()).games, 90);
+});
+
+test("idle and backed-off audits preserve the allowance for newly invalidated coverage", async () => {
+  const harness = createMeasuredContext();
+  let now = 0;
+  const store = new WnbaStore(harness.ctx, {}, { ...harness.options, now: () => now });
+  await finishBackfill(store);
+  for (let tick = 0; tick < IDENTITY_WORK_PER_DAY / IDENTITY_WORK_PER_RUN + 10; tick += 1) {
+    now += IDENTITY_WORK_INTERVAL_MS;
+    await store.identities.backfillWhenDue(store.docs);
+  }
+  assert.equal(harness.stored.has("identity:work"), false);
+  harness.stored.set("identity:error:failed:games%2Fmissing", 1);
+  harness.stored.set("games/missing", { id: "missing" });
+  harness.stored.get("identity:backfill").retryAfter = now + IDENTITY_WORK_INTERVAL_MS;
+  await store.identities.backfillWhenDue(store.docs);
+  assert.equal(harness.stored.has("identity:work"), false);
+  await store.docs.write("games/seasonless", { id: "seasonless" });
+  await store.identities.backfillWhenDue(store.docs);
+  assert.equal(harness.stored.get("identity:work").used, IDENTITY_WORK_PER_RUN);
+});
+
+test("retained vendor sources share one bounded ledger index and only read their complete candidate groups", async () => {
+  const harness = createMeasuredContext();
+  const store = new WnbaStore(harness.ctx, {}, harness.options);
+  await store.identities.lookup.save(
+    Array.from({ length: 100 }, (_, index) => ({
+      type: "game",
+      vendor: "wnba",
+      vendorId: String(index),
+      internalId: String(index),
+      evidence: { method: "existing-id" },
+      facts: {
+        season: 2026,
+        away: index ? "SEA" : "NYL",
+        home: "LVA",
+        start: "2026-06-01T18:00:00Z",
+      },
+    })),
+  );
+  for (const key of harness.stored.keys())
+    if (key.startsWith("identity:candidate:")) harness.stored.delete(key);
+  for (let month = 1; month <= 12; month += 1)
+    harness.stored.set(
+      `feed:networks:2026${String(month).padStart(2, "0")}`,
+      createSavedNetworkMonth(),
+    );
+  const list = harness.ctx.storage.list;
+  let ledgerRows = 0;
+  let candidateRows = 0;
+  harness.ctx.storage.list = async (options) => {
+    const entries = await list(options);
+    if (options.prefix === "identity:entity:wnba:game:") ledgerRows += entries.size;
+    if (options.prefix.startsWith("identity:candidate:")) candidateRows += entries.size;
+    return entries;
+  };
+  await finishBackfill(store);
+  assert.equal(ledgerRows, 100);
+  assert.equal(candidateRows, 12);
+  assert.equal(await store.identities.lookup.read("game", "espn", "espn-event"), "0");
+  assert.equal((await store.identities.readStatus()).checks.verified, true);
+});
+
+test("live native facts update cached entries without scanning the full ledger again", async () => {
+  const harness = createMeasuredContext();
+  const store = new WnbaStore(harness.ctx, {}, harness.options);
+  const list = harness.ctx.storage.list;
+  let scans = 0;
+  harness.ctx.storage.list = async (options) => {
+    if (options.prefix === "identity:entity:wnba:player:") scans += 1;
+    return list(options);
+  };
+  for (let number = 1; number <= 5; number += 1) {
+    await store.docs.write("rosters/2026-NYL", {
+      season: 2026,
+      team: "NYL",
+      players: [{ id: "44", firstName: "Alex", lastName: "Jones", number: String(number) }],
+    });
+    await store.docs.write("games/1022600001", {
+      boxScore: {
+        id: "1022600001",
+        season: 2026,
+        state: "final",
+        period: 4,
+        away: {
+          team: "NYL",
+          players: [
+            {
+              id: null,
+              espnIdentity: {
+                id: `vendor-${number}`,
+                facts: { firstName: "Alex", lastName: "Jones", number: String(number) },
+              },
+            },
+          ],
+        },
+      },
+    });
+  }
+  assert.equal(scans, 1);
+});
+
+for (const cached of [false, true]) {
+  test(`${cached ? "cached" : "canonical"} live player reconciliation retries concurrent facts and retains private retry evidence on exhaustion`, async () => {
+    const harness = createMeasuredContext();
+    const store = new WnbaStore(harness.ctx, {}, harness.options);
+    await store.docs.write("rosters/2026-NYL", {
+      season: 2026,
+      team: "NYL",
+      players: [{ id: "44", firstName: "Alex", lastName: "Jones", number: "7" }],
+    });
+    const key = cached
+      ? "job:details:detail-answer:/box-score?id=1022600001&season=2026"
+      : "games/1022600001";
+    const box = {
+      id: "1022600001",
+      season: 2026,
+      state: "final",
+      period: 4,
+      away: {
+        team: "NYL",
+        players: [
+          {
+            id: null,
+            espnIdentity: {
+              id: "espn-player",
+              facts: { firstName: "Alex", lastName: "Jones", number: "7" },
+            },
+          },
+        ],
+      },
+    };
+    const write = () =>
+      cached
+        ? store
+            .createJobStorage("details")
+            .put("detail-answer:/box-score?id=1022600001&season=2026", { at: 1, body: box })
+        : store.docs.write(key, { boxScore: box });
+    const read = store.identities.lookup.read;
+    let changes = 1;
+    let number = 0;
+    store.identities.lookup.read = async (...args) => {
+      if (args[1] === "espn" && changes > 0) {
+        changes -= 1;
+        await createIdentityLookup(harness.ctx.storage, "wnba").save([
+          {
+            type: "player",
+            vendor: "wnba",
+            vendorId: "other",
+            internalId: "other",
+            facts: { number: String(number++) },
+            evidence: { method: "existing-id" },
+          },
+        ]);
+      }
+      return read(...args);
+    };
+    await write();
+    assert.equal(await store.identities.lookup.read("player", "espn", "espn-player"), "44");
+    assert.equal((await store.identities.readStatus()).errors, 0);
+    changes = 10;
+    await write();
+    assert.equal((await store.identities.readStatus()).errors, 1);
+    assert.ok(!JSON.stringify(harness.stored.get(key)).includes("espnIdentity"));
+    const retryKey = `identity:retry:${encodeURIComponent(key)}`;
+    assert.equal(harness.stored.get(retryKey).records[0].id, "espn-player");
+    changes = 0;
+    await finishBackfill(store);
+    assert.equal(harness.stored.has(retryKey), false);
+    assert.equal((await store.identities.readStatus()).checks.verified, true);
+    assert.equal(harness.calls.vendor, 0);
+  });
+}
+
+test("candidate groups move atomically with corrected native facts", async () => {
+  const harness = createMeasuredContext();
+  const lookup = createIdentityLookup(harness.ctx.storage, "wnba");
+  const facts = { season: 2026, away: "NYL", home: "LVA", start: "2026-06-01T18:00:00Z" };
+  const observation = {
+    type: "game",
+    vendor: "wnba",
+    vendorId: "native",
+    internalId: "native",
+    evidence: { method: "existing-id" },
+    facts,
+  };
+  await lookup.save([observation]);
+  const oldPrefix = nameIdentityCandidatePrefix("wnba", "game", facts);
+  const changed = { ...facts, away: "SEA" };
+  const newPrefix = nameIdentityCandidatePrefix("wnba", "game", changed);
+  await lookup.save([{ ...observation, facts: changed }]);
+  assert.equal((await harness.ctx.storage.list({ prefix: oldPrefix })).size, 0);
+  assert.deepEqual(
+    [...(await harness.ctx.storage.list({ prefix: newPrefix })).values()],
+    ["native"],
+  );
+  const transaction = harness.ctx.storage.transaction;
+  harness.ctx.storage.transaction = (callback) =>
+    transaction((inner) =>
+      callback({
+        ...inner,
+        put: async (key, value) => {
+          if (key.startsWith("identity:candidate:")) throw new Error("Index write failed");
+          return inner.put(key, value);
+        },
+      }),
+    );
+  await assert.rejects(lookup.save([observation]), /Index write failed/);
+  assert.equal((await lookup.readEntry("game", "native")).facts.away, "SEA");
+  assert.equal((await harness.ctx.storage.list({ prefix: oldPrefix })).size, 0);
+  assert.equal((await harness.ctx.storage.list({ prefix: newPrefix })).size, 1);
+});
+
+test("live game matching retries a concurrent native revision before publishing a vendor link", async () => {
+  const harness = createMeasuredContext();
+  const store = new WnbaStore(harness.ctx, {}, harness.options);
+  const facts = { season: 2026, away: "NYL", home: "LVA", start: "2026-06-01T18:00:00Z" };
+  await store.identities.lookup.save([
+    {
+      type: "game",
+      vendor: "wnba",
+      vendorId: "native",
+      internalId: "native",
+      facts,
+      evidence: { method: "existing-id" },
+    },
+  ]);
+  const read = store.identities.lookup.read;
+  let changed = false;
+  store.identities.lookup.read = async (...args) => {
+    if (args[1] === "espn" && !changed) {
+      changed = true;
+      await createIdentityLookup(harness.ctx.storage, "wnba").save([
+        {
+          type: "player",
+          vendor: "wnba",
+          vendorId: "new",
+          internalId: "new",
+          facts: { number: "7" },
+          evidence: { method: "existing-id" },
+        },
+      ]);
+    }
+    return read(...args);
+  };
+  await store.identities.saveVendorGames([{ ...facts, id: "espn-event" }], 0, store.docs);
+  assert.equal(await store.identities.lookup.read("game", "espn", "espn-event"), "native");
+  assert.equal((await store.docs.read("espnMatches/native")).eventId, "espn-event");
+  assert.equal((await store.identities.readStatus()).errors, 0);
+});
+
+test("retained vendor observations with no native revision finish as unmatched without an empty-scan loop", async () => {
+  const harness = createMeasuredContext();
+  const store = new WnbaStore(harness.ctx, {}, harness.options);
+  harness.stored.set("feed:networks:202606", createSavedNetworkMonth());
+  const get = harness.ctx.storage.get;
+  let revisionReads = 0;
+  harness.ctx.storage.get = async (key) => {
+    if (key === "identity:facts-revision:wnba" && ++revisionReads > 100)
+      throw new Error("Unbounded empty candidate scan");
+    return get(key);
+  };
+  await finishBackfill(store);
+  assert.equal((await store.identities.readStatus()).unmatched, 1);
+  assert.equal((await store.identities.readStatus()).errors, 0);
+  assert.equal((await store.identities.readStatus()).checks.verified, true);
+  assert.ok(revisionReads < 10);
+});
+
+test("an unchanged document consuming an external revision invalidates cached unmatched vendor batches", async () => {
+  const harness = createMeasuredContext();
+  const store = new WnbaStore(harness.ctx, {}, harness.options);
+  const record = { id: "espn-event", away: "NYL", home: "LVA", start: "2026-06-01T18:00:00Z" };
+  await store.identities.saveVendorGames([record]);
+  assert.equal((await store.identities.readStatus()).unmatched, 1);
+  const other = new WnbaStore(harness.ctx, {}, harness.options);
+  await other.docs.write("games/1022600001", createGame("1022600001"));
+  await store.docs.write("games/1022600001", createGame("1022600001"));
+  await store.identities.saveVendorGames([record]);
+  assert.equal(await store.identities.lookup.read("game", "espn", "espn-event"), "1022600001");
+  assert.equal((await store.identities.readStatus()).unmatched, 0);
+});
+
+for (const newerFailure of [false, true]) {
+  test(`${newerFailure ? "a newer failure" : "an unrelated lead write"} cannot discard player retry evidence before its own reconciliation`, async () => {
+    const harness = createMeasuredContext();
+    const store = new WnbaStore(harness.ctx, {}, harness.options);
+    const key = "games/1022600001";
+    await store.docs.write("rosters/2026-NYL", {
+      season: 2026,
+      team: "NYL",
+      players: [{ id: "44", firstName: "Alex", lastName: "Jones", number: "7" }],
+    });
+    await store.docs.write(key, {
+      boxScore: { id: "1022600001", season: 2026, state: "final", period: 4 },
+    });
+    const retryKey = `identity:retry:${encodeURIComponent(key)}`;
+    const errorKey = `identity:error:failed:${encodeURIComponent(key)}`;
+    const records = [
+      { id: "old-event", firstName: "Alex", lastName: "Jones", number: "7", team: "NYL" },
+    ];
+    harness.stored.set(retryKey, { revision: "old", records });
+    harness.stored.set(errorKey, 1);
+    if (!newerFailure) {
+      await store.docs.update(key, (document) => ({ ...document, lead: { text: "Saved lead" } }));
+      assert.equal(await store.identities.lookup.read("player", "espn", "old-event"), "44");
+      assert.equal(harness.stored.has(retryKey), false);
+      assert.equal(harness.stored.has(errorKey), false);
+      assert.equal((await store.docs.read(key)).lead.text, "Saved lead");
+    } else {
+      const read = store.identities.lookup.read;
+      let replaced = false;
+      store.identities.lookup.read = async (...args) => {
+        if (args[1] === "espn" && !replaced) {
+          replaced = true;
+          harness.stored.set(retryKey, {
+            revision: "new",
+            records: [{ ...records[0], id: "new-event" }],
+          });
+        }
+        return read(...args);
+      };
+      await finishBackfill(store);
+      assert.equal(harness.stored.get(retryKey).revision, "new");
+      assert.equal(harness.stored.get(errorKey), 1);
+      assert.equal(await store.identities.lookup.read("player", "espn", "old-event"), "44");
+      assert.equal(await store.identities.lookup.read("player", "espn", "new-event"), null);
+    }
+    assert.ok(!JSON.stringify(harness.stored.get(key)).includes("espnIdentity"));
+  });
+}
+
+test("a new retained-player batch restarts matching slices without losing its unprocessed records", async () => {
+  const harness = createMeasuredContext();
+  const store = new WnbaStore(harness.ctx, {}, harness.options);
+  const key = "job:details:detail-answer:/player?id=kept&season=2026";
+  const retryKey = `identity:retry:${encodeURIComponent(key)}`;
+  const records = (prefix) =>
+    Array.from({ length: 40 }, (_, index) => ({
+      id: `${prefix}-${index}`,
+      firstName: "Alex",
+      lastName: "Jones",
+      team: "NYL",
+      number: "7",
+    }));
+  harness.stored.set(key, { at: 1, body: { kept: true } });
+  harness.stored.set(retryKey, { revision: "old", records: records("old") });
+  harness.stored.set(`identity:error:failed:${encodeURIComponent(key)}`, 1);
+  for (let step = 0; step < 20; step += 1) {
+    await store.identities.backfill(store.docs);
+    const pending = harness.stored.get("identity:backfill").pending;
+    if (pending?.stage === "vendor" && pending.offset > 0) break;
+  }
+  assert.ok(harness.stored.get("identity:backfill").pending.offset > 0);
+  harness.stored.set(retryKey, { revision: "new", records: records("new") });
+  await finishBackfill(store);
+  const problems = (await store.identities.lookup.readProblems(100, ["espn"])).problems;
+  for (const record of records("new"))
+    assert.ok(
+      problems.some((problem) => problem.id === record.id),
+      record.id,
+    );
+  assert.equal(harness.stored.has(retryKey), false);
+  assert.equal((await store.identities.readStatus()).checks.verified, true);
 });

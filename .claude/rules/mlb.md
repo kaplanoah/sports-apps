@@ -104,4 +104,4 @@ paths:
 
 - Schedule publications keep a small `schedule-revisions/<year>` document. History completion is tied to that revision; an interrupted publication remains incomplete until repaired.
 
-- `worker/src/identity-policy.js` supplies league facts to the shared identity facility described in worker.md. Optional identity audits resume within large documents and keep their progress across unrelated releases; live ingestion and reminders retain priority.
+- `worker/src/identity-policy.js` supplies league facts to the shared identity facility described in worker.md.
