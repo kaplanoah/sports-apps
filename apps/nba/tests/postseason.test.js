@@ -19,6 +19,16 @@ const fixtures = { playoffs: readFixture("bracket"), "play-in": readFixture("pla
 const readKind = (input) =>
   new URL(String(input)).searchParams.get("State") === "2" ? "playoffs" : "play-in";
 
+test("NBA requests negotiate JSON without asserting browser identity or website context", async () => {
+  let headers;
+  const read = createPostseasonAdapter(async (input, init) => {
+    headers = new Headers(init.headers);
+    return Response.json(fixtures.playoffs);
+  });
+  await read(2024, "playoffs");
+  assert.deepEqual([...headers], [["accept", "application/json"]]);
+});
+
 test("recorded NBA responses supply all 15 series and six Play-In games for the starting year", async () => {
   const reads = [];
   const read = createPostseasonAdapter(async (input, init) => {
@@ -66,7 +76,7 @@ test("recorded NBA responses supply all 15 series and six Play-In games for the 
     assert.equal(url.searchParams.get("SeasonYear"), "2024");
     assert.equal(url.searchParams.get("LeagueID"), "00");
     assert.equal(init.headers.accept, "application/json");
-    assert.equal(Object.keys(init.headers).length, 2);
+    assert.equal(Object.keys(init.headers).length, 1);
     assert.ok(init.signal instanceof AbortSignal);
   }
 });
