@@ -2,13 +2,32 @@
 import { IdentityEntry, IdentityObservation, validateSportsData } from "./sports-schema.js";
 import { isSameJson } from "../page/compare.js";
 
+const VENDOR_PREFIX = "identity:vendor:";
 const nameStatusKey = (league) => `identity:status:${encodeURIComponent(league)}`;
 const nameEntityKey = (league, type, id) =>
   `identity:entity:${encodeURIComponent(league)}:${type}:${encodeURIComponent(id)}`;
 const nameVendorKey = (league, type, vendor, id) =>
-  `identity:vendor:${encodeURIComponent(vendor)}:${encodeURIComponent(league)}:${type}:${encodeURIComponent(id)}`;
+  `${VENDOR_PREFIX}${encodeURIComponent(vendor)}:${encodeURIComponent(league)}:${type}:${encodeURIComponent(id)}`;
 const nameProblemKey = (key) => `identity:problem:${key}`;
+const PROBLEM_PREFIX = nameProblemKey(VENDOR_PREFIX);
 const createBlankStatus = () => ({ games: 0, players: 0, unmatched: 0, disputed: 0 });
+
+function readProblem(key, value, league) {
+  try {
+    const parts = key.slice(PROBLEM_PREFIX.length).split(":").map(decodeURIComponent);
+    if (parts.length !== 4 || !parts.every(Boolean)) return { reason: "invalid_problem" };
+    const [vendor, storedLeague, type, id] = parts;
+    if (storedLeague !== league) return null;
+    return {
+      vendor,
+      type,
+      id,
+      problem: value === "unmatched" || value === "disputed" ? value : "other",
+    };
+  } catch {
+    return { reason: "invalid_problem" };
+  }
+}
 
 /** @param {any} storage @param {string} key @param {any} value */
 async function saveChanged(storage, key, value) {
@@ -194,12 +213,22 @@ export function createIdentityLookup(storage, league) {
             }
             conflicts += 1;
           }
-        } else if (key.startsWith("identity:vendor:") && value.league === league) {
+        } else if (key.startsWith(VENDOR_PREFIX) && value.league === league) {
           const entry = await transaction.get(nameEntityKey(league, value.type, value.internalId));
           if (entry?.vendors[value.vendor] !== value.vendorId) conflicts += 1;
         }
         return conflicts;
       });
+    },
+    async readProblems(limit) {
+      const entries = await storage.list({ prefix: PROBLEM_PREFIX, limit: limit + 1 });
+      return {
+        problems: [...entries]
+          .slice(0, limit)
+          .map(([key, value]) => readProblem(key, value, league))
+          .filter(Boolean),
+        truncated: entries.size > limit,
+      };
     },
     readStatus: async () => (await storage.get(nameStatusKey(league))) ?? createBlankStatus(),
   };
