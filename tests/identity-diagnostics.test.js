@@ -8,6 +8,7 @@ import { createDurableObjectContext } from "./durable-object-context.js";
 import { createAppWorker } from "../shared/worker/app-worker.js";
 import { createHealthServer, HEALTH_REUSE_MS } from "../shared/worker/health.js";
 import { readStoreHealth } from "../shared/worker/season-store.js";
+import { IDENTITY_AUDIT_VERSION } from "../shared/worker/identity-backfill.js";
 import { readIdentityDiagnosis } from "../shared/worker/identity-diagnostics.js";
 import { buildSnapshot } from "../apps/wnba/worker/src/adapters/wnba.js";
 import { readIdentityGames } from "../shared/worker/espn-adapter.js";
@@ -542,7 +543,7 @@ test("malformed retained answers remain unavailable evidence without failing spo
 
 test("diagnostic storage failures expose no error payload and leave sports health and coverage unchanged", async () => {
   const harness = createHarness();
-  harness.stored.set("identity:backfill", { complete: true });
+  harness.stored.set("identity:backfill", { version: IDENTITY_AUDIT_VERSION, complete: true });
   const list = harness.ctx.storage.list;
   harness.ctx.storage.list = async (options) => {
     if (options.prefix === "identity:problem:identity:vendor:")

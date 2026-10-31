@@ -1,27 +1,25 @@
-// Additive identity registration, fact expansion and bounded storage-only coverage checks.
+// Additive facts and identity registration for stored sports documents.
 import { isStoreDocumentPath } from "../page/store-path.js";
 import { isSameJson } from "../page/compare.js";
-import { createIdentityLookup } from "./identity.js";
+import {
+  createIdentityLookup,
+  IdentityFactsChanged,
+  nameIdentityEntityPrefix,
+  nameIdentityCandidateGroup,
+  isIdentityNativeCandidate,
+  isIdentityEntityKey,
+  isIdentityVendorKey,
+  IDENTITY_PREFIX,
+} from "./identity.js";
 import { ESPN_VENDOR } from "./espn-adapter.js";
 import { readIdentityDiagnosis } from "./identity-diagnostics.js";
-import { readPlayerName } from "./player-name.js";
-import { reconcileIdentities, readIdentityDay } from "./identity-matching.js";
+import { reconcileIdentities } from "./identity-matching.js";
+import { createIdentityBackfill, IDENTITY_COVERAGE_KEY } from "./identity-backfill.js";
 
-const BACKFILL_KEY = "identity:backfill";
-const COVERAGE_KEY = "identity:coverage-revision";
-const BATCH_SIZE = 20;
-const RETRY_DELAY_MS = 60_000;
-const MAX_RETRY_DELAY_MS = 60 * RETRY_DELAY_MS;
-const createBackfillProgress = () => ({
-  cursor: "",
-  checkedDocuments: 0,
-  complete: false,
-  phase: "documents",
-  missingEntries: 0,
-  missingFacts: 0,
-  conflicts: 0,
-  coverageRevision: null,
-});
+const ERROR_PREFIX = `${IDENTITY_PREFIX}error:`;
+const FAILED_PREFIX = `${ERROR_PREFIX}failed:`;
+const ERROR_SCAN_LIMIT = 20;
+const LIVE_RECONCILIATION_ATTEMPTS = 3;
 const PLAYER_FIELDS = new Set(["players", "batters", "pitchers", "starters", "leaders"]);
 const GAME_FIELDS = new Set([
   "games",
@@ -57,19 +55,35 @@ const hasIdentifier = (value) =>
 export function createIdentityDocuments(storage, policy, now = Date.now) {
   const lookup = createIdentityLookup(storage, policy.league);
 
-  const nameErrorKey = (key, kind) => `identity:error:${kind}:${encodeURIComponent(key)}`;
-  async function saveErrors(key, count, kind = "rejected") {
+  const nameRetryKey = (key) => `${IDENTITY_PREFIX}retry:${encodeURIComponent(key)}`;
+  const nameErrorKey = (key, kind) => `${ERROR_PREFIX}${kind}:${encodeURIComponent(key)}`;
+  async function saveErrors(key, count, kind = "rejected", processedRetry = null) {
     const path = nameErrorKey(key, kind);
+    if (kind === "failed" && !count) {
+      if (!(await storage.get(path))) return;
+      await storage.transaction(async (transaction) => {
+        const latestRetry = (await transaction.get(nameRetryKey(key))) ?? null;
+        if (!isSameJson(latestRetry, processedRetry)) return;
+        if (latestRetry) await transaction.delete(nameRetryKey(key));
+        if (await transaction.get(path)) await transaction.delete(path);
+      });
+      return;
+    }
     const previous = await storage.get(path);
     if (previous === count || (!previous && !count)) return;
     if (count) await storage.put(path, count);
     else await storage.delete(path);
   }
 
-  async function attemptIdentity(key, action, fallback = () => null) {
+  async function attemptIdentity(
+    key,
+    action,
+    fallback = () => null,
+    readProcessedRetry = () => null,
+  ) {
     try {
       const result = await action();
-      await saveErrors(key, 0, "failed");
+      await saveErrors(key, 0, "failed", readProcessedRetry());
       return result;
     } catch {
       await saveErrors(key, 1, "failed").catch(() => {});
@@ -79,52 +93,75 @@ export function createIdentityDocuments(storage, policy, now = Date.now) {
 
   const vendorBatches = new Map();
   const nativeEntries = new Map();
+  let nativeRevision;
+  async function refreshNativeRevision() {
+    const revision = await lookup.readFactsRevision();
+    if (nativeRevision !== revision) {
+      nativeEntries.clear();
+      vendorBatches.clear();
+      nativeRevision = revision;
+    }
+    return revision;
+  }
   async function listNatives(type) {
+    await refreshNativeRevision();
     if (!nativeEntries.has(type)) {
-      const entries = await storage.list({ prefix: `identity:entity:${policy.league}:${type}:` });
+      const entries = await storage.list({ prefix: nameIdentityEntityPrefix(policy.league, type) });
       nativeEntries.set(type, new Map([...entries.values()].map((entry) => [entry.id, entry])));
     }
     return [...nativeEntries.get(type).values()];
   }
-  function rememberNatives(observations) {
-    for (const observation of observations) {
-      const entries = nativeEntries.get(observation.type);
-      if (!entries) continue;
-      const previous = entries.get(observation.internalId);
-      const facts = {
-        ...previous?.facts,
-        ...Object.fromEntries(
-          Object.entries(observation.facts).filter(([, value]) => value != null),
-        ),
-      };
-      if (isSameJson(previous?.facts, facts)) continue;
-      entries.set(observation.internalId, {
-        id: observation.internalId,
-        facts,
-        vendors: { ...previous?.vendors, [policy.vendor]: observation.internalId },
-      });
+  function rememberNatives(saved) {
+    if (nativeRevision !== saved.beforeRevision) {
+      nativeEntries.clear();
       vendorBatches.clear();
     }
+    if (saved.revision !== saved.beforeRevision) vendorBatches.clear();
+    for (const entry of saved.entries) nativeEntries.get(entry.type)?.set(entry.id, entry);
+    nativeRevision = saved.revision;
   }
+
+  async function reconcileLiveRecords(type, records) {
+    for (let attempt = 0; attempt < LIVE_RECONCILIATION_ATTEMPTS; attempt += 1) {
+      const factsRevision = await refreshNativeRevision();
+      const groups = new Set(records.map((record) => nameIdentityCandidateGroup(type, record)));
+      const natives = (await listNatives(type))
+        .filter(
+          (entry) =>
+            isIdentityNativeCandidate(type, entry, policy.vendor) &&
+            groups.has(nameIdentityCandidateGroup(type, entry.facts ?? {})),
+        )
+        .map((entry) => ({ id: entry.id, ...entry.facts }));
+      try {
+        return await reconcileIdentities(lookup, {
+          type,
+          vendor: ESPN_VENDOR,
+          natives,
+          records,
+          factsRevision,
+        });
+      } catch (error) {
+        if (
+          !(error instanceof IdentityFactsChanged) ||
+          attempt === LIVE_RECONCILIATION_ATTEMPTS - 1
+        )
+          throw error;
+      }
+    }
+  }
+
   async function saveVendorGames(records, key = "snapshot", rejected = 0, docs = null) {
     await saveErrors(key, rejected);
     if (!records?.length) return;
-    const nameGameGroup = (record) =>
-      JSON.stringify([record.away, record.home, readIdentityDay(record)]);
-    const groups = new Set(records.map(nameGameGroup));
+    await refreshNativeRevision();
     const signature = JSON.stringify(records);
     if (vendorBatches.get(key) === signature) return;
-    const natives = (await listNatives("game"))
-      .filter(
-        (entry) => entry.vendors[policy.vendor] && groups.has(nameGameGroup(entry.facts ?? {})),
-      )
-      .map((entry) => ({ id: entry.id, ...entry.facts }));
-    const results = await reconcileIdentities(lookup, {
-      type: "game",
-      vendor: ESPN_VENDOR,
-      natives,
-      records,
-    });
+    const results = await reconcileLiveRecords("game", records);
+    await saveGameMatches(results, docs);
+    vendorBatches.set(key, signature);
+  }
+
+  async function saveGameMatches(results, docs) {
     if (docs && policy.nameMatchKey) {
       for (const result of results) {
         if (!result.internalId || result.disputed) continue;
@@ -140,7 +177,6 @@ export function createIdentityDocuments(storage, policy, now = Date.now) {
         });
       }
     }
-    vendorBatches.set(key, signature);
   }
 
   /** @param {string} key @param {any} document */
@@ -283,12 +319,34 @@ export function createIdentityDocuments(storage, policy, now = Date.now) {
     };
   }
 
-  async function registerDocument(key, sourceKey, prepared, audit, trackCoverage) {
+  function listGameMatchObservations(key, document) {
+    if (!key.startsWith("espnMatches/") || !document?.eventId) return [];
+    return [
+      {
+        type: "game",
+        vendor: ESPN_VENDOR,
+        vendorId: String(document.eventId),
+        internalId: String(document.id),
+        evidence: {
+          method: "existing-id",
+          away: document.away,
+          home: document.home,
+          start: document.start,
+        },
+      },
+    ];
+  }
+
+  async function registerDocument(key, sourceKey, prepared) {
     const { document, observations, rejected, espnPlayers } = prepared;
-    const results = observations.length ? await lookup.save(observations) : [];
+    let results = [];
+    if (observations.length) {
+      const saved = await lookup.saveWithEntries(observations);
+      results = saved.results;
+      rememberNatives(saved);
+    }
     await saveErrors(sourceKey, rejected);
     if (
-      trackCoverage &&
       observations.some(
         (observation, index) =>
           observation.type === "game" &&
@@ -296,123 +354,108 @@ export function createIdentityDocuments(storage, policy, now = Date.now) {
             (!results[index].created && results[index].addedFacts.includes("season"))),
       )
     )
-      await storage.put(COVERAGE_KEY, crypto.randomUUID());
-    rememberNatives(observations);
-    if (audit)
-      for (const observation of observations) {
-        if (
-          (await lookup.read(observation.type, policy.vendor, observation.internalId)) !==
-          observation.internalId
-        )
-          audit.missingEntries += 1;
-        if (
-          observation.type === "game" &&
-          !Number.isInteger((await lookup.readEntry("game", observation.internalId))?.facts?.season)
-        )
-          audit.missingFacts += 1;
-      }
-    if (espnPlayers.length) {
-      const names = new Set(espnPlayers.map(readPlayerName));
-      const natives = (await listNatives("player"))
-        .filter((entry) => names.has(readPlayerName(entry.facts ?? {})))
-        .map((entry) => ({ id: entry.id, ...entry.facts }));
-      await reconcileIdentities(lookup, {
-        type: "player",
-        vendor: ESPN_VENDOR,
-        natives,
-        records: espnPlayers,
-      });
-    }
-    if (key.startsWith("espnMatches/") && document?.eventId) {
-      await lookup.save([
-        {
-          type: "game",
-          vendor: ESPN_VENDOR,
-          vendorId: String(document.eventId),
-          internalId: String(document.id),
-          evidence: {
-            method: "existing-id",
-            away: document.away,
-            home: document.home,
-            start: document.start,
-          },
-        },
-      ]);
-    }
+      await storage.put(IDENTITY_COVERAGE_KEY, crypto.randomUUID());
+    if (espnPlayers.length) await reconcileLiveRecords("player", espnPlayers);
+    const matches = listGameMatchObservations(key, document);
+    if (matches.length) await lookup.save(matches);
     return prepared.document;
   }
-  async function prepareDocument(
-    key,
-    document,
-    audit = null,
-    sourceKey = key,
-    known = null,
-    trackCoverage = true,
-  ) {
+  async function expandWithKnownFacts(key, document, prepared) {
+    if (prepared.rootId && !prepared.document.season) {
+      const entry = await lookup.readEntry("game", String(prepared.rootId));
+      if (entry?.facts) prepared = expandDocument(key, document, entry.facts);
+    }
+    return prepared;
+  }
+
+  function describeDetailAnswer(key, value) {
+    const url = new URL(key.slice("job:details:detail-answer:".length), "https://store");
+    const season = Number(url.searchParams.get("season")) || value.body?.season;
+    return { key: `details/${season ?? "answer"}`, document: value.body };
+  }
+
+  function mergePlayerEvidence(retained, current) {
+    return [
+      ...new Map(
+        [...(retained?.records ?? []), ...current].map((record) => [String(record.id), record]),
+      ).values(),
+    ];
+  }
+
+  async function saveRetryEvidence(key, records) {
+    await storage.transaction(async (transaction) => {
+      const retained = await transaction.get(nameRetryKey(key));
+      await transaction.put(nameRetryKey(key), {
+        revision: crypto.randomUUID(),
+        records: mergePlayerEvidence(retained, records),
+      });
+      await transaction.put(nameErrorKey(key, "failed"), 1);
+    });
+  }
+
+  async function prepareDocument(key, document, known = null, sourceKey = key) {
     let prepared = expandDocument(key, document, known);
+    let retryEvidence = null;
     return attemptIdentity(
       sourceKey,
       async () => {
-        if (prepared.rootId && !prepared.document.season) {
-          const entry = await lookup.readEntry("game", String(prepared.rootId));
-          if (entry?.facts) prepared = expandDocument(key, document, entry.facts);
-        }
-        return registerDocument(key, sourceKey, prepared, audit, trackCoverage);
+        prepared = await expandWithKnownFacts(key, document, prepared);
+        retryEvidence = (await storage.get(nameRetryKey(sourceKey))) ?? null;
+        return registerDocument(key, sourceKey, {
+          ...prepared,
+          espnPlayers: mergePlayerEvidence(retryEvidence, prepared.espnPlayers),
+        });
       },
-      () => prepared.document,
+      async () => {
+        if (prepared.espnPlayers.length)
+          await saveRetryEvidence(sourceKey, prepared.espnPlayers).catch(() => {});
+        return prepared.document;
+      },
+      () => retryEvidence,
     );
   }
 
-  async function prepareDetailAnswer(key, value, audit = null, trackCoverage = true) {
-    const url = new URL(key.slice("job:details:detail-answer:".length), "https://store");
-    const season = Number(url.searchParams.get("season")) || value.body?.season;
-    const body = await prepareDocument(
-      `details/${season ?? "answer"}`,
-      value.body,
-      audit,
-      key,
-      null,
-      trackCoverage,
-    );
+  async function prepareDetailAnswer(key, value) {
+    const source = describeDetailAnswer(key, value);
+    const body = await prepareDocument(source.key, source.document, null, key);
     return { ...value, body };
   }
 
   async function forgetSource(key) {
+    await storage.delete(nameRetryKey(key));
     await saveErrors(key, 0, "failed");
     await saveErrors(key, 0, "rejected");
   }
 
-  async function backfillSource(docs, key, value, audit = null, vendors = false) {
-    try {
-      if (isStoreDocumentPath(key) && !vendors) {
-        const previous = await docs.read(key);
-        if (!previous) return forgetSource(key);
-        const expanded = await prepareDocument(key, previous, audit, key, previous, false);
-        await docs.update(key, (latest) =>
-          isSameJson(latest, previous) && !isSameJson(latest, expanded) ? expanded : null,
-        );
-      } else if (key.startsWith("job:details:detail-answer:") && !vendors) {
-        const expanded = await prepareDetailAnswer(key, value, audit, false);
-        await storage.transaction(async (transaction) => {
-          const latest = await transaction.get(key);
-          if (isSameJson(latest, value) && !isSameJson(value, expanded))
-            await transaction.put(key, expanded);
-        });
-      } else if (vendors) {
-        const saved = policy.readSavedVendorGames?.(key, value);
-        if (saved)
-          await attemptIdentity(key, () =>
-            saveVendorGames(saved.records, key, saved.rejected, docs),
-          );
-        if (key.startsWith("identity:entity:") || key.startsWith("identity:vendor:")) {
-          await attemptIdentity(key, async () => {
-            audit.conflicts += await lookup.countMappingConflicts(key);
-          });
-        }
-      }
-    } catch {
-      await saveErrors(key, 1, "failed").catch(() => {});
+  async function describeBackfillSource(key, value, phase, docs) {
+    if (phase === "vendors") {
+      const saved = policy.readSavedVendorGames?.(key, value);
+      if (saved) return { kind: "vendor", type: "game", ...saved };
+      return isIdentityEntityKey(key) || isIdentityVendorKey(key) ? { kind: "mappings" } : null;
     }
+    const cached = key.startsWith("job:details:detail-answer:");
+    if (!cached && !isStoreDocumentPath(key)) return null;
+    if (!cached && !isSameJson(await docs.read(key), value)) return { kind: "changed" };
+    const source = cached ? describeDetailAnswer(key, value) : { key, document: value };
+    const prepared = await expandWithKnownFacts(
+      source.key,
+      source.document,
+      expandDocument(source.key, source.document, cached ? null : value),
+    );
+    const retryEvidence = (await storage.get(nameRetryKey(key))) ?? null;
+    return {
+      kind: "document",
+      cached,
+      type: "player",
+      document: cached ? { ...value, body: prepared.document } : prepared.document,
+      observations: [
+        ...prepared.observations,
+        ...listGameMatchObservations(key, prepared.document),
+      ],
+      records: mergePlayerEvidence(retryEvidence, prepared.espnPlayers),
+      retryEvidence,
+      rejected: prepared.rejected,
+    };
   }
 
   async function noteFeedAnswer(key, value) {
@@ -425,10 +468,13 @@ export function createIdentityDocuments(storage, policy, now = Date.now) {
   }
 
   async function hasFailedSources() {
-    const errors = await storage.list({ prefix: "identity:error:failed:", limit: BATCH_SIZE });
+    const errors = await storage.list({
+      prefix: FAILED_PREFIX,
+      limit: ERROR_SCAN_LIMIT,
+    });
     let retry = false;
     for (const [path] of errors) {
-      const key = decodeURIComponent(path.slice("identity:error:failed:".length));
+      const key = decodeURIComponent(path.slice(FAILED_PREFIX.length));
       if (key === "snapshot") continue;
       if ((await storage.get(key)) === undefined) await forgetSource(key);
       else retry = true;
@@ -436,74 +482,21 @@ export function createIdentityDocuments(storage, policy, now = Date.now) {
     return retry;
   }
 
-  /** @param {import("./season-store.js").SeasonDocuments} docs */
-  async function backfill(docs, isActive = () => true) {
-    if (!isActive()) return;
-    const coverageRevision = (await storage.get(COVERAGE_KEY)) ?? null;
-    let progress = (await storage.get(BACKFILL_KEY)) ?? createBackfillProgress();
-    if ((progress.coverageRevision ?? null) !== coverageRevision)
-      progress = { ...createBackfillProgress(), coverageRevision };
-    if (progress.complete) {
-      if (progress.retryAfter > now() || !(await hasFailedSources())) return;
-      progress = {
-        ...createBackfillProgress(),
-        coverageRevision,
-        recoveryAttempt: (progress.recoveryAttempt ?? 0) + 1,
-      };
-      if (!isActive()) return;
-      await storage.put(BACKFILL_KEY, progress);
-    }
-    const entries = await storage.list({
-      prefix: "",
-      startAfter: progress.cursor,
-      limit: BATCH_SIZE,
-    });
-    for (const [key, value] of entries) {
-      if (!isActive()) return;
-      if (progress.phase !== "vendors" && key.startsWith("identity:")) {
-        progress.cursor = "identity;";
-        await storage.put(BACKFILL_KEY, progress);
-        return;
-      }
-      await backfillSource(
-        docs,
-        key,
-        value,
-        progress.phase === "facts" || progress.phase === "vendors" ? progress : null,
-        progress.phase === "vendors",
-      );
-      if (!isActive()) return;
-      progress.cursor = key;
-      progress.checkedDocuments += 1;
-      await storage.put(BACKFILL_KEY, progress);
-    }
-    if (!isActive()) return;
-    if (entries.size < BATCH_SIZE) {
-      if (progress.phase === "documents") {
-        progress.phase = "facts";
-        progress.cursor = "";
-      } else if (progress.phase === "facts") {
-        progress.phase = "vendors";
-        progress.cursor = "";
-      } else {
-        progress.complete = true;
-        if (progress.recoveryAttempt && (await hasFailedSources()))
-          progress.retryAfter =
-            now() +
-            Math.min(
-              MAX_RETRY_DELAY_MS,
-              RETRY_DELAY_MS * 2 ** Math.min(progress.recoveryAttempt - 1, 6),
-            );
-      }
-      if (!isActive()) return;
-      await storage.put(BACKFILL_KEY, progress);
-    }
-  }
+  const backfill = createIdentityBackfill(
+    storage,
+    {
+      lookup,
+      policy,
+      describeSource: describeBackfillSource,
+      saveErrors,
+      hasFailedSources,
+      saveGameMatches,
+    },
+    now,
+  );
 
   async function readStatus() {
-    const progress = await storage.get(BACKFILL_KEY);
-    const coverageRevision = (await storage.get(COVERAGE_KEY)) ?? null;
-    const errors = [...(await storage.list({ prefix: "identity:error:" })).values()].reduce(
+    const errors = [...(await storage.list({ prefix: ERROR_PREFIX })).values()].reduce(
       (total, count) => total + count,
       0,
     );
@@ -511,40 +504,20 @@ export function createIdentityDocuments(storage, policy, now = Date.now) {
       ...(await lookup.readStatus()),
       errors,
       diagnosis: await readIdentityDiagnosis(storage, policy),
-      checks: {
-        verified:
-          !!progress?.complete &&
-          (progress.coverageRevision ?? null) === coverageRevision &&
-          !progress.missingEntries &&
-          !progress.missingFacts &&
-          !progress.conflicts &&
-          !errors,
-        missingEntries: progress?.missingEntries ?? 0,
-        missingFacts: progress?.missingFacts ?? 0,
-        competingMappings: progress?.conflicts ?? 0,
-      },
-      backfill: {
-        complete: !!progress?.complete && (progress.coverageRevision ?? null) === coverageRevision,
-        checkedDocuments: progress?.checkedDocuments ?? 0,
-      },
+      ...(await backfill.readStatus(errors)),
     };
   }
 
-  async function restartBackfill() {
-    await storage.put(BACKFILL_KEY, createBackfillProgress());
-  }
-
   return {
-    prepareDocument: (key, document, known = null) =>
-      prepareDocument(key, document, null, key, known),
+    prepareDocument,
     prepareDetailAnswer,
     saveVendorGames: (records, rejected = 0, docs = null) =>
       attemptIdentity("snapshot", () => saveVendorGames(records, "snapshot", rejected, docs)),
     forgetSource,
     noteFeedAnswer,
-    backfill,
+    backfill: backfill.backfill,
+    backfillWhenDue: backfill.backfillWhenDue,
     lookup,
     readStatus,
-    restartBackfill,
   };
 }

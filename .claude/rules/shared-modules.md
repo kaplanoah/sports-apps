@@ -259,10 +259,11 @@ Pages link these before their own stylesheet, and theme them with the tokens the
 - `game-details-job.js`: keeping each finished game's details
 - `espn-adapter.js`: shared ESPN requests and parsing, with league-supplied mappings and basketball rules
 - `player-name.js`: normalized player-name letters shared by matching and injury reports
-- `identity.js`: atomic scoped vendor mappings, matching evidence, discovery and reconciliation
+- `identity.js`: atomic scoped vendor mappings, candidate-group indexes, matching evidence, discovery and reconciliation
 - `identity-matching.js`: confident game and player matches with explicit doubleheader evidence
 - `identity-diagnostics.js`: bounded aggregate diagnosis from retained identity evidence without writes or vendor reads
-- `identity-documents.js`: additive facts and identity coverage for stored sports documents, with resumable backfill
+- `identity-documents.js`: additive facts and identity registration for stored sports documents
+- `identity-backfill.js`: versioned coverage checks, nested checkpoints, candidate-group indexes and persisted optional-work pacing
 - `sports-schema.js`: shared sports contracts and detail records, validated only in Workers with Zod configured without runtime compilation
 - `store-reads.js`: reading the documents a store-owned detail service keeps for a sheet
 - `detail-reads.js`: sharing store-owned detail reads and retaining usable answers across restarts
