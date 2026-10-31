@@ -19,6 +19,7 @@ export const readPlayerIndex = () =>
     2026,
     Object.entries(ROSTERS.rosters).map(([key, leagueRoster]) =>
       describeRoster({
+        onPlayerFailure: () => {},
         team: key.split(":")[0],
         season: 2026,
         leagueRoster,

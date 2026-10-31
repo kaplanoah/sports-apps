@@ -404,7 +404,7 @@ function createStoreUpdate() {
         });
         await saveDoc(context.docs, namePlayerKey(season, id), player);
       } catch (error) {
-        noteFailure(context.failures, "Keeping a player", error);
+        noteFailure(context.failures, `Keeping ${season}'s player ${id}`, error);
       }
     }
   }

@@ -976,6 +976,7 @@ test("a malformed player list preserves a complete kept roster when its raw cach
   const { describeRoster } = await import("../worker/src/adapters/roster.js");
   const answers = listAnswers();
   const kept = describeRoster({
+    onPlayerFailure: () => {},
     team: "NYL",
     season: 2025,
     leagueRoster: answers[nameLeagueRosterRequest("NYL", 2025)],
@@ -1046,6 +1047,7 @@ test("a failed player-list transport preserves a canonical roster without a raw 
   const original = answers[path];
   const key = nameRosterKey(2025, "NYL");
   const kept = describeRoster({
+    onPlayerFailure: () => {},
     team: "NYL",
     season: 2025,
     leagueRoster: answers[nameLeagueRosterRequest("NYL", 2025)],
@@ -1399,6 +1401,7 @@ test("a historical malformed roster name rejects its cached feed despite a match
   const listed = answers[namePlayerListRequest(2025)].resultSets[0];
   const key = nameRosterKey(2025, "NYL");
   const kept = describeRoster({
+    onPlayerFailure: () => {},
     team: "NYL",
     season: 2025,
     leagueRoster: answers[path],

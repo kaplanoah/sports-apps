@@ -46,7 +46,14 @@ function describeRostered(mlbTeamId, club, name) {
   const entry = answers[listRosterRequest(mlbTeamId, season)].roster.find(
     (/** @type {any} */ each) => each.person.fullName === name,
   );
-  return describePlayer({ ...NUMBERS, entry, club, season, person: PEOPLE.get(entry.person.id) });
+  return describePlayer({
+    onFactsFailure: () => {},
+    ...NUMBERS,
+    entry,
+    club,
+    season,
+    person: PEOPLE.get(entry.person.id),
+  });
 }
 
 test("a hitter's sheet has his facts, and his regular season and postseason at the plate", () => {
@@ -81,7 +88,14 @@ test("a two-way player's sheet has his seasons at the plate and on the mound, an
 
 test("a player MLB's list doesn't have yet has no facts", () => {
   const entry = answers[listRosterRequest(114, season)].roster[0];
-  const player = describePlayer({ ...NUMBERS, entry, club: "CLE", season, person: null });
+  const player = describePlayer({
+    onFactsFailure: () => {},
+    ...NUMBERS,
+    entry,
+    club: "CLE",
+    season,
+    person: null,
+  });
   assert.equal(player.facts, null);
 });
 

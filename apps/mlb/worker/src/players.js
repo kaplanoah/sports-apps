@@ -178,12 +178,11 @@ const readNumbers = (table, id, trim) => (table.has(id) ? trim(table.get(id)) : 
  * @typedef {{ hitting: Map<number, any>, pitching: Map<number, any>, postseasonHitting: Map<number, any>, postseasonPitching: Map<number, any> }} PlayerNumbers
  */
 
-/** @param {any} person @param {any} kept @param {((error: unknown) => void) | undefined} onFailure */
+/** @param {any} person @param {any} kept @param {(error: unknown) => void} onFailure */
 function describeRetainedFacts(person, kept, onFailure) {
   try {
     return validateSportsData(BaseballPlayer.shape.facts, person ? describeFacts(person) : null);
   } catch (error) {
-    if (!onFailure) throw error;
     onFailure(error);
     return kept?.facts ?? null;
   }
@@ -192,7 +191,7 @@ function describeRetainedFacts(person, kept, onFailure) {
 /**
  * A player's sheet: his facts, his stay on the injured list and why, and his season at the plate
  * and on the mound, regular and post.
- * @param {PlayerNumbers & { entry: any, club: string, season: number, person: any, lastGames?: any, out?: import("./injuries.js").OutReason | null, kept?: any, failed?: Set<string>, onFactsFailure?: (error: unknown) => void }} sources
+ * @param {PlayerNumbers & { entry: any, club: string, season: number, person: any, lastGames?: any, out?: import("./injuries.js").OutReason | null, kept?: any, failed?: Set<string>, onFactsFailure: (error: unknown) => void }} sources
  *   `entry` is his line on the club's roster, `lastGames` what describeLastGames found, and `out`
  *   what ESPN's injury report says of him
  */

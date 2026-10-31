@@ -181,7 +181,7 @@ function describeRosterPlayer(row, listed, context) {
       describePlayer(row, listed, context),
     );
   } catch (error) {
-    if (!context.onPlayerFailure || !listed.has(row.PLAYER_ID)) throw error;
+    if (!listed.has(row.PLAYER_ID)) throw error;
     context.onPlayerFailure(error, String(row.PLAYER_ID));
     const kept = context.kept?.players.find((player) => player.id === String(row.PLAYER_ID));
     const current = describePlayer(row, new Map(), context);
@@ -200,7 +200,7 @@ function nameHeadCoach(leagueRoster) {
 }
 
 /**
- * @param {{ team: string, season: number, leagueRoster: any, playerList: any, outPlayers: import("../injuries.js").OutPlayer[], now: number, kept?: any, onPlayerFailure?: (error: unknown, id: string) => void }} reads
+ * @param {{ team: string, season: number, leagueRoster: any, playerList: any, outPlayers: import("../injuries.js").OutPlayer[], now: number, kept?: any, onPlayerFailure: (error: unknown, id: string) => void }} reads
  *   `outPlayers` are the team's players ESPN lists as out
  */
 export function describeRoster({

@@ -80,7 +80,15 @@ function describeRostered(mlbTeamId, club, name) {
   );
   const id = entry.person.id;
   const lastGames = describeLastGames(FIXTURE.gameLogs[id]);
-  return describePlayer({ ...NUMBERS, entry, club, season, person: PEOPLE.get(id), lastGames });
+  return describePlayer({
+    onFactsFailure: () => {},
+    ...NUMBERS,
+    entry,
+    club,
+    season,
+    person: PEOPLE.get(id),
+    lastGames,
+  });
 }
 
 /**
@@ -309,6 +317,7 @@ function describeTreinen(out = TREINEN_OUT) {
     (/** @type {any} */ each) => each.person.fullName === "Blake Treinen",
   );
   return describePlayer({
+    onFactsFailure: () => {},
     ...NUMBERS,
     entry,
     club: "LAD",

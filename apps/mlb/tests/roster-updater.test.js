@@ -1010,3 +1010,21 @@ test("a player's bad list facts retain only his facts while his current numbers 
     );
   }
 });
+
+test("a failed player save names the player and season without blocking other players", async () => {
+  const run = createRun();
+  const id = 694197;
+  const key = namePlayerKey(SEASON, id);
+  const write = run.docs.write;
+  run.docs.write = async (path, value) => {
+    if (path === key) throw new Error("store unavailable");
+    await write(path, value);
+  };
+  await fillRosters(run);
+  assert.equal(run.docs.stored.has(key), false);
+  assert.ok(run.docs.stored.get(namePlayerKey(SEASON, 680757)));
+  assert.match(
+    run.docs.stored.get("rosters/status").lastFailure.message,
+    /Keeping 2026's player 694197 failed: store unavailable/,
+  );
+});
