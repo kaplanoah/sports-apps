@@ -38,10 +38,13 @@ async function readVendorEvidence(storage, policy, ids) {
   return { records, conflicts, limited };
 }
 
+const needsGameEvidence = (problem) =>
+  problem.vendor === ESPN_VENDOR && problem.type === "game" && problem.problem !== "disputed";
+
 function classifyProblemReason(problem, evidence) {
   if (problem.reason) return problem.reason;
   if (problem.problem === "disputed") return "disputed_association";
-  if (problem.vendor !== ESPN_VENDOR || problem.type !== "game") return "evidence_unavailable";
+  if (!needsGameEvidence(problem)) return "evidence_unavailable";
   const record = evidence?.records.get(problem.id);
   if (evidence?.conflicts.has(problem.id)) return "conflicting_retained_evidence";
   if (record && (!record.away || !record.home)) return "missing_team_evidence";
@@ -70,10 +73,7 @@ function groupProblems(problems, evidence, vendor) {
 }
 
 async function readProblemEvidence(storage, policy, problems) {
-  const games = problems.filter(
-    (problem) =>
-      problem.vendor === ESPN_VENDOR && problem.type === "game" && problem.problem === "unmatched",
-  );
+  const games = problems.filter(needsGameEvidence);
   return games.length
     ? readVendorEvidence(storage, policy, new Set(games.map((game) => game.id)))
     : null;
@@ -87,6 +87,7 @@ export async function readIdentityDiagnosis(storage, policy) {
   try {
     const { problems, truncated } = await createIdentityLookup(storage, policy.league).readProblems(
       PROBLEM_LIMIT,
+      [policy.vendor, ESPN_VENDOR],
     );
     const evidence = await readProblemEvidence(storage, policy, problems);
     return {

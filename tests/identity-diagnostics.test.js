@@ -231,6 +231,76 @@ test("a capped problem sample follows descending keys toward evidence retained f
   assertReadOnly(harness, before);
 });
 
+test("bounded vendor and entity samples preserve games beside more than fifty player and native problems", async () => {
+  const harness = createHarness();
+  for (const [vendor, type] of [
+    ["espn", "player"],
+    ["wnba", "game"],
+    ["wnba", "player"],
+  ])
+    for (let number = 0; number < 60; number += 1)
+      harness.stored.set(nameProblem("wnba", type, String(number), vendor), "unmatched");
+  for (const id of ["one", "two"]) harness.stored.set(nameProblem("wnba", "game", id), "unmatched");
+  harness.stored.set(
+    "feed:networks:202610",
+    createMonth([createEvent("one", { away: "-1" }), createEvent("two", { home: "-2" })]),
+  );
+  const before = structuredClone([...harness.stored]);
+  const diagnosis = (await harness.read()).identity.diagnosis;
+  assert.equal(diagnosis.sampled, 50);
+  assert.equal(diagnosis.truncated, true);
+  assert.equal(diagnosis.groups.length, 4);
+  assert.ok(
+    diagnosis.groups.some(
+      (group) =>
+        group.vendor === "espn" &&
+        group.type === "game" &&
+        group.reason === "missing_team_evidence" &&
+        group.count === 2,
+    ),
+  );
+  const windows = harness.calls.lists.filter(({ prefix }) =>
+    prefix.startsWith("identity:problem:"),
+  );
+  assert.equal(windows.length, 5);
+  assert.ok(windows.every(({ limit, reverse }) => limit === 51 && reverse === true));
+  assertReadOnly(harness, before);
+});
+
+test("unrecognized game-problem states retain evidence while their public state stays unknown", async () => {
+  const harness = createHarness();
+  harness.stored.set(nameProblem("wnba", "game", "private-event"), "private-state");
+  harness.stored.set(
+    "feed:networks:202610",
+    createMonth([createEvent("private-event", { away: "-1" })]),
+  );
+  const before = structuredClone([...harness.stored]);
+  const health = await harness.read();
+  assert.deepEqual(health.identity.diagnosis.groups, [
+    { vendor: "espn", type: "game", problem: "other", reason: "missing_team_evidence", count: 1 },
+  ]);
+  assert.ok(!JSON.stringify(health).includes("private-"));
+  assertReadOnly(harness, before);
+});
+
+test("an empty problem window skips all category and retained-source reads", async () => {
+  const harness = createHarness();
+  const before = structuredClone([...harness.stored]);
+  assert.deepEqual((await harness.read()).identity.diagnosis, {
+    available: true,
+    sampled: 0,
+    truncated: false,
+    evidenceTruncated: false,
+    groups: [],
+  });
+  assert.equal(
+    harness.calls.lists.filter(({ prefix }) => prefix.startsWith("identity:problem:")).length,
+    1,
+  );
+  assert.ok(!harness.calls.lists.some(({ prefix }) => prefix.startsWith("feed:")));
+  assertReadOnly(harness, before);
+});
+
 test("retained game evidence distinguishes missing teams, dates, conflicts, usable evidence and unavailable records", async () => {
   const harness = createHarness();
   for (const id of ["teams", "date", "usable", "conflict", "absent"])

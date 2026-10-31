@@ -29,6 +29,29 @@ function readProblem(key, value, league) {
   }
 }
 
+function readUniqueProblems(entries, league, seen) {
+  const problems = [];
+  for (const [key, value] of entries) {
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const problem = readProblem(key, value, league);
+    if (problem) problems.push(problem);
+  }
+  return problems;
+}
+
+function selectProblemSample(pools, limit) {
+  const problems = [];
+  const rows = Math.max(0, ...pools.map((pool) => pool.length));
+  for (let row = 0; row < rows && problems.length < limit; row += 1) {
+    for (const pool of pools) {
+      if (pool[row]) problems.push(pool[row]);
+      if (problems.length === limit) break;
+    }
+  }
+  return problems;
+}
+
 /** @param {any} storage @param {string} key @param {any} value */
 async function saveChanged(storage, key, value) {
   if (!isSameJson(await storage.get(key), value)) await storage.put(key, value);
@@ -220,18 +243,21 @@ export function createIdentityLookup(storage, league) {
         return conflicts;
       });
     },
-    async readProblems(limit) {
-      const entries = await storage.list({
-        prefix: PROBLEM_PREFIX,
-        reverse: true,
-        limit: limit + 1,
-      });
+    async readProblems(limit, vendors) {
+      const readWindow = (prefix) => storage.list({ prefix, reverse: true, limit: limit + 1 });
+      const all = await readWindow(PROBLEM_PREFIX);
+      if (!all.size) return { problems: [], truncated: false };
+      const prefixes = [...new Set(vendors)].flatMap((vendor) =>
+        ["game", "player"].map((type) => nameProblemKey(nameVendorKey(league, type, vendor, ""))),
+      );
+      const entries = [...(await Promise.all(prefixes.map(readWindow))), all];
+      const seen = new Set();
+      const pools = entries.map((window) => readUniqueProblems(window, league, seen));
       return {
-        problems: [...entries]
-          .slice(0, limit)
-          .map(([key, value]) => readProblem(key, value, league))
-          .filter(Boolean),
-        truncated: entries.size > limit,
+        problems: selectProblemSample(pools, limit),
+        truncated:
+          entries.some((window) => window.size > limit) ||
+          pools.reduce((total, pool) => total + pool.length, 0) > limit,
       };
     },
     readStatus: async () => (await storage.get(nameStatusKey(league))) ?? createBlankStatus(),
