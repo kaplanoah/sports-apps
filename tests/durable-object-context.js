@@ -20,10 +20,23 @@ export function createDurableObjectContext() {
         if (typeof keyOrKeys === "string") return stored.delete(keyOrKeys);
         return keyOrKeys.filter((key) => stored.delete(key)).length;
       },
-      list: async ({ prefix = "", limit = undefined, startAfter = "", reverse = false }) =>
+      list: async ({
+        prefix = "",
+        limit = undefined,
+        startAfter = "",
+        start = undefined,
+        end = undefined,
+        reverse = false,
+      }) =>
         new Map(
           [...stored]
-            .filter(([key]) => key.startsWith(prefix) && key > startAfter)
+            .filter(
+              ([key]) =>
+                key.startsWith(prefix) &&
+                key > startAfter &&
+                (start === undefined || key >= start) &&
+                (end === undefined || key < end),
+            )
             .sort(
               ([first], [second]) =>
                 (first < second ? -1 : first > second ? 1 : 0) * (reverse ? -1 : 1),

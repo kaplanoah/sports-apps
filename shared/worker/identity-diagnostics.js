@@ -1,5 +1,6 @@
 // Bounded aggregate identity evidence reads without association or storage changes.
 import { isSameJson } from "../page/compare.js";
+import { IDENTITY_TYPES } from "./sports-schema.js";
 import { ESPN_VENDOR } from "./espn-adapter.js";
 import { createIdentityLookup } from "./identity.js";
 
@@ -59,7 +60,7 @@ function groupProblems(problems, evidence, vendor) {
     const group = {
       vendor:
         problem.vendor === vendor || problem.vendor === ESPN_VENDOR ? problem.vendor : "other",
-      type: problem.type === "game" || problem.type === "player" ? problem.type : "other",
+      type: IDENTITY_TYPES.includes(problem.type) ? problem.type : "other",
       problem: problem.problem ?? "other",
       reason: classifyProblemReason(problem, evidence),
     };

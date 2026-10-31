@@ -1,5 +1,10 @@
 // Atomic, vendor-scoped associations retain matching evidence and independent uncertainty counts.
-import { IdentityEntry, IdentityObservation, validateSportsData } from "./sports-schema.js";
+import {
+  IDENTITY_TYPES,
+  IdentityEntry,
+  IdentityObservation,
+  validateSportsData,
+} from "./sports-schema.js";
 import { isSameJson } from "../page/compare.js";
 
 const VENDOR_PREFIX = "identity:vendor:";
@@ -27,6 +32,20 @@ function readProblem(key, value, league) {
   } catch {
     return { reason: "invalid_problem" };
   }
+}
+
+const namePrefixEnd = (prefix) =>
+  prefix.slice(0, -1) + String.fromCharCode(prefix.charCodeAt(prefix.length - 1) + 1);
+
+function listOtherProblemRanges(prefixes) {
+  const ranges = [];
+  let start = PROBLEM_PREFIX;
+  for (const prefix of [...prefixes].sort()) {
+    ranges.push({ start, end: prefix });
+    start = namePrefixEnd(prefix);
+  }
+  ranges.push({ start, end: namePrefixEnd(PROBLEM_PREFIX) });
+  return ranges;
 }
 
 function readUniqueProblems(entries, league, seen) {
@@ -244,13 +263,25 @@ export function createIdentityLookup(storage, league) {
       });
     },
     async readProblems(limit, vendors) {
-      const readWindow = (prefix) => storage.list({ prefix, reverse: true, limit: limit + 1 });
-      const all = await readWindow(PROBLEM_PREFIX);
-      if (!all.size) return { problems: [], truncated: false };
+      const probe = await storage.list({ prefix: PROBLEM_PREFIX, limit: 1 });
+      if (!probe.size) return { problems: [], truncated: false };
       const prefixes = [...new Set(vendors)].flatMap((vendor) =>
-        ["game", "player"].map((type) => nameProblemKey(nameVendorKey(league, type, vendor, ""))),
+        IDENTITY_TYPES.map((type) => nameProblemKey(nameVendorKey(league, type, vendor, ""))),
       );
-      const entries = [...(await Promise.all(prefixes.map(readWindow))), all];
+      const windows = [
+        ...prefixes.map((prefix) => ({ prefix })),
+        ...listOtherProblemRanges(prefixes),
+      ];
+      const entries = await Promise.all(
+        windows.map((window) =>
+          storage.list({
+            prefix: PROBLEM_PREFIX,
+            reverse: true,
+            limit: limit + 1,
+            ...window,
+          }),
+        ),
+      );
       const seen = new Set();
       const pools = entries.map((window) => readUniqueProblems(window, league, seen));
       return {

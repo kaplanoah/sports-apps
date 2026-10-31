@@ -32,7 +32,15 @@ const createMonth = (events) => ({ edition: 1, data: { events } });
 function createHarness(app = "wnba") {
   const context = createDurableObjectContext();
   const { ctx } = context;
-  const calls = { mutations: [], lists: [], reads: [], vendor: 0, store: 0 };
+  const calls = {
+    mutations: [],
+    lists: [],
+    reads: [],
+    vendor: 0,
+    store: 0,
+    problemRows: 0,
+    problemWindows: [],
+  };
   const Store = app === "wnba" ? WnbaStore : MlbStore;
   const clock = { now: 0 };
   const store = new Store(
@@ -61,7 +69,12 @@ function createHarness(app = "wnba") {
   const list = ctx.storage.list;
   ctx.storage.list = async (options) => {
     calls.lists.push(options);
-    return list(options);
+    const entries = await list(options);
+    if (options.prefix.startsWith("identity:problem:")) {
+      calls.problemRows += entries.size;
+      calls.problemWindows.push({ options, keys: [...entries.keys()] });
+    }
+    return entries;
   };
   const env = {
     STORE: {
@@ -262,9 +275,62 @@ test("bounded vendor and entity samples preserve games beside more than fifty pl
   const windows = harness.calls.lists.filter(({ prefix }) =>
     prefix.startsWith("identity:problem:"),
   );
-  assert.equal(windows.length, 5);
-  assert.ok(windows.every(({ limit, reverse }) => limit === 51 && reverse === true));
+  assert.equal(windows.length, 10);
+  assert.equal(windows[0].limit, 1);
+  assert.ok(windows.slice(1).every(({ limit, reverse }) => limit === 51 && reverse === true));
+  assert.ok(harness.calls.problemRows <= 460);
   assertReadOnly(harness, before);
+});
+
+test("fallback ranges retain malformed and unknown problems when native categories exceed the sample", async () => {
+  const harness = createHarness();
+  for (let number = 0; number < 60; number += 1)
+    harness.stored.set(nameProblem("wnba", "player", String(number), "wnba"), "unmatched");
+  harness.stored.set("identity:problem:identity:vendor:%ZZ", "private-malformed");
+  for (const vendor of ["aaa-private", "private-vendor", "zz-private"])
+    harness.stored.set(nameProblem("wnba", "player", "private-player", vendor), "unmatched");
+  for (const type of ["event", "game;", "other", "zz-type"])
+    harness.stored.set(nameProblem("wnba", type, "private-type", "espn"), "unmatched");
+  const before = structuredClone([...harness.stored]);
+  const health = await harness.read();
+  const diagnosis = health.identity.diagnosis;
+  assert.equal(diagnosis.sampled, 50);
+  assert.equal(diagnosis.truncated, true);
+  assert.ok(
+    diagnosis.groups.some((group) => group.reason === "invalid_problem" && group.count === 1),
+  );
+  assert.ok(
+    diagnosis.groups.some(
+      (group) => group.vendor === "other" && group.type === "player" && group.count === 3,
+    ),
+  );
+  assert.ok(
+    diagnosis.groups.some(
+      (group) => group.vendor === "espn" && group.type === "other" && group.count === 4,
+    ),
+  );
+  assert.ok(!JSON.stringify(health).includes("private-"));
+  assert.ok(harness.calls.problemRows <= 460);
+  const categoryPrefixes = harness.calls.problemWindows
+    .filter(({ options }) => options.prefix !== "identity:problem:identity:vendor:")
+    .map(({ options }) => options.prefix);
+  for (const { options, keys } of harness.calls.problemWindows)
+    if (options.start !== undefined)
+      assert.ok(keys.every((key) => !categoryPrefixes.some((prefix) => key.startsWith(prefix))));
+  assertReadOnly(harness, before);
+});
+
+test("storage range fixtures use inclusive starts and exclusive ends in either order", async () => {
+  const { ctx, stored } = createDurableObjectContext();
+  for (const key of ["a", "b", "c", "d"]) stored.set(key, key);
+  assert.deepEqual(
+    [...(await ctx.storage.list({ start: "b", end: "d" }))].map(([key]) => key),
+    ["b", "c"],
+  );
+  assert.deepEqual(
+    [...(await ctx.storage.list({ start: "b", end: "d", reverse: true }))].map(([key]) => key),
+    ["c", "b"],
+  );
 });
 
 test("unrecognized game-problem states retain evidence while their public state stays unknown", async () => {
