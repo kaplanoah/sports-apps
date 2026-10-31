@@ -230,12 +230,25 @@ const damageFeedAnswer = {
   },
 };
 
+async function readRetainedHealth(store, stored, reads) {
+  const saved = structuredClone([...stored]);
+  const requested = new Map(reads);
+  const { data } = await (await store.readDoc("health/status")).json();
+  assert.deepEqual([...stored], saved);
+  assert.deepEqual(reads, requested);
+  assert.equal(data.identity.diagnosis.available, true);
+  return data;
+}
+
 for (const name of ["schedule", "bracket", "standings"]) {
   for (const isDue of [false, true]) {
     for (const hasShape of [false, true]) {
       test(`the store rejects a ${isDue ? "due" : "young"} saved ${name} with ${hasShape ? "invalid facts" : "no feed data"} and recovers across restarts`, async () => {
         const { clock, reads, downFeeds, stored, storage, restartStore } = createOffseasonStore();
-        await restartStore().updateSeasonWhenDue(clock.now);
+        const firstStore = restartStore();
+        await firstStore.updateSeasonWhenDue(clock.now);
+        const firstHealth = await readRetainedHealth(firstStore, stored, reads);
+        assert.ok(firstHealth.identity.games > 0);
         const saved = structuredClone(stored.get("seasons/2026"));
         const request = REQUESTS[name];
         const key = await nameFeedKey(
@@ -253,6 +266,10 @@ for (const name of ["schedule", "bracket", "standings"]) {
         const failedAt = clock.now;
         assert.equal(await store.updateSeasonWhenDue(clock.now), failedAt + FAILED_FEED_WAIT_MS);
         assert.ok(stored.get("live/feeds").failing[name]);
+        const failedHealth = await readRetainedHealth(store, stored, reads);
+        assert.ok(failedHealth.feeds[name]);
+        assert.equal(failedHealth.identity.games, firstHealth.identity.games);
+        assert.deepEqual(failedHealth.identity.diagnosis, firstHealth.identity.diagnosis);
         assert.deepEqual(stored.get("seasons/2026").games, saved.games);
         assert.deepEqual(stored.get("seasons/2026").standings, saved.standings);
         assert.equal((await storage.get(key)).answer, undefined);
@@ -267,6 +284,10 @@ for (const name of ["schedule", "bracket", "standings"]) {
         clock.now += 1;
         await store.updateSeasonWhenDue(clock.now);
         assert.deepEqual(stored.get("live/feeds").failing, {});
+        const recoveredHealth = await readRetainedHealth(store, stored, reads);
+        assert.deepEqual(recoveredHealth.feeds, {});
+        assert.equal(recoveredHealth.identity.games, firstHealth.identity.games);
+        assert.deepEqual(recoveredHealth.identity.diagnosis, firstHealth.identity.diagnosis);
         assert.equal(reads.get(name), failedReads.get(name) + 1);
         assert.equal(store.requestCount, 2);
         assert.ok((await storage.get(key)).answer);
