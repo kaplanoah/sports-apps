@@ -19,6 +19,8 @@ export const session = {
   // Every game of the season shown, which the Games view lists, null when the store has none.
   /** @type {{ games: any[] } | null} */
   schedule: null,
+  // Whether the store has yet to answer for the schedule of the season shown.
+  isScheduleDue: false,
   // Every player on a team's roster in the season shown, for search, null when the store has none.
   /** @type {{ players: import("#shared/page-search.js").PagePlayer[] } | null} */
   playerIndex: null,

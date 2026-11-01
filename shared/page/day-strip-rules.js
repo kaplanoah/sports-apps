@@ -104,6 +104,15 @@ export function choosePlacement({ isPlaced, hasPutBackDay }) {
 }
 
 /**
+ * Whether a list's first fill leaves the copy the page put back as it loaded in place, for a fill
+ * that lacks the day the copy shows while the season's whole schedule, which may list it, is still
+ * on its way, since a list placed on its start day keeps that place once the schedule arrives.
+ * @param {{ hasPutBackDay: boolean, isPutBackDayFilled: boolean, isScheduleDue: boolean }} state
+ */
+export const isKeepingPutBack = ({ hasPutBackDay, isPutBackDayFilled, isScheduleDue }) =>
+  hasPutBackDay && !isPutBackDayFilled && isScheduleDue;
+
+/**
  * Where the list stands with a day a day's gap under its top, or as near as its ends let it.
  * @param {{ dayTop: number, gap: number, scrollHeight: number, clientHeight: number }} list
  */

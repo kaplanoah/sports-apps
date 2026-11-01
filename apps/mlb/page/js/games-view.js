@@ -422,5 +422,7 @@ export function listFoundGameDays(found, allGames, now) {
 }
 
 export function renderGames() {
-  fillDayStrip(listSeasonDays(session.state?.slate, session.schedule, Date.now()));
+  fillDayStrip(listSeasonDays(session.state?.slate, session.schedule, Date.now()), {
+    isScheduleDue: session.isScheduleDue,
+  });
 }

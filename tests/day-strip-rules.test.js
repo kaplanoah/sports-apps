@@ -8,6 +8,7 @@ import {
   findCellScrollLeft,
   findDayScrollTop,
   isFollowingStartDay,
+  isKeepingPutBack,
   isLedByOne,
   isRowOutOfSight,
   listShownDays,
@@ -74,6 +75,14 @@ test("a list opens where it last was, else on the day the page put back, else on
   assert.equal(choosePlacement({ isPlaced: true, hasPutBackDay: false }), "last place");
   assert.equal(choosePlacement({ isPlaced: false, hasPutBackDay: true }), "put back");
   assert.equal(choosePlacement({ isPlaced: false, hasPutBackDay: false }), "start day");
+});
+
+test("a first fill keeps the copy put back only while it lacks the copy's day and the whole schedule is on its way", () => {
+  const due = { hasPutBackDay: true, isPutBackDayFilled: false, isScheduleDue: true };
+  assert.equal(isKeepingPutBack(due), true);
+  assert.equal(isKeepingPutBack({ ...due, isScheduleDue: false }), false);
+  assert.equal(isKeepingPutBack({ ...due, isPutBackDayFilled: true }), false);
+  assert.equal(isKeepingPutBack({ ...due, hasPutBackDay: false }), false);
 });
 
 test("the list stands with a day a gap under its top, or as near as its ends let it", () => {
