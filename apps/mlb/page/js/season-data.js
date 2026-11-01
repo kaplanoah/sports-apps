@@ -58,7 +58,7 @@ function followSchedule(year, showChange) {
         if (!session.isReordering) showChange();
       },
       () => {
-        if (year !== scheduleYear) return;
+        if (year !== scheduleYear || !session.isScheduleDue) return;
         session.isScheduleDue = false;
         if (!session.isReordering) showChange();
       },

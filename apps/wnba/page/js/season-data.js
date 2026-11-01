@@ -41,7 +41,7 @@ function followSchedule(year, showChange) {
       showChange();
     },
     () => {
-      if (year !== scheduleYear) return;
+      if (year !== scheduleYear || !session.isScheduleDue) return;
       session.isScheduleDue = false;
       showChange();
     },
