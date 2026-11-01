@@ -45,6 +45,7 @@ function readSchedule(docs) {
 function followSchedule(year, showChange) {
   if (year === scheduleYear) return;
   scheduleYear = year;
+  session.isScheduleDue = true;
   unwatchSchedule();
   unwatchSchedule = session.db
     .collection(nameScheduleCollection(year))
@@ -53,9 +54,14 @@ function followSchedule(year, showChange) {
       (/** @type {{ docs: { data: () => any }[] }} */ result) => {
         if (year !== scheduleYear) return;
         session.schedule = readSchedule(result.docs);
+        session.isScheduleDue = false;
         if (!session.isReordering) showChange();
       },
-      () => {},
+      () => {
+        if (year !== scheduleYear || !session.isScheduleDue) return;
+        session.isScheduleDue = false;
+        if (!session.isReordering) showChange();
+      },
     );
 }
 

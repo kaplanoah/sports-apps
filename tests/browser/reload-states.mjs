@@ -1,9 +1,12 @@
 import { expect } from "@playwright/test";
+import { UPDATING_WAIT_MS } from "../../shared/page/catch-up-note.js";
+import { matchPath } from "./harness.mjs";
 
 // What a phone can hold when the page loads again: the copy of the page it saved as it left, the
 // season it drew that from, either one alone, or neither, and a copy older than two minutes, after
 // which the Games list opens on today. A page showing the copy draws once the store has handed
-// over all it holds, the whole schedule with the season's record, so it keeps any day it showed. A
+// over all it holds, the whole schedule with the season's record, so it keeps any day it showed,
+// and keeps the copy while the record alone lacks that day and the schedule is on its way. A
 // page that draws the season it saved without its whole schedule, from the record, which lists
 // fewer days, keeps only a day the record lists and opens on today otherwise. Whatever it holds,
 // the list ends on the day it showed or on today once the store has answered with the whole season.
@@ -73,18 +76,70 @@ function changeSavedState(state) {
  * @param {{ state: string, opensOn: OpenDay, today: string, shownDay: string }} options
  */
 export async function expectReloadOpensOn(page, { state, opensOn, today, shownDay }) {
-  const chosen = page.locator("#seasonGames .day-cell.is-chosen");
-  await expectWholeSeason(page);
-  await expect(chosen).toHaveAttribute("data-day", today);
-  await page.locator(`#seasonGames .day-cell[data-day="${shownDay}"]`).click();
-  await expect(page.locator(`#seasonGames .listed-day[data-day="${shownDay}"]`)).toBeInViewport();
+  await leaveListOn(page, { today, shownDay });
   await page.addInitScript(changeSavedState, state);
 
   await page.reload();
 
-  const day = opensOn === "today" ? today : shownDay;
+  await expectListOn(page, opensOn === "today" ? today : shownDay);
+}
+
+/**
+ * Leaves the Games list on `shownDay`, a day before any the season's record lists, and loads the
+ * page again from the copy without its season, with the record answering only once the store has
+ * stopped holding what it sends, then checks the list ends on that day once the whole season has
+ * arrived. The page asks for the schedule only after the record, so the record alone fills the list
+ * first, as on a slow network.
+ * @param {import("@playwright/test").Page} page
+ * @param {{ today: string, shownDay: string }} options
+ */
+export async function expectLateRecordKeepsShownDay(page, { today, shownDay }) {
+  await leaveListOn(page, { today, shownDay });
+  await page.addInitScript(changeSavedState, "the copy without its season");
+  const record = matchPath(`/store/seasons/${today.slice(0, 4)}`);
+  /** @type {() => void} */
+  let noteAsked = () => {};
+  const asked = new Promise((resolve) => (noteAsked = () => resolve(undefined)));
+  /** @type {() => void} */
+  let answer = () => {};
+  const answered = new Promise((resolve) => (answer = () => resolve(undefined)));
+  /** @param {import("@playwright/test").Route} route */
+  const holdRecord = async (route) => {
+    noteAsked();
+    await answered;
+    await route.fallback();
+  };
+  await page.route(record, holdRecord);
+
+  await page.reload();
+  await asked;
+  await page.clock.runFor(UPDATING_WAIT_MS);
+  answer();
+  await page.unroute(record, holdRecord);
+
+  await expectListOn(page, shownDay);
+}
+
+/**
+ * Leaves the Games list on `shownDay`, once it shows the whole season on today.
+ * @param {import("@playwright/test").Page} page
+ * @param {{ today: string, shownDay: string }} days
+ */
+async function leaveListOn(page, { today, shownDay }) {
   await expectWholeSeason(page);
-  await expect(chosen).toHaveAttribute("data-day", day);
+  await expect(page.locator("#seasonGames .day-cell.is-chosen")).toHaveAttribute("data-day", today);
+  await page.locator(`#seasonGames .day-cell[data-day="${shownDay}"]`).click();
+  await expect(page.locator(`#seasonGames .listed-day[data-day="${shownDay}"]`)).toBeInViewport();
+}
+
+/**
+ * Checks the Games list ends on `day` once the whole season has arrived.
+ * @param {import("@playwright/test").Page} page
+ * @param {string} day
+ */
+async function expectListOn(page, day) {
+  await expectWholeSeason(page);
+  await expect(page.locator("#seasonGames .day-cell.is-chosen")).toHaveAttribute("data-day", day);
   await expect(page.locator(`#seasonGames .listed-day[data-day="${day}"]`)).toBeInViewport();
 }
 

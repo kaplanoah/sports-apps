@@ -30,15 +30,21 @@ let unwatchSchedule = () => {};
 function followSchedule(year, showChange) {
   if (year === scheduleYear) return;
   scheduleYear = year;
+  session.isScheduleDue = true;
   unwatchSchedule();
   unwatchSchedule = session.db.doc(nameScheduleKey(year)).onSnapshot(
     (/** @type {any} */ snapshot) => {
       if (year !== scheduleYear) return;
       const schedule = snapshot.exists ? snapshot.data() : null;
       session.schedule = isReadableSeason(schedule, SNAPSHOT_VERSION) ? schedule : null;
+      session.isScheduleDue = false;
       showChange();
     },
-    () => {},
+    () => {
+      if (year !== scheduleYear || !session.isScheduleDue) return;
+      session.isScheduleDue = false;
+      showChange();
+    },
   );
 }
 
