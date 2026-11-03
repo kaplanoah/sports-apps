@@ -863,10 +863,10 @@ async function readPreviousCheckedCommit(env, fetchImpl) {
   }
 }
 
-// The comment on the pull request quotes each failure, which can name what the channel's
-// environment holds, like the page address a page check throws with or the account a Cloudflare
-// answer quotes. GitHub drops a job output holding a secret whole, but not one holding a part of
-// one, like a page's host or key.
+// The comment on the pull request quotes each failure or service health check, which can name
+// what the channel's environment holds, like the page address a page check throws with or the
+// account a Cloudflare answer quotes. GitHub drops a job output holding a secret whole, but not
+// one holding a part of one, like a page's host or key.
 /**
  * Each secret of the channel's environment a failure or a service's health check could quote, masked,
  * an address before the subdomain it holds.

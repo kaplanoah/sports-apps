@@ -305,17 +305,19 @@ test("deployRelease reports each Worker it checked, each service that answered, 
     deployWorkerImpl: async ({ worker, onChecked, onAnswered, isCheckOnly }) => {
       if (isCheckOnly) return null;
       if (worker === "wnba") throw new Error("The Worker didn't answer as the new version");
-      onChecked?.("a Contact report waits");
+      onChecked?.("health check: ok, but a Contact report waits");
       onAnswered?.();
       return worker;
     },
-    onChecked: (worker, attention) => checked.push({ worker, attention }),
+    onChecked: (worker, health) => checked.push({ worker, health }),
     onAnswered: (worker) => answered.push(worker),
     onFailed: (worker, message) => failed.push({ worker, message }),
     logError: () => {},
   });
   assert.equal(isDeployed, false);
-  assert.deepEqual(checked, [{ worker: "mlb", attention: "a Contact report waits" }]);
+  assert.deepEqual(checked, [
+    { worker: "mlb", health: "health check: ok, but a Contact report waits" },
+  ]);
   assert.deepEqual(answered, ["mlb"]);
   assert.deepEqual(failed, [
     { worker: "wnba", message: "The Worker didn't answer as the new version" },
