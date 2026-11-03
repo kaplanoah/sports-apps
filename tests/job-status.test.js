@@ -91,7 +91,7 @@ test("a run saves its status with what the job adds, notes a failure it doesn't 
   assert.deepEqual(after.lastFailure, failed.lastFailure);
 });
 
-test("a run's requests count each call to the claude service, and one with no binding fails the run, saying why", async (context) => {
+test("a run's requests count each call to the claude service, its config read once, and one with no binding fails the run, saying why", async (context) => {
   context.mock.method(console, "error", () => {});
   const docs = createDocs();
   const now = Date.parse("2026-10-06T12:00:00Z");
@@ -108,11 +108,16 @@ test("a run's requests count each call to the claude service, and one with no bi
     statusKey: "news/status",
     updateStore: async ({ claude }) => {
       await claude.readConfig();
+      await claude.readConfig();
+      await claude.requestClaude({ timeoutMs: 1, request: {}, schema: {} });
     },
   };
 
-  await runWithStatus(createJobContext(createClaudeService({ ANTHROPIC_API_KEY: "key" })), job);
-  assert.equal(docs.stored.get("news/status").requests, 1);
+  const service = createClaudeService({ ANTHROPIC_API_KEY: "key" }, async () =>
+    Response.json({ content: [{ type: "text", text: "{}" }], stop_reason: "end_turn" }),
+  );
+  await runWithStatus(createJobContext(service), job);
+  assert.equal(docs.stored.get("news/status").requests, 2);
 
   await runWithStatus(createJobContext(undefined), job);
   const missing = docs.stored.get("news/status");

@@ -1,4 +1,8 @@
-import { lacksClaudeKey, requestClaude } from "../../../../shared/worker/claude.js";
+import {
+  MissingClaudeBinding,
+  lacksClaudeKey,
+  requestClaude,
+} from "../../../../shared/worker/claude.js";
 import { noteFailure } from "../../../../shared/worker/job-status.js";
 import { isSameJson } from "../../../../shared/page/compare.js";
 
@@ -10,8 +14,8 @@ import { isSameJson } from "../../../../shared/page/compare.js";
 // again next run for the next few. A still Claude doesn't answer for shows as MLB's own until it
 // does, and is asked about again a few minutes later, as the job tries again a read that failed,
 // until it has gone unanswered a few times, when it counts as clean. Claude turning the claude
-// service's key away isn't a still going unanswered, so a key that stopped working never clears
-// one. While the claude service has no API key, each still counts as clean. The answers are kept
+// service's key away, or a Worker without the service's binding, isn't a still going unanswered,
+// so neither ever clears one. While the claude service has no API key, each still counts as clean. The answers are kept
 // for the current season's games only, since the job reads no other season's.
 
 export const STILL_MODEL = "claude-haiku-5-5";
@@ -95,7 +99,9 @@ async function checkStills(claude, stills) {
       continue;
     }
     firstError ??= result.reason;
-    const isKeyRefused = REFUSED_KEY_STATUSES.has(result.reason?.status);
+    const isKeyRefused =
+      result.reason instanceof MissingClaudeBinding ||
+      REFUSED_KEY_STATUSES.has(result.reason?.status);
     (isKeyRefused ? refused : missed).push(stills[index]);
   }
   return { answers, missed, refused, firstError };

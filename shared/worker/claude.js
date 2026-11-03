@@ -23,11 +23,16 @@
  * @property {(options: ClaudeRequest) => Promise<ClaudeResult>} requestClaude
  */
 
-const MISSING_BINDING = "No CLAUDE binding to the claude service";
+/** A Worker without the claude service's binding, which says nothing about what it asked. */
+export class MissingClaudeBinding extends Error {
+  constructor() {
+    super("No CLAUDE binding to the claude service");
+  }
+}
 
 /** @param {Claude | undefined} claude */
 function findService(claude) {
-  if (!claude) throw new Error(MISSING_BINDING);
+  if (!claude) throw new MissingClaudeBinding();
   return claude;
 }
 
@@ -50,6 +55,26 @@ export const countClaudeCalls = (claude, count) => ({
     return await service.requestClaude(options);
   },
 });
+
+/**
+ * The service's calls, with its config read once, since it holds for a run.
+ * @param {Claude} claude
+ * @returns {Claude}
+ */
+export function rememberClaudeConfig(claude) {
+  /** @type {Promise<{ configured: boolean }> | undefined} */
+  let config;
+  return {
+    readConfig: () => {
+      config ??= claude.readConfig().catch((error) => {
+        config = undefined;
+        throw error;
+      });
+      return config;
+    },
+    requestClaude: (options) => claude.requestClaude(options),
+  };
+}
 
 /**
  * Whether the service says it has no API key, so nothing asks it. A service that doesn't answer

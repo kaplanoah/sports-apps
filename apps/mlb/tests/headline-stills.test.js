@@ -349,3 +349,15 @@ test("without a CLAUDE binding, or with a service that fails, the stills go unan
     assert.equal(context.stored.get("headline-stills:2026:849826"), undefined);
   }
 });
+
+test("a Worker without the CLAUDE binding never clears a still, however many reads ask", async (t) => {
+  t.mock.method(console, "error", () => {});
+  const context = createContext({ claude: countClaudeCalls(undefined, () => {}) });
+
+  for (let read = 0; read < MAX_STILL_TRIES + 2; read += 1) {
+    const found = await findHeadlineStills(context, { season: 2026, id: "849826" }, [STILL]);
+    assert.deepEqual([found.isFinished, found.hasMisses], [true, true]);
+  }
+  assert.equal(context.stored.has("headline-stills:2026:849826"), false);
+  assert.equal(context.stored.has("headline-still-misses:2026:849826"), false);
+});
