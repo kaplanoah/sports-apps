@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { countClaudeCalls } from "../shared/worker/claude.js";
+import { countClaudeCalls, stopAfterRefusal } from "../shared/worker/claude.js";
 import { frameNewsPhotos } from "../shared/worker/news-photos.js";
 import { createJobStorage } from "./job-context.js";
 import { createPng } from "./photo-files.js";
@@ -32,21 +32,25 @@ test("a key Claude turns away costs one ask a run, and every photo still gets it
   context.mock.method(console, "error", () => {});
   const storage = createJobStorage();
   let asks = 0;
-  const photoContext = {
-    storage,
-    claude: {
-      readConfig: async () => ({ configured: true }),
-      requestClaude: async () => {
-        asks += 1;
-        return { problem: "Claude answered 401: invalid x-api-key", status: 401 };
-      },
+  const claude = {
+    readConfig: async () => ({ configured: true }),
+    requestClaude: async () => {
+      asks += 1;
+      return { problem: "Claude answered 401: invalid x-api-key", status: 401 };
     },
-    canAsk: async () => true,
-    fetchImpl: async () => new Response(createPng(683, 1024)),
   };
   const urls = Array.from({ length: 30 }, (_, index) => `https://photos.example/${index}.jpg`);
 
-  for (let run = 0; run < 3; run += 1) await frameNewsPhotos(photoContext, urls);
+  for (let run = 0; run < 3; run += 1)
+    await frameNewsPhotos(
+      {
+        storage,
+        claude: stopAfterRefusal(claude),
+        canAsk: async () => true,
+        fetchImpl: async () => new Response(createPng(683, 1024)),
+      },
+      urls,
+    );
 
   const frames = [...(await storage.list("photo:")).values()];
   assert.equal(asks, 3);

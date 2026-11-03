@@ -1,4 +1,4 @@
-import { countClaudeCalls, rememberClaudeConfig } from "./claude.js";
+import { countClaudeCalls, rememberClaudeConfig, stopAfterRefusal } from "./claude.js";
 import { RequestBudgetExhausted } from "./request-budget.js";
 import { describeError } from "./responses.js";
 
@@ -146,9 +146,11 @@ export async function runWithStatus(
       : context.docs,
     fetchImpl: counter.fetchImpl,
     claude: rememberClaudeConfig(
-      countClaudeCalls(context.claude, () => {
-        counter.count += 1;
-      }),
+      stopAfterRefusal(
+        countClaudeCalls(context.claude, () => {
+          counter.count += 1;
+        }),
+      ),
     ),
     loadSnapshot: (season) =>
       (loadSnapshot ??= context.createLoadSnapshot(counter.fetchImpl))(season),

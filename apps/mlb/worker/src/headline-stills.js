@@ -15,9 +15,9 @@ import { isSameJson } from "../../../../shared/page/compare.js";
 // does, and is asked about again a few minutes later, as the job tries again a read that failed,
 // until it has gone unanswered a few times, when it counts as clean. Claude turning the claude
 // service's key away, or a Worker without the service's binding, isn't a still going unanswered,
-// so neither ever clears one. While the claude service has no API key, each still counts as
-// clean. The answers are kept for the current season's games only, since the job reads no other
-// season's.
+// so neither ever clears one, and a run Claude turns the key away for asks about no other still.
+// While the claude service has no API key, each still counts as clean. The answers are kept for
+// the current season's games only, since the job reads no other season's.
 
 export const STILL_MODEL = "claude-haiku-5-5";
 const MAX_ANSWER_TOKENS = 1024;

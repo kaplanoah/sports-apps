@@ -9,7 +9,7 @@ import { createWnbaNewsJob } from "../worker/src/news-updater.js";
 import { createFeedFetch } from "./news-fixtures.js";
 import { createDocs, createJobStorage } from "../../../tests/job-context.js";
 import { createPng } from "../../../tests/photo-files.js";
-import { countClaudeCalls } from "../../../shared/worker/claude.js";
+import { countClaudeCalls, stopAfterRefusal } from "../../../shared/worker/claude.js";
 import { createClaudeService } from "../../../services/claude/worker/src/service.js";
 
 const NOW = Date.parse("2026-10-05T16:00:00Z");
@@ -122,7 +122,7 @@ function createRun({ env = ENV, claude, now = NOW } = {}) {
       storage,
       createLoadSnapshot,
       env: {},
-      claude: claude ?? createClaudeService(env, fetchImpl),
+      claude: stopAfterRefusal(claude ?? createClaudeService(env, fetchImpl)),
       fetchImpl,
       now: () => now,
     });
@@ -527,15 +527,17 @@ test("a photo Claude couldn't place is asked about again on the next runs, three
   assert.deepEqual(docs.stored.get("news/status").photos, { framed: 0, failed: 1 });
 });
 
-test("while Claude turns the key away, each run asks about one photo, keeps every try, and still reads every card photo's size", async () => {
+test("while Claude turns the key away, each run with no story to label asks about one photo, keeps every try, and still reads every card photo's size", async () => {
   const { docs, storage, runJob } = createRun();
   const spotRequests = [];
-  for (let run = 0; run < 4; run += 1)
-    await runJob(createFetch({ photoSize: TALL_PHOTO, spotStatus: 401, spotRequests }));
+  const refusing = { photoSize: TALL_PHOTO, spotStatus: 401, spotRequests };
+  await runJob(createFetch(refusing));
+  const firstRunRequests = spotRequests.length;
+  for (let run = 0; run < 3; run += 1) await runJob(createFetch(refusing));
 
   const frames = [...(await storage.list("photo:")).values()];
-  assert.ok(listCardPhotos(docs).length > 24);
-  assert.equal(spotRequests.length, 4);
+  assert.ok(new Set(listCardPhotos(docs).map((photo) => photo.url)).size > 24);
+  assert.equal(spotRequests.length, firstRunRequests + 3);
   assert.ok(listCardPhotos(docs).every((photo) => photo.width === 683));
   assert.ok(frames.every((frame) => frame.tries === undefined && frame.frameTop === undefined));
 });

@@ -95,6 +95,30 @@ export function rememberClaudeConfig(claude) {
 }
 
 /**
+ * The service's calls, with a run's first ask sent alone and the rest waiting on it, so a key
+ * Claude turns away costs one request a run: that refusal answers every later ask, which never
+ * goes out.
+ * @param {Claude} claude
+ * @returns {Claude}
+ */
+export function stopAfterRefusal(claude) {
+  /** @type {Promise<ClaudeResult | undefined> | undefined} */
+  let firstAsk;
+  return {
+    readConfig: () => claude.readConfig(),
+    requestClaude: async (options) => {
+      if (firstAsk) return (await firstAsk) ?? (await claude.requestClaude(options));
+      const asked = claude.requestClaude(options);
+      firstAsk = asked.then(
+        (result) => ("problem" in result && isClaudeRefusal(result) ? result : undefined),
+        () => undefined,
+      );
+      return await asked;
+    },
+  };
+}
+
+/**
  * Whether the service says it has no API key, so nothing asks it. A service that doesn't answer
  * isn't one without a key: its asks go on, and fail where a run's failures show them.
  * @param {Claude} claude

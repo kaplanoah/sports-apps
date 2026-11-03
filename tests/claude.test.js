@@ -7,6 +7,7 @@ import {
   lacksClaudeKey,
   rememberClaudeConfig,
   requestClaude,
+  stopAfterRefusal,
 } from "../shared/worker/claude.js";
 import { RequestBudgetExhausted, createRequestBudget } from "../shared/worker/request-budget.js";
 
@@ -125,5 +126,31 @@ test("a remembered config is read from the service once, even when that read fai
     });
     for (let read = 0; read < 3; read += 1) assert.equal(await lacksClaudeKey(claude), false);
     assert.equal(reads, 1);
+  }
+});
+
+test("a run's later asks wait on its first, and go out only when Claude didn't turn the key away", async () => {
+  const outcomes = [
+    { result: { problem: "Claude answered 403: no", status: 403 }, asks: 1 },
+    { result: { problem: "Claude answered 529: overloaded", status: 529 }, asks: 3 },
+    { result: { answer: {}, usage: {} }, asks: 3 },
+    { result: new Error("service down"), asks: 3 },
+  ];
+  for (const { result, asks } of outcomes) {
+    const sent = [];
+    const claude = stopAfterRefusal({
+      ...createService(),
+      requestClaude: async () => {
+        sent.push(sent.length);
+        if (result instanceof Error) throw result;
+        return result;
+      },
+    });
+    const answers = await Promise.allSettled([1, 2, 3].map(() => claude.requestClaude(OPTIONS)));
+    assert.equal(sent.length, asks);
+    if (asks === 1)
+      assert.ok(
+        answers.every((answer) => answer.status === "fulfilled" && answer.value === result),
+      );
   }
 });

@@ -131,6 +131,33 @@ test("a run's requests count each call to the claude service, its config read on
   }
 });
 
+test("a run whose first ask Claude turns the key away for sends no other ask", async () => {
+  const docs = createDocs();
+  const service = createClaudeService({ ANTHROPIC_API_KEY: "key" }, async () =>
+    Response.json({ error: { message: "invalid x-api-key" } }, { status: 401 }),
+  );
+  const ask = { timeoutMs: 1, request: {}, schema: {} };
+  const answers = [];
+  await runWithStatus(
+    /** @type {any} */ ({
+      docs,
+      storage: createJobStorage(),
+      env: {},
+      claude: service,
+      fetchImpl: async () => new Response("{}"),
+      now: () => 0,
+    }),
+    {
+      statusKey: "news/status",
+      updateStore: async ({ claude }) => {
+        answers.push(...(await Promise.all([1, 2, 3].map(() => claude.requestClaude(ask)))));
+      },
+    },
+  );
+  assert.equal(docs.stored.get("news/status").requests, 1);
+  assert.ok(answers.every((answer) => answer.status === 401));
+});
+
 test("job feed reads name cold and retained failures once even through outer job catches", async (context) => {
   for (const warm of [false, true]) {
     const failures = [];

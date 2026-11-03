@@ -11,7 +11,7 @@ import {
 } from "../worker/src/headline-stills.js";
 import { createJobStorage } from "../../../tests/job-context.js";
 import { createClaudeService } from "../../../services/claude/worker/src/service.js";
-import { countClaudeCalls } from "../../../shared/worker/claude.js";
+import { countClaudeCalls, stopAfterRefusal } from "../../../shared/worker/claude.js";
 
 const CLAUDE_URL = "https://api.anthropic.com/v1/messages";
 const STILL = "https://img.mlbstatic.com/mlb-images/image/upload/w_480,h_270/mlb/home-run.jpg";
@@ -185,6 +185,23 @@ test("a key Claude turns away never clears a still, and the read is tried again 
     OTHER_STILL,
   ]);
   assert.deepEqual([...found.withHeadlines], [STILL]);
+});
+
+test("a run whose first still Claude turns the key away for asks about no other still, in any game", async (t) => {
+  t.mock.method(console, "error", () => {});
+  const fake = createClaude(() => "unauthorized");
+  const context = createContext({ claude: stopAfterRefusal(connectClaude(fake.fetchImpl)) });
+
+  for (const id of ["849826", "849827", "849828"]) {
+    const found = await findHeadlineStills(context, { season: 2026, id }, [
+      STILL,
+      OTHER_STILL,
+      NEW_STILL,
+    ]);
+    assert.deepEqual([found.isFinished, found.hasMisses], [true, true]);
+  }
+  assert.equal(fake.requests.length, 1);
+  assert.equal(context.stored.size, 0);
 });
 
 test("a still Claude never answers for is asked about a few reads, then counts as clean and is never asked about again", async () => {

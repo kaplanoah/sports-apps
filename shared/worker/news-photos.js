@@ -48,9 +48,8 @@ export const PHOTO_SPOT_SCHEMA = {
  */
 
 /**
- * What a run did with a photo: its frame now, whether the run failed to read it, and whether that
- * was Claude refusing the service rather than anything about the photo.
- * @typedef {{ frame: PhotoFrame, failed: boolean, refused?: boolean }} PhotoRead
+ * What a run did with a photo: its frame now, and whether the run failed to read it.
+ * @typedef {{ frame: PhotoFrame, failed: boolean }} PhotoRead
  */
 
 /** @param {number} percent */
@@ -107,7 +106,7 @@ const needsSpot = (frame) =>
  */
 function failRead(frame, error) {
   console.error(`Framing the photo ${frame.url} failed: ${describeError(error)}`);
-  if (isClaudeRefusal(error)) return { frame, failed: true, refused: true };
+  if (isClaudeRefusal(error)) return { frame, failed: true };
   return { frame: { ...frame, tries: (frame.tries ?? 0) + 1 }, failed: true };
 }
 
@@ -141,18 +140,14 @@ async function readSpot({ claude }, frame) {
 }
 
 /**
- * Where Claude says each photo's subject is, asking about the first photo alone, so a service
- * Claude refuses costs one ask a run rather than one for every photo.
+ * Where Claude says each photo's subject is.
  * @param {PhotoContext} context
  * @param {(PhotoFrame & { width: number, height: number })[]} frames
  * @returns {Promise<PhotoRead[]>}
  */
 async function readSpots(context, frames) {
   if (!frames.length || !(await context.canAsk())) return [];
-  const [first, ...rest] = frames;
-  const firstRead = await readSpot(context, first);
-  if (firstRead.refused) return [firstRead];
-  return [firstRead, ...(await Promise.all(rest.map((frame) => readSpot(context, frame))))];
+  return await Promise.all(frames.map((frame) => readSpot(context, frame)));
 }
 
 /**
