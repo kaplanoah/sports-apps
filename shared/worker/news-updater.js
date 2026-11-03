@@ -354,8 +354,7 @@ const listWaitingStories = (stories, now) =>
 async function curateStories(context) {
   const waiting = listWaitingStories(context.stories, context.now);
   if (!waiting.length) return "";
-  if (!(await context.canAsk()))
-    return `The claude service has ${MISSING_CLAUDE_KEY}, so no story was labeled.`;
+  if (!(await context.canAsk())) return `${MISSING_CLAUDE_KEY}, so no story was labeled.`;
   const ask = createClaudeAsker(context);
   try {
     await labelWaitingStories({ ...context, waiting, ask });
@@ -432,20 +431,6 @@ async function readRecentUsage(storage, now) {
 }
 
 /**
- * Whether the claude service has its API key, asked once a run, and only once something needs
- * Claude.
- * @param {import("./claude.js").Claude} claude
- */
-function rememberCanAsk(claude) {
-  /** @type {Promise<boolean> | undefined} */
-  let canAsk;
-  return () => {
-    canAsk ??= lacksClaudeKey(claude).then((lacks) => !lacks);
-    return canAsk;
-  };
-}
-
-/**
  * The news's feeds read, its stories judged, and its cards saved, answering which feeds didn't
  * answer, what went wrong asking Claude, which the run's failures name too, and how the photos
  * were framed.
@@ -460,7 +445,7 @@ async function keepNews(context, league) {
   await saveFeedEntries({ storage, stories, entries, now, league });
   await forgetOldStories(storage, stories, now);
   await judgeAgainOnNewRules(storage, stories, league.prompt);
-  const canAsk = rememberCanAsk(claude);
+  const canAsk = async () => !(await lacksClaudeKey(claude));
   const problem = await curateStories({ storage, stories, claude, canAsk, now, league });
   const cards = listShownCards(stories, now);
   const { frames, framed, failed } = await frameNewsPhotos(

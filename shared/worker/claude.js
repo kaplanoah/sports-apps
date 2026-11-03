@@ -23,8 +23,8 @@
  * @property {(options: ClaudeRequest) => Promise<ClaudeResult>} requestClaude
  */
 
-/** The service's own words for its missing API key, which the news status repeats. */
-export const MISSING_CLAUDE_KEY = "no ANTHROPIC_API_KEY secret";
+/** The service's own words for its missing API key. */
+export const MISSING_CLAUDE_KEY = "The claude service has no ANTHROPIC_API_KEY secret";
 
 /** A Worker without the claude service's binding, which says nothing about what it asked. */
 export class MissingClaudeBinding extends Error {
@@ -77,7 +77,8 @@ export function countClaudeCalls(claude, count) {
 }
 
 /**
- * The service's calls, with its config read once, since it holds for a run.
+ * The service's calls, with its config read once, since it holds for a run, and a read that
+ * failed is the run's answer too, so a service that doesn't answer costs one request a run.
  * @param {Claude} claude
  * @returns {Claude}
  */
@@ -86,10 +87,7 @@ export function rememberClaudeConfig(claude) {
   let config;
   return {
     readConfig: () => {
-      config ??= claude.readConfig().catch((error) => {
-        config = undefined;
-        throw error;
-      });
+      config ??= claude.readConfig();
       return config;
     },
     requestClaude: (options) => claude.requestClaude(options),

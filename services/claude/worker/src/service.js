@@ -86,7 +86,7 @@ export function createClaudeService(env, fetchImpl = fetch) {
    */
   async function requestClaude(options) {
     const apiKey = readKey(env);
-    if (!apiKey) return { problem: `The claude service has ${MISSING_CLAUDE_KEY}` };
+    if (!apiKey) return { problem: MISSING_CLAUDE_KEY };
     try {
       const result = await askMessages(apiKey, fetchImpl, options);
       return "problem" in result ? { ...result, problem: hideKey(result.problem, apiKey) } : result;

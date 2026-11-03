@@ -47,6 +47,12 @@ export const PHOTO_SPOT_SCHEMA = {
  * @property {typeof fetch} fetchImpl
  */
 
+/**
+ * What a run did with a photo: its frame now, whether the run failed to read it, and whether that
+ * was Claude refusing the service rather than anything about the photo.
+ * @typedef {{ frame: PhotoFrame, failed: boolean, refused?: boolean }} PhotoRead
+ */
+
 /** @param {number} percent */
 const readShare = (percent) => Math.min(1, Math.max(0, percent / 100));
 
@@ -79,56 +85,74 @@ async function askFrameTop(claude, url, size) {
  */
 const hasSize = (frame) => Boolean(frame.width && frame.height);
 
+/** @param {PhotoFrame} frame */
+const hasTriesLeft = (frame) => (frame.tries ?? 0) < MAX_TRIES;
+
+/** @param {PhotoFrame} frame */
+const needsSize = (frame) => !hasSize(frame) && hasTriesLeft(frame);
+
 /**
  * Whether Claude has yet to say where the frame starts on a photo taller than it.
  * @param {PhotoFrame} frame
  * @returns {frame is PhotoFrame & { width: number, height: number }}
  */
 const needsSpot = (frame) =>
-  hasSize(frame) && isTallerThanFrame(frame) && frame.frameTop === undefined;
-
-/** @param {PhotoFrame | undefined} frame */
-const isUnfinished = (frame) =>
-  !frame || ((frame.tries ?? 0) < MAX_TRIES && (!hasSize(frame) || needsSpot(frame)));
+  hasSize(frame) && isTallerThanFrame(frame) && frame.frameTop === undefined && hasTriesLeft(frame);
 
 /**
- * The photos this run reads, leaving out those that wait on Claude alone while the claude service
- * has no API key.
- * @param {PhotoContext} context
- * @param {string[]} urls
- * @param {Map<string, PhotoFrame>} frames
+ * The frame with one more failed try, or as it was when Claude refused the service.
+ * @param {PhotoFrame} frame
+ * @param {unknown} error
+ * @returns {PhotoRead}
  */
-async function listWaitingPhotos({ canAsk }, urls, frames) {
-  const unfinished = urls.filter((url) => isUnfinished(frames.get(url)));
-  const waitsOnClaude = (/** @type {string} */ url) => {
-    const frame = frames.get(url);
-    return frame !== undefined && needsSpot(frame);
-  };
-  const isAskable = !unfinished.some(waitsOnClaude) || (await canAsk());
-  const waiting = isAskable ? unfinished : unfinished.filter((url) => !waitsOnClaude(url));
-  return waiting.slice(0, PHOTOS_PER_RUN);
+function failRead(frame, error) {
+  console.error(`Framing the photo ${frame.url} failed: ${describeError(error)}`);
+  if (isClaudeRefusal(error)) return { frame, failed: true, refused: true };
+  return { frame: { ...frame, tries: (frame.tries ?? 0) + 1 }, failed: true };
 }
 
 /**
- * The photo's frame with what this run could add to it, or with one more try when it failed for
- * the photo.
  * @param {PhotoContext} context
- * @param {string} url
- * @param {PhotoFrame} kept
- * @returns {Promise<{ frame: PhotoFrame, failed: boolean }>}
+ * @param {PhotoFrame} frame
+ * @returns {Promise<PhotoRead>}
  */
-async function readFrame({ claude, canAsk, fetchImpl }, url, kept) {
-  let frame = kept;
+async function readSize({ fetchImpl }, frame) {
   try {
-    if (!hasSize(frame)) frame = { ...frame, ...(await readPhotoSize(fetchImpl, url)) };
-    if (needsSpot(frame) && (await canAsk()))
-      frame = { ...frame, frameTop: await askFrameTop(claude, url, frame) };
-    return { frame, failed: false };
+    return { frame: { ...frame, ...(await readPhotoSize(fetchImpl, frame.url)) }, failed: false };
   } catch (error) {
-    console.error(`Framing the photo ${url} failed: ${describeError(error)}`);
-    if (isClaudeRefusal(error)) return { frame, failed: true };
-    return { frame: { ...frame, tries: (frame.tries ?? 0) + 1 }, failed: true };
+    return failRead(frame, error);
   }
+}
+
+/**
+ * @param {PhotoContext} context
+ * @param {PhotoFrame & { width: number, height: number }} frame
+ * @returns {Promise<PhotoRead>}
+ */
+async function readSpot({ claude }, frame) {
+  try {
+    return {
+      frame: { ...frame, frameTop: await askFrameTop(claude, frame.url, frame) },
+      failed: false,
+    };
+  } catch (error) {
+    return failRead(frame, error);
+  }
+}
+
+/**
+ * Where Claude says each photo's subject is, asking about the first photo alone, so a service
+ * Claude refuses costs one ask a run rather than one for every photo.
+ * @param {PhotoContext} context
+ * @param {(PhotoFrame & { width: number, height: number })[]} frames
+ * @returns {Promise<PhotoRead[]>}
+ */
+async function readSpots(context, frames) {
+  if (!frames.length || !(await context.canAsk())) return [];
+  const [first, ...rest] = frames;
+  const firstRead = await readSpot(context, first);
+  if (firstRead.refused) return [firstRead];
+  return [firstRead, ...(await Promise.all(rest.map((frame) => readSpot(context, frame))))];
 }
 
 /**
@@ -142,8 +166,15 @@ async function readKeptFrames(storage) {
 }
 
 /**
- * Frames the photos the cards show, newest card's first, forgets the ones no card shows, and says
- * how this run went.
+ * Each card photo's frame, as kept or new.
+ * @param {Map<string, { key: string, frame: PhotoFrame }>} kept
+ * @param {string[]} urls
+ */
+const listFrames = (kept, urls) => urls.map((url) => kept.get(url)?.frame ?? { url });
+
+/**
+ * Frames the photos the cards show, newest card's first, reading every size before asking Claude,
+ * forgets the ones no card shows, and says how this run went.
  * @param {PhotoContext & { storage: import("./season-store.js").JobContext["storage"] }} context
  * @param {string[]} urls the cards' photos, newest card's first
  * @returns {Promise<{ frames: Map<string, PhotoFrame>, framed: number, failed: number }>}
@@ -151,20 +182,21 @@ async function readKeptFrames(storage) {
 export async function frameNewsPhotos({ storage, ...context }, urls) {
   const kept = await readKeptFrames(storage);
   for (const [url, { key }] of kept) if (!urls.includes(url)) await storage.delete(key);
-  const frames = new Map(
-    urls.flatMap((url) => {
-      const frame = kept.get(url)?.frame;
-      return frame ? [[url, frame]] : [];
-    }),
-  );
-  const waiting = await listWaitingPhotos(context, urls, frames);
-  const read = await Promise.all(
-    waiting.map((url) => readFrame(context, url, frames.get(url) ?? { url })),
-  );
-  for (const { frame } of read) {
-    frames.set(frame.url, frame);
+  const frames = new Map(listFrames(kept, urls).map((frame) => [frame.url, frame]));
+  /** @type {Map<string, PhotoRead>} */
+  const reads = new Map();
+  const keepReads = (/** @type {PhotoRead[]} */ results) => {
+    for (const read of results) {
+      reads.set(read.frame.url, read);
+      frames.set(read.frame.url, read.frame);
+    }
+  };
+  const unsized = [...frames.values()].filter(needsSize).slice(0, PHOTOS_PER_RUN);
+  keepReads(await Promise.all(unsized.map((frame) => readSize(context, frame))));
+  const unspotted = [...frames.values()].filter(needsSpot).slice(0, PHOTOS_PER_RUN);
+  keepReads(await readSpots(context, unspotted));
+  for (const { frame } of reads.values())
     await storage.put(`${KEY_PREFIX}${await hashText(frame.url)}`, frame);
-  }
-  const failed = read.filter((result) => result.failed).length;
-  return { frames, framed: read.length - failed, failed };
+  const failed = [...reads.values()].filter((read) => read.failed).length;
+  return { frames, framed: reads.size - failed, failed };
 }

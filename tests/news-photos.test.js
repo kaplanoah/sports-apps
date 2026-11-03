@@ -27,3 +27,29 @@ test("a tall photo a Worker without the claude binding couldn't ask about keeps 
   assert.equal(frame.tries, undefined);
   assert.equal(frame.frameTop, undefined);
 });
+
+test("a key Claude turns away costs one ask a run, and every photo still gets its size", async (context) => {
+  context.mock.method(console, "error", () => {});
+  const storage = createJobStorage();
+  let asks = 0;
+  const photoContext = {
+    storage,
+    claude: {
+      readConfig: async () => ({ configured: true }),
+      requestClaude: async () => {
+        asks += 1;
+        return { problem: "Claude answered 401: invalid x-api-key", status: 401 };
+      },
+    },
+    canAsk: async () => true,
+    fetchImpl: async () => new Response(createPng(683, 1024)),
+  };
+  const urls = Array.from({ length: 30 }, (_, index) => `https://photos.example/${index}.jpg`);
+
+  for (let run = 0; run < 3; run += 1) await frameNewsPhotos(photoContext, urls);
+
+  const frames = [...(await storage.list("photo:")).values()];
+  assert.equal(asks, 3);
+  assert.equal(frames.length, urls.length);
+  assert.ok(frames.every((frame) => frame.width === 683 && frame.tries === undefined));
+});

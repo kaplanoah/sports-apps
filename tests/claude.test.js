@@ -112,19 +112,18 @@ test("an answer comes back as is, and a problem throws with the API's status whe
   );
 });
 
-test("a remembered config is read from the service once, but again after a read that failed", async () => {
-  let reads = 0;
-  const service = createService();
-  const claude = rememberClaudeConfig({
-    ...service,
-    readConfig: async () => {
-      reads += 1;
-      if (reads === 1) throw new Error("service down");
-      return await service.readConfig();
-    },
-  });
-  await assert.rejects(claude.readConfig(), /service down/);
-  assert.deepEqual(await claude.readConfig(), { configured: true });
-  assert.deepEqual(await claude.readConfig(), { configured: true });
-  assert.equal(reads, 2);
+test("a remembered config is read from the service once, even when that read failed", async () => {
+  for (const answer of [{ configured: true }, new Error("service down")]) {
+    let reads = 0;
+    const claude = rememberClaudeConfig({
+      ...createService(),
+      readConfig: async () => {
+        reads += 1;
+        if (answer instanceof Error) throw answer;
+        return answer;
+      },
+    });
+    for (let read = 0; read < 3; read += 1) assert.equal(await lacksClaudeKey(claude), false);
+    assert.equal(reads, 1);
+  }
 });

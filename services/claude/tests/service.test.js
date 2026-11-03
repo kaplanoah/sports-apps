@@ -71,7 +71,7 @@ test("without a key the service says so, asks nothing, and its health names the 
     assert.deepEqual(await service.readHealth(), {
       ok: false,
       release: "abc1234",
-      problem: "no ANTHROPIC_API_KEY secret",
+      problem: "The claude service has no ANTHROPIC_API_KEY secret",
     });
     assert.equal(messages.calls.length, 0);
   }
