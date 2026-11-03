@@ -60,6 +60,7 @@ async function runOnce() {
     docs,
     storage: createJobStorage(),
     createLoadSnapshot: () => async () => ({ season: 2026 }),
+    env: {},
     claude: createClaudeService({ ANTHROPIC_API_KEY: "test-key" }, fetchImpl),
     fetchImpl,
     now: () => NOW,

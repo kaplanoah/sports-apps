@@ -64,11 +64,11 @@ test("without a key the service says so, asks nothing, and its health names the 
       { ...env, VERSION: { tag: "abc1234" } },
       messages.fetchImpl,
     );
-    assert.deepEqual(service.readConfig(), { configured: false });
+    assert.deepEqual(await service.readConfig(), { configured: false });
     assert.deepEqual(await service.requestClaude(OPTIONS), {
       problem: "The claude service has no ANTHROPIC_API_KEY secret",
     });
-    assert.deepEqual(service.readHealth(), {
+    assert.deepEqual(await service.readHealth(), {
       ok: false,
       release: "abc1234",
       problem: "no ANTHROPIC_API_KEY secret",
@@ -77,11 +77,11 @@ test("without a key the service says so, asks nothing, and its health names the 
   }
 });
 
-test("with a key the service is configured, and its health never shows the key", () => {
+test("with a key the service is configured, and its health never shows the key", async () => {
   const service = createClaudeService({ ANTHROPIC_API_KEY: KEY, VERSION: { tag: "abc1234" } });
-  assert.deepEqual(service.readConfig(), { configured: true });
-  assert.deepEqual(service.readHealth(), { ok: true, release: "abc1234" });
-  assert.doesNotMatch(JSON.stringify(service.readHealth()), new RegExp(KEY));
+  assert.deepEqual(await service.readConfig(), { configured: true });
+  assert.deepEqual(await service.readHealth(), { ok: true, release: "abc1234" });
+  assert.doesNotMatch(JSON.stringify(await service.readHealth()), new RegExp(KEY));
 });
 
 test("a refusal comes back as a problem with the API's status, never the key", async () => {

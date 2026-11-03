@@ -71,12 +71,12 @@ const hideKey = (text, apiKey) => text.replaceAll(apiKey, "<key>");
  * @param {typeof fetch} [fetchImpl]
  */
 export function createClaudeService(env, fetchImpl = fetch) {
-  function readHealth() {
+  async function readHealth() {
     const release = env.VERSION?.tag ?? null;
     return readKey(env) ? { ok: true, release } : { ok: false, release, problem: MISSING_KEY };
   }
 
-  const readConfig = () => ({ configured: Boolean(readKey(env)) });
+  const readConfig = async () => ({ configured: Boolean(readKey(env)) });
 
   /**
    * @param {ClaudeRequest} options

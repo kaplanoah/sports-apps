@@ -121,6 +121,7 @@ function createRun({ env = ENV, claude, now = NOW } = {}) {
       docs,
       storage,
       createLoadSnapshot,
+      env: {},
       claude: claude ?? createClaudeService(env, fetchImpl),
       fetchImpl,
       now: () => now,
@@ -369,9 +370,12 @@ test("without a CLAUDE binding, or with a service that fails, the run goes on, i
       throw new Error("service down");
     },
   };
-  for (const [claude, problem] of [
-    [countClaudeCalls(undefined, () => {}), /No CLAUDE binding to the claude service/],
-    [broken, /service down/],
+  for (const { claude, problem } of [
+    {
+      claude: countClaudeCalls(undefined, () => {}),
+      problem: /No CLAUDE binding to the claude service/,
+    },
+    { claude: broken, problem: /service down/ },
   ]) {
     const requests = [];
     const { docs, storage, runJob } = createRun({ claude });
@@ -569,6 +573,7 @@ test("without an API key, no photo is asked about, and one no card shows is forg
       docs,
       storage,
       createLoadSnapshot: () => async () => ({ season: 2026 }),
+      env: {},
       claude: createClaudeService(env, fetchImpl),
       fetchImpl,
       now: () => NOW,

@@ -41,7 +41,7 @@ import { describeError, respondError, respondJson, respondMethodNotAllowed } fro
  *   requests counts these too
  * @property {{ get: (key: string) => Promise<any>, put: (key: string, value: any) => Promise<void>, delete: (key: string) => Promise<boolean>, list: (prefix: string) => Promise<Map<string, any>> }} storage
  * @property {Record<string, any>} env
- * @property {import("./claude.js").Claude} claude the claude service, each call counted as a request
+ * @property {import("./claude.js").Claude} [claude] the claude service, each call counted as a request
  * @property {() => number} [remainingRequests] how many history requests this run may still make
  * @property {typeof fetch} fetchImpl
  * @property {() => number} now

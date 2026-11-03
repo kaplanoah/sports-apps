@@ -332,9 +332,12 @@ test("without a CLAUDE binding, or with a service that fails, the stills go unan
       throw new Error("service down");
     },
   };
-  for (const [claude, reason] of [
-    [countClaudeCalls(undefined, () => {}), /No CLAUDE binding to the claude service/],
-    [broken, /service down/],
+  for (const { claude, reason } of [
+    {
+      claude: countClaudeCalls(undefined, () => {}),
+      reason: /No CLAUDE binding to the claude service/,
+    },
+    { claude: broken, reason: /service down/ },
   ]) {
     const context = createContext({ claude });
 

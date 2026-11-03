@@ -82,8 +82,7 @@ test("an answer comes back as is, and a problem throws with the API's status whe
       createService({ result: { problem: "Claude answered 403: no", status: 403 } }),
       OPTIONS,
     ),
-    (error) =>
-      error instanceof Error && error.message === "Claude answered 403: no" && error.status === 403,
+    { message: "Claude answered 403: no", status: 403 },
   );
   await assert.rejects(
     requestClaude(createService({ result: { problem: "timed out" } }), OPTIONS),

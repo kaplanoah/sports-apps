@@ -348,8 +348,8 @@ function createClaudeAsker({ claude, storage, now }) {
 }
 
 /** What went wrong asking Claude, or "" when nothing did. */
-async function curateStories({ canAsk, ...context }) {
-  if (!canAsk)
+async function curateStories(context) {
+  if (!context.canAsk)
     return "The claude service has no ANTHROPIC_API_KEY secret, so no story was labeled.";
   const ask = createClaudeAsker(context);
   try {
