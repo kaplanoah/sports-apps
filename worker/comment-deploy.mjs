@@ -21,21 +21,15 @@ export const nameDeployMarker = (channel, commit) => `<!-- deploy:${channel}:${c
 
 const UNCHANGED = "Not deployed or checked by this run";
 
-// A Cloudflare error can quote its answer, which may name an address or the account's ID.
+// The deploy job masks each failure's secrets before it hands them on (`listChannelMasks` in
+// deploy.mjs), so this only keeps a failure to its table cell.
 /** @param {string} text */
-export const maskDetail = (text) =>
-  text
-    .replace(/https?:\/\/\S+/g, "<address>")
-    .replace(/\b[\w-]+(\.[\w-]+)*\.workers\.dev\b/g, "<address>")
-    .replace(/\b[0-9a-f]{32}\b/gi, "<id>")
-    .replace(/\s+/g, " ")
-    .replaceAll("|", "\\|")
-    .trim();
+const formatCell = (text) => text.replace(/\s+/g, " ").replaceAll("|", "\\|").trim();
 
 /** @param {WorkerResult} result */
 function describeResult({ result, detail }) {
   if (result === "checked") return WORKER_CHECK_OK;
-  if (result === "failed") return `failed: ${maskDetail(detail ?? "")}`;
+  if (result === "failed") return `failed: ${formatCell(detail ?? "")}`;
   return UNCHANGED;
 }
 

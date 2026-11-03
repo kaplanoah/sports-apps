@@ -171,6 +171,60 @@ test("each run that deploys writes every Worker's result and version, failed or 
   }
 });
 
+test("a failure the run hands its comment names none of the channel's secrets, whole or in part", async (context) => {
+  const { deployCheckedRelease } = await loadDeployModule();
+  const folder = mkdtempSync(join(tmpdir(), "deploy-masks-"));
+  context.after(() => rmSync(folder, { recursive: true, force: true }));
+  const output = join(folder, "output");
+  const account = "7".repeat(32);
+  const host = "mlb-beta.example-subdomain.workers.dev";
+  const message = [
+    `https://${host}/k3y/ drew nothing`,
+    `then ${host} refused`,
+    "the key k3y on its own",
+    "the code s3cret-code",
+    `account ${account}`,
+    "wnba.example-subdomain.workers.dev answered 500",
+  ].join("; ");
+  for (const channel of ["production", "beta"]) {
+    writeFileSync(output, "");
+    await deployCheckedRelease(
+      ["mlb"],
+      { channel, commit: NEW_COMMIT, newer: null },
+      {
+        env: {
+          GITHUB_OUTPUT: output,
+          CLOUDFLARE_ACCOUNT_ID: account,
+          CLOUDFLARE_WORKERS_SUBDOMAIN: "example-subdomain",
+          ACCESS_CODE: "s3cret-code",
+          [channel === "beta" ? "MLB_BETA_PAGE_URL" : "MLB_PAGE_URL"]: `https://${host}/k3y`,
+        },
+        deploy: async (workers, options) => {
+          options?.onFailed?.("mlb", message);
+          return false;
+        },
+        readCheckedCommit: async () => null,
+        readWorkerVersion: () => "2.40.1",
+      },
+    );
+    const line = readFileSync(output, "utf8")
+      .split("\n")
+      .find((text) => text.startsWith("worker-results="));
+    const [result] = JSON.parse(line.slice("worker-results=".length));
+    assert.equal(
+      result.detail,
+      [
+        "<page>/ drew nothing",
+        "then <worker> refused",
+        "the key <key> on its own",
+        "the code <access code>",
+        "account <account>",
+        "wnba.<subdomain>.workers.dev answered 500",
+      ].join("; "),
+    );
+  }
+});
+
 test("deployRelease reports each Worker it checked and each one that failed", async () => {
   const { deployRelease } = await loadDeployModule();
   const checked = [];

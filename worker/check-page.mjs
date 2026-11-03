@@ -264,10 +264,27 @@ export const listAccessCodeMasks = (accessCode) =>
   accessCode ? [[accessCode, "<access code>"]] : [];
 
 /**
- * A check's reason without the page's address, since logs and issues are public: not the whole
- * address, its Worker's with or without its scheme, its folder, or its key on its own, in
- * whatever form a browser's error names them, nor the page host the address sent it on to,
- * or the access code.
+ * A page's address masked: the whole address, its Worker's with or without its scheme, its
+ * folder, and its key on its own, in whatever form an error names them, and the access code.
+ * @param {string} pageUrl
+ * @param {string} [accessCode]
+ * @returns {[string, string][]}
+ */
+export function listPageMasks(pageUrl, accessCode) {
+  const page = new URL(pageUrl);
+  const key = page.pathname.split("/").filter(Boolean).at(-1) ?? "";
+  return [
+    [pageUrl, "<page>/"],
+    ...listSiteMasks(page, "<worker>"),
+    [page.pathname, "/<key>/"],
+    ...(key ? /** @type {[string, string][]} */ ([[key, "<key>"]]) : []),
+    ...listAccessCodeMasks(accessCode),
+  ];
+}
+
+/**
+ * A check's reason without the page's address, since logs and issues are public, nor the page
+ * host the address sent it on to.
  * @template {PageCheck} Check
  * @param {Check} check
  * @param {string} pageUrl
@@ -277,17 +294,10 @@ export const listAccessCodeMasks = (accessCode) =>
  */
 export function hideAddress(check, pageUrl, landedUrl = pageUrl, accessCode) {
   if (check.status === "drawn") return check;
-  const page = new URL(pageUrl);
-  const key = page.pathname.split("/").filter(Boolean).at(-1) ?? "";
   const landed = new URL(landedUrl);
-  /** @type {[string, string][]} */
   const masks = [
-    [pageUrl, "<page>/"],
-    ...listSiteMasks(page, "<worker>"),
+    ...listPageMasks(pageUrl, accessCode),
     ...(landed.hostname ? listSiteMasks(landed, "<page host>") : []),
-    [page.pathname, "/<key>/"],
-    ...(key ? /** @type {[string, string][]} */ ([[key, "<key>"]]) : []),
-    ...listAccessCodeMasks(accessCode),
   ];
   const reason = maskSecrets(check.reason, masks);
   return { ...check, reason };

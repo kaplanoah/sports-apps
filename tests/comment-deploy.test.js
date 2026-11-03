@@ -1,12 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { BETA_LABEL } from "../worker/beta-claim.mjs";
-import {
-  commentDeploy,
-  maskDetail,
-  nameDeployMarker,
-  renderDeployComment,
-} from "../worker/comment-deploy.mjs";
+import { commentDeploy, nameDeployMarker, renderDeployComment } from "../worker/comment-deploy.mjs";
 import { ACTIONS_LOGIN } from "../worker/github-api.mjs";
 import { readRepoFile } from "./repo-files.js";
 import { createTimelineAnswer } from "./timeline.js";
@@ -278,21 +273,17 @@ test("a re-run keeps or edits its channel's one comment for the commit, never po
   assert.equal(edited.writes[0].body.body, body);
 });
 
-test("a failure's detail never carries an address, key, subdomain, or account ID", async () => {
-  const detail = `GET https://mlb.example-subdomain.workers.dev/k3y/health answered 500 from wnba.example-subdomain.workers.dev for account ${"7".repeat(32)} | retry`;
-  assert.equal(
-    maskDetail(detail),
-    "GET <address> answered 500 from <address> for account <id> \\| retry",
-  );
+test("a failure spanning lines or holding a pipe stays in its Worker's row", async () => {
   const { writes } = await comment(
     {
       jobResult: "failure",
-      results: [{ worker: "mlb", version: "2.40.1", result: "failed", detail }],
+      results: [
+        { worker: "mlb", version: "2.40.1", result: "failed", detail: "answered 500\n | retry " },
+      ],
     },
     { merged: MERGED },
   );
-  const body = writes[0].body.body.replace(nameDeployMarker("production", COMMIT), "");
-  assert.doesNotMatch(body, /workers\.dev|k3y|example-subdomain|[0-9a-f]{32}/);
+  assert.match(writes[0].body.body, /^\| mlb \| 2\.40\.1 \| failed: answered 500 \\\| retry \|$/m);
 });
 
 test("the comment job, apart from the one holding Cloudflare's token, runs main's script on both channels", () => {

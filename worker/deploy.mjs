@@ -14,7 +14,7 @@ import {
 } from "./apps.mjs";
 import { buildWorker, readRelease } from "./build.mjs";
 import { findChannel, readCommandLine } from "./channels.mjs";
-import { checkAppPage } from "./check-page.mjs";
+import { checkAppPage, listPageMasks, maskSecrets, readPageAccess } from "./check-page.mjs";
 import { checkService } from "./check-service.mjs";
 import { CHECK_INTERVAL_MS, CHECK_TIMEOUT_MS, waitFor } from "./check-timing.mjs";
 import { decideDeploy, listChangedFiles } from "./deploy-scope.mjs";
@@ -856,6 +856,30 @@ async function readPreviousCheckedCommit(env, fetchImpl) {
   }
 }
 
+// The comment on the pull request quotes each failure, which can name what the channel's
+// environment holds, like the page address a page check throws with or the account a Cloudflare
+// answer quotes. GitHub drops a job output holding a secret whole, but not one holding a part of
+// one, like a page's host or key.
+/**
+ * Each secret of the channel's environment a failure could quote, masked, an address before the
+ * subdomain it holds.
+ * @param {string} channel
+ * @param {NodeJS.ProcessEnv} env
+ * @param {string[]} [apps]
+ * @returns {[string, string][]}
+ */
+export function listChannelMasks(channel, env, apps = listApps()) {
+  const { CLOUDFLARE_ACCOUNT_ID: account, CLOUDFLARE_WORKERS_SUBDOMAIN: subdomain } = env;
+  return [
+    ...apps.flatMap((app) => {
+      const access = readPageAccess(app, channel, env);
+      return access ? listPageMasks(access.pageUrl, access.accessCode) : [];
+    }),
+    ...(account ? /** @type {[string, string][]} */ ([[account, "<account>"]]) : []),
+    ...(subdomain ? /** @type {[string, string][]} */ ([[subdomain, "<subdomain>"]]) : []),
+  ];
+}
+
 /**
  * @param {string[]} workers
  * @param {Set<string>} checked
@@ -906,6 +930,7 @@ export async function deployCheckedRelease(
   const checked = new Set();
   /** @type {Map<string, string>} */
   const failures = new Map();
+  const masks = listChannelMasks(channel, env);
   console.log(`Deploying ${branch} at ${commit.slice(0, 7)} to ${channel}`);
   const isDeployed = await deploy(workers, {
     channel,
@@ -913,7 +938,7 @@ export async function deployCheckedRelease(
     checkedCommit,
     onCovered: (worker) => covered.add(worker),
     onChecked: (worker) => checked.add(worker),
-    onFailed: (worker, message) => failures.set(worker, message),
+    onFailed: (worker, message) => failures.set(worker, maskSecrets(message, masks)),
   });
   if (env.GITHUB_OUTPUT) {
     const results = listWorkerResults(workers, checked, failures, readWorkerVersion);

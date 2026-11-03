@@ -165,7 +165,7 @@ jobs:
       checks: read
       pull-requests: write
     steps:
-      # Main's script, so a branch pushed to beta never runs its own code with pull-requests: write.
+      # Main's script, as reviewed, rather than one a pull request put on beta changed.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: main
