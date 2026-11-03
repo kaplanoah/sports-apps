@@ -1,6 +1,7 @@
 import { finishSeries, WILD_CARD_SERIES, DIVISION_SERIES } from "./bracket-rounds.mjs";
 import { test, expect, openApp } from "./harness.mjs";
 import {
+  expectFailedScheduleLetsRecordFill,
   expectLateRecordKeepsShownDay,
   expectReloadOpensOn,
   expectStalledScheduleLetsRecordFill,
@@ -70,6 +71,15 @@ test("a reload from the copy without its season, left on a day before the season
   await openApp(page, { isWholeSeason: true });
 
   await expectStalledScheduleLetsRecordFill(page, LATE_RECORD);
+});
+
+test("a reload from the copy without its season, left on a day before the season's record lists, opens the Games list on today from the record as soon as the schedule's read fails", async ({
+  page,
+}) => {
+  await page.addInitScript(() => localStorage.setItem("lastTab", "games"));
+  await openApp(page, { isWholeSeason: true });
+
+  await expectFailedScheduleLetsRecordFill(page, LATE_RECORD);
 });
 
 test("a reload two minutes or more after the page left the Games list on another day shows its strip of dates on today, before the page's code arrives and once it runs", async ({

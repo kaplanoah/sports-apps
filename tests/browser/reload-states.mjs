@@ -95,21 +95,23 @@ async function holdRequests(page, pattern) {
   /** @type {() => void} */
   let noteAsked = () => {};
   const asked = new Promise((resolve) => (noteAsked = () => resolve(undefined)));
-  /** @type {() => void} */
+  /** @type {(isFailing: boolean) => void} */
   let release = () => {};
-  const released = new Promise((resolve) => (release = () => resolve(undefined)));
+  /** @type {Promise<boolean>} */
+  const released = new Promise((resolve) => (release = resolve));
   /** @param {import("@playwright/test").Route} route */
   const hold = async (route) => {
     noteAsked();
-    await released;
-    await route.fallback();
+    if (await released) await route.abort();
+    else await route.fallback();
   };
   await page.route(pattern, hold);
-  const answer = async () => {
-    release();
+  /** @param {boolean} isFailing */
+  const settle = async (isFailing) => {
+    release(isFailing);
     await page.unroute(pattern, hold);
   };
-  return { asked, answer };
+  return { asked, answer: () => settle(false), fail: () => settle(true) };
 }
 
 /**
@@ -165,6 +167,24 @@ export async function expectStalledScheduleLetsRecordFill(page, options) {
     options.today,
   );
   await schedule.answer();
+  await expectListOn(page, options.today);
+}
+
+/**
+ * Checks the record alone fills the list, on today, as soon as the schedule's read fails after a
+ * reload with a late record, without waiting out SCHEDULE_WAIT_MS.
+ * @param {import("@playwright/test").Page} page
+ * @param {{ today: string, shownDay: string, schedulePath: string }} options
+ */
+export async function expectFailedScheduleLetsRecordFill(page, options) {
+  const schedule = await reloadWithLateRecord(page, options);
+
+  await schedule.fail();
+
+  await expect(page.locator("#seasonGames .day-cell.is-chosen")).toHaveAttribute(
+    "data-day",
+    options.today,
+  );
   await expectListOn(page, options.today);
 }
 
