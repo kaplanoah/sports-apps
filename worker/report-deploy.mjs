@@ -62,7 +62,7 @@ export async function reportDeploy({
  * @param {ReturnType<typeof createGitHub>} github
  * @param {string} runId
  */
-async function hasDeployStarted(github, runId) {
+export async function hasDeployStarted(github, runId) {
   const jobs = await readAllPages(github, `/actions/runs/${runId}/jobs`, (answer) => answer.jobs);
   return jobs.some(
     (/** @type {{ name: string, steps?: unknown[] }} */ job) =>

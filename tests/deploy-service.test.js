@@ -52,9 +52,13 @@ async function deployWorker(answerApp, { worker = "accounts", channel } = {}) {
   const { roots, remove } = createServiceRoots();
   const cloudflare = createFakeCloudflare(answerApp);
   const lines = [];
+  let checks = 0;
   try {
     const result = await deploy({
       worker,
+      onChecked: () => {
+        checks += 1;
+      },
       channel,
       roots,
       script: "export default {}",
@@ -69,7 +73,7 @@ async function deployWorker(answerApp, { worker = "accounts", channel } = {}) {
         return { status: "drawn" };
       },
     }).catch((error) => error);
-    return { result, lines, calls: cloudflare.calls };
+    return { result, lines, calls: cloudflare.calls, checks };
   } finally {
     remove();
   }
@@ -78,8 +82,9 @@ async function deployWorker(answerApp, { worker = "accounts", channel } = {}) {
 const RELEASED = { ok: true, release: NEW_COMMIT.slice(0, 7) };
 
 test("a service uploads its store and version, has no workers.dev address, and answers through each app's health", async () => {
-  const { result, lines, calls } = await deployWorker(answerHealth(RELEASED));
+  const { result, lines, calls, checks } = await deployWorker(answerHealth(RELEASED));
   assert.equal(result, "accounts");
+  assert.equal(checks, 1);
   const upload = calls.find(({ init }) => init.method === "PUT");
   const metadata = JSON.parse(await upload.init.body.get("metadata").text());
   assert.deepEqual(metadata.bindings, [
@@ -107,8 +112,9 @@ test("a service an app reports as down, or at another release, is put back, nami
       problem: "mlb reaches accounts at 1111111, not 2222222",
     },
   ]) {
-    const { result, calls } = await deployWorker(answerHealth(report));
+    const { result, calls, checks } = await deployWorker(answerHealth(report));
     assert.ok(result instanceof Error);
+    assert.equal(checks, 0);
     assert.match(result.message, new RegExp(problem));
     assert.match(result.message, /the earlier version is live again/);
     assert.doesNotMatch(result.message, /workers\.dev|example-subdomain/);

@@ -40,6 +40,7 @@ jobs:
       cancel-in-progress: false
     outputs:
       checked-commit: ${{ steps.deploy.outputs.checked-commit }}
+      worker-results: ${{ steps.deploy.outputs.worker-results }}
     steps:
       # All of main's history, so the merge can be compared with the live version's commit.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -146,3 +147,38 @@ jobs:
           COMMIT: ${{ github.event.workflow_run.head_sha || github.sha }}
           JOB_RESULT: ${{ needs.deploy.result }}
           CHECKED_COMMIT: ${{ needs.deploy.outputs.checked-commit }}
+
+  # Comments on the pull request the run deployed, with each Worker's result, so the session that
+  # drives it hears when the deploy finished (worker/comment-deploy.mjs). Its own job, so the job
+  # that holds the Cloudflare token can't write to pull requests, and one whose failure leaves the
+  # run's conclusion to the deploy.
+  comment:
+    needs: deploy
+    if: always() && needs.deploy.result != 'skipped'
+    continue-on-error: true
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+      issues: read
+      checks: read
+      pull-requests: write
+    steps:
+      # Main's script, so a branch pushed to beta never runs its own code with pull-requests: write.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: main
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version-file: .nvmrc
+      - run: node worker/comment-deploy.mjs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CHANNEL: ${{ github.ref_name == 'beta' && 'beta' || 'production' }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          RUN_ID: ${{ github.run_id }}
+          COMMIT: ${{ github.event.workflow_run.head_sha || github.sha }}
+          JOB_RESULT: ${{ needs.deploy.result }}
+          WORKER_RESULTS: ${{ needs.deploy.outputs.worker-results }}

@@ -60,6 +60,11 @@ test("production receipts require successful deployment; superseded, failed and 
   const output = join(folder, "output");
   writeFileSync(output, "");
   const env = { GITHUB_OUTPUT: output };
+  const readReceipts = () =>
+    readFileSync(output, "utf8")
+      .split("\n")
+      .filter((line) => line.startsWith("checked-commit="));
+  const readWorkerVersion = () => "1.0.0";
   let deployments = 0;
   const release = { channel: "production", commit: NEW_COMMIT, newer: "3".repeat(40) };
   /** @type {typeof import("../worker/deploy.mjs").deployRelease} */
@@ -78,30 +83,115 @@ test("production receipts require successful deployment; superseded, failed and 
   assert.equal(readFileSync(output, "utf8"), "");
   const current = { ...release, newer: null };
   assert.equal(
-    await deployCheckedRelease(["mlb"], current, { env, deploy: async () => false }),
+    await deployCheckedRelease(["mlb"], current, {
+      env,
+      deploy: async () => false,
+      readWorkerVersion,
+    }),
     false,
   );
-  assert.equal(readFileSync(output, "utf8"), "");
+  assert.deepEqual(readReceipts(), []);
   await assert.rejects(
     deployCheckedRelease(["mlb"], current, {
       env,
       deploy: async () => {
         throw new Error("verification failed");
       },
+      readWorkerVersion,
     }),
     /verification failed/,
   );
-  assert.equal(readFileSync(output, "utf8"), "");
+  assert.deepEqual(readReceipts(), []);
   assert.equal(
-    await deployCheckedRelease(["mlb"], { ...current, channel: "beta" }, { env, deploy }),
+    await deployCheckedRelease(
+      ["mlb"],
+      { ...current, channel: "beta" },
+      { env, deploy, readWorkerVersion },
+    ),
     true,
   );
-  assert.equal(readFileSync(output, "utf8"), "");
+  assert.deepEqual(readReceipts(), []);
   assert.equal(
-    await deployCheckedRelease(["mlb"], current, { env, deploy, requiredWorkers: ["mlb"] }),
+    await deployCheckedRelease(["mlb"], current, {
+      env,
+      deploy,
+      requiredWorkers: ["mlb"],
+      readWorkerVersion,
+    }),
     true,
   );
-  assert.equal(readFileSync(output, "utf8"), `checked-commit=${NEW_COMMIT}\n`);
+  assert.deepEqual(readReceipts(), [`checked-commit=${NEW_COMMIT}`]);
+});
+
+test("each run that deploys writes every Worker's result and version, failed or not, on both channels", async (context) => {
+  const { deployCheckedRelease } = await loadDeployModule();
+  const folder = mkdtempSync(join(tmpdir(), "deploy-results-"));
+  context.after(() => rmSync(folder, { recursive: true, force: true }));
+  const output = join(folder, "output");
+  const readResults = () =>
+    readFileSync(output, "utf8")
+      .split("\n")
+      .filter((line) => line.startsWith("worker-results="))
+      .map((line) => JSON.parse(line.slice("worker-results=".length)));
+  /** @type {typeof import("../worker/deploy.mjs").deployRelease} */
+  const deploy = async (workers, options) => {
+    options?.onChecked?.("mlb");
+    options?.onChecked?.("accounts");
+    options?.onFailed?.(
+      "accounts",
+      "The service didn't answer, so the earlier version is live again.",
+    );
+    return false;
+  };
+  for (const channel of ["production", "beta"]) {
+    writeFileSync(output, "");
+    const isDeployed = await deployCheckedRelease(
+      ["mlb", "wnba"],
+      { channel, commit: NEW_COMMIT, newer: null },
+      {
+        env: { GITHUB_OUTPUT: output },
+        deploy,
+        readCheckedCommit: async () => null,
+        readWorkerVersion: (worker) => `${worker}-version`,
+      },
+    );
+    assert.equal(isDeployed, false);
+    assert.deepEqual(readResults(), [
+      [
+        { worker: "mlb", version: "mlb-version", result: "checked" },
+        { worker: "wnba", version: "wnba-version", result: "unchanged" },
+        {
+          worker: "accounts",
+          version: "accounts-version",
+          result: "failed",
+          detail: "The service didn't answer, so the earlier version is live again.",
+        },
+      ],
+    ]);
+  }
+});
+
+test("deployRelease reports each Worker it checked and each one that failed", async () => {
+  const { deployRelease } = await loadDeployModule();
+  const checked = [];
+  const failed = [];
+  const isDeployed = await deployRelease(["mlb", "wnba"], {
+    buildWorkerImpl: async () => "",
+    deployWorkerImpl: async ({ worker, onChecked, isCheckOnly }) => {
+      if (isCheckOnly) return null;
+      if (worker === "wnba") throw new Error("The Worker didn't answer as the new version");
+      onChecked?.();
+      return worker;
+    },
+    onChecked: (worker) => checked.push(worker),
+    onFailed: (worker, message) => failed.push({ worker, message }),
+    logError: () => {},
+  });
+  assert.equal(isDeployed, false);
+  assert.deepEqual(checked, ["mlb"]);
+  assert.deepEqual(failed, [
+    { worker: "wnba", message: "The Worker didn't answer as the new version" },
+  ]);
 });
 
 /**
@@ -652,6 +742,38 @@ test("a first deploy has no live version to look up", async () => {
     pause: skipPause,
   });
   assert.equal(url, WORKER_URL);
+});
+
+test("an app's deploy reports its check only once its Worker and page answer", async () => {
+  const { deploy } = await loadDeployModule();
+  let checks = 0;
+  const countCheck = () => {
+    checks += 1;
+  };
+  await deploy({
+    worker: "mlb",
+    fetchImpl: createFakeCloudflare().fetchImpl,
+    env: ENV,
+    script: "",
+    log: () => {},
+    pause: skipPause,
+    onChecked: countCheck,
+  });
+  assert.equal(checks, 1);
+  const silent = createFakeCloudflare({ answerWorker: () => new Response("", { status: 500 }) });
+  await assert.rejects(
+    deploy({
+      worker: "mlb",
+      fetchImpl: silent.fetchImpl,
+      env: ENV,
+      script: "",
+      log: () => {},
+      pause: skipPause,
+      onChecked: countCheck,
+    }),
+    /the earlier version is live again/,
+  );
+  assert.equal(checks, 1);
 });
 
 test("the log and errors never show the Worker's address", async () => {
