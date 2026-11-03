@@ -130,8 +130,8 @@ export async function saveIdentityError(storage, key, count, kind = "rejected", 
   await saveIdentityCount(storage, nameIdentityErrorKey(key, kind), count, partial);
 }
 
-export async function readIdentitySourceRejections(storage, key, observedRejections = 0) {
-  return Math.max(observedRejections, (await storage.get(nameSourceRejectionKey(key))) ?? 0);
+export async function readIdentitySourceRejections(storage, key) {
+  return (await storage.get(nameSourceRejectionKey(key))) ?? 0;
 }
 
 export async function saveIdentitySourceRejections(storage, key, count) {

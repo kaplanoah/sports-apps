@@ -17,6 +17,7 @@ import {
   IDENTITY_BACKFILL_KEY,
   saveIdentitySourceProblems,
   saveIdentitySourceRejections,
+  readIdentitySourceRejections,
 } from "./identity.js";
 
 export const IDENTITY_AUDIT_VERSION = 2;
@@ -322,13 +323,19 @@ export function createIdentityBackfill(storage, options, now) {
         published &&
         (await storage.transaction(async (transaction) => {
           if (!isActive() || !isSameJson(await transaction.get(key), expected)) return false;
+          if (
+            source.kind === "document" &&
+            (await readIdentitySourceRejections(transaction, key)) !== source.retainedRejections
+          )
+            return false;
           await saveIdentitySourceProblems(
             transaction,
             key,
             countSourceRejections(source, pending),
             pending.nativeMissingEntries ?? 0,
           );
-          await saveIdentitySourceRejections(transaction, key, source.rejected ?? 0);
+          if (source.kind === "document")
+            await saveIdentitySourceRejections(transaction, key, source.rejected ?? 0);
           return true;
         }));
       if (!finalized) {

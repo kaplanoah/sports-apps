@@ -984,6 +984,43 @@ test("opaque backfill retains vendor rejections while sanitizing older stored so
   assert.equal((await store.identities.readStatus()).checks.verified, false);
 });
 
+for (const rejectedBefore of [false, true]) {
+  test(`audit finalization preserves a newer ${rejectedBefore ? "valid" : "rejected"} observation of unchanged content`, async () => {
+    const { ctx, stored } = createDurableObjectContext();
+    const store = createStore(ctx);
+    const id = await store.identities.lookup.discover({
+      type: "player",
+      vendor: "nba",
+      vendorId: "native-current",
+    });
+    const key = "seasons/2025";
+    const player = { id, firstName: "Current", lastName: "Player" };
+    const source = (rejected) => ({
+      season: 2025,
+      players: [{ ...player, ...(rejected && { espnIdentity: { id: null } }) }],
+    });
+    await store.docs.write(key, source(rejectedBefore));
+    const before = structuredClone(stored.get(key));
+    const check = store.identities.lookup.recordRegistrationCheck;
+    let replaced = false;
+    store.identities.lookup.recordRegistrationCheck = async (...args) => {
+      const result = await check(...args);
+      if (!replaced) {
+        replaced = true;
+        await store.docs.write(key, source(!rejectedBefore));
+        assert.deepEqual(stored.get(key), before);
+      }
+      return result;
+    };
+    await finishBackfill(store);
+    assert.equal(replaced, true);
+    const expected = rejectedBefore ? 0 : 1;
+    assert.equal(await readIdentitySourceRejections(ctx.storage, key), expected);
+    assert.equal((await store.identities.readStatus()).errors, expected);
+    assert.equal((await store.identities.readStatus()).checks.verified, !expected);
+  });
+}
+
 test("failed superseded repair preserves the newer source and schedules normal recovery", async () => {
   const { ctx, stored } = createDurableObjectContext();
   const store = createStore(ctx);

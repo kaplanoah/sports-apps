@@ -443,6 +443,11 @@ export function createIdentityDocuments(storage, policy, now = Date.now) {
     return { ...value, body };
   }
 
+  async function describeSourceRejections(storage, key, observedRejections) {
+    const retainedRejections = await readIdentitySourceRejections(storage, key);
+    return { retainedRejections, rejected: Math.max(observedRejections, retainedRejections) };
+  }
+
   async function updateDocumentCoverage(transaction, key, document, original = null) {
     if (document === undefined) {
       await saveIdentitySourceProblems(transaction, key, 0, 0);
@@ -456,10 +461,10 @@ export function createIdentityDocuments(storage, policy, now = Date.now) {
     const prepared = cached ? describeDetailAnswer(key, document).document : document;
     const { observations } = expandDocument(source.key, prepared);
     const observedRejections = expandDocument(source.key, source.document).rejected;
-    const rejected =
+    const { rejected } =
       original === null
-        ? await readIdentitySourceRejections(transaction, key, observedRejections)
-        : observedRejections;
+        ? await describeSourceRejections(transaction, key, observedRejections)
+        : { rejected: observedRejections };
     const saved = await lookup.updateRegisteredFacts(observations, { key, rejected }, transaction);
     await saveIdentitySourceRejections(transaction, key, rejected);
     await invalidateFactCoverage(transaction, observations, saved.results);
@@ -519,6 +524,10 @@ export function createIdentityDocuments(storage, policy, now = Date.now) {
       expandDocument(source.key, source.document, cached ? null : value),
     );
     const retryEvidence = (await storage.get(nameRetryKey(key))) ?? null;
+    const rejections =
+      policy.nativeIdMode === "internal"
+        ? await describeSourceRejections(storage, key, prepared.rejected)
+        : { rejected: prepared.rejected };
     return {
       kind: "document",
       cached,
@@ -530,10 +539,7 @@ export function createIdentityDocuments(storage, policy, now = Date.now) {
       ],
       records: mergePlayerEvidence(retryEvidence, prepared.espnPlayers),
       retryEvidence,
-      rejected:
-        policy.nativeIdMode === "internal"
-          ? await readIdentitySourceRejections(storage, key, prepared.rejected)
-          : prepared.rejected,
+      ...rejections,
     };
   }
 
