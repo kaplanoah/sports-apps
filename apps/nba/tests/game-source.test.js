@@ -31,10 +31,11 @@ for (const event of fixtures.january.events) {
   january.get(day).push(event);
 }
 
-function createHarness() {
+function createHarness({ configured = false } = {}) {
   const context = createDurableObjectContext();
   const clock = { now: Date.parse("2026-11-03T15:00:00Z") };
   const Store = createSeasonStore({
+    ...(configured && { identity: identityPolicy }),
     createLoadSnapshot: () => async () => ({ season: 2024 }),
     loadCurrentSnapshot: (load) => load(2024),
     readUpdates: async () => null,
@@ -44,7 +45,7 @@ function createHarness() {
     listNotifications: () => [],
   });
   const store = new Store(context.ctx, {}, { now: () => clock.now });
-  const identities = createIdentityLookup(context.ctx.storage, "nba");
+  const identities = store.identities?.lookup ?? createIdentityLookup(context.ctx.storage, "nba");
   const state = { reads: [], mode: "valid", wait: Promise.resolve() };
   const fetchImpl = async (input) => {
     const url = new URL(input);
@@ -632,6 +633,140 @@ test("detail lookup uses read methods without discovering identities or rewritin
   const read = createStoredGameReader({ docs: harness.store.docs, identityLookup: readonly });
   assert.deepEqual(await read(id), result.games[0]);
   assert.deepEqual(await harness.identities.readEntry("game", id), before);
+});
+
+test("actual NBA detail reads preserve native registration uncertainty and reject quarantined ESPN sources until reconciliation", async () => {
+  const harness = createHarness({ configured: true });
+  const result = await harness.createReader().read(2024, "2025-06-22");
+  const game = result.games[0];
+  const association = {
+    type: "game",
+    vendor: "espn",
+    vendorId: "401766128",
+    internalId: game.id,
+    evidence: { method: "existing-id" },
+  };
+  const read = createStoredGameReader({
+    docs: harness.store.docs,
+    identityLookup: harness.identities,
+  });
+  const guard = await harness.identities.readEligible("game", "espn", association.vendorId);
+  assert.deepEqual(await read(game.id), game);
+  assert.equal(await harness.identities.hasRegistration("game", "nba", game.id), false);
+  const errors = (await harness.store.identities.readStatus()).errors;
+  assert.ok(errors > 0);
+  await harness.identities.save([{ ...association, disputed: true }]);
+  const retained = structuredClone(harness.stored);
+  assert.equal(await harness.identities.read("game", "espn", association.vendorId), game.id);
+  assert.equal(await harness.identities.readEligible("game", "espn", association.vendorId), null);
+  assert.deepEqual(await Promise.all([read(game.id), read(game.id)]), [null, null]);
+  assert.deepEqual(harness.stored, retained);
+  await harness.identities.save([{ ...association, decisive: true }]);
+  const restored = await harness.identities.readEligible("game", "espn", association.vendorId);
+  assert.equal(restored.internalId, game.id);
+  assert.notEqual(restored.associationToken, guard.associationToken);
+  assert.deepEqual(await read(game.id), game);
+  assert.equal((await harness.identities.readEntry("game", game.id)).vendors.nba, undefined);
+  assert.equal((await harness.store.identities.readStatus()).errors, errors);
+  assert.equal(harness.state.reads.length, 1);
+});
+
+test("an eligible native association cannot admit a quarantined ESPN detail source", async () => {
+  const harness = createHarness({ configured: true });
+  const result = await harness.createReader().read(2024, "2025-06-22");
+  const game = result.games[0];
+  await harness.identities.save([
+    {
+      type: "game",
+      vendor: "nba",
+      vendorId: "native-game-proof",
+      internalId: game.id,
+      evidence: { method: "discovery" },
+    },
+    {
+      type: "game",
+      vendor: "espn",
+      vendorId: "401766128",
+      internalId: game.id,
+      evidence: { method: "existing-id" },
+      disputed: true,
+    },
+  ]);
+  assert.equal(
+    (await harness.identities.readEligible("game", "nba", "native-game-proof")).internalId,
+    game.id,
+  );
+  const read = createStoredGameReader({
+    docs: harness.store.docs,
+    identityLookup: harness.identities,
+  });
+  assert.equal(await read(game.id), null);
+  assert.equal(harness.state.reads.length, 1);
+});
+
+test("NBA detail reads check eligibility after a dispute committed during the stored month read", async () => {
+  const harness = createHarness({ configured: true });
+  const result = await harness.createReader().read(2024, "2025-06-22");
+  const game = result.games[0];
+  const read = createStoredGameReader({
+    docs: {
+      ...harness.store.docs,
+      read: async (key) => {
+        const stored = await harness.store.docs.read(key);
+        await harness.identities.save([
+          {
+            type: "game",
+            vendor: "espn",
+            vendorId: "401766128",
+            internalId: game.id,
+            evidence: { method: "existing-id" },
+            disputed: true,
+          },
+        ]);
+        return stored;
+      },
+    },
+    identityLookup: harness.identities,
+  });
+  assert.equal(await read(game.id), null);
+  assert.equal(harness.state.reads.length, 1);
+});
+
+test("NBA detail reads reject an eligible guard reassigned to another internal ID during the stored month read", async () => {
+  const harness = createHarness({ configured: true });
+  const result = await harness.createReader().read(2024, "2025-06-22");
+  const game = result.games[0];
+  const otherId = await harness.identities.discover({
+    type: "game",
+    vendor: "nba",
+    vendorId: "another-native-game",
+  });
+  const read = createStoredGameReader({
+    docs: {
+      ...harness.store.docs,
+      read: async (key) => {
+        const stored = await harness.store.docs.read(key);
+        await harness.identities.save([
+          {
+            type: "game",
+            vendor: "espn",
+            vendorId: "401766128",
+            internalId: otherId,
+            evidence: { method: "existing-id" },
+            decisive: true,
+          },
+        ]);
+        return stored;
+      },
+    },
+    identityLookup: harness.identities,
+  });
+  assert.equal(await read(game.id), null);
+  assert.equal(
+    (await harness.identities.readEligible("game", "espn", "401766128")).internalId,
+    otherId,
+  );
+  assert.equal(harness.state.reads.length, 1);
 });
 
 test("the prepared internal-ID policy reads explicit facts without decoding any ID", () => {

@@ -131,10 +131,14 @@ export function createStoredGameReader({ docs, identityLookup }) {
   return async function readGame(id) {
     if (!/^g_[a-z0-9]{12}$/.test(id)) return null;
     const entry = await identities.readEntry("game", id);
-    if (entry?.league !== "nba" || !entry.facts?.season || !entry.facts?.day) return null;
+    const vendorId = entry?.vendors?.espn;
+    if (entry?.league !== "nba" || !entry.facts?.season || !entry.facts?.day || !vendorId)
+      return null;
     const month = await docs.read(nameMonthKey(entry.facts.season, entry.facts.day));
     const game = month?.days?.[entry.facts.day]?.find((record) => record.id === id) ?? null;
-    return game ? validateSportsData(BasketballGameFacts, game) : null;
+    if (!game) return null;
+    const guard = await identities.readEligible("game", "espn", vendorId);
+    return guard?.internalId === id ? validateSportsData(BasketballGameFacts, game) : null;
   };
 }
 
