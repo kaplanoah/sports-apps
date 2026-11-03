@@ -10,6 +10,7 @@ import {
   IDENTITY_WORK_INTERVAL_MS,
 } from "../shared/worker/identity-backfill.js";
 import { createDurableObjectContext } from "./durable-object-context.js";
+import { createGame, nameStoredGameId } from "./identity-fixtures.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -45,7 +46,10 @@ test("audit progress health uses three fixed reads without advancing work or exp
       candidateCursor: "private-candidate-key",
       candidates: Array.from({ length: 10_000 }, () => ({ id: "private-player-id" })),
     },
-    indexes: { game: { complete: true, cursor: "private-index-key" } },
+    indexes: {
+      game: { complete: true, cursor: "private-index-key" },
+      player: { complete: true, cursor: "private-player-index" },
+    },
   });
   harness.stored.set("identity:coverage-revision", "private-revision");
   harness.stored.set("identity:work", { day: 0, used: 40, nextAt: 60_000 });
@@ -69,7 +73,7 @@ test("audit progress health uses three fixed reads without advancing work or exp
     candidateGroupOffset: 5,
     candidates: 10_000,
     gameIndexComplete: true,
-    playerIndexComplete: false,
+    playerIndexComplete: true,
     savedAt: 100,
     retryAfter: null,
   });
@@ -133,6 +137,7 @@ test("legacy, obsolete and malformed checkpoints remain honestly unclassified", 
   assert.equal(absent.checkpoint.phase, null);
   assert.equal(absent.checkpoint.offset, null);
   assert.equal(absent.checkpoint.savedAt, null);
+  assert.equal(absent.checkpoint.candidates, null);
   assert.equal(absent.allowance.lastReservedAt, null);
   harness.stored.set("identity:backfill", {
     version: IDENTITY_AUDIT_VERSION,
@@ -179,14 +184,7 @@ for (const [app, Store] of /** @type {const} */ ([
     };
     harness.stored.set("seasons/2026", {
       year: 2026,
-      games: Array.from({ length: 1000 }, (_, index) => ({
-        id: String(index + 1),
-        state: "final",
-        season: 2026,
-        away: { team: "NYL" },
-        home: { team: "LVA" },
-        start: "2026-06-01T18:00:00Z",
-      })),
+      games: Array.from({ length: 1000 }, (_, index) => createGame(nameStoredGameId(app, index))),
     });
     const first = new Store(harness.ctx, {}, options);
     await first.identities.backfillWhenDue(first.docs);
@@ -197,6 +195,10 @@ for (const [app, Store] of /** @type {const} */ ([
     assert.equal(early.checkpoint.current, true);
     assert.equal(early.checkpoint.phase, "documents");
     assert.equal(early.checkpoint.stage, "native");
+    if (app === "wnba") {
+      const game = await first.identities.lookup.readEntry("game", nameStoredGameId(app, 0));
+      assert.equal(game.facts.isCupFinal, false);
+    }
     assert.ok(early.checkpoint.offset > 0);
     assert.equal(early.checkpoint.savedAt, now);
     assert.equal(early.allowance.reserved, IDENTITY_WORK_PER_RUN);

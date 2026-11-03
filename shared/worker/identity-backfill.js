@@ -26,13 +26,15 @@ export const IDENTITY_COVERAGE_KEY = `${IDENTITY_PREFIX}coverage-revision`;
 const MAX_CANDIDATE_BYTES = 512 * 1024;
 const RETRY_DELAY_MS = 60_000;
 const MAX_RETRY_MS = 60 * 60 * 1000;
+const AUDIT_PHASES = { documents: "documents", facts: "facts", vendors: "vendors" };
+const AUDIT_STAGES = { native: "native", candidates: "candidates", vendor: "vendor", done: "done" };
 
 const createProgress = (coverageRevision = null) => ({
   version: IDENTITY_AUDIT_VERSION,
   cursor: "",
   checkedDocuments: 0,
   complete: false,
-  phase: "documents",
+  phase: AUDIT_PHASES.documents,
   missingEntries: 0,
   missingFacts: 0,
   conflicts: 0,
@@ -72,10 +74,8 @@ function describeCheckpoint(progress, current) {
   const pending = progress?.pending;
   return {
     current,
-    phase: ["documents", "facts", "vendors"].includes(progress?.phase) ? progress.phase : null,
-    stage: ["native", "candidates", "vendor", "done"].includes(pending?.stage)
-      ? pending.stage
-      : null,
+    phase: Object.values(AUDIT_PHASES).includes(progress?.phase) ? progress.phase : null,
+    stage: Object.values(AUDIT_STAGES).includes(pending?.stage) ? pending.stage : null,
     offset: readOptionalCount(pending?.offset),
     candidateGroupOffset: readOptionalCount(pending?.groupOffset),
     candidates: Array.isArray(pending?.candidates) ? pending.candidates.length : null,
@@ -87,8 +87,8 @@ function describeCheckpoint(progress, current) {
 }
 
 function chooseSourceStage(source) {
-  if (source.kind !== "vendor") return "native";
-  return source.records.length ? "candidates" : "done";
+  if (source.kind !== "vendor") return AUDIT_STAGES.native;
+  return source.records.length ? AUDIT_STAGES.candidates : AUDIT_STAGES.done;
 }
 
 /**
@@ -194,12 +194,12 @@ export function createIdentityBackfill(storage, options, now) {
         pending.candidateCursor = "";
       }
     }
-    if (pending.groupOffset === prefixes.length) pending.stage = "vendor";
+    if (pending.groupOffset === prefixes.length) pending.stage = AUDIT_STAGES.vendor;
   }
 
   async function saveVendorBatch(source, pending, work, docs) {
     if (pending.nativeRevision !== (await lookup.readFactsRevision())) {
-      pending.stage = "candidates";
+      pending.stage = AUDIT_STAGES.candidates;
       return;
     }
     const count = new Set(source.records.map((record) => String(record.id))).size;
@@ -218,12 +218,12 @@ export function createIdentityBackfill(storage, options, now) {
       });
     } catch (error) {
       if (!(error instanceof IdentityFactsChanged)) throw error;
-      pending.stage = "candidates";
+      pending.stage = AUDIT_STAGES.candidates;
       return;
     }
     pending.offset += results.length;
     if (source.type === "game") await saveGameMatches(results, docs);
-    if (pending.offset >= count) pending.stage = "done";
+    if (pending.offset >= count) pending.stage = AUDIT_STAGES.done;
   }
 
   async function registerNativeBatch(source, pending, work) {
@@ -235,7 +235,7 @@ export function createIdentityBackfill(storage, options, now) {
     pending.offset += batch.length;
     if (pending.offset >= source.observations.length) {
       pending.offset = 0;
-      pending.stage = source.records.length ? "candidates" : "done";
+      pending.stage = source.records.length ? AUDIT_STAGES.candidates : AUDIT_STAGES.done;
     }
   }
 
@@ -257,7 +257,7 @@ export function createIdentityBackfill(storage, options, now) {
     pending.offset += batch.length;
     if (pending.offset >= source.observations.length) {
       pending.offset = 0;
-      pending.stage = source.records.length ? "candidates" : "done";
+      pending.stage = source.records.length ? AUDIT_STAGES.candidates : AUDIT_STAGES.done;
     }
   }
 
@@ -268,7 +268,7 @@ export function createIdentityBackfill(storage, options, now) {
     work.remaining -= consumed;
     pending.conflicts += await lookup.countMappingConflicts(key, batch);
     pending.offset += consumed;
-    if (!vendors || pending.offset >= vendors.length) pending.stage = "done";
+    if (!vendors || pending.offset >= vendors.length) pending.stage = AUDIT_STAGES.done;
   }
 
   async function advanceSource(docs, key, value, source, progress, work, isActive) {
@@ -291,20 +291,21 @@ export function createIdentityBackfill(storage, options, now) {
     const pending = progress.pending;
     if (pending.signature !== signature) {
       pending.signature = signature;
-      if (pending.stage === "candidates" || pending.stage === "vendor") {
-        pending.stage = "candidates";
+      if (pending.stage === AUDIT_STAGES.candidates || pending.stage === AUDIT_STAGES.vendor) {
+        pending.stage = AUDIT_STAGES.candidates;
         delete pending.nativeRevision;
       }
     }
-    while (work.remaining && pending.stage !== "done" && isActive()) {
+    while (work.remaining && pending.stage !== AUDIT_STAGES.done && isActive()) {
       if (source.kind === "mappings") await checkMappingBatch(key, value, pending, work);
-      else if (pending.stage === "candidates")
+      else if (pending.stage === AUDIT_STAGES.candidates)
         await collectCandidates(source, pending, progress, work);
-      else if (pending.stage === "vendor") await saveVendorBatch(source, pending, work, docs);
-      else if (progress.phase === "facts") await checkNativeBatch(source, pending, work);
+      else if (pending.stage === AUDIT_STAGES.vendor)
+        await saveVendorBatch(source, pending, work, docs);
+      else if (progress.phase === AUDIT_PHASES.facts) await checkNativeBatch(source, pending, work);
       else await registerNativeBatch(source, pending, work);
     }
-    if (!isActive() || pending.stage !== "done") return false;
+    if (!isActive() || pending.stage !== AUDIT_STAGES.done) return false;
     const latest = await storage.get(key);
     let published = isSameJson(latest, value);
     if (published && source.kind === "document" && !isSameJson(source.document, value)) {
@@ -320,7 +321,7 @@ export function createIdentityBackfill(storage, options, now) {
     }
     if (!isActive()) return false;
     await saveErrors(key, source.rejected ?? 0);
-    if (progress.phase !== "facts" && published)
+    if (progress.phase !== AUDIT_PHASES.facts && published)
       await saveErrors(key, 0, "failed", source.retryEvidence ?? null);
     progress.missingEntries += pending.missingEntries;
     progress.missingFacts += pending.missingFacts;
@@ -331,9 +332,9 @@ export function createIdentityBackfill(storage, options, now) {
   async function finishPhase(progress) {
     progress.cursor = "";
     progress.pending = null;
-    if (progress.phase === "documents") {
-      progress.phase = "facts";
-    } else if (progress.phase === "facts") progress.phase = "vendors";
+    if (progress.phase === AUDIT_PHASES.documents) {
+      progress.phase = AUDIT_PHASES.facts;
+    } else if (progress.phase === AUDIT_PHASES.facts) progress.phase = AUDIT_PHASES.vendors;
     else {
       progress.complete = true;
       if (progress.recoveryAttempt && (await hasFailedSources()))
@@ -380,7 +381,7 @@ export function createIdentityBackfill(storage, options, now) {
         progress.pending = null;
         continue;
       }
-      if (progress.phase !== "vendors" && key.startsWith(IDENTITY_PREFIX)) {
+      if (progress.phase !== AUDIT_PHASES.vendors && key.startsWith(IDENTITY_PREFIX)) {
         progress.cursor = IDENTITY_PREFIX_END;
         progress.pending = null;
         continue;

@@ -18,6 +18,7 @@ import {
   IDENTITY_CANDIDATE_PREFIX,
 } from "../shared/worker/identity.js";
 import { createDurableObjectContext } from "./durable-object-context.js";
+import { createGame, nameStoredGameId } from "./identity-fixtures.js";
 
 function createMeasuredContext() {
   const context = createDurableObjectContext();
@@ -67,15 +68,6 @@ function createMeasuredContext() {
   };
 }
 
-const createGame = (id) => ({
-  id: String(id),
-  state: "final",
-  season: 2026,
-  away: { team: "NYL" },
-  home: { team: "LVA" },
-  start: "2026-06-01T18:00:00Z",
-});
-
 function createSavedNetworkMonth() {
   return {
     edition: 1,
@@ -112,9 +104,7 @@ for (const [app, Store] of /** @type {const} */ ([
 ])) {
   test(`${app}: a thousand nested identities stay within each storage-work slice and resume across evictions`, async () => {
     const harness = createMeasuredContext();
-    const ids = Array.from({ length: 1000 }, (_, index) =>
-      app === "wnba" ? `10226${String(index + 1).padStart(5, "0")}` : String(index + 1),
-    );
+    const ids = Array.from({ length: 1000 }, (_, index) => nameStoredGameId(app, index));
     harness.stored.set("seasons/2026", { year: 2026, games: ids.map(createGame) });
     let store = new Store(harness.ctx, {}, harness.options);
     await store.identities.backfill(store.docs);
