@@ -420,11 +420,11 @@ export function createSeasonStore(league) {
     async putDoc(key, doc) {
       const previous = await this.ctx.storage.get(key);
       const prepared = this.identities
-        ? await this.identities.prepareDocument(key, doc, previous)
-        : doc;
-      const data = sortKeys(prepared);
-      if (this.identities?.publishDocument) {
-        if (await this.identities.publishDocument(key, data, doc, previous))
+        ? await this.identities.prepareDocumentWrite(key, doc, previous)
+        : { document: doc, failure: null };
+      const data = sortKeys(prepared.document);
+      if (this.identities) {
+        if (await this.identities.publishDocument(key, data, doc, previous, prepared.failure))
           this.announceChange(key, data);
         return;
       }
@@ -715,11 +715,17 @@ export function createSeasonStore(league) {
           const isDetailAnswer = name === "details" && key.startsWith(DETAIL_ANSWER_PREFIX);
           const prepared =
             isDetailAnswer && this.identities
-              ? await this.identities.prepareDetailAnswer(prefix + key, value)
-              : value;
-          if (isDetailAnswer && this.identities?.publishDocument)
-            await this.identities.publishDocument(prefix + key, prepared, value);
-          else await storage.put(prefix + key, prepared);
+              ? await this.identities.prepareDetailWrite(prefix + key, value)
+              : { document: value, failure: null };
+          if (isDetailAnswer && this.identities)
+            await this.identities.publishDocument(
+              prefix + key,
+              prepared.document,
+              value,
+              undefined,
+              prepared.failure,
+            );
+          else await storage.put(prefix + key, prepared.document);
         },
         delete: async (key) => {
           const removed = await storage.delete(prefix + key);

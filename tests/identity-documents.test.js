@@ -13,6 +13,9 @@ import {
 import { IDENTITY_WORK_PER_RUN } from "../shared/worker/identity-backfill.js";
 import { createDurableObjectContext } from "./durable-object-context.js";
 import { createDeferred } from "./deferred.js";
+import { SeasonStore as MlbStore } from "../apps/mlb/worker/src/store.js";
+import { SeasonStore as WnbaStore } from "../apps/wnba/worker/src/store.js";
+import { createIdentityDocuments } from "../shared/worker/identity-documents.js";
 
 /** @type {import("../shared/worker/identity-documents.js").IdentityPolicy} */
 const POLICY = {
@@ -39,6 +42,12 @@ const Store = createSeasonStore({
 });
 const OPTIONS = { fetchImpl: async () => assert.fail("Unexpected vendor request") };
 const createStore = (ctx, options = {}) => new Store(ctx, {}, { ...OPTIONS, ...options });
+const LEAGUE_STORES = [
+  { name: "internal", league: "nba", team: "NYK", create: (ctx) => createStore(ctx) },
+  { name: "MLB", league: "mlb", team: "LAD", create: (ctx) => new MlbStore(ctx, {}, OPTIONS) },
+  { name: "WNBA", league: "wnba", team: "NYL", create: (ctx) => new WnbaStore(ctx, {}, OPTIONS) },
+];
+
 const createGame = (id) => ({
   id,
   season: 2026,
@@ -1033,7 +1042,9 @@ test("failed superseded repair preserves the newer source and schedules normal r
   const key = "seasons/2025";
   const original = {
     season: 2025,
-    players: [{ id: "p_abandoned", firstName: "Old", lastName: "Player" }],
+    players: [
+      { id: "p_abandoned", firstName: "Old", lastName: "Player", espnIdentity: { id: null } },
+    ],
   };
   await store.docs.write(key, original);
   const update = store.identities.lookup.updateRegisteredFacts;
@@ -1072,6 +1083,7 @@ test("failed superseded repair preserves the newer source and schedules normal r
   await writing;
   assert.deepEqual(stored.get(key), current);
   assert.equal(stored.get(`${IDENTITY_ERROR_PREFIX}failed:${encodeURIComponent(key)}`), 1);
+  assert.equal(await readIdentitySourceRejections(ctx.storage, key), 0);
   assert.equal((await store.identities.readStatus()).checks.verified, false);
   unavailable = false;
   for (let step = 0; step < 100; step++) {
@@ -1293,97 +1305,279 @@ test("deletion cleanup preserves a recreated source's failed-publication evidenc
   }
 });
 
-test("a late backfill check cannot leave counts for a deleted source", async () => {
-  for (const cached of [false, true]) {
-    const { ctx, stored } = createDurableObjectContext();
-    const store = createStore(ctx);
-    const id = await store.identities.lookup.discover({
-      type: "player",
-      vendor: "nba",
-      vendorId: "native-player",
-    });
-    const key = cached ? "job:details:detail-answer:/players?season=2025" : "seasons/2025";
-    const answerKey = "detail-answer:/players?season=2025";
-    const document = {
-      season: 2025,
-      players: [{ id, firstName: "Example", lastName: "Player", espnIdentity: { id: null } }],
-    };
-    if (cached) await store.createJobStorage("details").put(answerKey, { body: document });
-    else await store.docs.write(key, document);
-    const check = store.identities.lookup.recordRegistrationCheck;
-    let deleted = false;
-    store.identities.lookup.recordRegistrationCheck = async (...args) => {
-      if (!deleted && args[3].key === key) {
-        deleted = true;
-        if (cached) await store.createJobStorage("details").delete(answerKey);
-        else await store.docs.remove(key);
+for (const variant of LEAGUE_STORES) {
+  test(`${variant.name} late backfill cannot leave counts for a deleted source`, async () => {
+    for (const cached of [false, true]) {
+      for (const before of [false, true]) {
+        const { ctx, stored } = createDurableObjectContext();
+        const store = variant.create(ctx);
+        const id = "p_late";
+        if (variant.name === "internal")
+          await store.identities.lookup.save([
+            {
+              type: "player",
+              vendor: variant.league,
+              vendorId: "native-player",
+              internalId: id,
+              evidence: { method: "discovery" },
+            },
+          ]);
+        const player = {
+          id,
+          firstName: "Example",
+          lastName: "Player",
+          team: variant.team,
+          number: "7",
+        };
+        await store.docs.write(`players/2025-${id}`, { ...player, season: 2025 });
+        const key = cached ? "job:details:detail-answer:/players?season=2025" : "seasons/2025";
+        const answerKey = "detail-answer:/players?season=2025";
+        const document = {
+          season: 2025,
+          players: [{ ...player, number: "9", espnIdentity: { id: null } }],
+        };
+        stored.set(key, cached ? { body: document } : document);
+        let deleted = false;
+        const deleteTargetSource = async (observations) => {
+          if (
+            deleted ||
+            !observations.some(
+              (entry) =>
+                entry.internalId === id &&
+                entry.vendor === variant.league &&
+                entry.facts?.number === "9",
+            )
+          )
+            return;
+          deleted = true;
+          if (cached) await store.createJobStorage("details").delete(answerKey);
+          else await store.docs.remove(key);
+        };
+        if (variant.name === "internal") {
+          const update = store.identities.lookup.updateRegisteredFacts;
+          store.identities.lookup.updateRegisteredFacts = async (...args) => {
+            if (before) await deleteTargetSource(args[0]);
+            const result = await update(...args);
+            if (!before) await deleteTargetSource(args[0]);
+            return result;
+          };
+        } else {
+          const save = store.identities.lookup.save;
+          store.identities.lookup.save = async (...args) => {
+            if (before) await deleteTargetSource(args[0]);
+            const result = await save(...args);
+            if (!before) await deleteTargetSource(args[0]);
+            return result;
+          };
+        }
+        await finishBackfill(store);
+        assert.equal(deleted, true);
+        assert.equal(stored.has(key), false);
+        assert.equal(await readIdentitySourceRejections(ctx.storage, key), 0);
+        assert.equal((await store.identities.readStatus()).errors, 0);
+        assert.equal((await store.identities.readStatus()).checks.verified, true);
       }
-      return check(...args);
-    };
-    await finishBackfill(store);
-    assert.equal(deleted, true);
-    assert.equal(stored.has(key), false);
-    assert.equal(await readIdentitySourceRejections(ctx.storage, key), 0);
-    assert.equal((await store.identities.readStatus()).errors, 0);
-    assert.equal((await store.identities.readStatus()).checks.verified, true);
-  }
-});
+    }
+  });
 
-test("fallback publication retains fresh and earlier vendor rejections through recovery", async () => {
-  for (const cached of [false, true]) {
-    for (const rejectedBefore of [false, true]) {
+  test(`${variant.name} publication carries failed preparation evidence across deletion`, async () => {
+    for (const cached of [false, true]) {
       const { ctx, stored } = createDurableObjectContext();
-      const store = createStore(ctx);
-      const id = await store.identities.lookup.discover({
-        type: "player",
-        vendor: "nba",
-        vendorId: "native-player",
-      });
+      const store = variant.create(ctx);
+      const id = "p_current";
+      if (variant.name === "internal")
+        await store.identities.lookup.save([
+          {
+            type: "player",
+            vendor: variant.league,
+            vendorId: "native-player",
+            internalId: id,
+            evidence: { method: "discovery" },
+          },
+        ]);
+      const player = {
+        id,
+        firstName: "Current",
+        lastName: "Player",
+        team: variant.team,
+        number: "7",
+      };
+      await store.docs.write(`players/2025-${id}`, { ...player, season: 2025 });
       const key = cached ? "job:details:detail-answer:/players?season=2025" : "seasons/2025";
-      const player = { id, firstName: "Example", lastName: "Player" };
-      const document = (rejected) => ({
-        season: 2025,
-        players: [{ ...player, ...(rejected && { espnIdentity: { id: null } }) }],
-      });
-      const write = (source) =>
-        cached
-          ? store
-              .createJobStorage("details")
-              .put("detail-answer:/players?season=2025", { body: source })
-          : store.docs.write(key, source);
-      await write(document(rejectedBefore));
+      const answerKey = "detail-answer:/players?season=2025";
+      const job = store.createJobStorage("details");
+      const write = (document) =>
+        cached ? job.put(answerKey, { body: document }) : store.docs.write(key, document);
+      await write({ season: 2025, players: [] });
       await finishBackfill(store);
-      const before = structuredClone(stored.get(key));
       const transaction = ctx.storage.transaction;
-      let failed = false;
+      let unavailable = true;
       ctx.storage.transaction = (change) =>
         transaction((inner) =>
           change({
             ...inner,
             get: async (asked) => {
-              if (asked === key && !failed) {
-                failed = true;
-                throw new Error("Primary publication unavailable");
-              }
+              if (unavailable && asked === `identity:entity:${variant.league}:player:${id}`)
+                throw new Error("Identity ledger unavailable");
               return inner.get(asked);
             },
           }),
         );
-      await write(document(!rejectedBefore));
-      assert.equal(failed, true);
-      assert.deepEqual(stored.get(key), before);
-      assert.equal(await readIdentitySourceRejections(ctx.storage, key), 1);
-      assert.equal(stored.get(`${IDENTITY_ERROR_PREFIX}failed:${encodeURIComponent(key)}`), 1);
+      const entered = createDeferred();
+      const release = createDeferred();
+      const publish = store.identities.publishDocument;
+      store.identities.publishDocument = async (...args) => {
+        entered.resolve(undefined);
+        await release.promise;
+        return publish(...args);
+      };
+      const document = {
+        season: 2025,
+        players: [
+          {
+            ...player,
+            espnIdentity: {
+              id: "espn-current",
+              facts: { firstName: "Current", lastName: "Player", number: "7" },
+            },
+          },
+        ],
+      };
+      const writing = write(document);
+      assert.equal(
+        await Promise.race([entered.promise.then(() => true), writing.then(() => false)]),
+        true,
+      );
+      const retryKey = `identity:retry:${encodeURIComponent(key)}`;
+      const failedKey = `${IDENTITY_ERROR_PREFIX}failed:${encodeURIComponent(key)}`;
+      assert.equal(stored.get(retryKey).records[0].id, "espn-current");
+      assert.equal(stored.get(failedKey), 1);
+      if (cached) await job.delete(answerKey);
+      else await store.docs.remove(key);
+      assert.equal(stored.has(retryKey), false);
+      assert.equal(stored.has(failedKey), false);
+      unavailable = false;
+      release.resolve(undefined);
+      await writing;
+      assert.deepEqual(cached ? stored.get(key).body : stored.get(key), {
+        season: 2025,
+        players: [player],
+      });
+      assert.equal(stored.get(retryKey).records[0].id, "espn-current");
+      assert.equal(stored.get(failedKey), 1);
+      assert.equal((await store.identities.readStatus()).checks.verified, false);
       await store.identities.backfill(store.docs);
       await finishBackfill(store);
-      const status = await store.identities.readStatus();
-      assert.equal(status.backfill.complete, true);
-      assert.equal(status.errors, 1);
-      assert.equal(status.checks.verified, false);
-      assert.equal(stored.has(`${IDENTITY_ERROR_PREFIX}failed:${encodeURIComponent(key)}`), false);
-      await write(document(false));
-      assert.equal(await readIdentitySourceRejections(ctx.storage, key), 0);
+      assert.equal(stored.has(retryKey), false);
       assert.equal((await store.identities.readStatus()).checks.verified, true);
+      assert.equal(
+        (await store.identities.lookup.readEligible("player", "espn", "espn-current"))?.internalId,
+        id,
+      );
+    }
+  });
+}
+
+for (const replacement of [false, true]) {
+  test(`feed rejection accounting ignores an answer ${replacement ? "replaced" : "deleted"} before accounting`, async () => {
+    const { ctx, stored } = createDurableObjectContext();
+    const key = "feed:fixture";
+    const policy = {
+      ...POLICY,
+      readSavedVendorGames: (asked, value) =>
+        asked === key ? { records: [], rejected: value.rejected } : null,
+    };
+    const identities = createIdentityDocuments(ctx.storage, policy);
+    const answer = { rejected: 1 };
+    stored.set(key, answer);
+    await identities.noteFeedAnswer(key, answer);
+    const transaction = ctx.storage.transaction;
+    let changed = false;
+    ctx.storage.transaction = async (change) => {
+      if (!changed) {
+        changed = true;
+        if (replacement) {
+          stored.set(key, { rejected: 0 });
+          await identities.noteFeedAnswer(key, stored.get(key));
+        } else {
+          await ctx.storage.delete(key);
+          await identities.forgetSource(key);
+        }
+      }
+      return transaction(change);
+    };
+    await identities.noteFeedAnswer(key, answer);
+    assert.equal(changed, true);
+    assert.equal((await identities.readStatus()).errors, 0);
+  });
+}
+
+test("fallback publication retains fresh and earlier vendor rejections through recovery", async () => {
+  for (const variant of LEAGUE_STORES) {
+    for (const cached of [false, true]) {
+      for (const rejectedBefore of [false, true]) {
+        const { ctx, stored } = createDurableObjectContext();
+        const store = variant.create(ctx);
+        const id = "p_fallback";
+        if (variant.name === "internal")
+          await store.identities.lookup.save([
+            {
+              type: "player",
+              vendor: variant.league,
+              vendorId: "native-player",
+              internalId: id,
+              evidence: { method: "discovery" },
+            },
+          ]);
+        const key = cached ? "job:details:detail-answer:/players?season=2025" : "seasons/2025";
+        const player = { id, firstName: "Example", lastName: "Player" };
+        const document = (rejected) => ({
+          season: 2025,
+          players: [{ ...player, ...(rejected && { espnIdentity: { id: null } }) }],
+        });
+        const write = (source) =>
+          cached
+            ? store
+                .createJobStorage("details")
+                .put("detail-answer:/players?season=2025", { body: source })
+            : store.docs.write(key, source);
+        await write(document(rejectedBefore));
+        await finishBackfill(store);
+        const before = structuredClone(stored.get(key));
+        const transaction = ctx.storage.transaction;
+        let failed = false;
+        ctx.storage.transaction = (change) =>
+          transaction((inner) =>
+            change({
+              ...inner,
+              get: async (asked) => {
+                if (asked === key && !failed) {
+                  failed = true;
+                  throw new Error("Primary publication unavailable");
+                }
+                return inner.get(asked);
+              },
+            }),
+          );
+        await write(document(!rejectedBefore));
+        assert.equal(failed, true);
+        assert.deepEqual(stored.get(key), before);
+        assert.equal(await readIdentitySourceRejections(ctx.storage, key), 1);
+        assert.equal(stored.get(`${IDENTITY_ERROR_PREFIX}failed:${encodeURIComponent(key)}`), 1);
+        await store.identities.backfill(store.docs);
+        await finishBackfill(store);
+        const status = await store.identities.readStatus();
+        assert.equal(status.backfill.complete, true);
+        assert.equal(status.errors, 1);
+        assert.equal(status.checks.verified, false);
+        assert.equal(
+          stored.has(`${IDENTITY_ERROR_PREFIX}failed:${encodeURIComponent(key)}`),
+          false,
+        );
+        await write(document(false));
+        assert.equal(await readIdentitySourceRejections(ctx.storage, key), 0);
+        assert.equal((await store.identities.readStatus()).checks.verified, true);
+      }
     }
   }
 });

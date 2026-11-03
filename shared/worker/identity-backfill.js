@@ -16,6 +16,7 @@ import {
   IDENTITY_COVERAGE_KEY,
   IDENTITY_BACKFILL_KEY,
   saveIdentitySourceProblems,
+  saveIdentityError,
   saveIdentitySourceRejections,
   readIdentitySourceRejections,
 } from "./identity.js";
@@ -318,33 +319,35 @@ export function createIdentityBackfill(storage, options, now) {
       published = matched;
     }
     if (!isActive()) return false;
-    if (policy.nativeIdMode === "internal") {
-      const expected = source.kind === "document" ? source.document : value;
-      const finalized =
-        published &&
-        (await storage.transaction(async (transaction) => {
-          if (!isActive() || !isSameJson(await transaction.get(key), expected)) return false;
-          if (
-            source.kind === "document" &&
-            (await readIdentitySourceRejections(transaction, key)) !== source.retainedRejections
-          )
-            return false;
-          await saveIdentitySourceProblems(
-            transaction,
-            key,
-            countSourceRejections(source, pending),
-            pending.nativeMissingEntries ?? 0,
-          );
+    const expected = source.kind === "document" ? source.document : value;
+    const finalized =
+      published &&
+      (await storage.transaction(async (transaction) => {
+        if (!isActive() || !isSameJson(await transaction.get(key), expected)) return false;
+        if (
+          source.kind === "document" &&
+          (await readIdentitySourceRejections(transaction, key)) !== source.retainedRejections
+        )
+          return false;
+        if (source.kind !== "mappings") {
+          if (policy.nativeIdMode === "internal")
+            await saveIdentitySourceProblems(
+              transaction,
+              key,
+              countSourceRejections(source, pending),
+              pending.nativeMissingEntries ?? 0,
+            );
+          else await saveIdentityError(transaction, key, countSourceRejections(source, pending));
           if (source.kind === "document")
             await saveIdentitySourceRejections(transaction, key, source.rejected ?? 0);
-          return true;
-        }));
-      if (!finalized) {
-        await forgetSource(key);
-        progress.pending = null;
-        return false;
-      }
-    } else await saveErrors(key, countSourceRejections(source, pending));
+        }
+        return true;
+      }));
+    if (!finalized) {
+      await forgetSource(key);
+      progress.pending = null;
+      return false;
+    }
     if (progress.phase !== "facts" && published)
       await saveErrors(key, 0, "failed", source.retryEvidence ?? null);
     progress.missingEntries += pending.missingEntries;
