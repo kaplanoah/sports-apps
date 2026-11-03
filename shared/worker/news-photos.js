@@ -1,5 +1,5 @@
 import { chooseFrameTop, isTallerThanFrame } from "../page/news-photo.js";
-import { requestClaude } from "./claude.js";
+import { isClaudeRefusal, requestClaude } from "./claude.js";
 import { hashText } from "./hash-text.js";
 import { readPhotoSize } from "./image-size.js";
 import { describeError } from "./responses.js";
@@ -7,8 +7,9 @@ import { describeError } from "./responses.js";
 // Framing the photos the news cards show: each photo's size, read once from the start of its file,
 // so a card draws its frame before the photo arrives, and, for a photo taller than the frame, where
 // Claude says its subject is, asked once. A photo whose size or subject a run couldn't read is tried
-// again on the next runs, a few times at most. Each is kept under a hash of its address, so a photo
-// several stories share is read once, until no card shows it.
+// again on the next runs, a few times at most, but for Claude turning the claude service's key
+// away, or a Worker without its binding, which says nothing about the photo. Each is kept under a
+// hash of its address, so a photo several stories share is read once, until no card shows it.
 
 export const PHOTO_MODEL = "claude-haiku-5-5";
 const MAX_ANSWER_TOKENS = 1024;
@@ -38,9 +39,12 @@ export const PHOTO_SPOT_SCHEMA = {
  */
 
 /**
- * What framing a photo reads with: the claude service, whether it has its API key, and the fetch
- * that reads a photo's size.
- * @typedef {{ claude: import("./claude.js").Claude, canAsk: boolean, fetchImpl: typeof fetch }} PhotoContext
+ * What framing a photo reads with: the claude service, whether it has its API key, asked only once
+ * a photo needs Claude, and the fetch that reads a photo's size.
+ * @typedef {object} PhotoContext
+ * @property {import("./claude.js").Claude} claude
+ * @property {() => Promise<boolean>} canAsk
+ * @property {typeof fetch} fetchImpl
  */
 
 /** @param {number} percent */
@@ -83,15 +87,31 @@ const hasSize = (frame) => Boolean(frame.width && frame.height);
 const needsSpot = (frame) =>
   hasSize(frame) && isTallerThanFrame(frame) && frame.frameTop === undefined;
 
-/**
- * @param {PhotoFrame | undefined} frame
- * @param {boolean} canAsk whether the claude service has its API key
- */
-const isWaiting = (frame, canAsk) =>
-  !frame || ((frame.tries ?? 0) < MAX_TRIES && (!hasSize(frame) || (canAsk && needsSpot(frame))));
+/** @param {PhotoFrame | undefined} frame */
+const isUnfinished = (frame) =>
+  !frame || ((frame.tries ?? 0) < MAX_TRIES && (!hasSize(frame) || needsSpot(frame)));
 
 /**
- * The photo's frame with what this run could add to it, or with one more try when it failed.
+ * The photos this run reads, leaving out those that wait on Claude alone while the claude service
+ * has no API key.
+ * @param {PhotoContext} context
+ * @param {string[]} urls
+ * @param {Map<string, PhotoFrame>} frames
+ */
+async function listWaitingPhotos({ canAsk }, urls, frames) {
+  const unfinished = urls.filter((url) => isUnfinished(frames.get(url)));
+  const waitsOnClaude = (/** @type {string} */ url) => {
+    const frame = frames.get(url);
+    return frame !== undefined && needsSpot(frame);
+  };
+  const isAskable = !unfinished.some(waitsOnClaude) || (await canAsk());
+  const waiting = isAskable ? unfinished : unfinished.filter((url) => !waitsOnClaude(url));
+  return waiting.slice(0, PHOTOS_PER_RUN);
+}
+
+/**
+ * The photo's frame with what this run could add to it, or with one more try when it failed for
+ * the photo.
  * @param {PhotoContext} context
  * @param {string} url
  * @param {PhotoFrame} kept
@@ -101,11 +121,12 @@ async function readFrame({ claude, canAsk, fetchImpl }, url, kept) {
   let frame = kept;
   try {
     if (!hasSize(frame)) frame = { ...frame, ...(await readPhotoSize(fetchImpl, url)) };
-    if (canAsk && needsSpot(frame))
+    if (needsSpot(frame) && (await canAsk()))
       frame = { ...frame, frameTop: await askFrameTop(claude, url, frame) };
     return { frame, failed: false };
   } catch (error) {
     console.error(`Framing the photo ${url} failed: ${describeError(error)}`);
+    if (isClaudeRefusal(error)) return { frame, failed: true };
     return { frame: { ...frame, tries: (frame.tries ?? 0) + 1 }, failed: true };
   }
 }
@@ -136,9 +157,7 @@ export async function frameNewsPhotos({ storage, ...context }, urls) {
       return frame ? [[url, frame]] : [];
     }),
   );
-  const waiting = urls
-    .filter((url) => isWaiting(frames.get(url), context.canAsk))
-    .slice(0, PHOTOS_PER_RUN);
+  const waiting = await listWaitingPhotos(context, urls, frames);
   const read = await Promise.all(
     waiting.map((url) => readFrame(context, url, frames.get(url) ?? { url })),
   );

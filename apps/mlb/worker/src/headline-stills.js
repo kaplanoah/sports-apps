@@ -1,5 +1,5 @@
 import {
-  MissingClaudeBinding,
+  isClaudeRefusal,
   lacksClaudeKey,
   requestClaude,
 } from "../../../../shared/worker/claude.js";
@@ -15,8 +15,9 @@ import { isSameJson } from "../../../../shared/page/compare.js";
 // does, and is asked about again a few minutes later, as the job tries again a read that failed,
 // until it has gone unanswered a few times, when it counts as clean. Claude turning the claude
 // service's key away, or a Worker without the service's binding, isn't a still going unanswered,
-// so neither ever clears one. While the claude service has no API key, each still counts as clean. The answers are kept
-// for the current season's games only, since the job reads no other season's.
+// so neither ever clears one. While the claude service has no API key, each still counts as
+// clean. The answers are kept for the current season's games only, since the job reads no other
+// season's.
 
 export const STILL_MODEL = "claude-haiku-5-5";
 const MAX_ANSWER_TOKENS = 1024;
@@ -38,8 +39,6 @@ export const STILL_SCHEMA = {
 
 // How many reads a still may go unanswered before it counts as clean.
 export const MAX_STILL_TRIES = 3;
-// Claude turning the claude service's key away, which says nothing about the still.
-const REFUSED_KEY_STATUSES = new Set([401, 403]);
 const CHECKS_PREFIX = "headline-stills:";
 const MISSES_PREFIX = "headline-still-misses:";
 // The season whose games' answers are kept.
@@ -99,10 +98,7 @@ async function checkStills(claude, stills) {
       continue;
     }
     firstError ??= result.reason;
-    const isKeyRefused =
-      result.reason instanceof MissingClaudeBinding ||
-      REFUSED_KEY_STATUSES.has(result.reason?.status);
-    (isKeyRefused ? refused : missed).push(stills[index]);
+    (isClaudeRefusal(result.reason) ? refused : missed).push(stills[index]);
   }
   return { answers, missed, refused, firstError };
 }

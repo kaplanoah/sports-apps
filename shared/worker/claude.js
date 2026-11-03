@@ -23,6 +23,9 @@
  * @property {(options: ClaudeRequest) => Promise<ClaudeResult>} requestClaude
  */
 
+/** The service's own words for its missing API key, which the news status repeats. */
+export const MISSING_CLAUDE_KEY = "no ANTHROPIC_API_KEY secret";
+
 /** A Worker without the claude service's binding, which says nothing about what it asked. */
 export class MissingClaudeBinding extends Error {
   constructor() {
@@ -30,31 +33,48 @@ export class MissingClaudeBinding extends Error {
   }
 }
 
-/** @param {Claude | undefined} claude */
-function findService(claude) {
-  if (!claude) throw new MissingClaudeBinding();
-  return claude;
-}
+// Claude turning the claude service's key away, which says nothing about what it asked.
+const REFUSED_KEY_STATUSES = new Set([401, 403]);
 
 /**
- * The service's calls, each counted as it goes out. Without the binding, each call fails, as a
- * service that doesn't answer does.
+ * Whether a call failed for the binding or the key rather than for what it asked, so the ask
+ * shouldn't count against what it was about.
+ * @param {unknown} error
+ */
+export const isClaudeRefusal = (error) =>
+  error instanceof MissingClaudeBinding ||
+  REFUSED_KEY_STATUSES.has(/** @type {{ status?: number }} */ (error)?.status);
+
+const failUnbound = async () => {
+  throw new MissingClaudeBinding();
+};
+
+/**
+ * A Worker without the binding, whose every call fails, as a service that doesn't answer does,
+ * and is never counted, since nothing goes out.
+ * @type {Claude}
+ */
+const UNBOUND_CLAUDE = { readConfig: failUnbound, requestClaude: failUnbound };
+
+/**
+ * The service's calls, each counted as it goes out.
  * @param {Claude | undefined} claude
  * @param {() => void} count
  * @returns {Claude}
  */
-export const countClaudeCalls = (claude, count) => ({
-  readConfig: async () => {
-    const service = findService(claude);
-    count();
-    return await service.readConfig();
-  },
-  requestClaude: async (options) => {
-    const service = findService(claude);
-    count();
-    return await service.requestClaude(options);
-  },
-});
+export function countClaudeCalls(claude, count) {
+  if (!claude || claude === UNBOUND_CLAUDE) return UNBOUND_CLAUDE;
+  return {
+    readConfig: async () => {
+      count();
+      return await claude.readConfig();
+    },
+    requestClaude: async (options) => {
+      count();
+      return await claude.requestClaude(options);
+    },
+  };
+}
 
 /**
  * The service's calls, with its config read once, since it holds for a run.

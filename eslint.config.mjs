@@ -273,8 +273,8 @@ export default [
     languageOptions: { globals: { ...globals.serviceworker, WebSocketPair: "readonly" } },
   },
   {
-    // Every answer the Workers and the tooling ask Claude for comes through the claude service,
-    // which holds it to a JSON schema, so none has to be picked out of prose.
+    // Every answer a Worker asks Claude for comes through the claude service, which holds it to a
+    // JSON schema, so none has to be picked out of prose. The tooling asks Claude for none.
     files: [
       "apps/*/worker/src/**/*.js",
       "services/*/worker/src/**/*.js",
@@ -289,7 +289,7 @@ export default [
         {
           selector: `Literal[value=${CLAUDE_MESSAGES}], TemplateElement[value.cooked=${CLAUDE_MESSAGES}]`,
           message:
-            "Ask Claude with requestClaude from shared/worker/claude.js, through the claude service, and a JSON schema.",
+            "A Worker asks Claude with requestClaude from shared/worker/claude.js, through the claude service, and a JSON schema; the tooling asks it nothing.",
         },
       ],
     },

@@ -9,6 +9,7 @@ import {
 import { createFeedKeeper } from "../shared/worker/feed-keeper.js";
 import { createDocs, createJobStorage } from "./job-context.js";
 import { createClaudeService } from "../services/claude/worker/src/service.js";
+import { countClaudeCalls } from "../shared/worker/claude.js";
 
 /**
  * Runs `work` with console.error held, and answers what it logged.
@@ -119,13 +120,15 @@ test("a run's requests count each call to the claude service, its config read on
   await runWithStatus(createJobContext(service), job);
   assert.equal(docs.stored.get("news/status").requests, 2);
 
-  await runWithStatus(createJobContext(undefined), job);
-  const missing = docs.stored.get("news/status");
-  assert.equal(missing.requests, 0);
-  assert.equal(
-    missing.lastFailure.message,
-    "The run failed: No CLAUDE binding to the claude service",
-  );
+  for (const unbound of [undefined, countClaudeCalls(undefined, () => {})]) {
+    await runWithStatus(createJobContext(unbound), job);
+    const missing = docs.stored.get("news/status");
+    assert.equal(missing.requests, 0);
+    assert.equal(
+      missing.lastFailure.message,
+      "The run failed: No CLAUDE binding to the claude service",
+    );
+  }
 });
 
 test("job feed reads name cold and retained failures once even through outer job catches", async (context) => {

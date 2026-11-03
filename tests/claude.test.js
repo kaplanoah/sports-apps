@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  MissingClaudeBinding,
   countClaudeCalls,
+  isClaudeRefusal,
   lacksClaudeKey,
   rememberClaudeConfig,
   requestClaude,
@@ -56,14 +58,29 @@ test("a call to the service spends a request budget, and one the budget has no r
   assert.equal(fetches, 1);
 });
 
-test("without a CLAUDE binding, each call fails, counting nothing", async () => {
+test("without a CLAUDE binding, each call fails, counting nothing however often it's counted", async () => {
   let count = 0;
-  const claude = countClaudeCalls(undefined, () => {
+  const countCall = () => {
     count += 1;
-  });
+  };
+  const claude = countClaudeCalls(countClaudeCalls(undefined, countCall), countCall);
+  await assert.rejects(claude.readConfig(), MissingClaudeBinding);
   await assert.rejects(claude.requestClaude(OPTIONS), /No CLAUDE binding to the claude service/);
   await assert.rejects(requestClaude(claude, OPTIONS), /No CLAUDE binding/);
   assert.equal(count, 0);
+});
+
+test("only a missing binding, or Claude turning the key away, is a refusal", async () => {
+  const fail = (status) =>
+    requestClaude(createService({ result: { problem: "no", status } }), OPTIONS).catch(
+      (error) => error,
+    );
+  assert.equal(isClaudeRefusal(new MissingClaudeBinding()), true);
+  assert.equal(isClaudeRefusal(await fail(401)), true);
+  assert.equal(isClaudeRefusal(await fail(403)), true);
+  assert.equal(isClaudeRefusal(await fail(529)), false);
+  assert.equal(isClaudeRefusal(await fail(undefined)), false);
+  assert.equal(isClaudeRefusal(new Error("timed out")), false);
 });
 
 test("only a service that says it has no key lacks one; one that fails or isn't bound doesn't", async () => {

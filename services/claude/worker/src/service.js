@@ -1,3 +1,4 @@
+import { MISSING_CLAUDE_KEY } from "../../../../shared/worker/claude.js";
 import { abortAfter } from "../../../../shared/worker/timeout.js";
 
 // Asking Claude, with the service's own API key, for an answer in the shape a JSON schema sets,
@@ -6,7 +7,6 @@ import { abortAfter } from "../../../../shared/worker/timeout.js";
 
 const MESSAGES_URL = "https://api.anthropic.com/v1/messages";
 const API_VERSION = "2023-06-01";
-const MISSING_KEY = "no ANTHROPIC_API_KEY secret";
 
 /** @typedef {import("../../../../shared/worker/claude.js").ClaudeRequest} ClaudeRequest */
 /** @typedef {import("../../../../shared/worker/claude.js").ClaudeResult} ClaudeResult */
@@ -73,7 +73,9 @@ const hideKey = (text, apiKey) => text.replaceAll(apiKey, "<key>");
 export function createClaudeService(env, fetchImpl = fetch) {
   async function readHealth() {
     const release = env.VERSION?.tag ?? null;
-    return readKey(env) ? { ok: true, release } : { ok: false, release, problem: MISSING_KEY };
+    return readKey(env)
+      ? { ok: true, release }
+      : { ok: false, release, problem: MISSING_CLAUDE_KEY };
   }
 
   const readConfig = async () => ({ configured: Boolean(readKey(env)) });
@@ -84,7 +86,7 @@ export function createClaudeService(env, fetchImpl = fetch) {
    */
   async function requestClaude(options) {
     const apiKey = readKey(env);
-    if (!apiKey) return { problem: `The claude service has ${MISSING_KEY}` };
+    if (!apiKey) return { problem: `The claude service has ${MISSING_CLAUDE_KEY}` };
     try {
       const result = await askMessages(apiKey, fetchImpl, options);
       return "problem" in result ? { ...result, problem: hideKey(result.problem, apiKey) } : result;

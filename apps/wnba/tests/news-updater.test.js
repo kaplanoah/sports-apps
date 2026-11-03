@@ -527,6 +527,38 @@ test("a photo Claude couldn't place is asked about again on the next runs, three
   assert.deepEqual(docs.stored.get("news/status").photos, { framed: 0, failed: 1 });
 });
 
+test("a photo Claude turned the key away for keeps its size and every try", async () => {
+  const { storage, runJob } = createRun();
+  const spotRequests = [];
+  for (let run = 0; run < 4; run += 1)
+    await runJob(createFetch({ photoSize: TALL_PHOTO, spotStatus: 401, spotRequests }));
+
+  const frames = [...(await storage.list("photo:")).values()];
+  assert.ok(frames.length > 0);
+  assert.ok(spotRequests.length >= frames.length * 4);
+  assert.ok(frames.every((frame) => frame.width === 683 && frame.tries === undefined));
+  assert.ok(frames.every((frame) => frame.frameTop === undefined));
+});
+
+test("a run with no story waiting and no photo waiting on Claude asks the claude service nothing", async () => {
+  let calls = 0;
+  const fetchImpl = createFetch();
+  const claude = countClaudeCalls(createClaudeService(ENV, fetchImpl), () => {
+    calls += 1;
+  });
+  const { docs, runJob } = createRun({ claude });
+  await runJob(fetchImpl);
+  await runJob(fetchImpl);
+  assert.ok(listCardPhotos(docs).every((photo) => photo.width === 1800));
+  const before = calls;
+
+  await runJob(fetchImpl);
+
+  assert.ok(before > 0);
+  assert.equal(calls, before);
+  assert.equal(docs.stored.get("news/status").problem, "");
+});
+
 test("a photo whose size couldn't be read is read again on the next runs, three times at most", async () => {
   const { docs, runJob } = createRun();
   const photoReads = [];
