@@ -13,6 +13,7 @@ import {
   isIdentityEntityKey,
   IDENTITY_PREFIX,
   IDENTITY_PREFIX_END,
+  IDENTITY_COVERAGE_KEY,
 } from "./identity.js";
 
 export const IDENTITY_AUDIT_VERSION = 2;
@@ -22,7 +23,7 @@ export const IDENTITY_WORK_INTERVAL_MS = 60_000;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const BACKFILL_KEY = `${IDENTITY_PREFIX}backfill`;
 const WORK_KEY = `${IDENTITY_PREFIX}work`;
-export const IDENTITY_COVERAGE_KEY = `${IDENTITY_PREFIX}coverage-revision`;
+export { IDENTITY_COVERAGE_KEY };
 const MAX_CANDIDATE_BYTES = 512 * 1024;
 const RETRY_DELAY_MS = 60_000;
 const MAX_RETRY_MS = 60 * 60 * 1000;

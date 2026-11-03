@@ -54,7 +54,9 @@ const hasIdentifier = (value) =>
 
 /** @param {any} storage @param {IdentityPolicy} policy @param {() => number} [now] */
 export function createIdentityDocuments(storage, policy, now = Date.now) {
-  const lookup = createIdentityLookup(storage, policy.league);
+  const lookup = createIdentityLookup(storage, policy.league, {
+    nativeVendor: policy.nativeIdMode === "internal" ? policy.vendor : null,
+  });
 
   const nameRetryKey = (key) => `${IDENTITY_PREFIX}retry:${encodeURIComponent(key)}`;
   const nameErrorKey = (key, kind) => `${ERROR_PREFIX}${kind}:${encodeURIComponent(key)}`;
@@ -352,13 +354,8 @@ export function createIdentityDocuments(storage, policy, now = Date.now) {
       rememberNatives(saved);
     }
     const rejectedCount = rejected + results.filter((result) => result.missing).length;
-    const recoveredRegistration =
-      policy.nativeIdMode === "internal" &&
-      !rejectedCount &&
-      (await storage.get(nameErrorKey(sourceKey, "rejected"))) > 0;
     await saveErrors(sourceKey, rejectedCount);
     if (
-      recoveredRegistration ||
       observations.some(
         (observation, index) =>
           observation.type === "game" &&

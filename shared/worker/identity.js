@@ -14,6 +14,7 @@ import { readPlayerName } from "./player-name.js";
 import { hashTextInFull } from "./hash-text.js";
 
 export const IDENTITY_PREFIX = "identity:";
+export const IDENTITY_COVERAGE_KEY = `${IDENTITY_PREFIX}coverage-revision`;
 export const IDENTITY_PREFIX_END = namePrefixEnd(IDENTITY_PREFIX);
 const VENDOR_PREFIX = `${IDENTITY_PREFIX}vendor:`;
 const ENTITY_PREFIX = `${IDENTITY_PREFIX}entity:`;
@@ -161,12 +162,15 @@ async function ensureEntity(transaction, league, observation) {
   };
 }
 
-/** @param {any} transaction @param {string} league @param {any} observation */
-async function saveAssociation(transaction, league, observation) {
+/** @param {any} transaction @param {string} league @param {any} observation @param {string | null} nativeVendor */
+async function saveAssociation(transaction, league, observation, nativeVendor) {
   const { type, vendor, vendorId, internalId, evidence, decisive = false } = observation;
   const key = nameVendorKey(league, type, vendor, vendorId);
   const previous = await transaction.get(key);
   const { entry, created, addedFacts } = await ensureEntity(transaction, league, observation);
+  const needsCoverage =
+    vendor === nativeVendor &&
+    !hasCoherentAssociation(entry, previous, { league, type, vendor, vendorId, internalId });
   const competingId = entry.vendors[vendor];
   if (
     (previous && previous.internalId !== internalId) ||
@@ -220,6 +224,7 @@ async function saveAssociation(transaction, league, observation) {
     await transaction.put(key, updated);
   }
   if (!observation.preserveProblem) await saveProblem(transaction, league, key, null, decisive);
+  if (needsCoverage) await transaction.put(IDENTITY_COVERAGE_KEY, crypto.randomUUID());
   return { internalId, disputed: false, created, addedFacts };
 }
 
@@ -298,8 +303,9 @@ async function readEligibleAssociation(transaction, league, type, vendor, vendor
  * The storage transaction owns lookup and creation, including collision checks and reconciliation.
  * @param {any} storage Durable Object storage
  * @param {string} league
+ * @param {{ nativeVendor?: string | null }} [options]
  */
-export function createIdentityLookup(storage, league) {
+export function createIdentityLookup(storage, league, { nativeVendor = null } = {}) {
   /** @param {any[]} observations @param {string | null} [factsRevision] @param {boolean} [includeEntries] */
   async function saveObservations(observations, factsRevision = undefined, includeEntries = false) {
     observations.forEach((observation) => validateSportsData(IdentityObservation, observation));
@@ -334,7 +340,7 @@ export function createIdentityLookup(storage, league) {
           results.push({ vendorId: observation.vendorId, internalId: null, disputed: false });
           continue;
         }
-        const result = await saveAssociation(transaction, league, observation);
+        const result = await saveAssociation(transaction, league, observation, nativeVendor);
         results.push({
           ...result,
           vendorId: observation.vendorId,
@@ -410,7 +416,7 @@ export function createIdentityLookup(storage, league) {
         } while (await transaction.get(nameEntityKey(league, asked.type, internalId)));
         const observation = { ...asked, internalId, evidence: { method: "discovery" } };
         validateSportsData(IdentityObservation, observation);
-        await saveAssociation(transaction, league, observation);
+        await saveAssociation(transaction, league, observation, nativeVendor);
         return internalId;
       });
     },

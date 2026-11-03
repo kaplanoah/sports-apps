@@ -38,7 +38,7 @@ While a league is being built, a sandbox Worker may try its feeds from Cloudflar
 
    A new league should create opaque game and player IDs during ingestion with the shared lookup, keep vendor IDs in scoped mappings, and persist explicit season, competition, round and game-number fields. Never copy the existing apps' legacy assumption that an internal ID equals a vendor ID. Test concurrent discovery, repeated ingestion, postponements, resumed games, trades, uncertain matches and decisive repairs against actual storage.
 
-   Select the internal-ID preparation mode described in the worker rules before writing opaque records. Register native identities during ingestion first; document preparation refreshes their facts without inventing vendor aliases. Test the actual snapshot, detail-answer and background writers, including incomplete registration and backfill restarts.
+   Select the internal-ID preparation mode in the worker rules and register native identities during ingestion before writing opaque records. Test the actual snapshot, detail-answer and background writers, including incomplete registration and backfill restarts.
 
    Opaque-ID readers, the vendor merge and per-part provenance are later prerequisites for the existing apps, not facilities implemented here. Introduce missing shared facilities with contract tests before a new league depends on them. The merge must keep coherent game state, rank eligible fresh answers above saved ones, preserve corrections and expose uncertainty in health.
 
