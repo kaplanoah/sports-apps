@@ -30,13 +30,15 @@ const WORK_KEY = `${IDENTITY_PREFIX}work`;
 const MAX_CANDIDATE_BYTES = 512 * 1024;
 const RETRY_DELAY_MS = 60_000;
 const MAX_RETRY_MS = 60 * 60 * 1000;
+export const AUDIT_PHASES = { documents: "documents", facts: "facts", vendors: "vendors" };
+const AUDIT_STAGES = { native: "native", candidates: "candidates", vendor: "vendor", done: "done" };
 
 const createProgress = (coverageRevision = null) => ({
   version: IDENTITY_AUDIT_VERSION,
   cursor: "",
   checkedDocuments: 0,
   complete: false,
-  phase: "documents",
+  phase: AUDIT_PHASES.documents,
   missingEntries: 0,
   nativeMissingEntries: 0,
   missingFacts: 0,
@@ -48,9 +50,50 @@ const createProgress = (coverageRevision = null) => ({
 
 const describeSignature = (value) => hashTextInFull(JSON.stringify(value));
 
+const readOptionalCount = (value) => (Number.isSafeInteger(value) && value >= 0 ? value : null);
+
+const chooseWorkAllowance = (previous, at) => {
+  const day = Math.floor(at / DAY_MS);
+  return previous?.day >= day ? previous : { day, used: 0, nextAt: 0 };
+};
+
+function describeWorkAllowance(previous, at) {
+  const allowance = chooseWorkAllowance(previous, at);
+  const resetsAt = (allowance.day + 1) * DAY_MS;
+  const nextDay = allowance.used + IDENTITY_WORK_PER_RUN > IDENTITY_WORK_PER_DAY;
+  return {
+    perRun: IDENTITY_WORK_PER_RUN,
+    dailyLimit: IDENTITY_WORK_PER_DAY,
+    minimumIntervalMs: IDENTITY_WORK_INTERVAL_MS,
+    reserved: readOptionalCount(allowance.used),
+    remaining: readOptionalCount(Math.max(0, IDENTITY_WORK_PER_DAY - allowance.used)),
+    resetsAt: readOptionalCount(resetsAt),
+    lastReservedAt: readOptionalCount(previous?.nextAt - IDENTITY_WORK_INTERVAL_MS),
+    nextReservationAt: readOptionalCount(
+      Math.max(at, nextDay ? resetsAt : Math.min(allowance.nextAt, resetsAt)),
+    ),
+  };
+}
+
+function describeCheckpoint(progress, current) {
+  const pending = progress?.pending;
+  return {
+    current,
+    phase: Object.values(AUDIT_PHASES).includes(progress?.phase) ? progress.phase : null,
+    stage: Object.values(AUDIT_STAGES).includes(pending?.stage) ? pending.stage : null,
+    offset: readOptionalCount(pending?.offset),
+    candidateGroupOffset: readOptionalCount(pending?.groupOffset),
+    candidates: Array.isArray(pending?.candidates) ? pending.candidates.length : null,
+    gameIndexComplete: progress?.indexes?.game?.complete === true,
+    playerIndexComplete: progress?.indexes?.player?.complete === true,
+    savedAt: readOptionalCount(progress?.savedAt),
+    retryAfter: current && progress?.complete ? readOptionalCount(progress.retryAfter) : null,
+  };
+}
+
 function chooseSourceStage(source) {
-  if (source.kind !== "vendor") return "native";
-  return source.records.length ? "candidates" : "done";
+  if (source.kind !== "vendor") return AUDIT_STAGES.native;
+  return source.records.length ? AUDIT_STAGES.candidates : AUDIT_STAGES.done;
 }
 
 function countSourceRejections(source, pending) {
@@ -90,17 +133,16 @@ export function createIdentityBackfill(storage, options, now) {
     await storage.transaction(async (transaction) => {
       const latest = await transaction.get(IDENTITY_BACKFILL_KEY);
       if (!isActive() || !isSameJson(latest, previous)) return;
-      await transaction.put(IDENTITY_BACKFILL_KEY, progress);
+      await transaction.put(IDENTITY_BACKFILL_KEY, { ...progress, savedAt: now() });
     });
   }
 
   async function reserveWork(isActive) {
     const at = now();
-    const day = Math.floor(at / DAY_MS);
     return storage.transaction(async (transaction) => {
       if (!isActive()) return false;
       const previous = await transaction.get(WORK_KEY);
-      const budget = previous?.day >= day ? previous : { day, used: 0, nextAt: 0 };
+      const budget = chooseWorkAllowance(previous, at);
       if (budget.nextAt > at || budget.used + IDENTITY_WORK_PER_RUN > IDENTITY_WORK_PER_DAY)
         return false;
       await transaction.put(WORK_KEY, {
@@ -170,12 +212,12 @@ export function createIdentityBackfill(storage, options, now) {
         pending.candidateCursor = "";
       }
     }
-    if (pending.groupOffset === prefixes.length) pending.stage = "vendor";
+    if (pending.groupOffset === prefixes.length) pending.stage = AUDIT_STAGES.vendor;
   }
 
   async function saveVendorBatch(source, pending, work, docs) {
     if (pending.nativeRevision !== (await lookup.readFactsRevision())) {
-      pending.stage = "candidates";
+      pending.stage = AUDIT_STAGES.candidates;
       return;
     }
     const count = new Set(source.records.map((record) => String(record.id))).size;
@@ -194,12 +236,12 @@ export function createIdentityBackfill(storage, options, now) {
       });
     } catch (error) {
       if (!(error instanceof IdentityFactsChanged)) throw error;
-      pending.stage = "candidates";
+      pending.stage = AUDIT_STAGES.candidates;
       return;
     }
     pending.offset += results.length;
     if (source.type === "game") await saveGameMatches(results, docs);
-    if (pending.offset >= count) pending.stage = "done";
+    if (pending.offset >= count) pending.stage = AUDIT_STAGES.done;
   }
 
   async function registerNativeBatch(source, pending, work) {
@@ -218,7 +260,7 @@ export function createIdentityBackfill(storage, options, now) {
     pending.offset += batch.length;
     if (pending.offset >= source.observations.length) {
       pending.offset = 0;
-      pending.stage = source.records.length ? "candidates" : "done";
+      pending.stage = source.records.length ? AUDIT_STAGES.candidates : AUDIT_STAGES.done;
     }
   }
 
@@ -256,7 +298,7 @@ export function createIdentityBackfill(storage, options, now) {
     pending.offset += batch.length;
     if (pending.offset >= source.observations.length) {
       pending.offset = 0;
-      pending.stage = source.records.length ? "candidates" : "done";
+      pending.stage = source.records.length ? AUDIT_STAGES.candidates : AUDIT_STAGES.done;
     }
   }
 
@@ -267,7 +309,7 @@ export function createIdentityBackfill(storage, options, now) {
     work.remaining -= consumed;
     pending.conflicts += await lookup.countMappingConflicts(key, batch);
     pending.offset += consumed;
-    if (!vendors || pending.offset >= vendors.length) pending.stage = "done";
+    if (!vendors || pending.offset >= vendors.length) pending.stage = AUDIT_STAGES.done;
   }
 
   async function advanceSource(docs, key, value, source, progress, work, isActive) {
@@ -291,20 +333,21 @@ export function createIdentityBackfill(storage, options, now) {
     const pending = progress.pending;
     if (pending.signature !== signature) {
       pending.signature = signature;
-      if (pending.stage === "candidates" || pending.stage === "vendor") {
-        pending.stage = "candidates";
+      if (pending.stage === AUDIT_STAGES.candidates || pending.stage === AUDIT_STAGES.vendor) {
+        pending.stage = AUDIT_STAGES.candidates;
         delete pending.nativeRevision;
       }
     }
-    while (work.remaining && pending.stage !== "done" && isActive()) {
+    while (work.remaining && pending.stage !== AUDIT_STAGES.done && isActive()) {
       if (source.kind === "mappings") await checkMappingBatch(key, value, pending, work);
-      else if (pending.stage === "candidates")
+      else if (pending.stage === AUDIT_STAGES.candidates)
         await collectCandidates(source, pending, progress, work);
-      else if (pending.stage === "vendor") await saveVendorBatch(source, pending, work, docs);
-      else if (progress.phase === "facts") await checkNativeBatch(source, pending, work);
+      else if (pending.stage === AUDIT_STAGES.vendor)
+        await saveVendorBatch(source, pending, work, docs);
+      else if (progress.phase === AUDIT_PHASES.facts) await checkNativeBatch(source, pending, work);
       else await registerNativeBatch(source, pending, work);
     }
-    if (!isActive() || pending.stage !== "done") return false;
+    if (!isActive() || pending.stage !== AUDIT_STAGES.done) return false;
     const latest = await storage.get(key);
     let published = isSameJson(latest, value);
     if (published && source.kind === "document" && !isSameJson(source.document, value)) {
@@ -348,10 +391,10 @@ export function createIdentityBackfill(storage, options, now) {
       progress.pending = null;
       return false;
     }
-    if (progress.phase !== "facts")
+    if (progress.phase !== AUDIT_PHASES.facts)
       await saveErrors(key, 0, "failed", source.retryEvidence ?? null);
     progress.missingEntries += pending.missingEntries;
-    if (progress.phase === "facts")
+    if (progress.phase === AUDIT_PHASES.facts)
       progress.nativeMissingEntries += pending.nativeMissingEntries ?? 0;
     progress.missingFacts += pending.missingFacts;
     progress.conflicts += pending.conflicts;
@@ -361,9 +404,9 @@ export function createIdentityBackfill(storage, options, now) {
   async function finishPhase(progress) {
     progress.cursor = "";
     progress.pending = null;
-    if (progress.phase === "documents") {
-      progress.phase = "facts";
-    } else if (progress.phase === "facts") progress.phase = "vendors";
+    if (progress.phase === AUDIT_PHASES.documents) {
+      progress.phase = AUDIT_PHASES.facts;
+    } else if (progress.phase === AUDIT_PHASES.facts) progress.phase = AUDIT_PHASES.vendors;
     else {
       progress.complete = true;
       if (progress.recoveryAttempt && (await hasFailedSources()))
@@ -410,7 +453,7 @@ export function createIdentityBackfill(storage, options, now) {
         progress.pending = null;
         continue;
       }
-      if (progress.phase !== "vendors" && key.startsWith(IDENTITY_PREFIX)) {
+      if (progress.phase !== AUDIT_PHASES.vendors && key.startsWith(IDENTITY_PREFIX)) {
         progress.cursor = IDENTITY_PREFIX_END;
         progress.pending = null;
         continue;
@@ -441,10 +484,11 @@ export function createIdentityBackfill(storage, options, now) {
   async function readStatus(errors) {
     const progress = await storage.get(IDENTITY_BACKFILL_KEY);
     const coverageRevision = (await storage.get(IDENTITY_COVERAGE_KEY)) ?? null;
-    const complete =
-      !!progress?.complete &&
-      progress.version === IDENTITY_AUDIT_VERSION &&
-      (progress.coverageRevision ?? null) === coverageRevision;
+    const current =
+      progress?.version === IDENTITY_AUDIT_VERSION &&
+      (progress?.coverageRevision ?? null) === coverageRevision;
+    const complete = !!progress?.complete && current;
+    const allowance = await storage.get(WORK_KEY);
     return {
       checks: {
         verified:
@@ -457,7 +501,12 @@ export function createIdentityBackfill(storage, options, now) {
         missingFacts: progress?.missingFacts ?? 0,
         competingMappings: progress?.conflicts ?? 0,
       },
-      backfill: { complete, checkedDocuments: progress?.checkedDocuments ?? 0 },
+      backfill: {
+        complete,
+        checkedDocuments: progress?.checkedDocuments ?? 0,
+        checkpoint: describeCheckpoint(progress, current),
+        allowance: describeWorkAllowance(allowance, now()),
+      },
     };
   }
 

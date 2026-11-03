@@ -129,6 +129,7 @@
     "tests/identity-diagnostics.test.js",
     "tests/identity-documents.test.js",
     "tests/identity-guards.test.js",
+    "tests/identity-progress.test.js",
     "tests/identity.test.js",
     "tests/install-browsers.test.js",
     "tests/install-packages.test.js",
