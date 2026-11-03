@@ -3,6 +3,7 @@ import { readEasternDay } from "../page/days.js";
 import { isWebAddress } from "../page/html.js";
 import { hashText } from "./hash-text.js";
 import { runWithStatus } from "./job-status.js";
+import { lacksClaudeKey } from "./claude.js";
 import { askClaude } from "./news-claude.js";
 import { frameNewsPhotos } from "./news-photos.js";
 import { describeError } from "./responses.js";
@@ -337,14 +338,9 @@ const addUsage = (total, usage) => ({
 });
 
 /** Asks Claude, counting each day's tokens under the league's Eastern day. */
-function createClaudeAsker({ env, fetchImpl, storage, now }) {
+function createClaudeAsker({ claude, storage, now }) {
   return async (prompt, content) => {
-    const { answers, usage } = await askClaude({
-      apiKey: env.ANTHROPIC_API_KEY,
-      fetchImpl,
-      prompt,
-      content,
-    });
+    const { answers, usage } = await askClaude(claude, { prompt, content });
     const key = `usage:${readEasternDay(now).date}`;
     await storage.put(key, addUsage(await storage.get(key), usage));
     return answers;
@@ -352,9 +348,9 @@ function createClaudeAsker({ env, fetchImpl, storage, now }) {
 }
 
 /** What went wrong asking Claude, or "" when nothing did. */
-async function curateStories(context) {
-  if (!context.env.ANTHROPIC_API_KEY)
-    return "No ANTHROPIC_API_KEY secret, so no story was labeled.";
+async function curateStories({ canAsk, ...context }) {
+  if (!canAsk)
+    return "The claude service has no ANTHROPIC_API_KEY secret, so no story was labeled.";
   const ask = createClaudeAsker(context);
   try {
     await labelWaitingStories({ ...context, ask });
@@ -438,17 +434,18 @@ async function readRecentUsage(storage, now) {
  * @param {NewsLeague} league
  */
 async function keepNews(context, league) {
-  const { docs, storage, env, fetchImpl } = context;
+  const { docs, storage, claude, fetchImpl } = context;
   const now = context.now();
   const { entries, missing } = await league.readFeeds(fetchImpl);
   const stories = await readStories(storage);
   await saveFeedEntries({ storage, stories, entries, now, league });
   await forgetOldStories(storage, stories, now);
   await judgeAgainOnNewRules(storage, stories, league.prompt);
-  const problem = await curateStories({ storage, stories, env, fetchImpl, now, league });
+  const canAsk = !(await lacksClaudeKey(claude));
+  const problem = await curateStories({ storage, stories, claude, canAsk, now, league });
   const cards = listShownCards(stories, now);
   const { frames, framed, failed } = await frameNewsPhotos(
-    { storage, env, fetchImpl },
+    { storage, claude, canAsk, fetchImpl },
     listCardPhotos(cards),
   );
   await saveCards(docs, cards, frames);

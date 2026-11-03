@@ -9,6 +9,8 @@ import { createWnbaNewsJob } from "../worker/src/news-updater.js";
 import { createFeedFetch } from "./news-fixtures.js";
 import { createDocs, createJobStorage } from "../../../tests/job-context.js";
 import { createPng } from "../../../tests/photo-files.js";
+import { countClaudeCalls } from "../../../shared/worker/claude.js";
+import { createClaudeService } from "../../../services/claude/worker/src/service.js";
 
 const NOW = Date.parse("2026-10-05T16:00:00Z");
 const CLAUDE_URL = "https://api.anthropic.com/v1/messages";
@@ -102,14 +104,27 @@ function createFetch({
   };
 }
 
-/** @param {{ env?: Record<string, string>, now?: number }} [options] */
-function createRun({ env = ENV, now = NOW } = {}) {
+/**
+ * @param {{
+ *   env?: Record<string, string>,
+ *   claude?: import("../../../shared/worker/claude.js").Claude,
+ *   now?: number,
+ * }} [options]
+ */
+function createRun({ env = ENV, claude, now = NOW } = {}) {
   const storage = createJobStorage();
   const docs = createDocs();
   const job = createWnbaNewsJob();
   const createLoadSnapshot = () => async () => ({ season: 2026 });
   const runJob = (fetchImpl) =>
-    job.updateStore({ docs, storage, createLoadSnapshot, env, fetchImpl, now: () => now });
+    job.updateStore({
+      docs,
+      storage,
+      createLoadSnapshot,
+      claude: claude ?? createClaudeService(env, fetchImpl),
+      fetchImpl,
+      now: () => now,
+    });
   return { storage, docs, runJob };
 }
 
@@ -283,13 +298,17 @@ test("the topics a store kept before are removed", async () => {
   assert.equal(docs.stored.has("news/topics"), false);
 });
 
-test("the status counts each day's calls and tokens and the run's requests, and names the feeds that didn't answer", async () => {
-  const { docs, runJob } = createRun();
+test("the status counts each day's calls and tokens and the run's requests, each call to the claude service too, and names the feeds that didn't answer", async () => {
   const readFeed = createFetch();
-
   let requests = 0;
-  await runJob(async (url, init) => {
+  const countRequest = () => {
     requests += 1;
+  };
+  const claude = countClaudeCalls(createClaudeService(ENV, readFeed), countRequest);
+  const { docs, runJob } = createRun({ claude });
+
+  await runJob(async (url, init) => {
+    countRequest();
     return String(url).includes("winsidr")
       ? new Response("down", { status: 503 })
       : readFeed(url, init);
@@ -326,16 +345,44 @@ test("a story Claude didn't answer for waits for the next run, and one it labele
   assert.equal(asked.length, waiting);
 });
 
-test("without an API key nothing is asked, and the status says why", async () => {
+test("without the claude service's key nothing is asked, and the status names its secret", async () => {
   const requests = [];
   const { docs, storage, runJob } = createRun({ env: {} });
 
   await runJob(createFetch({ requests }));
 
   assert.equal(requests.length, 0);
-  assert.match(docs.stored.get("news/status").problem, /ANTHROPIC_API_KEY/);
+  assert.match(
+    docs.stored.get("news/status").problem,
+    /claude service has no ANTHROPIC_API_KEY secret/,
+  );
   assert.deepEqual(docs.stored.get("news/cards"), { cards: [] });
   assert.ok(listStoryStates(storage).includes("pending"));
+});
+
+test("without a CLAUDE binding, or with a service that fails, the run goes on, its status says why, and its stories wait", async () => {
+  const broken = {
+    readConfig: async () => {
+      throw new Error("service down");
+    },
+    requestClaude: async () => {
+      throw new Error("service down");
+    },
+  };
+  for (const [claude, problem] of [
+    [countClaudeCalls(undefined, () => {}), /No CLAUDE binding to the claude service/],
+    [broken, /service down/],
+  ]) {
+    const requests = [];
+    const { docs, storage, runJob } = createRun({ claude });
+
+    await runJob(createFetch({ requests }));
+
+    assert.equal(requests.length, 0);
+    assert.match(docs.stored.get("news/status").problem, problem);
+    assert.ok(listStoryStates(storage).includes("pending"));
+    assert.ok(!listStoryStates(storage).includes("kept"));
+  }
 });
 
 test("a run whose call to Claude fails says so, and keeps saying it last failed, and its stories wait for the next run", async () => {
@@ -516,13 +563,14 @@ test("without an API key, no photo is asked about, and one no card shows is forg
   const { docs, storage } = createRun();
   const job = createWnbaNewsJob();
   const spotRequests = [];
+  const fetchImpl = createFetch({ photoSize: TALL_PHOTO, spotRequests });
   const runWith = (env) =>
     job.updateStore({
       docs,
       storage,
       createLoadSnapshot: () => async () => ({ season: 2026 }),
-      env,
-      fetchImpl: createFetch({ photoSize: TALL_PHOTO, spotRequests }),
+      claude: createClaudeService(env, fetchImpl),
+      fetchImpl,
       now: () => NOW,
     });
   await runWith(ENV);

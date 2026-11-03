@@ -37,19 +37,23 @@ export const PHOTO_SPOT_SCHEMA = {
  * @typedef {{ url: string, width?: number, height?: number, frameTop?: number, tries?: number }} PhotoFrame
  */
 
+/**
+ * What framing a photo reads with: the claude service, whether it has its API key, and the fetch
+ * that reads a photo's size.
+ * @typedef {{ claude: import("./claude.js").Claude, canAsk: boolean, fetchImpl: typeof fetch }} PhotoContext
+ */
+
 /** @param {number} percent */
 const readShare = (percent) => Math.min(1, Math.max(0, percent / 100));
 
 /**
  * Where the frame starts on a tall photo, as Claude places its subject.
- * @param {{ apiKey: string, fetchImpl: typeof fetch }} options
+ * @param {import("./claude.js").Claude} claude
  * @param {string} url
  * @param {{ width: number, height: number }} size
  */
-async function askFrameTop({ apiKey, fetchImpl }, url, size) {
-  const { answer } = await requestClaude({
-    apiKey,
-    fetchImpl,
+async function askFrameTop(claude, url, size) {
+  const { answer } = await requestClaude(claude, {
     timeoutMs: CLAUDE_TIMEOUT_MS,
     schema: PHOTO_SPOT_SCHEMA,
     request: {
@@ -81,24 +85,24 @@ const needsSpot = (frame) =>
 
 /**
  * @param {PhotoFrame | undefined} frame
- * @param {boolean} canAsk whether the Worker has Claude's API key
+ * @param {boolean} canAsk whether the claude service has its API key
  */
 const isWaiting = (frame, canAsk) =>
   !frame || ((frame.tries ?? 0) < MAX_TRIES && (!hasSize(frame) || (canAsk && needsSpot(frame))));
 
 /**
  * The photo's frame with what this run could add to it, or with one more try when it failed.
- * @param {{ apiKey?: string, fetchImpl: typeof fetch }} options
+ * @param {PhotoContext} context
  * @param {string} url
  * @param {PhotoFrame} kept
  * @returns {Promise<{ frame: PhotoFrame, failed: boolean }>}
  */
-async function readFrame({ apiKey, fetchImpl }, url, kept) {
+async function readFrame({ claude, canAsk, fetchImpl }, url, kept) {
   let frame = kept;
   try {
     if (!hasSize(frame)) frame = { ...frame, ...(await readPhotoSize(fetchImpl, url)) };
-    if (apiKey && needsSpot(frame))
-      frame = { ...frame, frameTop: await askFrameTop({ apiKey, fetchImpl }, url, frame) };
+    if (canAsk && needsSpot(frame))
+      frame = { ...frame, frameTop: await askFrameTop(claude, url, frame) };
     return { frame, failed: false };
   } catch (error) {
     console.error(`Framing the photo ${url} failed: ${describeError(error)}`);
@@ -119,12 +123,11 @@ async function readKeptFrames(storage) {
 /**
  * Frames the photos the cards show, newest card's first, forgets the ones no card shows, and says
  * how this run went.
- * @param {{ storage: import("./season-store.js").JobContext["storage"], env: Record<string, string | undefined>, fetchImpl: typeof fetch }} context
+ * @param {PhotoContext & { storage: import("./season-store.js").JobContext["storage"] }} context
  * @param {string[]} urls the cards' photos, newest card's first
  * @returns {Promise<{ frames: Map<string, PhotoFrame>, framed: number, failed: number }>}
  */
-export async function frameNewsPhotos({ storage, env, fetchImpl }, urls) {
-  const apiKey = env.ANTHROPIC_API_KEY;
+export async function frameNewsPhotos({ storage, ...context }, urls) {
   const kept = await readKeptFrames(storage);
   for (const [url, { key }] of kept) if (!urls.includes(url)) await storage.delete(key);
   const frames = new Map(
@@ -134,10 +137,10 @@ export async function frameNewsPhotos({ storage, env, fetchImpl }, urls) {
     }),
   );
   const waiting = urls
-    .filter((url) => isWaiting(frames.get(url), Boolean(apiKey)))
+    .filter((url) => isWaiting(frames.get(url), context.canAsk))
     .slice(0, PHOTOS_PER_RUN);
   const read = await Promise.all(
-    waiting.map((url) => readFrame({ apiKey, fetchImpl }, url, frames.get(url) ?? { url })),
+    waiting.map((url) => readFrame(context, url, frames.get(url) ?? { url })),
   );
   for (const { frame } of read) {
     frames.set(frame.url, frame);

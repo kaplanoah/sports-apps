@@ -1,3 +1,4 @@
+import { countClaudeCalls } from "./claude.js";
 import { RequestBudgetExhausted } from "./request-budget.js";
 import { describeError } from "./responses.js";
 
@@ -144,6 +145,9 @@ export async function runWithStatus(
         }
       : context.docs,
     fetchImpl: counter.fetchImpl,
+    claude: countClaudeCalls(context.claude, () => {
+      counter.count += 1;
+    }),
     loadSnapshot: (season) =>
       (loadSnapshot ??= context.createLoadSnapshot(counter.fetchImpl))(season),
     failures: [],

@@ -8,6 +8,7 @@ import {
 } from "../shared/worker/job-status.js";
 import { createFeedKeeper } from "../shared/worker/feed-keeper.js";
 import { createDocs, createJobStorage } from "./job-context.js";
+import { createClaudeService } from "../services/claude/worker/src/service.js";
 
 /**
  * Runs `work` with console.error held, and answers what it logged.
@@ -88,6 +89,38 @@ test("a run saves its status with what the job adds, notes a failure it doesn't 
   assert.equal(after.ranAt, "2026-10-06T12:01:00.000Z");
   assert.equal(after.requests, 0);
   assert.deepEqual(after.lastFailure, failed.lastFailure);
+});
+
+test("a run's requests count each call to the claude service, and one with no binding fails the run, saying why", async (context) => {
+  context.mock.method(console, "error", () => {});
+  const docs = createDocs();
+  const now = Date.parse("2026-10-06T12:00:00Z");
+  const createJobContext = (claude) =>
+    /** @type {any} */ ({
+      docs,
+      storage: createJobStorage(),
+      env: {},
+      claude,
+      fetchImpl: async () => new Response("{}"),
+      now: () => now,
+    });
+  const job = {
+    statusKey: "news/status",
+    updateStore: async ({ claude }) => {
+      await claude.readConfig();
+    },
+  };
+
+  await runWithStatus(createJobContext(createClaudeService({ ANTHROPIC_API_KEY: "key" })), job);
+  assert.equal(docs.stored.get("news/status").requests, 1);
+
+  await runWithStatus(createJobContext(undefined), job);
+  const missing = docs.stored.get("news/status");
+  assert.equal(missing.requests, 0);
+  assert.equal(
+    missing.lastFailure.message,
+    "The run failed: No CLAUDE binding to the claude service",
+  );
 });
 
 test("job feed reads name cold and retained failures once even through outer job catches", async (context) => {

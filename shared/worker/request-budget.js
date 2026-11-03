@@ -7,13 +7,17 @@ export class RequestBudgetExhausted extends Error {}
 /** @param {typeof fetch} fetchImpl @param {number} limit @param {() => boolean} [isActive] */
 export function createRequestBudget(fetchImpl, limit, isActive = () => true) {
   let remaining = limit;
+  const spend = () => {
+    if (!isActive() || remaining <= 0)
+      throw new RequestBudgetExhausted("No requests left for history");
+    remaining -= 1;
+  };
   return {
     remaining: () => (isActive() ? remaining : 0),
+    spend,
     /** @type {typeof fetch} */
     fetchImpl: (input, init) => {
-      if (!isActive() || remaining <= 0)
-        throw new RequestBudgetExhausted("No requests left for history");
-      remaining -= 1;
+      spend();
       return fetchImpl(input, init);
     },
   };
