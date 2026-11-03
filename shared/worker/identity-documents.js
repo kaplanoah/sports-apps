@@ -396,6 +396,10 @@ export function createIdentityDocuments(storage, policy, now = Date.now) {
     return { key: `details/${season ?? "answer"}`, document: value.body };
   }
 
+  function describeSourceDocument(key, document) {
+    return isCachedAnswerKey(key) ? describeDetailAnswer(key, document) : { key, document };
+  }
+
   function mergePlayerEvidence(retained, current) {
     return [
       ...new Map(
@@ -448,17 +452,23 @@ export function createIdentityDocuments(storage, policy, now = Date.now) {
     return { retainedRejections, rejected: Math.max(observedRejections, retainedRejections) };
   }
 
+  async function recordDocumentFailure(transaction, key, original, superseded) {
+    await saveIdentityError(transaction, key, 1, "failed");
+    if (superseded) return;
+    const source = describeSourceDocument(key, original);
+    const observedRejections = expandDocument(source.key, source.document).rejected;
+    const { rejected } = await describeSourceRejections(transaction, key, observedRejections);
+    await saveIdentitySourceRejections(transaction, key, rejected);
+  }
+
   async function updateDocumentCoverage(transaction, key, document, original = null) {
     if (document === undefined) {
       await saveIdentitySourceProblems(transaction, key, 0, 0);
       await saveIdentitySourceRejections(transaction, key, 0);
       return;
     }
-    const cached = isCachedAnswerKey(key);
-    const source = cached
-      ? describeDetailAnswer(key, original ?? document)
-      : { key, document: original ?? document };
-    const prepared = cached ? describeDetailAnswer(key, document).document : document;
+    const source = describeSourceDocument(key, original ?? document);
+    const prepared = describeSourceDocument(key, document).document;
     const { observations } = expandDocument(source.key, prepared);
     const observedRejections = expandDocument(source.key, source.document).rejected;
     const { rejected } =
@@ -478,7 +488,7 @@ export function createIdentityDocuments(storage, policy, now = Date.now) {
         const current = await transaction.get(key);
         const superseded = isSuperseded(current);
         const changed = !isSameJson(current, document);
-        if (recordFailure) await saveIdentityError(transaction, key, 1, "failed");
+        if (recordFailure) await recordDocumentFailure(transaction, key, original, superseded);
         else
           await updateDocumentCoverage(
             transaction,
@@ -498,13 +508,12 @@ export function createIdentityDocuments(storage, policy, now = Date.now) {
   }
 
   async function forgetSource(key) {
-    await storage.delete(nameRetryKey(key));
-    await saveErrors(key, 0, "failed");
     await storage.transaction(async (transaction) => {
-      if ((await transaction.get(key)) === undefined) {
-        await saveIdentitySourceProblems(transaction, key, 0, 0);
-        await saveIdentitySourceRejections(transaction, key, 0);
-      }
+      if ((await transaction.get(key)) !== undefined) return;
+      await transaction.delete(nameRetryKey(key));
+      await saveIdentityError(transaction, key, 0, "failed");
+      await saveIdentitySourceProblems(transaction, key, 0, 0);
+      await saveIdentitySourceRejections(transaction, key, 0);
     });
   }
 
@@ -517,7 +526,7 @@ export function createIdentityDocuments(storage, policy, now = Date.now) {
     const cached = isCachedAnswerKey(key);
     if (!cached && !isStoreDocumentPath(key)) return null;
     if (!cached && !isSameJson(await docs.read(key), value)) return { kind: "changed" };
-    const source = cached ? describeDetailAnswer(key, value) : { key, document: value };
+    const source = describeSourceDocument(key, value);
     const prepared = await expandWithKnownFacts(
       source.key,
       source.document,
@@ -575,6 +584,7 @@ export function createIdentityDocuments(storage, policy, now = Date.now) {
       describeSource: describeBackfillSource,
       saveErrors,
       hasFailedSources,
+      forgetSource,
       saveGameMatches,
       registerObservations: async (observations, source) => {
         const facts = observations.filter((observation) => observation.vendorId === undefined);

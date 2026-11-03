@@ -58,7 +58,7 @@ function countSourceRejections(source, pending) {
 
 /**
  * @param {any} storage
- * @param {{ lookup: any, policy: any, describeSource: (key: string, value: any, phase: string, docs: any) => Promise<any>, saveErrors: (key: string, count: number, kind?: string, processedRetry?: any) => Promise<void>, hasFailedSources: () => Promise<boolean>, saveGameMatches: (results: any[], docs: any) => Promise<void>, registerObservations: (observations: any[], source: import("./identity.js").IdentitySource) => Promise<any[]> }} options
+ * @param {{ lookup: any, policy: any, describeSource: (key: string, value: any, phase: string, docs: any) => Promise<any>, saveErrors: (key: string, count: number, kind?: string, processedRetry?: any) => Promise<void>, hasFailedSources: () => Promise<boolean>, forgetSource: (key: string) => Promise<void>, saveGameMatches: (results: any[], docs: any) => Promise<void>, registerObservations: (observations: any[], source: import("./identity.js").IdentitySource) => Promise<any[]> }} options
  * @param {() => number} now
  */
 export function createIdentityBackfill(storage, options, now) {
@@ -68,6 +68,7 @@ export function createIdentityBackfill(storage, options, now) {
     describeSource,
     saveErrors,
     hasFailedSources,
+    forgetSource,
     saveGameMatches,
     registerObservations,
   } = options;
@@ -339,6 +340,7 @@ export function createIdentityBackfill(storage, options, now) {
           return true;
         }));
       if (!finalized) {
+        await forgetSource(key);
         progress.pending = null;
         return false;
       }

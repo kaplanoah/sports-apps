@@ -1208,6 +1208,186 @@ test("failed atomic identity publication preserves sports data and reports uncer
   }
 });
 
+test("deletion cleanup preserves a recreated source's failed-publication evidence", async () => {
+  for (const cached of [false, true]) {
+    const { ctx, stored } = createDurableObjectContext();
+    const store = createStore(ctx);
+    const key = cached ? "job:details:detail-answer:/players?season=2025" : "seasons/2025";
+    const answerKey = "detail-answer:/players?season=2025";
+    const job = store.createJobStorage("details");
+    const write = (document) =>
+      cached ? job.put(answerKey, { body: document }) : store.docs.write(key, document);
+    await write({ season: 2025, players: [] });
+    await finishBackfill(store);
+    const current = {
+      season: 2025,
+      players: [
+        { id: "p_recreated", firstName: "Current", lastName: "Player", team: "NYK", number: "7" },
+      ],
+    };
+    const remove = ctx.storage.delete;
+    let recreated = false;
+    ctx.storage.delete = async (asked) => {
+      const removed = await remove(asked);
+      if (asked === key && !recreated) {
+        recreated = true;
+        const transaction = ctx.storage.transaction;
+        ctx.storage.transaction = (change) =>
+          transaction((inner) =>
+            change({
+              ...inner,
+              get: async (entry) => {
+                if (entry === "identity:entity:nba:player:p_recreated")
+                  throw new Error("Identity ledger unavailable");
+                return inner.get(entry);
+              },
+            }),
+          );
+        try {
+          await write({
+            ...current,
+            players: [
+              {
+                ...current.players[0],
+                espnIdentity: {
+                  id: "espn-recreated",
+                  facts: { firstName: "Current", lastName: "Player", number: "7" },
+                },
+              },
+            ],
+          });
+        } finally {
+          ctx.storage.transaction = transaction;
+        }
+      }
+      return removed;
+    };
+    if (cached) await job.delete(answerKey);
+    else await store.docs.remove(key);
+    assert.equal(recreated, true);
+    assert.deepEqual(cached ? stored.get(key).body : stored.get(key), current);
+    assert.equal(stored.get(`${IDENTITY_ERROR_PREFIX}failed:${encodeURIComponent(key)}`), 1);
+    assert.equal((await store.identities.readStatus()).checks.verified, false);
+    const retryKey = `identity:retry:${encodeURIComponent(key)}`;
+    assert.equal(stored.get(retryKey).records.length, 1);
+    assert.equal(stored.get(retryKey).records[0].id, "espn-recreated");
+    assert.equal(stored.get(retryKey).records[0].team, "NYK");
+    await store.identities.lookup.save([
+      {
+        type: "player",
+        vendor: "nba",
+        vendorId: "native-recreated",
+        internalId: "p_recreated",
+        evidence: { method: "discovery" },
+      },
+    ]);
+    await store.identities.backfill(store.docs);
+    await finishBackfill(store);
+    assert.equal((await store.identities.readStatus()).checks.verified, true);
+    assert.equal((await store.identities.readStatus()).errors, 0);
+    assert.equal(
+      (await store.identities.lookup.readEligible("player", "espn", "espn-recreated"))?.internalId,
+      "p_recreated",
+    );
+    assert.equal(stored.has(retryKey), false);
+  }
+});
+
+test("a late backfill check cannot leave counts for a deleted source", async () => {
+  for (const cached of [false, true]) {
+    const { ctx, stored } = createDurableObjectContext();
+    const store = createStore(ctx);
+    const id = await store.identities.lookup.discover({
+      type: "player",
+      vendor: "nba",
+      vendorId: "native-player",
+    });
+    const key = cached ? "job:details:detail-answer:/players?season=2025" : "seasons/2025";
+    const answerKey = "detail-answer:/players?season=2025";
+    const document = {
+      season: 2025,
+      players: [{ id, firstName: "Example", lastName: "Player", espnIdentity: { id: null } }],
+    };
+    if (cached) await store.createJobStorage("details").put(answerKey, { body: document });
+    else await store.docs.write(key, document);
+    const check = store.identities.lookup.recordRegistrationCheck;
+    let deleted = false;
+    store.identities.lookup.recordRegistrationCheck = async (...args) => {
+      if (!deleted && args[3].key === key) {
+        deleted = true;
+        if (cached) await store.createJobStorage("details").delete(answerKey);
+        else await store.docs.remove(key);
+      }
+      return check(...args);
+    };
+    await finishBackfill(store);
+    assert.equal(deleted, true);
+    assert.equal(stored.has(key), false);
+    assert.equal(await readIdentitySourceRejections(ctx.storage, key), 0);
+    assert.equal((await store.identities.readStatus()).errors, 0);
+    assert.equal((await store.identities.readStatus()).checks.verified, true);
+  }
+});
+
+test("fallback publication retains fresh and earlier vendor rejections through recovery", async () => {
+  for (const cached of [false, true]) {
+    for (const rejectedBefore of [false, true]) {
+      const { ctx, stored } = createDurableObjectContext();
+      const store = createStore(ctx);
+      const id = await store.identities.lookup.discover({
+        type: "player",
+        vendor: "nba",
+        vendorId: "native-player",
+      });
+      const key = cached ? "job:details:detail-answer:/players?season=2025" : "seasons/2025";
+      const player = { id, firstName: "Example", lastName: "Player" };
+      const document = (rejected) => ({
+        season: 2025,
+        players: [{ ...player, ...(rejected && { espnIdentity: { id: null } }) }],
+      });
+      const write = (source) =>
+        cached
+          ? store
+              .createJobStorage("details")
+              .put("detail-answer:/players?season=2025", { body: source })
+          : store.docs.write(key, source);
+      await write(document(rejectedBefore));
+      await finishBackfill(store);
+      const before = structuredClone(stored.get(key));
+      const transaction = ctx.storage.transaction;
+      let failed = false;
+      ctx.storage.transaction = (change) =>
+        transaction((inner) =>
+          change({
+            ...inner,
+            get: async (asked) => {
+              if (asked === key && !failed) {
+                failed = true;
+                throw new Error("Primary publication unavailable");
+              }
+              return inner.get(asked);
+            },
+          }),
+        );
+      await write(document(!rejectedBefore));
+      assert.equal(failed, true);
+      assert.deepEqual(stored.get(key), before);
+      assert.equal(await readIdentitySourceRejections(ctx.storage, key), 1);
+      assert.equal(stored.get(`${IDENTITY_ERROR_PREFIX}failed:${encodeURIComponent(key)}`), 1);
+      await store.identities.backfill(store.docs);
+      await finishBackfill(store);
+      const status = await store.identities.readStatus();
+      assert.equal(status.backfill.complete, true);
+      assert.equal(status.errors, 1);
+      assert.equal(status.checks.verified, false);
+      assert.equal(stored.has(`${IDENTITY_ERROR_PREFIX}failed:${encodeURIComponent(key)}`), false);
+      await write(document(false));
+      assert.equal(await readIdentitySourceRejections(ctx.storage, key), 0);
+      assert.equal((await store.identities.readStatus()).checks.verified, true);
+    }
+  }
+});
+
 test("failed fallback evidence cannot replace the earlier usable document", async () => {
   for (const cached of [false, true]) {
     const { ctx, stored } = createDurableObjectContext();
