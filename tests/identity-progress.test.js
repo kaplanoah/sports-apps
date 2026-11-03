@@ -23,7 +23,9 @@ function createStatusReader(harness, now) {
       describeSource: async () => assert.fail("Status must not describe sources"),
       saveErrors: async () => assert.fail("Status must not write errors"),
       hasFailedSources: async () => assert.fail("Status must not scan failures"),
+      forgetSource: async () => assert.fail("Status must not clear source metadata"),
       saveGameMatches: async () => assert.fail("Status must not publish matches"),
+      registerObservations: async () => assert.fail("Status must not register identities"),
     },
     now,
   );

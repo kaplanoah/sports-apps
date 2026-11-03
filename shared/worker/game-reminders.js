@@ -48,6 +48,14 @@ function isDeliveryFinished(receipt) {
   );
 }
 
+function isFreshFacts(facts, now) {
+  return (
+    Number.isFinite(facts?.verifiedAt) &&
+    facts.verifiedAt <= now &&
+    now - facts.verifiedAt <= FRESH_FOR_MS
+  );
+}
+
 /** @param {any} device @param {any[]} games @param {number} now */
 function planDevice(device, games, now) {
   const preferences = readNotificationPreferences(device);
@@ -85,8 +93,8 @@ function planDevice(device, games, now) {
   return { ...device, reminderReceipts: receipts };
 }
 
-/** @param {{ storage: any, push: ReturnType<typeof import("./push.js").createPushService>, now: () => number, verify: () => Promise<void> }} options */
-export function createGameReminders({ storage, push, now, verify }) {
+/** @param {{ storage: any, push: ReturnType<typeof import("./push.js").createPushService>, now: () => number, verify: () => Promise<void>, validateIdentityGuards?: (transaction: any, guards: import("./identity.js").IdentityGuard[]) => Promise<boolean> }} options */
+export function createGameReminders({ storage, push, now, verify, validateIdentityGuards }) {
   let checking = null;
 
   async function saveGames(games, verified = false) {
@@ -132,8 +140,7 @@ export function createGameReminders({ storage, push, now, verify }) {
   async function deliverDue() {
     let facts = await storage.get(FACTS_KEY);
     if (!facts || (await findNextDeadline()) > now()) return;
-    const isFresh = facts.verifiedAt !== null && now() - facts.verifiedAt <= FRESH_FOR_MS;
-    if (!isFresh) {
+    if (!isFreshFacts(facts, now())) {
       try {
         await verify();
       } catch {
@@ -141,7 +148,7 @@ export function createGameReminders({ storage, push, now, verify }) {
       }
       facts = await storage.get(FACTS_KEY);
     }
-    if (facts?.verifiedAt === null || !facts) return;
+    if (!isFreshFacts(facts, now())) return;
     const games = new Map(facts.games.map((game) => [game.id, game]));
     const devices = await push.listSubscriptions();
     await Promise.allSettled(
@@ -153,32 +160,66 @@ export function createGameReminders({ storage, push, now, verify }) {
     await refreshDevices();
   }
 
+  async function validateGameClaim(transaction, game) {
+    const facts = await transaction.get(FACTS_KEY);
+    if (
+      !game ||
+      !isFreshFacts(facts, now()) ||
+      !isSameJson(
+        facts.games.find((candidate) => candidate.id === game.id),
+        game,
+      )
+    )
+      return false;
+    if (game.identityGuards === undefined) return true;
+    if (
+      !Array.isArray(game.identityGuards) ||
+      !game.identityGuards.length ||
+      !game.identityGuards.every((guard) => guard?.type === "game" && guard.internalId === game.id)
+    )
+      return false;
+    return !!(await validateIdentityGuards?.(transaction, game.identityGuards));
+  }
+
   async function deliverGame(key, id, games) {
     let claimed = null;
-    await push.updateDevice(key, (device) => {
-      const receipt = device.reminderReceipts?.[id];
-      const preferences = readNotificationPreferences(device);
-      const game = games.get(id);
-      if (!preferences.reminders || !game || receipt?.state !== "pending" || receipt.nextAt > now())
-        return null;
-      if (receipt.dueAt !== describeDeadline(game, preferences).dueAt)
-        return planDevice(device, [...games.values()], now());
-      if (receipt.expiresAt <= now() || receipt.attempts >= MAX_ATTEMPTS) {
-        return {
-          ...device,
-          reminderReceipts: { ...device.reminderReceipts, [id]: { ...receipt, state: "expired" } },
+    await push.updateDevice(
+      key,
+      (device) => {
+        const receipt = device.reminderReceipts?.[id];
+        const preferences = readNotificationPreferences(device);
+        const game = games.get(id);
+        if (
+          !preferences.reminders ||
+          !game ||
+          receipt?.state !== "pending" ||
+          receipt.nextAt > now()
+        )
+          return null;
+        if (receipt.dueAt !== describeDeadline(game, preferences).dueAt)
+          return planDevice(device, [...games.values()], now());
+        if (receipt.expiresAt <= now() || receipt.attempts >= MAX_ATTEMPTS) {
+          return {
+            ...device,
+            reminderReceipts: {
+              ...device.reminderReceipts,
+              [id]: { ...receipt, state: "expired" },
+            },
+          };
+        }
+        const attempt = {
+          ...receipt,
+          attempts: receipt.attempts + 1,
+          uncertain: true,
+          nextAt: now() + RETRY_MS * (receipt.attempts + 1),
         };
-      }
-      const attempt = {
-        ...receipt,
-        attempts: receipt.attempts + 1,
-        uncertain: true,
-        nextAt: now() + RETRY_MS * (receipt.attempts + 1),
-      };
-      claimed = { device, receipt: attempt, preferences, game };
-      // Persist before the network request; a lost response retries with the same notification tag.
-      return { ...device, reminderReceipts: { ...device.reminderReceipts, [id]: attempt } };
-    });
+        claimed = { device, receipt: attempt, preferences, game };
+        // Persist before the network request; a lost response retries with the same notification tag.
+        return { ...device, reminderReceipts: { ...device.reminderReceipts, [id]: attempt } };
+      },
+      undefined,
+      (transaction) => validateGameClaim(transaction, games.get(id)),
+    );
     if (!claimed) return;
     const { device, receipt, preferences, game } = claimed;
     let status = 503;

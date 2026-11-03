@@ -34,7 +34,11 @@ While a league is being built, a sandbox Worker may try its feeds from Cloudflar
 
    Shared `identity.js` provides atomic scoped vendor lookup, discovery and reconciliation. `identity-matching.js` requires confident matching evidence, with explicit game numbers and corroborating teams and day for doubleheaders. Existing apps use `identity-documents.js` to register legacy internal IDs and backfill explicit facts without renaming records. Each identity policy names its `gameFactFields` so shared writes preserve those facts during ledger failures. Check health coverage before depending on a completed backfill. Reuse `identity-backfill.js` for nested checkpoints and persisted optional-work pacing; a document count alone does not bound its identities or storage reads. Change `IDENTITY_AUDIT_VERSION` when identity-writing or audit requirements change, not for unrelated releases. The optional-work allowance in `identity-backfill.js` does not cap total account usage.
 
+   Use the shared lookup and guarded publication contract in [the worker rules](../../../.claude/rules/worker.md). Test the league's actual snapshot, detail and reminder writers with revoked identities before activating them.
+
    A new league should create opaque game and player IDs during ingestion with the shared lookup, keep vendor IDs in scoped mappings, and persist explicit season, competition, round and game-number fields. Never copy the existing apps' legacy assumption that an internal ID equals a vendor ID. Test concurrent discovery, repeated ingestion, postponements, resumed games, trades, uncertain matches and decisive repairs against actual storage.
+
+   Select the internal-ID preparation mode in the worker rules and register native identities during ingestion before writing opaque records. Test the actual snapshot, detail-answer and background writers, including incomplete registration and backfill restarts.
 
    Opaque-ID readers, the vendor merge and per-part provenance are later prerequisites for the existing apps, not facilities implemented here. Introduce missing shared facilities with contract tests before a new league depends on them. The merge must keep coherent game state, rank eligible fresh answers above saved ones, preserve corrections and expose uncertainty in health.
 
