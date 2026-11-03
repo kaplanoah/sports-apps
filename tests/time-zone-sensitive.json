@@ -126,6 +126,7 @@
     "tests/highlights-view.test.js",
     "tests/identity-backfill.test.js",
     "tests/identity-diagnostics.test.js",
+    "tests/identity-guards.test.js",
     "tests/identity.test.js",
     "tests/install-browsers.test.js",
     "tests/install-packages.test.js",

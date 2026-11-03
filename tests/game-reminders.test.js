@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createGameReminders, describeGameReminder } from "../shared/worker/game-reminders.js";
 import { createPushService } from "../shared/worker/push.js";
+import { createIdentityLookup } from "../shared/worker/identity.js";
 import {
   isNotificationPreferences,
   normalizeNotificationPreferences,
@@ -25,6 +26,7 @@ const PREFERENCES = { updates: false, reminders: true, minutes: 60, timeZone: "A
 function createHarness() {
   const { ctx, stored } = createDurableObjectContext();
   const clock = { now: NOW };
+  const identities = createIdentityLookup(ctx.storage, "mlb");
   const sent = [];
   const upstream = {
     games: [GAME],
@@ -51,6 +53,7 @@ function createHarness() {
       upstream.reads++;
       await reminders.saveGames(upstream.games, true);
     },
+    validateIdentityGuards: (transaction, guards) => identities.validateGuards(transaction, guards),
   });
   const request = (method, path, body) =>
     push.serveRequest(
@@ -73,8 +76,151 @@ function createHarness() {
     );
     return { subscription, keys };
   }
-  return { ctx, stored, clock, sent, upstream, push, reminders, request, subscribe };
+  return { ctx, stored, clock, sent, upstream, push, reminders, request, subscribe, identities };
 }
+
+test("reminder claims reject revoked guards and old restored tokens until fresh confirmation", async () => {
+  const harness = createHarness();
+  await harness.subscribe();
+  const association = {
+    type: "game",
+    vendor: "espn",
+    vendorId: "vendor-reminder",
+    internalId: GAME.id,
+    evidence: { method: "teams-day" },
+    facts: { season: GAME.season },
+  };
+  await harness.identities.save([association]);
+  const guard = await harness.identities.readEligible("game", "espn", association.vendorId);
+  const game = { ...GAME, identityGuards: [guard] };
+  harness.upstream.games = [game];
+  await harness.reminders.saveGames([game]);
+  harness.clock.now = GAME.start - PREFERENCES.minutes * 60_000;
+  const updateDevice = harness.push.updateDevice;
+  let revoked = false;
+  harness.push.updateDevice = async (key, change, deviceId, check) => {
+    if (check && !revoked) {
+      revoked = true;
+      await harness.identities.save([{ ...association, disputed: true }]);
+    }
+    return updateDevice(key, change, deviceId, check);
+  };
+  await harness.reminders.checkDue();
+  assert.equal(harness.sent.length, 0);
+  let device = [...(await harness.push.listSubscriptions()).values()][0];
+  assert.equal(device.reminderReceipts[GAME.id].attempts, 0);
+  await harness.identities.save([{ ...association, decisive: true }]);
+  await harness.reminders.checkDue();
+  assert.equal(harness.sent.length, 0);
+  const restored = await harness.identities.readEligible("game", "espn", association.vendorId);
+  harness.upstream.games = [{ ...GAME, identityGuards: [restored] }];
+  await harness.reminders.saveGames(harness.upstream.games, true);
+  await harness.reminders.checkDue();
+  assert.equal(harness.sent.length, 1);
+  device = [...(await harness.push.listSubscriptions()).values()][0];
+  assert.equal(device.reminderReceipts[GAME.id].state, "sent");
+  assert.doesNotMatch(
+    JSON.stringify(describeGameReminder(harness.upstream.games[0], PREFERENCES)),
+    /identityGuards|associationToken/,
+  );
+});
+
+test("reminder claim validates identity and the current verified game inside the device transaction", async () => {
+  const harness = createHarness();
+  await harness.subscribe();
+  await harness.identities.save([
+    {
+      type: "game",
+      vendor: "espn",
+      vendorId: "vendor-reminder",
+      internalId: GAME.id,
+      evidence: { method: "teams-day" },
+    },
+  ]);
+  const guard = await harness.identities.readEligible("game", "espn", "vendor-reminder");
+  harness.upstream.games = [{ ...GAME, identityGuards: [guard] }];
+  await harness.reminders.saveGames(harness.upstream.games);
+  harness.clock.now = GAME.start - PREFERENCES.minutes * 60_000;
+  const transaction = harness.ctx.storage.transaction;
+  const claims = [];
+  harness.ctx.storage.transaction = (change) =>
+    transaction((tx) => {
+      const operations = [];
+      const result = change({
+        ...tx,
+        get: async (key) => {
+          operations.push(key);
+          return tx.get(key);
+        },
+        put: async (key, value) => {
+          if (key.startsWith("push:subscription:")) claims.push(operations);
+          return tx.put(key, value);
+        },
+      });
+      return result;
+    });
+  await harness.reminders.checkDue();
+  assert.equal(harness.sent.length, 1);
+  assert.equal(claims.length, 1);
+  assert.ok(claims[0].includes("push:reminder-games"));
+  assert.ok(claims[0].includes("identity:vendor:espn:mlb:game:vendor-reminder"));
+  assert.ok(claims[0].includes("identity:problem:identity:vendor:espn:mlb:game:vendor-reminder"));
+});
+
+test("a reminder-facts change before device planning cannot authorize an old game claim", async () => {
+  const harness = createHarness();
+  await harness.subscribe();
+  await harness.reminders.saveGames([GAME]);
+  harness.clock.now = GAME.start - PREFERENCES.minutes * 60_000;
+  const updateDevice = harness.push.updateDevice;
+  harness.push.updateDevice = async (key, change, deviceId, guard) => {
+    if (guard)
+      await harness.ctx.storage.put("push:reminder-games", {
+        games: [{ ...GAME, start: GAME.start + 60 * 60_000 }],
+        verifiedAt: harness.clock.now,
+      });
+    return updateDevice(key, change, deviceId, guard);
+  };
+  await harness.reminders.checkDue();
+  assert.equal(harness.sent.length, 0);
+  const device = [...(await harness.push.listSubscriptions()).values()][0];
+  assert.equal(device.reminderReceipts[GAME.id].attempts, 0);
+});
+
+test("a reminder with explicit guards cannot fall back to an unconfigured identity validator", async () => {
+  const harness = createHarness();
+  await harness.subscribe();
+  const games = [{ ...GAME, identityGuards: [] }];
+  const reminders = createGameReminders({
+    storage: harness.ctx.storage,
+    push: harness.push,
+    now: () => harness.clock.now,
+    verify: async () => reminders.saveGames(games, true),
+  });
+  await reminders.saveGames(games);
+  harness.clock.now = GAME.start - PREFERENCES.minutes * 60_000;
+  await reminders.checkDue();
+  assert.equal(harness.sent.length, 0);
+});
+
+test("verification expiring while a reminder claim waits cannot spend an attempt", async () => {
+  const harness = createHarness();
+  await harness.subscribe();
+  await harness.reminders.saveGames([GAME]);
+  harness.clock.now = GAME.start - PREFERENCES.minutes * 60_000;
+  const updateDevice = harness.push.updateDevice;
+  harness.push.updateDevice = async (key, change, deviceId, guard) => {
+    if (guard) harness.clock.now += 61_000;
+    return updateDevice(key, change, deviceId, guard);
+  };
+  await harness.reminders.checkDue();
+  assert.equal(harness.sent.length, 0);
+  const device = [...(await harness.push.listSubscriptions()).values()][0];
+  assert.equal(device.reminderReceipts[GAME.id].attempts, 0);
+  harness.push.updateDevice = updateDevice;
+  await harness.reminders.checkDue();
+  assert.equal(harness.sent.length, 1);
+});
 
 test("only the five approved presets, booleans and real time zones are accepted", () => {
   assert.ok(isNotificationPreferences({ ...PREFERENCES, timeZone: "Etc/GMT+5" }));

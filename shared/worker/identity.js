@@ -3,11 +3,14 @@ import {
   IDENTITY_TYPES,
   IdentityEntry,
   IdentityObservation,
+  IdentityAssociation,
+  IdentityAssociationGuard,
   validateSportsData,
 } from "./sports-schema.js";
 import { isSameJson } from "../page/compare.js";
 import { nameIdentityGameGroup } from "./identity-matching.js";
 import { readPlayerName } from "./player-name.js";
+import { hashTextInFull } from "./hash-text.js";
 
 export const IDENTITY_PREFIX = "identity:";
 export const IDENTITY_PREFIX_END = namePrefixEnd(IDENTITY_PREFIX);
@@ -107,16 +110,20 @@ async function saveChanged(storage, key, value) {
   if (!isSameJson(await storage.get(key), value)) await storage.put(key, value);
 }
 
-/** @param {any} transaction @param {string} key @param {string | null} problem */
-async function saveProblem(transaction, league, key, problem) {
+/** @param {any} transaction @param {string} league @param {string} key @param {string | null} problem @param {boolean} [decisive] */
+async function saveProblem(transaction, league, key, problem, decisive = false) {
   const path = nameProblemKey(key);
   const previous = await transaction.get(path);
-  if (previous === problem || (!previous && !problem)) return;
+  if (previous === problem || (previous == null && problem == null)) return;
+  if (previous != null && previous !== "unmatched" && problem !== previous && !decisive) return;
   const status = (await transaction.get(nameStatusKey(league))) ?? createBlankStatus();
-  if (previous) status[previous] -= 1;
+  if (previous === "unmatched" || previous === "disputed") status[previous] -= 1;
   if (problem) status[problem] += 1;
   if (problem) await transaction.put(path, problem);
   else await transaction.delete(path);
+  const association = await transaction.get(key);
+  if (association)
+    await transaction.put(key, { ...association, associationToken: crypto.randomUUID() });
   await transaction.put(nameStatusKey(league), status);
 }
 
@@ -185,7 +192,7 @@ async function saveAssociation(transaction, league, observation) {
     if (competingId && competingId !== vendorId) {
       const competingKey = nameVendorKey(league, type, vendor, competingId);
       await transaction.delete(competingKey);
-      await saveProblem(transaction, league, competingKey, "unmatched");
+      await saveProblem(transaction, league, competingKey, "unmatched", true);
     }
   }
   entry.vendors[vendor] = vendorId;
@@ -194,16 +201,59 @@ async function saveAssociation(transaction, league, observation) {
   entry.evidence[vendor] = matchingEvidence;
   validateSportsData(IdentityEntry, entry);
   await saveChanged(transaction, nameEntityKey(league, type, internalId), entry);
-  await saveChanged(transaction, key, {
+  const association = {
     internalId,
     evidence: matchingEvidence,
     type,
     league,
     vendor,
     vendorId,
-  });
-  if (!observation.preserveProblem) await saveProblem(transaction, league, key, null);
+  };
+  const previousAssociation = { ...previous };
+  delete previousAssociation.associationToken;
+  if (!isSameJson(previousAssociation, association)) {
+    const updated = { ...association, associationToken: crypto.randomUUID() };
+    validateSportsData(IdentityAssociation, updated);
+    await transaction.put(key, updated);
+  }
+  if (!observation.preserveProblem) await saveProblem(transaction, league, key, null, decisive);
   return { internalId, disputed: false, created, addedFacts };
+}
+
+/** @typedef {import("zod").infer<typeof IdentityAssociationGuard>} IdentityGuard */
+
+async function readEligibleAssociation(transaction, league, type, vendor, vendorId) {
+  const key = nameVendorKey(league, type, vendor, vendorId);
+  const parsed = IdentityAssociation.safeParse(await transaction.get(key));
+  if (!parsed.success) return null;
+  const association = parsed.data;
+  if (
+    association.league !== league ||
+    association.type !== type ||
+    association.vendor !== vendor ||
+    association.vendorId !== vendorId ||
+    (await transaction.get(nameProblemKey(key))) != null
+  )
+    return null;
+  const entry = await transaction.get(nameEntityKey(league, type, association.internalId));
+  if (
+    !IdentityEntry.safeParse(entry).success ||
+    entry.id !== association.internalId ||
+    entry.league !== league ||
+    entry.type !== type ||
+    entry.vendors[vendor] !== vendorId ||
+    !isSameJson(entry.evidence[vendor], association.evidence)
+  )
+    return null;
+  const token = association.associationToken;
+  return {
+    league,
+    type,
+    vendor,
+    vendorId,
+    internalId: association.internalId,
+    associationToken: token ?? (await hashTextInFull(JSON.stringify([key, association]))),
+  };
 }
 
 /**
@@ -302,6 +352,28 @@ export function createIdentityLookup(storage, league) {
     /** @param {"game" | "player"} type @param {string} vendor @param {string} id */
     async read(type, vendor, id) {
       return (await storage.get(nameVendorKey(league, type, vendor, id)))?.internalId ?? null;
+    },
+    /** @param {"game" | "player"} type @param {string} vendor @param {string} vendorId @returns {Promise<IdentityGuard | null>} */
+    readEligible: (type, vendor, vendorId) =>
+      storage.transaction((transaction) =>
+        readEligibleAssociation(transaction, league, type, vendor, vendorId),
+      ),
+    /** @param {any} transaction @param {IdentityGuard[]} guards */
+    async validateGuards(transaction, guards) {
+      if (!Array.isArray(guards) || !guards.length) return false;
+      for (const guard of guards) {
+        if (!IdentityAssociationGuard.safeParse(guard).success || guard.league !== league)
+          return false;
+        const current = await readEligibleAssociation(
+          transaction,
+          league,
+          guard.type,
+          guard.vendor,
+          guard.vendorId,
+        );
+        if (!current || !isSameJson(current, guard)) return false;
+      }
+      return true;
     },
     /** @param {"game" | "player"} type @param {string} id */
     readEntry: (type, id) => storage.get(nameEntityKey(league, type, id)),

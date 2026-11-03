@@ -85,8 +85,8 @@ function planDevice(device, games, now) {
   return { ...device, reminderReceipts: receipts };
 }
 
-/** @param {{ storage: any, push: ReturnType<typeof import("./push.js").createPushService>, now: () => number, verify: () => Promise<void> }} options */
-export function createGameReminders({ storage, push, now, verify }) {
+/** @param {{ storage: any, push: ReturnType<typeof import("./push.js").createPushService>, now: () => number, verify: () => Promise<void>, validateIdentityGuards?: (transaction: any, guards: import("./identity.js").IdentityGuard[]) => Promise<boolean> }} options */
+export function createGameReminders({ storage, push, now, verify, validateIdentityGuards }) {
   let checking = null;
 
   async function saveGames(games, verified = false) {
@@ -153,32 +153,64 @@ export function createGameReminders({ storage, push, now, verify }) {
     await refreshDevices();
   }
 
+  async function validateGameClaim(transaction, game) {
+    const facts = await transaction.get(FACTS_KEY);
+    if (
+      !game ||
+      !Number.isFinite(facts?.verifiedAt) ||
+      facts.verifiedAt > now() ||
+      now() - facts.verifiedAt > FRESH_FOR_MS ||
+      !isSameJson(
+        facts.games.find((candidate) => candidate.id === game.id),
+        game,
+      )
+    )
+      return false;
+    return (
+      game.identityGuards === undefined ||
+      !!(await validateIdentityGuards?.(transaction, game.identityGuards))
+    );
+  }
+
   async function deliverGame(key, id, games) {
     let claimed = null;
-    await push.updateDevice(key, (device) => {
-      const receipt = device.reminderReceipts?.[id];
-      const preferences = readNotificationPreferences(device);
-      const game = games.get(id);
-      if (!preferences.reminders || !game || receipt?.state !== "pending" || receipt.nextAt > now())
-        return null;
-      if (receipt.dueAt !== describeDeadline(game, preferences).dueAt)
-        return planDevice(device, [...games.values()], now());
-      if (receipt.expiresAt <= now() || receipt.attempts >= MAX_ATTEMPTS) {
-        return {
-          ...device,
-          reminderReceipts: { ...device.reminderReceipts, [id]: { ...receipt, state: "expired" } },
+    await push.updateDevice(
+      key,
+      (device) => {
+        const receipt = device.reminderReceipts?.[id];
+        const preferences = readNotificationPreferences(device);
+        const game = games.get(id);
+        if (
+          !preferences.reminders ||
+          !game ||
+          receipt?.state !== "pending" ||
+          receipt.nextAt > now()
+        )
+          return null;
+        if (receipt.dueAt !== describeDeadline(game, preferences).dueAt)
+          return planDevice(device, [...games.values()], now());
+        if (receipt.expiresAt <= now() || receipt.attempts >= MAX_ATTEMPTS) {
+          return {
+            ...device,
+            reminderReceipts: {
+              ...device.reminderReceipts,
+              [id]: { ...receipt, state: "expired" },
+            },
+          };
+        }
+        const attempt = {
+          ...receipt,
+          attempts: receipt.attempts + 1,
+          uncertain: true,
+          nextAt: now() + RETRY_MS * (receipt.attempts + 1),
         };
-      }
-      const attempt = {
-        ...receipt,
-        attempts: receipt.attempts + 1,
-        uncertain: true,
-        nextAt: now() + RETRY_MS * (receipt.attempts + 1),
-      };
-      claimed = { device, receipt: attempt, preferences, game };
-      // Persist before the network request; a lost response retries with the same notification tag.
-      return { ...device, reminderReceipts: { ...device.reminderReceipts, [id]: attempt } };
-    });
+        claimed = { device, receipt: attempt, preferences, game };
+        // Persist before the network request; a lost response retries with the same notification tag.
+        return { ...device, reminderReceipts: { ...device.reminderReceipts, [id]: attempt } };
+      },
+      undefined,
+      (transaction) => validateGameClaim(transaction, games.get(id)),
+    );
     if (!claimed) return;
     const { device, receipt, preferences, game } = claimed;
     let status = 503;
