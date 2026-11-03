@@ -1,5 +1,32 @@
 // A stand-in for a Durable Object's ctx: its key-value storage, one key or many at a time, its
 // alarm, and its accepted WebSockets.
+function listStoredEntries(
+  entries,
+  {
+    prefix = "",
+    limit = undefined,
+    startAfter = "",
+    start = undefined,
+    end = undefined,
+    reverse = false,
+  },
+) {
+  return new Map(
+    [...entries]
+      .filter(
+        ([key]) =>
+          key.startsWith(prefix) &&
+          key > startAfter &&
+          (start === undefined || key >= start) &&
+          (end === undefined || key < end),
+      )
+      .sort(
+        ([first], [second]) => (first < second ? -1 : first > second ? 1 : 0) * (reverse ? -1 : 1),
+      )
+      .slice(0, limit),
+  );
+}
+
 export function createDurableObjectContext() {
   const stored = new Map();
   const sockets = [];
@@ -20,34 +47,17 @@ export function createDurableObjectContext() {
         if (typeof keyOrKeys === "string") return stored.delete(keyOrKeys);
         return keyOrKeys.filter((key) => stored.delete(key)).length;
       },
-      list: async ({
-        prefix = "",
-        limit = undefined,
-        startAfter = "",
-        start = undefined,
-        end = undefined,
-        reverse = false,
-      }) =>
-        new Map(
-          [...stored]
-            .filter(
-              ([key]) =>
-                key.startsWith(prefix) &&
-                key > startAfter &&
-                (start === undefined || key >= start) &&
-                (end === undefined || key < end),
-            )
-            .sort(
-              ([first], [second]) =>
-                (first < second ? -1 : first > second ? 1 : 0) * (reverse ? -1 : 1),
-            )
-            .slice(0, limit),
-        ),
+      list: async (options) => listStoredEntries(stored, options),
       transaction: (callback) => {
         const pending = transactions.then(async () => {
           const changes = new Map();
           const removed = new Set();
           const transaction = {
+            list: async (options) => {
+              const entries = new Map([...stored, ...changes]);
+              for (const key of removed) entries.delete(key);
+              return listStoredEntries(entries, options);
+            },
             get: async (key) =>
               structuredClone(
                 removed.has(key)

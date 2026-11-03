@@ -109,7 +109,7 @@ async function findSubscriptionKey(endpoint) {
 
 /**
  * @param {object} options
- * @param {{ get: Function, put: Function, delete: Function, list: Function }} options.storage
+ * @param {{ get: Function, put: Function, delete: Function, list: Function, transaction?: Function }} options.storage
  * @param {() => number} options.now
  * @param {typeof fetch} [options.fetchImpl]
  */
@@ -127,29 +127,43 @@ export function createPushService({ storage, now, fetchImpl }) {
     return result;
   }
 
-  async function findDeviceForUpdate(key, deviceId) {
-    const stored = await storage.get(key);
+  async function findDeviceForUpdate(key, deviceId, source = storage) {
+    const stored = await source.get(key);
     if (stored && (deviceId === undefined || (stored.deviceId ?? key) === deviceId))
       return [key, stored];
     if (deviceId === undefined) return null;
     // A completed receipt follows its device through renewal or retirement during the send.
     for (const prefix of [SUBSCRIPTION_PREFIX, RETIRED_PREFIX]) {
-      const devices = await storage.list({ prefix });
+      const devices = await source.list({ prefix });
       for (const [candidate, device] of devices)
         if ((device.deviceId ?? candidate) === deviceId) return [candidate, device];
     }
     return null;
   }
 
-  /** @param {string} key @param {(device: any) => any} change @param {string} [deviceId] */
-  function updateDevice(key, change, deviceId = undefined) {
+  async function updateStoredDevice(source, key, change, deviceId, guard) {
+    const found = await findDeviceForUpdate(key, deviceId, source);
+    if (!found) return null;
+    if (guard && !(await guard(source))) return null;
+    const [currentKey, stored] = found;
+    const next = change(stored);
+    if (next) await source.put(currentKey, next);
+    return next ?? stored;
+  }
+
+  /**
+   * @param {string} key
+   * @param {(device: any) => any} change
+   * @param {string} [deviceId]
+   * @param {(transaction: any) => Promise<boolean>} [guard]
+   */
+  function updateDevice(key, change, deviceId = undefined, guard = undefined) {
     return changeDevices(async () => {
-      const found = await findDeviceForUpdate(key, deviceId);
-      if (!found) return null;
-      const [currentKey, stored] = found;
-      const next = change(stored);
-      if (next) await storage.put(currentKey, next);
-      return next ?? stored;
+      if (!guard) return updateStoredDevice(storage, key, change, deviceId, null);
+      if (!storage.transaction) throw new Error("A guarded device update requires a transaction");
+      return storage.transaction((transaction) =>
+        updateStoredDevice(transaction, key, change, deviceId, guard),
+      );
     });
   }
 

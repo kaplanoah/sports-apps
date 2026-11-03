@@ -122,7 +122,8 @@ test("a run that checked production and then failed closes the issue rather than
 
 test("only the report job writes issues, after every production deploy, and never beta's", () => {
   const workflow = readRepoFile(".github/workflows/deploy.yml");
-  const [deployJob, reportJob] = workflow.split(/\n {2}report:\n/);
+  const [deployJob, laterJobs] = workflow.split(/\n {2}report:\n/);
+  const [reportJob] = laterJobs.split(/\n {2}comment:\n/);
   assert.match(deployJob, /\n {2}issues: read\n/);
   assert.doesNotMatch(deployJob, /issues: write/);
   assert.match(
