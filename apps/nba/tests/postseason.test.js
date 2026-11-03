@@ -274,7 +274,7 @@ function createHarness() {
     createPostseasonReader({
       storage: context.ctx.storage,
       docs: store.docs,
-      identities,
+      identityLookup: identities,
       fetchImpl: fetchWith,
       now: () => clock.now,
     });

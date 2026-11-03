@@ -1,4 +1,5 @@
 import { createPostseasonAdapter } from "./adapters/postseason.js";
+import { requireIdentityLookup } from "./identity-policy.js";
 import { createFeedKeeper } from "../../../../shared/worker/feed-keeper.js";
 import { createReusedLoader } from "../../../../shared/worker/upstream.js";
 
@@ -10,11 +11,12 @@ const KINDS = /** @type {const} */ (["playoffs", "play-in"]);
  * @param {object} options
  * @param {import("../../../../shared/worker/feed-keeper.js").FeedStorage} options.storage
  * @param {import("../../../../shared/worker/season-store.js").SeasonDocuments} options.docs
- * @param {ReturnType<typeof import("../../../../shared/worker/identity.js").createIdentityLookup>} options.identities
+ * @param {import("./identity-policy.js").IdentityLookup | null} options.identityLookup
  * @param {typeof fetch} options.fetchImpl
  * @param {() => number} options.now
  */
-export function createPostseasonReader({ storage, docs, identities, fetchImpl, now }) {
+export function createPostseasonReader({ storage, docs, identityLookup, fetchImpl, now }) {
+  const identities = requireIdentityLookup(identityLookup);
   const readAdapter = createPostseasonAdapter(fetchImpl);
   const keeper = createFeedKeeper({
     storage,

@@ -9,6 +9,8 @@ import {
 } from "../worker/src/game-source.js";
 import { findTeamCodeByEspnId, findTeamCodeByNbaId } from "../worker/src/teams.js";
 import { createIdentityLookup } from "../../../shared/worker/identity.js";
+import { identityPolicy } from "../worker/src/identity-policy.js";
+import { createPostseasonReader } from "../worker/src/postseason.js";
 import { createSeasonStore } from "../../../shared/worker/season-store.js";
 import { createDurableObjectContext } from "../../../tests/durable-object-context.js";
 import { createRequestBudget } from "../../../shared/worker/request-budget.js";
@@ -59,11 +61,11 @@ function createHarness() {
     if (state.mode === "wrong-season") answer.events[0].season.year = 2026;
     return Response.json(answer);
   };
-  const createReader = (fetchWith = fetchImpl) =>
+  const createReader = (fetchWith = fetchImpl, identityLookup = identities) =>
     createGameSourceReader({
       storage: context.ctx.storage,
       docs: store.docs,
-      identities,
+      identityLookup,
       fetchImpl: fetchWith,
       now: () => clock.now,
     });
@@ -270,7 +272,10 @@ test("actual writer shares concurrent reads, keeps opaque IDs and serves details
   assert.equal(entry.vendors.espn, "401766128");
   assert.equal(entry.facts.away, "IND");
   assert.equal(entry.facts.home, "OKC");
-  const readStored = createStoredGameReader(harness.store.docs, harness.identities);
+  const readStored = createStoredGameReader({
+    docs: harness.store.docs,
+    identityLookup: harness.identities,
+  });
   assert.deepEqual(await readStored(game.id), game);
   assert.equal(await readStored("401766128"), null);
   assert.equal(harness.state.reads.length, 1);
@@ -318,6 +323,7 @@ test("bounded history resumes through all 232 January games without a monthly 20
   const history = createGameHistory({ days, createReader: harness.createReader });
   const context = (budget) => ({
     storage: harness.historyStorage,
+    identityLookup: harness.identities,
     docs: harness.store.docs,
     fetchImpl: budget.fetchImpl,
     remainingRequests: budget.remaining,
@@ -363,6 +369,7 @@ test("failed history waits across restarts without advancing its cursor or spend
     const budget = createRequestBudget(harness.fetchImpl, 4);
     return {
       storage: harness.historyStorage,
+      identityLookup: harness.identities,
       docs: harness.store.docs,
       fetchImpl: budget.fetchImpl,
       remainingRequests: budget.remaining,
@@ -393,6 +400,7 @@ test("an exhausted historical request budget causes no read or persisted progres
   const budget = createRequestBudget(harness.fetchImpl, 0);
   await history({
     storage: harness.historyStorage,
+    identityLookup: harness.identities,
     docs: harness.store.docs,
     fetchImpl: budget.fetchImpl,
     remainingRequests: budget.remaining,
@@ -456,10 +464,10 @@ test("a changed date reuses the same opaque ID and detail lookup follows its exp
     .read(2024, "2025-06-23");
   assert.equal(next.games[0].id, first.games[0].id);
   assert.equal((await harness.identities.readStatus()).games, 1);
-  const stored = await createStoredGameReader(
-    harness.store.docs,
-    harness.identities,
-  )(first.games[0].id);
+  const stored = await createStoredGameReader({
+    docs: harness.store.docs,
+    identityLookup: harness.identities,
+  })(first.games[0].id);
   assert.equal(stored.day, "2025-06-23");
 });
 
@@ -503,6 +511,7 @@ test("history caps a run at four days even when more request budget remains", as
   const budget = createRequestBudget(harness.fetchImpl, 10);
   await history({
     storage: harness.historyStorage,
+    identityLookup: harness.identities,
     docs: harness.store.docs,
     fetchImpl: budget.fetchImpl,
     remainingRequests: budget.remaining,
@@ -534,4 +543,118 @@ test("disputed associations hold the usable source record instead of publishing 
   assert.match(held.failure, /disputed/);
   assert.deepEqual(held.games, first.games);
   assert.equal((await harness.identities.readStatus()).disputed, 1);
+});
+
+test("NBA source and detail preparation fail closed without the agreed identity context", async () => {
+  const harness = createHarness();
+  const options = {
+    docs: harness.store.docs,
+    storage: harness.ctx.storage,
+    fetchImpl: harness.fetchImpl,
+    now: () => harness.clock.now,
+    identityLookup: null,
+  };
+  assert.throws(() => createGameSourceReader(options), /identity lookup is not configured/);
+  assert.throws(() => createPostseasonReader(options), /identity lookup is not configured/);
+  assert.throws(() => createStoredGameReader(options), /identity lookup is not configured/);
+  assert.equal(harness.state.reads.length, 0);
+  assert.equal(harness.stored.size, 0);
+});
+
+test("history cannot use another lookup or fetch when its proposed JobContext lookup is missing", async () => {
+  const harness = createHarness();
+  let created = false;
+  const history = createGameHistory({
+    days: [{ season: 2024, day: "2025-06-22" }],
+    createReader: () => {
+      created = true;
+      return harness.createReader();
+    },
+  });
+  const budget = createRequestBudget(harness.fetchImpl, 4);
+  await assert.rejects(
+    history({
+      storage: harness.historyStorage,
+      docs: harness.store.docs,
+      fetchImpl: budget.fetchImpl,
+      remainingRequests: budget.remaining,
+      now: () => harness.clock.now,
+      env: {},
+      createLoadSnapshot: () => async () => ({ season: 2024 }),
+      identityLookup: null,
+    }),
+    /identity lookup is not configured/,
+  );
+  assert.equal(created, false);
+  assert.equal(harness.state.reads.length, 0);
+  assert.equal(await harness.historyStorage.get("nba-game-history"), undefined);
+});
+
+test("history forwards the exact league-scoped lookup from its proposed JobContext", async () => {
+  const harness = createHarness();
+  let received;
+  const history = createGameHistory({
+    days: [{ season: 2024, day: "2025-06-22" }],
+    createReader: (fetchImpl, lookup) => {
+      received = lookup;
+      return harness.createReader(fetchImpl, lookup);
+    },
+  });
+  const budget = createRequestBudget(harness.fetchImpl, 4);
+  await history({
+    storage: harness.historyStorage,
+    docs: harness.store.docs,
+    fetchImpl: budget.fetchImpl,
+    remainingRequests: budget.remaining,
+    now: () => harness.clock.now,
+    env: {},
+    createLoadSnapshot: () => async () => ({ season: 2024 }),
+    identityLookup: harness.identities,
+  });
+  assert.equal(received, harness.identities);
+  assert.equal((await harness.identities.readStatus()).games, 1);
+});
+
+test("detail lookup uses read methods without discovering identities or rewriting their evidence", async () => {
+  const harness = createHarness();
+  const result = await harness.createReader().read(2024, "2025-06-22");
+  const id = result.games[0].id;
+  const before = await harness.identities.readEntry("game", id);
+  const readonly = {
+    ...harness.identities,
+    discover: async () => {
+      throw new Error("Unexpected discovery");
+    },
+    save: async () => {
+      throw new Error("Unexpected identity write");
+    },
+  };
+  const read = createStoredGameReader({ docs: harness.store.docs, identityLookup: readonly });
+  assert.deepEqual(await read(id), result.games[0]);
+  assert.deepEqual(await harness.identities.readEntry("game", id), before);
+});
+
+test("the prepared internal-ID policy reads explicit facts without decoding any ID", () => {
+  const game = {
+    get id() {
+      throw new Error("ID decoding is forbidden");
+    },
+    season: 2024,
+    competition: "play-in",
+    isCupFinal: false,
+    round: 0,
+    gameNumber: 1,
+    day: "2025-04-15",
+  };
+  assert.equal(identityPolicy.nativeIdMode, "internal");
+  assert.deepEqual(identityPolicy.readGameFacts(game, 2026), {
+    season: 2024,
+    competition: "play-in",
+    isCupFinal: false,
+    round: 0,
+    gameNumber: 1,
+    day: "2025-04-15",
+  });
+  assert.deepEqual(identityPolicy.readSeriesFacts(), {});
+  assert.equal(identityPolicy.readGameFacts({}, null).season, null);
 });

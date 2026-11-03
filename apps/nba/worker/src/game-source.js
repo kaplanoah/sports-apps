@@ -1,4 +1,5 @@
 import { createGameAdapter } from "./adapters/games.js";
+import { requireIdentityLookup } from "./identity-policy.js";
 import {
   BasketballGameFacts,
   validateSportsData,
@@ -17,11 +18,12 @@ const nameMonthKey = (season, day) => `nbaMonths/${season}-${day.slice(0, 7)}`;
  * @param {object} options
  * @param {import("../../../../shared/worker/feed-keeper.js").FeedStorage} options.storage
  * @param {import("../../../../shared/worker/season-store.js").SeasonDocuments} options.docs
- * @param {ReturnType<typeof import("../../../../shared/worker/identity.js").createIdentityLookup>} options.identities
+ * @param {import("./identity-policy.js").IdentityLookup | null} options.identityLookup
  * @param {typeof fetch} options.fetchImpl
  * @param {() => number} options.now
  */
-export function createGameSourceReader({ storage, docs, identities, fetchImpl, now }) {
+export function createGameSourceReader({ storage, docs, identityLookup, fetchImpl, now }) {
+  const identities = requireIdentityLookup(identityLookup);
   const readAdapter = createGameAdapter(fetchImpl);
   const keeper = createFeedKeeper({
     storage,
@@ -123,8 +125,9 @@ export function createGameSourceReader({ storage, docs, identities, fetchImpl, n
   return { read: (season, day) => load(JSON.stringify([season, day])) };
 }
 
-/** @param {import("../../../../shared/worker/season-store.js").SeasonDocuments} docs */
-export function createStoredGameReader(docs, identities) {
+/** @param {{ docs: import("../../../../shared/worker/season-store.js").SeasonDocuments, identityLookup: import("./identity-policy.js").IdentityLookup | null }} context */
+export function createStoredGameReader({ docs, identityLookup }) {
+  const identities = requireIdentityLookup(identityLookup);
   return async function readGame(id) {
     if (!/^g_[a-z0-9]{12}$/.test(id)) return null;
     const entry = await identities.readEntry("game", id);
@@ -137,20 +140,27 @@ export function createStoredGameReader(docs, identities) {
 
 /**
  * The store supplies its already-budgeted fetch only after live work and reminders.
- * @param {{ days: { season: number, day: string }[], createReader: (fetchImpl: typeof fetch) => ReturnType<typeof createGameSourceReader> }} options
+ * @param {{ days: { season: number, day: string }[], createReader: (fetchImpl: typeof fetch, identityLookup: import("./identity-policy.js").IdentityLookup) => ReturnType<typeof createGameSourceReader> }} options
  */
 export function createGameHistory({ days, createReader }) {
   const ordered = [...days].sort((first, second) => second.day.localeCompare(first.day));
   if (new Set(ordered.map((entry) => entry.day)).size !== ordered.length)
     throw new Error("Duplicate NBA history day");
   const plan = JSON.stringify(ordered);
-  /** @param {import("../../../../shared/worker/season-store.js").JobContext} context */
-  return async function updateHistory({ storage, fetchImpl, remainingRequests = () => 0, now }) {
+  /** @param {import("../../../../shared/worker/season-store.js").JobContext & { identityLookup?: import("./identity-policy.js").IdentityLookup | null }} context */
+  return async function updateHistory({
+    storage,
+    fetchImpl,
+    remainingRequests = () => 0,
+    now,
+    identityLookup,
+  }) {
     if (!remainingRequests()) return;
+    const identities = requireIdentityLookup(identityLookup);
     const saved = await storage.get("nba-game-history");
     const progress = saved?.plan === plan ? saved : { plan, index: 0, retryAt: 0 };
     if (progress.retryAt > now()) return;
-    const reader = createReader(fetchImpl);
+    const reader = createReader(fetchImpl, identities);
     for (
       let count = 0;
       count < HISTORY_REQUESTS_PER_RUN && progress.index < ordered.length && remainingRequests();
