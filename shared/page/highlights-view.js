@@ -72,7 +72,7 @@ const PLAY_VIDEO = html`<span class="spoken-only">, play video</span>`;
 const renderRecap = (recap) =>
   html`<button
     type="button"
-    class="clip-open press-tint press-reach clip-feature"
+    class="clip-open clip-feature"
     data-video="${recap.video}"
   >
     ${renderStill(recap)}
@@ -103,7 +103,7 @@ function renderPlay(clip, describePlay) {
   const facts = describePlay(clip).filter(Boolean);
   return html`<button
     type="button"
-    class="clip-open press-tint press-reach clip-row"
+    class="clip-open clip-row"
     data-video="${clip.video}"
   >
     ${renderStill(clip)}

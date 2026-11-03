@@ -77,7 +77,7 @@ test("each clip is a button named by what it shows, then that a tap plays it, ca
 
   assert.match(
     markup,
-    /<button\s+type="button"\s+class="clip-open press-tint press-reach clip-row"\s+data-video="https:\/\/video\.test\/26\.mp4"\s*>[^]*?Manny Machado&#39;s RBI single[^]*?<span class="spoken-only">, play video<\/span>\s*<\/button>/,
+    /<button\s+type="button"\s+class="clip-open clip-row"\s+data-video="https:\/\/video\.test\/26\.mp4"\s*>[^]*?Manny Machado&#39;s RBI single[^]*?<span class="spoken-only">, play video<\/span>\s*<\/button>/,
   );
   assert.doesNotMatch(markup, /<button(?=[^>]*class="clip-open)[^>]*aria-label/);
   assert.equal(markup.match(/class="clip-open/g)?.length, 3);
