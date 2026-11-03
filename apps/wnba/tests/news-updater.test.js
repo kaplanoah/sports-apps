@@ -9,7 +9,7 @@ import { createWnbaNewsJob } from "../worker/src/news-updater.js";
 import { createFeedFetch } from "./news-fixtures.js";
 import { createDocs, createJobStorage } from "../../../tests/job-context.js";
 import { createPng } from "../../../tests/photo-files.js";
-import { countClaudeCalls, stopAfterRefusal } from "../../../shared/worker/claude.js";
+import { countClaudeCalls } from "../../../shared/worker/claude.js";
 import { createClaudeService } from "../../../services/claude/worker/src/service.js";
 
 const NOW = Date.parse("2026-10-05T16:00:00Z");
@@ -122,7 +122,7 @@ function createRun({ env = ENV, claude, now = NOW } = {}) {
       storage,
       createLoadSnapshot,
       env: {},
-      claude: stopAfterRefusal(claude ?? createClaudeService(env, fetchImpl)),
+      claude: claude ?? createClaudeService(env, fetchImpl),
       fetchImpl,
       now: () => now,
     });
