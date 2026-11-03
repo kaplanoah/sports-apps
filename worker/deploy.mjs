@@ -568,6 +568,7 @@ export async function deploy({
       await restoreAfter(problem, previousVersions);
     }
     if (isUploaded) logWorkerCheck();
+    else if (check.status === "answering") onChecked?.();
     // An unbound service is safely excluded only after every app health answered.
     if (
       isUploaded ||

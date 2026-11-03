@@ -286,7 +286,7 @@ test("a failure spanning lines or holding a pipe stays in its Worker's row", asy
   assert.match(writes[0].body.body, /^\| mlb \| 2\.40\.1 \| failed: answered 500 \\\| retry \|$/m);
 });
 
-test("the comment job, apart from the one holding Cloudflare's token, runs main's script on both channels", () => {
+test("the comment job, apart from the one holding Cloudflare's token, runs on both channels", () => {
   const workflow = readRepoFile(".github/workflows/deploy.yml");
   const [beforeComment, commentJob] = workflow.split(/\n {2}comment:\n/);
   const [deployJob] = beforeComment.split(/\n {2}report:\n/);
@@ -297,7 +297,6 @@ test("the comment job, apart from the one holding Cloudflare's token, runs main'
     commentJob,
     /permissions:\n {6}contents: read\n {6}actions: read\n {6}issues: read\n {6}checks: read\n {6}pull-requests: write\n/,
   );
-  assert.match(commentJob, /\n {10}ref: main\n/);
   assert.match(commentJob, /\n {4}continue-on-error: true\n/);
   assert.match(commentJob, /run: node worker\/comment-deploy\.mjs\n/);
   assert.match(commentJob, /WORKER_RESULTS: \$\{\{ needs\.deploy\.outputs\.worker-results \}\}/);

@@ -222,6 +222,7 @@ async function deployServiceAndApps({
   const { roots, remove } = createServiceRoots();
   const events = [];
   const covered = [];
+  const checked = [];
   const errors = [];
   const lines = [];
   const calls = [];
@@ -292,6 +293,7 @@ async function deployServiceAndApps({
       roots,
       commit: NEW_COMMIT,
       onCovered: (worker) => covered.push({ worker, events: [...events] }),
+      onChecked: (worker) => checked.push(worker),
       buildWorkerImpl: async () => "export default {}",
       deployWorkerImpl: (options) =>
         deploy({
@@ -316,7 +318,7 @@ async function deployServiceAndApps({
         }),
       logError: (line) => errors.push(line),
     });
-    return { isDeployed, events, covered, errors, lines, calls, previousVersions };
+    return { isDeployed, events, covered, checked, errors, lines, calls, previousVersions };
   } finally {
     remove();
   }
@@ -429,13 +431,15 @@ test("deferred service failures keep the no-earlier-version and refused-rollback
 
 test("newly bound apps check an unchanged service at its own live commit without uploading it", async () => {
   for (const isAppOnly of [false, true]) {
-    const { isDeployed, events, lines, calls } = await deployServiceAndApps({
+    const { isDeployed, events, checked, lines, calls } = await deployServiceAndApps({
       isAppOnly,
       isServiceChanged: false,
     });
     assert.equal(isDeployed, true);
     assert.deepEqual(events.slice(-2), ["health mlb", "health wnba"]);
     assert.ok(lines.includes("accounts: health check: ok"));
+    assert.ok(checked.includes("accounts"), "a service that answered counts as checked");
+    assert.ok(!lines.includes("accounts: worker check: ok"));
     assert.ok(
       !calls.some(
         ({ url, init }) =>
@@ -479,6 +483,15 @@ test("a service still unbound after app deploys has only the skipped-check notic
     lines.includes("accounts: ::notice::health check: skipped, no app reaches accounts yet"),
   );
   assert.ok(!events.includes("rollback accounts"));
+});
+
+test("an unchanged service no app reports counts as not checked", async () => {
+  const { isDeployed, checked } = await deployServiceAndApps({
+    isServiceChanged: false,
+    areAppsUnbound: true,
+  });
+  assert.equal(isDeployed, true);
+  assert.ok(!checked.includes("accounts"));
 });
 
 test("a check-only service with no recorded live release fails without uploading or rolling back", async () => {
