@@ -103,6 +103,44 @@ test("contradictory ESPN evidence preserves the saved opaque match while recordi
   });
 });
 
+test("strict WNBA eligibility stays quarantined through an agreeing replay and rejects old restored tokens", async () => {
+  const { ctx, identities, docs } = await createMappedGames();
+  const [game] = OPAQUE_GAMES;
+  const original = await identities.lookup.readEligible("game", "espn", game.espnId);
+  assert.ok(original);
+  await identities.saveVendorGames([{ ...describeEspnIdentities()[0], home: "NYL" }], 0, docs);
+  assert.equal(await identities.lookup.readEligible("game", "espn", game.espnId), null);
+  const restarted = createIdentityDocuments(ctx.storage, identityPolicy);
+  await restarted.saveVendorGames([describeEspnIdentities()[0]], 0, docs);
+  assert.equal(await restarted.lookup.readEligible("game", "espn", game.espnId), null);
+  assert.equal((await restarted.lookup.readStatus()).disputed, 1);
+  await restarted.lookup.save([
+    {
+      type: "game",
+      internalId: game.id,
+      vendor: "espn",
+      vendorId: game.espnId,
+      decisive: true,
+      evidence: { method: "existing-id" },
+    },
+  ]);
+  const restored = await restarted.lookup.readEligible("game", "espn", game.espnId);
+  assert.equal(restored.internalId, original.internalId);
+  assert.notEqual(restored.associationToken, original.associationToken);
+  assert.equal(
+    await ctx.storage.transaction((transaction) =>
+      restarted.lookup.validateGuards(transaction, [original]),
+    ),
+    false,
+  );
+  assert.equal(
+    await ctx.storage.transaction((transaction) =>
+      restarted.lookup.validateGuards(transaction, [restored]),
+    ),
+    true,
+  );
+});
+
 test("an exhausted store request budget stops an opaque summary read without losing its match", async () => {
   const { docs } = await createMappedGames();
   const saved = structuredClone([...docs.stored]);

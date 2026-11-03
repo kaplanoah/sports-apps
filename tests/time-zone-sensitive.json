@@ -54,6 +54,7 @@
     "apps/wnba/tests/game-ends.test.js",
     "apps/wnba/tests/game-sheet.test.js",
     "apps/wnba/tests/highlights.test.js",
+    "apps/wnba/tests/identity-guard-integration.test.js",
     "apps/wnba/tests/injuries.test.js",
     "apps/wnba/tests/lead.test.js",
     "apps/wnba/tests/news-feeds.test.js",
