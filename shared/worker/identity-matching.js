@@ -3,9 +3,13 @@ import { readPlayerName } from "./player-name.js";
 import { readEasternDay } from "../page/days.js";
 
 /** @param {any} game */
-export const readIdentityDay = (game) =>
+const readIdentityDay = (game) =>
   game.date ??
   (Number.isFinite(Date.parse(game.start)) ? readEasternDay(Date.parse(game.start)).date : null);
+
+/** @param {any} record */
+export const nameIdentityGameGroup = (record) =>
+  JSON.stringify([record.away, record.home, readIdentityDay(record)]);
 
 function hasSameTeams(first, second) {
   return !!first.away && !!first.home && first.away === second.away && first.home === second.home;
@@ -70,13 +74,17 @@ function findIdentityCandidate(type, record, uniqueNatives, uniqueRecords) {
 /**
  * Match normalized records, retaining established identities when schedules or rosters change.
  * @param {ReturnType<typeof import("./identity.js").createIdentityLookup>} lookup
- * @param {{ type: "game" | "player", vendor: string, natives: any[], records: any[] }} batch
+ * @param {{ type: "game" | "player", vendor: string, natives: any[], records: any[], offset?: number, limit?: number, factsRevision?: string | null }} batch
  */
-export async function reconcileIdentities(lookup, { type, vendor, natives, records }) {
+export async function reconcileIdentities(
+  lookup,
+  { type, vendor, natives, records, offset = 0, limit = Infinity, factsRevision = undefined },
+) {
+  const revision = factsRevision === undefined ? await lookup.readFactsRevision() : factsRevision;
   const uniqueNatives = [...new Map(natives.map((record) => [String(record.id), record])).values()];
   const uniqueRecords = [...new Map(records.map((record) => [String(record.id), record])).values()];
   const observations = [];
-  for (const record of uniqueRecords) {
+  for (const record of uniqueRecords.slice(offset, offset + limit)) {
     const established = await lookup.read(type, vendor, String(record.id));
     const { candidate, confident, decisive, numbered } = findIdentityCandidate(
       type,
@@ -140,5 +148,5 @@ export async function reconcileIdentities(lookup, { type, vendor, natives, recor
       },
     });
   }
-  return lookup.save(observations);
+  return lookup.save(observations, revision);
 }

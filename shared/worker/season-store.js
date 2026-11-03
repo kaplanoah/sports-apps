@@ -35,6 +35,7 @@ import { describeError, respondError, respondJson, respondMethodNotAllowed } fro
  * store's paths can't name, the store's reading of the league, the Worker's secrets, and the clock.
  * @typedef {object} JobContext
  * @property {SeasonDocuments} docs
+ * @property {ReturnType<typeof import("./identity.js").createIdentityLookup> | null} [identityLookup]
  * @property {(fetchImpl: typeof fetch) => SnapshotLoader<SeasonSnapshot>} createLoadSnapshot
  *   the store's reading of the league, made on the fetch it's handed, so a run that counts its
  *   requests counts these too
@@ -74,6 +75,7 @@ import { describeError, respondError, respondJson, respondMethodNotAllowed } fro
  * @property {(collection: string) => Promise<any[]>} list
  * @property {(key: string, document: object) => Promise<void>} write
  * @property {(key: string, change: (document: any) => object | null) => Promise<void>} update
+ * @property {(key: string, previous: object, document: object, options?: { identityGuards: import("./identity.js").IdentityGuard[] }) => Promise<boolean>} replaceIfUnchanged
  * @property {(key: string) => Promise<void>} remove
  */
 
@@ -83,7 +85,7 @@ import { describeError, respondError, respondJson, respondMethodNotAllowed } fro
  * @template {SeasonSnapshot} Snapshot
  * @template Updates
  * @typedef {object} League
- * @property {(storage: import("./feed-keeper.js").FeedStorage, fetchImpl: typeof fetch, readDoc: SeasonDocuments["read"]) => SnapshotLoader<Snapshot>} createLoadSnapshot
+ * @property {(storage: import("./feed-keeper.js").FeedStorage, fetchImpl: typeof fetch, readDoc: SeasonDocuments["read"], identityLookup: ReturnType<typeof import("./identity.js").createIdentityLookup> | null) => SnapshotLoader<Snapshot>} createLoadSnapshot
  *   reads the league through `fetchImpl`, keeping what it may read again in `storage`
  * @property {(loadSnapshot: SnapshotLoader<Snapshot>, now: number) => Promise<Snapshot>} loadCurrentSnapshot
  * @property {(docs: SeasonDocuments, season: number) => Promise<Updates>} readUpdates
@@ -262,6 +264,7 @@ export function createSeasonStore(league) {
             }),
             fetchWith,
             (key) => ctx.storage.get(key),
+            this.identities?.lookup ?? null,
           ),
         loadDetails = undefined,
       } = {},
@@ -297,6 +300,8 @@ export function createSeasonStore(league) {
         push: this.push,
         now,
         verify: () => this.verifyReminderGames(),
+        validateIdentityGuards: (transaction, guards) =>
+          this.identities?.lookup.validateGuards(transaction, guards) ?? Promise.resolve(false),
       });
       /** @type {Map<string, Promise<void>>} */
       this.docUpdates = new Map();
@@ -309,6 +314,8 @@ export function createSeasonStore(league) {
         ],
         write: (key, doc) => this.putDoc(key, doc),
         update: (key, change) => this.updateDoc(key, change),
+        replaceIfUnchanged: (key, previous, document, options) =>
+          this.replaceDocIfUnchanged(key, previous, document, options),
         remove: (key) => this.deleteDoc(key),
       };
       this.readDetail = league.createReadDetail?.({
@@ -318,6 +325,7 @@ export function createSeasonStore(league) {
           await this.incrementJobCount(job, LEAGUE_READS_COUNT);
         },
         createLoadSnapshot: this.createLoadSnapshot,
+        identityLookup: this.identities?.lookup ?? null,
         env,
         fetchImpl: this.fetchImpl,
         now,
@@ -439,6 +447,37 @@ export function createSeasonStore(league) {
       return updating;
     }
 
+    async replaceDocIfUnchanged(key, previous, document, options = undefined) {
+      const data = sortKeys(document);
+      let changed = false;
+      const replacing = (this.docUpdates.get(key) ?? Promise.resolve()).then(() =>
+        this.ctx.storage.transaction(async (transaction) => {
+          const latest = await transaction.get(key);
+          if (!isSameJson(latest, previous)) return false;
+          if (
+            options !== undefined &&
+            !(await this.identities?.lookup.validateGuards(transaction, options?.identityGuards))
+          )
+            return false;
+          if (!isSameJson(latest, data)) {
+            await transaction.put(key, data);
+            changed = true;
+          }
+          return true;
+        }),
+      );
+      this.docUpdates.set(
+        key,
+        replacing.then(
+          () => {},
+          () => {},
+        ),
+      );
+      const matched = await replacing;
+      if (changed) this.announceChange(key, data);
+      return matched;
+    }
+
     async deleteDoc(key) {
       await this.ctx.storage.delete(key);
       await this.identities?.forgetSource(key).catch(() => {});
@@ -451,15 +490,9 @@ export function createSeasonStore(league) {
     async startUpdating() {
       if (this.hasAlarm) return;
       const alarmAt = await this.ctx.storage.getAlarm();
-      await this.prepareIdentityBackfill();
       if (alarmAt === null || (alarmAt > this.now() && (await this.isBehindDeploy())))
         await this.ctx.storage.setAlarm(this.now());
       this.hasAlarm = true;
-    }
-
-    async prepareIdentityBackfill() {
-      if (this.identities && isFromEarlierRelease(await this.ctx.storage.get(SCHEDULE_KEY)))
-        await this.identities.restartBackfill();
     }
 
     async isBehindDeploy() {
@@ -483,7 +516,6 @@ export function createSeasonStore(league) {
       const requestsBefore = this.requestCount;
       let nextAt = now + RETRY_MS[0];
       try {
-        await this.prepareIdentityBackfill();
         const seasonDueAt = await this.updateSeasonWhenDue(now);
         await this.reminders.checkDue();
         const jobDueTimes = await this.startDueJobs(now);
@@ -594,6 +626,7 @@ export function createSeasonStore(league) {
                 docs: this.docs,
                 storage: this.createJobStorage(name),
                 createLoadSnapshot: this.createLoadSnapshot,
+                identityLookup: this.identities?.lookup ?? null,
                 env: this.env,
                 fetchImpl: budget.fetchImpl,
                 remainingRequests: budget.remaining,
@@ -601,7 +634,10 @@ export function createSeasonStore(league) {
               });
             }
           } finally {
-            await this.identities?.backfill(this.docs, () => generation === this.alarmGeneration);
+            await this.identities?.backfillWhenDue(
+              this.docs,
+              () => generation === this.alarmGeneration,
+            );
           }
         })
         .catch((error) => {
@@ -650,6 +686,7 @@ export function createSeasonStore(league) {
           docs: this.docs,
           storage: this.createJobStorage(name),
           createLoadSnapshot: this.createLoadSnapshot,
+          identityLookup: this.identities?.lookup ?? null,
           env: this.env,
           fetchImpl: this.fetchImpl,
           now: this.now,

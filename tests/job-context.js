@@ -1,5 +1,6 @@
 // Stand-ins for what the store hands a league's job (`JobContext` in shared/worker/season-store.js):
 // its documents and its own storage. Each copies what goes in and comes out, as the store does.
+import { isSameJson } from "../shared/page/compare.js";
 
 /**
  * A job's own storage, starting with `initial`.
@@ -54,6 +55,15 @@ export function createDocs(initial = {}) {
         .map(([, doc]) => structuredClone(doc));
     },
     write: async (/** @type {string} */ key, /** @type {any} */ doc) => save(key, doc),
+    replaceIfUnchanged: async (
+      /** @type {string} */ key,
+      /** @type {any} */ previous,
+      /** @type {any} */ doc,
+    ) => {
+      if (!isSameJson(stored.get(key), previous)) return false;
+      save(key, doc);
+      return true;
+    },
     update: (/** @type {string} */ key, /** @type {(doc: any) => any} */ change) => {
       const run = updating.then(() => {
         const doc = change(structuredClone(stored.get(key)) ?? null);
