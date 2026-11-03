@@ -1,3 +1,4 @@
+import { DETAIL_ANSWER_PREFIX } from "./detail-reads.js";
 import { nameStoredFeedKey } from "./feed-keeper.js";
 import { createIdentityDocuments } from "./identity-documents.js";
 import {
@@ -711,15 +712,12 @@ export function createSeasonStore(league) {
       return {
         get: (key) => storage.get(prefix + key),
         put: async (key, value) => {
+          const isDetailAnswer = name === "details" && key.startsWith(DETAIL_ANSWER_PREFIX);
           const prepared =
-            name === "details" && key.startsWith("detail-answer:") && this.identities
+            isDetailAnswer && this.identities
               ? await this.identities.prepareDetailAnswer(prefix + key, value)
               : value;
-          if (
-            name === "details" &&
-            key.startsWith("detail-answer:") &&
-            this.identities?.publishDocument
-          )
+          if (isDetailAnswer && this.identities?.publishDocument)
             await this.identities.publishDocument(prefix + key, prepared, value);
           else await storage.put(prefix + key, prepared);
         },

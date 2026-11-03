@@ -16,6 +16,7 @@ import {
   IDENTITY_COVERAGE_KEY,
   IDENTITY_BACKFILL_KEY,
   saveIdentitySourceProblems,
+  saveIdentitySourceRejections,
 } from "./identity.js";
 
 export const IDENTITY_AUDIT_VERSION = 2;
@@ -327,6 +328,7 @@ export function createIdentityBackfill(storage, options, now) {
             countSourceRejections(source, pending),
             pending.nativeMissingEntries ?? 0,
           );
+          await saveIdentitySourceRejections(transaction, key, source.rejected ?? 0);
           return true;
         }));
       if (!finalized) {

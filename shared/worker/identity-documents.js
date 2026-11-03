@@ -15,12 +15,17 @@ import {
   nameIdentityErrorKey,
   saveIdentityError,
   saveIdentitySourceProblems,
+  readIdentitySourceRejections,
+  saveIdentitySourceRejections,
 } from "./identity.js";
+import { DETAIL_ANSWER_PREFIX } from "./detail-reads.js";
 import { ESPN_VENDOR } from "./espn-adapter.js";
 import { readIdentityDiagnosis } from "./identity-diagnostics.js";
 import { reconcileIdentities } from "./identity-matching.js";
 import { createIdentityBackfill } from "./identity-backfill.js";
 
+const CACHED_ANSWER_PREFIX = `job:details:${DETAIL_ANSWER_PREFIX}`;
+const isCachedAnswerKey = (key) => key.startsWith(CACHED_ANSWER_PREFIX);
 const FAILED_PREFIX = `${IDENTITY_ERROR_PREFIX}failed:`;
 const ERROR_SCAN_LIMIT = 20;
 const LIVE_RECONCILIATION_ATTEMPTS = 3;
@@ -342,6 +347,18 @@ export function createIdentityDocuments(storage, policy, now = Date.now) {
     ];
   }
 
+  async function invalidateFactCoverage(storage, observations, results) {
+    if (
+      observations.some(
+        (observation, index) =>
+          observation.type === "game" &&
+          ((results[index].created && !Number.isInteger(observation.facts?.season)) ||
+            (!results[index].created && results[index].addedFacts.includes("season"))),
+      )
+    )
+      await storage.put(IDENTITY_COVERAGE_KEY, crypto.randomUUID());
+  }
+
   async function registerDocument(key, sourceKey, prepared) {
     const { document, observations, rejected, espnPlayers } = prepared;
     let results = [];
@@ -359,15 +376,7 @@ export function createIdentityDocuments(storage, policy, now = Date.now) {
     }
     const rejectedCount = rejected + results.filter((result) => result.missing).length;
     if (policy.nativeIdMode !== "internal") await saveErrors(sourceKey, rejectedCount);
-    if (
-      observations.some(
-        (observation, index) =>
-          observation.type === "game" &&
-          ((results[index].created && !Number.isInteger(observation.facts?.season)) ||
-            (!results[index].created && results[index].addedFacts.includes("season"))),
-      )
-    )
-      await storage.put(IDENTITY_COVERAGE_KEY, crypto.randomUUID());
+    await invalidateFactCoverage(storage, observations, results);
     if (espnPlayers.length) await reconcileLiveRecords("player", espnPlayers);
     const matches = listGameMatchObservations(key, document);
     if (matches.length) await lookup.save(matches);
@@ -382,7 +391,7 @@ export function createIdentityDocuments(storage, policy, now = Date.now) {
   }
 
   function describeDetailAnswer(key, value) {
-    const url = new URL(key.slice("job:details:detail-answer:".length), "https://store");
+    const url = new URL(key.slice(CACHED_ANSWER_PREFIX.length), "https://store");
     const season = Number(url.searchParams.get("season")) || value.body?.season;
     return { key: `details/${season ?? "answer"}`, document: value.body };
   }
@@ -434,32 +443,52 @@ export function createIdentityDocuments(storage, policy, now = Date.now) {
     return { ...value, body };
   }
 
-  async function publishDocument(key, document, original, previous = undefined) {
-    const cached = key.startsWith("job:details:detail-answer:");
-    const source = cached ? describeDetailAnswer(key, original) : { key, document: original };
+  async function updateDocumentCoverage(transaction, key, document, original = null) {
+    if (document === undefined) {
+      await saveIdentitySourceProblems(transaction, key, 0, 0);
+      await saveIdentitySourceRejections(transaction, key, 0);
+      return;
+    }
+    const cached = isCachedAnswerKey(key);
+    const source = cached
+      ? describeDetailAnswer(key, original ?? document)
+      : { key, document: original ?? document };
     const prepared = cached ? describeDetailAnswer(key, document).document : document;
     const { observations } = expandDocument(source.key, prepared);
-    const { rejected } = expandDocument(source.key, source.document);
+    const observedRejections = expandDocument(source.key, source.document).rejected;
+    const rejected =
+      original === null
+        ? await readIdentitySourceRejections(transaction, key, observedRejections)
+        : observedRejections;
+    const saved = await lookup.updateRegisteredFacts(observations, { key, rejected }, transaction);
+    await saveIdentitySourceRejections(transaction, key, rejected);
+    await invalidateFactCoverage(transaction, observations, saved.results);
+  }
+
+  async function publishDocument(key, document, original, previous = undefined) {
     const isSuperseded = (current) =>
       isSameJson(previous, document) && !isSameJson(current, document);
+    const commitDocument = (recordFailure = false) =>
+      storage.transaction(async (transaction) => {
+        const current = await transaction.get(key);
+        const superseded = isSuperseded(current);
+        const changed = !isSameJson(current, document);
+        if (recordFailure) await saveIdentityError(transaction, key, 1, "failed");
+        else
+          await updateDocumentCoverage(
+            transaction,
+            key,
+            superseded ? current : document,
+            superseded ? null : original,
+          );
+        if (superseded) return false;
+        if (changed) await transaction.put(key, document);
+        return changed;
+      });
     try {
-      return await storage.transaction(async (transaction) => {
-        const current = await transaction.get(key);
-        if (isSuperseded(current)) return false;
-        const changed = !isSameJson(current, document);
-        await lookup.updateRegisteredFacts(observations, { key, rejected }, transaction);
-        if (changed) await transaction.put(key, document);
-        return changed;
-      });
+      return await commitDocument();
     } catch {
-      return storage.transaction(async (transaction) => {
-        const current = await transaction.get(key);
-        if (isSuperseded(current)) return false;
-        const changed = !isSameJson(current, document);
-        await saveIdentityError(transaction, key, 1, "failed");
-        if (changed) await transaction.put(key, document);
-        return changed;
-      });
+      return commitDocument(true);
     }
   }
 
@@ -467,8 +496,10 @@ export function createIdentityDocuments(storage, policy, now = Date.now) {
     await storage.delete(nameRetryKey(key));
     await saveErrors(key, 0, "failed");
     await storage.transaction(async (transaction) => {
-      if ((await transaction.get(key)) === undefined)
+      if ((await transaction.get(key)) === undefined) {
         await saveIdentitySourceProblems(transaction, key, 0, 0);
+        await saveIdentitySourceRejections(transaction, key, 0);
+      }
     });
   }
 
@@ -478,7 +509,7 @@ export function createIdentityDocuments(storage, policy, now = Date.now) {
       if (saved) return { kind: "vendor", type: "game", ...saved };
       return isIdentityEntityKey(key) || isIdentityVendorKey(key) ? { kind: "mappings" } : null;
     }
-    const cached = key.startsWith("job:details:detail-answer:");
+    const cached = isCachedAnswerKey(key);
     if (!cached && !isStoreDocumentPath(key)) return null;
     if (!cached && !isSameJson(await docs.read(key), value)) return { kind: "changed" };
     const source = cached ? describeDetailAnswer(key, value) : { key, document: value };
@@ -499,7 +530,10 @@ export function createIdentityDocuments(storage, policy, now = Date.now) {
       ],
       records: mergePlayerEvidence(retryEvidence, prepared.espnPlayers),
       retryEvidence,
-      rejected: prepared.rejected,
+      rejected:
+        policy.nativeIdMode === "internal"
+          ? await readIdentitySourceRejections(storage, key, prepared.rejected)
+          : prepared.rejected,
     };
   }
 

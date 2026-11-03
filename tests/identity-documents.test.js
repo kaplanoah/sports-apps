@@ -8,6 +8,7 @@ import {
   IDENTITY_BACKFILL_KEY,
   IDENTITY_ERROR_PREFIX,
   IDENTITY_UNREGISTERED_PREFIX,
+  readIdentitySourceRejections,
 } from "../shared/worker/identity.js";
 import { IDENTITY_WORK_PER_RUN } from "../shared/worker/identity-backfill.js";
 import { createDurableObjectContext } from "./durable-object-context.js";
@@ -829,6 +830,290 @@ test("an unchanged prepared write cannot overwrite a concurrent source change", 
   assert.equal((await store.identities.lookup.readEntry("player", id)).facts.team, "LAL");
 });
 
+for (const replacement of ["delete", "empty", "missing"]) {
+  test(`superseded preparation restores counts for ${replacement} source`, async () => {
+    const { ctx, stored } = createDurableObjectContext();
+    const store = createStore(ctx);
+    stored.set(IDENTITY_COVERAGE_KEY, "healthy-generation");
+    await finishBackfill(store);
+    const key = "seasons/2025";
+    const original = {
+      season: 2025,
+      players: [{ id: "p_abandoned", firstName: "Old", lastName: "Player" }],
+    };
+    await store.docs.write(key, original);
+    const update = store.identities.lookup.updateRegisteredFacts;
+    const entered = createDeferred();
+    const release = createDeferred();
+    let paused = false;
+    store.identities.lookup.updateRegisteredFacts = async (...args) => {
+      if (!paused && args[1]?.partial) {
+        paused = true;
+        entered.resolve(undefined);
+        await release.promise;
+      }
+      return update(...args);
+    };
+    const writing = store.docs.write(key, original);
+    assert.equal(
+      await Promise.race([entered.promise.then(() => true), writing.then(() => false)]),
+      true,
+    );
+    const current = {
+      season: 2025,
+      players:
+        replacement === "missing"
+          ? [{ id: "p_current", firstName: "Current", lastName: "Player" }]
+          : [],
+    };
+    if (replacement === "delete") await store.docs.remove(key);
+    else await store.docs.write(key, current);
+    release.resolve(undefined);
+    await writing;
+    assert.deepEqual(stored.get(key), replacement === "delete" ? undefined : current);
+    const count = replacement === "missing" ? 1 : 0;
+    assert.equal(
+      stored.get(`${IDENTITY_UNREGISTERED_PREFIX}${encodeURIComponent(key)}`) ?? 0,
+      count,
+    );
+    assert.equal((await store.identities.readStatus()).errors, count);
+    await store.identities.lookup.save([
+      {
+        type: "player",
+        vendor: "nba",
+        vendorId: "native-current",
+        internalId: replacement === "missing" ? "p_current" : "p_unrelated",
+        evidence: { method: "discovery" },
+      },
+    ]);
+    assert.equal(stored.get(IDENTITY_COVERAGE_KEY) === "healthy-generation", !count);
+    await finishBackfill(store);
+    assert.equal((await store.identities.readStatus()).checks.verified, true);
+  });
+}
+
+test("superseded repair preserves a newer writer's vendor rejection through audits", async () => {
+  const { ctx, stored } = createDurableObjectContext();
+  const store = createStore(ctx);
+  const id = await store.identities.lookup.discover({
+    type: "player",
+    vendor: "nba",
+    vendorId: "native-current",
+  });
+  stored.set(IDENTITY_COVERAGE_KEY, "healthy-generation");
+  await finishBackfill(store);
+  const key = "seasons/2025";
+  const original = {
+    season: 2025,
+    players: [{ id: "p_abandoned", firstName: "Old", lastName: "Player" }],
+  };
+  await store.docs.write(key, original);
+  const update = store.identities.lookup.updateRegisteredFacts;
+  const entered = createDeferred();
+  const release = createDeferred();
+  let paused = false;
+  store.identities.lookup.updateRegisteredFacts = async (...args) => {
+    if (!paused && args[1]?.partial) {
+      paused = true;
+      entered.resolve(undefined);
+      await release.promise;
+    }
+    return update(...args);
+  };
+  const writing = store.docs.write(key, original);
+  assert.equal(
+    await Promise.race([entered.promise.then(() => true), writing.then(() => false)]),
+    true,
+  );
+  const player = { id, firstName: "Current", lastName: "Player" };
+  await store.docs.write(key, {
+    season: 2025,
+    players: [{ ...player, espnIdentity: { id: null } }],
+  });
+  const current = structuredClone(stored.get(key));
+  assert.equal((await store.identities.readStatus()).errors, 1);
+  release.resolve(undefined);
+  await writing;
+  assert.deepEqual(stored.get(key), current);
+  assert.equal((await store.identities.readStatus()).errors, 1);
+  assert.equal(stored.has(`${IDENTITY_UNREGISTERED_PREFIX}${encodeURIComponent(key)}`), false);
+  await store.identities.lookup.discover({
+    type: "player",
+    vendor: "nba",
+    vendorId: "unrelated-native",
+  });
+  assert.equal(stored.get(IDENTITY_COVERAGE_KEY), "healthy-generation");
+  stored.set(IDENTITY_COVERAGE_KEY, "audit-retained-rejection");
+  await finishBackfill(store);
+  assert.equal((await store.identities.readStatus()).errors, 1);
+  assert.equal((await store.identities.readStatus()).checks.verified, false);
+  await store.docs.write(key, { season: 2025, players: [player] });
+  assert.equal((await store.identities.readStatus()).errors, 0);
+  assert.equal((await store.identities.readStatus()).checks.verified, true);
+  assert.equal(await readIdentitySourceRejections(ctx.storage, key), 0);
+  await store.docs.write(key, {
+    season: 2025,
+    players: [{ ...player, espnIdentity: { id: null } }],
+  });
+  assert.equal(await readIdentitySourceRejections(ctx.storage, key), 1);
+  await store.docs.remove(key);
+  assert.equal(await readIdentitySourceRejections(ctx.storage, key), 0);
+  assert.equal((await store.identities.readStatus()).errors, 0);
+});
+
+test("opaque backfill retains vendor rejections while sanitizing older stored sources", async () => {
+  const { ctx, stored } = createDurableObjectContext();
+  const store = createStore(ctx);
+  const id = await store.identities.lookup.discover({
+    type: "player",
+    vendor: "nba",
+    vendorId: "native-current",
+  });
+  const key = "seasons/2025";
+  stored.set(key, {
+    season: 2025,
+    players: [{ id, firstName: "Current", lastName: "Player", espnIdentity: { id: null } }],
+  });
+  await finishBackfill(store);
+  assert.equal(stored.get(key).players[0].espnIdentity, undefined);
+  assert.equal(await readIdentitySourceRejections(ctx.storage, key), 1);
+  assert.equal((await store.identities.readStatus()).errors, 1);
+  stored.set(IDENTITY_COVERAGE_KEY, "recheck-sanitized-source");
+  await finishBackfill(store);
+  assert.equal((await store.identities.readStatus()).errors, 1);
+  assert.equal((await store.identities.readStatus()).checks.verified, false);
+});
+
+test("failed superseded repair preserves the newer source and schedules normal recovery", async () => {
+  const { ctx, stored } = createDurableObjectContext();
+  const store = createStore(ctx);
+  const id = await store.identities.lookup.discover({
+    type: "player",
+    vendor: "nba",
+    vendorId: "native-current",
+  });
+  await finishBackfill(store);
+  const key = "seasons/2025";
+  const original = {
+    season: 2025,
+    players: [{ id: "p_abandoned", firstName: "Old", lastName: "Player" }],
+  };
+  await store.docs.write(key, original);
+  const update = store.identities.lookup.updateRegisteredFacts;
+  const entered = createDeferred();
+  const release = createDeferred();
+  let paused = false;
+  store.identities.lookup.updateRegisteredFacts = async (...args) => {
+    if (!paused && args[1]?.partial) {
+      paused = true;
+      entered.resolve(undefined);
+      await release.promise;
+    }
+    return update(...args);
+  };
+  const writing = store.docs.write(key, original);
+  assert.equal(
+    await Promise.race([entered.promise.then(() => true), writing.then(() => false)]),
+    true,
+  );
+  const current = { season: 2025, players: [{ id, firstName: "Current", lastName: "Player" }] };
+  await store.docs.write(key, current);
+  const transaction = ctx.storage.transaction;
+  let unavailable = true;
+  ctx.storage.transaction = (change) =>
+    transaction((inner) =>
+      change({
+        ...inner,
+        get: async (asked) => {
+          if (unavailable && asked === `identity:entity:nba:player:${id}`)
+            throw new Error("Identity ledger unavailable");
+          return inner.get(asked);
+        },
+      }),
+    );
+  release.resolve(undefined);
+  await writing;
+  assert.deepEqual(stored.get(key), current);
+  assert.equal(stored.get(`${IDENTITY_ERROR_PREFIX}failed:${encodeURIComponent(key)}`), 1);
+  assert.equal((await store.identities.readStatus()).checks.verified, false);
+  unavailable = false;
+  for (let step = 0; step < 100; step++) {
+    await store.identities.backfill(store.docs);
+    if ((await store.identities.readStatus()).checks.verified) break;
+  }
+  assert.equal((await store.identities.readStatus()).checks.verified, true);
+  assert.equal((await store.identities.readStatus()).errors, 0);
+  assert.deepEqual(stored.get(key), current);
+});
+
+test("game registration while publication waits invalidates a completed missing-season audit", async () => {
+  for (const cached of [false, true]) {
+    const { ctx, stored } = createDurableObjectContext();
+    const store = createStore(ctx);
+    await finishBackfill(store);
+    const game = createGame("g_later");
+    const { season: _season, ...withoutSeason } = game;
+    await store.docs.write(`games/${game.id}`, withoutSeason);
+    const key = cached ? "job:details:detail-answer:/season?season=2026" : "seasons/2026";
+    const publish = store.identities.publishDocument;
+    const entered = createDeferred();
+    const release = createDeferred();
+    store.identities.publishDocument = async (...args) => {
+      if (args[0] === key) {
+        entered.resolve(undefined);
+        await release.promise;
+      }
+      return publish(...args);
+    };
+    const document = { season: 2026, games: [game] };
+    const writing = cached
+      ? store
+          .createJobStorage("details")
+          .put("detail-answer:/season?season=2026", { body: document })
+      : store.docs.write(key, document);
+    assert.equal(
+      await Promise.race([entered.promise.then(() => true), writing.then(() => false)]),
+      true,
+    );
+    await store.identities.lookup.save([
+      {
+        type: "game",
+        vendor: "nba",
+        vendorId: "native-later-game",
+        internalId: game.id,
+        evidence: { method: "discovery" },
+      },
+    ]);
+    await finishBackfill(store);
+    assert.ok((await store.identities.readStatus()).checks.missingFacts > 0);
+    const revision = stored.get(IDENTITY_COVERAGE_KEY);
+    const transaction = ctx.storage.transaction;
+    const writeGroups = [];
+    ctx.storage.transaction = (change) =>
+      transaction((inner) => {
+        const writes = [];
+        writeGroups.push(writes);
+        return change({
+          ...inner,
+          put: async (asked, value) => {
+            writes.push(asked);
+            return inner.put(asked, value);
+          },
+        });
+      });
+    release.resolve(undefined);
+    await writing;
+    assert.notEqual(stored.get(IDENTITY_COVERAGE_KEY), revision);
+    assert.ok(
+      writeGroups.some((writes) => writes.includes(key) && writes.includes(IDENTITY_COVERAGE_KEY)),
+    );
+    await finishBackfill(store);
+    assert.equal((await store.identities.readStatus()).checks.verified, true);
+    assert.equal((await store.identities.lookup.readEntry("game", game.id)).facts.season, 2026);
+    assert.equal(await store.identities.lookup.read("game", "nba", game.id), null);
+  }
+});
+
 test("failed atomic identity publication preserves sports data and reports uncertainty", async () => {
   for (const cached of [false, true]) {
     const { ctx, stored } = createDurableObjectContext();
@@ -897,7 +1182,12 @@ test("failed fallback evidence cannot replace the earlier usable document", asyn
             .createJobStorage("details")
             .put("detail-answer:/players?season=2025", { body: document })
         : store.docs.write(sourceKey, document);
-    const original = { season: 2025, players: [] };
+    stored.set(IDENTITY_COVERAGE_KEY, "missing-native-demand");
+    await finishBackfill(store);
+    const original = {
+      season: 2025,
+      players: [{ id: "p_missing", firstName: "Missing", lastName: "Player" }],
+    };
     await write(original);
     const transaction = ctx.storage.transaction;
     let failed = false;
@@ -922,11 +1212,23 @@ test("failed fallback evidence cannot replace the earlier usable document", asyn
     await assert.rejects(
       write({
         season: 2025,
-        players: [{ id: "p_missing", firstName: "Missing", lastName: "Player" }],
+        players: [],
       }),
       /Failure evidence unavailable/,
     );
     assert.deepEqual(cached ? stored.get(sourceKey).body : stored.get(sourceKey), original);
+    assert.equal(stored.get(`${IDENTITY_UNREGISTERED_PREFIX}${encodeURIComponent(sourceKey)}`), 1);
+    assert.equal((await store.identities.readStatus()).errors, 1);
+    await store.identities.lookup.save([
+      {
+        type: "player",
+        vendor: "nba",
+        vendorId: "native-missing",
+        internalId: "p_missing",
+        evidence: { method: "discovery" },
+      },
+    ]);
+    assert.notEqual(stored.get(IDENTITY_COVERAGE_KEY), "missing-native-demand");
   }
 });
 

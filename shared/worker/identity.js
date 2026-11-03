@@ -18,6 +18,8 @@ export const IDENTITY_COVERAGE_KEY = `${IDENTITY_PREFIX}coverage-revision`;
 export const IDENTITY_BACKFILL_KEY = `${IDENTITY_PREFIX}backfill`;
 export const IDENTITY_ERROR_PREFIX = `${IDENTITY_PREFIX}error:`;
 export const IDENTITY_UNREGISTERED_PREFIX = `${IDENTITY_PREFIX}unregistered:`;
+const SOURCE_REJECTION_PREFIX = `${IDENTITY_PREFIX}source-rejected:`;
+const nameSourceRejectionKey = (key) => `${SOURCE_REJECTION_PREFIX}${encodeURIComponent(key)}`;
 export const nameIdentityErrorKey = (key, kind) =>
   `${IDENTITY_ERROR_PREFIX}${kind}:${encodeURIComponent(key)}`;
 export const IDENTITY_PREFIX_END = namePrefixEnd(IDENTITY_PREFIX);
@@ -126,6 +128,14 @@ async function saveIdentityCount(storage, path, count, partial = false) {
 
 export async function saveIdentityError(storage, key, count, kind = "rejected", partial = false) {
   await saveIdentityCount(storage, nameIdentityErrorKey(key, kind), count, partial);
+}
+
+export async function readIdentitySourceRejections(storage, key, observedRejections = 0) {
+  return Math.max(observedRejections, (await storage.get(nameSourceRejectionKey(key))) ?? 0);
+}
+
+export async function saveIdentitySourceRejections(storage, key, count) {
+  await saveIdentityCount(storage, nameSourceRejectionKey(key), count);
 }
 
 export async function saveIdentitySourceProblems(
