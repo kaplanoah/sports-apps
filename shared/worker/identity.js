@@ -15,6 +15,11 @@ import { hashTextInFull } from "./hash-text.js";
 
 export const IDENTITY_PREFIX = "identity:";
 export const IDENTITY_COVERAGE_KEY = `${IDENTITY_PREFIX}coverage-revision`;
+export const IDENTITY_BACKFILL_KEY = `${IDENTITY_PREFIX}backfill`;
+export const IDENTITY_ERROR_PREFIX = `${IDENTITY_PREFIX}error:`;
+const REJECTED_PREFIX = `${IDENTITY_ERROR_PREFIX}rejected:`;
+export const nameIdentityErrorKey = (key, kind) =>
+  `${IDENTITY_ERROR_PREFIX}${kind}:${encodeURIComponent(key)}`;
 export const IDENTITY_PREFIX_END = namePrefixEnd(IDENTITY_PREFIX);
 const VENDOR_PREFIX = `${IDENTITY_PREFIX}vendor:`;
 const ENTITY_PREFIX = `${IDENTITY_PREFIX}entity:`;
@@ -110,6 +115,14 @@ function selectProblemSample(pools, limit) {
 /** @param {any} storage @param {string} key @param {any} value */
 async function saveChanged(storage, key, value) {
   if (!isSameJson(await storage.get(key), value)) await storage.put(key, value);
+}
+
+export async function saveIdentityError(storage, key, count, kind = "rejected") {
+  const path = nameIdentityErrorKey(key, kind);
+  const previous = await storage.get(path);
+  if (previous === count || (!previous && !count)) return;
+  if (count) await storage.put(path, count);
+  else await storage.delete(path);
 }
 
 /** @param {any} transaction @param {string} league @param {string} key @param {string | null} problem @param {boolean} [decisive] */
@@ -224,8 +237,15 @@ async function saveAssociation(transaction, league, observation, nativeVendor) {
     await transaction.put(key, updated);
   }
   if (!observation.preserveProblem) await saveProblem(transaction, league, key, null, decisive);
-  if (needsCoverage) await transaction.put(IDENTITY_COVERAGE_KEY, crypto.randomUUID());
+  if (needsCoverage && (await hasMissingCoverage(transaction)))
+    await transaction.put(IDENTITY_COVERAGE_KEY, crypto.randomUUID());
   return { internalId, disputed: false, created, addedFacts };
+}
+
+async function hasMissingCoverage(transaction) {
+  const progress = await transaction.get(IDENTITY_BACKFILL_KEY);
+  if (progress?.missingEntries || progress?.pending?.missingEntries) return true;
+  return (await transaction.list({ prefix: REJECTED_PREFIX, limit: 1 })).size > 0;
 }
 
 function hasCoherentAssociation(
@@ -371,12 +391,16 @@ export function createIdentityLookup(storage, league, { nativeVendor = null } = 
     save: async (observations, factsRevision = undefined) =>
       (await saveObservations(observations, factsRevision)).results,
     saveWithEntries: (observations) => saveObservations(observations, undefined, true),
-    hasRegistration: (type, vendor, internalId) =>
-      storage.transaction(
-        async (transaction) =>
-          (await readRegisteredEntry(transaction, league, type, vendor, internalId)) !== null,
-      ),
-    async updateRegisteredFacts(updates) {
+    /** @param {"game" | "player"} type @param {string} vendor @param {string} internalId @param {{ key: string, rejected: number }} source */
+    recordRegistrationCheck: (type, vendor, internalId, source) =>
+      storage.transaction(async (transaction) => {
+        const registered =
+          (await readRegisteredEntry(transaction, league, type, vendor, internalId)) !== null;
+        await saveIdentityError(transaction, source.key, source.rejected + (registered ? 0 : 1));
+        return registered;
+      }),
+    /** @param {any[]} updates @param {{ key: string, rejected: number } | null} [source] */
+    async updateRegisteredFacts(updates, source = null) {
       updates.forEach((update) => validateSportsData(IdentityFactsUpdate, update));
       return storage.transaction(async (transaction) => {
         const beforeRevision = (await transaction.get(nameFactsRevisionKey(league))) ?? null;
@@ -390,6 +414,12 @@ export function createIdentityLookup(storage, league, { nativeVendor = null } = 
               await transaction.get(nameEntityKey(league, update.type, update.internalId)),
             );
         }
+        if (source)
+          await saveIdentityError(
+            transaction,
+            source.key,
+            source.rejected + results.filter((result) => result.missing).length,
+          );
         return {
           results,
           entries,

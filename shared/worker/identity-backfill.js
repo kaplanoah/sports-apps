@@ -14,6 +14,7 @@ import {
   IDENTITY_PREFIX,
   IDENTITY_PREFIX_END,
   IDENTITY_COVERAGE_KEY,
+  IDENTITY_BACKFILL_KEY as BACKFILL_KEY,
 } from "./identity.js";
 
 export const IDENTITY_AUDIT_VERSION = 2;
@@ -21,9 +22,7 @@ export const IDENTITY_WORK_PER_RUN = 20;
 export const IDENTITY_WORK_PER_DAY = 10_000;
 export const IDENTITY_WORK_INTERVAL_MS = 60_000;
 const DAY_MS = 24 * 60 * 60 * 1000;
-const BACKFILL_KEY = `${IDENTITY_PREFIX}backfill`;
 const WORK_KEY = `${IDENTITY_PREFIX}work`;
-export { IDENTITY_COVERAGE_KEY };
 const MAX_CANDIDATE_BYTES = 512 * 1024;
 const RETRY_DELAY_MS = 60_000;
 const MAX_RETRY_MS = 60 * 60 * 1000;
@@ -51,7 +50,7 @@ function chooseSourceStage(source) {
 
 /**
  * @param {any} storage
- * @param {{ lookup: any, policy: any, describeSource: (key: string, value: any, phase: string, docs: any) => Promise<any>, saveErrors: (key: string, count: number, kind?: string, processedRetry?: any) => Promise<void>, hasFailedSources: () => Promise<boolean>, saveGameMatches: (results: any[], docs: any) => Promise<void>, registerObservations: (observations: any[]) => Promise<any[]> }} options
+ * @param {{ lookup: any, policy: any, describeSource: (key: string, value: any, phase: string, docs: any) => Promise<any>, saveErrors: (key: string, count: number, kind?: string, processedRetry?: any) => Promise<void>, hasFailedSources: () => Promise<boolean>, saveGameMatches: (results: any[], docs: any) => Promise<void>, registerObservations: (observations: any[], source: { key: string, rejected: number }) => Promise<any[]> }} options
  * @param {() => number} now
  */
 export function createIdentityBackfill(storage, options, now) {
@@ -197,7 +196,10 @@ export function createIdentityBackfill(storage, options, now) {
     const batch = source.observations.slice(pending.offset, pending.offset + work.remaining);
     work.remaining -= Math.max(1, batch.length);
     if (batch.length) {
-      const results = await registerObservations(batch);
+      const results = await registerObservations(batch, {
+        key: pending.key,
+        rejected: (source.rejected ?? 0) + (pending.rejected ?? 0),
+      });
       pending.rejected =
         (pending.rejected ?? 0) + results.filter((result) => result.missing).length;
     }
@@ -218,10 +220,11 @@ export function createIdentityBackfill(storage, options, now) {
           : null;
       const missing =
         observation.vendorId === undefined
-          ? !(await lookup.hasRegistration(
+          ? !(await lookup.recordRegistrationCheck(
               observation.type,
               observation.vendor,
               observation.internalId,
+              { key: pending.key, rejected: (source.rejected ?? 0) + (pending.rejected ?? 0) },
             ))
           : (await lookup.read(observation.type, observation.vendor, observation.vendorId)) !==
             observation.internalId;

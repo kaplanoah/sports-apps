@@ -10,13 +10,16 @@ import {
   isIdentityEntityKey,
   isIdentityVendorKey,
   IDENTITY_PREFIX,
+  IDENTITY_COVERAGE_KEY,
+  IDENTITY_ERROR_PREFIX as ERROR_PREFIX,
+  nameIdentityErrorKey as nameErrorKey,
+  saveIdentityError,
 } from "./identity.js";
 import { ESPN_VENDOR } from "./espn-adapter.js";
 import { readIdentityDiagnosis } from "./identity-diagnostics.js";
 import { reconcileIdentities } from "./identity-matching.js";
-import { createIdentityBackfill, IDENTITY_COVERAGE_KEY } from "./identity-backfill.js";
+import { createIdentityBackfill } from "./identity-backfill.js";
 
-const ERROR_PREFIX = `${IDENTITY_PREFIX}error:`;
 const FAILED_PREFIX = `${ERROR_PREFIX}failed:`;
 const ERROR_SCAN_LIMIT = 20;
 const LIVE_RECONCILIATION_ATTEMPTS = 3;
@@ -59,7 +62,6 @@ export function createIdentityDocuments(storage, policy, now = Date.now) {
   });
 
   const nameRetryKey = (key) => `${IDENTITY_PREFIX}retry:${encodeURIComponent(key)}`;
-  const nameErrorKey = (key, kind) => `${ERROR_PREFIX}${kind}:${encodeURIComponent(key)}`;
   async function saveErrors(key, count, kind = "rejected", processedRetry = null) {
     const path = nameErrorKey(key, kind);
     if (kind === "failed" && !count) {
@@ -72,10 +74,7 @@ export function createIdentityDocuments(storage, policy, now = Date.now) {
       });
       return;
     }
-    const previous = await storage.get(path);
-    if (previous === count || (!previous && !count)) return;
-    if (count) await storage.put(path, count);
-    else await storage.delete(path);
+    await saveIdentityError(storage, key, count, kind);
   }
 
   async function attemptIdentity(
@@ -348,13 +347,14 @@ export function createIdentityDocuments(storage, policy, now = Date.now) {
     if (observations.length) {
       const saved =
         policy.nativeIdMode === "internal"
-          ? await lookup.updateRegisteredFacts(observations)
+          ? await lookup.updateRegisteredFacts(observations, { key: sourceKey, rejected })
           : await lookup.saveWithEntries(observations);
       results = saved.results;
       rememberNatives(saved);
     }
     const rejectedCount = rejected + results.filter((result) => result.missing).length;
-    await saveErrors(sourceKey, rejectedCount);
+    if (policy.nativeIdMode !== "internal" || !observations.length)
+      await saveErrors(sourceKey, rejectedCount);
     if (
       observations.some(
         (observation, index) =>
@@ -500,12 +500,14 @@ export function createIdentityDocuments(storage, policy, now = Date.now) {
       saveErrors,
       hasFailedSources,
       saveGameMatches,
-      registerObservations: async (observations) => {
+      registerObservations: async (observations, source) => {
         const facts = observations.filter((observation) => observation.vendorId === undefined);
         const associations = observations.filter(
           (observation) => observation.vendorId !== undefined,
         );
-        const updated = facts.length ? (await lookup.updateRegisteredFacts(facts)).results : [];
+        const updated = facts.length
+          ? (await lookup.updateRegisteredFacts(facts, source)).results
+          : [];
         const saved = associations.length ? await lookup.save(associations) : [];
         return [...updated, ...saved];
       },

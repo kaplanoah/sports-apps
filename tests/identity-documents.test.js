@@ -5,6 +5,8 @@ import {
   createIdentityLookup,
   nameIdentityCandidatePrefix,
   IDENTITY_COVERAGE_KEY,
+  IDENTITY_BACKFILL_KEY,
+  IDENTITY_ERROR_PREFIX,
 } from "../shared/worker/identity.js";
 import { IDENTITY_WORK_PER_RUN } from "../shared/worker/identity-backfill.js";
 import { createDurableObjectContext } from "./durable-object-context.js";
@@ -343,6 +345,7 @@ test("native registration restarts rejected historical documents and cached answ
 
 test("only new or restored native registration resets internal-mode coverage", async () => {
   const { ctx, stored } = createDurableObjectContext();
+  stored.set(`${IDENTITY_ERROR_PREFIX}rejected:players`, 1);
   const lookup = createStore(ctx).identities.lookup;
   const transaction = ctx.storage.transaction;
   let invalidations = 0;
@@ -355,6 +358,10 @@ test("only new or restored native registration resets internal-mode coverage", a
         get: async (key) => {
           reads.push(key);
           return inner.get(key);
+        },
+        list: async (options) => {
+          assert.deepEqual(options, { prefix: `${IDENTITY_ERROR_PREFIX}rejected:`, limit: 1 });
+          return inner.list(options);
         },
         put: async (key, value) => {
           writes.push(key);
@@ -418,6 +425,8 @@ test("native registration rolls back its mapping and entity if coverage invalida
   for (const discover of [false, true]) {
     const { ctx, stored } = createDurableObjectContext();
     const lookup = createStore(ctx).identities.lookup;
+    stored.set(`${IDENTITY_ERROR_PREFIX}rejected:games`, 1);
+    const before = structuredClone(stored);
     const transaction = ctx.storage.transaction;
     ctx.storage.transaction = (change) =>
       transaction((inner) =>
@@ -438,11 +447,193 @@ test("native registration rolls back its mapping and entity if coverage invalida
     );
     assert.equal(await lookup.read("game", "nba", asked.vendorId), null);
     assert.equal((await lookup.readStatus()).games, 0);
-    assert.equal(stored.size, 0);
+    assert.deepEqual(stored, before);
     ctx.storage.transaction = transaction;
     assert.ok(await lookup.discover(asked));
     assert.ok(stored.get(IDENTITY_COVERAGE_KEY));
   }
+});
+
+test("new native identities preserve a finished healthy audit and its revision", async () => {
+  const { ctx, stored } = createDurableObjectContext();
+  const store = createStore(ctx);
+  stored.set(IDENTITY_COVERAGE_KEY, "healthy-generation");
+  await finishBackfill(store);
+  assert.equal((await store.identities.readStatus()).checks.verified, true);
+  const progress = structuredClone(stored.get(IDENTITY_BACKFILL_KEY));
+  for (const type of /** @type {const} */ (["game", "player"])) {
+    const id = await store.identities.lookup.discover({
+      type,
+      vendor: "nba",
+      vendorId: `new-${type}`,
+      facts: { season: 2026 },
+    });
+    assert.ok(id);
+    assert.equal(stored.get(IDENTITY_COVERAGE_KEY), "healthy-generation");
+    assert.deepEqual(stored.get(IDENTITY_BACKFILL_KEY), progress);
+    assert.equal((await store.identities.readStatus()).backfill.complete, true);
+    assert.equal((await store.identities.readStatus()).checks.verified, true);
+  }
+});
+
+test("native registration invalidates completed and pending missing-entry coverage without a rejection row", async () => {
+  for (const pending of [false, true]) {
+    const { ctx, stored } = createDurableObjectContext();
+    const lookup = createStore(ctx).identities.lookup;
+    stored.set(IDENTITY_COVERAGE_KEY, "missing-generation");
+    stored.set(
+      IDENTITY_BACKFILL_KEY,
+      pending ? { pending: { missingEntries: 1 } } : { missingEntries: 1 },
+    );
+    await lookup.discover({ type: "player", vendor: "nba", vendorId: "missing-player" });
+    assert.notEqual(stored.get(IDENTITY_COVERAGE_KEY), "missing-generation");
+  }
+});
+
+test("coverage demand sees rejection inserts and deletions within the registration transaction", async () => {
+  for (const inserting of [false, true]) {
+    const { ctx, stored } = createDurableObjectContext();
+    const lookup = createStore(ctx).identities.lookup;
+    const key = `${IDENTITY_ERROR_PREFIX}rejected:players`;
+    stored.set(IDENTITY_COVERAGE_KEY, "existing-generation");
+    if (!inserting) stored.set(key, 1);
+    const transaction = ctx.storage.transaction;
+    ctx.storage.transaction = (change) =>
+      transaction(async (inner) => {
+        if (inserting) await inner.put(key, 1);
+        else await inner.delete(key);
+        return change(inner);
+      });
+    await lookup.discover({ type: "player", vendor: "nba", vendorId: "new-player" });
+    assert.equal(stored.get(IDENTITY_COVERAGE_KEY) !== "existing-generation", inserting);
+  }
+});
+
+test("registration queued after a missing-identity check cannot leave delayed rejection evidence stuck", async () => {
+  const { ctx, stored } = createDurableObjectContext();
+  const clock = { now: Date.parse("2026-06-01T12:00:00Z") };
+  const options = { now: () => clock.now };
+  let store = createStore(ctx, options);
+  await finishBackfill(store);
+  const lookup = store.identities.lookup;
+  const updateRegisteredFacts = lookup.updateRegisteredFacts;
+  let registration;
+  lookup.updateRegisteredFacts = async (...args) => {
+    const result = await updateRegisteredFacts(...args);
+    if (!registration && result?.results?.some((entry) => entry.missing))
+      registration = lookup.save([
+        {
+          type: "player",
+          vendor: "nba",
+          vendorId: "native-racing-player",
+          internalId: "p_racing",
+          evidence: { method: "discovery" },
+          facts: { season: 2025 },
+        },
+      ]);
+    await registration;
+    return result;
+  };
+  const key = "players/2025-p_racing";
+  await store.docs.write(key, {
+    id: "p_racing",
+    firstName: "Example",
+    lastName: "Player",
+    season: 2025,
+  });
+  assert.ok(registration);
+  await registration;
+  const source = structuredClone(stored.get(key));
+  for (let step = 0; step < 100; step++) {
+    store = createStore(ctx, options);
+    await store.identities.backfillWhenDue(store.docs);
+    if ((await store.identities.readStatus()).checks.verified) break;
+    clock.now += 60_000;
+  }
+  assert.equal((await store.identities.readStatus()).errors, 0);
+  assert.equal((await store.identities.readStatus()).checks.verified, true);
+  assert.deepEqual(stored.get(key), source);
+});
+
+test("native fact updates roll back if their source rejection evidence cannot persist", async () => {
+  const { ctx, stored } = createDurableObjectContext();
+  const lookup = createStore(ctx).identities.lookup;
+  await lookup.save([
+    {
+      type: "player",
+      vendor: "nba",
+      vendorId: "native-player",
+      internalId: "p_saved",
+      evidence: { method: "discovery" },
+      facts: { team: "NYK" },
+    },
+  ]);
+  const before = structuredClone(stored);
+  const transaction = ctx.storage.transaction;
+  ctx.storage.transaction = (change) =>
+    transaction((inner) =>
+      change({
+        ...inner,
+        put: async (key, value) => {
+          if (key.startsWith(`${IDENTITY_ERROR_PREFIX}rejected:`))
+            throw new Error("Evidence unavailable");
+          return inner.put(key, value);
+        },
+      }),
+    );
+  await assert.rejects(
+    lookup.updateRegisteredFacts(
+      [{ type: "player", vendor: "nba", internalId: "p_saved", facts: { team: "LAL" } }],
+      { key: "players/2025-p_saved", rejected: 1 },
+    ),
+    /Evidence unavailable/,
+  );
+  assert.deepEqual(stored, before);
+});
+
+test("registration restored after a failed coverage check recovers without rewriting its source", async () => {
+  const { ctx, stored } = createDurableObjectContext();
+  const clock = { now: Date.parse("2026-06-01T12:00:00Z") };
+  const store = createStore(ctx, { now: () => clock.now });
+  const lookup = store.identities.lookup;
+  const association = {
+    type: "player",
+    vendor: "nba",
+    vendorId: "native-player",
+    internalId: "p_checked",
+    evidence: { method: "discovery" },
+    facts: { season: 2025 },
+  };
+  await lookup.save([association]);
+  const key = "players/2025-p_checked";
+  await store.docs.write(key, {
+    id: "p_checked",
+    firstName: "Example",
+    lastName: "Player",
+    season: 2025,
+  });
+  await finishBackfill(store);
+  const source = structuredClone(stored.get(key));
+  stored.set(IDENTITY_COVERAGE_KEY, "check-registration-again");
+  const recordRegistrationCheck = lookup.recordRegistrationCheck;
+  let restored = false;
+  lookup.recordRegistrationCheck = async (...args) => {
+    if (restored || args[2] !== association.internalId) return recordRegistrationCheck(...args);
+    await lookup.save([{ ...association, internalId: "p_other", decisive: true }]);
+    const registered = await recordRegistrationCheck(...args);
+    assert.equal(registered, false);
+    await lookup.save([{ ...association, decisive: true }]);
+    restored = true;
+    return registered;
+  };
+  for (let step = 0; step < 100; step++) {
+    await store.identities.backfillWhenDue(store.docs);
+    if (restored && (await store.identities.readStatus()).checks.verified) break;
+    clock.now += 60_000;
+  }
+  assert.equal(restored, true);
+  assert.equal((await store.identities.readStatus()).checks.verified, true);
+  assert.deepEqual(stored.get(key), source);
 });
 
 test("fact updates serialize with decisive reassociation without restoring a revoked native binding", async () => {
