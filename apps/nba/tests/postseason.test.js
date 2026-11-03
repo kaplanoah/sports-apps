@@ -117,6 +117,13 @@ const corruptions = [
     },
   ],
   [
+    "unmapped team without a code",
+    (answer) => {
+      answer.bracket.playoffBracketSeries[0].highSeedId = 999999;
+      answer.bracket.playoffBracketSeries[0].highSeedTricode = null;
+    },
+  ],
+  [
     "negative wins",
     (answer) => {
       answer.bracket.playoffBracketSeries[0].highSeedSeriesWins = -1;

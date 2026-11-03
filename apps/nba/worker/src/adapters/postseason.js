@@ -25,7 +25,8 @@ function readSide(record, prefix) {
   const id = record[`${prefix}SeedId`];
   const code = record[`${prefix}SeedTricode`];
   if (id === 0 && code === "") return { team: null, seed: null };
-  requireValid(findTeamCodeByNbaId(id) === code, "team");
+  const team = findTeamCodeByNbaId(id);
+  requireValid(team !== null && team === code, "team");
   return { team: code, seed: record[`${prefix}SeedRank`] };
 }
 
