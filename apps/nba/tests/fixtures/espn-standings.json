@@ -1,0 +1,600 @@
+{
+  "uid": "s:40~l:46~g:7",
+  "abbreviation": "NBA",
+  "season": {
+    "year": 2025,
+    "startDate": "2024-09-24T07:00Z",
+    "endDate": "2025-06-27T06:59Z",
+    "displayName": "2024-25"
+  },
+  "children": [
+    {
+      "abbreviation": "East",
+      "standings": {
+        "season": 2025,
+        "seasonType": 2,
+        "entries": [
+          {
+            "team": {
+              "id": "5"
+            },
+            "stats": [
+              {
+                "name": "losses",
+                "value": 18.0
+              },
+              {
+                "name": "playoffSeed",
+                "value": 1.0
+              },
+              {
+                "name": "wins",
+                "value": 64.0
+              }
+            ]
+          },
+          {
+            "team": {
+              "id": "2"
+            },
+            "stats": [
+              {
+                "name": "losses",
+                "value": 21.0
+              },
+              {
+                "name": "playoffSeed",
+                "value": 2.0
+              },
+              {
+                "name": "wins",
+                "value": 61.0
+              }
+            ]
+          },
+          {
+            "team": {
+              "id": "14"
+            },
+            "stats": [
+              {
+                "name": "losses",
+                "value": 45.0
+              },
+              {
+                "name": "playoffSeed",
+                "value": 8.0
+              },
+              {
+                "name": "wins",
+                "value": 37.0
+              }
+            ]
+          },
+          {
+            "team": {
+              "id": "19"
+            },
+            "stats": [
+              {
+                "name": "losses",
+                "value": 41.0
+              },
+              {
+                "name": "playoffSeed",
+                "value": 7.0
+              },
+              {
+                "name": "wins",
+                "value": 41.0
+              }
+            ]
+          },
+          {
+            "team": {
+              "id": "8"
+            },
+            "stats": [
+              {
+                "name": "losses",
+                "value": 38.0
+              },
+              {
+                "name": "playoffSeed",
+                "value": 6.0
+              },
+              {
+                "name": "wins",
+                "value": 44.0
+              }
+            ]
+          },
+          {
+            "team": {
+              "id": "15"
+            },
+            "stats": [
+              {
+                "name": "losses",
+                "value": 34.0
+              },
+              {
+                "name": "playoffSeed",
+                "value": 5.0
+              },
+              {
+                "name": "wins",
+                "value": 48.0
+              }
+            ]
+          },
+          {
+            "team": {
+              "id": "11"
+            },
+            "stats": [
+              {
+                "name": "losses",
+                "value": 32.0
+              },
+              {
+                "name": "playoffSeed",
+                "value": 4.0
+              },
+              {
+                "name": "wins",
+                "value": 50.0
+              }
+            ]
+          },
+          {
+            "team": {
+              "id": "18"
+            },
+            "stats": [
+              {
+                "name": "losses",
+                "value": 31.0
+              },
+              {
+                "name": "playoffSeed",
+                "value": 3.0
+              },
+              {
+                "name": "wins",
+                "value": 51.0
+              }
+            ]
+          },
+          {
+            "team": {
+              "id": "4"
+            },
+            "stats": [
+              {
+                "name": "losses",
+                "value": 43.0
+              },
+              {
+                "name": "playoffSeed",
+                "value": 10.0
+              },
+              {
+                "name": "wins",
+                "value": 39.0
+              }
+            ]
+          },
+          {
+            "team": {
+              "id": "1"
+            },
+            "stats": [
+              {
+                "name": "losses",
+                "value": 42.0
+              },
+              {
+                "name": "playoffSeed",
+                "value": 9.0
+              },
+              {
+                "name": "wins",
+                "value": 40.0
+              }
+            ]
+          },
+          {
+            "team": {
+              "id": "27"
+            },
+            "stats": [
+              {
+                "name": "losses",
+                "value": 64.0
+              },
+              {
+                "name": "playoffSeed",
+                "value": 15.0
+              },
+              {
+                "name": "wins",
+                "value": 18.0
+              }
+            ]
+          },
+          {
+            "team": {
+              "id": "30"
+            },
+            "stats": [
+              {
+                "name": "losses",
+                "value": 63.0
+              },
+              {
+                "name": "playoffSeed",
+                "value": 14.0
+              },
+              {
+                "name": "wins",
+                "value": 19.0
+              }
+            ]
+          },
+          {
+            "team": {
+              "id": "20"
+            },
+            "stats": [
+              {
+                "name": "losses",
+                "value": 58.0
+              },
+              {
+                "name": "playoffSeed",
+                "value": 13.0
+              },
+              {
+                "name": "wins",
+                "value": 24.0
+              }
+            ]
+          },
+          {
+            "team": {
+              "id": "17"
+            },
+            "stats": [
+              {
+                "name": "losses",
+                "value": 56.0
+              },
+              {
+                "name": "playoffSeed",
+                "value": 12.0
+              },
+              {
+                "name": "wins",
+                "value": 26.0
+              }
+            ]
+          },
+          {
+            "team": {
+              "id": "28"
+            },
+            "stats": [
+              {
+                "name": "losses",
+                "value": 52.0
+              },
+              {
+                "name": "playoffSeed",
+                "value": 11.0
+              },
+              {
+                "name": "wins",
+                "value": 30.0
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "abbreviation": "West",
+      "standings": {
+        "season": 2025,
+        "seasonType": 2,
+        "entries": [
+          {
+            "team": {
+              "id": "25"
+            },
+            "stats": [
+              {
+                "name": "losses",
+                "value": 14.0
+              },
+              {
+                "name": "playoffSeed",
+                "value": 1.0
+              },
+              {
+                "name": "wins",
+                "value": 68.0
+              }
+            ]
+          },
+          {
+            "team": {
+              "id": "13"
+            },
+            "stats": [
+              {
+                "name": "losses",
+                "value": 32.0
+              },
+              {
+                "name": "playoffSeed",
+                "value": 3.0
+              },
+              {
+                "name": "wins",
+                "value": 50.0
+              }
+            ]
+          },
+          {
+            "team": {
+              "id": "10"
+            },
+            "stats": [
+              {
+                "name": "losses",
+                "value": 30.0
+              },
+              {
+                "name": "playoffSeed",
+                "value": 2.0
+              },
+              {
+                "name": "wins",
+                "value": 52.0
+              }
+            ]
+          },
+          {
+            "team": {
+              "id": "9"
+            },
+            "stats": [
+              {
+                "name": "losses",
+                "value": 34.0
+              },
+              {
+                "name": "playoffSeed",
+                "value": 7.0
+              },
+              {
+                "name": "wins",
+                "value": 48.0
+              }
+            ]
+          },
+          {
+            "team": {
+              "id": "29"
+            },
+            "stats": [
+              {
+                "name": "losses",
+                "value": 34.0
+              },
+              {
+                "name": "playoffSeed",
+                "value": 8.0
+              },
+              {
+                "name": "wins",
+                "value": 48.0
+              }
+            ]
+          },
+          {
+            "team": {
+              "id": "16"
+            },
+            "stats": [
+              {
+                "name": "losses",
+                "value": 33.0
+              },
+              {
+                "name": "playoffSeed",
+                "value": 6.0
+              },
+              {
+                "name": "wins",
+                "value": 49.0
+              }
+            ]
+          },
+          {
+            "team": {
+              "id": "7"
+            },
+            "stats": [
+              {
+                "name": "losses",
+                "value": 32.0
+              },
+              {
+                "name": "playoffSeed",
+                "value": 4.0
+              },
+              {
+                "name": "wins",
+                "value": 50.0
+              }
+            ]
+          },
+          {
+            "team": {
+              "id": "12"
+            },
+            "stats": [
+              {
+                "name": "losses",
+                "value": 32.0
+              },
+              {
+                "name": "playoffSeed",
+                "value": 5.0
+              },
+              {
+                "name": "wins",
+                "value": 50.0
+              }
+            ]
+          },
+          {
+            "team": {
+              "id": "6"
+            },
+            "stats": [
+              {
+                "name": "losses",
+                "value": 43.0
+              },
+              {
+                "name": "playoffSeed",
+                "value": 10.0
+              },
+              {
+                "name": "wins",
+                "value": 39.0
+              }
+            ]
+          },
+          {
+            "team": {
+              "id": "23"
+            },
+            "stats": [
+              {
+                "name": "losses",
+                "value": 42.0
+              },
+              {
+                "name": "playoffSeed",
+                "value": 9.0
+              },
+              {
+                "name": "wins",
+                "value": 40.0
+              }
+            ]
+          },
+          {
+            "team": {
+              "id": "26"
+            },
+            "stats": [
+              {
+                "name": "losses",
+                "value": 65.0
+              },
+              {
+                "name": "playoffSeed",
+                "value": 15.0
+              },
+              {
+                "name": "wins",
+                "value": 17.0
+              }
+            ]
+          },
+          {
+            "team": {
+              "id": "3"
+            },
+            "stats": [
+              {
+                "name": "losses",
+                "value": 61.0
+              },
+              {
+                "name": "playoffSeed",
+                "value": 14.0
+              },
+              {
+                "name": "wins",
+                "value": 21.0
+              }
+            ]
+          },
+          {
+            "team": {
+              "id": "24"
+            },
+            "stats": [
+              {
+                "name": "losses",
+                "value": 48.0
+              },
+              {
+                "name": "playoffSeed",
+                "value": 13.0
+              },
+              {
+                "name": "wins",
+                "value": 34.0
+              }
+            ]
+          },
+          {
+            "team": {
+              "id": "21"
+            },
+            "stats": [
+              {
+                "name": "losses",
+                "value": 46.0
+              },
+              {
+                "name": "playoffSeed",
+                "value": 11.0
+              },
+              {
+                "name": "wins",
+                "value": 36.0
+              }
+            ]
+          },
+          {
+            "team": {
+              "id": "22"
+            },
+            "stats": [
+              {
+                "name": "losses",
+                "value": 46.0
+              },
+              {
+                "name": "playoffSeed",
+                "value": 12.0
+              },
+              {
+                "name": "wins",
+                "value": 36.0
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -73,6 +73,26 @@ export const BasketballGame = z.looseObject({
   home: BasketballSide,
 });
 
+export const BasketballGameFacts = z.object({
+  id: Identifier,
+  state: GameState,
+  season: Count,
+  day: z.iso.date(),
+  start: Start,
+  status: z.string(),
+  period: NullableCount,
+  clock: z.string().nullable(),
+  competition: z.enum(["preseason", "regular", "playoffs", "play-in", "cup-final"]),
+  isCupFinal: z.boolean(),
+  round: NullableCount,
+  number: NullableCount,
+  gameNumber: Count.positive().nullable(),
+  isTimeSet: z.boolean(),
+  away: z.object({ team: Identifier, score: NullableCount }),
+  home: z.object({ team: Identifier, score: NullableCount }),
+});
+/** @typedef {z.infer<typeof BasketballGameFacts>} BasketballGameFactsRecord */
+
 const BaseballSide = z.union([
   Identifier.nullable(),
   z.looseObject({ id: Identifier.nullable(), score: Count.optional() }),
