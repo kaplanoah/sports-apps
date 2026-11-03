@@ -153,7 +153,12 @@ function createReleaseFixture(
     },
     errors,
     lookups,
-    readReceipt: () => readFileSync(output, "utf8"),
+    readReceipt: () =>
+      readFileSync(output, "utf8")
+        .split("\n")
+        .filter((line) => line.startsWith("checked-commit="))
+        .map((line) => `${line}\n`)
+        .join(""),
     uploads: () => uploads,
   };
 }
