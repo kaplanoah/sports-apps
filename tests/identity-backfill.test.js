@@ -48,6 +48,11 @@ function createMeasuredContext() {
           calls.put += 1;
           return inner.put(key, value);
         },
+        list: async (options) => {
+          const entries = await inner.list(options);
+          calls.rows += entries.size;
+          return entries;
+        },
       }),
     );
   return {
@@ -1189,7 +1194,7 @@ test("unchanged native registrations read no derived candidate keys", async () =
 });
 
 for (const cached of [false, true]) {
-  test(`${cached ? "cached" : "canonical"} writes expand each known-season game's facts once, including ledger outages`, async () => {
+  test(`${cached ? "cached" : "canonical"} preparation and publication each expand known-season facts once in vendor mode`, async () => {
     const harness = createMeasuredContext();
     let expansions = 0;
     const identities = createIdentityDocuments(harness.ctx.storage, {
@@ -1205,18 +1210,25 @@ for (const cached of [false, true]) {
     };
     const prepare = () =>
       cached
-        ? identities.prepareDetailAnswer("job:details:detail-answer:/season?season=2026", {
+        ? identities.prepareDetailWrite("job:details:detail-answer:/season?season=2026", {
             body: document,
             at: 1,
           })
-        : identities.prepareDocument("seasons/2026", document);
-    await prepare();
+        : identities.prepareDocumentWrite("seasons/2026", document);
+    const prepared = await prepare();
+    assert.equal(expansions, document.games.length);
+    expansions = 0;
+    await identities.publishDocument(
+      cached ? "job:details:detail-answer:/season?season=2026" : "seasons/2026",
+      prepared.document,
+      cached ? { body: document, at: 1 } : document,
+    );
     assert.equal(expansions, document.games.length);
     harness.ctx.storage.transaction = async () => {
       throw new Error("Ledger unavailable");
     };
     expansions = 0;
-    const fallback = await prepare();
+    const fallback = (await prepare()).document;
     assert.equal(expansions, document.games.length);
     assert.deepEqual(
       (cached ? fallback.body : fallback).games.map((game) => game.id),

@@ -10,14 +10,23 @@ import {
   isIdentityEntityKey,
   isIdentityVendorKey,
   IDENTITY_PREFIX,
+  IDENTITY_COVERAGE_KEY,
+  IDENTITY_ERROR_PREFIX,
+  nameIdentityErrorKey,
+  saveIdentityError,
+  saveIdentitySourceProblems,
+  readIdentitySourceRejections,
+  saveIdentitySourceRejections,
 } from "./identity.js";
+import { DETAIL_ANSWER_PREFIX } from "./detail-reads.js";
 import { ESPN_VENDOR } from "./espn-adapter.js";
 import { readIdentityDiagnosis } from "./identity-diagnostics.js";
 import { reconcileIdentities } from "./identity-matching.js";
-import { createIdentityBackfill, IDENTITY_COVERAGE_KEY } from "./identity-backfill.js";
+import { createIdentityBackfill } from "./identity-backfill.js";
 
-const ERROR_PREFIX = `${IDENTITY_PREFIX}error:`;
-const FAILED_PREFIX = `${ERROR_PREFIX}failed:`;
+const CACHED_ANSWER_PREFIX = `job:details:${DETAIL_ANSWER_PREFIX}`;
+const isCachedAnswerKey = (key) => key.startsWith(CACHED_ANSWER_PREFIX);
+const FAILED_PREFIX = `${IDENTITY_ERROR_PREFIX}failed:`;
 const ERROR_SCAN_LIMIT = 20;
 const LIVE_RECONCILIATION_ATTEMPTS = 3;
 const PLAYER_FIELDS = new Set(["players", "batters", "pitchers", "starters", "leaders"]);
@@ -43,6 +52,7 @@ const hasIdentifier = (value) =>
  * @typedef {object} IdentityPolicy
  * @property {string} league
  * @property {string} vendor
+ * @property {"vendor" | "internal"} [nativeIdMode]
  * @property {string[]} gameFactFields
  * @property {(record: any, season: number | null) => object} readGameFacts
  * @property {(id: string) => object} readSeriesFacts
@@ -53,12 +63,13 @@ const hasIdentifier = (value) =>
 
 /** @param {any} storage @param {IdentityPolicy} policy @param {() => number} [now] */
 export function createIdentityDocuments(storage, policy, now = Date.now) {
-  const lookup = createIdentityLookup(storage, policy.league);
+  const lookup = createIdentityLookup(storage, policy.league, {
+    nativeVendor: policy.nativeIdMode === "internal" ? policy.vendor : null,
+  });
 
   const nameRetryKey = (key) => `${IDENTITY_PREFIX}retry:${encodeURIComponent(key)}`;
-  const nameErrorKey = (key, kind) => `${ERROR_PREFIX}${kind}:${encodeURIComponent(key)}`;
   async function saveErrors(key, count, kind = "rejected", processedRetry = null) {
-    const path = nameErrorKey(key, kind);
+    const path = nameIdentityErrorKey(key, kind);
     if (kind === "failed" && !count) {
       if (!(await storage.get(path))) return;
       await storage.transaction(async (transaction) => {
@@ -69,10 +80,7 @@ export function createIdentityDocuments(storage, policy, now = Date.now) {
       });
       return;
     }
-    const previous = await storage.get(path);
-    if (previous === count || (!previous && !count)) return;
-    if (count) await storage.put(path, count);
-    else await storage.delete(path);
+    await saveIdentityError(storage, key, count, kind);
   }
 
   async function attemptIdentity(
@@ -203,10 +211,12 @@ export function createIdentityDocuments(storage, policy, now = Date.now) {
       observations.set(entryKey, {
         type,
         vendor: policy.vendor,
-        vendorId: internalId,
         internalId,
         facts: { ...previous?.facts, ...facts },
-        evidence: { method: "existing-id" },
+        ...(policy.nativeIdMode !== "internal" && {
+          vendorId: internalId,
+          evidence: { method: "existing-id" },
+        }),
       });
     };
     if (isGameDocument && rootId) {
@@ -337,15 +347,7 @@ export function createIdentityDocuments(storage, policy, now = Date.now) {
     ];
   }
 
-  async function registerDocument(key, sourceKey, prepared) {
-    const { document, observations, rejected, espnPlayers } = prepared;
-    let results = [];
-    if (observations.length) {
-      const saved = await lookup.saveWithEntries(observations);
-      results = saved.results;
-      rememberNatives(saved);
-    }
-    await saveErrors(sourceKey, rejected);
+  async function invalidateFactCoverage(storage, observations, results) {
     if (
       observations.some(
         (observation, index) =>
@@ -355,6 +357,24 @@ export function createIdentityDocuments(storage, policy, now = Date.now) {
       )
     )
       await storage.put(IDENTITY_COVERAGE_KEY, crypto.randomUUID());
+  }
+
+  async function registerDocument(key, sourceKey, prepared) {
+    const { document, observations, rejected, espnPlayers } = prepared;
+    let results = [];
+    if (observations.length || policy.nativeIdMode === "internal") {
+      const saved =
+        policy.nativeIdMode === "internal"
+          ? await lookup.updateRegisteredFacts(observations, {
+              key: sourceKey,
+              rejected,
+              partial: true,
+            })
+          : await lookup.saveWithEntries(observations);
+      results = saved.results;
+      rememberNatives(saved);
+    }
+    await invalidateFactCoverage(storage, observations, results);
     if (espnPlayers.length) await reconcileLiveRecords("player", espnPlayers);
     const matches = listGameMatchObservations(key, document);
     if (matches.length) await lookup.save(matches);
@@ -369,9 +389,13 @@ export function createIdentityDocuments(storage, policy, now = Date.now) {
   }
 
   function describeDetailAnswer(key, value) {
-    const url = new URL(key.slice("job:details:detail-answer:".length), "https://store");
+    const url = new URL(key.slice(CACHED_ANSWER_PREFIX.length), "https://store");
     const season = Number(url.searchParams.get("season")) || value.body?.season;
     return { key: `details/${season ?? "answer"}`, document: value.body };
+  }
+
+  function describeSourceDocument(key, document) {
+    return isCachedAnswerKey(key) ? describeDetailAnswer(key, document) : { key, document };
   }
 
   function mergePlayerEvidence(retained, current) {
@@ -382,21 +406,27 @@ export function createIdentityDocuments(storage, policy, now = Date.now) {
     ];
   }
 
-  async function saveRetryEvidence(key, records) {
-    await storage.transaction(async (transaction) => {
+  async function recordRetryEvidence(transaction, key, records) {
+    if (records.length) {
       const retained = await transaction.get(nameRetryKey(key));
       await transaction.put(nameRetryKey(key), {
         revision: crypto.randomUUID(),
         records: mergePlayerEvidence(retained, records),
       });
-      await transaction.put(nameErrorKey(key, "failed"), 1);
-    });
+    }
+    await saveIdentityError(transaction, key, 1, "failed");
   }
 
-  async function prepareDocument(key, document, known = null, sourceKey = key) {
+  async function saveRetryEvidence(key, records) {
+    await storage.transaction((transaction) => recordRetryEvidence(transaction, key, records));
+  }
+
+  /** @returns {Promise<{ document: any, failure: { records: any[] } | null }>} */
+  async function prepareDocumentWrite(key, document, known = null, sourceKey = key) {
     let prepared = expandDocument(key, document, known);
     let retryEvidence = null;
-    return attemptIdentity(
+    let failure = null;
+    const data = await attemptIdentity(
       sourceKey,
       async () => {
         prepared = await expandWithKnownFacts(key, document, prepared);
@@ -407,24 +437,98 @@ export function createIdentityDocuments(storage, policy, now = Date.now) {
         });
       },
       async () => {
-        if (prepared.espnPlayers.length)
-          await saveRetryEvidence(sourceKey, prepared.espnPlayers).catch(() => {});
+        retryEvidence ??= (await storage.get(nameRetryKey(sourceKey)).catch(() => null)) ?? null;
+        const records = mergePlayerEvidence(retryEvidence, prepared.espnPlayers);
+        failure = { records };
+        if (records.length) await saveRetryEvidence(sourceKey, records).catch(() => {});
         return prepared.document;
       },
       () => retryEvidence,
     );
+    return { document: data, failure };
   }
 
-  async function prepareDetailAnswer(key, value) {
+  async function prepareDetailWrite(key, value) {
     const source = describeDetailAnswer(key, value);
-    const body = await prepareDocument(source.key, source.document, null, key);
-    return { ...value, body };
+    const prepared = await prepareDocumentWrite(source.key, source.document, null, key);
+    return { document: { ...value, body: prepared.document }, failure: prepared.failure };
+  }
+
+  async function describeSourceRejections(storage, key, observedRejections) {
+    const retainedRejections = await readIdentitySourceRejections(storage, key);
+    return { retainedRejections, rejected: Math.max(observedRejections, retainedRejections) };
+  }
+
+  async function recordDocumentFailure(transaction, key, original, superseded) {
+    await saveIdentityError(transaction, key, 1, "failed");
+    if (superseded) return;
+    const source = describeSourceDocument(key, original);
+    const observedRejections = expandDocument(source.key, source.document).rejected;
+    const { rejected } = await describeSourceRejections(transaction, key, observedRejections);
+    await saveIdentitySourceRejections(transaction, key, rejected);
+  }
+
+  async function updateDocumentCoverage(transaction, key, document, original = null) {
+    if (document === undefined) {
+      await saveIdentitySourceProblems(transaction, key, 0, 0);
+      await saveIdentitySourceRejections(transaction, key, 0);
+      return;
+    }
+    const source = describeSourceDocument(key, original ?? document);
+    const observedRejections = expandDocument(source.key, source.document).rejected;
+    const { rejected } =
+      original === null
+        ? await describeSourceRejections(transaction, key, observedRejections)
+        : { rejected: observedRejections };
+    if (policy.nativeIdMode === "internal") {
+      const prepared = describeSourceDocument(key, document).document;
+      const { observations } = expandDocument(source.key, prepared);
+      const saved = await lookup.updateRegisteredFacts(
+        observations,
+        { key, rejected },
+        transaction,
+      );
+      await invalidateFactCoverage(transaction, observations, saved.results);
+    } else await saveIdentityError(transaction, key, rejected);
+    await saveIdentitySourceRejections(transaction, key, rejected);
+  }
+
+  async function publishDocument(key, document, original, previous = undefined, failure = null) {
+    const isSuperseded = (current) =>
+      isSameJson(previous, document) && !isSameJson(current, document);
+    const commitDocument = (recordFailure = false) =>
+      storage.transaction(async (transaction) => {
+        const current = await transaction.get(key);
+        const superseded = isSuperseded(current);
+        const changed = !isSameJson(current, document);
+        if (recordFailure) await recordDocumentFailure(transaction, key, original, superseded);
+        else
+          await updateDocumentCoverage(
+            transaction,
+            key,
+            superseded ? current : document,
+            superseded ? null : original,
+          );
+        if (superseded) return false;
+        if (failure) await recordRetryEvidence(transaction, key, failure.records);
+        if (changed) await transaction.put(key, document);
+        return changed;
+      });
+    try {
+      return await commitDocument();
+    } catch {
+      return commitDocument(true);
+    }
   }
 
   async function forgetSource(key) {
-    await storage.delete(nameRetryKey(key));
-    await saveErrors(key, 0, "failed");
-    await saveErrors(key, 0, "rejected");
+    await storage.transaction(async (transaction) => {
+      if ((await transaction.get(key)) !== undefined) return;
+      await transaction.delete(nameRetryKey(key));
+      await saveIdentityError(transaction, key, 0, "failed");
+      await saveIdentitySourceProblems(transaction, key, 0, 0);
+      await saveIdentitySourceRejections(transaction, key, 0);
+    });
   }
 
   async function describeBackfillSource(key, value, phase, docs) {
@@ -433,16 +537,17 @@ export function createIdentityDocuments(storage, policy, now = Date.now) {
       if (saved) return { kind: "vendor", type: "game", ...saved };
       return isIdentityEntityKey(key) || isIdentityVendorKey(key) ? { kind: "mappings" } : null;
     }
-    const cached = key.startsWith("job:details:detail-answer:");
+    const cached = isCachedAnswerKey(key);
     if (!cached && !isStoreDocumentPath(key)) return null;
     if (!cached && !isSameJson(await docs.read(key), value)) return { kind: "changed" };
-    const source = cached ? describeDetailAnswer(key, value) : { key, document: value };
+    const source = describeSourceDocument(key, value);
     const prepared = await expandWithKnownFacts(
       source.key,
       source.document,
       expandDocument(source.key, source.document, cached ? null : value),
     );
     const retryEvidence = (await storage.get(nameRetryKey(key))) ?? null;
+    const rejections = await describeSourceRejections(storage, key, prepared.rejected);
     return {
       kind: "document",
       cached,
@@ -454,14 +559,18 @@ export function createIdentityDocuments(storage, policy, now = Date.now) {
       ],
       records: mergePlayerEvidence(retryEvidence, prepared.espnPlayers),
       retryEvidence,
-      rejected: prepared.rejected,
+      ...rejections,
     };
   }
 
   async function noteFeedAnswer(key, value) {
     try {
       const saved = policy.readSavedVendorGames?.(key, value);
-      if (saved) await saveErrors(key, saved.rejected);
+      if (saved)
+        await storage.transaction(async (transaction) => {
+          if (isSameJson(await transaction.get(key), value))
+            await saveIdentityError(transaction, key, saved.rejected);
+        });
     } catch {
       await saveErrors(key, 1, "failed").catch(() => {});
     }
@@ -490,13 +599,25 @@ export function createIdentityDocuments(storage, policy, now = Date.now) {
       describeSource: describeBackfillSource,
       saveErrors,
       hasFailedSources,
+      forgetSource,
       saveGameMatches,
+      registerObservations: async (observations, source) => {
+        const facts = observations.filter((observation) => observation.vendorId === undefined);
+        const associations = observations.filter(
+          (observation) => observation.vendorId !== undefined,
+        );
+        const updated = facts.length
+          ? (await lookup.updateRegisteredFacts(facts, source)).results
+          : [];
+        const saved = associations.length ? await lookup.save(associations) : [];
+        return [...updated, ...saved];
+      },
     },
     now,
   );
 
   async function readStatus() {
-    const errors = [...(await storage.list({ prefix: ERROR_PREFIX })).values()].reduce(
+    const errors = [...(await storage.list({ prefix: IDENTITY_ERROR_PREFIX })).values()].reduce(
       (total, count) => total + count,
       0,
     );
@@ -509,8 +630,9 @@ export function createIdentityDocuments(storage, policy, now = Date.now) {
   }
 
   return {
-    prepareDocument,
-    prepareDetailAnswer,
+    prepareDocumentWrite,
+    prepareDetailWrite,
+    publishDocument,
     saveVendorGames: (records, rejected = 0, docs = null) =>
       attemptIdentity("snapshot", () => saveVendorGames(records, "snapshot", rejected, docs)),
     forgetSource,
