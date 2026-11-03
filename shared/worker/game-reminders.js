@@ -171,10 +171,14 @@ export function createGameReminders({ storage, push, now, verify, validateIdenti
       )
     )
       return false;
-    return (
-      game.identityGuards === undefined ||
-      !!(await validateIdentityGuards?.(transaction, game.identityGuards))
-    );
+    if (game.identityGuards === undefined) return true;
+    if (
+      !Array.isArray(game.identityGuards) ||
+      !game.identityGuards.length ||
+      !game.identityGuards.every((guard) => guard?.type === "game" && guard.internalId === game.id)
+    )
+      return false;
+    return !!(await validateIdentityGuards?.(transaction, game.identityGuards));
   }
 
   async function deliverGame(key, id, games) {
