@@ -20,6 +20,18 @@ export const IDENTITY_TYPES = /** @type {const} */ (["game", "player"]);
 const IdentityEvidence = z.looseObject({
   method: z.enum(["existing-id", "discovery", "teams-day", "game-number", "player-facts"]),
 });
+export const IdentityAssociation = z.strictObject({
+  internalId: Identifier,
+  league: Identifier,
+  type: z.enum(IDENTITY_TYPES),
+  vendor: Identifier,
+  vendorId: Identifier,
+  evidence: IdentityEvidence,
+  associationToken: Identifier.optional(),
+});
+export const IdentityAssociationGuard = IdentityAssociation.omit({ evidence: true }).required({
+  associationToken: true,
+});
 export const IdentityEntry = z.looseObject({
   id: Identifier,
   league: Identifier,
