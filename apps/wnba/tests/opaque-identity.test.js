@@ -85,6 +85,24 @@ test("a partial vendor identity batch leaves other saved opaque matches and fact
     assert.equal(await identities.lookup.read("game", "espn", game.espnId), game.id);
 });
 
+test("contradictory ESPN evidence preserves the saved opaque match while recording its dispute", async () => {
+  const { ctx, docs } = await createMappedGames();
+  const saved = structuredClone([...docs.stored]);
+  const [game] = OPAQUE_GAMES;
+  const identities = createIdentityDocuments(ctx.storage, identityPolicy);
+  await identities.saveVendorGames([{ ...describeEspnIdentities()[0], home: "NYL" }], 0, docs);
+  assert.deepEqual([...docs.stored], saved);
+  assert.equal(await identities.lookup.read("game", "espn", game.espnId), game.id);
+  const entry = await identities.lookup.readEntry("game", game.id);
+  assert.equal(entry.vendors.espn, game.espnId);
+  assert.deepEqual(entry.facts, game.facts);
+  assert.equal((await identities.lookup.readStatus()).disputed, 1);
+  assert.deepEqual(await identities.lookup.readProblems(10, ["espn"]), {
+    problems: [{ vendor: "espn", type: "game", id: game.espnId, problem: "disputed" }],
+    truncated: false,
+  });
+});
+
 test("an exhausted store request budget stops an opaque summary read without losing its match", async () => {
   const { docs } = await createMappedGames();
   const saved = structuredClone([...docs.stored]);
