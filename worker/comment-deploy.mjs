@@ -9,8 +9,9 @@ import { fileURLToPath } from "node:url";
 import { BETA_LABEL, findHolder, readOpenPulls } from "./beta-claim.mjs";
 import { ACTIONS_LOGIN, createGitHub, readAllPages } from "./github-api.mjs";
 import { hasDeployStarted } from "./report-deploy.mjs";
+import { WORKER_CHECK_OK } from "./worker-results.mjs";
 
-/** @typedef {import("./deploy.mjs").WorkerResult} WorkerResult */
+/** @typedef {import("./worker-results.mjs").WorkerResult} WorkerResult */
 
 /**
  * @param {string} channel
@@ -33,7 +34,7 @@ export const maskDetail = (text) =>
 
 /** @param {WorkerResult} result */
 function describeResult({ result, detail }) {
-  if (result === "checked") return "worker check: ok";
+  if (result === "checked") return WORKER_CHECK_OK;
   if (result === "failed") return `failed: ${maskDetail(detail ?? "")}`;
   return UNCHANGED;
 }

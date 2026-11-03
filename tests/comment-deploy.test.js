@@ -11,7 +11,7 @@ import { ACTIONS_LOGIN } from "../worker/github-api.mjs";
 import { readRepoFile } from "./repo-files.js";
 import { createTimelineAnswer } from "./timeline.js";
 
-/** @typedef {import("../worker/deploy.mjs").WorkerResult} WorkerResult */
+/** @typedef {import("../worker/worker-results.mjs").WorkerResult} WorkerResult */
 
 const REPOSITORY = "owner/sports-apps";
 const API = `https://api.github.com/repos/${REPOSITORY}`;

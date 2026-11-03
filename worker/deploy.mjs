@@ -21,6 +21,9 @@ import { decideDeploy, listChangedFiles } from "./deploy-scope.mjs";
 import { createGitHub } from "./github-api.mjs";
 import { isGitObjectId } from "./git-object.mjs";
 import { readDeployedMain } from "./production-coverage.mjs";
+import { WORKER_CHECK_OK } from "./worker-results.mjs";
+
+/** @typedef {import("./worker-results.mjs").WorkerResult} WorkerResult */
 
 export const API = "https://api.cloudflare.com/client/v4";
 const root = new URL("../", import.meta.url);
@@ -385,7 +388,7 @@ export async function deploy({
   const deployments = createDeploymentsClient({ base, name, callCloudflare });
 
   function logWorkerCheck() {
-    log("worker check: ok");
+    log(WORKER_CHECK_OK);
     onChecked?.();
   }
 
@@ -852,11 +855,6 @@ async function readPreviousCheckedCommit(env, fetchImpl) {
     return null;
   }
 }
-
-/**
- * What a run did with a Worker: checked it answering, failed, or left it as it was.
- * @typedef {{ worker: string, version: string | null, result: "checked" | "failed" | "unchanged", detail?: string }} WorkerResult
- */
 
 /**
  * @param {string[]} workers
