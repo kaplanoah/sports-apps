@@ -31,10 +31,18 @@ const startsComment = ({ result }) => result === "checked" || result === "failed
 
 /** @param {WorkerResult} result */
 function describeResult({ result, detail }) {
-  if (result === "checked") return WORKER_CHECK_OK;
-  if (result === "answered") return HEALTH_CHECK_OK;
+  if (result === "checked") return describeCheck(WORKER_CHECK_OK, detail);
+  if (result === "answered") return describeCheck(HEALTH_CHECK_OK, detail);
   if (result === "failed") return `failed: ${formatCell(detail ?? "")}`;
   return UNCHANGED;
+}
+
+/**
+ * @param {string} check
+ * @param {string | undefined} attention what a service that answered needs of its owner
+ */
+function describeCheck(check, attention) {
+  return attention ? `${check}, but ${formatCell(attention)}` : check;
 }
 
 /**

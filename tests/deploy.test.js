@@ -199,6 +199,40 @@ test("a run that deploys nothing writes each unchanged service that answered apa
   ]);
 });
 
+test("what a checked or answered service needs of its owner reaches its result, masked", async (context) => {
+  const { deployCheckedRelease } = await loadDeployModule();
+  const folder = mkdtempSync(join(tmpdir(), "deploy-attention-"));
+  context.after(() => rmSync(folder, { recursive: true, force: true }));
+  const output = join(folder, "output");
+  writeFileSync(output, "");
+  await deployCheckedRelease(
+    ["accounts", "email"],
+    { channel: "production", commit: NEW_COMMIT, newer: null },
+    {
+      env: { GITHUB_OUTPUT: output, CLOUDFLARE_WORKERS_SUBDOMAIN: "example-subdomain" },
+      deploy: async (workers, options) => {
+        options?.onChecked?.("email", "Contact reports are paused");
+        options?.onAnswered?.("accounts", "mlb.example-subdomain.workers.dev waits");
+        return true;
+      },
+      readCheckedCommit: async () => null,
+      readWorkerVersion: () => "1.0.0",
+    },
+  );
+  const line = readFileSync(output, "utf8")
+    .split("\n")
+    .find((text) => text.startsWith("worker-results="));
+  assert.deepEqual(JSON.parse(line.slice("worker-results=".length)), [
+    {
+      worker: "accounts",
+      version: "1.0.0",
+      result: "answered",
+      detail: "mlb.<subdomain>.workers.dev waits",
+    },
+    { worker: "email", version: "1.0.0", result: "checked", detail: "Contact reports are paused" },
+  ]);
+});
+
 test("a failure the run hands its comment names none of the channel's secrets, whole or in part", async (context) => {
   const { deployCheckedRelease } = await loadDeployModule();
   const folder = mkdtempSync(join(tmpdir(), "deploy-masks-"));
@@ -263,17 +297,17 @@ test("deployRelease reports each Worker it checked, each service that answered, 
     deployWorkerImpl: async ({ worker, onChecked, onAnswered, isCheckOnly }) => {
       if (isCheckOnly) return null;
       if (worker === "wnba") throw new Error("The Worker didn't answer as the new version");
-      onChecked?.();
+      onChecked?.("a Contact report waits");
       onAnswered?.();
       return worker;
     },
-    onChecked: (worker) => checked.push(worker),
+    onChecked: (worker, attention) => checked.push({ worker, attention }),
     onAnswered: (worker) => answered.push(worker),
     onFailed: (worker, message) => failed.push({ worker, message }),
     logError: () => {},
   });
   assert.equal(isDeployed, false);
-  assert.deepEqual(checked, ["mlb"]);
+  assert.deepEqual(checked, [{ worker: "mlb", attention: "a Contact report waits" }]);
   assert.deepEqual(answered, ["mlb"]);
   assert.deepEqual(failed, [
     { worker: "wnba", message: "The Worker didn't answer as the new version" },

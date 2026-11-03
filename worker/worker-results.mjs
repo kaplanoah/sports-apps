@@ -9,6 +9,7 @@ export const HEALTH_CHECK_OK = "health check: ok";
 
 /**
  * What a run did with a Worker: checked it answering, found an unchanged service
- * answering at its live commit, failed, or left it as it was.
+ * answering at its live commit, failed, or left it as it was. Its detail is a failure's error,
+ * or what a checked or answered service needs of its owner.
  * @typedef {{ worker: string, version: string | null, result: "checked" | "answered" | "failed" | "unchanged", detail?: string }} WorkerResult
  */

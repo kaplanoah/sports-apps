@@ -52,13 +52,11 @@ async function deployWorker(answerApp, { worker = "accounts", channel } = {}) {
   const { roots, remove } = createServiceRoots();
   const cloudflare = createFakeCloudflare(answerApp);
   const lines = [];
-  let checks = 0;
+  const attentions = [];
   try {
     const result = await deploy({
       worker,
-      onChecked: () => {
-        checks += 1;
-      },
+      onChecked: (attention) => attentions.push(attention),
       channel,
       roots,
       script: "export default {}",
@@ -73,7 +71,7 @@ async function deployWorker(answerApp, { worker = "accounts", channel } = {}) {
         return { status: "drawn" };
       },
     }).catch((error) => error);
-    return { result, lines, calls: cloudflare.calls, checks };
+    return { result, lines, calls: cloudflare.calls, checks: attentions.length, attentions };
   } finally {
     remove();
   }
@@ -126,7 +124,7 @@ test("a service an app reports as down, or at another release, is put back, nami
 });
 
 test("a service that answers but needs attention stays live, with a notice naming what it needs", async () => {
-  const { result, lines, calls } = await deployWorker(
+  const { result, lines, calls, attentions } = await deployWorker(
     answerHealth({ ...RELEASED, attention: "Contact delivery needs attention" }),
   );
   assert.equal(result, "accounts");
@@ -134,6 +132,7 @@ test("a service that answers but needs attention stays live, with a notice namin
     "::notice::health check: ok, but Contact delivery needs attention",
     "worker check: ok",
   ]);
+  assert.deepEqual(attentions, ["Contact delivery needs attention"]);
   const putBack = calls.filter(
     ({ url, init }) => url.endsWith("/deployments") && init.method === "POST",
   );
@@ -207,6 +206,7 @@ test("every service deploys before any app starts, and one that fails holds back
  * @param {boolean} [options.isAppBroken]
  * @param {string} [options.healthProblem]
  * @param {string} [options.reportedRelease]
+ * @param {string} [options.attention] what each app's health says the service needs of its owner
  */
 async function deployServiceAndApps({
   isServiceChanged = true,
@@ -218,12 +218,14 @@ async function deployServiceAndApps({
   isAppBroken = false,
   healthProblem,
   reportedRelease,
+  attention,
 } = {}) {
   const { roots, remove } = createServiceRoots();
   const events = [];
   const covered = [];
   const checked = [];
   const answered = [];
+  const attentions = new Map();
   const errors = [];
   const lines = [];
   const calls = [];
@@ -249,6 +251,7 @@ async function deployServiceAndApps({
             ok: !healthProblem,
             release: reportedRelease ?? serviceCommit.slice(0, 7),
             ...(healthProblem && { problem: healthProblem }),
+            ...(attention && { attention }),
           }
         : null;
       return answerHealth(report)();
@@ -295,7 +298,10 @@ async function deployServiceAndApps({
       commit: NEW_COMMIT,
       onCovered: (worker) => covered.push({ worker, events: [...events] }),
       onChecked: (worker) => checked.push(worker),
-      onAnswered: (worker) => answered.push(worker),
+      onAnswered: (worker, answeredAttention) => {
+        answered.push(worker);
+        attentions.set(worker, answeredAttention);
+      },
       buildWorkerImpl: async () => "export default {}",
       deployWorkerImpl: (options) =>
         deploy({
@@ -326,6 +332,7 @@ async function deployServiceAndApps({
       covered,
       checked,
       answered,
+      attentions,
       errors,
       lines,
       calls,
@@ -460,6 +467,17 @@ test("newly bound apps check an unchanged service at its own live commit without
       ),
     );
   }
+});
+
+test("an unchanged service that answers but needs attention reports what it needs", async () => {
+  const { isDeployed, answered, attentions, lines } = await deployServiceAndApps({
+    isServiceChanged: false,
+    attention: "a Contact report waits",
+  });
+  assert.equal(isDeployed, true);
+  assert.ok(answered.includes("accounts"));
+  assert.equal(attentions.get("accounts"), "a Contact report waits");
+  assert.ok(lines.includes("accounts: ::notice::health check: ok, but a Contact report waits"));
 });
 
 test("an unchanged service that fails its own release check is reported without rolling it back", async () => {

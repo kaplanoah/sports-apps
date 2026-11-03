@@ -341,8 +341,10 @@ export const listAppWorkers = (channel, subdomain, roots) =>
  * @property {string} [commit] The commit the bundle was built from, recorded on the version.
  * @property {string | null} [checkedCommit] Previously verified production coverage.
  * @property {() => void} [onCovered] Reports fresh verification or equivalent verified runtime.
- * @property {() => void} [onChecked] Reports that this run checked the Worker answering.
- * @property {() => void} [onAnswered] Reports that an unchanged service answered at its live commit.
+ * @property {(attention?: string) => void} [onChecked] Reports that this run checked the Worker
+ * answering, with what a service that answered says it needs of its owner.
+ * @property {(attention?: string) => void} [onAnswered] Reports that an unchanged service answered
+ * at its live commit, with what it says it needs of its owner.
  * @property {(since: string) => string[] | null} [findChanges] Files changed since a commit.
  * @property {typeof fetch} [fetchImpl]
  * @property {NodeJS.ProcessEnv} [env]
@@ -389,9 +391,10 @@ export async function deploy({
   const callCloudflare = createCloudflareCaller({ fetchImpl, env, log });
   const deployments = createDeploymentsClient({ base, name, callCloudflare });
 
-  function logWorkerCheck() {
+  /** @param {string} [attention] */
+  function logWorkerCheck(attention) {
     log(WORKER_CHECK_OK);
-    onChecked?.();
+    onChecked?.(attention);
   }
 
   async function findLiveVersions() {
@@ -569,8 +572,9 @@ export async function deploy({
       if (!isUploaded) throw new Error(problem);
       await restoreAfter(problem, previousVersions);
     }
-    if (isUploaded) logWorkerCheck();
-    else if (check.status === "answering") onAnswered?.();
+    const attention = check.status === "answering" ? check.attention : undefined;
+    if (isUploaded) logWorkerCheck(attention);
+    else if (check.status === "answering") onAnswered?.(attention);
     // An unbound service is safely excluded only after every app health answered.
     if (
       isUploaded ||
@@ -734,8 +738,8 @@ export async function deployWorkers(
  * @param {string} [options.commit]
  * @param {string | null} [options.checkedCommit]
  * @param {(worker: string) => void} [options.onCovered]
- * @param {(worker: string) => void} [options.onChecked]
- * @param {(worker: string) => void} [options.onAnswered]
+ * @param {(worker: string, attention?: string) => void} [options.onChecked]
+ * @param {(worker: string, attention?: string) => void} [options.onAnswered]
  * @param {(worker: string, message: string) => void} [options.onFailed]
  * @param {import("./apps.mjs").WorkerRoots} [options.roots]
  * @param {typeof buildWorker} [options.buildWorkerImpl]
@@ -770,8 +774,8 @@ export async function deployRelease(
       commit,
       checkedCommit,
       onCovered: () => onCovered?.(worker),
-      onChecked: () => onChecked?.(worker),
-      onAnswered: () => onAnswered?.(worker),
+      onChecked: (attention) => onChecked?.(worker, attention),
+      onAnswered: (attention) => onAnswered?.(worker, attention),
       log: createWorkerLog(worker),
     });
   return deployWorkers(workers, deployWorker, {
@@ -867,8 +871,8 @@ async function readPreviousCheckedCommit(env, fetchImpl) {
 // answer quotes. GitHub drops a job output holding a secret whole, but not one holding a part of
 // one, like a page's host or key.
 /**
- * Each secret of the channel's environment a failure could quote, masked, an address before the
- * subdomain it holds.
+ * Each secret of the channel's environment a failure or a service's attention could quote, masked,
+ * an address before the subdomain it holds.
  * @param {string} channel
  * @param {NodeJS.ProcessEnv} env
  * @param {string[]} [apps]
@@ -887,32 +891,52 @@ export function listChannelMasks(channel, env, apps = listApps()) {
 }
 
 /**
+ * @param {string | undefined} detail
+ * @param {[string, string][]} masks
+ */
+function maskDetail(detail, masks) {
+  return detail === undefined ? undefined : maskSecrets(detail, masks);
+}
+
+/**
  * @param {string[]} workers
- * @param {Set<string>} checked
- * @param {Set<string>} answered unchanged services that answered at their live commit
+ * @param {Map<string, string | undefined>} checked each checked Worker's attention
+ * @param {Map<string, string | undefined>} answered each unchanged service that answered at its
+ * live commit, with its attention
  * @param {Map<string, string>} failures each failed Worker's error
  * @param {(worker: string) => string | null} readWorkerVersion
  * @returns {WorkerResult[]}
  */
 function listWorkerResults(workers, checked, answered, failures, readWorkerVersion) {
-  return [...new Set([...workers, ...checked, ...answered, ...failures.keys()])].map((worker) => {
-    const version = readWorkerVersion(worker);
-    const failure = failures.get(worker);
-    if (failure !== undefined) return { worker, version, result: "failed", detail: failure };
-    return { worker, version, result: findCheckResult(worker, checked, answered) };
-  });
+  const listed = [...workers, ...checked.keys(), ...answered.keys(), ...failures.keys()];
+  return [...new Set(listed)].map((worker) => ({
+    worker,
+    version: readWorkerVersion(worker),
+    ...findCheckResult(worker, checked, answered, failures),
+  }));
 }
 
 /**
  * @param {string} worker
- * @param {Set<string>} checked
- * @param {Set<string>} answered
- * @returns {"checked" | "answered" | "unchanged"}
+ * @param {Map<string, string | undefined>} checked
+ * @param {Map<string, string | undefined>} answered
+ * @param {Map<string, string>} failures
+ * @returns {Pick<WorkerResult, "result" | "detail">}
  */
-function findCheckResult(worker, checked, answered) {
-  if (checked.has(worker)) return "checked";
-  if (answered.has(worker)) return "answered";
-  return "unchanged";
+function findCheckResult(worker, checked, answered, failures) {
+  if (failures.has(worker)) return { result: "failed", detail: failures.get(worker) };
+  if (checked.has(worker)) return withDetail("checked", checked.get(worker));
+  if (answered.has(worker)) return withDetail("answered", answered.get(worker));
+  return { result: "unchanged" };
+}
+
+/**
+ * @param {"checked" | "answered"} result
+ * @param {string | undefined} detail
+ * @returns {Pick<WorkerResult, "result" | "detail">}
+ */
+function withDetail(result, detail) {
+  return detail === undefined ? { result } : { result, detail };
 }
 
 /**
@@ -945,10 +969,10 @@ export async function deployCheckedRelease(
   const needsReceipt = channel === "production" && !!env.GITHUB_OUTPUT;
   const checkedCommit = needsReceipt ? await readCheckedCommit(env, fetchImpl) : null;
   const covered = new Set();
-  /** @type {Set<string>} */
-  const checked = new Set();
-  /** @type {Set<string>} */
-  const answered = new Set();
+  /** @type {Map<string, string | undefined>} */
+  const checked = new Map();
+  /** @type {Map<string, string | undefined>} */
+  const answered = new Map();
   /** @type {Map<string, string>} */
   const failures = new Map();
   const masks = listChannelMasks(channel, env);
@@ -958,8 +982,8 @@ export async function deployCheckedRelease(
     commit,
     checkedCommit,
     onCovered: (worker) => covered.add(worker),
-    onChecked: (worker) => checked.add(worker),
-    onAnswered: (worker) => answered.add(worker),
+    onChecked: (worker, attention) => checked.set(worker, maskDetail(attention, masks)),
+    onAnswered: (worker, attention) => answered.set(worker, maskDetail(attention, masks)),
     onFailed: (worker, message) => failures.set(worker, maskSecrets(message, masks)),
   });
   if (env.GITHUB_OUTPUT) {
