@@ -279,8 +279,7 @@ test("a re-run keeps or edits its channel's one comment for the commit, never po
 });
 
 test("a failure's detail never carries an address, key, subdomain, or account ID", async () => {
-  const detail =
-    "GET https://mlb.example-subdomain.workers.dev/k3y/health answered 500 from wnba.example-subdomain.workers.dev for account 0123456789abcdef0123456789abcdef | retry";
+  const detail = `GET https://mlb.example-subdomain.workers.dev/k3y/health answered 500 from wnba.example-subdomain.workers.dev for account ${"7".repeat(32)} | retry`;
   assert.equal(
     maskDetail(detail),
     "GET <address> answered 500 from <address> for account <id> \\| retry",
