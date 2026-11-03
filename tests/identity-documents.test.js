@@ -1562,6 +1562,11 @@ test("fallback publication retains fresh and earlier vendor rejections through r
         await write(document(!rejectedBefore));
         assert.equal(failed, true);
         assert.deepEqual(stored.get(key), before);
+        if (rejectedBefore)
+          assert.equal(
+            stored.get(`${IDENTITY_ERROR_PREFIX}rejected:${encodeURIComponent(key)}`),
+            1,
+          );
         assert.equal(await readIdentitySourceRejections(ctx.storage, key), 1);
         assert.equal(stored.get(`${IDENTITY_ERROR_PREFIX}failed:${encodeURIComponent(key)}`), 1);
         await store.identities.backfill(store.docs);
@@ -1581,6 +1586,41 @@ test("fallback publication retains fresh and earlier vendor rejections through r
     }
   }
 });
+
+for (const variant of LEAGUE_STORES.filter((variant) => variant.name !== "internal")) {
+  test(`${variant.name} unavailable storage transactions preserve published documents and their rejection counts`, async () => {
+    for (const cached of [false, true]) {
+      const { ctx, stored } = createDurableObjectContext();
+      const store = variant.create(ctx);
+      const key = cached ? "job:details:detail-answer:/players?season=2025" : "seasons/2025";
+      const write = (document) =>
+        cached
+          ? store
+              .createJobStorage("details")
+              .put("detail-answer:/players?season=2025", { body: document })
+          : store.docs.write(key, document);
+      const player = { id: "p_saved", firstName: "Saved", lastName: "Player", team: variant.team };
+      await write({ season: 2025, players: [{ ...player, espnIdentity: { id: null } }] });
+      const previous = structuredClone(stored.get(key));
+      const transaction = ctx.storage.transaction;
+      ctx.storage.transaction = async () => {
+        throw new Error("Storage transactions unavailable");
+      };
+      const announced = [];
+      store.announceChange = (...args) => announced.push(args);
+      const next = { season: 2025, players: [{ ...player, number: "8" }] };
+      await assert.rejects(write(next), /Storage transactions unavailable/);
+      assert.deepEqual(stored.get(key), previous);
+      assert.equal(stored.get(`${IDENTITY_ERROR_PREFIX}rejected:${encodeURIComponent(key)}`), 1);
+      assert.deepEqual(announced, []);
+      ctx.storage.transaction = transaction;
+      await write(next);
+      assert.deepEqual(cached ? stored.get(key).body : stored.get(key), next);
+      assert.equal((await store.identities.readStatus()).errors, 0);
+      assert.equal(announced.length, cached ? 0 : 1);
+    }
+  });
+}
 
 test("failed fallback evidence cannot replace the earlier usable document", async () => {
   for (const cached of [false, true]) {

@@ -419,15 +419,14 @@ export function createSeasonStore(league) {
 
     async putDoc(key, doc) {
       const previous = await this.ctx.storage.get(key);
-      const prepared = this.identities
-        ? await this.identities.prepareDocumentWrite(key, doc, previous)
-        : { document: doc, failure: null };
-      const data = sortKeys(prepared.document);
       if (this.identities) {
+        const prepared = await this.identities.prepareDocumentWrite(key, doc, previous);
+        const data = sortKeys(prepared.document);
         if (await this.identities.publishDocument(key, data, doc, previous, prepared.failure))
           this.announceChange(key, data);
         return;
       }
+      const data = sortKeys(doc);
       if (isSameJson(previous, data)) return;
       await this.ctx.storage.put(key, data);
       this.announceChange(key, data);
@@ -712,12 +711,8 @@ export function createSeasonStore(league) {
       return {
         get: (key) => storage.get(prefix + key),
         put: async (key, value) => {
-          const isDetailAnswer = name === "details" && key.startsWith(DETAIL_ANSWER_PREFIX);
-          const prepared =
-            isDetailAnswer && this.identities
-              ? await this.identities.prepareDetailWrite(prefix + key, value)
-              : { document: value, failure: null };
-          if (isDetailAnswer && this.identities)
+          if (name === "details" && key.startsWith(DETAIL_ANSWER_PREFIX) && this.identities) {
+            const prepared = await this.identities.prepareDetailWrite(prefix + key, value);
             await this.identities.publishDocument(
               prefix + key,
               prepared.document,
@@ -725,7 +720,7 @@ export function createSeasonStore(league) {
               undefined,
               prepared.failure,
             );
-          else await storage.put(prefix + key, prepared.document);
+          } else await storage.put(prefix + key, value);
         },
         delete: async (key) => {
           const removed = await storage.delete(prefix + key);

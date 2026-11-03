@@ -374,8 +374,6 @@ export function createIdentityDocuments(storage, policy, now = Date.now) {
       results = saved.results;
       rememberNatives(saved);
     }
-    const rejectedCount = rejected + results.filter((result) => result.missing).length;
-    if (policy.nativeIdMode !== "internal") await saveErrors(sourceKey, rejectedCount);
     await invalidateFactCoverage(storage, observations, results);
     if (espnPlayers.length) await reconcileLiveRecords("player", espnPlayers);
     const matches = listGameMatchObservations(key, document);
@@ -450,18 +448,10 @@ export function createIdentityDocuments(storage, policy, now = Date.now) {
     return { document: data, failure };
   }
 
-  async function prepareDocument(key, document, known = null, sourceKey = key) {
-    return (await prepareDocumentWrite(key, document, known, sourceKey)).document;
-  }
-
   async function prepareDetailWrite(key, value) {
     const source = describeDetailAnswer(key, value);
     const prepared = await prepareDocumentWrite(source.key, source.document, null, key);
     return { document: { ...value, body: prepared.document }, failure: prepared.failure };
-  }
-
-  async function prepareDetailAnswer(key, value) {
-    return (await prepareDetailWrite(key, value)).document;
   }
 
   async function describeSourceRejections(storage, key, observedRejections) {
@@ -485,14 +475,14 @@ export function createIdentityDocuments(storage, policy, now = Date.now) {
       return;
     }
     const source = describeSourceDocument(key, original ?? document);
-    const prepared = describeSourceDocument(key, document).document;
-    const { observations } = expandDocument(source.key, prepared);
     const observedRejections = expandDocument(source.key, source.document).rejected;
     const { rejected } =
       original === null
         ? await describeSourceRejections(transaction, key, observedRejections)
         : { rejected: observedRejections };
     if (policy.nativeIdMode === "internal") {
+      const prepared = describeSourceDocument(key, document).document;
+      const { observations } = expandDocument(source.key, prepared);
       const saved = await lookup.updateRegisteredFacts(
         observations,
         { key, rejected },
@@ -640,8 +630,6 @@ export function createIdentityDocuments(storage, policy, now = Date.now) {
   }
 
   return {
-    prepareDocument,
-    prepareDetailAnswer,
     prepareDocumentWrite,
     prepareDetailWrite,
     publishDocument,

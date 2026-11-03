@@ -348,7 +348,7 @@ export function createIdentityBackfill(storage, options, now) {
       progress.pending = null;
       return false;
     }
-    if (progress.phase !== "facts" && published)
+    if (progress.phase !== "facts")
       await saveErrors(key, 0, "failed", source.retryEvidence ?? null);
     progress.missingEntries += pending.missingEntries;
     if (progress.phase === "facts")
