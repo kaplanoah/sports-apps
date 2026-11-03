@@ -14,7 +14,11 @@ import {
 import { ESPN_VENDOR } from "./espn-adapter.js";
 import { readIdentityDiagnosis } from "./identity-diagnostics.js";
 import { reconcileIdentities } from "./identity-matching.js";
-import { createIdentityBackfill, IDENTITY_COVERAGE_KEY } from "./identity-backfill.js";
+import {
+  createIdentityBackfill,
+  IDENTITY_COVERAGE_KEY,
+  AUDIT_PHASES,
+} from "./identity-backfill.js";
 
 const ERROR_PREFIX = `${IDENTITY_PREFIX}error:`;
 const FAILED_PREFIX = `${ERROR_PREFIX}failed:`;
@@ -428,7 +432,7 @@ export function createIdentityDocuments(storage, policy, now = Date.now) {
   }
 
   async function describeBackfillSource(key, value, phase, docs) {
-    if (phase === "vendors") {
+    if (phase === AUDIT_PHASES.vendors) {
       const saved = policy.readSavedVendorGames?.(key, value);
       if (saved) return { kind: "vendor", type: "game", ...saved };
       return isIdentityEntityKey(key) || isIdentityVendorKey(key) ? { kind: "mappings" } : null;

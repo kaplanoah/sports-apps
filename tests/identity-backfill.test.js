@@ -696,9 +696,7 @@ test("hot documents and changing native facts cannot restart or starve an active
   const key = "seasons/2026";
   await store.docs.write(key, {
     year: 2026,
-    games: Array.from({ length: 90 }, (_, index) =>
-      createGame(`10226${String(index).padStart(5, "0")}`),
-    ),
+    games: Array.from({ length: 90 }, (_, index) => createGame(nameStoredGameId("wnba", index))),
   });
   let complete = false;
   for (let step = 0; step < 200; step += 1) {

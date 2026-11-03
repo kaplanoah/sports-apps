@@ -26,7 +26,7 @@ export const IDENTITY_COVERAGE_KEY = `${IDENTITY_PREFIX}coverage-revision`;
 const MAX_CANDIDATE_BYTES = 512 * 1024;
 const RETRY_DELAY_MS = 60_000;
 const MAX_RETRY_MS = 60 * 60 * 1000;
-const AUDIT_PHASES = { documents: "documents", facts: "facts", vendors: "vendors" };
+export const AUDIT_PHASES = { documents: "documents", facts: "facts", vendors: "vendors" };
 const AUDIT_STAGES = { native: "native", candidates: "candidates", vendor: "vendor", done: "done" };
 
 const createProgress = (coverageRevision = null) => ({
