@@ -189,8 +189,18 @@ test("a run that went through names each Worker's version and result", () => {
       ...CHECKED,
       { worker: "accounts", version: null, result: "checked" },
       { worker: "contact", version: "1.2.0", result: "answered" },
-      { worker: "email", version: "1.3.0", result: "answered", detail: "a report waits | 2h" },
-      { worker: "notify", version: "1.4.0", result: "checked", detail: "sending is paused" },
+      {
+        worker: "email",
+        version: "1.3.0",
+        result: "answered",
+        detail: "health check: ok, but a report waits | 2h",
+      },
+      {
+        worker: "notify",
+        version: "1.4.0",
+        result: "checked",
+        detail: "health check: skipped, no app reaches notify yet",
+      },
     ],
   });
   assert.equal(
@@ -205,7 +215,7 @@ test("a run that went through names each Worker's version and result", () => {
       "| accounts | unknown | worker check: ok |",
       "| contact | 1.2.0 | health check: ok |",
       "| email | 1.3.0 | health check: ok, but a report waits \\| 2h |",
-      "| notify | 1.4.0 | worker check: ok, but sending is paused |",
+      "| notify | 1.4.0 | health check: skipped, no app reaches notify yet; worker check: ok |",
       "",
       nameDeployMarker("production", COMMIT),
     ].join("\n"),

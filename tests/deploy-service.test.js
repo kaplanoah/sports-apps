@@ -52,11 +52,11 @@ async function deployWorker(answerApp, { worker = "accounts", channel } = {}) {
   const { roots, remove } = createServiceRoots();
   const cloudflare = createFakeCloudflare(answerApp);
   const lines = [];
-  const attentions = [];
+  const healths = [];
   try {
     const result = await deploy({
       worker,
-      onChecked: (attention) => attentions.push(attention),
+      onChecked: (health) => healths.push(health),
       channel,
       roots,
       script: "export default {}",
@@ -71,7 +71,7 @@ async function deployWorker(answerApp, { worker = "accounts", channel } = {}) {
         return { status: "drawn" };
       },
     }).catch((error) => error);
-    return { result, lines, calls: cloudflare.calls, checks: attentions.length, attentions };
+    return { result, lines, calls: cloudflare.calls, healths };
   } finally {
     remove();
   }
@@ -80,9 +80,9 @@ async function deployWorker(answerApp, { worker = "accounts", channel } = {}) {
 const RELEASED = { ok: true, release: NEW_COMMIT.slice(0, 7) };
 
 test("a service uploads its store and version, has no workers.dev address, and answers through each app's health", async () => {
-  const { result, lines, calls, checks } = await deployWorker(answerHealth(RELEASED));
+  const { result, lines, calls, healths } = await deployWorker(answerHealth(RELEASED));
   assert.equal(result, "accounts");
-  assert.equal(checks, 1);
+  assert.deepEqual(healths, [undefined]);
   const upload = calls.find(({ init }) => init.method === "PUT");
   const metadata = JSON.parse(await upload.init.body.get("metadata").text());
   assert.deepEqual(metadata.bindings, [
@@ -110,9 +110,9 @@ test("a service an app reports as down, or at another release, is put back, nami
       problem: "mlb reaches accounts at 1111111, not 2222222",
     },
   ]) {
-    const { result, calls, checks } = await deployWorker(answerHealth(report));
+    const { result, calls, healths } = await deployWorker(answerHealth(report));
     assert.ok(result instanceof Error);
-    assert.equal(checks, 0);
+    assert.deepEqual(healths, []);
     assert.match(result.message, new RegExp(problem));
     assert.match(result.message, /the earlier version is live again/);
     assert.doesNotMatch(result.message, /workers\.dev|example-subdomain/);
@@ -124,7 +124,7 @@ test("a service an app reports as down, or at another release, is put back, nami
 });
 
 test("a service that answers but needs attention stays live, with a notice naming what it needs", async () => {
-  const { result, lines, calls, attentions } = await deployWorker(
+  const { result, lines, calls, healths } = await deployWorker(
     answerHealth({ ...RELEASED, attention: "Contact delivery needs attention" }),
   );
   assert.equal(result, "accounts");
@@ -132,20 +132,21 @@ test("a service that answers but needs attention stays live, with a notice namin
     "::notice::health check: ok, but Contact delivery needs attention",
     "worker check: ok",
   ]);
-  assert.deepEqual(attentions, ["Contact delivery needs attention"]);
+  assert.deepEqual(healths, ["health check: ok, but Contact delivery needs attention"]);
   const putBack = calls.filter(
     ({ url, init }) => url.endsWith("/deployments") && init.method === "POST",
   );
   assert.equal(putBack.length, 0);
 });
 
-test("a service no app reports yet, as on its first deploy, deploys with a notice", async () => {
-  const { result, lines } = await deployWorker(answerHealth(null));
+test("a service no app reports yet, as on its first deploy, deploys with a notice its result carries", async () => {
+  const { result, lines, healths } = await deployWorker(answerHealth(null));
   assert.equal(result, "accounts");
   assert.deepEqual(lines.slice(-2), [
     "::notice::health check: skipped, no app reaches accounts yet",
     "worker check: ok",
   ]);
+  assert.deepEqual(healths, ["health check: skipped, no app reaches accounts yet"]);
 });
 
 test("an app whose own health fails still vouches for the service it reaches", async () => {
@@ -225,7 +226,7 @@ async function deployServiceAndApps({
   const covered = [];
   const checked = [];
   const answered = [];
-  const attentions = new Map();
+  const healths = new Map();
   const errors = [];
   const lines = [];
   const calls = [];
@@ -298,9 +299,9 @@ async function deployServiceAndApps({
       commit: NEW_COMMIT,
       onCovered: (worker) => covered.push({ worker, events: [...events] }),
       onChecked: (worker) => checked.push(worker),
-      onAnswered: (worker, answeredAttention) => {
+      onAnswered: (worker, health) => {
         answered.push(worker);
-        attentions.set(worker, answeredAttention);
+        healths.set(worker, health);
       },
       buildWorkerImpl: async () => "export default {}",
       deployWorkerImpl: (options) =>
@@ -332,7 +333,7 @@ async function deployServiceAndApps({
       covered,
       checked,
       answered,
-      attentions,
+      healths,
       errors,
       lines,
       calls,
@@ -470,13 +471,13 @@ test("newly bound apps check an unchanged service at its own live commit without
 });
 
 test("an unchanged service that answers but needs attention reports what it needs", async () => {
-  const { isDeployed, answered, attentions, lines } = await deployServiceAndApps({
+  const { isDeployed, answered, healths, lines } = await deployServiceAndApps({
     isServiceChanged: false,
     attention: "a Contact report waits",
   });
   assert.equal(isDeployed, true);
   assert.ok(answered.includes("accounts"));
-  assert.equal(attentions.get("accounts"), "a Contact report waits");
+  assert.equal(healths.get("accounts"), "health check: ok, but a Contact report waits");
   assert.ok(lines.includes("accounts: ::notice::health check: ok, but a Contact report waits"));
 });
 

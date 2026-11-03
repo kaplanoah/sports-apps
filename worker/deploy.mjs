@@ -21,7 +21,7 @@ import { decideDeploy, listChangedFiles } from "./deploy-scope.mjs";
 import { createGitHub } from "./github-api.mjs";
 import { isGitObjectId } from "./git-object.mjs";
 import { readDeployedMain } from "./production-coverage.mjs";
-import { HEALTH_CHECK_OK, WORKER_CHECK_OK } from "./worker-results.mjs";
+import { describeHealthCheck, HEALTH_CHECK_OK, WORKER_CHECK_OK } from "./worker-results.mjs";
 
 /** @typedef {import("./worker-results.mjs").WorkerResult} WorkerResult */
 
@@ -341,10 +341,10 @@ export const listAppWorkers = (channel, subdomain, roots) =>
  * @property {string} [commit] The commit the bundle was built from, recorded on the version.
  * @property {string | null} [checkedCommit] Previously verified production coverage.
  * @property {() => void} [onCovered] Reports fresh verification or equivalent verified runtime.
- * @property {(attention?: string) => void} [onChecked] Reports that this run checked the Worker
- * answering, with what a service that answered says it needs of its owner.
- * @property {(attention?: string) => void} [onAnswered] Reports that an unchanged service answered
- * at its live commit, with what it says it needs of its owner.
+ * @property {(health?: string) => void} [onChecked] Reports that this run checked the Worker
+ * answering, with a service's health check when it says more than ok.
+ * @property {(health?: string) => void} [onAnswered] Reports that an unchanged service answered
+ * at its live commit, with its health check when it says more than ok.
  * @property {(since: string) => string[] | null} [findChanges] Files changed since a commit.
  * @property {typeof fetch} [fetchImpl]
  * @property {NodeJS.ProcessEnv} [env]
@@ -391,10 +391,10 @@ export async function deploy({
   const callCloudflare = createCloudflareCaller({ fetchImpl, env, log });
   const deployments = createDeploymentsClient({ base, name, callCloudflare });
 
-  /** @param {string} [attention] */
-  function logWorkerCheck(attention) {
+  /** @param {string} [health] */
+  function logWorkerCheck(health) {
     log(WORKER_CHECK_OK);
-    onChecked?.(attention);
+    onChecked?.(health);
   }
 
   async function findLiveVersions() {
@@ -559,11 +559,9 @@ export async function deploy({
       pause,
       fetchImpl,
     });
-    if (check.status === "answering") {
-      const notice = check.attention ? "::notice::" : "";
-      log(`${notice}${HEALTH_CHECK_OK}${check.attention ? `, but ${check.attention}` : ""}`);
-    }
-    if (check.status === "unchecked") log(`::notice::health check: skipped, ${check.reason}`);
+    const health = describeHealthCheck(check);
+    const notableHealth = health === HEALTH_CHECK_OK ? undefined : health;
+    if (health) log(`${notableHealth ? "::notice::" : ""}${health}`);
     if (check.status === "unanswered") {
       const versionProblem = isUploaded
         ? "The service didn't answer as the new version"
@@ -572,9 +570,8 @@ export async function deploy({
       if (!isUploaded) throw new Error(problem);
       await restoreAfter(problem, previousVersions);
     }
-    const attention = check.status === "answering" ? check.attention : undefined;
-    if (isUploaded) logWorkerCheck(attention);
-    else if (check.status === "answering") onAnswered?.(attention);
+    if (isUploaded) logWorkerCheck(notableHealth);
+    else if (check.status === "answering") onAnswered?.(notableHealth);
     // An unbound service is safely excluded only after every app health answered.
     if (
       isUploaded ||
@@ -738,8 +735,8 @@ export async function deployWorkers(
  * @param {string} [options.commit]
  * @param {string | null} [options.checkedCommit]
  * @param {(worker: string) => void} [options.onCovered]
- * @param {(worker: string, attention?: string) => void} [options.onChecked]
- * @param {(worker: string, attention?: string) => void} [options.onAnswered]
+ * @param {(worker: string, health?: string) => void} [options.onChecked]
+ * @param {(worker: string, health?: string) => void} [options.onAnswered]
  * @param {(worker: string, message: string) => void} [options.onFailed]
  * @param {import("./apps.mjs").WorkerRoots} [options.roots]
  * @param {typeof buildWorker} [options.buildWorkerImpl]
@@ -774,8 +771,8 @@ export async function deployRelease(
       commit,
       checkedCommit,
       onCovered: () => onCovered?.(worker),
-      onChecked: (attention) => onChecked?.(worker, attention),
-      onAnswered: (attention) => onAnswered?.(worker, attention),
+      onChecked: (health) => onChecked?.(worker, health),
+      onAnswered: (health) => onAnswered?.(worker, health),
       log: createWorkerLog(worker),
     });
   return deployWorkers(workers, deployWorker, {
@@ -871,7 +868,7 @@ async function readPreviousCheckedCommit(env, fetchImpl) {
 // answer quotes. GitHub drops a job output holding a secret whole, but not one holding a part of
 // one, like a page's host or key.
 /**
- * Each secret of the channel's environment a failure or a service's attention could quote, masked,
+ * Each secret of the channel's environment a failure or a service's health check could quote, masked,
  * an address before the subdomain it holds.
  * @param {string} channel
  * @param {NodeJS.ProcessEnv} env
@@ -900,9 +897,10 @@ function maskDetail(detail, masks) {
 
 /**
  * @param {string[]} workers
- * @param {Map<string, string | undefined>} checked each checked Worker's attention
+ * @param {Map<string, string | undefined>} checked each checked Worker, with a service's health
+ * check when it says more than ok
  * @param {Map<string, string | undefined>} answered each unchanged service that answered at its
- * live commit, with its attention
+ * live commit, with its health check when it says more than ok
  * @param {Map<string, string>} failures each failed Worker's error
  * @param {(worker: string) => string | null} readWorkerVersion
  * @returns {WorkerResult[]}
@@ -982,8 +980,8 @@ export async function deployCheckedRelease(
     commit,
     checkedCommit,
     onCovered: (worker) => covered.add(worker),
-    onChecked: (worker, attention) => checked.set(worker, maskDetail(attention, masks)),
-    onAnswered: (worker, attention) => answered.set(worker, maskDetail(attention, masks)),
+    onChecked: (worker, health) => checked.set(worker, maskDetail(health, masks)),
+    onAnswered: (worker, health) => answered.set(worker, maskDetail(health, masks)),
     onFailed: (worker, message) => failures.set(worker, maskSecrets(message, masks)),
   });
   if (env.GITHUB_OUTPUT) {

@@ -21,8 +21,8 @@ export const nameDeployMarker = (channel, commit) => `<!-- deploy:${channel}:${c
 
 const UNCHANGED = "Not deployed or checked by this run";
 
-// The deploy job masks each failure's secrets before it hands them on (`listChannelMasks` in
-// deploy.mjs), so this only keeps a failure to its table cell.
+// The deploy job masks each detail's secrets, a failure's or a service's health check's, before
+// it hands them on (`listChannelMasks` in deploy.mjs), so this only keeps a detail to its table cell.
 /** @param {string} text */
 const formatCell = (text) => text.replace(/\s+/g, " ").replaceAll("|", "\\|").trim();
 
@@ -31,18 +31,11 @@ const startsComment = ({ result }) => result === "checked" || result === "failed
 
 /** @param {WorkerResult} result */
 function describeResult({ result, detail }) {
-  if (result === "checked") return describeCheck(WORKER_CHECK_OK, detail);
-  if (result === "answered") return describeCheck(HEALTH_CHECK_OK, detail);
+  if (result === "checked")
+    return detail ? `${formatCell(detail)}; ${WORKER_CHECK_OK}` : WORKER_CHECK_OK;
+  if (result === "answered") return formatCell(detail ?? HEALTH_CHECK_OK);
   if (result === "failed") return `failed: ${formatCell(detail ?? "")}`;
   return UNCHANGED;
-}
-
-/**
- * @param {string} check
- * @param {string | undefined} attention what a service that answered needs of its owner
- */
-function describeCheck(check, attention) {
-  return attention ? `${check}, but ${formatCell(attention)}` : check;
 }
 
 /**

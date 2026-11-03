@@ -199,9 +199,9 @@ test("a run that deploys nothing writes each unchanged service that answered apa
   ]);
 });
 
-test("what a checked or answered service needs of its owner reaches its result, masked", async (context) => {
+test("a checked or answered service's health check, when it says more than ok, reaches its result, masked", async (context) => {
   const { deployCheckedRelease } = await loadDeployModule();
-  const folder = mkdtempSync(join(tmpdir(), "deploy-attention-"));
+  const folder = mkdtempSync(join(tmpdir(), "deploy-health-"));
   context.after(() => rmSync(folder, { recursive: true, force: true }));
   const output = join(folder, "output");
   writeFileSync(output, "");
@@ -211,8 +211,11 @@ test("what a checked or answered service needs of its owner reaches its result, 
     {
       env: { GITHUB_OUTPUT: output, CLOUDFLARE_WORKERS_SUBDOMAIN: "example-subdomain" },
       deploy: async (workers, options) => {
-        options?.onChecked?.("email", "Contact reports are paused");
-        options?.onAnswered?.("accounts", "mlb.example-subdomain.workers.dev waits");
+        options?.onChecked?.("email", "health check: skipped, no app reaches email yet");
+        options?.onAnswered?.(
+          "accounts",
+          "health check: ok, but mlb.example-subdomain.workers.dev waits",
+        );
         return true;
       },
       readCheckedCommit: async () => null,
@@ -227,9 +230,14 @@ test("what a checked or answered service needs of its owner reaches its result, 
       worker: "accounts",
       version: "1.0.0",
       result: "answered",
-      detail: "mlb.<subdomain>.workers.dev waits",
+      detail: "health check: ok, but mlb.<subdomain>.workers.dev waits",
     },
-    { worker: "email", version: "1.0.0", result: "checked", detail: "Contact reports are paused" },
+    {
+      worker: "email",
+      version: "1.0.0",
+      result: "checked",
+      detail: "health check: skipped, no app reaches email yet",
+    },
   ]);
 });
 
