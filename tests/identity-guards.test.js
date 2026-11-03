@@ -253,6 +253,7 @@ test("strict reads and validation make bounded point reads without scans, writes
           return tx.get(key);
         },
         put: async () => assert.fail("Strict reads must not write"),
+        list: async () => assert.fail("Strict reads must not scan"),
       }),
     );
   ctx.storage.list = async () => assert.fail("Strict reads must not scan");

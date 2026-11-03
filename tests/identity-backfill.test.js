@@ -48,6 +48,11 @@ function createMeasuredContext() {
           calls.put += 1;
           return inner.put(key, value);
         },
+        list: async (options) => {
+          const entries = await inner.list(options);
+          calls.rows += entries.size;
+          return entries;
+        },
       }),
     );
   return {

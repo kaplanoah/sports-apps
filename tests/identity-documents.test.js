@@ -7,6 +7,7 @@ import {
   IDENTITY_COVERAGE_KEY,
   IDENTITY_BACKFILL_KEY,
   IDENTITY_ERROR_PREFIX,
+  IDENTITY_UNREGISTERED_PREFIX,
 } from "../shared/worker/identity.js";
 import { IDENTITY_WORK_PER_RUN } from "../shared/worker/identity-backfill.js";
 import { createDurableObjectContext } from "./durable-object-context.js";
@@ -346,6 +347,7 @@ test("native registration restarts rejected historical documents and cached answ
 test("only new or restored native registration resets internal-mode coverage", async () => {
   const { ctx, stored } = createDurableObjectContext();
   stored.set(`${IDENTITY_ERROR_PREFIX}rejected:players`, 1);
+  stored.set(`${IDENTITY_UNREGISTERED_PREFIX}players`, 1);
   const lookup = createStore(ctx).identities.lookup;
   const transaction = ctx.storage.transaction;
   let invalidations = 0;
@@ -360,7 +362,7 @@ test("only new or restored native registration resets internal-mode coverage", a
           return inner.get(key);
         },
         list: async (options) => {
-          assert.deepEqual(options, { prefix: `${IDENTITY_ERROR_PREFIX}rejected:`, limit: 1 });
+          assert.deepEqual(options, { prefix: IDENTITY_UNREGISTERED_PREFIX, limit: 1 });
           return inner.list(options);
         },
         put: async (key, value) => {
@@ -426,6 +428,7 @@ test("native registration rolls back its mapping and entity if coverage invalida
     const { ctx, stored } = createDurableObjectContext();
     const lookup = createStore(ctx).identities.lookup;
     stored.set(`${IDENTITY_ERROR_PREFIX}rejected:games`, 1);
+    stored.set(`${IDENTITY_UNREGISTERED_PREFIX}games`, 1);
     const before = structuredClone(stored);
     const transaction = ctx.storage.transaction;
     ctx.storage.transaction = (change) =>
@@ -483,18 +486,209 @@ test("native registration invalidates completed and pending missing-entry covera
     stored.set(IDENTITY_COVERAGE_KEY, "missing-generation");
     stored.set(
       IDENTITY_BACKFILL_KEY,
-      pending ? { pending: { missingEntries: 1 } } : { missingEntries: 1 },
+      pending ? { pending: { nativeMissingEntries: 1 } } : { nativeMissingEntries: 1 },
     );
     await lookup.discover({ type: "player", vendor: "nba", vendorId: "missing-player" });
     assert.notEqual(stored.get(IDENTITY_COVERAGE_KEY), "missing-generation");
   }
 });
 
+test("unrelated vendor rejection and vendor-only missing coverage do not restart native audits", async () => {
+  const { ctx, stored } = createDurableObjectContext();
+  const store = createStore(ctx);
+  stored.set(IDENTITY_COVERAGE_KEY, "vendor-uncertainty");
+  await finishBackfill(store);
+  await store.identities.saveVendorGames([], 1);
+  const progress = stored.get(IDENTITY_BACKFILL_KEY);
+  progress.missingEntries = 2;
+  const before = structuredClone(progress);
+  for (const type of /** @type {const} */ (["game", "player"])) {
+    await store.identities.lookup.discover({ type, vendor: "nba", vendorId: `new-${type}` });
+    assert.equal(stored.get(IDENTITY_COVERAGE_KEY), "vendor-uncertainty");
+    assert.deepEqual(stored.get(IDENTITY_BACKFILL_KEY), before);
+    const status = await store.identities.readStatus();
+    assert.equal(status.backfill.complete, true);
+    assert.equal(status.checks.verified, false);
+    assert.equal(status.errors, 1);
+  }
+});
+
+test("partial source checks preserve later missing registration demand and restore its facts", async () => {
+  const { ctx, stored } = createDurableObjectContext();
+  const clock = { now: Date.parse("2026-06-01T12:00:00Z") };
+  const store = createStore(ctx, { now: () => clock.now });
+  const lookup = store.identities.lookup;
+  const players = Array.from({ length: 30 }, (_, index) => ({
+    id: `p_${index}`,
+    firstName: "Example",
+    lastName: `Player${index}`,
+    team: "NYK",
+  }));
+  await lookup.save(
+    players.slice(0, -1).map((player) => ({
+      type: "player",
+      vendor: "nba",
+      vendorId: `native-${player.id}`,
+      internalId: player.id,
+      evidence: { method: "discovery" },
+      facts: { season: 2025 },
+    })),
+  );
+  const key = "seasons/2025";
+  await store.docs.write(key, { season: 2025, players });
+  const before = structuredClone(stored.get(key));
+  const marker = `${IDENTITY_UNREGISTERED_PREFIX}${encodeURIComponent(key)}`;
+  const check = lookup.recordRegistrationCheck;
+  let checked = 0;
+  let registered = false;
+  lookup.recordRegistrationCheck = async (...args) => {
+    const result = await check(...args);
+    if (++checked === 19) {
+      assert.equal(stored.get(marker), 1);
+      const revision = stored.get(IDENTITY_COVERAGE_KEY);
+      const player = players.at(-1);
+      await lookup.save([
+        {
+          type: "player",
+          vendor: "nba",
+          vendorId: `native-${player.id}`,
+          internalId: player.id,
+          evidence: { method: "discovery" },
+          facts: { season: 2025 },
+        },
+      ]);
+      assert.notEqual(stored.get(IDENTITY_COVERAGE_KEY), revision);
+      registered = true;
+    }
+    return result;
+  };
+  for (let step = 0; step < 100; step++) {
+    await store.identities.backfillWhenDue(store.docs);
+    if (registered && (await store.identities.readStatus()).checks.verified) break;
+    clock.now += 60_000;
+  }
+  assert.equal(registered, true);
+  assert.equal((await store.identities.readStatus()).checks.verified, true);
+  assert.equal(stored.has(marker), false);
+  assert.deepEqual(stored.get(key), before);
+  const player = players.at(-1);
+  assert.deepEqual((await lookup.readEntry("player", player.id)).facts, {
+    season: 2025,
+    firstName: player.firstName,
+    lastName: player.lastName,
+    team: player.team,
+  });
+  assert.ok(
+    [
+      ...(
+        await ctx.storage.list({ prefix: nameIdentityCandidatePrefix("nba", "player", player) })
+      ).values(),
+    ].includes(player.id),
+  );
+});
+
+test("deleting a missing native source clears its demand without restarting healthy coverage", async () => {
+  const { ctx, stored } = createDurableObjectContext();
+  const store = createStore(ctx);
+  stored.set(IDENTITY_COVERAGE_KEY, "healthy-generation");
+  await finishBackfill(store);
+  const job = store.createJobStorage("details");
+  const key = "detail-answer:/players?season=2025";
+  await job.put(key, {
+    body: {
+      season: 2025,
+      players: [{ id: "p_missing", firstName: "Example", lastName: "Player" }],
+    },
+  });
+  assert.equal((await ctx.storage.list({ prefix: IDENTITY_UNREGISTERED_PREFIX })).size, 1);
+  assert.equal((await store.identities.readStatus()).errors, 1);
+  await job.delete(key);
+  assert.equal((await ctx.storage.list({ prefix: IDENTITY_UNREGISTERED_PREFIX })).size, 0);
+  assert.equal((await store.identities.readStatus()).errors, 0);
+  await store.identities.lookup.discover({ type: "player", vendor: "nba", vendorId: "new-player" });
+  assert.equal(stored.get(IDENTITY_COVERAGE_KEY), "healthy-generation");
+  assert.equal((await store.identities.readStatus()).checks.verified, true);
+});
+
+test("replacing a source with no native observations clears its missing registration demand", async () => {
+  for (const cached of [false, true]) {
+    const { ctx, stored } = createDurableObjectContext();
+    const store = createStore(ctx);
+    stored.set(IDENTITY_COVERAGE_KEY, "healthy-generation");
+    await finishBackfill(store);
+    const write = cached
+      ? (document) =>
+          store
+            .createJobStorage("details")
+            .put("detail-answer:/players?season=2025", { body: document })
+      : (document) => store.docs.write("seasons/2025", document);
+    await write({
+      season: 2025,
+      players: [{ id: "p_missing", firstName: "Example", lastName: "Player" }],
+    });
+    assert.equal((await ctx.storage.list({ prefix: IDENTITY_UNREGISTERED_PREFIX })).size, 1);
+    await write({ season: 2025, players: [] });
+    assert.equal((await ctx.storage.list({ prefix: IDENTITY_UNREGISTERED_PREFIX })).size, 0);
+    assert.equal((await store.identities.readStatus()).errors, 0);
+    await store.identities.lookup.discover({
+      type: "player",
+      vendor: "nba",
+      vendorId: "new-player",
+    });
+    assert.equal(stored.get(IDENTITY_COVERAGE_KEY), "healthy-generation");
+    assert.equal((await store.identities.readStatus()).checks.verified, true);
+  }
+});
+
+test("a source changed before finalizing its check retains newly missing native demand", async () => {
+  const { ctx, stored } = createDurableObjectContext();
+  const store = createStore(ctx);
+  const lookup = store.identities.lookup;
+  const player = { id: "p_registered", firstName: "Example", lastName: "Player" };
+  await lookup.save([
+    {
+      type: "player",
+      vendor: "nba",
+      vendorId: "native-player",
+      internalId: player.id,
+      evidence: { method: "discovery" },
+    },
+  ]);
+  const key = "seasons/2025";
+  await store.docs.write(key, { season: 2025, players: [player] });
+  const check = lookup.recordRegistrationCheck;
+  let changeBeforeFinalizing = false;
+  let changed = false;
+  lookup.recordRegistrationCheck = async (...args) => {
+    const result = await check(...args);
+    if (!changed) changeBeforeFinalizing = true;
+    return result;
+  };
+  const transaction = ctx.storage.transaction;
+  ctx.storage.transaction = async (callback) => {
+    if (changeBeforeFinalizing) {
+      changeBeforeFinalizing = false;
+      changed = true;
+      await store.docs.write(key, {
+        season: 2025,
+        players: [player, { id: "p_missing", firstName: "Missing", lastName: "Player" }],
+      });
+    }
+    return transaction(callback);
+  };
+  for (let step = 0; step < 100 && !changed; step++) await store.identities.backfill(store.docs);
+  assert.equal(changed, true);
+  assert.equal(stored.get(`${IDENTITY_UNREGISTERED_PREFIX}${encodeURIComponent(key)}`), 1);
+  assert.equal((await store.identities.readStatus()).errors, 1);
+  await finishBackfill(store);
+  assert.equal((await store.identities.readStatus()).checks.verified, false);
+});
+
 test("coverage demand sees rejection inserts and deletions within the registration transaction", async () => {
   for (const inserting of [false, true]) {
     const { ctx, stored } = createDurableObjectContext();
     const lookup = createStore(ctx).identities.lookup;
-    const key = `${IDENTITY_ERROR_PREFIX}rejected:players`;
+    const key = `${IDENTITY_UNREGISTERED_PREFIX}players`;
     stored.set(IDENTITY_COVERAGE_KEY, "existing-generation");
     if (!inserting) stored.set(key, 1);
     const transaction = ctx.storage.transaction;
