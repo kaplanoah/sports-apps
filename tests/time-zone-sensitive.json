@@ -59,6 +59,7 @@
     "apps/wnba/tests/news-feeds.test.js",
     "apps/wnba/tests/news-updater.test.js",
     "apps/wnba/tests/news-view.test.js",
+    "apps/wnba/tests/opaque-identity.test.js",
     "apps/wnba/tests/overtimes.test.js",
     "apps/wnba/tests/page.test.js",
     "apps/wnba/tests/player-updater.test.js",
