@@ -348,7 +348,11 @@ export function createIdentityDocuments(storage, policy, now = Date.now) {
     if (observations.length || policy.nativeIdMode === "internal") {
       const saved =
         policy.nativeIdMode === "internal"
-          ? await lookup.updateRegisteredFacts(observations, { key: sourceKey, rejected })
+          ? await lookup.updateRegisteredFacts(observations, {
+              key: sourceKey,
+              rejected,
+              partial: true,
+            })
           : await lookup.saveWithEntries(observations);
       results = saved.results;
       rememberNatives(saved);
@@ -428,6 +432,35 @@ export function createIdentityDocuments(storage, policy, now = Date.now) {
     const source = describeDetailAnswer(key, value);
     const body = await prepareDocument(source.key, source.document, null, key);
     return { ...value, body };
+  }
+
+  async function publishDocument(key, document, original, previous = undefined) {
+    const cached = key.startsWith("job:details:detail-answer:");
+    const source = cached ? describeDetailAnswer(key, original) : { key, document: original };
+    const prepared = cached ? describeDetailAnswer(key, document).document : document;
+    const { observations } = expandDocument(source.key, prepared);
+    const { rejected } = expandDocument(source.key, source.document);
+    const isSuperseded = (current) =>
+      isSameJson(previous, document) && !isSameJson(current, document);
+    try {
+      return await storage.transaction(async (transaction) => {
+        const current = await transaction.get(key);
+        if (isSuperseded(current)) return false;
+        const changed = !isSameJson(current, document);
+        await lookup.updateRegisteredFacts(observations, { key, rejected }, transaction);
+        if (changed) await transaction.put(key, document);
+        return changed;
+      });
+    } catch {
+      return storage.transaction(async (transaction) => {
+        const current = await transaction.get(key);
+        if (isSuperseded(current)) return false;
+        const changed = !isSameJson(current, document);
+        await saveIdentityError(transaction, key, 1, "failed");
+        if (changed) await transaction.put(key, document);
+        return changed;
+      });
+    }
   }
 
   async function forgetSource(key) {
@@ -534,6 +567,7 @@ export function createIdentityDocuments(storage, policy, now = Date.now) {
   return {
     prepareDocument,
     prepareDetailAnswer,
+    publishDocument: policy.nativeIdMode === "internal" ? publishDocument : null,
     saveVendorGames: (records, rejected = 0, docs = null) =>
       attemptIdentity("snapshot", () => saveVendorGames(records, "snapshot", rejected, docs)),
     forgetSource,

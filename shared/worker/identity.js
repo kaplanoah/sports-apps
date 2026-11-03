@@ -422,14 +422,14 @@ export function createIdentityLookup(storage, league, { nativeVendor = null } = 
           source.key,
           source.rejected + missing,
           (source.unregistered ?? 0) + missing,
-          true,
+          source.partial ?? false,
         );
         return registered;
       }),
-    /** @param {any[]} updates @param {IdentitySource | null} [source] */
-    async updateRegisteredFacts(updates, source = null) {
+    /** @param {any[]} updates @param {IdentitySource | null} [source] @param {any} [transaction] */
+    async updateRegisteredFacts(updates, source = null, transaction = null) {
       updates.forEach((update) => validateSportsData(IdentityFactsUpdate, update));
-      return storage.transaction(async (transaction) => {
+      const updateFacts = async (transaction) => {
         const beforeRevision = (await transaction.get(nameFactsRevisionKey(league))) ?? null;
         const results = [];
         const entries = [];
@@ -457,7 +457,8 @@ export function createIdentityLookup(storage, league, { nativeVendor = null } = 
           beforeRevision,
           revision: (await transaction.get(nameFactsRevisionKey(league))) ?? null,
         };
-      });
+      };
+      return transaction ? updateFacts(transaction) : storage.transaction(updateFacts);
     },
     async indexCandidate(type, id) {
       await storage.transaction(async (transaction) => {

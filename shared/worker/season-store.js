@@ -422,6 +422,11 @@ export function createSeasonStore(league) {
         ? await this.identities.prepareDocument(key, doc, previous)
         : doc;
       const data = sortKeys(prepared);
+      if (this.identities?.publishDocument) {
+        if (await this.identities.publishDocument(key, data, doc, previous))
+          this.announceChange(key, data);
+        return;
+      }
       if (isSameJson(previous, data)) return;
       await this.ctx.storage.put(key, data);
       this.announceChange(key, data);
@@ -710,7 +715,13 @@ export function createSeasonStore(league) {
             name === "details" && key.startsWith("detail-answer:") && this.identities
               ? await this.identities.prepareDetailAnswer(prefix + key, value)
               : value;
-          await storage.put(prefix + key, prepared);
+          if (
+            name === "details" &&
+            key.startsWith("detail-answer:") &&
+            this.identities?.publishDocument
+          )
+            await this.identities.publishDocument(prefix + key, prepared, value);
+          else await storage.put(prefix + key, prepared);
         },
         delete: async (key) => {
           const removed = await storage.delete(prefix + key);
