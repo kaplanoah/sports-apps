@@ -4,12 +4,12 @@
 // squash merge the run deployed, which GitHub names for the commit, as a squash's "(#N)" can be
 // edited away. One comment for each channel and commit, edited when a re-run finishes. A run that
 // checked nothing, like one waiting for CI on main, a superseded one, or one that found nothing
-// to deploy, posts nothing.
+// to deploy, posts nothing, even when it found an unchanged service answering at its live commit.
 import { fileURLToPath } from "node:url";
 import { BETA_LABEL, findHolder, readOpenPulls } from "./beta-claim.mjs";
 import { ACTIONS_LOGIN, createGitHub, readAllPages } from "./github-api.mjs";
 import { hasDeployStarted } from "./report-deploy.mjs";
-import { WORKER_CHECK_OK } from "./worker-results.mjs";
+import { HEALTH_CHECK_OK, WORKER_CHECK_OK } from "./worker-results.mjs";
 
 /** @typedef {import("./worker-results.mjs").WorkerResult} WorkerResult */
 
@@ -27,8 +27,12 @@ const UNCHANGED = "Not deployed or checked by this run";
 const formatCell = (text) => text.replace(/\s+/g, " ").replaceAll("|", "\\|").trim();
 
 /** @param {WorkerResult} result */
+const startsComment = ({ result }) => result === "checked" || result === "failed";
+
+/** @param {WorkerResult} result */
 function describeResult({ result, detail }) {
   if (result === "checked") return WORKER_CHECK_OK;
+  if (result === "answered") return HEALTH_CHECK_OK;
   if (result === "failed") return `failed: ${formatCell(detail ?? "")}`;
   return UNCHANGED;
 }
@@ -146,7 +150,7 @@ export async function commentDeploy({
   const isFailed =
     jobResult === "failure" ||
     (jobResult === "cancelled" && (await hasDeployStarted(github, runId)));
-  if (!isFailed && !results.some(({ result }) => result !== "unchanged"))
+  if (!isFailed && !results.some(startsComment))
     return "The run checked nothing, so no pull request hears of it";
   const options = { repository, fetchImpl, env };
   const number =

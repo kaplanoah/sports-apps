@@ -4,7 +4,11 @@
 /** What the deploy's log and its comment say of a Worker the run checked answering. */
 export const WORKER_CHECK_OK = "worker check: ok";
 
+/** What the deploy's log and its comment say of a service every app that reports it says is ok. */
+export const HEALTH_CHECK_OK = "health check: ok";
+
 /**
- * What a run did with a Worker: checked it answering, failed, or left it as it was.
- * @typedef {{ worker: string, version: string | null, result: "checked" | "failed" | "unchanged", detail?: string }} WorkerResult
+ * What a run did with a Worker: checked it answering, found an unchanged service
+ * answering at its live commit, failed, or left it as it was.
+ * @typedef {{ worker: string, version: string | null, result: "checked" | "answered" | "failed" | "unchanged", detail?: string }} WorkerResult
  */

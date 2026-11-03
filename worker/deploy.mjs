@@ -21,7 +21,7 @@ import { decideDeploy, listChangedFiles } from "./deploy-scope.mjs";
 import { createGitHub } from "./github-api.mjs";
 import { isGitObjectId } from "./git-object.mjs";
 import { readDeployedMain } from "./production-coverage.mjs";
-import { WORKER_CHECK_OK } from "./worker-results.mjs";
+import { HEALTH_CHECK_OK, WORKER_CHECK_OK } from "./worker-results.mjs";
 
 /** @typedef {import("./worker-results.mjs").WorkerResult} WorkerResult */
 
@@ -342,6 +342,7 @@ export const listAppWorkers = (channel, subdomain, roots) =>
  * @property {string | null} [checkedCommit] Previously verified production coverage.
  * @property {() => void} [onCovered] Reports fresh verification or equivalent verified runtime.
  * @property {() => void} [onChecked] Reports that this run checked the Worker answering.
+ * @property {() => void} [onAnswered] Reports that an unchanged service answered at its live commit.
  * @property {(since: string) => string[] | null} [findChanges] Files changed since a commit.
  * @property {typeof fetch} [fetchImpl]
  * @property {NodeJS.ProcessEnv} [env]
@@ -368,6 +369,7 @@ export async function deploy({
   checkedCommit,
   onCovered,
   onChecked,
+  onAnswered,
   findChanges = listChangedFiles,
   fetchImpl = fetch,
   env = process.env,
@@ -556,7 +558,7 @@ export async function deploy({
     });
     if (check.status === "answering") {
       const notice = check.attention ? "::notice::" : "";
-      log(`${notice}health check: ok${check.attention ? `, but ${check.attention}` : ""}`);
+      log(`${notice}${HEALTH_CHECK_OK}${check.attention ? `, but ${check.attention}` : ""}`);
     }
     if (check.status === "unchecked") log(`::notice::health check: skipped, ${check.reason}`);
     if (check.status === "unanswered") {
@@ -568,7 +570,7 @@ export async function deploy({
       await restoreAfter(problem, previousVersions);
     }
     if (isUploaded) logWorkerCheck();
-    else if (check.status === "answering") onChecked?.();
+    else if (check.status === "answering") onAnswered?.();
     // An unbound service is safely excluded only after every app health answered.
     if (
       isUploaded ||
@@ -733,6 +735,7 @@ export async function deployWorkers(
  * @param {string | null} [options.checkedCommit]
  * @param {(worker: string) => void} [options.onCovered]
  * @param {(worker: string) => void} [options.onChecked]
+ * @param {(worker: string) => void} [options.onAnswered]
  * @param {(worker: string, message: string) => void} [options.onFailed]
  * @param {import("./apps.mjs").WorkerRoots} [options.roots]
  * @param {typeof buildWorker} [options.buildWorkerImpl]
@@ -748,6 +751,7 @@ export async function deployRelease(
     checkedCommit,
     onCovered,
     onChecked,
+    onAnswered,
     onFailed,
     roots,
     buildWorkerImpl = buildWorker,
@@ -767,6 +771,7 @@ export async function deployRelease(
       checkedCommit,
       onCovered: () => onCovered?.(worker),
       onChecked: () => onChecked?.(worker),
+      onAnswered: () => onAnswered?.(worker),
       log: createWorkerLog(worker),
     });
   return deployWorkers(workers, deployWorker, {
@@ -884,17 +889,30 @@ export function listChannelMasks(channel, env, apps = listApps()) {
 /**
  * @param {string[]} workers
  * @param {Set<string>} checked
+ * @param {Set<string>} answered unchanged services that answered at their live commit
  * @param {Map<string, string>} failures each failed Worker's error
  * @param {(worker: string) => string | null} readWorkerVersion
  * @returns {WorkerResult[]}
  */
-function listWorkerResults(workers, checked, failures, readWorkerVersion) {
-  return [...new Set([...workers, ...checked, ...failures.keys()])].map((worker) => {
+function listWorkerResults(workers, checked, answered, failures, readWorkerVersion) {
+  return [...new Set([...workers, ...checked, ...answered, ...failures.keys()])].map((worker) => {
     const version = readWorkerVersion(worker);
     const failure = failures.get(worker);
     if (failure !== undefined) return { worker, version, result: "failed", detail: failure };
-    return { worker, version, result: checked.has(worker) ? "checked" : "unchanged" };
+    return { worker, version, result: findCheckResult(worker, checked, answered) };
   });
+}
+
+/**
+ * @param {string} worker
+ * @param {Set<string>} checked
+ * @param {Set<string>} answered
+ * @returns {"checked" | "answered" | "unchanged"}
+ */
+function findCheckResult(worker, checked, answered) {
+  if (checked.has(worker)) return "checked";
+  if (answered.has(worker)) return "answered";
+  return "unchanged";
 }
 
 /**
@@ -929,6 +947,8 @@ export async function deployCheckedRelease(
   const covered = new Set();
   /** @type {Set<string>} */
   const checked = new Set();
+  /** @type {Set<string>} */
+  const answered = new Set();
   /** @type {Map<string, string>} */
   const failures = new Map();
   const masks = listChannelMasks(channel, env);
@@ -939,10 +959,11 @@ export async function deployCheckedRelease(
     checkedCommit,
     onCovered: (worker) => covered.add(worker),
     onChecked: (worker) => checked.add(worker),
+    onAnswered: (worker) => answered.add(worker),
     onFailed: (worker, message) => failures.set(worker, maskSecrets(message, masks)),
   });
   if (env.GITHUB_OUTPUT) {
-    const results = listWorkerResults(workers, checked, failures, readWorkerVersion);
+    const results = listWorkerResults(workers, checked, answered, failures, readWorkerVersion);
     appendFileSync(env.GITHUB_OUTPUT, `worker-results=${JSON.stringify(results)}\n`);
   }
   if (!isDeployed) return false;

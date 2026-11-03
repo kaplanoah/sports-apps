@@ -152,8 +152,10 @@ test("beta posts nothing when the holder's head isn't the commit the run deploye
 test("a run that checked nothing asks GitHub nothing, on either channel", async () => {
   /** @type {WorkerResult[]} */
   const unchanged = [{ worker: "mlb", version: "2.40.1", result: "unchanged" }];
+  /** @type {WorkerResult[]} */
+  const answered = [...unchanged, { worker: "accounts", version: "1.2.0", result: "answered" }];
   for (const channel of ["production", "beta"])
-    for (const results of [unchanged, [], "", "not json"]) {
+    for (const results of [unchanged, answered, [], "", "not json"]) {
       const { line, requests } = await comment({ channel, results }, { merged: MERGED });
       assert.match(line, /checked nothing/);
       assert.deepEqual(requests, []);
@@ -183,7 +185,11 @@ test("a run that went through names each Worker's version and result", () => {
     commit: COMMIT,
     runUrl: RUN_URL,
     isFailed: false,
-    results: [...CHECKED, { worker: "accounts", version: null, result: "checked" }],
+    results: [
+      ...CHECKED,
+      { worker: "accounts", version: null, result: "checked" },
+      { worker: "contact", version: "1.2.0", result: "answered" },
+    ],
   });
   assert.equal(
     body,
@@ -195,6 +201,7 @@ test("a run that went through names each Worker's version and result", () => {
       "| mlb | 2.40.1 | worker check: ok |",
       "| wnba | 1.20.0 | Not deployed or checked by this run |",
       "| accounts | unknown | worker check: ok |",
+      "| contact | 1.2.0 | health check: ok |",
       "",
       nameDeployMarker("production", COMMIT),
     ].join("\n"),

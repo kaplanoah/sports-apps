@@ -171,6 +171,34 @@ test("each run that deploys writes every Worker's result and version, failed or 
   }
 });
 
+test("a run that deploys nothing writes each unchanged service that answered apart from the Workers it checked", async (context) => {
+  const { deployCheckedRelease } = await loadDeployModule();
+  const folder = mkdtempSync(join(tmpdir(), "deploy-answered-"));
+  context.after(() => rmSync(folder, { recursive: true, force: true }));
+  const output = join(folder, "output");
+  writeFileSync(output, "");
+  await deployCheckedRelease(
+    ["accounts", "mlb"],
+    { channel: "production", commit: NEW_COMMIT, newer: null },
+    {
+      env: { GITHUB_OUTPUT: output },
+      deploy: async (workers, options) => {
+        options?.onAnswered?.("accounts");
+        return true;
+      },
+      readCheckedCommit: async () => null,
+      readWorkerVersion: () => "1.0.0",
+    },
+  );
+  const line = readFileSync(output, "utf8")
+    .split("\n")
+    .find((text) => text.startsWith("worker-results="));
+  assert.deepEqual(JSON.parse(line.slice("worker-results=".length)), [
+    { worker: "accounts", version: "1.0.0", result: "answered" },
+    { worker: "mlb", version: "1.0.0", result: "unchanged" },
+  ]);
+});
+
 test("a failure the run hands its comment names none of the channel's secrets, whole or in part", async (context) => {
   const { deployCheckedRelease } = await loadDeployModule();
   const folder = mkdtempSync(join(tmpdir(), "deploy-masks-"));
@@ -225,24 +253,28 @@ test("a failure the run hands its comment names none of the channel's secrets, w
   }
 });
 
-test("deployRelease reports each Worker it checked and each one that failed", async () => {
+test("deployRelease reports each Worker it checked, each service that answered, and each one that failed", async () => {
   const { deployRelease } = await loadDeployModule();
   const checked = [];
+  const answered = [];
   const failed = [];
   const isDeployed = await deployRelease(["mlb", "wnba"], {
     buildWorkerImpl: async () => "",
-    deployWorkerImpl: async ({ worker, onChecked, isCheckOnly }) => {
+    deployWorkerImpl: async ({ worker, onChecked, onAnswered, isCheckOnly }) => {
       if (isCheckOnly) return null;
       if (worker === "wnba") throw new Error("The Worker didn't answer as the new version");
       onChecked?.();
+      onAnswered?.();
       return worker;
     },
     onChecked: (worker) => checked.push(worker),
+    onAnswered: (worker) => answered.push(worker),
     onFailed: (worker, message) => failed.push({ worker, message }),
     logError: () => {},
   });
   assert.equal(isDeployed, false);
   assert.deepEqual(checked, ["mlb"]);
+  assert.deepEqual(answered, ["mlb"]);
   assert.deepEqual(failed, [
     { worker: "wnba", message: "The Worker didn't answer as the new version" },
   ]);
