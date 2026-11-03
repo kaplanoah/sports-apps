@@ -8,10 +8,10 @@ import { matchPath } from "./harness.mjs";
 // which the Games list opens on today. A page showing the copy draws once the store has handed
 // over all it holds, the whole schedule with the season's record, so it keeps any day it showed,
 // and keeps the copy while the record alone lacks that day and the schedule is on its way, for at
-// most SCHEDULE_WAIT_MS. A
-// page that draws the season it saved without its whole schedule, from the record, which lists
-// fewer days, keeps only a day the record lists and opens on today otherwise. Whatever it holds,
-// the list ends on the day it showed or on today once the store has answered with the whole season.
+// most SCHEDULE_WAIT_MS. A page that draws the season it saved without its whole schedule, from
+// the record, which lists fewer days, keeps only a day the record lists and opens on today
+// otherwise. Whatever it holds, the list ends on the day it showed or on today once the store has
+// answered with the whole season.
 
 /** @typedef {"today" | "shown"} OpenDay */
 
