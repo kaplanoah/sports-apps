@@ -34,6 +34,28 @@ const createGame = (id, extra = {}) => ({
   ...extra,
 });
 
+function interruptIdentityReads(storage) {
+  const transaction = storage.transaction;
+  let failures = 0;
+  storage.transaction = (change) =>
+    transaction((inner) =>
+      change({
+        ...inner,
+        get: async (key) => {
+          if (/^identity:(entity|vendor):/.test(key)) {
+            failures += 1;
+            throw new Error("Identity ledger unavailable");
+          }
+          return inner.get(key);
+        },
+      }),
+    );
+  return () => {
+    assert.ok(failures > 0);
+    storage.transaction = transaction;
+  };
+}
+
 test("concurrent discovery is one atomic creation across independent lookup instances and retries", async () => {
   const { ctx } = createDurableObjectContext();
   const lookups = Array.from({ length: 12 }, () => createIdentityLookup(ctx.storage, "mlb"));
@@ -732,9 +754,7 @@ test("identity failure preserves sports writes, season notifications and reminde
   store.reminders.saveGames = async (games) => {
     reminders.push(games);
   };
-  ctx.storage.transaction = async () => {
-    throw new Error("identity storage unavailable");
-  };
+  const restore = interruptIdentityReads(ctx.storage);
   const update = {
     ...snapshot,
     identityRecords: readIdentityGames(
@@ -752,6 +772,7 @@ test("identity failure preserves sports writes, season notifications and reminde
   assert.equal(reminders.length, 1);
   assert.ok(Array.isArray(reminders[0]));
   assert.ok((await store.identities.readStatus()).errors > 0);
+  restore();
 });
 
 test("backfill records a failed document, advances past it, and never labels incomplete coverage verified", async () => {
@@ -831,11 +852,10 @@ test("ESPN fallback identities reach the ledger but never stored or served box s
     ),
   );
   assert.ok(!(await (await store.readDoc("games/" + id)).text()).includes("espnIdentity"));
-  ctx.storage.transaction = async () => {
-    throw new Error("identity write failure");
-  };
+  const restore = interruptIdentityReads(ctx.storage);
   await store.docs.write("games/" + id, { boxScore: box });
   assert.ok(!JSON.stringify(stored.get("games/" + id)).includes("espnIdentity"));
+  restore();
 });
 
 test("unchanged raw documents publish nothing after stored fact expansion for both actual stores", async () => {
@@ -916,15 +936,12 @@ test("narrowing candidate games still checks contradictory facts on an establish
 test("a recovered cached-detail identity write clears only its failure and permits coverage verification", async () => {
   const { ctx, stored } = createDurableObjectContext();
   const store = new WnbaStore(ctx, {});
-  const transaction = ctx.storage.transaction;
   const key = "detail-answer:/player?id=44&season=2026";
   const value = { at: 1, body: { id: "44", firstName: "Alex", lastName: "Jones", season: 2026 } };
-  ctx.storage.transaction = async () => {
-    throw new Error("temporary identity failure");
-  };
+  const restore = interruptIdentityReads(ctx.storage);
   await store.createJobStorage("details").put(key, value);
   assert.equal((await store.identities.readStatus()).errors, 1);
-  ctx.storage.transaction = transaction;
+  restore();
   await store.createJobStorage("details").put(key, value);
   assert.equal((await store.identities.readStatus()).errors, 0);
   for (
@@ -963,16 +980,13 @@ test("rejected cached records keep health uncertain without restarting completed
 test("backfill recovers a live cached-detail failure under the same physical source key", async () => {
   const { ctx } = createDurableObjectContext();
   const store = new WnbaStore(ctx, {});
-  const transaction = ctx.storage.transaction;
   const key = "detail-answer:/player?id=44&season=2026";
-  ctx.storage.transaction = async () => {
-    throw new Error("temporary identity failure");
-  };
+  const restore = interruptIdentityReads(ctx.storage);
   await store
     .createJobStorage("details")
     .put(key, { at: 1, body: { id: "44", firstName: "Alex", lastName: "Jones", season: 2026 } });
   assert.equal((await store.identities.readStatus()).errors, 1);
-  ctx.storage.transaction = transaction;
+  restore();
   for (
     let iteration = 0;
     iteration < 40 && !(await store.identities.readStatus()).backfill.complete;
@@ -1013,10 +1027,7 @@ test("identity outages preserve prepared sports facts and never announce unchang
     };
     await store.docs.write("games/" + id, raw);
     const previous = await store.docs.read("games/" + id);
-    const transaction = ctx.storage.transaction;
-    ctx.storage.transaction = async () => {
-      throw new Error("identity unavailable");
-    };
+    const restore = interruptIdentityReads(ctx.storage);
     const changed = [];
     store.announceChange = (key) => {
       changed.push(key);
@@ -1024,7 +1035,7 @@ test("identity outages preserve prepared sports facts and never announce unchang
     await store.docs.write("games/" + id, raw);
     assert.deepEqual(await store.docs.read("games/" + id), previous);
     assert.deepEqual(changed, []);
-    ctx.storage.transaction = transaction;
+    restore();
     await store.docs.write("games/" + id, raw);
     assert.deepEqual(changed, []);
   }
@@ -1444,11 +1455,10 @@ test("policy-defined saved game facts survive writes during ledger outages", asy
   });
   const store = new Store(ctx, {});
   await store.docs.write("games/7", { id: "7", season: 2026, format: "extra", state: "final" });
-  ctx.storage.transaction = async () => {
-    throw new Error("identity unavailable");
-  };
+  const restore = interruptIdentityReads(ctx.storage);
   await store.docs.write("games/7", { id: "7", season: 2026, state: "final" });
   assert.equal((await store.docs.read("games/7")).format, "extra");
+  restore();
 });
 
 test("mapping audit counts forward and reverse breaks once without a growing checkpoint list", async () => {
@@ -1507,15 +1517,12 @@ test("WNBA new ESPN links wait for ledger recovery while established match docum
       rejected: 0,
     },
   };
-  const transaction = ctx.storage.transaction;
-  ctx.storage.transaction = async () => {
-    throw new Error("identity unavailable");
-  };
+  const restore = interruptIdentityReads(ctx.storage);
   assert.ok((await store.saveSeason(update)).snapshot);
   assert.equal(await store.docs.read("espnMatches/" + game.id), null);
   assert.deepEqual(await store.docs.read("espnMatches/old"), kept);
   assert.ok(await store.docs.read("seasons/2026"));
-  ctx.storage.transaction = transaction;
+  restore();
   assert.ok((await store.saveSeason(update)).snapshot);
   const recoveredMatch = await store.docs.read("espnMatches/" + game.id);
   assert.ok(recoveredMatch);

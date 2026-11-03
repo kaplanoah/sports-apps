@@ -15,11 +15,13 @@ function listImported(script) {
   return found;
 }
 
-// Every push to beta runs the claim's check, and every production deploy its report, whether or
-// not a Worker deploys, and no Worker runs either, so a change to one needs no deploy to show it
-// works.
+// Every push to beta runs the claim's check, every production deploy its report, and every run
+// its comment, whether or not a Worker deploys, and no Worker runs any of them, so a change to one
+// needs no deploy to show it works.
 const BETA_CLAIM_CHECK = "worker/beta-claim.mjs";
 const DEPLOY_REPORT = "worker/report-deploy.mjs";
+const DEPLOY_COMMENT = "worker/comment-deploy.mjs";
+const UNDEPLOYED_SCRIPTS = [BETA_CLAIM_CHECK, DEPLOY_REPORT, DEPLOY_COMMENT];
 
 test("rate-control tooling changes do not deploy Workers while unknown root code still does", () => {
   for (const name of [
@@ -46,19 +48,18 @@ test("rate-control tooling changes do not deploy Workers while unknown root code
   assert.equal(decideDeploy(["worker/example-runtime.mjs"]).isNeeded, true);
 });
 
-test("every script the deploy runs, and every module those import, deploys when it changes, but the beta claim's check and the deploy's report", () => {
+test("every script the deploy runs, and every module those import, deploys when it changes, but the beta claim's check and the deploy's report and comment", () => {
   const workflow = readRepoFile(".github/workflows/deploy.yml");
   const scripts = [...workflow.matchAll(/node (worker\/[\w-]+\.mjs)/g)]
     .map(([, path]) => path)
-    .filter((path) => path !== BETA_CLAIM_CHECK && path !== DEPLOY_REPORT);
+    .filter((path) => !UNDEPLOYED_SCRIPTS.includes(path));
   assert.ok(scripts.includes("worker/deploy.mjs"));
   assert.match(
     workflow,
     /if: env\.CHANNEL == 'beta'\n.*\n.*\n\s+run: node worker\/beta-claim\.mjs/,
   );
   assert.equal(
-    decideDeploy([BETA_CLAIM_CHECK, "worker/labeling.mjs", DEPLOY_REPORT, "worker/issues.mjs"])
-      .isNeeded,
+    decideDeploy([...UNDEPLOYED_SCRIPTS, "worker/labeling.mjs", "worker/issues.mjs"]).isNeeded,
     false,
   );
   const run = [".github/workflows/deploy.yml", ...new Set(scripts.flatMap(listImported))];

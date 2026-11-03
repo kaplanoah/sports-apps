@@ -14,6 +14,14 @@ import { readPlayerName } from "./player-name.js";
 import { hashTextInFull } from "./hash-text.js";
 
 export const IDENTITY_PREFIX = "identity:";
+export const IDENTITY_COVERAGE_KEY = `${IDENTITY_PREFIX}coverage-revision`;
+export const IDENTITY_BACKFILL_KEY = `${IDENTITY_PREFIX}backfill`;
+export const IDENTITY_ERROR_PREFIX = `${IDENTITY_PREFIX}error:`;
+export const IDENTITY_UNREGISTERED_PREFIX = `${IDENTITY_PREFIX}unregistered:`;
+const SOURCE_REJECTION_PREFIX = `${IDENTITY_PREFIX}source-rejected:`;
+const nameSourceRejectionKey = (key) => `${SOURCE_REJECTION_PREFIX}${encodeURIComponent(key)}`;
+export const nameIdentityErrorKey = (key, kind) =>
+  `${IDENTITY_ERROR_PREFIX}${kind}:${encodeURIComponent(key)}`;
 export const IDENTITY_PREFIX_END = namePrefixEnd(IDENTITY_PREFIX);
 const VENDOR_PREFIX = `${IDENTITY_PREFIX}vendor:`;
 const ENTITY_PREFIX = `${IDENTITY_PREFIX}entity:`;
@@ -111,6 +119,41 @@ async function saveChanged(storage, key, value) {
   if (!isSameJson(await storage.get(key), value)) await storage.put(key, value);
 }
 
+async function saveIdentityCount(storage, path, count, partial = false) {
+  const previous = await storage.get(path);
+  if (previous === count || (!previous && !count) || (partial && (previous ?? 0) >= count)) return;
+  if (count) await storage.put(path, count);
+  else await storage.delete(path);
+}
+
+export async function saveIdentityError(storage, key, count, kind = "rejected", partial = false) {
+  await saveIdentityCount(storage, nameIdentityErrorKey(key, kind), count, partial);
+}
+
+export async function readIdentitySourceRejections(storage, key) {
+  return (await storage.get(nameSourceRejectionKey(key))) ?? 0;
+}
+
+export async function saveIdentitySourceRejections(storage, key, count) {
+  await saveIdentityCount(storage, nameSourceRejectionKey(key), count);
+}
+
+export async function saveIdentitySourceProblems(
+  storage,
+  key,
+  rejected,
+  unregistered,
+  partial = false,
+) {
+  await saveIdentityError(storage, key, rejected, "rejected", partial);
+  await saveIdentityCount(
+    storage,
+    `${IDENTITY_UNREGISTERED_PREFIX}${encodeURIComponent(key)}`,
+    unregistered,
+    partial,
+  );
+}
+
 /** @param {any} transaction @param {string} league @param {string} key @param {string | null} problem @param {boolean} [decisive] */
 async function saveProblem(transaction, league, key, problem, decisive = false) {
   const path = nameProblemKey(key);
@@ -161,12 +204,15 @@ async function ensureEntity(transaction, league, observation) {
   };
 }
 
-/** @param {any} transaction @param {string} league @param {any} observation */
-async function saveAssociation(transaction, league, observation) {
+/** @param {any} transaction @param {string} league @param {any} observation @param {string | null} nativeVendor */
+async function saveAssociation(transaction, league, observation, nativeVendor) {
   const { type, vendor, vendorId, internalId, evidence, decisive = false } = observation;
   const key = nameVendorKey(league, type, vendor, vendorId);
   const previous = await transaction.get(key);
   const { entry, created, addedFacts } = await ensureEntity(transaction, league, observation);
+  const needsCoverage =
+    vendor === nativeVendor &&
+    !hasCoherentAssociation(entry, previous, { league, type, vendor, vendorId, internalId });
   const competingId = entry.vendors[vendor];
   if (
     (previous && previous.internalId !== internalId) ||
@@ -220,7 +266,15 @@ async function saveAssociation(transaction, league, observation) {
     await transaction.put(key, updated);
   }
   if (!observation.preserveProblem) await saveProblem(transaction, league, key, null, decisive);
+  if (needsCoverage && (await hasMissingCoverage(transaction)))
+    await transaction.put(IDENTITY_COVERAGE_KEY, crypto.randomUUID());
   return { internalId, disputed: false, created, addedFacts };
+}
+
+async function hasMissingCoverage(transaction) {
+  const progress = await transaction.get(IDENTITY_BACKFILL_KEY);
+  if (progress?.nativeMissingEntries || progress?.pending?.nativeMissingEntries) return true;
+  return (await transaction.list({ prefix: IDENTITY_UNREGISTERED_PREFIX, limit: 1 })).size > 0;
 }
 
 function hasCoherentAssociation(
@@ -264,6 +318,7 @@ async function updateRegisteredFacts(transaction, league, update) {
 }
 
 /** @typedef {import("zod").infer<typeof IdentityAssociationGuard>} IdentityGuard */
+/** @typedef {{ key: string, rejected: number, unregistered?: number, partial?: boolean }} IdentitySource */
 
 async function readEligibleAssociation(transaction, league, type, vendor, vendorId) {
   const key = nameVendorKey(league, type, vendor, vendorId);
@@ -298,8 +353,9 @@ async function readEligibleAssociation(transaction, league, type, vendor, vendor
  * The storage transaction owns lookup and creation, including collision checks and reconciliation.
  * @param {any} storage Durable Object storage
  * @param {string} league
+ * @param {{ nativeVendor?: string | null }} [options]
  */
-export function createIdentityLookup(storage, league) {
+export function createIdentityLookup(storage, league, { nativeVendor = null } = {}) {
   /** @param {any[]} observations @param {string | null} [factsRevision] @param {boolean} [includeEntries] */
   async function saveObservations(observations, factsRevision = undefined, includeEntries = false) {
     observations.forEach((observation) => validateSportsData(IdentityObservation, observation));
@@ -334,7 +390,7 @@ export function createIdentityLookup(storage, league) {
           results.push({ vendorId: observation.vendorId, internalId: null, disputed: false });
           continue;
         }
-        const result = await saveAssociation(transaction, league, observation);
+        const result = await saveAssociation(transaction, league, observation, nativeVendor);
         results.push({
           ...result,
           vendorId: observation.vendorId,
@@ -365,14 +421,25 @@ export function createIdentityLookup(storage, league) {
     save: async (observations, factsRevision = undefined) =>
       (await saveObservations(observations, factsRevision)).results,
     saveWithEntries: (observations) => saveObservations(observations, undefined, true),
-    hasRegistration: (type, vendor, internalId) =>
-      storage.transaction(
-        async (transaction) =>
-          (await readRegisteredEntry(transaction, league, type, vendor, internalId)) !== null,
-      ),
-    async updateRegisteredFacts(updates) {
+    /** @param {"game" | "player"} type @param {string} vendor @param {string} internalId @param {IdentitySource} source */
+    recordRegistrationCheck: (type, vendor, internalId, source) =>
+      storage.transaction(async (transaction) => {
+        const registered =
+          (await readRegisteredEntry(transaction, league, type, vendor, internalId)) !== null;
+        const missing = registered ? 0 : 1;
+        await saveIdentitySourceProblems(
+          transaction,
+          source.key,
+          source.rejected + missing,
+          (source.unregistered ?? 0) + missing,
+          source.partial ?? false,
+        );
+        return registered;
+      }),
+    /** @param {any[]} updates @param {IdentitySource | null} [source] @param {any} [transaction] */
+    async updateRegisteredFacts(updates, source = null, transaction = null) {
       updates.forEach((update) => validateSportsData(IdentityFactsUpdate, update));
-      return storage.transaction(async (transaction) => {
+      const updateFacts = async (transaction) => {
         const beforeRevision = (await transaction.get(nameFactsRevisionKey(league))) ?? null;
         const results = [];
         const entries = [];
@@ -384,13 +451,24 @@ export function createIdentityLookup(storage, league) {
               await transaction.get(nameEntityKey(league, update.type, update.internalId)),
             );
         }
+        if (source) {
+          const missing = results.filter((result) => result.missing).length;
+          await saveIdentitySourceProblems(
+            transaction,
+            source.key,
+            source.rejected + missing,
+            (source.unregistered ?? 0) + missing,
+            source.partial ?? false,
+          );
+        }
         return {
           results,
           entries,
           beforeRevision,
           revision: (await transaction.get(nameFactsRevisionKey(league))) ?? null,
         };
-      });
+      };
+      return transaction ? updateFacts(transaction) : storage.transaction(updateFacts);
     },
     async indexCandidate(type, id) {
       await storage.transaction(async (transaction) => {
@@ -410,7 +488,7 @@ export function createIdentityLookup(storage, league) {
         } while (await transaction.get(nameEntityKey(league, asked.type, internalId)));
         const observation = { ...asked, internalId, evidence: { method: "discovery" } };
         validateSportsData(IdentityObservation, observation);
-        await saveAssociation(transaction, league, observation);
+        await saveAssociation(transaction, league, observation, nativeVendor);
         return internalId;
       });
     },

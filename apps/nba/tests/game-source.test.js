@@ -652,7 +652,7 @@ test("actual NBA detail reads preserve native registration uncertainty and rejec
   });
   const guard = await harness.identities.readEligible("game", "espn", association.vendorId);
   assert.deepEqual(await read(game.id), game);
-  assert.equal(await harness.identities.hasRegistration("game", "nba", game.id), false);
+  assert.equal(await harness.identities.read("game", "nba", game.id), null);
   const errors = (await harness.store.identities.readStatus()).errors;
   assert.ok(errors > 0);
   await harness.identities.save([{ ...association, disputed: true }]);

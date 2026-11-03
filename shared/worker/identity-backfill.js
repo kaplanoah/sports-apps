@@ -13,6 +13,12 @@ import {
   isIdentityEntityKey,
   IDENTITY_PREFIX,
   IDENTITY_PREFIX_END,
+  IDENTITY_COVERAGE_KEY,
+  IDENTITY_BACKFILL_KEY,
+  saveIdentitySourceProblems,
+  saveIdentityError,
+  saveIdentitySourceRejections,
+  readIdentitySourceRejections,
 } from "./identity.js";
 
 export const IDENTITY_AUDIT_VERSION = 2;
@@ -20,9 +26,7 @@ export const IDENTITY_WORK_PER_RUN = 20;
 export const IDENTITY_WORK_PER_DAY = 10_000;
 export const IDENTITY_WORK_INTERVAL_MS = 60_000;
 const DAY_MS = 24 * 60 * 60 * 1000;
-const BACKFILL_KEY = `${IDENTITY_PREFIX}backfill`;
 const WORK_KEY = `${IDENTITY_PREFIX}work`;
-export const IDENTITY_COVERAGE_KEY = `${IDENTITY_PREFIX}coverage-revision`;
 const MAX_CANDIDATE_BYTES = 512 * 1024;
 const RETRY_DELAY_MS = 60_000;
 const MAX_RETRY_MS = 60 * 60 * 1000;
@@ -34,6 +38,7 @@ const createProgress = (coverageRevision = null) => ({
   complete: false,
   phase: "documents",
   missingEntries: 0,
+  nativeMissingEntries: 0,
   missingFacts: 0,
   conflicts: 0,
   coverageRevision,
@@ -48,9 +53,13 @@ function chooseSourceStage(source) {
   return source.records.length ? "candidates" : "done";
 }
 
+function countSourceRejections(source, pending) {
+  return (source.rejected ?? 0) + (pending.nativeMissingEntries ?? 0);
+}
+
 /**
  * @param {any} storage
- * @param {{ lookup: any, policy: any, describeSource: (key: string, value: any, phase: string, docs: any) => Promise<any>, saveErrors: (key: string, count: number, kind?: string, processedRetry?: any) => Promise<void>, hasFailedSources: () => Promise<boolean>, saveGameMatches: (results: any[], docs: any) => Promise<void>, registerObservations: (observations: any[]) => Promise<any[]> }} options
+ * @param {{ lookup: any, policy: any, describeSource: (key: string, value: any, phase: string, docs: any) => Promise<any>, saveErrors: (key: string, count: number, kind?: string, processedRetry?: any) => Promise<void>, hasFailedSources: () => Promise<boolean>, forgetSource: (key: string) => Promise<void>, saveGameMatches: (results: any[], docs: any) => Promise<void>, registerObservations: (observations: any[], source: import("./identity.js").IdentitySource) => Promise<any[]> }} options
  * @param {() => number} now
  */
 export function createIdentityBackfill(storage, options, now) {
@@ -60,12 +69,13 @@ export function createIdentityBackfill(storage, options, now) {
     describeSource,
     saveErrors,
     hasFailedSources,
+    forgetSource,
     saveGameMatches,
     registerObservations,
   } = options;
 
   async function readCurrentProgress() {
-    const previous = await storage.get(BACKFILL_KEY);
+    const previous = await storage.get(IDENTITY_BACKFILL_KEY);
     const coverageRevision = (await storage.get(IDENTITY_COVERAGE_KEY)) ?? null;
     const progress =
       previous?.version === IDENTITY_AUDIT_VERSION &&
@@ -78,9 +88,9 @@ export function createIdentityBackfill(storage, options, now) {
   async function saveProgress(previous, progress, isActive) {
     if (!isActive()) return;
     await storage.transaction(async (transaction) => {
-      const latest = await transaction.get(BACKFILL_KEY);
+      const latest = await transaction.get(IDENTITY_BACKFILL_KEY);
       if (!isActive() || !isSameJson(latest, previous)) return;
-      await transaction.put(BACKFILL_KEY, progress);
+      await transaction.put(IDENTITY_BACKFILL_KEY, progress);
     });
   }
 
@@ -196,9 +206,14 @@ export function createIdentityBackfill(storage, options, now) {
     const batch = source.observations.slice(pending.offset, pending.offset + work.remaining);
     work.remaining -= Math.max(1, batch.length);
     if (batch.length) {
-      const results = await registerObservations(batch);
-      pending.rejected =
-        (pending.rejected ?? 0) + results.filter((result) => result.missing).length;
+      const results = await registerObservations(batch, {
+        key: pending.key,
+        rejected: countSourceRejections(source, pending),
+        unregistered: pending.nativeMissingEntries ?? 0,
+        partial: true,
+      });
+      pending.nativeMissingEntries =
+        (pending.nativeMissingEntries ?? 0) + results.filter((result) => result.missing).length;
     }
     pending.offset += batch.length;
     if (pending.offset >= source.observations.length) {
@@ -217,16 +232,23 @@ export function createIdentityBackfill(storage, options, now) {
           : null;
       const missing =
         observation.vendorId === undefined
-          ? !(await lookup.hasRegistration(
+          ? !(await lookup.recordRegistrationCheck(
               observation.type,
               observation.vendor,
               observation.internalId,
+              {
+                key: pending.key,
+                rejected: countSourceRejections(source, pending),
+                unregistered: pending.nativeMissingEntries ?? 0,
+                partial: true,
+              },
             ))
           : (await lookup.read(observation.type, observation.vendor, observation.vendorId)) !==
             observation.internalId;
       if (missing) {
         pending.missingEntries += 1;
-        if (observation.vendorId === undefined) pending.rejected = (pending.rejected ?? 0) + 1;
+        if (observation.vendorId === undefined)
+          pending.nativeMissingEntries = (pending.nativeMissingEntries ?? 0) + 1;
       }
       if (observation.type === "game" && !Number.isInteger(entry?.facts?.season))
         pending.missingFacts += 1;
@@ -261,6 +283,7 @@ export function createIdentityBackfill(storage, options, now) {
         groupOffset: 0,
         nativeRevision: null,
         missingEntries: 0,
+        nativeMissingEntries: 0,
         missingFacts: 0,
         conflicts: 0,
       };
@@ -296,10 +319,40 @@ export function createIdentityBackfill(storage, options, now) {
       published = matched;
     }
     if (!isActive()) return false;
-    await saveErrors(key, (source.rejected ?? 0) + (pending.rejected ?? 0));
-    if (progress.phase !== "facts" && published)
+    const expected = source.kind === "document" ? source.document : value;
+    const finalized =
+      published &&
+      (await storage.transaction(async (transaction) => {
+        if (!isActive() || !isSameJson(await transaction.get(key), expected)) return false;
+        if (
+          source.kind === "document" &&
+          (await readIdentitySourceRejections(transaction, key)) !== source.retainedRejections
+        )
+          return false;
+        if (source.kind !== "mappings") {
+          if (policy.nativeIdMode === "internal")
+            await saveIdentitySourceProblems(
+              transaction,
+              key,
+              countSourceRejections(source, pending),
+              pending.nativeMissingEntries ?? 0,
+            );
+          else await saveIdentityError(transaction, key, countSourceRejections(source, pending));
+          if (source.kind === "document")
+            await saveIdentitySourceRejections(transaction, key, source.rejected ?? 0);
+        }
+        return true;
+      }));
+    if (!finalized) {
+      await forgetSource(key);
+      progress.pending = null;
+      return false;
+    }
+    if (progress.phase !== "facts")
       await saveErrors(key, 0, "failed", source.retryEvidence ?? null);
     progress.missingEntries += pending.missingEntries;
+    if (progress.phase === "facts")
+      progress.nativeMissingEntries += pending.nativeMissingEntries ?? 0;
     progress.missingFacts += pending.missingFacts;
     progress.conflicts += pending.conflicts;
     return true;
@@ -386,7 +439,7 @@ export function createIdentityBackfill(storage, options, now) {
   }
 
   async function readStatus(errors) {
-    const progress = await storage.get(BACKFILL_KEY);
+    const progress = await storage.get(IDENTITY_BACKFILL_KEY);
     const coverageRevision = (await storage.get(IDENTITY_COVERAGE_KEY)) ?? null;
     const complete =
       !!progress?.complete &&
