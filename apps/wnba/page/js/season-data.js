@@ -3,6 +3,7 @@ import { listSeasonYears } from "#shared/season-picker.js";
 import { createSeasonPicks, createSeasonReader, isReadableSeason } from "#shared/season-reader.js";
 import { namePlayerIndexKey, readPlayerIndex } from "#shared/page-search.js";
 import { createSeasonDocFollower } from "#shared/season-doc-follower.js";
+import { createScheduleDue } from "#shared/schedule-due.js";
 import { nameOvertimesKey } from "./search-pages.js";
 import { session } from "./session.js";
 import { SNAPSHOT_VERSION, nameScheduleKey } from "./snapshot.js";
@@ -19,6 +20,7 @@ let pickSeason = async () => {};
 /** @type {number | null} */
 let scheduleYear = null;
 let unwatchSchedule = () => {};
+const scheduleDue = createScheduleDue((isDue) => (session.isScheduleDue = isDue));
 
 /**
  * Follows every game of the season shown, which the store keeps apart from its record, and redraws
@@ -30,20 +32,18 @@ let unwatchSchedule = () => {};
 function followSchedule(year, showChange) {
   if (year === scheduleYear) return;
   scheduleYear = year;
-  session.isScheduleDue = true;
+  scheduleDue.expectAnswer(showChange);
   unwatchSchedule();
   unwatchSchedule = session.db.doc(nameScheduleKey(year)).onSnapshot(
     (/** @type {any} */ snapshot) => {
       if (year !== scheduleYear) return;
       const schedule = snapshot.exists ? snapshot.data() : null;
       session.schedule = isReadableSeason(schedule, SNAPSHOT_VERSION) ? schedule : null;
-      session.isScheduleDue = false;
+      scheduleDue.noteAnswer();
       showChange();
     },
     () => {
-      if (year !== scheduleYear || !session.isScheduleDue) return;
-      session.isScheduleDue = false;
-      showChange();
+      if (year === scheduleYear) scheduleDue.stopWaiting(showChange);
     },
   );
 }

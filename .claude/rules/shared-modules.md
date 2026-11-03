@@ -191,6 +191,7 @@ The Worker serves every file here, its `networks/` logos too, under `shared/`, b
 - `count-path.js`: the route the daily count is sent to, shared by the page and Worker
 - `season-reader.js`: reading the current season, its record, and the store's status
 - `season-doc-follower.js`: following a document the store keeps for the season shown
+- `schedule-due.js`: whether the store has yet to answer for the schedule shown, and how long the Games list waits for it
 - `poll-schedule.js`: how long a league's next update waits
 - `kept-read.js`: a read worked out again only once what it reads changes
 - `compare.js`: comparing documents whatever their key order

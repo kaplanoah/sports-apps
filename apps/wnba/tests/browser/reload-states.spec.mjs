@@ -2,6 +2,7 @@ import { test, openApp } from "./harness.mjs";
 import {
   expectLateRecordKeepsShownDay,
   expectReloadOpensOn,
+  expectStalledScheduleLetsRecordFill,
   RELOAD_STATES,
 } from "../../../../tests/browser/reload-states.mjs";
 
@@ -36,14 +37,26 @@ for (const { name, opensOn } of RELOAD_STATES) {
   }
 }
 
+const LATE_RECORD = {
+  today: "2026-09-30",
+  shownDay: SHOWN_DAYS.earlierDay,
+  schedulePath: "/store/schedules/2026",
+};
+
 test("a reload from the copy without its season, left on a day before the season's record lists, opens the Games list on that day when the record answers after the store stops holding", async ({
   page,
 }) => {
   await page.addInitScript(() => localStorage.setItem("lastTab", "games"));
   await openApp(page, { isWholeSeason: true });
 
-  await expectLateRecordKeepsShownDay(page, {
-    today: "2026-09-30",
-    shownDay: SHOWN_DAYS.earlierDay,
-  });
+  await expectLateRecordKeepsShownDay(page, LATE_RECORD);
+});
+
+test("a reload from the copy without its season, left on a day before the season's record lists, opens the Games list on today from the record when the schedule doesn't answer in time", async ({
+  page,
+}) => {
+  await page.addInitScript(() => localStorage.setItem("lastTab", "games"));
+  await openApp(page, { isWholeSeason: true });
+
+  await expectStalledScheduleLetsRecordFill(page, LATE_RECORD);
 });

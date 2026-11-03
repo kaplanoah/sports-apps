@@ -1,12 +1,14 @@
 import { expect } from "@playwright/test";
 import { UPDATING_WAIT_MS } from "../../shared/page/catch-up-note.js";
+import { SCHEDULE_WAIT_MS } from "../../shared/page/schedule-due.js";
 import { matchPath } from "./harness.mjs";
 
 // What a phone can hold when the page loads again: the copy of the page it saved as it left, the
 // season it drew that from, either one alone, or neither, and a copy older than two minutes, after
 // which the Games list opens on today. A page showing the copy draws once the store has handed
 // over all it holds, the whole schedule with the season's record, so it keeps any day it showed,
-// and keeps the copy while the record alone lacks that day and the schedule is on its way. A
+// and keeps the copy while the record alone lacks that day and the schedule is on its way, for at
+// most SCHEDULE_WAIT_MS. A
 // page that draws the season it saved without its whole schedule, from the record, which lists
 // fewer days, keeps only a day the record lists and opens on today otherwise. Whatever it holds,
 // the list ends on the day it showed or on today once the store has answered with the whole season.
@@ -85,39 +87,85 @@ export async function expectReloadOpensOn(page, { state, opensOn, today, shownDa
 }
 
 /**
- * Leaves the Games list on `shownDay`, a day before any the season's record lists, and loads the
- * page again from the copy without its season, with the record answering only once the store has
- * stopped holding what it sends, then checks the list ends on that day once the whole season has
- * arrived. The page asks for the schedule only after the record, so the record alone fills the list
- * first, as on a slow network.
+ * Holds each request `pattern` matches until the test answers it.
  * @param {import("@playwright/test").Page} page
- * @param {{ today: string, shownDay: string }} options
+ * @param {RegExp} pattern
  */
-export async function expectLateRecordKeepsShownDay(page, { today, shownDay }) {
-  await leaveListOn(page, { today, shownDay });
-  await page.addInitScript(changeSavedState, "the copy without its season");
-  const record = matchPath(`/store/seasons/${today.slice(0, 4)}`);
+async function holdRequests(page, pattern) {
   /** @type {() => void} */
   let noteAsked = () => {};
   const asked = new Promise((resolve) => (noteAsked = () => resolve(undefined)));
   /** @type {() => void} */
-  let answer = () => {};
-  const answered = new Promise((resolve) => (answer = () => resolve(undefined)));
+  let release = () => {};
+  const released = new Promise((resolve) => (release = () => resolve(undefined)));
   /** @param {import("@playwright/test").Route} route */
-  const holdRecord = async (route) => {
+  const hold = async (route) => {
     noteAsked();
-    await answered;
+    await released;
     await route.fallback();
   };
-  await page.route(record, holdRecord);
+  await page.route(pattern, hold);
+  const answer = async () => {
+    release();
+    await page.unroute(pattern, hold);
+  };
+  return { asked, answer };
+}
+
+/**
+ * Leaves the Games list on `shownDay`, a day before any the season's record lists, and loads the
+ * page again from the copy without its season, with the record answering only once the store has
+ * stopped holding what it sends.
+ * @param {import("@playwright/test").Page} page
+ * @param {{ today: string, shownDay: string, schedulePath: string }} options
+ */
+async function reloadWithLateRecord(page, { today, shownDay, schedulePath }) {
+  await leaveListOn(page, { today, shownDay });
+  await page.addInitScript(changeSavedState, "the copy without its season");
+  const record = await holdRequests(page, matchPath(`/store/seasons/${today.slice(0, 4)}`));
+  const schedule = await holdRequests(page, matchPath(schedulePath));
 
   await page.reload();
-  await asked;
+  await record.asked;
   await page.clock.runFor(UPDATING_WAIT_MS);
-  answer();
-  await page.unroute(record, holdRecord);
+  await record.answer();
+  await schedule.asked;
+  return schedule;
+}
 
-  await expectListOn(page, shownDay);
+/**
+ * Checks the list ends on `shownDay` after a reload with a late record, once the whole season
+ * has arrived. The page asks for the schedule only after the record, so the record alone fills the
+ * list first, as on a slow network.
+ * @param {import("@playwright/test").Page} page
+ * @param {{ today: string, shownDay: string, schedulePath: string }} options
+ */
+export async function expectLateRecordKeepsShownDay(page, options) {
+  const schedule = await reloadWithLateRecord(page, options);
+
+  await schedule.answer();
+
+  await expectListOn(page, options.shownDay);
+}
+
+/**
+ * Checks the record alone fills the list, on today, after a reload with a late record whose
+ * schedule doesn't answer within SCHEDULE_WAIT_MS, so a read that never answers can't leave the
+ * list on its copy.
+ * @param {import("@playwright/test").Page} page
+ * @param {{ today: string, shownDay: string, schedulePath: string }} options
+ */
+export async function expectStalledScheduleLetsRecordFill(page, options) {
+  const schedule = await reloadWithLateRecord(page, options);
+
+  await page.clock.runFor(SCHEDULE_WAIT_MS);
+
+  await expect(page.locator("#seasonGames .day-cell.is-chosen")).toHaveAttribute(
+    "data-day",
+    options.today,
+  );
+  await schedule.answer();
+  await expectListOn(page, options.today);
 }
 
 /**
