@@ -43,6 +43,49 @@ const createProgress = (coverageRevision = null) => ({
 
 const describeSignature = (value) => hashTextInFull(JSON.stringify(value));
 
+const readOptionalCount = (value) => (Number.isSafeInteger(value) && value >= 0 ? value : null);
+
+const chooseWorkAllowance = (previous, at) => {
+  const day = Math.floor(at / DAY_MS);
+  return previous?.day >= day ? previous : { day, used: 0, nextAt: 0 };
+};
+
+function describeWorkAllowance(previous, at) {
+  const allowance = chooseWorkAllowance(previous, at);
+  const resetsAt = (allowance.day + 1) * DAY_MS;
+  const nextDay = allowance.used + IDENTITY_WORK_PER_RUN > IDENTITY_WORK_PER_DAY;
+  return {
+    perRun: IDENTITY_WORK_PER_RUN,
+    dailyLimit: IDENTITY_WORK_PER_DAY,
+    minimumIntervalMs: IDENTITY_WORK_INTERVAL_MS,
+    reserved: readOptionalCount(allowance.used),
+    remaining: readOptionalCount(Math.max(0, IDENTITY_WORK_PER_DAY - allowance.used)),
+    resetsAt: readOptionalCount(resetsAt),
+    lastReservedAt: readOptionalCount(previous?.nextAt - IDENTITY_WORK_INTERVAL_MS),
+    nextReservationAt: readOptionalCount(
+      Math.max(at, nextDay ? resetsAt : Math.min(allowance.nextAt, resetsAt)),
+    ),
+  };
+}
+
+function describeCheckpoint(progress, current) {
+  const pending = progress?.pending;
+  return {
+    current,
+    phase: ["documents", "facts", "vendors"].includes(progress?.phase) ? progress.phase : null,
+    stage: ["native", "candidates", "vendor", "done"].includes(pending?.stage)
+      ? pending.stage
+      : null,
+    offset: readOptionalCount(pending?.offset),
+    candidateGroupOffset: readOptionalCount(pending?.groupOffset),
+    candidates: Array.isArray(pending?.candidates) ? pending.candidates.length : null,
+    gameIndexComplete: progress?.indexes?.game?.complete === true,
+    playerIndexComplete: progress?.indexes?.player?.complete === true,
+    savedAt: readOptionalCount(progress?.savedAt),
+    retryAfter: current && progress?.complete ? readOptionalCount(progress.retryAfter) : null,
+  };
+}
+
 function chooseSourceStage(source) {
   if (source.kind !== "vendor") return "native";
   return source.records.length ? "candidates" : "done";
@@ -72,17 +115,16 @@ export function createIdentityBackfill(storage, options, now) {
     await storage.transaction(async (transaction) => {
       const latest = await transaction.get(BACKFILL_KEY);
       if (!isActive() || !isSameJson(latest, previous)) return;
-      await transaction.put(BACKFILL_KEY, progress);
+      await transaction.put(BACKFILL_KEY, { ...progress, savedAt: now() });
     });
   }
 
   async function reserveWork(isActive) {
     const at = now();
-    const day = Math.floor(at / DAY_MS);
     return storage.transaction(async (transaction) => {
       if (!isActive()) return false;
       const previous = await transaction.get(WORK_KEY);
-      const budget = previous?.day >= day ? previous : { day, used: 0, nextAt: 0 };
+      const budget = chooseWorkAllowance(previous, at);
       if (budget.nextAt > at || budget.used + IDENTITY_WORK_PER_RUN > IDENTITY_WORK_PER_DAY)
         return false;
       await transaction.put(WORK_KEY, {
@@ -369,10 +411,11 @@ export function createIdentityBackfill(storage, options, now) {
   async function readStatus(errors) {
     const progress = await storage.get(BACKFILL_KEY);
     const coverageRevision = (await storage.get(IDENTITY_COVERAGE_KEY)) ?? null;
-    const complete =
-      !!progress?.complete &&
-      progress.version === IDENTITY_AUDIT_VERSION &&
-      (progress.coverageRevision ?? null) === coverageRevision;
+    const current =
+      progress?.version === IDENTITY_AUDIT_VERSION &&
+      (progress?.coverageRevision ?? null) === coverageRevision;
+    const complete = !!progress?.complete && current;
+    const allowance = await storage.get(WORK_KEY);
     return {
       checks: {
         verified:
@@ -385,7 +428,12 @@ export function createIdentityBackfill(storage, options, now) {
         missingFacts: progress?.missingFacts ?? 0,
         competingMappings: progress?.conflicts ?? 0,
       },
-      backfill: { complete, checkedDocuments: progress?.checkedDocuments ?? 0 },
+      backfill: {
+        complete,
+        checkedDocuments: progress?.checkedDocuments ?? 0,
+        checkpoint: describeCheckpoint(progress, current),
+        allowance: describeWorkAllowance(allowance, now()),
+      },
     };
   }
 
