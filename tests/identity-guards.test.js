@@ -6,6 +6,8 @@ import { identityPolicy } from "../apps/mlb/worker/src/identity-policy.js";
 import { createSeasonStore } from "../shared/worker/season-store.js";
 import { createDurableObjectContext } from "./durable-object-context.js";
 import { createDeferred } from "./deferred.js";
+import { reconcileIdentities } from "../shared/worker/identity-matching.js";
+import { createBrowserKeys } from "./push-reader.js";
 
 const ASSOCIATION = {
   type: "game",
@@ -46,6 +48,93 @@ test("ordinary agreeing, unmatched and missing observations cannot clear identit
     (await lookup.readEntry("game", guard.internalId)).vendors.espn,
     ASSOCIATION.vendorId,
   );
+});
+
+test("unnumbered games stay quarantined through agreeing reconciliation and accept an explicit decisive repair", async () => {
+  const { ctx } = createDurableObjectContext();
+  const lookup = createIdentityLookup(ctx.storage, "wnba");
+  const native = { id: "native-game", away: "NYL", home: "LVA", date: "2026-06-01" };
+  const record = { ...native, id: "vendor-game" };
+  const reconcile = (records) =>
+    reconcileIdentities(lookup, { type: "game", vendor: "espn", natives: [native], records });
+  await reconcile([record]);
+  const guard = await lookup.readEligible("game", "espn", record.id);
+  await reconcile([{ ...record, away: "SEA" }]);
+  assert.equal((await lookup.readStatus()).disputed, 1);
+  await reconcile([record]);
+  assert.equal((await lookup.readStatus()).disputed, 1);
+  assert.equal(await lookup.readEligible("game", "espn", record.id), null);
+  await lookup.save([
+    {
+      type: "game",
+      vendor: "espn",
+      vendorId: record.id,
+      internalId: native.id,
+      decisive: true,
+      evidence: { method: "existing-id", reconciled: true },
+    },
+  ]);
+  assert.equal((await lookup.readStatus()).disputed, 0);
+  const restored = await lookup.readEligible("game", "espn", record.id);
+  assert.equal(restored.internalId, native.id);
+  assert.notEqual(restored.associationToken, guard.associationToken);
+  assert.equal((await lookup.readEntry("game", native.id)).evidence.espn.reconciled, true);
+});
+
+test("the season store wires identity validation into guarded reminder claims", async () => {
+  const { ctx } = createDurableObjectContext();
+  const clock = { now: Date.parse("2026-06-01T12:00:00Z") };
+  const sent = [];
+  const store = new SeasonStore(
+    ctx,
+    {},
+    {
+      now: () => clock.now,
+      fetchImpl: async (_url, init) => {
+        sent.push(init);
+        return new Response(null, { status: 201 });
+      },
+    },
+  );
+  const keys = await createBrowserKeys();
+  const response = await store.fetch(
+    new Request("https://store/push/subscription", {
+      method: "PUT",
+      body: JSON.stringify({
+        endpoint: "https://web.push.apple.com/reminder",
+        keys,
+        preferences: { updates: false, reminders: true, minutes: 60, timeZone: "America/New_York" },
+      }),
+    }),
+  );
+  assert.equal(response.status, 204);
+  const games = [];
+  for (const [index, id] of ["eligible-game", "revoked-game"].entries()) {
+    await store.identities.lookup.save([{ ...ASSOCIATION, vendorId: id, internalId: id }]);
+    const guard = await store.identities.lookup.readEligible("game", "espn", id);
+    games.push({
+      id,
+      season: 2026,
+      away: "LAD",
+      home: "NYY",
+      networks: [],
+      start: clock.now + (61 + index) * 60_000,
+      identityGuards: [guard],
+    });
+  }
+  await store.reminders.saveGames(games, true);
+  clock.now = games[0].start - 60 * 60_000;
+  await store.reminders.checkDue();
+  assert.equal(sent.length, 1);
+  await store.identities.lookup.save([
+    { ...ASSOCIATION, vendorId: games[1].id, internalId: games[1].id, disputed: true },
+  ]);
+  clock.now = games[1].start - 60 * 60_000;
+  await store.reminders.saveGames(games, true);
+  await store.reminders.checkDue();
+  assert.equal(sent.length, 1);
+  const device = [...(await store.push.listSubscriptions()).values()][0];
+  assert.equal(device.reminderReceipts[games[1].id].attempts, 0);
 });
 
 test("decisive restoration changes the token across repeated revocation with the same internal ID", async () => {
@@ -94,6 +183,8 @@ test("legacy eligible associations are read without writes and old guards fail a
   const guard = await lookup.readEligible("game", "espn", ASSOCIATION.vendorId);
   assert.ok(guard.associationToken);
   assert.deepEqual(stored, before);
+  stored.set(key, Object.fromEntries(Object.entries(legacy).reverse()));
+  assert.deepEqual(await lookup.readEligible("game", "espn", ASSOCIATION.vendorId), guard);
   await revokeIdentity(lookup);
   await restoreIdentity(lookup);
   assert.equal(await ctx.storage.transaction((tx) => lookup.validateGuards(tx, [guard])), false);

@@ -43,6 +43,7 @@ const hasIdentifier = (value) =>
  * @typedef {object} IdentityPolicy
  * @property {string} league
  * @property {string} vendor
+ * @property {"vendor" | "internal"} [nativeIdMode]
  * @property {string[]} gameFactFields
  * @property {(record: any, season: number | null) => object} readGameFacts
  * @property {(id: string) => object} readSeriesFacts
@@ -203,10 +204,12 @@ export function createIdentityDocuments(storage, policy, now = Date.now) {
       observations.set(entryKey, {
         type,
         vendor: policy.vendor,
-        vendorId: internalId,
         internalId,
         facts: { ...previous?.facts, ...facts },
-        evidence: { method: "existing-id" },
+        ...(policy.nativeIdMode !== "internal" && {
+          vendorId: internalId,
+          evidence: { method: "existing-id" },
+        }),
       });
     };
     if (isGameDocument && rootId) {
@@ -341,12 +344,21 @@ export function createIdentityDocuments(storage, policy, now = Date.now) {
     const { document, observations, rejected, espnPlayers } = prepared;
     let results = [];
     if (observations.length) {
-      const saved = await lookup.saveWithEntries(observations);
+      const saved =
+        policy.nativeIdMode === "internal"
+          ? await lookup.updateRegisteredFacts(observations)
+          : await lookup.saveWithEntries(observations);
       results = saved.results;
       rememberNatives(saved);
     }
-    await saveErrors(sourceKey, rejected);
+    const rejectedCount = rejected + results.filter((result) => result.missing).length;
+    const recoveredRegistration =
+      policy.nativeIdMode === "internal" &&
+      !rejectedCount &&
+      (await storage.get(nameErrorKey(sourceKey, "rejected"))) > 0;
+    await saveErrors(sourceKey, rejectedCount);
     if (
+      recoveredRegistration ||
       observations.some(
         (observation, index) =>
           observation.type === "game" &&
@@ -491,6 +503,15 @@ export function createIdentityDocuments(storage, policy, now = Date.now) {
       saveErrors,
       hasFailedSources,
       saveGameMatches,
+      registerObservations: async (observations) => {
+        const facts = observations.filter((observation) => observation.vendorId === undefined);
+        const associations = observations.filter(
+          (observation) => observation.vendorId !== undefined,
+        );
+        const updated = facts.length ? (await lookup.updateRegisteredFacts(facts)).results : [];
+        const saved = associations.length ? await lookup.save(associations) : [];
+        return [...updated, ...saved];
+      },
     },
     now,
   );

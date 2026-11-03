@@ -50,11 +50,19 @@ function chooseSourceStage(source) {
 
 /**
  * @param {any} storage
- * @param {{ lookup: any, policy: any, describeSource: (key: string, value: any, phase: string, docs: any) => Promise<any>, saveErrors: (key: string, count: number, kind?: string, processedRetry?: any) => Promise<void>, hasFailedSources: () => Promise<boolean>, saveGameMatches: (results: any[], docs: any) => Promise<void> }} options
+ * @param {{ lookup: any, policy: any, describeSource: (key: string, value: any, phase: string, docs: any) => Promise<any>, saveErrors: (key: string, count: number, kind?: string, processedRetry?: any) => Promise<void>, hasFailedSources: () => Promise<boolean>, saveGameMatches: (results: any[], docs: any) => Promise<void>, registerObservations: (observations: any[]) => Promise<any[]> }} options
  * @param {() => number} now
  */
 export function createIdentityBackfill(storage, options, now) {
-  const { lookup, policy, describeSource, saveErrors, hasFailedSources, saveGameMatches } = options;
+  const {
+    lookup,
+    policy,
+    describeSource,
+    saveErrors,
+    hasFailedSources,
+    saveGameMatches,
+    registerObservations,
+  } = options;
 
   async function readCurrentProgress() {
     const previous = await storage.get(BACKFILL_KEY);
@@ -188,7 +196,9 @@ export function createIdentityBackfill(storage, options, now) {
     const batch = source.observations.slice(pending.offset, pending.offset + work.remaining);
     work.remaining -= Math.max(1, batch.length);
     if (batch.length) {
-      await lookup.save(batch);
+      const results = await registerObservations(batch);
+      pending.rejected =
+        (pending.rejected ?? 0) + results.filter((result) => result.missing).length;
     }
     pending.offset += batch.length;
     if (pending.offset >= source.observations.length) {
@@ -201,15 +211,24 @@ export function createIdentityBackfill(storage, options, now) {
     const batch = source.observations.slice(pending.offset, pending.offset + work.remaining);
     work.remaining -= Math.max(1, batch.length);
     for (const observation of batch) {
-      if (
-        (await lookup.read(observation.type, observation.vendor, observation.vendorId)) !==
-        observation.internalId
-      )
+      const entry =
+        observation.type === "game"
+          ? await lookup.readEntry(observation.type, observation.internalId)
+          : null;
+      const missing =
+        observation.vendorId === undefined
+          ? !(await lookup.hasRegistration(
+              observation.type,
+              observation.vendor,
+              observation.internalId,
+            ))
+          : (await lookup.read(observation.type, observation.vendor, observation.vendorId)) !==
+            observation.internalId;
+      if (missing) {
         pending.missingEntries += 1;
-      if (
-        observation.type === "game" &&
-        !Number.isInteger((await lookup.readEntry("game", observation.internalId))?.facts?.season)
-      )
+        if (observation.vendorId === undefined) pending.rejected = (pending.rejected ?? 0) + 1;
+      }
+      if (observation.type === "game" && !Number.isInteger(entry?.facts?.season))
         pending.missingFacts += 1;
     }
     pending.offset += batch.length;
@@ -277,7 +296,7 @@ export function createIdentityBackfill(storage, options, now) {
       published = matched;
     }
     if (!isActive()) return false;
-    await saveErrors(key, source.rejected ?? 0);
+    await saveErrors(key, (source.rejected ?? 0) + (pending.rejected ?? 0));
     if (progress.phase !== "facts" && published)
       await saveErrors(key, 0, "failed", source.retryEvidence ?? null);
     progress.missingEntries += pending.missingEntries;

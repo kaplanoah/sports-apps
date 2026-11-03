@@ -3,6 +3,7 @@ import {
   IDENTITY_TYPES,
   IdentityEntry,
   IdentityObservation,
+  IdentityFactsUpdate,
   IdentityAssociation,
   IdentityAssociationGuard,
   validateSportsData,
@@ -197,7 +198,9 @@ async function saveAssociation(transaction, league, observation) {
   }
   entry.vendors[vendor] = vendorId;
   const matchingEvidence =
-    evidence.method === "existing-id" && entry.evidence[vendor] ? entry.evidence[vendor] : evidence;
+    evidence.method === "existing-id" && entry.evidence[vendor] && !decisive
+      ? entry.evidence[vendor]
+      : evidence;
   entry.evidence[vendor] = matchingEvidence;
   validateSportsData(IdentityEntry, entry);
   await saveChanged(transaction, nameEntityKey(league, type, internalId), entry);
@@ -220,29 +223,62 @@ async function saveAssociation(transaction, league, observation) {
   return { internalId, disputed: false, created, addedFacts };
 }
 
+function hasCoherentAssociation(
+  entry,
+  association,
+  { league, type, vendor, vendorId, internalId },
+) {
+  return (
+    IdentityEntry.safeParse(entry).success &&
+    entry.id === internalId &&
+    entry.league === league &&
+    entry.type === type &&
+    IdentityAssociation.safeParse(association).success &&
+    association.internalId === internalId &&
+    association.league === league &&
+    association.type === type &&
+    association.vendor === vendor &&
+    association.vendorId === vendorId &&
+    entry.vendors[vendor] === vendorId &&
+    isSameJson(association.evidence, entry.evidence[vendor])
+  );
+}
+
+async function readRegisteredEntry(transaction, league, type, vendor, internalId) {
+  const entry = await transaction.get(nameEntityKey(league, type, internalId));
+  const vendorId = entry?.vendors?.[vendor];
+  const association = vendorId
+    ? await transaction.get(nameVendorKey(league, type, vendor, vendorId))
+    : null;
+  return hasCoherentAssociation(entry, association, { league, type, vendor, vendorId, internalId })
+    ? entry
+    : null;
+}
+
+async function updateRegisteredFacts(transaction, league, update) {
+  const { type, vendor, internalId } = update;
+  if (!(await readRegisteredEntry(transaction, league, type, vendor, internalId)))
+    return { internalId, missing: true, created: false, addedFacts: [] };
+  const saved = await ensureEntity(transaction, league, update);
+  return { internalId, missing: false, created: saved.created, addedFacts: saved.addedFacts };
+}
+
 /** @typedef {import("zod").infer<typeof IdentityAssociationGuard>} IdentityGuard */
 
 async function readEligibleAssociation(transaction, league, type, vendor, vendorId) {
   const key = nameVendorKey(league, type, vendor, vendorId);
-  const parsed = IdentityAssociation.safeParse(await transaction.get(key));
-  if (!parsed.success) return null;
-  const association = parsed.data;
-  if (
-    association.league !== league ||
-    association.type !== type ||
-    association.vendor !== vendor ||
-    association.vendorId !== vendorId ||
-    (await transaction.get(nameProblemKey(key))) != null
-  )
-    return null;
+  const association = await transaction.get(key);
+  if (typeof association?.internalId !== "string" || !association.internalId) return null;
+  if ((await transaction.get(nameProblemKey(key))) != null) return null;
   const entry = await transaction.get(nameEntityKey(league, type, association.internalId));
   if (
-    !IdentityEntry.safeParse(entry).success ||
-    entry.id !== association.internalId ||
-    entry.league !== league ||
-    entry.type !== type ||
-    entry.vendors[vendor] !== vendorId ||
-    !isSameJson(entry.evidence[vendor], association.evidence)
+    !hasCoherentAssociation(entry, association, {
+      league,
+      type,
+      vendor,
+      vendorId,
+      internalId: association.internalId,
+    })
   )
     return null;
   const token = association.associationToken;
@@ -252,7 +288,9 @@ async function readEligibleAssociation(transaction, league, type, vendor, vendor
     vendor,
     vendorId,
     internalId: association.internalId,
-    associationToken: token ?? (await hashTextInFull(JSON.stringify([key, association]))),
+    associationToken:
+      token ??
+      (await hashTextInFull(JSON.stringify([key, IdentityAssociation.parse(association)]))),
   };
 }
 
@@ -327,6 +365,33 @@ export function createIdentityLookup(storage, league) {
     save: async (observations, factsRevision = undefined) =>
       (await saveObservations(observations, factsRevision)).results,
     saveWithEntries: (observations) => saveObservations(observations, undefined, true),
+    hasRegistration: (type, vendor, internalId) =>
+      storage.transaction(
+        async (transaction) =>
+          (await readRegisteredEntry(transaction, league, type, vendor, internalId)) !== null,
+      ),
+    async updateRegisteredFacts(updates) {
+      updates.forEach((update) => validateSportsData(IdentityFactsUpdate, update));
+      return storage.transaction(async (transaction) => {
+        const beforeRevision = (await transaction.get(nameFactsRevisionKey(league))) ?? null;
+        const results = [];
+        const entries = [];
+        for (const update of updates) {
+          const result = await updateRegisteredFacts(transaction, league, update);
+          results.push(result);
+          if (!result.missing)
+            entries.push(
+              await transaction.get(nameEntityKey(league, update.type, update.internalId)),
+            );
+        }
+        return {
+          results,
+          entries,
+          beforeRevision,
+          revision: (await transaction.get(nameFactsRevisionKey(league))) ?? null,
+        };
+      });
+    },
     async indexCandidate(type, id) {
       await storage.transaction(async (transaction) => {
         const entry = await transaction.get(nameEntityKey(league, type, id));

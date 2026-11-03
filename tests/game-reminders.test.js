@@ -222,6 +222,25 @@ test("verification expiring while a reminder claim waits cannot spend an attempt
   assert.equal(harness.sent.length, 1);
 });
 
+test("future or invalid verification timestamps trigger fresh confirmation before claiming", async () => {
+  for (const verifiedAt of [
+    NOW + 24 * 60 * 60_000,
+    String(GAME.start - PREFERENCES.minutes * 60_000),
+    "invalid",
+    undefined,
+    Infinity,
+  ]) {
+    const harness = createHarness();
+    await harness.subscribe();
+    await harness.reminders.saveGames([GAME]);
+    await harness.ctx.storage.put("push:reminder-games", { games: [GAME], verifiedAt });
+    harness.clock.now = GAME.start - PREFERENCES.minutes * 60_000;
+    await harness.reminders.checkDue();
+    assert.equal(harness.upstream.reads, 1);
+    assert.equal(harness.sent.length, 1);
+  }
+});
+
 test("only the five approved presets, booleans and real time zones are accepted", () => {
   assert.ok(isNotificationPreferences({ ...PREFERENCES, timeZone: "Etc/GMT+5" }));
   for (const minutes of REMINDER_PRESETS)
