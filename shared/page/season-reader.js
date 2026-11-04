@@ -71,8 +71,8 @@ export function createSeasonReader({
   // The past season the page last loaded on, null when it loaded the current one.
   /** @type {number | null} */
   let loadedPastYear = null;
-  // Whether the last season the page loaded or advanced to was a load of the current season, so a
-  // failed advance leaves the page asking for the current season rather than the one it shows.
+  // Whether the season the page shows is the current one, by a load of it or a pick of it, so a
+  // failed advance leaves the page following the current season rather than the one it shows.
   let isFollowingCurrentSeason = false;
   // The record as the store last answered, whether or not the page reads it.
   /** @type {any} */
@@ -214,7 +214,7 @@ export function createSeasonReader({
     if (!answer) return false;
     const season = answer.value;
     shownYear = year;
-    isFollowingCurrentSeason = pendingIntent === "current";
+    isFollowingCurrentSeason = pendingIntent === "current" || year === currentYear;
     heldRecord = null;
     lastRecord = season;
     keepSeason(year, isReadable(season) ? season : null);
@@ -228,7 +228,8 @@ export function createSeasonReader({
 
   /** @param {number} year */
   async function moveOnToYear(year) {
-    const wasShowingCurrent = askedYear === currentYear;
+    const wasShowingCurrent =
+      askedYear === currentYear || (isFollowingCurrentSeason && pendingIntent === null);
     currentYear = year;
     try {
       if (!wasShowingCurrent) return;
