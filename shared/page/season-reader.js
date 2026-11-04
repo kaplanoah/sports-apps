@@ -2,7 +2,7 @@ import { isSameJson } from "./compare.js";
 import { isEarlierSeason } from "./title-year.js";
 
 // Reads a league's season from the store, which says which season is current, so a page never goes
-// by its own clock, and pushes each change to the season's record. A page showing the current
+// by its own clock, and pushes each change to the season's record. A page following the current
 // season moves on to the next one when the store does, and a page that loads again on a past season
 // stays on it. Each load or pick selects its season before reading; obsolete answers cannot
 // change the selection or report a failure. A failed selection restores the season shown.
@@ -44,7 +44,7 @@ export const isReadableSeason = (season, version) =>
  *   a newer release's Worker saves it, so the page reloads once that release is out
  * @property {() => void} showLoadFailure reports a failed selection after its choice is restored
  * @property {(year: number) => void} [noteCurrentYear] hears that the store names a new current
- *   season, once a page showing the current one has moved on to it, and whether or not it has
+ *   season, once a page following the current one has moved on to it, and whether or not it has
  */
 
 /** @param {SeasonReaderOptions} options */
@@ -228,11 +228,11 @@ export function createSeasonReader({
 
   /** @param {number} year */
   async function moveOnToYear(year) {
-    const wasShowingCurrent =
+    const wasFollowingCurrent =
       askedYear === currentYear || (isFollowingCurrentSeason && pendingIntent === null);
     currentYear = year;
     try {
-      if (!wasShowingCurrent) return;
+      if (!wasFollowingCurrent) return;
       if (await readSelectedYear(year, startSelection(year, "current"), "loaded")) showChange();
     } finally {
       noteCurrentYear(year);
