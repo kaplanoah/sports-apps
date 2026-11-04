@@ -1,9 +1,15 @@
 name: Code scanning alerts
 
-# A Claude session's GitHub access can't read code scanning, so the routine that triages CodeQL's
-# findings starts this run and reads the alerts from its log (worker/list-code-scanning-alerts.mjs).
+# A Claude session's GitHub access can't read code scanning, so the routines that triage CodeQL's
+# findings and merge Dependabot's PRs start this run and read the alerts from its log
+# (worker/list-code-scanning-alerts.mjs).
 on:
   workflow_dispatch:
+    inputs:
+      pull:
+        description: A pull request's number, to list its merge's analyses and alerts instead of main's
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -23,4 +29,5 @@ jobs:
       - name: List code-scanning alerts
         env:
           GH_TOKEN: ${{ github.token }}
+          PULL: ${{ inputs.pull }}
         run: node worker/list-code-scanning-alerts.mjs
