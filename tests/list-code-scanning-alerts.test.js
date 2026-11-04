@@ -105,21 +105,21 @@ test("a category whose latest analysis is behind main's still shows its own comm
     assert.equal(request.searchParams.get("ref"), "refs/heads/main");
 });
 
-test("a pull request's number reads the analyses and alerts of its merge instead of main's", async () => {
+test("a pull request's number reads the analyses and alerts of its head instead of main's", async () => {
   const github = createFakeGitHub(
     [createAlert(3)],
     [createAnalysis(JAVASCRIPT, MAIN_COMMIT, "today")],
   );
 
   assert.deepEqual(await list(github, "42"), [
-    "Latest CodeQL analysis of each category on refs/pull/42/merge (1):",
+    "Latest CodeQL analysis of each category on refs/pull/42/head (1):",
     `${JAVASCRIPT}: ${MAIN_COMMIT} at today`,
-    "CodeQL alerts on refs/pull/42/merge, in every state (1):",
+    "CodeQL alerts on refs/pull/42/head, in every state (1):",
     "#3 open high js/xss shared/page/html.js:12",
   ]);
   assert.equal(github.requests.length, 2);
   for (const request of github.requests)
-    assert.equal(request.searchParams.get("ref"), "refs/pull/42/merge");
+    assert.equal(request.searchParams.get("ref"), "refs/pull/42/head");
 });
 
 test("an empty pull request input, as the workflow sends when none is given, reads main's", async () => {

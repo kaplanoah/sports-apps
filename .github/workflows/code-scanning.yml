@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       pull:
-        description: A pull request's number, to list its merge's analyses and alerts instead of main's
+        description: A pull request's number, to list its head's analyses and alerts instead of main's
         required: false
         type: string
 
