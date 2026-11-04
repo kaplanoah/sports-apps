@@ -9,6 +9,7 @@ import {
   readStoreDoc,
 } from "../shared/worker/season-store.js";
 import { createDurableObjectContext, fireNextAlarm } from "./durable-object-context.js";
+import { createClaudeService } from "../services/claude/worker/src/service.js";
 
 const ORIGIN = "https://app.example";
 
@@ -770,13 +771,16 @@ test("a background job runs beside the season's update, and the alarm wakes for 
     choosePollDelay: () => 60 * MINUTE_MS,
   });
   const clock = { now: NOW };
-  const env = { ANTHROPIC_API_KEY: "test-key" };
+  const env = { CLAUDE: createClaudeService({ ANTHROPIC_API_KEY: "test-key" }) };
   const store = new SeasonStore(context.ctx, env, { now: () => clock.now });
 
   await store.alarm();
   assert.equal(contexts.length, 1);
   assert.equal(contexts[0].env, env);
   assert.equal(contexts[0].createLoadSnapshot, store.createLoadSnapshot);
+  const requests = store.requestCount;
+  assert.deepEqual(await contexts[0].claude.readConfig(), { configured: true });
+  assert.equal(store.requestCount, requests + 1);
   assert.equal(seasonUpdates, 1);
   assert.equal(await context.ctx.storage.getAlarm(), NOW + 15 * MINUTE_MS);
 

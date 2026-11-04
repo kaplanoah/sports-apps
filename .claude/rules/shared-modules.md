@@ -260,7 +260,7 @@ Pages link these before their own stylesheet, and theme them with the tokens the
 - `game-details-job.js`: keeping each finished game's details
 - `espn-adapter.js`: shared ESPN requests and parsing, with league-supplied mappings and basketball rules
 - `player-name.js`: normalized player-name letters shared by matching and injury reports
-- `identity.js`: atomic scoped vendor mappings, candidate-group indexes, matching evidence, discovery and reconciliation
+- `identity.js`: atomic scoped vendor mappings, candidate-group indexes, matching evidence, discovery, reconciliation, persistent quarantine and eligibility guards
 - `identity-matching.js`: confident game and player matches with explicit doubleheader evidence
 - `identity-diagnostics.js`: bounded aggregate diagnosis from retained identity evidence without writes or vendor reads
 - `identity-documents.js`: additive facts and identity registration for stored sports documents
@@ -278,7 +278,7 @@ Pages link these before their own stylesheet, and theme them with the tokens the
 - `news-claude.js`: asking Claude to judge a batch of stories
 - `news-photos.js`: framing the photos the news cards show
 - `image-size.js`: a photo's size from the start of its file
-- `claude.js`: asking Claude for an answer shaped by a JSON schema
+- `claude.js`: asking Claude, through the claude service, for an answer shaped by a JSON schema
 - `hash-text.js`: the SHA-256 of any text, in full or as a short fixed-length name
 - `seasons.js`: the season a request names
 - `notifications.js`: capping a night's notifications

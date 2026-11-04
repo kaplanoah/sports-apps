@@ -2,7 +2,7 @@ import { isSameJson } from "./compare.js";
 import { isEarlierSeason } from "./title-year.js";
 
 // Reads a league's season from the store, which says which season is current, so a page never goes
-// by its own clock, and pushes each change to the season's record. A page showing the current
+// by its own clock, and pushes each change to the season's record. A page following the current
 // season moves on to the next one when the store does, and a page that loads again on a past season
 // stays on it. Each load or pick selects its season before reading; obsolete answers cannot
 // change the selection or report a failure. A failed selection restores the season shown.
@@ -44,7 +44,7 @@ export const isReadableSeason = (season, version) =>
  *   a newer release's Worker saves it, so the page reloads once that release is out
  * @property {() => void} showLoadFailure reports a failed selection after its choice is restored
  * @property {(year: number) => void} [noteCurrentYear] hears that the store names a new current
- *   season, once a page showing the current one has moved on to it, and whether or not it has
+ *   season, once a page following the current one has moved on to it, and whether or not it has
  */
 
 /** @param {SeasonReaderOptions} options */
@@ -71,6 +71,9 @@ export function createSeasonReader({
   // The past season the page last loaded on, null when it loaded the current one.
   /** @type {number | null} */
   let loadedPastYear = null;
+  // Whether the page follows the current season, set when a load or pick of it succeeds, so a
+  // failed advance leaves the page following the current season rather than the one it still shows.
+  let isFollowingCurrentSeason = false;
   // The record as the store last answered, whether or not the page reads it.
   /** @type {any} */
   let lastRecord = null;
@@ -211,6 +214,7 @@ export function createSeasonReader({
     if (!answer) return false;
     const season = answer.value;
     shownYear = year;
+    isFollowingCurrentSeason = pendingIntent === "current" || year === currentYear;
     heldRecord = null;
     lastRecord = season;
     keepSeason(year, isReadable(season) ? season : null);
@@ -224,10 +228,11 @@ export function createSeasonReader({
 
   /** @param {number} year */
   async function moveOnToYear(year) {
-    const wasShowingCurrent = askedYear === currentYear;
+    const wasFollowingCurrent =
+      askedYear === currentYear || (isFollowingCurrentSeason && pendingIntent === null);
     currentYear = year;
     try {
-      if (!wasShowingCurrent) return;
+      if (!wasFollowingCurrent) return;
       if (await readSelectedYear(year, startSelection(year, "current"), "loaded")) showChange();
     } finally {
       noteCurrentYear(year);
@@ -286,6 +291,7 @@ export function createSeasonReader({
   function readReloadYear(lastShownYear, lastCurrentYear) {
     if (pendingIntent === "current") return null;
     if (pendingIntent === "past") return loadedPastYear;
+    if (pendingIntent === null && isFollowingCurrentSeason) return null;
     const previousYear = pendingIntent === "pick" ? pickBefore : lastShownYear;
     const year = shownYear ?? loadedPastYear ?? previousYear;
     return isEarlierSeason(year, currentYear ?? lastCurrentYear) ? year : null;
@@ -302,7 +308,8 @@ export function createSeasonReader({
      * A current load or advance reloads current, and a pending past load reloads its past year.
      * During a viewer's pick, the shown year or prior past-load target wins; otherwise it uses the
      * choice captured before pending reads, which can keep a restored past season. With nothing
-     * pending, the app's last showing supplies the fallback. A pending pick never supplies its year.
+     * pending, a page following the current season reloads it; otherwise the app's last showing
+     * supplies the fallback. A pending pick never supplies its year.
      * @param {number | null} lastShownYear
      * @param {number | null} lastCurrentYear
      */

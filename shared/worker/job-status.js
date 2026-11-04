@@ -1,3 +1,4 @@
+import { countClaudeCalls, rememberClaudeConfig, stopAfterRefusal } from "./claude.js";
 import { RequestBudgetExhausted } from "./request-budget.js";
 import { describeError } from "./responses.js";
 
@@ -98,7 +99,7 @@ function describeJobRun({ startedAt, endedAt, requests, failure }, stored) {
 /**
  * What a job's run gets: the store's context, its fetch counted, the store's reading of the league
  * on that fetch, and what failed so far.
- * @typedef {import("./season-store.js").JobContext & { failures: string[], loadSnapshot: (season: number) => Promise<any> }} RunContext
+ * @typedef {import("./season-store.js").JobContext & { claude: import("./claude.js").Claude, failures: string[], loadSnapshot: (season: number) => Promise<any> }} RunContext
  */
 
 /**
@@ -144,6 +145,13 @@ export async function runWithStatus(
         }
       : context.docs,
     fetchImpl: counter.fetchImpl,
+    claude: rememberClaudeConfig(
+      stopAfterRefusal(
+        countClaudeCalls(context.claude, () => {
+          counter.count += 1;
+        }),
+      ),
+    ),
     loadSnapshot: (season) =>
       (loadSnapshot ??= context.createLoadSnapshot(counter.fetchImpl))(season),
     failures: [],

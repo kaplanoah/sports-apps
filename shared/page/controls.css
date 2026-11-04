@@ -32,8 +32,9 @@ body.kbd .contact-file:focus + .contact-secondary {
 }
 
 /* A press (press.js) shows at once and eases back as it lets go, as an iPhone's controls do. A
-   filled button darkens, an outlined one takes some ink, and every other control fades. A row's
-   button leaves its press to its row's tint, below. */
+   filled button darkens, an outlined one takes some ink, a clip darkens its still and dims its
+   words (highlights.css), and every other control fades. A row's button leaves its press to its
+   row's tint, below. */
 :where(button:not([role="switch"]), a[href], summary, .appearance-choice) {
   transition: opacity var(--press-ease-back);
 }
@@ -50,6 +51,7 @@ body.kbd .contact-file:focus + .contact-secondary {
 }
 .is-pressed:not(
   .is-row-press,
+  .clip-open,
   .accent-button,
   .diagnostics-button,
   .open-button,

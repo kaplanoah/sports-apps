@@ -9,6 +9,8 @@ import { createWnbaNewsJob } from "../worker/src/news-updater.js";
 import { createFeedFetch } from "./news-fixtures.js";
 import { createDocs, createJobStorage } from "../../../tests/job-context.js";
 import { createPng } from "../../../tests/photo-files.js";
+import { countClaudeCalls } from "../../../shared/worker/claude.js";
+import { createClaudeService } from "../../../services/claude/worker/src/service.js";
 
 const NOW = Date.parse("2026-10-05T16:00:00Z");
 const CLAUDE_URL = "https://api.anthropic.com/v1/messages";
@@ -102,14 +104,28 @@ function createFetch({
   };
 }
 
-/** @param {{ env?: Record<string, string>, now?: number }} [options] */
-function createRun({ env = ENV, now = NOW } = {}) {
+/**
+ * @param {{
+ *   env?: Record<string, string>,
+ *   claude?: import("../../../shared/worker/claude.js").Claude,
+ *   now?: number,
+ * }} [options]
+ */
+function createRun({ env = ENV, claude, now = NOW } = {}) {
   const storage = createJobStorage();
   const docs = createDocs();
   const job = createWnbaNewsJob();
   const createLoadSnapshot = () => async () => ({ season: 2026 });
   const runJob = (fetchImpl) =>
-    job.updateStore({ docs, storage, createLoadSnapshot, env, fetchImpl, now: () => now });
+    job.updateStore({
+      docs,
+      storage,
+      createLoadSnapshot,
+      env: {},
+      claude: claude ?? createClaudeService(env, fetchImpl),
+      fetchImpl,
+      now: () => now,
+    });
   return { storage, docs, runJob };
 }
 
@@ -283,13 +299,17 @@ test("the topics a store kept before are removed", async () => {
   assert.equal(docs.stored.has("news/topics"), false);
 });
 
-test("the status counts each day's calls and tokens and the run's requests, and names the feeds that didn't answer", async () => {
-  const { docs, runJob } = createRun();
+test("the status counts each day's calls and tokens and the run's requests, each call to the claude service too, and names the feeds that didn't answer", async () => {
   const readFeed = createFetch();
-
   let requests = 0;
-  await runJob(async (url, init) => {
+  const countRequest = () => {
     requests += 1;
+  };
+  const claude = countClaudeCalls(createClaudeService(ENV, readFeed), countRequest);
+  const { docs, runJob } = createRun({ claude });
+
+  await runJob(async (url, init) => {
+    countRequest();
     return String(url).includes("winsidr")
       ? new Response("down", { status: 503 })
       : readFeed(url, init);
@@ -326,16 +346,47 @@ test("a story Claude didn't answer for waits for the next run, and one it labele
   assert.equal(asked.length, waiting);
 });
 
-test("without an API key nothing is asked, and the status says why", async () => {
+test("without the claude service's key nothing is asked, and the status names its secret", async () => {
   const requests = [];
   const { docs, storage, runJob } = createRun({ env: {} });
 
   await runJob(createFetch({ requests }));
 
   assert.equal(requests.length, 0);
-  assert.match(docs.stored.get("news/status").problem, /ANTHROPIC_API_KEY/);
+  assert.match(
+    docs.stored.get("news/status").problem,
+    /claude service has no ANTHROPIC_API_KEY secret/,
+  );
   assert.deepEqual(docs.stored.get("news/cards"), { cards: [] });
   assert.ok(listStoryStates(storage).includes("pending"));
+});
+
+test("without a CLAUDE binding, or with a service that fails, the run goes on, its status says why, and its stories wait", async () => {
+  const broken = {
+    readConfig: async () => {
+      throw new Error("service down");
+    },
+    requestClaude: async () => {
+      throw new Error("service down");
+    },
+  };
+  for (const { claude, problem } of [
+    {
+      claude: countClaudeCalls(undefined, () => {}),
+      problem: /No CLAUDE binding to the claude service/,
+    },
+    { claude: broken, problem: /service down/ },
+  ]) {
+    const requests = [];
+    const { docs, storage, runJob } = createRun({ claude });
+
+    await runJob(createFetch({ requests }));
+
+    assert.equal(requests.length, 0);
+    assert.match(docs.stored.get("news/status").problem, problem);
+    assert.ok(listStoryStates(storage).includes("pending"));
+    assert.ok(!listStoryStates(storage).includes("kept"));
+  }
 });
 
 test("a run whose call to Claude fails says so, and keeps saying it last failed, and its stories wait for the next run", async () => {
@@ -476,6 +527,40 @@ test("a photo Claude couldn't place is asked about again on the next runs, three
   assert.deepEqual(docs.stored.get("news/status").photos, { framed: 0, failed: 1 });
 });
 
+test("while Claude turns the key away, each run with no story to label asks about one photo, keeps every try, and still reads every card photo's size", async () => {
+  const { docs, storage, runJob } = createRun();
+  const spotRequests = [];
+  const refusing = { photoSize: TALL_PHOTO, spotStatus: 401, spotRequests };
+  await runJob(createFetch(refusing));
+  const firstRunRequests = spotRequests.length;
+  for (let run = 0; run < 3; run += 1) await runJob(createFetch(refusing));
+
+  const frames = [...(await storage.list("photo:")).values()];
+  assert.ok(new Set(listCardPhotos(docs).map((photo) => photo.url)).size > 24);
+  assert.equal(spotRequests.length, firstRunRequests + 3);
+  assert.ok(listCardPhotos(docs).every((photo) => photo.width === 683));
+  assert.ok(frames.every((frame) => frame.tries === undefined && frame.frameTop === undefined));
+});
+
+test("a run with no story waiting and no photo waiting on Claude asks the claude service nothing", async () => {
+  let calls = 0;
+  const fetchImpl = createFetch();
+  const claude = countClaudeCalls(createClaudeService(ENV, fetchImpl), () => {
+    calls += 1;
+  });
+  const { docs, runJob } = createRun({ claude });
+  await runJob(fetchImpl);
+  await runJob(fetchImpl);
+  assert.ok(listCardPhotos(docs).every((photo) => photo.width === 1800));
+  const before = calls;
+
+  await runJob(fetchImpl);
+
+  assert.ok(before > 0);
+  assert.equal(calls, before);
+  assert.equal(docs.stored.get("news/status").problem, "");
+});
+
 test("a photo whose size couldn't be read is read again on the next runs, three times at most", async () => {
   const { docs, runJob } = createRun();
   const photoReads = [];
@@ -516,13 +601,15 @@ test("without an API key, no photo is asked about, and one no card shows is forg
   const { docs, storage } = createRun();
   const job = createWnbaNewsJob();
   const spotRequests = [];
+  const fetchImpl = createFetch({ photoSize: TALL_PHOTO, spotRequests });
   const runWith = (env) =>
     job.updateStore({
       docs,
       storage,
       createLoadSnapshot: () => async () => ({ season: 2026 }),
-      env,
-      fetchImpl: createFetch({ photoSize: TALL_PHOTO, spotRequests }),
+      env: {},
+      claude: createClaudeService(env, fetchImpl),
+      fetchImpl,
       now: () => NOW,
     });
   await runWith(ENV);

@@ -2,8 +2,10 @@
    across the section with its title under it, the written recap, and each play's clip as a row,
    its still on the left beside its title and where in the game it came. Each still holds a play
    button and the clip's length, drawn as video players draw them, in the same colors on any page.
-   Apps link it after sheet.css and news.css, and theme it with their --ink, --ink-dim, --ink-mid,
-   --sheet, and --radius-card and --radius-chip. */
+   A pressed clip (press.js) darkens its still and dims its words, as a phone's own apps press
+   artwork, rather than tinting a row around it. Apps link it after sheet.css and news.css, and
+   theme it with their --ink, --ink-dim, --ink-mid, --sheet, and --radius-card and --radius-chip,
+   and controls.css's --press-ease-back. */
 .clip-open {
   display: grid;
   width: 100%;
@@ -63,6 +65,25 @@
   display: grid;
   gap: 3px;
   min-width: 0;
+}
+/* Drawn last in the still, so it darkens the play button and the length too. */
+.clip-open .clip-still::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: transparent;
+  transition: background-color var(--press-ease-back);
+}
+.clip-open .clip-text {
+  transition: opacity var(--press-ease-back);
+}
+.clip-open.is-pressed .clip-still::after {
+  background: rgba(0, 0, 0, 0.35);
+  transition: none;
+}
+.clip-open.is-pressed .clip-text {
+  opacity: 0.45;
+  transition: none;
 }
 .clip-title {
   font-size: var(--type-detail-size);

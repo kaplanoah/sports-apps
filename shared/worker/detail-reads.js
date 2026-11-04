@@ -5,7 +5,7 @@ import { respondError, respondJson } from "./responses.js";
 export const DETAIL_REUSE_MS = 5000;
 export const DETAIL_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
 export const MAX_DETAIL_ANSWERS = 100;
-const ANSWER_PREFIX = "detail-answer:";
+export const DETAIL_ANSWER_PREFIX = "detail-answer:";
 
 /**
  * @typedef {object} DetailRead
@@ -28,16 +28,16 @@ export function createDetailReads(reads, { storage, now, docs, services }) {
     saving = saving
       .catch(() => {})
       .then(async () => {
-        const entries = await storage.list(ANSWER_PREFIX);
-        entries.delete(ANSWER_PREFIX + key);
+        const entries = await storage.list(DETAIL_ANSWER_PREFIX);
+        entries.delete(DETAIL_ANSWER_PREFIX + key);
         const retained = [...entries].filter(([, value]) => now() - value.at < DETAIL_RETENTION_MS);
         retained.sort(([, first], [, second]) => second.at - first.at);
         const keep = new Set(retained.slice(0, MAX_DETAIL_ANSWERS - 1).map(([entry]) => entry));
         for (const entry of entries.keys()) if (!keep.has(entry)) await storage.delete(entry);
-        await storage.put(ANSWER_PREFIX + key, { at: now(), body });
+        await storage.put(DETAIL_ANSWER_PREFIX + key, { at: now(), body });
       });
     await saving;
-    return (await storage.get(ANSWER_PREFIX + key))?.body ?? body;
+    return (await storage.get(DETAIL_ANSWER_PREFIX + key))?.body ?? body;
   }
 
   const load = createReusedLoader(
@@ -90,9 +90,9 @@ export function createDetailReads(reads, { storage, now, docs, services }) {
         const kept = service.field ? stored?.[service.field] : stored;
         if (kept) return respondJson(kept);
       } else {
-        const cached = await storage.get(ANSWER_PREFIX + key);
+        const cached = await storage.get(DETAIL_ANSWER_PREFIX + key);
         if (cached && now() - cached.at < DETAIL_RETENTION_MS) return respondJson(cached.body);
-        if (cached) await storage.delete(ANSWER_PREFIX + key);
+        if (cached) await storage.delete(DETAIL_ANSWER_PREFIX + key);
       }
       return error instanceof Response
         ? error.clone()

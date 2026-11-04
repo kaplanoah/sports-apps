@@ -176,8 +176,9 @@ export function startSeasonData({ showChange, showStamp, showCurrentYear, showUn
   });
 }
 
-// A page showing a past season, as its last showing does on a reload, loads it again, and one
-// showing the current season loads whichever the store now says is current, as it may have moved on.
+// A page following the current season loads whichever the store now says is current, as it may have
+// moved on. Otherwise it loads the past season its last showing names, or the current one when that
+// season isn't past.
 export async function loadSeason() {
   try {
     await reader?.reloadSeason(session.activeYear, session.currentSeason);

@@ -52,9 +52,11 @@ async function deployWorker(answerApp, { worker = "accounts", channel } = {}) {
   const { roots, remove } = createServiceRoots();
   const cloudflare = createFakeCloudflare(answerApp);
   const lines = [];
+  const healths = [];
   try {
     const result = await deploy({
       worker,
+      onChecked: (health) => healths.push(health),
       channel,
       roots,
       script: "export default {}",
@@ -69,7 +71,7 @@ async function deployWorker(answerApp, { worker = "accounts", channel } = {}) {
         return { status: "drawn" };
       },
     }).catch((error) => error);
-    return { result, lines, calls: cloudflare.calls };
+    return { result, lines, calls: cloudflare.calls, healths };
   } finally {
     remove();
   }
@@ -78,8 +80,9 @@ async function deployWorker(answerApp, { worker = "accounts", channel } = {}) {
 const RELEASED = { ok: true, release: NEW_COMMIT.slice(0, 7) };
 
 test("a service uploads its store and version, has no workers.dev address, and answers through each app's health", async () => {
-  const { result, lines, calls } = await deployWorker(answerHealth(RELEASED));
+  const { result, lines, calls, healths } = await deployWorker(answerHealth(RELEASED));
   assert.equal(result, "accounts");
+  assert.deepEqual(healths, [undefined]);
   const upload = calls.find(({ init }) => init.method === "PUT");
   const metadata = JSON.parse(await upload.init.body.get("metadata").text());
   assert.deepEqual(metadata.bindings, [
@@ -96,6 +99,27 @@ test("a service uploads its store and version, has no workers.dev address, and a
   assert.deepEqual(lines.slice(-2), ["health check: ok", "worker check: ok"]);
 });
 
+test("a stateless service uploads only its version, with no store or migration", async () => {
+  const cloudflare = createFakeCloudflare(answerHealth(null));
+  const result = await deploy({
+    worker: "claude",
+    script: "export default {}",
+    commit: NEW_COMMIT,
+    findChanges: () => null,
+    fetchImpl: cloudflare.fetchImpl,
+    env: ENV,
+    log: () => {},
+    pause: skipPause,
+    checkPage: async () => ({ status: "drawn" }),
+  });
+  assert.equal(result, "claude");
+  const upload = cloudflare.calls.find(({ init }) => init.method === "PUT");
+  const metadata = JSON.parse(await upload.init.body.get("metadata").text());
+  assert.deepEqual(metadata.bindings, [{ type: "version_metadata", name: "VERSION" }]);
+  assert.equal(metadata.migrations, undefined);
+  assert.ok(!cloudflare.calls.some(({ url }) => url.endsWith("/workers/scripts")));
+});
+
 test("a service an app reports as down, or at another release, is put back, naming the app and never its address", async () => {
   for (const { report, problem } of [
     {
@@ -107,8 +131,9 @@ test("a service an app reports as down, or at another release, is put back, nami
       problem: "mlb reaches accounts at 1111111, not 2222222",
     },
   ]) {
-    const { result, calls } = await deployWorker(answerHealth(report));
+    const { result, calls, healths } = await deployWorker(answerHealth(report));
     assert.ok(result instanceof Error);
+    assert.deepEqual(healths, []);
     assert.match(result.message, new RegExp(problem));
     assert.match(result.message, /the earlier version is live again/);
     assert.doesNotMatch(result.message, /workers\.dev|example-subdomain/);
@@ -120,7 +145,7 @@ test("a service an app reports as down, or at another release, is put back, nami
 });
 
 test("a service that answers but needs attention stays live, with a notice naming what it needs", async () => {
-  const { result, lines, calls } = await deployWorker(
+  const { result, lines, calls, healths } = await deployWorker(
     answerHealth({ ...RELEASED, attention: "Contact delivery needs attention" }),
   );
   assert.equal(result, "accounts");
@@ -128,19 +153,21 @@ test("a service that answers but needs attention stays live, with a notice namin
     "::notice::health check: ok, but Contact delivery needs attention",
     "worker check: ok",
   ]);
+  assert.deepEqual(healths, ["health check: ok, but Contact delivery needs attention"]);
   const putBack = calls.filter(
     ({ url, init }) => url.endsWith("/deployments") && init.method === "POST",
   );
   assert.equal(putBack.length, 0);
 });
 
-test("a service no app reports yet, as on its first deploy, deploys with a notice", async () => {
-  const { result, lines } = await deployWorker(answerHealth(null));
+test("a service no app reports yet, as on its first deploy, deploys with a notice its result carries", async () => {
+  const { result, lines, healths } = await deployWorker(answerHealth(null));
   assert.equal(result, "accounts");
   assert.deepEqual(lines.slice(-2), [
     "::notice::health check: skipped, no app reaches accounts yet",
     "worker check: ok",
   ]);
+  assert.deepEqual(healths, ["health check: skipped, no app reaches accounts yet"]);
 });
 
 test("an app whose own health fails still vouches for the service it reaches", async () => {
@@ -201,6 +228,7 @@ test("every service deploys before any app starts, and one that fails holds back
  * @param {boolean} [options.isAppBroken]
  * @param {string} [options.healthProblem]
  * @param {string} [options.reportedRelease]
+ * @param {string} [options.attention] what each app's health says the service needs of its owner
  */
 async function deployServiceAndApps({
   isServiceChanged = true,
@@ -212,10 +240,14 @@ async function deployServiceAndApps({
   isAppBroken = false,
   healthProblem,
   reportedRelease,
+  attention,
 } = {}) {
   const { roots, remove } = createServiceRoots();
   const events = [];
   const covered = [];
+  const checked = [];
+  const answered = [];
+  const healths = new Map();
   const errors = [];
   const lines = [];
   const calls = [];
@@ -241,6 +273,7 @@ async function deployServiceAndApps({
             ok: !healthProblem,
             release: reportedRelease ?? serviceCommit.slice(0, 7),
             ...(healthProblem && { problem: healthProblem }),
+            ...(attention && { attention }),
           }
         : null;
       return answerHealth(report)();
@@ -286,6 +319,11 @@ async function deployServiceAndApps({
       roots,
       commit: NEW_COMMIT,
       onCovered: (worker) => covered.push({ worker, events: [...events] }),
+      onChecked: (worker) => checked.push(worker),
+      onAnswered: (worker, health) => {
+        answered.push(worker);
+        healths.set(worker, health);
+      },
       buildWorkerImpl: async () => "export default {}",
       deployWorkerImpl: (options) =>
         deploy({
@@ -310,7 +348,18 @@ async function deployServiceAndApps({
         }),
       logError: (line) => errors.push(line),
     });
-    return { isDeployed, events, covered, errors, lines, calls, previousVersions };
+    return {
+      isDeployed,
+      events,
+      covered,
+      checked,
+      answered,
+      healths,
+      errors,
+      lines,
+      calls,
+      previousVersions,
+    };
   } finally {
     remove();
   }
@@ -423,13 +472,16 @@ test("deferred service failures keep the no-earlier-version and refused-rollback
 
 test("newly bound apps check an unchanged service at its own live commit without uploading it", async () => {
   for (const isAppOnly of [false, true]) {
-    const { isDeployed, events, lines, calls } = await deployServiceAndApps({
+    const { isDeployed, events, checked, answered, lines, calls } = await deployServiceAndApps({
       isAppOnly,
       isServiceChanged: false,
     });
     assert.equal(isDeployed, true);
     assert.deepEqual(events.slice(-2), ["health mlb", "health wnba"]);
     assert.ok(lines.includes("accounts: health check: ok"));
+    assert.ok(answered.includes("accounts"), "a service that answered counts as answered");
+    assert.ok(!checked.includes("accounts"), "an unchanged service that answered isn't checked");
+    assert.ok(!lines.includes("accounts: worker check: ok"));
     assert.ok(
       !calls.some(
         ({ url, init }) =>
@@ -437,6 +489,17 @@ test("newly bound apps check an unchanged service at its own live commit without
       ),
     );
   }
+});
+
+test("an unchanged service that answers but needs attention reports what it needs", async () => {
+  const { isDeployed, answered, healths, lines } = await deployServiceAndApps({
+    isServiceChanged: false,
+    attention: "a Contact report waits",
+  });
+  assert.equal(isDeployed, true);
+  assert.ok(answered.includes("accounts"));
+  assert.equal(healths.get("accounts"), "health check: ok, but a Contact report waits");
+  assert.ok(lines.includes("accounts: ::notice::health check: ok, but a Contact report waits"));
 });
 
 test("an unchanged service that fails its own release check is reported without rolling it back", async () => {
@@ -473,6 +536,16 @@ test("a service still unbound after app deploys has only the skipped-check notic
     lines.includes("accounts: ::notice::health check: skipped, no app reaches accounts yet"),
   );
   assert.ok(!events.includes("rollback accounts"));
+});
+
+test("an unchanged service no app reports counts as neither checked nor answered", async () => {
+  const { isDeployed, checked, answered } = await deployServiceAndApps({
+    isServiceChanged: false,
+    areAppsUnbound: true,
+  });
+  assert.equal(isDeployed, true);
+  assert.ok(!checked.includes("accounts"));
+  assert.ok(!answered.includes("accounts"));
 });
 
 test("a check-only service with no recorded live release fails without uploading or rolling back", async () => {

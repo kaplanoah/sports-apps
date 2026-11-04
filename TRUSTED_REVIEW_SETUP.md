@@ -178,6 +178,10 @@ Recovery uses an Actions-write token only in its separate trusted-main job, with
 
 Native usage retains only validated numeric input, cached-input, cache-write-input, output and reasoning-output counters. [Evaluation measurements](TRUSTED_REVIEW_EVALUATION.md#measurements) define how those counters are counted and how missing usage is reported.
 
-Coverage records hash the actual complete content supplied by trusted preparation, not a model assertion that it read everything. The summary says "Supplied in full" for Codex and retains Claude's Read-based accounting. Native tools inspect callers, shared state, related code, both apps, failure paths and tests beyond the diff. Supplied coverage establishes delivery, not the depth of reasoning. Incomplete investigation, unjudged work, context exhaustion, malformed output or interruption fails closed. No automatic retry starts another provider.
+Coverage records hash the actual complete content supplied by trusted preparation, not a model assertion that it read everything. The summary says "Supplied in full" for Codex and retains Claude's Read-based accounting. Native tools inspect callers, shared state, related code, both apps, failure paths and tests beyond the diff. Supplied coverage establishes delivery, not the depth of reasoning.
+
+A successful native action does not by itself complete a review. The `validate` job in `.github/workflows/trusted-codex-review.yml` downloads its structured answer on a fresh host after the model job succeeds. `acceptCodexAnswer` in `worker/review-codex.mjs` requires the exact fields, matching binding, `complete=true`, and empty `unfinished` and `unjudged` lists before validation can succeed.
+
+Incomplete investigation, unjudged work, context exhaustion, malformed output or interruption fails closed. No automatic retry starts another provider.
 
 Both providers produce the common candidate, disposition and posting contract, with different coverage evidence. Structured answers and sealed artifacts are revalidated before privileged posting or approval.

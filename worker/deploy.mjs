@@ -12,20 +12,24 @@ import {
   listWorkers,
   listWorkersOrExit,
 } from "./apps.mjs";
-import { buildWorker } from "./build.mjs";
+import { buildWorker, readRelease } from "./build.mjs";
 import { findChannel, readCommandLine } from "./channels.mjs";
-import { checkAppPage } from "./check-page.mjs";
+import { checkAppPage, listPageMasks, maskSecrets, readPageAccess } from "./check-page.mjs";
 import { checkService } from "./check-service.mjs";
 import { CHECK_INTERVAL_MS, CHECK_TIMEOUT_MS, waitFor } from "./check-timing.mjs";
 import { decideDeploy, listChangedFiles } from "./deploy-scope.mjs";
 import { createGitHub } from "./github-api.mjs";
 import { isGitObjectId } from "./git-object.mjs";
 import { readDeployedMain } from "./production-coverage.mjs";
+import { describeHealthCheck, HEALTH_CHECK_OK, WORKER_CHECK_OK } from "./worker-results.mjs";
+
+/** @typedef {import("./worker-results.mjs").WorkerResult} WorkerResult */
 
 export const API = "https://api.cloudflare.com/client/v4";
 const root = new URL("../", import.meta.url);
 
-// A channel's environment names its own Worker, which keeps the top level's other settings.
+// A channel's environment names its own Worker, which keeps the top level's other settings. A
+// stateless service has no store, so its class is null.
 /**
  * @param {string} toml
  * @param {string} [channel]
@@ -40,12 +44,12 @@ export function readWorkerConfig(toml, channel = "production") {
     : topLevel;
   const name = readSetting(section, "name");
   const compatibilityDate = readSetting(topLevel, "compatibility_date");
-  const storeClass = readSetting(toml, "class_name");
-  if (!name || !compatibilityDate || !storeClass)
+  const storeClass = readSetting(toml, "class_name") ?? null;
+  if (!name || !compatibilityDate)
     throw new Error(
       environment
-        ? `wrangler.toml needs compatibility_date, its store's class_name, and an [env.${environment}] with a name`
-        : "wrangler.toml needs name, compatibility_date, and its store's class_name",
+        ? `wrangler.toml needs compatibility_date and an [env.${environment}] with a name`
+        : "wrangler.toml needs name and compatibility_date",
     );
   return { name, compatibilityDate, storeClass };
 }
@@ -147,13 +151,15 @@ const listServiceBindings = (channel, roots) =>
   }));
 
 /**
- * @param {{ storeClass: string, isPageless: boolean, channel: string, roots?: import("./apps.mjs").WorkerRoots }} worker
+ * @param {{ storeClass: string | null, isPageless: boolean, channel: string, roots?: import("./apps.mjs").WorkerRoots }} worker
  */
 export function listBindings({ storeClass, isPageless, channel, roots }) {
-  const store = { type: "durable_object_namespace", name: "STORE", class_name: storeClass };
-  if (isPageless) return [store, VERSION_BINDING];
+  const store = storeClass
+    ? [{ type: "durable_object_namespace", name: "STORE", class_name: storeClass }]
+    : [];
+  if (isPageless) return [...store, VERSION_BINDING];
   const counts = channel === "production" ? [DAILY_OPENS_BINDING] : [];
-  return [store, ACCESS_LIMIT_BINDING, ...counts, ...listServiceBindings(channel, roots)];
+  return [...store, ACCESS_LIMIT_BINDING, ...counts, ...listServiceBindings(channel, roots)];
 }
 
 // Cloudflare records the last tag applied and rejects an upload that repeats one.
@@ -338,6 +344,10 @@ export const listAppWorkers = (channel, subdomain, roots) =>
  * @property {string} [commit] The commit the bundle was built from, recorded on the version.
  * @property {string | null} [checkedCommit] Previously verified production coverage.
  * @property {() => void} [onCovered] Reports fresh verification or equivalent verified runtime.
+ * @property {(health?: string) => void} [onChecked] Reports that this run checked the Worker
+ * answering, with a service's health check when it says more than ok.
+ * @property {(health?: string) => void} [onAnswered] Reports that an unchanged service answered
+ * at its live commit, with its health check when it says more than ok.
  * @property {(since: string) => string[] | null} [findChanges] Files changed since a commit.
  * @property {typeof fetch} [fetchImpl]
  * @property {NodeJS.ProcessEnv} [env]
@@ -363,6 +373,8 @@ export async function deploy({
   commit,
   checkedCommit,
   onCovered,
+  onChecked,
+  onAnswered,
   findChanges = listChangedFiles,
   fetchImpl = fetch,
   env = process.env,
@@ -382,8 +394,10 @@ export async function deploy({
   const callCloudflare = createCloudflareCaller({ fetchImpl, env, log });
   const deployments = createDeploymentsClient({ base, name, callCloudflare });
 
-  function logWorkerCheck() {
-    log("worker check: ok");
+  /** @param {string} [health] */
+  function logWorkerCheck(health) {
+    log(WORKER_CHECK_OK);
+    onChecked?.(health);
   }
 
   async function findLiveVersions() {
@@ -548,11 +562,9 @@ export async function deploy({
       pause,
       fetchImpl,
     });
-    if (check.status === "answering") {
-      const notice = check.attention ? "::notice::" : "";
-      log(`${notice}health check: ok${check.attention ? `, but ${check.attention}` : ""}`);
-    }
-    if (check.status === "unchecked") log(`::notice::health check: skipped, ${check.reason}`);
+    const health = describeHealthCheck(check);
+    const notableHealth = health === HEALTH_CHECK_OK ? undefined : health;
+    if (health) log(`${notableHealth ? "::notice::" : ""}${health}`);
     if (check.status === "unanswered") {
       const versionProblem = isUploaded
         ? "The service didn't answer as the new version"
@@ -561,7 +573,8 @@ export async function deploy({
       if (!isUploaded) throw new Error(problem);
       await restoreAfter(problem, previousVersions);
     }
-    if (isUploaded) logWorkerCheck();
+    if (isUploaded) logWorkerCheck(notableHealth);
+    else if (check.status === "answering") onAnswered?.(notableHealth);
     // An unbound service is safely excluded only after every app health answered.
     if (
       isUploaded ||
@@ -591,7 +604,7 @@ export async function deploy({
       onCovered?.();
     return null;
   }
-  const migrations = listPendingMigrations(await readMigrationTag(), storeClass);
+  const migrations = storeClass && listPendingMigrations(await readMigrationTag(), storeClass);
   await uploadWorker(migrations);
   await setWorkersDevRoute(previousVersions);
   const deployed = isPageless ? name : formatWorkerUrl(name, subdomain);
@@ -657,14 +670,14 @@ const createWorkerLog = (worker) => (message) => {
  * Settles a group of tasks, one per Worker, and says whether each succeeded.
  * @param {string[]} workers
  * @param {(worker: string) => Promise<unknown>} deployWorker
- * @param {(line: string) => void} logError
+ * @param {(worker: string, message: string) => void} reportFailure
  */
-async function deployGroup(workers, deployWorker, logError) {
+async function deployGroup(workers, deployWorker, reportFailure) {
   const results = await Promise.allSettled(workers.map((worker) => deployWorker(worker)));
   for (const [index, result] of results.entries()) {
     if (result.status === "fulfilled") continue;
     const { reason } = result;
-    logError(`${workers[index]}: ${reason instanceof Error ? reason.message : reason}`);
+    reportFailure(workers[index], reason instanceof Error ? reason.message : String(reason));
   }
   return results.every((result) => result.status === "fulfilled");
 }
@@ -676,7 +689,7 @@ async function deployGroup(workers, deployWorker, logError) {
  * the upload live. Services are checked only once all app deploys have settled.
  * @param {string[]} workers
  * @param {(worker: string, options: ServiceDeploymentOptions) => Promise<unknown>} deployWorker
- * @param {{ logError?: (line: string) => void, isServiceWorker?: (worker: string) => boolean, serviceWorkers?: string[] }} [options]
+ * @param {{ logError?: (line: string) => void, onFailed?: (worker: string, message: string) => void, isServiceWorker?: (worker: string) => boolean, serviceWorkers?: string[] }} [options]
  * @returns {Promise<boolean>} whether every Worker deployed and every service passed its check
  */
 export async function deployWorkers(
@@ -684,10 +697,16 @@ export async function deployWorkers(
   deployWorker,
   {
     logError = console.error,
+    onFailed,
     isServiceWorker = (worker) => isService(worker),
     serviceWorkers = [],
   } = {},
 ) {
+  /** @param {string} worker @param {string} message */
+  const reportFailure = (worker, message) => {
+    logError(`${worker}: ${message}`);
+    onFailed?.(worker, message);
+  };
   const services = [...new Set([...workers.filter(isServiceWorker), ...serviceWorkers])];
   const apps = workers.filter((worker) => !isServiceWorker(worker));
   /** @type {Map<string, () => Promise<void>>} */
@@ -697,12 +716,16 @@ export async function deployWorkers(
       isCheckOnly: !workers.includes(worker),
       deferServiceCheck: (confirm) => serviceChecks.set(worker, confirm),
     });
-  const areServicesDeployed = await deployGroup(services, prepareService, logError);
-  const areAppsDeployed = await deployGroup(apps, (worker) => deployWorker(worker, {}), logError);
+  const areServicesDeployed = await deployGroup(services, prepareService, reportFailure);
+  const areAppsDeployed = await deployGroup(
+    apps,
+    (worker) => deployWorker(worker, {}),
+    reportFailure,
+  );
   const areServicesConfirmed = await deployGroup(
     [...serviceChecks.keys()],
     (worker) => serviceChecks.get(worker)(),
-    logError,
+    reportFailure,
   );
   return areServicesDeployed && areAppsDeployed && areServicesConfirmed;
 }
@@ -715,6 +738,9 @@ export async function deployWorkers(
  * @param {string} [options.commit]
  * @param {string | null} [options.checkedCommit]
  * @param {(worker: string) => void} [options.onCovered]
+ * @param {(worker: string, health?: string) => void} [options.onChecked]
+ * @param {(worker: string, health?: string) => void} [options.onAnswered]
+ * @param {(worker: string, message: string) => void} [options.onFailed]
  * @param {import("./apps.mjs").WorkerRoots} [options.roots]
  * @param {typeof buildWorker} [options.buildWorkerImpl]
  * @param {typeof deploy} [options.deployWorkerImpl]
@@ -728,6 +754,9 @@ export async function deployRelease(
     commit,
     checkedCommit,
     onCovered,
+    onChecked,
+    onAnswered,
+    onFailed,
     roots,
     buildWorkerImpl = buildWorker,
     deployWorkerImpl = deploy,
@@ -745,12 +774,15 @@ export async function deployRelease(
       commit,
       checkedCommit,
       onCovered: () => onCovered?.(worker),
+      onChecked: (health) => onChecked?.(worker, health),
+      onAnswered: (health) => onAnswered?.(worker, health),
       log: createWorkerLog(worker),
     });
   return deployWorkers(workers, deployWorker, {
     serviceWorkers: listServices(roots?.servicesRoot),
     isServiceWorker: (worker) => isService(worker, roots?.servicesRoot),
     logError,
+    onFailed,
   });
 }
 
@@ -834,12 +866,86 @@ async function readPreviousCheckedCommit(env, fetchImpl) {
   }
 }
 
+// The comment on the pull request quotes each failure or service health check, which can name
+// what the channel's environment holds, like the page address a page check throws with or the
+// account a Cloudflare answer quotes. GitHub drops a job output holding a secret whole, but not
+// one holding a part of one, like a page's host or key.
+/**
+ * Each secret of the channel's environment a failure or a service's health check could quote, masked,
+ * an address before the subdomain it holds.
+ * @param {string} channel
+ * @param {NodeJS.ProcessEnv} env
+ * @param {string[]} [apps]
+ * @returns {[string, string][]}
+ */
+export function listChannelMasks(channel, env, apps = listApps()) {
+  const { CLOUDFLARE_ACCOUNT_ID: account, CLOUDFLARE_WORKERS_SUBDOMAIN: subdomain } = env;
+  return [
+    ...apps.flatMap((app) => {
+      const access = readPageAccess(app, channel, env);
+      return access ? listPageMasks(access.pageUrl, access.accessCode) : [];
+    }),
+    ...(account ? /** @type {[string, string][]} */ ([[account, "<account>"]]) : []),
+    ...(subdomain ? /** @type {[string, string][]} */ ([[subdomain, "<subdomain>"]]) : []),
+  ];
+}
+
+/**
+ * @param {string | undefined} detail
+ * @param {[string, string][]} masks
+ */
+function maskDetail(detail, masks) {
+  return detail === undefined ? undefined : maskSecrets(detail, masks);
+}
+
+/**
+ * @param {string[]} workers
+ * @param {Map<string, string | undefined>} checked each checked Worker, with a service's health
+ * check when it says more than ok
+ * @param {Map<string, string | undefined>} answered each unchanged service that answered at its
+ * live commit, with its health check when it says more than ok
+ * @param {Map<string, string>} failures each failed Worker's error
+ * @param {(worker: string) => string | null} readWorkerVersion
+ * @returns {WorkerResult[]}
+ */
+function listWorkerResults(workers, checked, answered, failures, readWorkerVersion) {
+  const listed = [...workers, ...checked.keys(), ...answered.keys(), ...failures.keys()];
+  return [...new Set(listed)].map((worker) => ({
+    worker,
+    version: readWorkerVersion(worker),
+    ...findCheckResult(worker, checked, answered, failures),
+  }));
+}
+
+/**
+ * @param {string} worker
+ * @param {Map<string, string | undefined>} checked
+ * @param {Map<string, string | undefined>} answered
+ * @param {Map<string, string>} failures
+ * @returns {Pick<WorkerResult, "result" | "detail">}
+ */
+function findCheckResult(worker, checked, answered, failures) {
+  if (failures.has(worker)) return { result: "failed", detail: failures.get(worker) };
+  if (checked.has(worker)) return withDetail("checked", checked.get(worker));
+  if (answered.has(worker)) return withDetail("answered", answered.get(worker));
+  return { result: "unchanged" };
+}
+
+/**
+ * @param {"checked" | "answered"} result
+ * @param {string | undefined} detail
+ * @returns {Pick<WorkerResult, "result" | "detail">}
+ */
+function withDetail(result, detail) {
+  return detail === undefined ? { result } : { result, detail };
+}
+
 /**
  * A receipt covers every repository Worker through fresh verification or equivalent previously
  * verified runtime. A successful no-op alone proves no page was verified.
  * @param {string[]} workers
  * @param {{ channel: string, commit: string, newer: string | null }} release
- * @param {{ readCiState?: typeof readMainCiState, deploy?: typeof deployRelease, env?: NodeJS.ProcessEnv, fetchImpl?: typeof fetch, readCheckedCommit?: typeof readPreviousCheckedCommit, requiredWorkers?: string[] }} [options]
+ * @param {{ readCiState?: typeof readMainCiState, deploy?: typeof deployRelease, env?: NodeJS.ProcessEnv, fetchImpl?: typeof fetch, readCheckedCommit?: typeof readPreviousCheckedCommit, requiredWorkers?: string[], readWorkerVersion?: (worker: string) => string | null }} [options]
  */
 export async function deployCheckedRelease(
   workers,
@@ -851,6 +957,8 @@ export async function deployCheckedRelease(
     fetchImpl = fetch,
     readCheckedCommit = readPreviousCheckedCommit,
     requiredWorkers = listWorkers(),
+    readWorkerVersion = (worker) =>
+      readRelease(worker, undefined, undefined, channel)?.version ?? null,
   } = {},
 ) {
   const { branch } = findChannel(channel);
@@ -862,16 +970,28 @@ export async function deployCheckedRelease(
   const needsReceipt = channel === "production" && !!env.GITHUB_OUTPUT;
   const checkedCommit = needsReceipt ? await readCheckedCommit(env, fetchImpl) : null;
   const covered = new Set();
+  /** @type {Map<string, string | undefined>} */
+  const checked = new Map();
+  /** @type {Map<string, string | undefined>} */
+  const answered = new Map();
+  /** @type {Map<string, string>} */
+  const failures = new Map();
+  const masks = listChannelMasks(channel, env);
   console.log(`Deploying ${branch} at ${commit.slice(0, 7)} to ${channel}`);
-  if (
-    !(await deploy(workers, {
-      channel,
-      commit,
-      checkedCommit,
-      onCovered: (worker) => covered.add(worker),
-    }))
-  )
-    return false;
+  const isDeployed = await deploy(workers, {
+    channel,
+    commit,
+    checkedCommit,
+    onCovered: (worker) => covered.add(worker),
+    onChecked: (worker, health) => checked.set(worker, maskDetail(health, masks)),
+    onAnswered: (worker, health) => answered.set(worker, maskDetail(health, masks)),
+    onFailed: (worker, message) => failures.set(worker, maskSecrets(message, masks)),
+  });
+  if (env.GITHUB_OUTPUT) {
+    const results = listWorkerResults(workers, checked, answered, failures, readWorkerVersion);
+    appendFileSync(env.GITHUB_OUTPUT, `worker-results=${JSON.stringify(results)}\n`);
+  }
+  if (!isDeployed) return false;
   if (needsReceipt) {
     if (requiredWorkers.length && requiredWorkers.every((worker) => covered.has(worker)))
       appendFileSync(env.GITHUB_OUTPUT, `checked-commit=${commit}\n`);

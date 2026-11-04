@@ -60,6 +60,11 @@ test("production receipts require successful deployment; superseded, failed and 
   const output = join(folder, "output");
   writeFileSync(output, "");
   const env = { GITHUB_OUTPUT: output };
+  const readReceipts = () =>
+    readFileSync(output, "utf8")
+      .split("\n")
+      .filter((line) => line.startsWith("checked-commit="));
+  const readWorkerVersion = () => "1.0.0";
   let deployments = 0;
   const release = { channel: "production", commit: NEW_COMMIT, newer: "3".repeat(40) };
   /** @type {typeof import("../worker/deploy.mjs").deployRelease} */
@@ -78,30 +83,245 @@ test("production receipts require successful deployment; superseded, failed and 
   assert.equal(readFileSync(output, "utf8"), "");
   const current = { ...release, newer: null };
   assert.equal(
-    await deployCheckedRelease(["mlb"], current, { env, deploy: async () => false }),
+    await deployCheckedRelease(["mlb"], current, {
+      env,
+      deploy: async () => false,
+      readWorkerVersion,
+    }),
     false,
   );
-  assert.equal(readFileSync(output, "utf8"), "");
+  assert.deepEqual(readReceipts(), []);
   await assert.rejects(
     deployCheckedRelease(["mlb"], current, {
       env,
       deploy: async () => {
         throw new Error("verification failed");
       },
+      readWorkerVersion,
     }),
     /verification failed/,
   );
-  assert.equal(readFileSync(output, "utf8"), "");
+  assert.deepEqual(readReceipts(), []);
   assert.equal(
-    await deployCheckedRelease(["mlb"], { ...current, channel: "beta" }, { env, deploy }),
+    await deployCheckedRelease(
+      ["mlb"],
+      { ...current, channel: "beta" },
+      { env, deploy, readWorkerVersion },
+    ),
     true,
   );
-  assert.equal(readFileSync(output, "utf8"), "");
+  assert.deepEqual(readReceipts(), []);
   assert.equal(
-    await deployCheckedRelease(["mlb"], current, { env, deploy, requiredWorkers: ["mlb"] }),
+    await deployCheckedRelease(["mlb"], current, {
+      env,
+      deploy,
+      requiredWorkers: ["mlb"],
+      readWorkerVersion,
+    }),
     true,
   );
-  assert.equal(readFileSync(output, "utf8"), `checked-commit=${NEW_COMMIT}\n`);
+  assert.deepEqual(readReceipts(), [`checked-commit=${NEW_COMMIT}`]);
+});
+
+test("each run that deploys writes every Worker's result and version, failed or not, on both channels", async (context) => {
+  const { deployCheckedRelease } = await loadDeployModule();
+  const folder = mkdtempSync(join(tmpdir(), "deploy-results-"));
+  context.after(() => rmSync(folder, { recursive: true, force: true }));
+  const output = join(folder, "output");
+  const readResults = () =>
+    readFileSync(output, "utf8")
+      .split("\n")
+      .filter((line) => line.startsWith("worker-results="))
+      .map((line) => JSON.parse(line.slice("worker-results=".length)));
+  /** @type {typeof import("../worker/deploy.mjs").deployRelease} */
+  const deploy = async (workers, options) => {
+    options?.onChecked?.("mlb");
+    options?.onChecked?.("accounts");
+    options?.onFailed?.(
+      "accounts",
+      "The service didn't answer, so the earlier version is live again.",
+    );
+    return false;
+  };
+  for (const channel of ["production", "beta"]) {
+    writeFileSync(output, "");
+    const isDeployed = await deployCheckedRelease(
+      ["mlb", "wnba"],
+      { channel, commit: NEW_COMMIT, newer: null },
+      {
+        env: { GITHUB_OUTPUT: output },
+        deploy,
+        readCheckedCommit: async () => null,
+        readWorkerVersion: (worker) => `${worker}-version`,
+      },
+    );
+    assert.equal(isDeployed, false);
+    assert.deepEqual(readResults(), [
+      [
+        { worker: "mlb", version: "mlb-version", result: "checked" },
+        { worker: "wnba", version: "wnba-version", result: "unchanged" },
+        {
+          worker: "accounts",
+          version: "accounts-version",
+          result: "failed",
+          detail: "The service didn't answer, so the earlier version is live again.",
+        },
+      ],
+    ]);
+  }
+});
+
+test("a run that deploys nothing writes each unchanged service that answered apart from the Workers it checked", async (context) => {
+  const { deployCheckedRelease } = await loadDeployModule();
+  const folder = mkdtempSync(join(tmpdir(), "deploy-answered-"));
+  context.after(() => rmSync(folder, { recursive: true, force: true }));
+  const output = join(folder, "output");
+  writeFileSync(output, "");
+  await deployCheckedRelease(
+    ["accounts", "mlb"],
+    { channel: "production", commit: NEW_COMMIT, newer: null },
+    {
+      env: { GITHUB_OUTPUT: output },
+      deploy: async (workers, options) => {
+        options?.onAnswered?.("accounts");
+        return true;
+      },
+      readCheckedCommit: async () => null,
+      readWorkerVersion: () => "1.0.0",
+    },
+  );
+  const line = readFileSync(output, "utf8")
+    .split("\n")
+    .find((text) => text.startsWith("worker-results="));
+  assert.deepEqual(JSON.parse(line.slice("worker-results=".length)), [
+    { worker: "accounts", version: "1.0.0", result: "answered" },
+    { worker: "mlb", version: "1.0.0", result: "unchanged" },
+  ]);
+});
+
+test("a checked or answered service's health check, when it says more than ok, reaches its result, masked", async (context) => {
+  const { deployCheckedRelease } = await loadDeployModule();
+  const folder = mkdtempSync(join(tmpdir(), "deploy-health-"));
+  context.after(() => rmSync(folder, { recursive: true, force: true }));
+  const output = join(folder, "output");
+  writeFileSync(output, "");
+  await deployCheckedRelease(
+    ["accounts", "email"],
+    { channel: "production", commit: NEW_COMMIT, newer: null },
+    {
+      env: { GITHUB_OUTPUT: output, CLOUDFLARE_WORKERS_SUBDOMAIN: "example-subdomain" },
+      deploy: async (workers, options) => {
+        options?.onChecked?.("email", "health check: skipped, no app reaches email yet");
+        options?.onAnswered?.(
+          "accounts",
+          "health check: ok, but mlb.example-subdomain.workers.dev waits",
+        );
+        return true;
+      },
+      readCheckedCommit: async () => null,
+      readWorkerVersion: () => "1.0.0",
+    },
+  );
+  const line = readFileSync(output, "utf8")
+    .split("\n")
+    .find((text) => text.startsWith("worker-results="));
+  assert.deepEqual(JSON.parse(line.slice("worker-results=".length)), [
+    {
+      worker: "accounts",
+      version: "1.0.0",
+      result: "answered",
+      detail: "health check: ok, but mlb.<subdomain>.workers.dev waits",
+    },
+    {
+      worker: "email",
+      version: "1.0.0",
+      result: "checked",
+      detail: "health check: skipped, no app reaches email yet",
+    },
+  ]);
+});
+
+test("a failure the run hands its comment names none of the channel's secrets, whole or in part", async (context) => {
+  const { deployCheckedRelease } = await loadDeployModule();
+  const folder = mkdtempSync(join(tmpdir(), "deploy-masks-"));
+  context.after(() => rmSync(folder, { recursive: true, force: true }));
+  const output = join(folder, "output");
+  const account = "7".repeat(32);
+  const host = "mlb-beta.example-subdomain.workers.dev";
+  const message = [
+    `https://${host}/k3y/ drew nothing`,
+    `then ${host} refused`,
+    "the key k3y on its own",
+    "the code s3cret-code",
+    `account ${account}`,
+    "wnba.example-subdomain.workers.dev answered 500",
+  ].join("; ");
+  for (const channel of ["production", "beta"]) {
+    writeFileSync(output, "");
+    await deployCheckedRelease(
+      ["mlb"],
+      { channel, commit: NEW_COMMIT, newer: null },
+      {
+        env: {
+          GITHUB_OUTPUT: output,
+          CLOUDFLARE_ACCOUNT_ID: account,
+          CLOUDFLARE_WORKERS_SUBDOMAIN: "example-subdomain",
+          ACCESS_CODE: "s3cret-code",
+          [channel === "beta" ? "MLB_BETA_PAGE_URL" : "MLB_PAGE_URL"]: `https://${host}/k3y`,
+        },
+        deploy: async (workers, options) => {
+          options?.onFailed?.("mlb", message);
+          return false;
+        },
+        readCheckedCommit: async () => null,
+        readWorkerVersion: () => "2.40.1",
+      },
+    );
+    const line = readFileSync(output, "utf8")
+      .split("\n")
+      .find((text) => text.startsWith("worker-results="));
+    const [result] = JSON.parse(line.slice("worker-results=".length));
+    assert.equal(
+      result.detail,
+      [
+        "<page>/ drew nothing",
+        "then <worker> refused",
+        "the key <key> on its own",
+        "the code <access code>",
+        "account <account>",
+        "wnba.<subdomain>.workers.dev answered 500",
+      ].join("; "),
+    );
+  }
+});
+
+test("deployRelease reports each Worker it checked, each service that answered, and each one that failed", async () => {
+  const { deployRelease } = await loadDeployModule();
+  const checked = [];
+  const answered = [];
+  const failed = [];
+  const isDeployed = await deployRelease(["mlb", "wnba"], {
+    buildWorkerImpl: async () => "",
+    deployWorkerImpl: async ({ worker, onChecked, onAnswered, isCheckOnly }) => {
+      if (isCheckOnly) return null;
+      if (worker === "wnba") throw new Error("The Worker didn't answer as the new version");
+      onChecked?.("health check: ok, but a Contact report waits");
+      onAnswered?.();
+      return worker;
+    },
+    onChecked: (worker, health) => checked.push({ worker, health }),
+    onAnswered: (worker) => answered.push(worker),
+    onFailed: (worker, message) => failed.push({ worker, message }),
+    logError: () => {},
+  });
+  assert.equal(isDeployed, false);
+  assert.deepEqual(checked, [
+    { worker: "mlb", health: "health check: ok, but a Contact report waits" },
+  ]);
+  assert.deepEqual(answered, ["mlb"]);
+  assert.deepEqual(failed, [
+    { worker: "wnba", message: "The Worker didn't answer as the new version" },
+  ]);
 });
 
 /**
@@ -182,10 +402,11 @@ test("the beta channel's Worker is named by its environment, with the top level'
     compatibilityDate: "2026-09-01",
     storeClass: "Store",
   });
-  assert.throws(
-    () => readWorkerConfig('name = "x"\ncompatibility_date = "2026-09-01"\n'),
-    /class_name/,
-  );
+  assert.deepEqual(readWorkerConfig('name = "x"\ncompatibility_date = "2026-09-01"\n'), {
+    name: "x",
+    compatibilityDate: "2026-09-01",
+    storeClass: null,
+  });
   assert.throws(() => readWorkerConfig(toml, "beta"), /\[env\.beta\] with a name/);
   assert.throws(() => readWorkerConfig(toml, "staging"), /no channel named staging/);
 });
@@ -242,7 +463,7 @@ test("a beta deploy uploads to the beta Worker, with the same bindings", async (
   const metadata = JSON.parse(await upload.init.body.get("metadata").text());
   assert.deepEqual(
     metadata.bindings.map((binding) => binding.name),
-    ["STORE", "ACCESS_LIMIT", "ACCOUNTS", "EMAIL"],
+    ["STORE", "ACCESS_LIMIT", "ACCOUNTS", "CLAUDE", "EMAIL"],
   );
   assert.deepEqual(metadata.bindings[2], {
     type: "service",
@@ -293,6 +514,7 @@ test("upload, route, and the Worker URL", async () => {
       },
       { type: "analytics_engine", name: "DAILY_OPENS", dataset: "daily_opens" },
       { type: "service", name: "ACCOUNTS", service: "accounts" },
+      { type: "service", name: "CLAUDE", service: "claude" },
       { type: "service", name: "EMAIL", service: "email" },
     ],
     keep_bindings: ["secret_text"],
@@ -443,22 +665,23 @@ test("each service's wrangler.toml declares the bindings and migrations the depl
   for (const service of listServices()) {
     const toml = readRepoFile(`services/${service}/worker/wrangler.toml`);
     const className = toml.match(/^class_name = "(\w+)"/m)?.[1];
-    assert.ok(className, service);
     assert.match(toml.split("[env.beta]")[0], /^workers_dev = false\n/m);
     for (const prefix of ["", "env.beta."]) {
-      assert.ok(
-        toml.includes(
-          `[[${prefix}durable_objects.bindings]]\nname = "STORE"\nclass_name = "${className}"`,
-        ),
-        `${service} ${prefix}STORE`,
-      );
+      if (className)
+        assert.ok(
+          toml.includes(
+            `[[${prefix}durable_objects.bindings]]\nname = "STORE"\nclass_name = "${className}"`,
+          ),
+          `${service} ${prefix}STORE`,
+        );
       assert.ok(
         toml.includes(`[${prefix}version_metadata]\nbinding = "VERSION"`),
         `${service} ${prefix}VERSION`,
       );
     }
     assert.match(toml, /\[env\.beta\]\nname = "[\w-]+-beta"\nworkers_dev = false/);
-    for (const { tag, new_sqlite_classes: classes } of listMigrations(className)) {
+    if (!className) assert.doesNotMatch(toml, /durable_objects|migrations/, service);
+    for (const { tag, new_sqlite_classes: classes } of className ? listMigrations(className) : []) {
       const declared = `[[migrations]]\ntag = "${tag}"\nnew_sqlite_classes = ${JSON.stringify(classes)}`;
       assert.ok(toml.includes(declared), declared);
     }
@@ -652,6 +875,38 @@ test("a first deploy has no live version to look up", async () => {
     pause: skipPause,
   });
   assert.equal(url, WORKER_URL);
+});
+
+test("an app's deploy reports its check only once its Worker and page answer", async () => {
+  const { deploy } = await loadDeployModule();
+  let checks = 0;
+  const countCheck = () => {
+    checks += 1;
+  };
+  await deploy({
+    worker: "mlb",
+    fetchImpl: createFakeCloudflare().fetchImpl,
+    env: ENV,
+    script: "",
+    log: () => {},
+    pause: skipPause,
+    onChecked: countCheck,
+  });
+  assert.equal(checks, 1);
+  const silent = createFakeCloudflare({ answerWorker: () => new Response("", { status: 500 }) });
+  await assert.rejects(
+    deploy({
+      worker: "mlb",
+      fetchImpl: silent.fetchImpl,
+      env: ENV,
+      script: "",
+      log: () => {},
+      pause: skipPause,
+      onChecked: countCheck,
+    }),
+    /the earlier version is live again/,
+  );
+  assert.equal(checks, 1);
 });
 
 test("the log and errors never show the Worker's address", async () => {
