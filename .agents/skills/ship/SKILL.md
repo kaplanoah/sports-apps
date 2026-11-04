@@ -70,7 +70,7 @@ This skill holds what "Shipping a change" in AGENTS.md leaves out, most of it un
 ## Steps 9 and 10: the deploy and its log
 
 - A PR typed `docs:`, `test:`, `ci:`, or `chore:` deploys nothing, since CI's `title` job holds those types to files the deploy skips (`findTypeProblem` in the root's `worker/release.mjs`). Its work ends at the merge: tell the user it merged and that nothing deploys, and skip steps 9 to 11.
-- For any other PR, load the `deploy-log` skill, which says how the deploy runs and what each line of its log asks of you.
+- For any other PR, stay subscribed to it through the merge, and load the `deploy-log` skill, which says how the deploy runs, what its comment on the PR says, and what each line of its log asks of you.
 
 ## Step 12: one thing a PR, and stacked PRs
 

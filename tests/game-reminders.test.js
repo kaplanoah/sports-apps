@@ -167,6 +167,33 @@ test("reminder claim validates identity and the current verified game inside the
   assert.ok(claims[0].includes("identity:problem:identity:vendor:espn:mlb:game:vendor-reminder"));
 });
 
+test("a valid guard for another game or a player cannot authorize a reminder", async () => {
+  for (const [type, internalId] of /** @type {const} */ ([
+    ["game", "another-internal-game"],
+    ["player", GAME.id],
+  ])) {
+    const harness = createHarness();
+    await harness.subscribe();
+    await harness.identities.save([
+      {
+        type,
+        vendor: "espn",
+        vendorId: "another-record",
+        internalId,
+        evidence: { method: "teams-day" },
+      },
+    ]);
+    const guard = await harness.identities.readEligible(type, "espn", "another-record");
+    harness.upstream.games = [{ ...GAME, identityGuards: [guard] }];
+    await harness.reminders.saveGames(harness.upstream.games);
+    harness.clock.now = GAME.start - PREFERENCES.minutes * 60_000;
+    await harness.reminders.checkDue();
+    assert.equal(harness.sent.length, 0);
+    const device = [...(await harness.push.listSubscriptions()).values()][0];
+    assert.equal(device.reminderReceipts[GAME.id].attempts, 0);
+  }
+});
+
 test("a reminder-facts change before device planning cannot authorize an old game claim", async () => {
   const harness = createHarness();
   await harness.subscribe();
@@ -220,6 +247,25 @@ test("verification expiring while a reminder claim waits cannot spend an attempt
   harness.push.updateDevice = updateDevice;
   await harness.reminders.checkDue();
   assert.equal(harness.sent.length, 1);
+});
+
+test("future or invalid verification timestamps trigger fresh confirmation before claiming", async () => {
+  for (const verifiedAt of [
+    NOW + 24 * 60 * 60_000,
+    String(GAME.start - PREFERENCES.minutes * 60_000),
+    "invalid",
+    undefined,
+    Infinity,
+  ]) {
+    const harness = createHarness();
+    await harness.subscribe();
+    await harness.reminders.saveGames([GAME]);
+    await harness.ctx.storage.put("push:reminder-games", { games: [GAME], verifiedAt });
+    harness.clock.now = GAME.start - PREFERENCES.minutes * 60_000;
+    await harness.reminders.checkDue();
+    assert.equal(harness.upstream.reads, 1);
+    assert.equal(harness.sent.length, 1);
+  }
 });
 
 test("only the five approved presets, booleans and real time zones are accepted", () => {

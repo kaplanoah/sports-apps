@@ -50,6 +50,12 @@ export const IdentityObservation = z.looseObject({
   preserveProblem: z.boolean().optional(),
   facts: z.record(z.string(), z.unknown()).optional(),
 });
+export const IdentityFactsUpdate = z.strictObject({
+  type: z.enum(IDENTITY_TYPES),
+  vendor: Identifier,
+  internalId: Identifier,
+  facts: z.record(z.string(), z.unknown()),
+});
 export const VendorGameIdentities = z.array(
   z.object({
     id: Identifier,

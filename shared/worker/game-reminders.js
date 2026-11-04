@@ -48,6 +48,14 @@ function isDeliveryFinished(receipt) {
   );
 }
 
+function isFreshFacts(facts, now) {
+  return (
+    Number.isFinite(facts?.verifiedAt) &&
+    facts.verifiedAt <= now &&
+    now - facts.verifiedAt <= FRESH_FOR_MS
+  );
+}
+
 /** @param {any} device @param {any[]} games @param {number} now */
 function planDevice(device, games, now) {
   const preferences = readNotificationPreferences(device);
@@ -132,8 +140,7 @@ export function createGameReminders({ storage, push, now, verify, validateIdenti
   async function deliverDue() {
     let facts = await storage.get(FACTS_KEY);
     if (!facts || (await findNextDeadline()) > now()) return;
-    const isFresh = facts.verifiedAt !== null && now() - facts.verifiedAt <= FRESH_FOR_MS;
-    if (!isFresh) {
+    if (!isFreshFacts(facts, now())) {
       try {
         await verify();
       } catch {
@@ -141,7 +148,7 @@ export function createGameReminders({ storage, push, now, verify, validateIdenti
       }
       facts = await storage.get(FACTS_KEY);
     }
-    if (facts?.verifiedAt === null || !facts) return;
+    if (!isFreshFacts(facts, now())) return;
     const games = new Map(facts.games.map((game) => [game.id, game]));
     const devices = await push.listSubscriptions();
     await Promise.allSettled(
@@ -157,19 +164,21 @@ export function createGameReminders({ storage, push, now, verify, validateIdenti
     const facts = await transaction.get(FACTS_KEY);
     if (
       !game ||
-      !Number.isFinite(facts?.verifiedAt) ||
-      facts.verifiedAt > now() ||
-      now() - facts.verifiedAt > FRESH_FOR_MS ||
+      !isFreshFacts(facts, now()) ||
       !isSameJson(
         facts.games.find((candidate) => candidate.id === game.id),
         game,
       )
     )
       return false;
-    return (
-      game.identityGuards === undefined ||
-      !!(await validateIdentityGuards?.(transaction, game.identityGuards))
-    );
+    if (game.identityGuards === undefined) return true;
+    if (
+      !Array.isArray(game.identityGuards) ||
+      !game.identityGuards.length ||
+      !game.identityGuards.every((guard) => guard?.type === "game" && guard.internalId === game.id)
+    )
+      return false;
+    return !!(await validateIdentityGuards?.(transaction, game.identityGuards));
   }
 
   async function deliverGame(key, id, games) {

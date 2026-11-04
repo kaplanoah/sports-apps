@@ -74,6 +74,7 @@ const SKIPPED_FILES = new Set([
   "worker/codex-rate-namespaces.mjs",
   "worker/codex-rate-probe-output.mjs",
   "worker/codex-runner-probe.mjs",
+  "worker/comment-deploy.mjs",
   "worker/find-trusted-review.mjs",
   "worker/flag-conflicts.mjs",
   "worker/issues.mjs",
