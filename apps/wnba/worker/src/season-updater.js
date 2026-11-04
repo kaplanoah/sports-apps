@@ -119,7 +119,17 @@ const addFinalTimes = (savedGames, games, asOf) =>
  * @param {{ isStandIn: boolean, asOf: string }} update
  */
 function prepareGames(savedGames, games, { isStandIn, asOf }) {
-  return addEndTimes(savedGames, keepFurtherGames(savedGames, games, isStandIn), asOf);
+  return addEndTimes(savedGames, keepFurtherGames(savedGames, games, isStandIn), asOf).map(
+    omitReminderGuards,
+  );
+}
+
+// Association guards belong to internal reminder facts, never page-facing game documents.
+function omitReminderGuards(game) {
+  if (!Object.hasOwn(game, "identityGuards")) return game;
+  const copy = { ...game };
+  delete copy.identityGuards;
+  return copy;
 }
 
 // Only the season's games keep when each was found final, for the Updates box, which reads them.
@@ -153,7 +163,7 @@ async function saveSchedule(docs, snapshot) {
   if (!hasGames) return;
   const key = nameScheduleKey(snapshot.season);
   const doc = await docs.read(key);
-  const games = keepFurtherGames(doc?.games, snapshot.schedule, isStandIn);
+  const games = keepFurtherGames(doc?.games, snapshot.schedule, isStandIn).map(omitReminderGuards);
   if (doc?.version === snapshot.version && isSameJson(doc.games, games)) return;
   await docs.write(key, {
     version: snapshot.version,
