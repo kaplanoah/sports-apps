@@ -71,8 +71,8 @@ export function createSeasonReader({
   // The past season the page last loaded on, null when it loaded the current one.
   /** @type {number | null} */
   let loadedPastYear = null;
-  // Whether the season the page shows is the current one, by a load of it or a pick of it, so a
-  // failed advance leaves the page following the current season rather than the one it shows.
+  // Whether the page follows the current season, set when a load or pick of it succeeds, so a
+  // failed advance leaves the page following the current season rather than the one it still shows.
   let isFollowingCurrentSeason = false;
   // The record as the store last answered, whether or not the page reads it.
   /** @type {any} */
@@ -308,7 +308,8 @@ export function createSeasonReader({
      * A current load or advance reloads current, and a pending past load reloads its past year.
      * During a viewer's pick, the shown year or prior past-load target wins; otherwise it uses the
      * choice captured before pending reads, which can keep a restored past season. With nothing
-     * pending, the app's last showing supplies the fallback. A pending pick never supplies its year.
+     * pending, a page following the current season reloads it; otherwise the app's last showing
+     * supplies the fallback. A pending pick never supplies its year.
      * @param {number | null} lastShownYear
      * @param {number | null} lastCurrentYear
      */
