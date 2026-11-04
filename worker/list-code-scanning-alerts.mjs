@@ -1,9 +1,10 @@
-// Prints the repository's code-scanning alerts, one line each, and the analysis of main they were
-// last read against. The Code scanning alerts workflow runs it with the workflow's own token,
-// since a Claude session's GitHub access can't read code scanning, so a session reads the alerts
-// from that run's log. Each line holds only what CodeQL's public queries find in the public code.
+// The run's log is public, so it reads only CodeQL's alerts, which its public queries find in the
+// public code, and prints no alert's message or code.
 import { fileURLToPath } from "node:url";
 import { createGitHub, readAllPages } from "./github-api.mjs";
+
+const TOOL = "CodeQL";
+const ANALYSES_PAGE_SIZE = 100;
 
 /**
  * @typedef {object} Alert
@@ -12,6 +13,13 @@ import { createGitHub, readAllPages } from "./github-api.mjs";
  * @property {string | null} [dismissed_reason]
  * @property {{ id: string, severity?: string | null, security_severity_level?: string | null }} rule
  * @property {{ location?: { path?: string, start_line?: number } }} [most_recent_instance]
+ */
+
+/**
+ * @typedef {object} Analysis
+ * @property {string} category
+ * @property {string} commit_sha
+ * @property {string} created_at
  */
 
 /** @param {Alert} alert */
@@ -23,13 +31,20 @@ function renderAlertLine(alert) {
   return `#${alert.number} ${state} ${severity} ${alert.rule.id} ${place}`;
 }
 
-/**
- * @param {{ commit_sha: string, created_at: string } | undefined} analysis
- */
+/** @param {Analysis} analysis */
 const renderAnalysisLine = (analysis) =>
-  analysis
-    ? `Main's latest analysis: ${analysis.commit_sha} at ${analysis.created_at}`
-    : "Main has no analysis yet.";
+  `${analysis.category}: ${analysis.commit_sha} at ${analysis.created_at}`;
+
+/**
+ * The newest of each category, since CodeQL analyzes each language apart and one can fall behind.
+ * @param {Analysis[]} newestFirst
+ */
+function pickLatestByCategory(newestFirst) {
+  const latest = new Map();
+  for (const analysis of newestFirst)
+    if (!latest.has(analysis.category)) latest.set(analysis.category, analysis);
+  return [...latest.values()];
+}
 
 /**
  * @param {object} options
@@ -40,12 +55,20 @@ const renderAnalysisLine = (analysis) =>
  */
 export async function listCodeScanningAlerts({ repository, fetchImpl = fetch, env = process.env }) {
   const github = createGitHub({ repository, fetchImpl, env });
-  const [analysis] = await github("/code-scanning/analyses?ref=refs/heads/main&per_page=1");
+  const analyses = pickLatestByCategory(
+    await github(
+      `/code-scanning/analyses?tool_name=${TOOL}&ref=refs/heads/main&per_page=${ANALYSES_PAGE_SIZE}`,
+    ),
+  );
   /** @type {Alert[]} */
-  const alerts = await readAllPages(github, "/code-scanning/alerts?sort=created&direction=asc");
+  const alerts = await readAllPages(
+    github,
+    `/code-scanning/alerts?tool_name=${TOOL}&sort=created&direction=asc`,
+  );
   return [
-    renderAnalysisLine(analysis),
-    `Alerts, in every state (${alerts.length}):`,
+    `Main's latest ${TOOL} analysis of each category (${analyses.length}):`,
+    ...analyses.map((analysis) => renderAnalysisLine(analysis)),
+    `${TOOL} alerts, in every state (${alerts.length}):`,
     ...alerts.map((alert) => renderAlertLine(alert)),
   ];
 }

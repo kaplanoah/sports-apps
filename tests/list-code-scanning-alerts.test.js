@@ -4,21 +4,22 @@ import { listCodeScanningAlerts } from "../worker/list-code-scanning-alerts.mjs"
 
 const REPOSITORY = "owner/sports-apps";
 const MAIN_COMMIT = "a".repeat(40);
+const EARLIER_COMMIT = "b".repeat(40);
 
 /**
- * GitHub's API with these code-scanning alerts and analyses of main.
+ * GitHub's API with these code-scanning alerts and analyses of main, newest first.
  * @param {object[]} alerts
- * @param {object[]} [analyses]
+ * @param {object[]} analyses
  */
-function createFakeGitHub(alerts, analyses = [{ commit_sha: MAIN_COMMIT, created_at: "now" }]) {
-  /** @type {string[]} */
+function createFakeGitHub(alerts, analyses) {
+  /** @type {URL[]} */
   const requests = [];
   /** @type {typeof fetch} */
   const fetchImpl = async (url) => {
-    const { pathname, search } = new URL(String(url));
-    requests.push(`${pathname}${search}`);
-    if (pathname.endsWith("/code-scanning/analyses")) return Response.json(analyses);
-    const page = Number(new URLSearchParams(search).get("page"));
+    const request = new URL(String(url));
+    requests.push(request);
+    if (request.pathname.endsWith("/code-scanning/analyses")) return Response.json(analyses);
+    const page = Number(request.searchParams.get("page"));
     return Response.json(alerts.slice((page - 1) * 100, page * 100));
   };
   return { fetchImpl, requests };
@@ -43,49 +44,75 @@ const createAlert = (number, fields = {}) => ({
   ...fields,
 });
 
-test("each alert prints on one line with its number, state, severity, rule, and place, after main's analysis", async () => {
-  const github = createFakeGitHub([
-    createAlert(3),
-    createAlert(5, {
-      state: "dismissed",
-      dismissed_reason: "false positive",
-      rule: { id: "js/unused-local-variable", severity: "note", security_severity_level: null },
-      most_recent_instance: { location: { path: "tests/a.test.js", start_line: 4 } },
-    }),
-    createAlert(8, { state: "fixed", most_recent_instance: {} }),
-  ]);
+/**
+ * @param {string} category
+ * @param {string} commit
+ * @param {string} createdAt
+ */
+const createAnalysis = (category, commit, createdAt) => ({
+  category,
+  commit_sha: commit,
+  created_at: createdAt,
+});
+
+const JAVASCRIPT = "/language:javascript-typescript";
+
+test("each alert prints on one line with its number, state, severity, rule, and place, after main's analyses", async () => {
+  const github = createFakeGitHub(
+    [
+      createAlert(3),
+      createAlert(5, {
+        state: "dismissed",
+        dismissed_reason: "false positive",
+        rule: { id: "js/unused-local-variable", severity: "note", security_severity_level: null },
+        most_recent_instance: { location: { path: "tests/a.test.js", start_line: 4 } },
+      }),
+      createAlert(8, { state: "fixed", most_recent_instance: {} }),
+    ],
+    [createAnalysis(JAVASCRIPT, MAIN_COMMIT, "today")],
+  );
 
   assert.deepEqual(await list(github), [
-    `Main's latest analysis: ${MAIN_COMMIT} at now`,
-    "Alerts, in every state (3):",
+    "Main's latest CodeQL analysis of each category (1):",
+    `${JAVASCRIPT}: ${MAIN_COMMIT} at today`,
+    "CodeQL alerts, in every state (3):",
     "#3 open high js/xss shared/page/html.js:12",
     "#5 dismissed/false positive note js/unused-local-variable tests/a.test.js:4",
     "#8 fixed high js/xss no location",
   ]);
-  assert.equal(
-    github.requests[0],
-    `/repos/${REPOSITORY}/code-scanning/analyses?ref=refs/heads/main&per_page=1`,
-  );
 });
 
-test("every page of alerts is read, in every state", async () => {
+test("a category whose latest analysis is behind main's still shows its own commit", async () => {
+  const github = createFakeGitHub(
+    [],
+    [
+      createAnalysis("/language:actions", MAIN_COMMIT, "today"),
+      createAnalysis("/language:actions", EARLIER_COMMIT, "yesterday"),
+      createAnalysis(JAVASCRIPT, EARLIER_COMMIT, "yesterday"),
+    ],
+  );
+
+  assert.deepEqual((await list(github)).slice(0, 3), [
+    "Main's latest CodeQL analysis of each category (2):",
+    `/language:actions: ${MAIN_COMMIT} at today`,
+    `${JAVASCRIPT}: ${EARLIER_COMMIT} at yesterday`,
+  ]);
+  const [analysesRequest] = github.requests;
+  assert.equal(analysesRequest.searchParams.get("ref"), "refs/heads/main");
+});
+
+// Another scanner's alerts may come from queries or code the public can't see.
+test("only CodeQL's analyses and alerts are read, every page of alerts in every state", async () => {
   const alerts = Array.from({ length: 150 }, (_, index) => createAlert(index + 1));
-  const github = createFakeGitHub(alerts);
+  const github = createFakeGitHub(alerts, []);
 
   const lines = await list(github);
 
   assert.equal(lines.length, 152);
   assert.equal(lines.at(-1), "#150 open high js/xss shared/page/html.js:12");
-  const alertRequests = github.requests.filter((request) => request.includes("/alerts"));
-  assert.equal(alertRequests.length, 2);
-  for (const request of alertRequests) assert.doesNotMatch(request, /state=/);
-});
-
-test("with no analysis of main yet, it says so", async () => {
-  const github = createFakeGitHub([], []);
-
-  assert.deepEqual(await list(github), [
-    "Main has no analysis yet.",
-    "Alerts, in every state (0):",
-  ]);
+  assert.equal(github.requests.length, 3);
+  for (const request of github.requests) {
+    assert.equal(request.searchParams.get("tool_name"), "CodeQL");
+    assert.equal(request.searchParams.get("state"), null);
+  }
 });
