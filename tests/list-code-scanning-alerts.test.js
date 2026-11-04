@@ -18,9 +18,9 @@ function createFakeGitHub(alerts, analyses) {
   const fetchImpl = async (url) => {
     const request = new URL(String(url));
     requests.push(request);
-    if (request.pathname.endsWith("/code-scanning/analyses")) return Response.json(analyses);
+    const listing = request.pathname.endsWith("/code-scanning/analyses") ? analyses : alerts;
     const page = Number(request.searchParams.get("page"));
-    return Response.json(alerts.slice((page - 1) * 100, page * 100));
+    return Response.json(listing.slice((page - 1) * 100, page * 100));
   };
   return { fetchImpl, requests };
 }
@@ -99,6 +99,24 @@ test("a category whose latest analysis is behind main's still shows its own comm
   ]);
   const [analysesRequest] = github.requests;
   assert.equal(analysesRequest.searchParams.get("ref"), "refs/heads/main");
+});
+
+test("a category analyzed last before main's newest page of analyses still shows", async () => {
+  const github = createFakeGitHub(
+    [],
+    [
+      ...Array.from({ length: 100 }, () =>
+        createAnalysis("/language:actions", MAIN_COMMIT, "today"),
+      ),
+      createAnalysis(JAVASCRIPT, EARLIER_COMMIT, "last month"),
+    ],
+  );
+
+  assert.deepEqual((await list(github)).slice(0, 3), [
+    "Main's latest CodeQL analysis of each category (2):",
+    `/language:actions: ${MAIN_COMMIT} at today`,
+    `${JAVASCRIPT}: ${EARLIER_COMMIT} at last month`,
+  ]);
 });
 
 // Another scanner's alerts may come from queries or code the public can't see.

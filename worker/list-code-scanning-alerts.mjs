@@ -4,7 +4,6 @@ import { fileURLToPath } from "node:url";
 import { createGitHub, readAllPages } from "./github-api.mjs";
 
 const TOOL = "CodeQL";
-const ANALYSES_PAGE_SIZE = 100;
 
 /**
  * @typedef {object} Alert
@@ -56,9 +55,7 @@ function pickLatestByCategory(newestFirst) {
 export async function listCodeScanningAlerts({ repository, fetchImpl = fetch, env = process.env }) {
   const github = createGitHub({ repository, fetchImpl, env });
   const analyses = pickLatestByCategory(
-    await github(
-      `/code-scanning/analyses?tool_name=${TOOL}&ref=refs/heads/main&per_page=${ANALYSES_PAGE_SIZE}`,
-    ),
+    await readAllPages(github, `/code-scanning/analyses?tool_name=${TOOL}&ref=refs/heads/main`),
   );
   /** @type {Alert[]} */
   const alerts = await readAllPages(
