@@ -395,8 +395,14 @@ test("the store's job reads each of the slate's finals in two requests, and save
 
 test("the store's job reads once more a final it kept before clips carried their stream", async () => {
   const mlb = createMlbFetch();
-  const { storage, runJob, wait } = createJobRun(mlb, {});
+  const { stored, storage, runJob, wait } = createJobRun(mlb, {});
   await runJob();
+  const key = nameHighlightsKey(BREWERS_AT_PADRES);
+  const kept = stored.get(key);
+  stored.set(key, {
+    ...kept,
+    plays: kept.plays.map((/** @type {any} */ { stream, ...play }) => play),
+  });
   const days = 2;
   wait(days * 24 * 60);
   const lastRead = { readAt: Date.parse(EVENING.now) + days * 24 * 60 * 60 * 1000, triedAt: 0 };
@@ -410,6 +416,7 @@ test("the store's job reads once more a final it kept before clips carried their
   await runJob();
 
   assert.ok(mlb.requests.some((path) => path.includes(`/game/${BREWERS_AT_PADRES}/`)));
+  assert.ok(stored.get(key).plays.every((/** @type {any} */ play) => play.stream));
 });
 
 /**

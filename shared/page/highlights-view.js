@@ -16,8 +16,8 @@ import { renderSheetPart } from "./sheet-part.js";
  * @property {number | null} length in seconds
  * @property {string | null} still
  * @property {string} video
- * @property {string | null} [stream] the same video in pieces, which a document saved before
- *   clips carried it lacks
+ * @property {string | null} [stream] the same video in pieces, which a stored document may not
+ *   have
  * @property {string | null} [expiresAt] when the league takes it down
  */
 
