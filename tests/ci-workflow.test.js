@@ -322,6 +322,18 @@ test("the nightly browser install has a step timeout that leaves time for the te
   assert.ok(timeout < jobTimeout, "the tests keep their own time after installation");
 });
 
+// Its log is public, so the run that reads code scanning for the triage routine can change nothing.
+test("only the Code scanning alerts workflow reads code scanning, and it writes nothing", () => {
+  const readers = WORKFLOWS.filter((workflow) =>
+    /security-events:/.test(readRepoFile(`.github/workflows/${workflow}`)),
+  );
+  assert.deepEqual(readers, ["code-scanning.yml"]);
+  const workflow = readRepoFile(".github/workflows/code-scanning.yml");
+  assert.match(workflow, /^permissions:\n {2}contents: read\n {2}security-events: read\n\n/m);
+  assert.doesNotMatch(workflow, /: write\b/);
+  assert.match(workflow, /run: node worker\/list-code-scanning-alerts\.mjs$/m);
+});
+
 test("the nightly run's report can start the routine that fixes flaky tests", () => {
   const workflow = readRepoFile(".github/workflows/flaky.yml");
   assert.match(workflow, /FLAKY_ROUTINE_URL: \$\{\{ secrets\.FLAKY_ROUTINE_URL \}\}/);
