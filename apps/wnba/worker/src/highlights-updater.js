@@ -5,6 +5,8 @@ import { createHighlightsReader, nameHighlightsKey } from "./adapters/highlights
 // Keeps each of the current season's finals' highlights, as the shared job reads them over the
 // hours after each game (highlights-job.js). A game from a season before is read on a tap.
 
+// How the WNBA's highlights are read; raising it reads each kept final once more (highlights-job.js).
+const HIGHLIGHTS_VERSION = 1;
 // A game the store didn't see end ends about two and a half hours after it starts.
 const GAME_LENGTH_MS = 2.5 * 60 * 60 * 1000;
 
@@ -50,5 +52,6 @@ export function createHighlightsUpdater() {
       isFinished: true,
     }),
     nameKey: nameHighlightsKey,
+    version: HIGHLIGHTS_VERSION,
   });
 }

@@ -3,6 +3,17 @@
 // iPhone plays full screen on its own, and which any other device puts full screen as it starts.
 // Once the player closes, the video stops and lets go of what it loaded.
 
+const STREAM_TYPE = "application/vnd.apple.mpegurl";
+
+/**
+ * The address a clip plays from: its stream where the browser plays one, which starts after its
+ * first few seconds arrive, or else its whole video.
+ * @param {{ video?: string, stream?: string }} addresses
+ * @param {{ canPlayType: (type: string) => string }} player
+ */
+export const pickClipAddress = ({ video, stream }, player) =>
+  stream && player.canPlayType(STREAM_TYPE) ? stream : video;
+
 /** @type {HTMLVideoElement | null} */
 let player = null;
 
@@ -52,11 +63,11 @@ function enterFullscreen(video) {
 /**
  * Plays a clip full screen. It must run inside the tap's own handler, which a browser requires
  * to start a video with sound or put it full screen.
- * @param {string} url
+ * @param {DOMStringMap} addresses the clip button's, whose video is set
  */
-function playClip(url) {
+function playClip(addresses) {
   player ??= createPlayer();
-  player.src = url;
+  player.src = /** @type {string} */ (pickClipAddress(addresses, player));
   enterFullscreen(player);
   player.play().catch(() => stopPlaying(/** @type {HTMLVideoElement} */ (player)));
 }
@@ -68,7 +79,6 @@ function playClip(url) {
 export function watchClipTaps(holder) {
   holder.addEventListener("click", (event) => {
     const button = /** @type {Element} */ (event.target).closest(".clip-open");
-    const url = button instanceof HTMLElement ? button.dataset.video : null;
-    if (url) playClip(url);
+    if (button instanceof HTMLElement && button.dataset.video) playClip(button.dataset);
   });
 }

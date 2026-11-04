@@ -27,6 +27,9 @@ const RECAP_STILL_WIDTH = 960;
 const PLAY_STILL_WIDTH = 480;
 const RECAP_TAG = "game-recap";
 const VIDEO_PLAYBACK = "mp4Avc";
+// The same video cut into short pieces at several sizes, which a phone starts playing after its
+// first piece rather than reading the whole file.
+const STREAM_PLAYBACK = "hlsCloud";
 // MLB's frames from a clip's video, one at the end of each five seconds, numbered from 1 in seven
 // digits in place of the address's "%".
 const FRAMES_PLAYBACK = "trickplay";
@@ -69,13 +72,18 @@ function findStill(image, width) {
 }
 
 /**
+ * @param {any} item
+ * @param {string} name
+ */
+const findPlayback = (item, name) =>
+  item.playbacks?.find((/** @type {any} */ playback) => playback.name === name)?.url ?? null;
+
+/**
  * The frame nearest the middle of a clip's video.
  * @param {any} item
  */
 function findFrame(item) {
-  const frames = item.playbacks?.find(
-    (/** @type {any} */ playback) => playback.name === FRAMES_PLAYBACK,
-  )?.url;
+  const frames = findPlayback(item, FRAMES_PLAYBACK);
   const count = Math.floor((readSeconds(item.duration) ?? 0) / FRAME_SECONDS);
   if (typeof frames !== "string" || count === 0) return null;
   const middle = String(Math.round(count / 2)).padStart(FRAME_NUMBER_DIGITS, "0");
@@ -87,21 +95,22 @@ function findFrame(item) {
 /** @param {any} item */
 const isNewsPhoto = (item) => NEWS_PHOTO.test(String(item.image?.title ?? ""));
 
-/** @param {any} item */
-const findVideo = (item) =>
-  item.playbacks?.find((/** @type {any} */ playback) => playback.name === VIDEO_PLAYBACK)?.url ??
-  null;
-
 /**
  * A clip as the sheet shows it, or null for one without a video the phone can play.
  * @param {any} item
  * @param {string | null} still
  */
 function describeClip(item, still) {
-  const video = findVideo(item);
+  const video = findPlayback(item, VIDEO_PLAYBACK);
   const title = String(item.headline ?? "").trim();
   if (!video || !title) return null;
-  return { title, length: readSeconds(item.duration), still, video };
+  return {
+    title,
+    length: readSeconds(item.duration),
+    still,
+    video,
+    stream: findPlayback(item, STREAM_PLAYBACK),
+  };
 }
 
 /** @param {any} item */

@@ -83,6 +83,30 @@ test("each clip is a button named by what it shows, then that a tap plays it, ca
   assert.equal(markup.match(/class="clip-open/g)?.length, 3);
 });
 
+test("a clip carries its stream beside its video, and one saved without a stream its video alone", () => {
+  const highlights = {
+    recap: null,
+    story: null,
+    plays: [
+      describeClip("Streamed", { stream: "https://video.test/8.m3u8" }),
+      describeClip("Saved before streams"),
+      describeClip("Odd stream", { stream: "javascript:alert(1)" }),
+    ],
+  };
+
+  const buttons = renderHighlights(highlights, { describePlay, now: NOW }).text.match(
+    /<button[^>]*>/g,
+  );
+
+  assert.match(
+    buttons?.[0] ?? "",
+    /data-video="https:\/\/video\.test\/8\.mp4"\s+data-stream="https:\/\/video\.test\/8\.m3u8"/,
+  );
+  assert.doesNotMatch(buttons?.[1] ?? "", /data-stream/);
+  assert.doesNotMatch(buttons?.[2] ?? "", /data-stream/);
+  assert.equal(buttons?.length, 3);
+});
+
 test("a clip the league has taken down leaves the list", () => {
   const highlights = {
     ...HIGHLIGHTS,

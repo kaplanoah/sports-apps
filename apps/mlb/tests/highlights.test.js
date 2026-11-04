@@ -141,6 +141,32 @@ test("each play's clip has MLB's still sized for its place and MLB's video the p
   assert.match(plays[0].video, /^https:\/\/mlb-cuts-diamond\.mlb\.com\/.+_1280x720_59_4000K\.mp4$/);
 });
 
+test("each clip has MLB's stream of its video beside the whole file", () => {
+  const { recap, plays } = describeRecorded(BREWERS_AT_PADRES);
+
+  for (const clip of [recap, ...plays]) {
+    assert.match(clip?.stream ?? "", /^https:\/\/[\w.-]+\.mlb\.com\/.+\.m3u8$/);
+  }
+});
+
+test("a clip MLB offers no stream of keeps its whole video alone", () => {
+  const content = structuredClone(RECORDED.content[BREWERS_AT_PADRES]);
+  for (const item of content.highlights.highlights.items) {
+    item.playbacks = item.playbacks.filter(
+      (/** @type {any} */ playback) => playback.name !== "hlsCloud",
+    );
+  }
+
+  const { plays } = describeHighlights(
+    BREWERS_AT_PADRES,
+    content,
+    RECORDED.plays[BREWERS_AT_PADRES],
+  );
+
+  assert.equal(plays[0].stream, null);
+  assert.match(plays[0].video, /\.mp4$/);
+});
+
 test("the recap's still is the frame from the middle of its video, in place of MLB's title card", () => {
   const { recap } = describeRecorded(BREWERS_AT_PADRES);
 
@@ -365,6 +391,25 @@ test("the store's job reads each of the slate's finals in two requests, and save
     stored.get(nameHighlightsKey(BREWERS_AT_PADRES)),
     describeRecorded(BREWERS_AT_PADRES),
   );
+});
+
+test("the store's job reads once more a final it kept before clips carried their stream", async () => {
+  const mlb = createMlbFetch();
+  const { storage, runJob, wait } = createJobRun(mlb, {});
+  await runJob();
+  const days = 2;
+  wait(days * 24 * 60);
+  const lastRead = { readAt: Date.parse(EVENING.now) + days * 24 * 60 * 60 * 1000, triedAt: 0 };
+  const [readsKey, reads] = [...storage].find(([key]) => key.startsWith("highlight-reads:"));
+  storage.set(
+    readsKey,
+    Object.fromEntries(Object.keys(reads).map((id) => [id, { ...lastRead, version: 1 }])),
+  );
+  mlb.requests.length = 0;
+
+  await runJob();
+
+  assert.ok(mlb.requests.some((path) => path.includes(`/game/${BREWERS_AT_PADRES}/`)));
 });
 
 /**
