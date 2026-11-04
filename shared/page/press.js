@@ -190,10 +190,18 @@ function startTouch(event) {
       : null;
 }
 
+/**
+ * Whether a pointer drifted far enough from where it landed to let go of what it pressed.
+ * @param {{ x: number, y: number }} landing
+ * @param {PointerEvent} event
+ */
+export const hasDrifted = (landing, event) =>
+  Math.hypot(event.clientX - landing.x, event.clientY - landing.y) > DRIFT_PX;
+
 /** @param {PointerEvent} event */
 function followDrift(event) {
   if (!press || !event.isPrimary) return;
-  if (Math.hypot(event.clientX - press.x, event.clientY - press.y) > DRIFT_PX) letGo();
+  if (hasDrifted(press, event)) letGo();
 }
 
 // The browser cancels a finger's pointer once it takes the touch for a scroll, well before the

@@ -9,7 +9,9 @@ import {
   matchPath,
   readColor,
 } from "./harness.mjs";
+import { holdClock } from "../../../../tests/browser/harness.mjs";
 import { holdRequests } from "../../../../tests/browser/hold-requests.mjs";
+import { sendFinger, sendScroll } from "../../../../tests/browser/stray-click.mjs";
 import { listLowContrastText } from "../../../../tests/browser/contrast.mjs";
 import { listTextOffRoles, readRole, readType } from "../../../../tests/browser/type-roles.mjs";
 import { listChipsOffCenter } from "../../../../tests/browser/chip-centering.mjs";
@@ -368,12 +370,19 @@ test("a final's plays sit 13px apart with no line between them, each still 128px
   }
 });
 
-test("a tap anywhere on a play's row plays its clip's stream full screen in the browser's own player", async ({
-  page,
-}) => {
-  const { body } = await openHighlights(page);
-  await page.evaluate(() => {
+/**
+ * Stands in for the device's player: records each address the page loads into a video and each it
+ * plays, with whether it asked for full screen first, and keeps the clips' own requests from being
+ * answered, as on a slow network.
+ * @param {import("@playwright/test").Page} page
+ * @param {{ isStreamFailing?: boolean }} [options] whether a stream fires the video's error, then
+ *   refuses the play it was asked for, as a stream that fails to load does
+ */
+async function fakeClipPlayer(page, { isStreamFailing = false } = {}) {
+  await holdRequests(page, /\.(m3u8|mp4)$/);
+  await page.evaluate((isStreamFailing) => {
     const played = /** @type {any} */ (window);
+    played.clipsLoaded = [];
     played.clipsPlayed = [];
     HTMLElement.prototype.requestFullscreen = function () {
       this.dataset.askedFullscreen = "true";
@@ -381,19 +390,53 @@ test("a tap anywhere on a play's row plays its clip's stream full screen in the 
     };
     HTMLMediaElement.prototype.canPlayType = (/** @type {string} */ type) =>
       type === "application/vnd.apple.mpegurl" ? "maybe" : "";
+    const source = /** @type {PropertyDescriptor} */ (
+      Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, "src")
+    );
+    Object.defineProperty(HTMLMediaElement.prototype, "src", {
+      ...source,
+      set(/** @type {string} */ address) {
+        played.clipsLoaded.push(address);
+        source.set?.call(this, address);
+      },
+    });
     HTMLMediaElement.prototype.play = function () {
       played.clipsPlayed.push({ src: this.src, isFullscreen: this.dataset.askedFullscreen });
-      return Promise.resolve();
+      if (!isStreamFailing || !this.src.endsWith(".m3u8")) return Promise.resolve();
+      this.dispatchEvent(new Event("error"));
+      return Promise.reject(new DOMException("The stream failed", "NotSupportedError"));
     };
+  }, isStreamFailing);
+}
+
+/** @param {import("@playwright/test").Page} page */
+const readClipPlayer = (page) =>
+  page.evaluate(() => {
+    const played = /** @type {any} */ (window);
+    return { loaded: played.clipsLoaded, played: played.clipsPlayed };
   });
-  const row = body.locator(".clip-row").nth(6);
+
+/**
+ * The middle of a clip row's title, where a finger lands on it.
+ * @param {import("@playwright/test").Locator} row
+ */
+async function findRowCenter(row) {
   await row.scrollIntoViewIfNeeded();
+  const title = await row.locator(".clip-title").boundingBox();
+  if (!title) throw new Error("The row's title isn't shown");
+  return { x: title.x + title.width / 2, y: title.y + title.height / 2 };
+}
+
+test("a tap anywhere on a play's row plays its clip's stream full screen in the browser's own player", async ({
+  page,
+}) => {
+  const { body } = await openHighlights(page);
+  await fakeClipPlayer(page);
+  const row = body.locator(".clip-row").nth(6);
+  const center = await findRowCenter(row);
   const video = await row.getAttribute("data-video");
   const stream = await row.getAttribute("data-stream");
   expect(stream).toMatch(/\.m3u8$/);
-  const title = await row.locator(".clip-title").boundingBox();
-  if (!title) throw new Error("The row's title isn't shown");
-  const center = { x: title.x + title.width / 2, y: title.y + title.height / 2 };
   const landsOn = await page.evaluate(
     ({ x, y }) =>
       /** @type {HTMLElement | null} */ (document.elementFromPoint(x, y)?.closest(".clip-open"))
@@ -405,46 +448,123 @@ test("a tap anywhere on a play's row plays its clip's stream full screen in the 
   await page.mouse.click(center.x, center.y);
 
   await expect
-    .poll(() => page.evaluate(() => /** @type {any} */ (window).clipsPlayed))
-    .toEqual([{ src: stream, isFullscreen: "true" }]);
+    .poll(() => readClipPlayer(page))
+    .toEqual({ loaded: [stream], played: [{ src: stream, isFullscreen: "true" }] });
+});
+
+test("a press on a clip starts loading its stream before the tap plays it", async ({ page }) => {
+  const { body } = await openHighlights(page);
+  await fakeClipPlayer(page);
+  const row = body.locator(".clip-row").nth(6);
+  const center = await findRowCenter(row);
+  const stream = /** @type {string} */ (await row.getAttribute("data-stream"));
+  const player = page.locator("video.clip-player");
+
+  await page.mouse.move(center.x, center.y);
+  await page.mouse.down();
+
+  await expect(player).toHaveAttribute("src", stream);
+  expect(await readClipPlayer(page)).toEqual({ loaded: [stream], played: [] });
+
+  await page.mouse.up();
+
+  await expect
+    .poll(() => readClipPlayer(page))
+    .toEqual({ loaded: [stream], played: [{ src: stream, isFullscreen: "true" }] });
+});
+
+test("a press that drifts off its spot or that the browser cancels lets go of what it loaded", async ({
+  page,
+}) => {
+  const { body } = await openHighlights(page);
+  await fakeClipPlayer(page);
+  const row = body.locator(".clip-row").nth(6);
+  const center = await findRowCenter(row);
+  const stream = /** @type {string} */ (await row.getAttribute("data-stream"));
+  const player = page.locator("video.clip-player");
+
+  await page.mouse.move(center.x, center.y);
+  await page.mouse.down();
+  await expect(player).toHaveAttribute("src", stream);
+  await page.mouse.move(center.x + 20, center.y);
+
+  await expect(player).not.toHaveAttribute("src");
+
+  await page.mouse.up();
+  await page.mouse.move(center.x, center.y);
+  await page.mouse.down();
+  await expect(player).toHaveAttribute("src", stream);
+  await row.dispatchEvent("pointercancel", { isPrimary: true, bubbles: true });
+
+  await expect(player).not.toHaveAttribute("src");
+  expect((await readClipPlayer(page)).played).toEqual([{ src: stream, isFullscreen: "true" }]);
+});
+
+test("a still finger on a clip while the Highlights glide loads nothing, since it only stops the glide", async ({
+  page,
+}) => {
+  const { body } = await openHighlights(page);
+  await fakeClipPlayer(page);
+  const row = body.locator(".clip-row").nth(6);
+  await row.scrollIntoViewIfNeeded();
+  await holdClock(page);
+  await sendFinger(row, { moves: [12], isCancelled: true, isScrolling: true });
+  await sendScroll(page, body);
+  const flung = (await readClipPlayer(page)).loaded.length;
+
+  await sendFinger(row, { moves: [] });
+
+  expect((await readClipPlayer(page)).loaded).toHaveLength(flung);
+  await expect(page.locator("video.clip-player")).not.toHaveAttribute("src");
 });
 
 test("a clip whose stream fails to load plays its video instead, full screen", async ({ page }) => {
   const { body } = await openHighlights(page);
-  await page.evaluate(() => {
-    const played = /** @type {any} */ (window);
-    played.clipsPlayed = [];
-    HTMLElement.prototype.requestFullscreen = function () {
-      this.dataset.askedFullscreen = "true";
-      return Promise.resolve();
-    };
-    HTMLMediaElement.prototype.canPlayType = (/** @type {string} */ type) =>
-      type === "application/vnd.apple.mpegurl" ? "maybe" : "";
-    // A stream that fails fires the video's error, then refuses the play it was asked for.
-    HTMLMediaElement.prototype.play = function () {
-      played.clipsPlayed.push({ src: this.src, isFullscreen: this.dataset.askedFullscreen });
-      if (!this.src.endsWith(".m3u8")) return Promise.resolve();
-      this.dispatchEvent(new Event("error"));
-      return Promise.reject(new DOMException("The stream failed", "NotSupportedError"));
-    };
-  });
+  await fakeClipPlayer(page, { isStreamFailing: true });
   const row = body.locator(".clip-row").nth(6);
-  await row.scrollIntoViewIfNeeded();
   const video = await row.getAttribute("data-video");
   const stream = await row.getAttribute("data-stream");
 
   await row.locator(".clip-title").click();
 
   await expect
-    .poll(() => page.evaluate(() => /** @type {any} */ (window).clipsPlayed))
-    .toEqual([
-      { src: stream, isFullscreen: "true" },
-      { src: video, isFullscreen: "true" },
-    ]);
+    .poll(() => readClipPlayer(page))
+    .toEqual({
+      loaded: [stream, video],
+      played: [
+        { src: stream, isFullscreen: "true" },
+        { src: video, isFullscreen: "true" },
+      ],
+    });
   await expect(page.locator("video.clip-player")).toHaveAttribute(
     "src",
     /** @type {string} */ (video),
   );
+});
+
+test("a clip whose stream fails while it's pressed loads its video, and plays it only on the tap", async ({
+  page,
+}) => {
+  const { body } = await openHighlights(page);
+  await fakeClipPlayer(page);
+  const row = body.locator(".clip-row").nth(6);
+  const center = await findRowCenter(row);
+  const video = /** @type {string} */ (await row.getAttribute("data-video"));
+  const player = page.locator("video.clip-player");
+
+  await page.mouse.move(center.x, center.y);
+  await page.mouse.down();
+  await expect(player).toHaveAttribute("src", /\.m3u8$/);
+  await player.dispatchEvent("error");
+
+  await expect(player).toHaveAttribute("src", video);
+  expect((await readClipPlayer(page)).played).toEqual([]);
+
+  await page.mouse.up();
+
+  await expect
+    .poll(() => readClipPlayer(page))
+    .toMatchObject({ played: [{ src: video, isFullscreen: "true" }] });
 });
 
 test("a still that doesn't load leaves its box's plain color, with no broken picture", async ({
