@@ -190,3 +190,22 @@ test("a pick that can't be read after a newer pick replaced it leaves the newer 
   assert.equal(session.pickedYear, 2026);
   assert.equal(session.problem, "");
 });
+
+test("a reload after a failed advance loads the season the store names current, not the one shown", async () => {
+  const unreadable = [];
+  const season2027 = { ...SEASON_2026, season: 2027 };
+  const { deliver } = startReading({ unreadable }, { "seasons/2027": season2027 });
+  await loadSeason();
+  await settle();
+  unreadable.push("seasons/2027");
+  deliver("live/current", { season: 2027 });
+  await settle();
+  assert.notEqual(session.problem, "");
+  unreadable.length = 0;
+
+  await loadSeason();
+
+  assert.deepEqual([session.year, session.currentYear], [2027, 2027]);
+  assert.deepEqual(session.season, season2027);
+  assert.equal(session.problem, "");
+});

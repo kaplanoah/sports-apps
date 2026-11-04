@@ -336,3 +336,29 @@ test("the seasons the store keeps list newest first, and a club that won more th
   assert.deepEqual(years, ["2028", "2027", "2026"]);
   assert.deepEqual(session.trackedTitles, { CLE: [2026, 2028], HOU: [2027] });
 });
+
+test("a reload after a failed advance loads the season the store names current, not the one shown", async () => {
+  const unreadable = [];
+  const record2027 = { ...RECORD_2026, year: 2027 };
+  const { deliver } = startReading(
+    {
+      "live/current": { season: 2026 },
+      "seasons/2026": RECORD_2026,
+      "seasons/2027": record2027,
+    },
+    { unreadable },
+  );
+  await loadSeason();
+  await settle();
+  unreadable.push("seasons/2027");
+  deliver("live/current", { season: 2027 });
+  await settle();
+  assert.notEqual(session.problem, "");
+  unreadable.length = 0;
+
+  await loadSeason();
+
+  assert.deepEqual([session.activeYear, session.currentSeason], [2027, 2027]);
+  assert.deepEqual(session.season, record2027);
+  assert.equal(session.problem, "");
+});

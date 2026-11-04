@@ -685,3 +685,75 @@ test("a reload during a viewer pick keeps an already shown past season", async (
   await Promise.all([picked, reloaded]);
   assert.deepEqual([shown.year, reader.readCurrentYear(), shown.failures], [2025, 2026, 0]);
 });
+
+test("a reload after a failed advance asks for the current season the store names, not the one shown", async () => {
+  const unreadable = [];
+  const { reader, shown, deliver } = startReader(
+    {
+      "live/current": { season: 2026 },
+      "seasons/2026": SEASON_2026,
+      "seasons/2027": SEASON_2027,
+    },
+    { unreadable },
+  );
+  await reader.loadSeason();
+  await settle();
+  unreadable.push("seasons/2027");
+  deliver("live/current", { season: 2027 });
+  await settle();
+  unreadable.length = 0;
+
+  await reader.reloadSeason(2026, 2026);
+
+  assert.deepEqual([shown.year, shown.season, reader.readCurrentYear()], [2027, SEASON_2027, 2027]);
+});
+
+test("a past season picked before an advance failed stays through the reload", async () => {
+  const unreadable = [];
+  const { reader, shown, deliver } = startReader(
+    {
+      "live/current": { season: 2026 },
+      "seasons/2026": SEASON_2026,
+      "seasons/2027": SEASON_2027,
+      "seasons/2025": { year: 2025 },
+    },
+    { unreadable },
+  );
+  await reader.loadSeason();
+  await reader.showYear(2025);
+  unreadable.push("seasons/2027");
+  deliver("live/current", { season: 2027 });
+  await settle();
+  unreadable.length = 0;
+
+  await reader.reloadSeason(2025, 2026);
+
+  assert.deepEqual([shown.year, shown.failures], [2025, 0]);
+});
+
+test("a pick made while an advance is held survives that advance failing later", async () => {
+  const unreadable = [];
+  const { reader, shown, deliver, holdReads } = startReader(
+    {
+      "live/current": { season: 2026 },
+      "seasons/2026": SEASON_2026,
+      "seasons/2027": SEASON_2027,
+      "seasons/2025": { year: 2025 },
+    },
+    { unreadable },
+  );
+  await reader.loadSeason();
+  await settle();
+  unreadable.push("seasons/2027");
+  const release = holdReads("seasons/2027");
+  deliver("live/current", { season: 2027 });
+  await settle();
+  await reader.showYear(2025);
+  release();
+  await settle();
+  unreadable.length = 0;
+
+  await reader.reloadSeason(2025, 2027);
+
+  assert.deepEqual([shown.year, shown.failures], [2025, 0]);
+});
