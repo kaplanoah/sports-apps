@@ -322,7 +322,7 @@ test("the nightly browser install has a step timeout that leaves time for the te
   assert.ok(timeout < jobTimeout, "the tests keep their own time after installation");
 });
 
-// Its log is public, so the run that reads code scanning for the triage routine can change nothing.
+// Its log is public, so the run that reads code scanning for the routines can change nothing.
 test("only the Code scanning alerts workflow reads code scanning, and it writes nothing", () => {
   const readers = WORKFLOWS.filter((workflow) =>
     /security-events:/.test(readRepoFile(`.github/workflows/${workflow}`)),
@@ -332,6 +332,12 @@ test("only the Code scanning alerts workflow reads code scanning, and it writes 
   assert.match(workflow, /^permissions:\n {2}contents: read\n {2}security-events: read\n\n/m);
   assert.doesNotMatch(workflow, /: write\b/);
   assert.match(workflow, /run: node worker\/list-code-scanning-alerts\.mjs$/m);
+});
+
+test("the Code scanning alerts workflow hands its pull request input to the script", () => {
+  const workflow = readRepoFile(".github/workflows/code-scanning.yml");
+  assert.match(workflow, /^ {6}pull:\n/m);
+  assert.match(workflow, /^ {10}PULL: \$\{\{ inputs\.pull \}\}$/m);
 });
 
 test("the nightly run's report can start the routine that fixes flaky tests", () => {

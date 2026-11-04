@@ -7,7 +7,7 @@ const MAIN_COMMIT = "a".repeat(40);
 const EARLIER_COMMIT = "b".repeat(40);
 
 /**
- * GitHub's API with these code-scanning alerts and analyses of main, newest first.
+ * GitHub's API with these code-scanning alerts and analyses, newest first.
  * @param {object[]} alerts
  * @param {object[]} analyses
  */
@@ -32,9 +32,8 @@ function createFakeGitHub(alerts, analyses) {
 const list = (github, pull) =>
   listCodeScanningAlerts({
     repository: REPOSITORY,
-    pull,
     fetchImpl: github.fetchImpl,
-    env: { GH_TOKEN: "token" },
+    env: { GH_TOKEN: "token", PULL: pull },
   });
 
 /**

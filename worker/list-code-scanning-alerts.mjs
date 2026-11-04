@@ -58,18 +58,13 @@ function findRef(pull) {
 /**
  * @param {object} options
  * @param {string} options.repository as owner/name
- * @param {string} [options.pull] a pull request's number, to read its merge's instead of main's
  * @param {typeof fetch} [options.fetchImpl]
- * @param {NodeJS.ProcessEnv} [options.env]
+ * @param {NodeJS.ProcessEnv} [options.env] with PULL, a pull request's number, to read its merge's
+ *   instead of main's
  * @returns {Promise<string[]>} the lines to print
  */
-export async function listCodeScanningAlerts({
-  repository,
-  pull,
-  fetchImpl = fetch,
-  env = process.env,
-}) {
-  const ref = findRef(pull);
+export async function listCodeScanningAlerts({ repository, fetchImpl = fetch, env = process.env }) {
+  const ref = findRef(env.PULL);
   const github = createGitHub({ repository, fetchImpl, env });
   const analyses = pickLatestByCategory(
     await readAllPages(github, `/code-scanning/analyses?tool_name=${TOOL}&ref=${ref}`),
@@ -88,9 +83,6 @@ export async function listCodeScanningAlerts({
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const lines = await listCodeScanningAlerts({
-    repository: String(process.env.GITHUB_REPOSITORY),
-    pull: process.env.PULL,
-  });
+  const lines = await listCodeScanningAlerts({ repository: String(process.env.GITHUB_REPOSITORY) });
   console.log(lines.join("\n"));
 }
