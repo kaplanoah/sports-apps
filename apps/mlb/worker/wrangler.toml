@@ -30,6 +30,10 @@ binding = "ACCOUNTS"
 service = "accounts"
 
 [[services]]
+binding = "CLAUDE"
+service = "claude"
+
+[[services]]
 binding = "EMAIL"
 service = "email"
 
@@ -62,6 +66,10 @@ period = 60
 [[env.beta.services]]
 binding = "ACCOUNTS"
 service = "accounts-beta"
+
+[[env.beta.services]]
+binding = "CLAUDE"
+service = "claude-beta"
 
 [[env.beta.services]]
 binding = "EMAIL"

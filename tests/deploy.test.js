@@ -402,10 +402,11 @@ test("the beta channel's Worker is named by its environment, with the top level'
     compatibilityDate: "2026-09-01",
     storeClass: "Store",
   });
-  assert.throws(
-    () => readWorkerConfig('name = "x"\ncompatibility_date = "2026-09-01"\n'),
-    /class_name/,
-  );
+  assert.deepEqual(readWorkerConfig('name = "x"\ncompatibility_date = "2026-09-01"\n'), {
+    name: "x",
+    compatibilityDate: "2026-09-01",
+    storeClass: null,
+  });
   assert.throws(() => readWorkerConfig(toml, "beta"), /\[env\.beta\] with a name/);
   assert.throws(() => readWorkerConfig(toml, "staging"), /no channel named staging/);
 });
@@ -462,7 +463,7 @@ test("a beta deploy uploads to the beta Worker, with the same bindings", async (
   const metadata = JSON.parse(await upload.init.body.get("metadata").text());
   assert.deepEqual(
     metadata.bindings.map((binding) => binding.name),
-    ["STORE", "ACCESS_LIMIT", "ACCOUNTS", "EMAIL"],
+    ["STORE", "ACCESS_LIMIT", "ACCOUNTS", "CLAUDE", "EMAIL"],
   );
   assert.deepEqual(metadata.bindings[2], {
     type: "service",
@@ -513,6 +514,7 @@ test("upload, route, and the Worker URL", async () => {
       },
       { type: "analytics_engine", name: "DAILY_OPENS", dataset: "daily_opens" },
       { type: "service", name: "ACCOUNTS", service: "accounts" },
+      { type: "service", name: "CLAUDE", service: "claude" },
       { type: "service", name: "EMAIL", service: "email" },
     ],
     keep_bindings: ["secret_text"],
@@ -663,22 +665,23 @@ test("each service's wrangler.toml declares the bindings and migrations the depl
   for (const service of listServices()) {
     const toml = readRepoFile(`services/${service}/worker/wrangler.toml`);
     const className = toml.match(/^class_name = "(\w+)"/m)?.[1];
-    assert.ok(className, service);
     assert.match(toml.split("[env.beta]")[0], /^workers_dev = false\n/m);
     for (const prefix of ["", "env.beta."]) {
-      assert.ok(
-        toml.includes(
-          `[[${prefix}durable_objects.bindings]]\nname = "STORE"\nclass_name = "${className}"`,
-        ),
-        `${service} ${prefix}STORE`,
-      );
+      if (className)
+        assert.ok(
+          toml.includes(
+            `[[${prefix}durable_objects.bindings]]\nname = "STORE"\nclass_name = "${className}"`,
+          ),
+          `${service} ${prefix}STORE`,
+        );
       assert.ok(
         toml.includes(`[${prefix}version_metadata]\nbinding = "VERSION"`),
         `${service} ${prefix}VERSION`,
       );
     }
     assert.match(toml, /\[env\.beta\]\nname = "[\w-]+-beta"\nworkers_dev = false/);
-    for (const { tag, new_sqlite_classes: classes } of listMigrations(className)) {
+    if (!className) assert.doesNotMatch(toml, /durable_objects|migrations/, service);
+    for (const { tag, new_sqlite_classes: classes } of className ? listMigrations(className) : []) {
       const declared = `[[migrations]]\ntag = "${tag}"\nnew_sqlite_classes = ${JSON.stringify(classes)}`;
       assert.ok(toml.includes(declared), declared);
     }

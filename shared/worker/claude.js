@@ -1,54 +1,145 @@
-import { abortAfter } from "./timeout.js";
-
-// Asking Claude, with the Worker's own API key, for an answer in the shape a JSON schema sets,
-// which the API holds Claude's answer to, so no answer has to be picked out of its prose.
-
-const MESSAGES_URL = "https://api.anthropic.com/v1/messages";
-const API_VERSION = "2023-06-01";
+// Asking Claude, through the claude service that holds the API key, for an answer in the shape a
+// JSON schema sets. Each call to the service is one of a run's requests, as a fetch is, so the
+// store's request budget and each job's status count it.
 
 /**
- * The text of Claude's answer, once it finished it. An answer cut short or refused may not match
- * the schema.
- * @param {any} answer
+ * @typedef {object} ClaudeRequest
+ * @property {number} timeoutMs how long a call takes before it has stalled
+ * @property {{ output_config?: object } & Record<string, unknown>} request the Messages API's request body
+ * @property {object} schema the JSON schema Claude's answer follows
  */
-function readFinishedText(answer) {
-  if (answer?.stop_reason !== "end_turn")
-    throw new Error(`Claude stopped without finishing: ${answer?.stop_reason ?? "no reason"}`);
-  return (answer.content ?? [])
-    .filter((/** @type {any} */ block) => block.type === "text")
-    .map((/** @type {any} */ block) => block.text)
-    .join("");
+
+/**
+ * What the service answers. A call over a binding drops an error's own fields, like its HTTP
+ * status, so a failure comes back as a problem.
+ * @typedef {{ answer: any, usage: Record<string, number> }
+ *   | { problem: string, status?: number }} ClaudeResult
+ */
+
+/**
+ * The claude service's calls, as its binding takes them.
+ * @typedef {object} Claude
+ * @property {() => Promise<{ configured: boolean }>} readConfig
+ * @property {(options: ClaudeRequest) => Promise<ClaudeResult>} requestClaude
+ */
+
+/** The service's own words for its missing API key. */
+export const MISSING_CLAUDE_KEY = "The claude service has no ANTHROPIC_API_KEY secret";
+
+/** A Worker without the claude service's binding, which says nothing about what it asked. */
+export class MissingClaudeBinding extends Error {
+  constructor() {
+    super("No CLAUDE binding to the claude service");
+  }
+}
+
+// Claude turning the claude service's key away, which says nothing about what it asked.
+const REFUSED_KEY_STATUSES = new Set([401, 403]);
+
+/**
+ * Whether a call failed for the binding or the key rather than for what it asked, so the ask
+ * shouldn't count against what it was about.
+ * @param {unknown} error
+ */
+export const isClaudeRefusal = (error) =>
+  error instanceof MissingClaudeBinding ||
+  REFUSED_KEY_STATUSES.has(/** @type {{ status?: number }} */ (error)?.status);
+
+const failUnbound = async () => {
+  throw new MissingClaudeBinding();
+};
+
+/**
+ * A Worker without the binding, whose every call fails, as a service that doesn't answer does,
+ * and is never counted, since nothing goes out.
+ * @type {Claude}
+ */
+const UNBOUND_CLAUDE = { readConfig: failUnbound, requestClaude: failUnbound };
+
+/**
+ * The service's calls, each counted as it goes out.
+ * @param {Claude | undefined} claude
+ * @param {() => void} count
+ * @returns {Claude}
+ */
+export function countClaudeCalls(claude, count) {
+  if (!claude || claude === UNBOUND_CLAUDE) return UNBOUND_CLAUDE;
+  return {
+    readConfig: async () => {
+      count();
+      return await claude.readConfig();
+    },
+    requestClaude: async (options) => {
+      count();
+      return await claude.requestClaude(options);
+    },
+  };
 }
 
 /**
- * @param {object} options
- * @param {string} options.apiKey
- * @param {typeof fetch} options.fetchImpl
- * @param {number} options.timeoutMs how long a call takes before it has stalled
- * @param {{ output_config?: object } & Record<string, unknown>} options.request the Messages API's request body
- * @param {object} options.schema the JSON schema Claude's answer follows
+ * The service's calls, with its config read once, since it holds for a run, and a read that
+ * failed is the run's answer too, so a service that doesn't answer costs one request a run.
+ * @param {Claude} claude
+ * @returns {Claude}
+ */
+export function rememberClaudeConfig(claude) {
+  /** @type {Promise<{ configured: boolean }> | undefined} */
+  let config;
+  return {
+    readConfig: () => {
+      config ??= claude.readConfig();
+      return config;
+    },
+    requestClaude: (options) => claude.requestClaude(options),
+  };
+}
+
+/**
+ * The service's calls, with a run's first ask sent alone and the rest waiting on it, so a key
+ * Claude turns away costs one request a run: that refusal answers every later ask, which never
+ * goes out.
+ * @param {Claude} claude
+ * @returns {Claude}
+ */
+export function stopAfterRefusal(claude) {
+  /** @type {Promise<ClaudeResult | undefined> | undefined} */
+  let firstAsk;
+  return {
+    readConfig: () => claude.readConfig(),
+    requestClaude: async (options) => {
+      if (firstAsk) return (await firstAsk) ?? (await claude.requestClaude(options));
+      const asked = claude.requestClaude(options);
+      firstAsk = asked.then(
+        (result) => ("problem" in result && isClaudeRefusal(result) ? result : undefined),
+        () => undefined,
+      );
+      return await asked;
+    },
+  };
+}
+
+/**
+ * Whether the service says it has no API key, so nothing asks it. A service that doesn't answer
+ * isn't one without a key: its asks go on, and fail where a run's failures show them.
+ * @param {Claude} claude
+ */
+export async function lacksClaudeKey(claude) {
+  try {
+    return (await claude.readConfig()).configured === false;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Claude's answer and the tokens it took, or an error with the API's HTTP status when it gave one.
+ * @param {Claude} claude
+ * @param {ClaudeRequest} options
  * @returns {Promise<{ answer: any, usage: Record<string, number> }>}
  */
-export const requestClaude = ({ apiKey, fetchImpl, timeoutMs, request, schema }) =>
-  abortAfter(timeoutMs, async (signal) => {
-    const response = await fetchImpl(MESSAGES_URL, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": API_VERSION,
-      },
-      body: JSON.stringify({
-        ...request,
-        output_config: { ...request.output_config, format: { type: "json_schema", schema } },
-      }),
-      signal,
-    });
-    const answer = await response.json().catch(() => null);
-    if (!response.ok)
-      throw Object.assign(
-        new Error(`Claude answered ${response.status}: ${answer?.error?.message ?? ""}`),
-        { status: response.status },
-      );
-    return { answer: JSON.parse(readFinishedText(answer)), usage: answer.usage ?? {} };
-  });
+export async function requestClaude(claude, options) {
+  const result = await claude.requestClaude(options);
+  if (!("problem" in result)) return result;
+  const status = result.status === undefined ? {} : { status: result.status };
+  throw Object.assign(new Error(result.problem), status);
+}

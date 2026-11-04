@@ -8,6 +8,8 @@ import {
 } from "../shared/worker/job-status.js";
 import { createFeedKeeper } from "../shared/worker/feed-keeper.js";
 import { createDocs, createJobStorage } from "./job-context.js";
+import { createClaudeService } from "../services/claude/worker/src/service.js";
+import { countClaudeCalls } from "../shared/worker/claude.js";
 
 /**
  * Runs `work` with console.error held, and answers what it logged.
@@ -88,6 +90,72 @@ test("a run saves its status with what the job adds, notes a failure it doesn't 
   assert.equal(after.ranAt, "2026-10-06T12:01:00.000Z");
   assert.equal(after.requests, 0);
   assert.deepEqual(after.lastFailure, failed.lastFailure);
+});
+
+test("a run's requests count each call to the claude service, its config read once, and one with no binding fails the run, saying why", async (context) => {
+  context.mock.method(console, "error", () => {});
+  const docs = createDocs();
+  const now = Date.parse("2026-10-06T12:00:00Z");
+  const createJobContext = (claude) =>
+    /** @type {any} */ ({
+      docs,
+      storage: createJobStorage(),
+      env: {},
+      claude,
+      fetchImpl: async () => new Response("{}"),
+      now: () => now,
+    });
+  const job = {
+    statusKey: "news/status",
+    updateStore: async ({ claude }) => {
+      await claude.readConfig();
+      await claude.readConfig();
+      await claude.requestClaude({ timeoutMs: 1, request: {}, schema: {} });
+    },
+  };
+
+  const service = createClaudeService({ ANTHROPIC_API_KEY: "key" }, async () =>
+    Response.json({ content: [{ type: "text", text: "{}" }], stop_reason: "end_turn" }),
+  );
+  await runWithStatus(createJobContext(service), job);
+  assert.equal(docs.stored.get("news/status").requests, 2);
+
+  for (const unbound of [undefined, countClaudeCalls(undefined, () => {})]) {
+    await runWithStatus(createJobContext(unbound), job);
+    const missing = docs.stored.get("news/status");
+    assert.equal(missing.requests, 0);
+    assert.equal(
+      missing.lastFailure.message,
+      "The run failed: No CLAUDE binding to the claude service",
+    );
+  }
+});
+
+test("a run whose first ask Claude turns the key away for sends no other ask", async () => {
+  const docs = createDocs();
+  const service = createClaudeService({ ANTHROPIC_API_KEY: "key" }, async () =>
+    Response.json({ error: { message: "invalid x-api-key" } }, { status: 401 }),
+  );
+  const ask = { timeoutMs: 1, request: {}, schema: {} };
+  const answers = [];
+  await runWithStatus(
+    /** @type {any} */ ({
+      docs,
+      storage: createJobStorage(),
+      env: {},
+      claude: service,
+      fetchImpl: async () => new Response("{}"),
+      now: () => 0,
+    }),
+    {
+      statusKey: "news/status",
+      updateStore: async ({ claude }) => {
+        answers.push(...(await Promise.all([1, 2, 3].map(() => claude.requestClaude(ask)))));
+      },
+    },
+  );
+  assert.equal(docs.stored.get("news/status").requests, 1);
+  assert.ok(answers.every((answer) => answer.status === 401));
 });
 
 test("job feed reads name cold and retained failures once even through outer job catches", async (context) => {

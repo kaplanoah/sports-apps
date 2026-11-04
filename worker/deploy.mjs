@@ -28,7 +28,8 @@ import { describeHealthCheck, HEALTH_CHECK_OK, WORKER_CHECK_OK } from "./worker-
 export const API = "https://api.cloudflare.com/client/v4";
 const root = new URL("../", import.meta.url);
 
-// A channel's environment names its own Worker, which keeps the top level's other settings.
+// A channel's environment names its own Worker, which keeps the top level's other settings. A
+// stateless service has no store, so its class is null.
 /**
  * @param {string} toml
  * @param {string} [channel]
@@ -43,12 +44,12 @@ export function readWorkerConfig(toml, channel = "production") {
     : topLevel;
   const name = readSetting(section, "name");
   const compatibilityDate = readSetting(topLevel, "compatibility_date");
-  const storeClass = readSetting(toml, "class_name");
-  if (!name || !compatibilityDate || !storeClass)
+  const storeClass = readSetting(toml, "class_name") ?? null;
+  if (!name || !compatibilityDate)
     throw new Error(
       environment
-        ? `wrangler.toml needs compatibility_date, its store's class_name, and an [env.${environment}] with a name`
-        : "wrangler.toml needs name, compatibility_date, and its store's class_name",
+        ? `wrangler.toml needs compatibility_date and an [env.${environment}] with a name`
+        : "wrangler.toml needs name and compatibility_date",
     );
   return { name, compatibilityDate, storeClass };
 }
@@ -150,13 +151,15 @@ const listServiceBindings = (channel, roots) =>
   }));
 
 /**
- * @param {{ storeClass: string, isPageless: boolean, channel: string, roots?: import("./apps.mjs").WorkerRoots }} worker
+ * @param {{ storeClass: string | null, isPageless: boolean, channel: string, roots?: import("./apps.mjs").WorkerRoots }} worker
  */
 export function listBindings({ storeClass, isPageless, channel, roots }) {
-  const store = { type: "durable_object_namespace", name: "STORE", class_name: storeClass };
-  if (isPageless) return [store, VERSION_BINDING];
+  const store = storeClass
+    ? [{ type: "durable_object_namespace", name: "STORE", class_name: storeClass }]
+    : [];
+  if (isPageless) return [...store, VERSION_BINDING];
   const counts = channel === "production" ? [DAILY_OPENS_BINDING] : [];
-  return [store, ACCESS_LIMIT_BINDING, ...counts, ...listServiceBindings(channel, roots)];
+  return [...store, ACCESS_LIMIT_BINDING, ...counts, ...listServiceBindings(channel, roots)];
 }
 
 // Cloudflare records the last tag applied and rejects an upload that repeats one.
@@ -601,7 +604,7 @@ export async function deploy({
       onCovered?.();
     return null;
   }
-  const migrations = listPendingMigrations(await readMigrationTag(), storeClass);
+  const migrations = storeClass && listPendingMigrations(await readMigrationTag(), storeClass);
   await uploadWorker(migrations);
   await setWorkersDevRoute(previousVersions);
   const deployed = isPageless ? name : formatWorkerUrl(name, subdomain);

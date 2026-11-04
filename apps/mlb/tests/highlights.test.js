@@ -18,6 +18,7 @@ import { assertErrorAnswer } from "../../../tests/error-answer.js";
 import { createDocs, createJobStorage } from "../../../tests/job-context.js";
 import { SeasonStore } from "../worker/src/store.js";
 import { createDurableObjectContext } from "../../../tests/durable-object-context.js";
+import { createClaudeService } from "../../../services/claude/worker/src/service.js";
 
 // MLB's content and plays for two Division Series games of Oct 7, as it had them the next day.
 const RECORDED = JSON.parse(
@@ -304,9 +305,9 @@ test("the route turns away an id that isn't MLB's, and says when MLB doesn't ans
 /**
  * The store's job over the evening's slate, with its own storage and documents.
  * @param {ReturnType<typeof createMlbFetch>} mlb
- * @param {Record<string, string>} env
+ * @param {Record<string, string>} claudeEnv the claude service's secrets
  */
-function createJobRun(mlb, env) {
+function createJobRun(mlb, claudeEnv) {
   const clock = { now: Date.parse(EVENING.now) };
   const slate = buildSnapshot(EVENING.responses, { season: EVENING.season, now: clock.now }).slate;
   const docs = createDocs({
@@ -317,7 +318,7 @@ function createJobRun(mlb, env) {
   const context = /** @type {any} */ ({
     docs,
     storage,
-    env,
+    claude: createClaudeService(claudeEnv, mlb.fetchImpl),
     fetchImpl: mlb.fetchImpl,
     now: () => clock.now,
   });

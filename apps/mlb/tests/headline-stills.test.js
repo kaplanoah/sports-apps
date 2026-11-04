@@ -10,6 +10,8 @@ import {
   hasHeadline,
 } from "../worker/src/headline-stills.js";
 import { createJobStorage } from "../../../tests/job-context.js";
+import { createClaudeService } from "../../../services/claude/worker/src/service.js";
+import { countClaudeCalls, stopAfterRefusal } from "../../../shared/worker/claude.js";
 
 const CLAUDE_URL = "https://api.anthropic.com/v1/messages";
 const STILL = "https://img.mlbstatic.com/mlb-images/image/upload/w_480,h_270/mlb/home-run.jpg";
@@ -49,12 +51,21 @@ function createClaude(answer) {
   return { requests, fetchImpl: /** @type {any} */ (fetchImpl) };
 }
 
-function createContext({ apiKey = "key", fetchImpl = /** @type {any} */ (null) } = {}) {
+/**
+ * The claude service, with `apiKey` as its secret, asking Claude by `fetchImpl`.
+ * @param {typeof fetch} fetchImpl
+ * @param {string} [apiKey]
+ */
+const connectClaude = (fetchImpl, apiKey = "key") =>
+  createClaudeService(apiKey ? { ANTHROPIC_API_KEY: apiKey } : {}, fetchImpl);
+
+/** @param {{ apiKey?: string, fetchImpl?: any, claude?: any }} [options] */
+function createContext({ apiKey = "key", fetchImpl = null, claude } = {}) {
   const storage = createJobStorage();
   return /** @type {any} */ ({
     stored: storage.stored,
-    env: apiKey ? { ANTHROPIC_API_KEY: apiKey } : {},
-    fetchImpl,
+    env: {},
+    claude: claude === undefined ? connectClaude(fetchImpl, apiKey) : claude,
     storage,
     failures: [],
   });
@@ -63,10 +74,7 @@ function createContext({ apiKey = "key", fetchImpl = /** @type {any} */ (null) }
 test("Claude Haiku looks at the still at its address and answers in the schema whether it has a headline", async () => {
   const claude = createClaude(() => true);
 
-  assert.equal(
-    await hasHeadline({ apiKey: "key", fetchImpl: claude.fetchImpl, still: STILL }),
-    true,
-  );
+  assert.equal(await hasHeadline(connectClaude(claude.fetchImpl), STILL), true);
   assert.equal(claude.requests[0].model, STILL_MODEL);
   assert.equal(STILL_MODEL, "claude-haiku-5-5");
   assert.deepEqual(claude.requests[0].messages[0].content, [
@@ -78,17 +86,14 @@ test("Claude Haiku looks at the still at its address and answers in the schema w
   });
 
   const clean = createClaude(() => false);
-  assert.equal(
-    await hasHeadline({ apiKey: "key", fetchImpl: clean.fetchImpl, still: STILL }),
-    false,
-  );
+  assert.equal(await hasHeadline(connectClaude(clean.fetchImpl), STILL), false);
 });
 
 test("an answer Claude didn't finish is no answer", async () => {
   const claude = createClaude(() => "refusal");
 
   await assert.rejects(
-    hasHeadline({ apiKey: "key", fetchImpl: claude.fetchImpl, still: STILL }),
+    hasHeadline(connectClaude(claude.fetchImpl), STILL),
     /Claude stopped without finishing: refusal/,
   );
 });
@@ -180,6 +185,23 @@ test("a key Claude turns away never clears a still, and the read is tried again 
     OTHER_STILL,
   ]);
   assert.deepEqual([...found.withHeadlines], [STILL]);
+});
+
+test("a run whose first still Claude turns the key away for asks about no other still, in any game", async (t) => {
+  t.mock.method(console, "error", () => {});
+  const fake = createClaude(() => "unauthorized");
+  const context = createContext({ claude: stopAfterRefusal(connectClaude(fake.fetchImpl)) });
+
+  for (const id of ["849826", "849827", "849828"]) {
+    const found = await findHeadlineStills(context, { season: 2026, id }, [
+      STILL,
+      OTHER_STILL,
+      NEW_STILL,
+    ]);
+    assert.deepEqual([found.isFinished, found.hasMisses], [true, true]);
+  }
+  assert.equal(fake.requests.length, 1);
+  assert.equal(context.stored.size, 0);
 });
 
 test("a still Claude never answers for is asked about a few reads, then counts as clean and is never asked about again", async () => {
@@ -292,13 +314,67 @@ test("a read asks Claude about only the first few stills it hasn't seen, and isn
   assert.equal(Object.keys(context.stored.get("headline-stills:2026:849826")).length, 12);
 });
 
-test("without the Worker's API key, no still goes to Claude, each counts as clean, and none is kept", async () => {
+test("while the claude service has no API key, no still goes to Claude, each counts as clean, and none is kept", async () => {
   const claude = createClaude(() => true);
   const context = createContext({ apiKey: "", fetchImpl: claude.fetchImpl });
 
   const found = await findHeadlineStills(context, { season: 2026, id: "849826" }, [STILL]);
   assert.deepEqual([...found.withHeadlines], []);
   assert.equal(found.isFinished, true);
+  assert.equal(found.hasMisses, false);
+  assert.deepEqual(context.failures, []);
   assert.equal(claude.requests.length, 0);
   assert.equal(context.stored.size, 0);
+});
+
+test("a game with no still left to ask about doesn't call the claude service", async () => {
+  const calls = [];
+  const service = {
+    readConfig: async () => calls.push("readConfig") && { configured: true },
+    requestClaude: async () => calls.push("requestClaude") && { problem: "unexpected" },
+  };
+  const context = createContext({ claude: service });
+
+  const found = await findHeadlineStills(context, { season: 2026, id: "849826" }, []);
+  assert.equal(found.isFinished, true);
+  assert.deepEqual(calls, []);
+});
+
+test("without a CLAUDE binding, or with a service that fails, the stills go unanswered and the run's failures say why", async () => {
+  const broken = {
+    readConfig: async () => {
+      throw new Error("service down");
+    },
+    requestClaude: async () => {
+      throw new Error("service down");
+    },
+  };
+  for (const { claude, reason } of [
+    {
+      claude: countClaudeCalls(undefined, () => {}),
+      reason: /No CLAUDE binding to the claude service/,
+    },
+    { claude: broken, reason: /service down/ },
+  ]) {
+    const context = createContext({ claude });
+
+    const found = await findHeadlineStills(context, { season: 2026, id: "849826" }, [STILL]);
+    assert.deepEqual([...found.withHeadlines], []);
+    assert.equal(found.hasMisses, true);
+    assert.equal(context.failures.length, 1);
+    assert.match(JSON.stringify(context.failures), reason);
+    assert.equal(context.stored.get("headline-stills:2026:849826"), undefined);
+  }
+});
+
+test("a Worker without the CLAUDE binding never clears a still, however many reads ask", async (t) => {
+  t.mock.method(console, "error", () => {});
+  const context = createContext({ claude: countClaudeCalls(undefined, () => {}) });
+
+  for (let read = 0; read < MAX_STILL_TRIES + 2; read += 1) {
+    const found = await findHeadlineStills(context, { season: 2026, id: "849826" }, [STILL]);
+    assert.deepEqual([found.isFinished, found.hasMisses], [true, true]);
+  }
+  assert.equal(context.stored.has("headline-stills:2026:849826"), false);
+  assert.equal(context.stored.has("headline-still-misses:2026:849826"), false);
 });

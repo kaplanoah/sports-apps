@@ -1,4 +1,8 @@
-import { requestClaude } from "../../../../shared/worker/claude.js";
+import {
+  isClaudeRefusal,
+  lacksClaudeKey,
+  requestClaude,
+} from "../../../../shared/worker/claude.js";
 import { noteFailure } from "../../../../shared/worker/job-status.js";
 import { isSameJson } from "../../../../shared/page/compare.js";
 
@@ -9,10 +13,11 @@ import { isSameJson } from "../../../../shared/page/compare.js";
 // one run and a game has dozens, so a game with more isn't finished, and the store's job reads it
 // again next run for the next few. A still Claude doesn't answer for shows as MLB's own until it
 // does, and is asked about again a few minutes later, as the job tries again a read that failed,
-// until it has gone unanswered a few times, when it counts as clean. Claude turning the Worker's
-// key away isn't a still going unanswered, so a key that stopped working never clears one. Without
-// the Worker's API key, each still counts as clean. The answers are kept for the current season's
-// games only, since the job reads no other season's.
+// until it has gone unanswered a few times, when it counts as clean. Claude turning the claude
+// service's key away, or a Worker without the service's binding, isn't a still going unanswered,
+// so neither ever clears one, and a run Claude turns the key away for asks about no other still.
+// While the claude service has no API key, each still counts as clean. The answers are kept for
+// the current season's games only, since the job reads no other season's.
 
 export const STILL_MODEL = "claude-haiku-5-5";
 const MAX_ANSWER_TOKENS = 1024;
@@ -34,8 +39,6 @@ export const STILL_SCHEMA = {
 
 // How many reads a still may go unanswered before it counts as clean.
 export const MAX_STILL_TRIES = 3;
-// Claude turning the Worker's key away, which says nothing about the still.
-const REFUSED_KEY_STATUSES = new Set([401, 403]);
 const CHECKS_PREFIX = "headline-stills:";
 const MISSES_PREFIX = "headline-still-misses:";
 // The season whose games' answers are kept.
@@ -53,15 +56,11 @@ const nameMissesKey = ({ season, id }) => `${MISSES_PREFIX}${season}:${id}`;
 
 /**
  * Whether Claude finds a headline on the still.
- * @param {object} options
- * @param {string} options.apiKey
- * @param {typeof fetch} options.fetchImpl
- * @param {string} options.still the still's address
+ * @param {import("../../../../shared/worker/claude.js").Claude} claude
+ * @param {string} still the still's address
  */
-export async function hasHeadline({ apiKey, fetchImpl, still }) {
-  const { answer } = await requestClaude({
-    apiKey,
-    fetchImpl,
+export async function hasHeadline(claude, still) {
+  const { answer } = await requestClaude(claude, {
     timeoutMs: CLAUDE_TIMEOUT_MS,
     schema: STILL_SCHEMA,
     request: {
@@ -79,16 +78,12 @@ export async function hasHeadline({ apiKey, fetchImpl, still }) {
 
 /**
  * Claude's answer for each still it answered for, the stills it didn't, and those it turned away
- * for the Worker's key, with the first error.
- * @param {object} options
- * @param {string} options.apiKey
- * @param {typeof fetch} options.fetchImpl
+ * for the claude service's key, with the first error.
+ * @param {import("../../../../shared/worker/claude.js").Claude} claude
  * @param {string[]} stills
  */
-async function checkStills({ apiKey, fetchImpl }, stills) {
-  const results = await Promise.allSettled(
-    stills.map((still) => hasHeadline({ apiKey, fetchImpl, still })),
-  );
+async function checkStills(claude, stills) {
+  const results = await Promise.allSettled(stills.map((still) => hasHeadline(claude, still)));
   /** @type {Record<string, boolean>} */
   const answers = {};
   /** @type {string[]} */
@@ -103,8 +98,7 @@ async function checkStills({ apiKey, fetchImpl }, stills) {
       continue;
     }
     firstError ??= result.reason;
-    const isKeyRefused = REFUSED_KEY_STATUSES.has(result.reason?.status);
-    (isKeyRefused ? refused : missed).push(stills[index]);
+    (isClaudeRefusal(result.reason) ? refused : missed).push(stills[index]);
   }
   return { answers, missed, refused, firstError };
 }
@@ -165,15 +159,15 @@ async function saveWhenChanged(storage, key, { before, after }) {
  * @returns {Promise<{ withHeadlines: Set<string>, isFinished: boolean, hasMisses: boolean }>}
  */
 export async function findHeadlineStills(context, game, stills) {
-  const apiKey = context.env.ANTHROPIC_API_KEY;
-  if (!apiKey) return { withHeadlines: new Set(), isFinished: true, hasMisses: false };
   /** @type {Record<string, boolean>} */
   const kept = (await context.storage.get(nameChecksKey(game))) ?? {};
   /** @type {Record<string, number>} */
   const missed = (await context.storage.get(nameMissesKey(game))) ?? {};
   const round = listRoundStills(stills, kept, missed);
   const asked = round.slice(0, STILLS_PER_READ);
-  const checked = await checkStills({ apiKey, fetchImpl: context.fetchImpl }, asked);
+  if (asked.length && (await lacksClaudeKey(context.claude)))
+    return { withHeadlines: new Set(), isFinished: true, hasMisses: false };
+  const checked = await checkStills(context.claude, asked);
   const unanswered = checked.missed.length + checked.refused.length;
   if (unanswered)
     noteFailure(

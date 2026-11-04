@@ -99,6 +99,27 @@ test("a service uploads its store and version, has no workers.dev address, and a
   assert.deepEqual(lines.slice(-2), ["health check: ok", "worker check: ok"]);
 });
 
+test("a stateless service uploads only its version, with no store or migration", async () => {
+  const cloudflare = createFakeCloudflare(answerHealth(null));
+  const result = await deploy({
+    worker: "claude",
+    script: "export default {}",
+    commit: NEW_COMMIT,
+    findChanges: () => null,
+    fetchImpl: cloudflare.fetchImpl,
+    env: ENV,
+    log: () => {},
+    pause: skipPause,
+    checkPage: async () => ({ status: "drawn" }),
+  });
+  assert.equal(result, "claude");
+  const upload = cloudflare.calls.find(({ init }) => init.method === "PUT");
+  const metadata = JSON.parse(await upload.init.body.get("metadata").text());
+  assert.deepEqual(metadata.bindings, [{ type: "version_metadata", name: "VERSION" }]);
+  assert.equal(metadata.migrations, undefined);
+  assert.ok(!cloudflare.calls.some(({ url }) => url.endsWith("/workers/scripts")));
+});
+
 test("a service an app reports as down, or at another release, is put back, naming the app and never its address", async () => {
   for (const { report, problem } of [
     {

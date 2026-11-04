@@ -35,17 +35,14 @@ export const LABELS_SCHEMA = {
 };
 
 /**
+ * @param {import("./claude.js").Claude} claude
  * @param {object} options
- * @param {string} options.apiKey
- * @param {typeof fetch} options.fetchImpl
  * @param {string} options.prompt what stays the same from call to call
  * @param {string} options.content this call's stories
  * @returns {Promise<{ answers: any[], usage: Record<string, number> }>}
  */
-export async function askClaude({ apiKey, fetchImpl, prompt, content }) {
-  const { answer, usage } = await requestClaude({
-    apiKey,
-    fetchImpl,
+export async function askClaude(claude, { prompt, content }) {
+  const { answer, usage } = await requestClaude(claude, {
     timeoutMs: CLAUDE_TIMEOUT_MS,
     schema: LABELS_SCHEMA,
     request: {

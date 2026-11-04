@@ -3,6 +3,7 @@ import { readEasternDay } from "../page/days.js";
 import { isWebAddress } from "../page/html.js";
 import { hashText } from "./hash-text.js";
 import { runWithStatus } from "./job-status.js";
+import { MISSING_CLAUDE_KEY, lacksClaudeKey } from "./claude.js";
 import { askClaude } from "./news-claude.js";
 import { frameNewsPhotos } from "./news-photos.js";
 import { describeError } from "./responses.js";
@@ -311,10 +312,7 @@ function placeStory(stories, numbered, story, answer, teamCodes) {
 // Every waiting story is asked about in one run, so a week judged again catches up at once, and in
 // the order they came out, so a story that tells news an earlier one told can lead only by telling
 // it better.
-async function labelWaitingStories({ storage, stories, ask, now, league }) {
-  const waiting = [...stories.values()]
-    .filter((story) => story.state === "pending" && isShownAge(story, now))
-    .sort(byOldest);
+async function labelWaitingStories({ storage, stories, waiting, ask, now, league }) {
   for (const batch of splitIntoBatches(waiting, LABEL_BATCH)) {
     const cards = listCards(stories, now);
     const numbered = [...cards.map((card) => card.lead), ...batch];
@@ -337,27 +335,29 @@ const addUsage = (total, usage) => ({
 });
 
 /** Asks Claude, counting each day's tokens under the league's Eastern day. */
-function createClaudeAsker({ env, fetchImpl, storage, now }) {
+function createClaudeAsker({ claude, storage, now }) {
   return async (prompt, content) => {
-    const { answers, usage } = await askClaude({
-      apiKey: env.ANTHROPIC_API_KEY,
-      fetchImpl,
-      prompt,
-      content,
-    });
+    const { answers, usage } = await askClaude(claude, { prompt, content });
     const key = `usage:${readEasternDay(now).date}`;
     await storage.put(key, addUsage(await storage.get(key), usage));
     return answers;
   };
 }
 
-/** What went wrong asking Claude, or "" when nothing did. */
+/** The stories still to label, oldest first. */
+const listWaitingStories = (stories, now) =>
+  [...stories.values()]
+    .filter((story) => story.state === "pending" && isShownAge(story, now))
+    .sort(byOldest);
+
+/** What went wrong asking Claude, or "" when nothing did, asking nothing when no story waits. */
 async function curateStories(context) {
-  if (!context.env.ANTHROPIC_API_KEY)
-    return "No ANTHROPIC_API_KEY secret, so no story was labeled.";
+  const waiting = listWaitingStories(context.stories, context.now);
+  if (!waiting.length) return "";
+  if (!(await context.canAsk())) return `${MISSING_CLAUDE_KEY}, so no story was labeled.`;
   const ask = createClaudeAsker(context);
   try {
-    await labelWaitingStories({ ...context, ask });
+    await labelWaitingStories({ ...context, waiting, ask });
     return "";
   } catch (error) {
     return describeError(error);
@@ -438,17 +438,18 @@ async function readRecentUsage(storage, now) {
  * @param {NewsLeague} league
  */
 async function keepNews(context, league) {
-  const { docs, storage, env, fetchImpl } = context;
+  const { docs, storage, claude, fetchImpl } = context;
   const now = context.now();
   const { entries, missing } = await league.readFeeds(fetchImpl);
   const stories = await readStories(storage);
   await saveFeedEntries({ storage, stories, entries, now, league });
   await forgetOldStories(storage, stories, now);
   await judgeAgainOnNewRules(storage, stories, league.prompt);
-  const problem = await curateStories({ storage, stories, env, fetchImpl, now, league });
+  const canAsk = async () => !(await lacksClaudeKey(claude));
+  const problem = await curateStories({ storage, stories, claude, canAsk, now, league });
   const cards = listShownCards(stories, now);
   const { frames, framed, failed } = await frameNewsPhotos(
-    { storage, env, fetchImpl },
+    { storage, claude, canAsk, fetchImpl },
     listCardPhotos(cards),
   );
   await saveCards(docs, cards, frames);

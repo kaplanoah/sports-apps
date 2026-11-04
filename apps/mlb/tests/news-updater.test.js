@@ -7,6 +7,7 @@ import { createMlbNewsJob, readMlbRuleDrop } from "../worker/src/news-updater.js
 import { createFeedFetch } from "./news-fixtures.js";
 import { createDocs, createJobStorage } from "../../../tests/job-context.js";
 import { createPng } from "../../../tests/photo-files.js";
+import { createClaudeService } from "../../../services/claude/worker/src/service.js";
 
 const NOW = Date.parse("2026-10-09T20:00:00Z");
 const CLAUDE_URL = "https://api.anthropic.com/v1/messages";
@@ -50,15 +51,18 @@ async function runOnce() {
   const photoReads = [];
   const readFeed = createFetch(calls, photoReads);
   let requests = 0;
+  /** @type {typeof fetch} */
+  const fetchImpl = async (url, init) => {
+    requests += 1;
+    return readFeed(url, init);
+  };
   await createMlbNewsJob().updateStore({
     docs,
     storage: createJobStorage(),
     createLoadSnapshot: () => async () => ({ season: 2026 }),
-    env: { ANTHROPIC_API_KEY: "test-key" },
-    fetchImpl: async (url, init) => {
-      requests += 1;
-      return readFeed(url, init);
-    },
+    env: {},
+    claude: createClaudeService({ ANTHROPIC_API_KEY: "test-key" }, fetchImpl),
+    fetchImpl,
     now: () => NOW,
   });
   return { docs, calls, photoReads, requests };
