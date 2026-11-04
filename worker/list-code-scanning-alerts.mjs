@@ -46,20 +46,20 @@ function pickLatestByCategory(newestFirst) {
 }
 
 /**
- * A pull request's merge is the ref CodeQL analyzes for it.
+ * CodeQL's default setup analyzes a pull request's head, not its merge.
  * @param {string} [pull] the pull request's number, or none for main
  */
 function findRef(pull) {
   if (!pull) return "refs/heads/main";
   if (!/^[1-9]\d*$/.test(pull)) throw new Error(`"${pull}" is not a pull request's number`);
-  return `refs/pull/${pull}/merge`;
+  return `refs/pull/${pull}/head`;
 }
 
 /**
  * @param {object} options
  * @param {string} options.repository as owner/name
  * @param {typeof fetch} [options.fetchImpl]
- * @param {NodeJS.ProcessEnv} [options.env] with PULL, a pull request's number, to read its merge's
+ * @param {NodeJS.ProcessEnv} [options.env] with PULL, a pull request's number, to read its head's
  *   instead of main's
  * @returns {Promise<string[]>} the lines to print
  */
