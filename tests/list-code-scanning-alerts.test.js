@@ -122,6 +122,23 @@ test("a pull request's number reads the analyses and alerts of its merge instead
     assert.equal(request.searchParams.get("ref"), "refs/pull/42/merge");
 });
 
+test("an empty pull request input, as the workflow sends when none is given, reads main's", async () => {
+  const github = createFakeGitHub(
+    [createAlert(3)],
+    [createAnalysis(JAVASCRIPT, MAIN_COMMIT, "today")],
+  );
+
+  assert.deepEqual(await list(github, ""), [
+    "Latest CodeQL analysis of each category on refs/heads/main (1):",
+    `${JAVASCRIPT}: ${MAIN_COMMIT} at today`,
+    "CodeQL alerts on refs/heads/main, in every state (1):",
+    "#3 open high js/xss shared/page/html.js:12",
+  ]);
+  assert.equal(github.requests.length, 2);
+  for (const request of github.requests)
+    assert.equal(request.searchParams.get("ref"), "refs/heads/main");
+});
+
 test("a pull request input that is not a number reads nothing", async () => {
   const github = createFakeGitHub([], []);
 
