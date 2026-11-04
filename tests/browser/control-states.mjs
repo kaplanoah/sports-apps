@@ -1,3 +1,4 @@
+import { QUICK_TAP_MS } from "../../shared/page/press.js";
 import { holdClock } from "./harness.mjs";
 import { SETTINGS } from "./settings.mjs";
 import { turnOnDiagnostics } from "./diagnostics-switch.mjs";
@@ -30,6 +31,28 @@ const readFocusedOutline = (page) =>
     if (!focused || focused === document.body) throw new Error("Nothing has focus");
     const style = getComputedStyle(focused);
     return `${style.outlineStyle} ${style.outlineWidth}`;
+  });
+
+/**
+ * What a clip's press shows: the shade over its still, its words' opacity, each with how long it
+ * eases back, and the button's own opacity, shadow, and background.
+ * @param {import("@playwright/test").Locator} button
+ */
+const readClipPress = (button) =>
+  button.evaluate((element) => {
+    const still = /** @type {Element} */ (element.querySelector(".clip-still"));
+    const words = getComputedStyle(/** @type {Element} */ (element.querySelector(".clip-text")));
+    const shade = getComputedStyle(still, "::after");
+    const style = getComputedStyle(element);
+    return {
+      shade: shade.backgroundColor,
+      shadeEase: shade.transitionDuration,
+      words: words.opacity,
+      wordsEase: words.transitionDuration,
+      opacity: style.opacity,
+      shadow: style.boxShadow,
+      background: style.backgroundColor,
+    };
   });
 
 /**
@@ -101,19 +124,48 @@ export function testControlStates(test, expect, app) {
     await expect(row.locator(".game-open")).toHaveCSS("opacity", "1");
   });
 
-  test("a press tints a final's clip row with the pressed row's ink", async ({ page }) => {
-    await app.openWithNewsAndHighlights(page);
-    await app.openHighlights(page);
-    const row = page.locator("#highlightsBody .clip-open.clip-row").first();
-    await expect(row).toBeVisible();
-    const pressed = await readBackground(row, "var(--pressed-row)");
+  for (const { name, clip } of [
+    { name: "the recap", clip: ".clip-feature" },
+    { name: "a play's clip", clip: ".clip-row" },
+  ]) {
+    test(`a press on ${name} darkens its still and dims its words at once, with no tint, and eases back`, async ({
+      page,
+    }) => {
+      await app.openWithNewsAndHighlights(page);
+      await app.openHighlights(page);
+      const button = page.locator(`#highlightsBody .clip-open${clip}`).first();
+      await expect(button).toBeVisible();
+      await holdClock(page);
 
-    await pressOn(page, row);
+      await pressOn(page, button);
 
-    await expect(row).toHaveClass(/is-pressed/);
-    expect(await readPressTint(row)).toBe(pressed);
-    await expect(row).toHaveCSS("opacity", "1");
-  });
+      await expect(button).toHaveClass(/is-pressed/);
+      expect(await readClipPress(button)).toEqual({
+        shade: "rgba(0, 0, 0, 0.35)",
+        shadeEase: "0s",
+        words: "0.45",
+        wordsEase: "0s",
+        opacity: "1",
+        shadow: "none",
+        background: "rgba(0, 0, 0, 0)",
+      });
+
+      await page.mouse.up();
+      await page.clock.runFor(QUICK_TAP_MS);
+
+      await expect(button).not.toHaveClass(/is-pressed/);
+      await expect(button.locator(".clip-text")).toHaveCSS("opacity", "1");
+      expect(await readClipPress(button)).toEqual({
+        shade: "rgba(0, 0, 0, 0)",
+        shadeEase: "0.15s",
+        words: "1",
+        wordsEase: "0.15s",
+        opacity: "1",
+        shadow: "none",
+        background: "rgba(0, 0, 0, 0)",
+      });
+    });
+  }
 
   test("a press tints a Diagnostics record's heading with the pressed row's ink", async ({
     page,
