@@ -46,31 +46,51 @@ function pickLatestByCategory(newestFirst) {
 }
 
 /**
+ * A pull request's merge is the ref CodeQL analyzes for it.
+ * @param {string} [pull] the pull request's number, or none for main
+ */
+function findRef(pull) {
+  if (!pull) return "refs/heads/main";
+  if (!/^[1-9]\d*$/.test(pull)) throw new Error(`"${pull}" is not a pull request's number`);
+  return `refs/pull/${pull}/merge`;
+}
+
+/**
  * @param {object} options
  * @param {string} options.repository as owner/name
+ * @param {string} [options.pull] a pull request's number, to read its merge's instead of main's
  * @param {typeof fetch} [options.fetchImpl]
  * @param {NodeJS.ProcessEnv} [options.env]
  * @returns {Promise<string[]>} the lines to print
  */
-export async function listCodeScanningAlerts({ repository, fetchImpl = fetch, env = process.env }) {
+export async function listCodeScanningAlerts({
+  repository,
+  pull,
+  fetchImpl = fetch,
+  env = process.env,
+}) {
+  const ref = findRef(pull);
   const github = createGitHub({ repository, fetchImpl, env });
   const analyses = pickLatestByCategory(
-    await readAllPages(github, `/code-scanning/analyses?tool_name=${TOOL}&ref=refs/heads/main`),
+    await readAllPages(github, `/code-scanning/analyses?tool_name=${TOOL}&ref=${ref}`),
   );
   /** @type {Alert[]} */
   const alerts = await readAllPages(
     github,
-    `/code-scanning/alerts?tool_name=${TOOL}&sort=created&direction=asc`,
+    `/code-scanning/alerts?tool_name=${TOOL}&ref=${ref}&sort=created&direction=asc`,
   );
   return [
-    `Main's latest ${TOOL} analysis of each category (${analyses.length}):`,
+    `Latest ${TOOL} analysis of each category on ${ref} (${analyses.length}):`,
     ...analyses.map((analysis) => renderAnalysisLine(analysis)),
-    `${TOOL} alerts, in every state (${alerts.length}):`,
+    `${TOOL} alerts on ${ref}, in every state (${alerts.length}):`,
     ...alerts.map((alert) => renderAlertLine(alert)),
   ];
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const lines = await listCodeScanningAlerts({ repository: String(process.env.GITHUB_REPOSITORY) });
+  const lines = await listCodeScanningAlerts({
+    repository: String(process.env.GITHUB_REPOSITORY),
+    pull: process.env.PULL,
+  });
   console.log(lines.join("\n"));
 }

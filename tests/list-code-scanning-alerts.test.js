@@ -25,9 +25,14 @@ function createFakeGitHub(alerts, analyses) {
   return { fetchImpl, requests };
 }
 
-const list = (github) =>
+/**
+ * @param {{ fetchImpl: typeof fetch }} github
+ * @param {string} [pull]
+ */
+const list = (github, pull) =>
   listCodeScanningAlerts({
     repository: REPOSITORY,
+    pull,
     fetchImpl: github.fetchImpl,
     env: { GH_TOKEN: "token" },
   });
@@ -73,9 +78,9 @@ test("each alert prints on one line with its number, state, severity, rule, and 
   );
 
   assert.deepEqual(await list(github), [
-    "Main's latest CodeQL analysis of each category (1):",
+    "Latest CodeQL analysis of each category on refs/heads/main (1):",
     `${JAVASCRIPT}: ${MAIN_COMMIT} at today`,
-    "CodeQL alerts, in every state (3):",
+    "CodeQL alerts on refs/heads/main, in every state (3):",
     "#3 open high js/xss shared/page/html.js:12",
     "#5 dismissed/false positive note js/unused-local-variable tests/a.test.js:4",
     "#8 fixed high js/xss no location",
@@ -93,12 +98,37 @@ test("a category whose latest analysis is behind main's still shows its own comm
   );
 
   assert.deepEqual((await list(github)).slice(0, 3), [
-    "Main's latest CodeQL analysis of each category (2):",
+    "Latest CodeQL analysis of each category on refs/heads/main (2):",
     `/language:actions: ${MAIN_COMMIT} at today`,
     `${JAVASCRIPT}: ${EARLIER_COMMIT} at yesterday`,
   ]);
-  const [analysesRequest] = github.requests;
-  assert.equal(analysesRequest.searchParams.get("ref"), "refs/heads/main");
+  for (const request of github.requests)
+    assert.equal(request.searchParams.get("ref"), "refs/heads/main");
+});
+
+test("a pull request's number reads the analyses and alerts of its merge instead of main's", async () => {
+  const github = createFakeGitHub(
+    [createAlert(3)],
+    [createAnalysis(JAVASCRIPT, MAIN_COMMIT, "today")],
+  );
+
+  assert.deepEqual(await list(github, "42"), [
+    "Latest CodeQL analysis of each category on refs/pull/42/merge (1):",
+    `${JAVASCRIPT}: ${MAIN_COMMIT} at today`,
+    "CodeQL alerts on refs/pull/42/merge, in every state (1):",
+    "#3 open high js/xss shared/page/html.js:12",
+  ]);
+  assert.equal(github.requests.length, 2);
+  for (const request of github.requests)
+    assert.equal(request.searchParams.get("ref"), "refs/pull/42/merge");
+});
+
+test("a pull request input that is not a number reads nothing", async () => {
+  const github = createFakeGitHub([], []);
+
+  for (const pull of ["main", "42&ref=refs/heads/beta", "0", "-1"])
+    await assert.rejects(list(github, pull), /is not a pull request's number/);
+  assert.equal(github.requests.length, 0);
 });
 
 test("a category analyzed last before main's newest page of analyses still shows", async () => {
@@ -113,7 +143,7 @@ test("a category analyzed last before main's newest page of analyses still shows
   );
 
   assert.deepEqual((await list(github)).slice(0, 3), [
-    "Main's latest CodeQL analysis of each category (2):",
+    "Latest CodeQL analysis of each category on refs/heads/main (2):",
     `/language:actions: ${MAIN_COMMIT} at today`,
     `${JAVASCRIPT}: ${EARLIER_COMMIT} at last month`,
   ]);
