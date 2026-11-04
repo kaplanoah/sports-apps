@@ -12,6 +12,7 @@ import {
   listBundledFiles,
   readRelease,
 } from "../worker/build.mjs";
+import { loadWorkerConfig } from "../worker/deploy.mjs";
 import { createServiceRoots } from "./service-roots.js";
 
 const BUILT_AT = new Date("2026-10-07T12:00:00Z");
@@ -224,6 +225,32 @@ test("a service's Worker loads its packages as a Worker resolves them, importing
     const worker = await loadForbiddingGlobalWork(service);
     assert.equal(typeof worker.default, "function", service);
   }
+});
+
+/**
+ * Whether Cloudflare finds an event handler in a Worker's module: a `fetch` on its default
+ * export, or the Durable Object class its upload declares. RPC methods alone don't count.
+ * @param {Record<string, unknown>} worker
+ * @param {string | null} storeClass
+ */
+function hasEventHandler(worker, storeClass) {
+  const entrypoint = /** @type {{ prototype?: { fetch?: unknown } }} */ (worker.default);
+  if (typeof entrypoint?.prototype?.fetch === "function") return true;
+  return storeClass !== null && typeof worker[storeClass] === "function";
+}
+
+test("each service's Worker registers an event handler, without which Cloudflare refuses it", async () => {
+  for (const service of listServices()) {
+    const worker = await loadForbiddingGlobalWork(service);
+    const { storeClass } = loadWorkerConfig(service);
+    assert.ok(hasEventHandler(worker, storeClass), service);
+  }
+});
+
+test("the claude service answers a fetch with a 404, since only the apps' bindings reach it", async () => {
+  const worker = await loadForbiddingGlobalWork("claude");
+  const response = await new worker.default().fetch();
+  assert.equal(response.status, 404);
 });
 
 test("a beta release with no version to count from still says beta", () => {
