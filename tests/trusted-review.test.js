@@ -16,6 +16,7 @@ import { createReviewDecisionEnvironment, readStepScript } from "./workflow-step
 import { REPO_ROOT, readRepoFile } from "./repo-files.js";
 import { GitHubError } from "../worker/github-api.mjs";
 import { createReviewGitEnvironment } from "../worker/review-repository.mjs";
+import { withoutRunnerContext } from "./without-runner-context.js";
 import {
   exportReviewArtifact,
   importReviewArtifacts,
@@ -436,7 +437,10 @@ test("forged completion cannot reach privileged finding posting", () => {
       new URL("worker/trusted-review.mjs", REPO_ROOT).pathname,
       "post",
     ],
-    { env: { ...ENV, ...ID_ENV, REVIEW_FOLDER: folder }, encoding: "utf8" },
+    {
+      env: withoutRunnerContext({ ...ENV, ...ID_ENV, REVIEW_FOLDER: folder }),
+      encoding: "utf8",
+    },
   );
   assert.equal(result.status, 1);
   assert.match(result.stderr, /Incomplete coverage cannot authorize posting findings/);
