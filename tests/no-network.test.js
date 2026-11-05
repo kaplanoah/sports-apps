@@ -9,11 +9,13 @@ import { buildNodeTestArgs } from "../worker/node-tests.mjs";
 
 const GUARD = new URL("tests/no-network.js", REPO_ROOT).href;
 const FEED = "https://example.com/feed";
+const WITHOUT_RUNNER_CONTEXT = { ...process.env, NODE_TEST_CONTEXT: undefined };
 
 /** @param {string} script run as a module with the guard loaded first, as every Node test is */
 const runWithGuard = (script) =>
   spawnSync(process.execPath, ["--import", GUARD, "--input-type=module", "--eval", script], {
     encoding: "utf8",
+    env: WITHOUT_RUNNER_CONTEXT,
   });
 
 test("a read that reaches the network fails with its address", () => {
@@ -44,7 +46,7 @@ function runUnderDotReporter(body) {
     return spawnSync(process.execPath, buildNodeTestArgs([file]), {
       cwd: REPO_ROOT,
       encoding: "utf8",
-      env: { ...process.env, NODE_TEST_CONTEXT: undefined },
+      env: WITHOUT_RUNNER_CONTEXT,
     });
   } finally {
     rmSync(folder, { recursive: true });
