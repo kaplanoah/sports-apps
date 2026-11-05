@@ -5,11 +5,12 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { REPO_ROOT, readRepoFile } from "./repo-files.js";
+import { withoutRunnerContext } from "./without-runner-context.js";
 import { buildNodeTestArgs } from "../worker/node-tests.mjs";
 
 const GUARD = new URL("tests/no-network.js", REPO_ROOT).href;
 const FEED = "https://example.com/feed";
-const WITHOUT_RUNNER_CONTEXT = { ...process.env, NODE_TEST_CONTEXT: undefined };
+const WITHOUT_RUNNER_CONTEXT = withoutRunnerContext();
 
 /** @param {string} script run as a module with the guard loaded first, as every Node test is */
 const runWithGuard = (script) =>

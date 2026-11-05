@@ -10,12 +10,11 @@ import { listMutationTests } from "../worker/mutation-tests.mjs";
 import { MUTATION_TARGETS, readMutationTarget } from "../worker/mutation-targets.mjs";
 import { buildNodeTestArgs, listNodeTests } from "../worker/node-tests.mjs";
 import { REPO_ROOT, readRepoFile } from "./repo-files.js";
+import { withoutRunnerContext } from "./without-runner-context.js";
 
 const RUNNER = fileURLToPath(new URL("worker/mutation-tests.mjs", REPO_ROOT));
 const FIXTURE_MODULE = `../${readMutationTarget("search-reading")}`;
-const fixtureEnv = { ...process.env };
-// A nested test runner needs its own context to actually execute its fixture files.
-delete fixtureEnv.NODE_TEST_CONTEXT;
+const fixtureEnv = withoutRunnerContext();
 
 test("mutation testing runs exactly one of three shared page modules with one Stryker lane", () => {
   assert.deepEqual(MUTATION_TARGETS, ["search-reading", "series-text", "season-days"]);

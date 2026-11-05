@@ -16,6 +16,7 @@ import { createReviewDecisionEnvironment, readStepScript } from "./workflow-step
 import { REPO_ROOT, readRepoFile } from "./repo-files.js";
 import { GitHubError } from "../worker/github-api.mjs";
 import { createReviewGitEnvironment } from "../worker/review-repository.mjs";
+import { withoutRunnerContext } from "./without-runner-context.js";
 import {
   exportReviewArtifact,
   importReviewArtifacts,
@@ -437,7 +438,7 @@ test("forged completion cannot reach privileged finding posting", () => {
       "post",
     ],
     {
-      env: { ...ENV, ...ID_ENV, REVIEW_FOLDER: folder, NODE_TEST_CONTEXT: undefined },
+      env: withoutRunnerContext({ ...ENV, ...ID_ENV, REVIEW_FOLDER: folder }),
       encoding: "utf8",
     },
   );
