@@ -58,7 +58,7 @@ const shownBy = (/** @type {import("node:child_process").SpawnSyncReturns<string
 
 test("under the dot reporter, a caught read fails the run and shows its address", () => {
   const run = runUnderDotReporter(
-    `test("catches", async () => { await fetch(${JSON.stringify(FEED)}).catch(() => {}); });`,
+    'test("catches", async () => { await fetch("https://example.com/feed").catch(() => {}); });',
   );
   assert.notEqual(run.status, 0);
   assert.match(shownBy(run), /tried to read:\s+https:\/\/example\.com\/feed/);
@@ -66,7 +66,7 @@ test("under the dot reporter, a caught read fails the run and shows its address"
 
 test("under the dot reporter, an uncaught read fails the run and shows its address", () => {
   const run = runUnderDotReporter(
-    `test("reads", async () => { await fetch(${JSON.stringify(FEED)}); });`,
+    'test("reads", async () => { await fetch("https://example.com/feed"); });',
   );
   assert.notEqual(run.status, 0);
   assert.match(shownBy(run), /A Node test tried to read https:\/\/example\.com\/feed/);
