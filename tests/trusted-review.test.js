@@ -436,7 +436,10 @@ test("forged completion cannot reach privileged finding posting", () => {
       new URL("worker/trusted-review.mjs", REPO_ROOT).pathname,
       "post",
     ],
-    { env: { ...ENV, ...ID_ENV, REVIEW_FOLDER: folder }, encoding: "utf8" },
+    {
+      env: { ...ENV, ...ID_ENV, REVIEW_FOLDER: folder, NODE_TEST_CONTEXT: undefined },
+      encoding: "utf8",
+    },
   );
   assert.equal(result.status, 1);
   assert.match(result.stderr, /Incomplete coverage cannot authorize posting findings/);
