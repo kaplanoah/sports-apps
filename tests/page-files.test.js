@@ -500,3 +500,10 @@ for (const app of listApps()) {
     }
   });
 }
+
+test("a module the lexer can't read fails with its path", () => {
+  assert.throws(
+    () => listModules({ "js/app.js": { text: "import {" } }, "js/app.js", IMPORTS),
+    /js\/app\.js/,
+  );
+});

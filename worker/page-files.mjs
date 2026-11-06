@@ -141,7 +141,7 @@ function resolveImport(specifier, importer, imports) {
 export function listModules(files, entry, imports) {
   const modules = [entry];
   for (const module of modules) {
-    for (const specifier of listSpecifiers(files[module]?.text ?? "")) {
+    for (const specifier of listSpecifiers(files[module]?.text ?? "", module)) {
       const path = resolveImport(specifier, module, imports);
       if (path && files[path] && !modules.includes(path)) modules.push(path);
     }

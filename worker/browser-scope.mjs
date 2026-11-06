@@ -48,7 +48,7 @@ export function listReachedFiles(entries, readText) {
     const text = readText(path);
     if (text === null) continue;
     reached.add(path);
-    for (const specifier of listSpecifiers(text)) {
+    for (const specifier of listSpecifiers(text, path)) {
       const target = resolveImport(specifier, path);
       if (target) toRead.push(target);
     }
