@@ -10,6 +10,7 @@
 import { appendFileSync, existsSync, readFileSync, readdirSync } from "node:fs";
 import { join, posix } from "node:path";
 import { fileURLToPath } from "node:url";
+import { parse } from "es-module-lexer/js";
 import { listAppsWithBrowserTests } from "./apps.mjs";
 import { CONFIG_ONLY_FILES, isDocument, isSessionPath } from "./deploy-scope.mjs";
 import { CI_WORKFLOW } from "./find-passed-ci.mjs";
@@ -22,8 +23,6 @@ const IMPORTED_ONLY = [
   /^tests\/.+\.m?js$/,
   /^(?:apps|services)\/[^/]+\/tests\/[^/]+\.test\.js$/,
 ];
-// A static import, a re-export, a dynamic import, and an import for its side effects alone.
-const IMPORT = /(?:\bfrom|\bimport\s*\(?)\s*["']([^"']+)["']/g;
 
 /**
  * Where an import names, from the repo's root, or null for a package's.
@@ -34,6 +33,13 @@ export function resolveImport(specifier, importer) {
   if (specifier.startsWith(".")) return posix.join(posix.dirname(importer), specifier);
   return specifier.startsWith("#") ? resolvePackageImport(specifier) : null;
 }
+
+/**
+ * What a script's static imports, re-exports, and dynamic imports with a literal name name.
+ * @param {string} text
+ */
+const listSpecifiers = (text) =>
+  parse(text)[0].flatMap(({ specifier }) => (typeof specifier === "string" ? [specifier] : []));
 
 /**
  * Every file the entries reach by import, the entries too.
@@ -49,7 +55,7 @@ export function listReachedFiles(entries, readText) {
     const text = readText(path);
     if (text === null) continue;
     reached.add(path);
-    for (const [, specifier] of text.matchAll(IMPORT)) {
+    for (const specifier of listSpecifiers(text)) {
       const target = resolveImport(specifier, path);
       if (target) toRead.push(target);
     }
