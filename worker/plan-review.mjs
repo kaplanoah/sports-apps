@@ -18,6 +18,7 @@ import { fileURLToPath } from "node:url";
 import { escapePattern } from "../shared/page/escape-pattern.js";
 import { isTestPath } from "./deploy-scope.mjs";
 import { createGitHub, readAllPages } from "./github-api.mjs";
+import { listSpecifiers } from "./import-specifiers.mjs";
 import { resolvePackageImport } from "./package-imports.mjs";
 import { MERGE_TREE_CONFLICT, readReviewGit } from "./review-repository.mjs";
 import { findSummary, readReviewedState, matchesReviewProvider } from "./review-state.mjs";
@@ -92,10 +93,10 @@ const nameTested = (path) => basename(path).replace(/\.(test|spec)\.m?js$|\.m?js
  * The relative paths a test imports, as it writes them, or none when it can't be read.
  * @param {string} test
  */
-function readTestImports(test) {
+export function readTestImports(test) {
   try {
-    return [...readFileSync(test, "utf8").matchAll(/from\s+["'](\.{1,2}\/[^"']+)["']/g)].map(
-      (match) => match[1],
+    return listSpecifiers(readFileSync(test, "utf8")).filter((specifier) =>
+      /^\.{1,2}\//.test(specifier),
     );
   } catch {
     return [];

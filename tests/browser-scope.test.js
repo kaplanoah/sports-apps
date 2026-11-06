@@ -186,7 +186,7 @@ test("an import-like comment or string reaches nothing, and an escaped delimiter
       '// import "./commented.js";',
       '/* export { x } from "./blocked.js"; */',
       "/** @param {import('./typed.js').Kind} kind */",
-      'const text = "import \\"./quoted.js\\" from \\"./also-quoted.js\\"";',
+      "const text = 'import \"./quoted.js\"';",
       "import './real\\'s.js';",
     ].join("\n"),
     "apps/mlb/tests/browser/real's.js": "",

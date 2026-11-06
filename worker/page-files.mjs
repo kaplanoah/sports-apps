@@ -8,6 +8,7 @@ import { extname, join, posix, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parse } from "parse5";
 import { buildSync } from "esbuild";
+import { listSpecifiers } from "./import-specifiers.mjs";
 import { html, joinWithSeparator } from "../shared/page/html.js";
 import { nameReleaseFolder } from "../shared/worker/app-worker.js";
 
@@ -119,9 +120,6 @@ function addScriptHashes(files) {
   );
 }
 
-const MODULE_IMPORT =
-  /^(?:import\s[^;]*?\sfrom|export\s*(?:\*|\{)[^;]*?\sfrom|import)\s*"([^"]+)"/gm;
-
 /**
  * The page path a module's import names, through the page's import map.
  * @param {string} specifier
@@ -143,7 +141,7 @@ function resolveImport(specifier, importer, imports) {
 export function listModules(files, entry, imports) {
   const modules = [entry];
   for (const module of modules) {
-    for (const [, specifier] of (files[module]?.text ?? "").matchAll(MODULE_IMPORT)) {
+    for (const specifier of listSpecifiers(files[module]?.text ?? "")) {
       const path = resolveImport(specifier, module, imports);
       if (path && files[path] && !modules.includes(path)) modules.push(path);
     }

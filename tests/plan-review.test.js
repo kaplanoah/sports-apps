@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -11,6 +11,7 @@ import {
   explainUnread,
   findPushedRange,
   findTestedFile,
+  readTestImports,
   formatJobOutputs,
   grepRepo,
   isReviewedOnBranch,
@@ -1101,4 +1102,22 @@ test("a run on the head the last full read ended on keeps its summary unless the
     chooseStage({ reviewedHead: head, head, isOnBranch: true, listChanged: () => [] }),
     { stage: "reviewed" },
   );
+});
+
+test("a test's relative imports are read by parsing, not from comments, strings, or a cut quote", (t) => {
+  const folder = mkdtempSync(join(tmpdir(), "test-imports-"));
+  t.after(() => rmSync(folder, { recursive: true, force: true }));
+  const test = join(folder, "a.test.js");
+  writeFileSync(
+    test,
+    [
+      '// import { x } from "../commented.js";',
+      "const text = 'import { y } from \"../quoted.js\"';",
+      "import { z } from \"../say 'hi'.js\";",
+      'import { w } from "node:fs";',
+      'import { v } from "./v.js";',
+    ].join("\n"),
+  );
+  assert.deepEqual(readTestImports(test), ["../say 'hi'.js", "./v.js"]);
+  assert.deepEqual(readTestImports(join(folder, "missing.test.js")), []);
 });

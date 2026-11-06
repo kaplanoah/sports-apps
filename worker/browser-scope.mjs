@@ -10,10 +10,10 @@
 import { appendFileSync, existsSync, readFileSync, readdirSync } from "node:fs";
 import { join, posix } from "node:path";
 import { fileURLToPath } from "node:url";
-import { parse } from "es-module-lexer/js";
 import { listAppsWithBrowserTests } from "./apps.mjs";
 import { CONFIG_ONLY_FILES, isDocument, isSessionPath } from "./deploy-scope.mjs";
 import { CI_WORKFLOW } from "./find-passed-ci.mjs";
+import { listSpecifiers } from "./import-specifiers.mjs";
 import { resolvePackageImport } from "./package-imports.mjs";
 
 const UNTESTED_FOLDERS = [/^\.github\//, /^types\//];
@@ -33,13 +33,6 @@ export function resolveImport(specifier, importer) {
   if (specifier.startsWith(".")) return posix.join(posix.dirname(importer), specifier);
   return specifier.startsWith("#") ? resolvePackageImport(specifier) : null;
 }
-
-/**
- * What a script's static imports, re-exports, and dynamic imports with a literal name name.
- * @param {string} text
- */
-const listSpecifiers = (text) =>
-  parse(text)[0].flatMap(({ specifier }) => (typeof specifier === "string" ? [specifier] : []));
 
 /**
  * Every file the entries reach by import, the entries too.
