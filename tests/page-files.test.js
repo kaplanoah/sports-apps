@@ -45,6 +45,26 @@ test("the modules an entry loads are found through every kind of import, once ea
   ]);
 });
 
+test("a module's import-like comment or template line preloads nothing, and either quote ends a name", () => {
+  const files = {
+    "js/app.js": {
+      text: [
+        "/*",
+        'import "./commented.js";',
+        "*/",
+        "const text = `",
+        'import "./templated.js";',
+        "`;",
+        "import './say \"hi\".js';",
+      ].join("\n"),
+    },
+    "js/commented.js": { text: "" },
+    "js/templated.js": { text: "" },
+    'js/say "hi".js': { text: "" },
+  };
+  assert.deepEqual(listModules(files, "js/app.js", IMPORTS), ["js/app.js", 'js/say "hi".js']);
+});
+
 for (const app of listApps()) {
   test(`${app}: the page names its modules after the import map and before its entry`, async () => {
     const { default: files } = await import(`#page-files/${app}`);
@@ -480,3 +500,10 @@ for (const app of listApps()) {
     }
   });
 }
+
+test("a module the lexer can't read fails with its path", () => {
+  assert.throws(
+    () => listModules({ "js/app.js": { text: "import {" } }, "js/app.js", IMPORTS),
+    /js\/app\.js/,
+  );
+});

@@ -13,6 +13,7 @@ import { fileURLToPath } from "node:url";
 import { listAppsWithBrowserTests } from "./apps.mjs";
 import { CONFIG_ONLY_FILES, isDocument, isSessionPath } from "./deploy-scope.mjs";
 import { CI_WORKFLOW } from "./find-passed-ci.mjs";
+import { listSpecifiers } from "./import-specifiers.mjs";
 import { resolvePackageImport } from "./package-imports.mjs";
 
 const UNTESTED_FOLDERS = [/^\.github\//, /^types\//];
@@ -22,8 +23,6 @@ const IMPORTED_ONLY = [
   /^tests\/.+\.m?js$/,
   /^(?:apps|services)\/[^/]+\/tests\/[^/]+\.test\.js$/,
 ];
-// A static import, a re-export, a dynamic import, and an import for its side effects alone.
-const IMPORT = /(?:\bfrom|\bimport\s*\(?)\s*["']([^"']+)["']/g;
 
 /**
  * Where an import names, from the repo's root, or null for a package's.
@@ -49,7 +48,7 @@ export function listReachedFiles(entries, readText) {
     const text = readText(path);
     if (text === null) continue;
     reached.add(path);
-    for (const [, specifier] of text.matchAll(IMPORT)) {
+    for (const specifier of listSpecifiers(text, path)) {
       const target = resolveImport(specifier, path);
       if (target) toRead.push(target);
     }

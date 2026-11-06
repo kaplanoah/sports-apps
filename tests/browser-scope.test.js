@@ -162,6 +162,39 @@ test("browser scope includes tooling reached through import filenames with liter
   }
 });
 
+test("a specifier keeps the quote character that isn't its delimiter", () => {
+  const entry = "apps/mlb/tests/browser/a.spec.mjs";
+  const files = {
+    [entry]:
+      'import "#shared/o\'clock.js";\nimport { b } from \'../../../../shared/page/say "hi".js\';',
+    "shared/page/o'clock.js": 'import "../../worker/needed.mjs";',
+    'shared/page/say "hi".js': "",
+    "worker/needed.mjs": "",
+  };
+  const reached = listReachedFiles([entry], (path) => files[path] ?? null);
+  assert.deepEqual(
+    [...reached].toSorted(),
+    [entry, "shared/page/o'clock.js", 'shared/page/say "hi".js', "worker/needed.mjs"].toSorted(),
+  );
+  assert.deepEqual(listTestedApps(["worker/needed.mjs"], { apps: APPS, reached }), APPS);
+});
+
+test("an import-like comment or string reaches nothing, and an escaped delimiter ends no specifier", () => {
+  const entry = "apps/mlb/tests/browser/a.spec.mjs";
+  const files = {
+    [entry]: [
+      '// import "./commented.js";',
+      '/* export { x } from "./blocked.js"; */',
+      "/** @param {import('./typed.js').Kind} kind */",
+      "const text = 'import \"./quoted.js\"';",
+      "import './real\\'s.js';",
+    ].join("\n"),
+    "apps/mlb/tests/browser/real's.js": "",
+  };
+  const reached = listReachedFiles([entry], (path) => files[path] ?? null);
+  assert.deepEqual([...reached].toSorted(), [entry, "apps/mlb/tests/browser/real's.js"]);
+});
+
 test("the reached files follow every import from the entries, static and dynamic", () => {
   const files = {
     "apps/mlb/tests/browser/a.spec.mjs":
@@ -208,4 +241,8 @@ test("executable agent files and unlisted Git hooks retain browser coverage", ()
     ".githooks/future.mjs",
   ])
     assert.deepEqual(listApps([path]), APPS, path);
+});
+
+test("a file the lexer can't read fails with its path", () => {
+  assert.throws(() => listReachedFiles(["x.spec.mjs"], () => "import {"), /x\.spec\.mjs/);
 });
