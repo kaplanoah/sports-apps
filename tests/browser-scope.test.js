@@ -242,3 +242,7 @@ test("executable agent files and unlisted Git hooks retain browser coverage", ()
   ])
     assert.deepEqual(listApps([path]), APPS, path);
 });
+
+test("a file the lexer can't read fails with its path", () => {
+  assert.throws(() => listReachedFiles(["x.spec.mjs"], () => "import {"), /x\.spec\.mjs/);
+});
