@@ -756,11 +756,17 @@ export function choosePollDelay(snapshot, now = Date.now()) {
 export function listReminderGames(snapshot) {
   if (!REMINDER_FEEDS.every((name) => isReminderFeedHeard(snapshot, name))) return null;
   const series = mapSeriesById(snapshot.series);
-  return listTimedReminderGames(
-    snapshot.games.filter((game) => isConfirmedReminderGame(game, series)),
-    snapshot.season,
-    (game) => ({ away: TEAMS[game.away.team]?.name, home: TEAMS[game.home.team]?.name }),
-  );
+  const games = snapshot.games.filter((game) => isConfirmedReminderGame(game, series));
+  const guardsById = new Map(games.map((game) => [game.id, game.identityGuards]));
+  return listTimedReminderGames(games, snapshot.season, (game) => ({
+    away: TEAMS[game.away.team]?.name,
+    home: TEAMS[game.home.team]?.name,
+  })).map((game) => {
+    const identityGuards = guardsById.get(game.id);
+    // Preserve explicit invalid guards too, so the atomic claim rejects them rather than
+    // treating a guarded source as an unguarded compatibility read.
+    return identityGuards === undefined ? game : { ...game, identityGuards };
+  });
 }
 
 const REMINDER_FEEDS = ["schedule", "scoreboard", "bracket"];
