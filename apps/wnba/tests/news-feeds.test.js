@@ -10,6 +10,22 @@ import { createRuleDrop } from "../../../shared/worker/news-rules.js";
 import { readWnbaNews } from "../worker/src/news-feeds.js";
 import { createFeedFetch, readFixture } from "./news-fixtures.js";
 
+test("news reads identify the app without inheriting a browser from sports requests", async () => {
+  const readRecordedFeed = createFeedFetch();
+  const headers = [];
+  const { entries, missing } = await readWnbaNews(async (url, init) => {
+    headers.push(init.headers);
+    return readRecordedFeed(url);
+  });
+  assert.equal(missing.length, 0);
+  assert.ok(entries.length > 0);
+  assert.equal(headers.length, 7);
+  for (const header of headers) {
+    assert.equal(header["user-agent"], "sports-apps");
+    assert.deepEqual(Object.keys(header).sort(), ["accept", "user-agent"]);
+  }
+});
+
 test("an RSS story reads its title, a short summary without the outlet's sign-off, its writer, and its photo", () => {
   const [story] = parseRss(readFixture("ix"));
   assert.deepEqual(story, {

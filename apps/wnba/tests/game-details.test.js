@@ -117,7 +117,7 @@ test("a box score keeps a fifth period for overtime", () => {
   assert.equal(box.period, 5);
 });
 
-test("the box score route reads the league's CDN as its own site would, briefly cached", async () => {
+test("the box score route requests compressed JSON without a browser context, briefly cached", async () => {
   const league = createLeague();
   const server = createBoxScoreServer({ fetchImpl: league.fetchImpl });
 
@@ -127,7 +127,7 @@ test("the box score route reads the league's CDN as its own site would, briefly 
   assert.equal((await response.json()).home.team, "IND");
   const [{ url, init }] = league.reads;
   assert.equal(url, nameBoxScoreRequest(ACES_AT_FEVER));
-  assert.equal(init.headers.referer, "https://www.wnba.com/");
+  assert.deepEqual(init.headers, { accept: "application/json", "accept-encoding": "gzip" });
   assert.equal(init.cf.cacheTtl, 5);
 });
 

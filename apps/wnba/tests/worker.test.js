@@ -171,7 +171,7 @@ test("a snapshot is reused only within the closing stretch's 5-second wait", asy
   assert.equal(league.countReads("scoreboard"), 2);
 });
 
-test("the Worker reads every feed as the league's own site would", async () => {
+test("sports reads request JSON without asserting a browser or website context", async () => {
   const league = createLeague();
   const loader = createSnapshotLoader({ fetchImpl: league.fetchImpl, now: () => NOW });
 
@@ -185,13 +185,24 @@ test("the Worker reads every feed as the league's own site would", async () => {
     "standings",
   ]);
   for (const { headers } of leagueReads) {
-    assert.match(headers["user-agent"], /Chrome/);
-    assert.equal(headers.referer, "https://www.wnba.com/");
-    assert.equal(headers["sec-fetch-mode"], "cors");
-    assert.equal(headers["accept-encoding"], "gzip");
+    assert.deepEqual(headers, { accept: "application/json", "accept-encoding": "gzip" });
   }
+  for (const { headers } of league.reads.filter((read) => read.feed === "networks"))
+    assert.deepEqual(headers, { accept: "application/json" });
   assert.equal(snapshot.games.length, 28);
   assert.deepEqual(snapshot.missing, []);
+});
+
+test("ESPN backup reads request JSON without inheriting a browser identity", async () => {
+  const league = createLeague({ refuse: { scoreboard: "error" }, espn: ESPN.answers });
+  const loader = createSnapshotLoader({
+    fetchImpl: league.fetchImpl,
+    now: () => Date.parse(ESPN.now),
+  });
+  await loader.loadSnapshot(2026);
+  const reads = league.reads.filter((read) => read.feed === "espn");
+  assert.equal(reads.length, 2);
+  for (const { headers } of reads) assert.deepEqual(headers, { accept: "application/json" });
 });
 
 test("the snapshot has each upcoming game's meetings from the schedule it read, and none without it", async () => {

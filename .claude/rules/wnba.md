@@ -8,11 +8,12 @@ paths:
 - `apps/wnba/` is the WNBA, Worker `wnba-app`.
 - The record and reads:
   - The Worker reads:
-    - the league's own feeds (`worker/src/adapters/wnba.js` says which), with the browser headers they require (`worker/src/wnba.js`)
+    - the league's own feeds (`worker/src/adapters/wnba.js` says which), requesting JSON with gzip encoding, without a browser User-Agent, website Origin/Referer or Sec-Fetch context (`worker/src/wnba.js`)
     - ESPN's scoreboard, for where each game is on
     - ESPN's scores and clocks while the league's scoreboard isn't answering, or for a game the league's schedule still holds as under way once its scoreboard no longer lists it, reading the schedule again every five minutes until it catches up
     - ESPN's scores and clocks once an hour even while the league's scoreboard answers, so a backup that stopped answering shows in the health's `feeds` before it's needed, and again five minutes after a read of them fails until one answers (`worker/src/backup-probe.js`)
   - The health's `feeds` counts the league's scoreboard as failing only while a score is due, so an idle scoreboard never reads as one.
+  - Saved schedule, bracket and standings answers pass the current adapter validation before reuse. Invalid answers use the shared keeper's persisted failure deadline; usable canonical games and standings remain stored while corrected responses are awaited. Fresh responses pass the same validation before caching.
   - Detail routes forward to the store; its services fetch through adapters. ESPN game matches come from the identity ledger, persist in `espnMatches/<game-id>`, and survive restarts. New links wait while the ledger fails; existing links remain usable.
   - The page saves nothing to the store.
   - Shared detail contracts cover rosters, player numbers, and rank records; see `worker.md` for validation policy.
