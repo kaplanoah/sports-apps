@@ -88,8 +88,10 @@ export function applyPageEdits(page, edits) {
     );
 }
 
-// Where the document ends: before its closing tag, or at the source's end when it has none.
-/** @param {string} page */
+/**
+ * Parse5 reports no closing tag for a document that never closes, which ends with its source.
+ * @param {string} page
+ */
 export function findPageEnd(page) {
   const document = listPageElements(page).find((element) => element.tagName === "html");
   return document?.sourceCodeLocation.endTag?.startOffset ?? page.length;
