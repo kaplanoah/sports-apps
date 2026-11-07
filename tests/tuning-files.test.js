@@ -83,6 +83,12 @@ test("the panel goes in a document that leaves out its html start tag", () => {
   assert.match(page, /shared\/tuning-panel\.js"><\/script>\n$/);
 });
 
+test("the panel goes before the closing html tag of a document that leaves out its start tag", () => {
+  const page = readTunedPage("<!doctype html><head></head><body>hi</body><!-- </html> --></HTML>");
+  assert.match(page, /<\/script>\n<\/HTML>$/);
+  assert.ok(page.includes("<!-- </html> --><script"));
+});
+
 test("the panel goes at the end of a document that never closes", () => {
   const page = readTunedPage("<!doctype html>\n<html>\n<body>hi</body>");
   assert.match(page, /<body>hi<\/body><script type="application\/json" id="tuningRound">/);

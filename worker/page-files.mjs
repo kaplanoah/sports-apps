@@ -89,13 +89,23 @@ export function applyPageEdits(page, edits) {
 }
 
 /**
- * Parse5 reports no closing tag for a document that never closes, and no location at all for an
- * html element the page left its start tag out of, so either ends with its source.
+ * Where the closing html tag starts, or the end of the source for a document that never closes.
+ * Parse5 records no location for an html element the page left its start tag out of, so its
+ * closing tag is looked for in what follows the body, skipping comments.
  * @param {string} page
  */
 export function findPageEnd(page) {
-  const document = listPageElements(page).find((element) => element.tagName === "html");
-  return document?.sourceCodeLocation?.endTag?.startOffset ?? page.length;
+  const elements = listPageElements(page);
+  const document = elements.find((element) => element.tagName === "html");
+  const location = document?.sourceCodeLocation;
+  if (location) return location.endTag?.startOffset ?? page.length;
+  const body = elements.find((element) => element.tagName === "body");
+  const bodyEnd = body?.sourceCodeLocation?.endTag?.endOffset ?? page.length;
+  const rest = page.slice(bodyEnd);
+  const closing = [...rest.matchAll(/<!--[\s\S]*?-->|<\/html\s*>/gi)].find(
+    (match) => !match[0].startsWith("<!--"),
+  );
+  return closing ? bodyEnd + closing.index : page.length;
 }
 
 /** @param {string} page @param {PageElement} element */
