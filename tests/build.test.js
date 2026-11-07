@@ -59,6 +59,40 @@ test("a beta page names itself beta on the Home Screen, and production's doesn't
   }
 });
 
+const TITLE_PAGE = (head) => ({
+  "index.html": {
+    contentType: "text/html",
+    text: `<!doctype html><html><head>${head}</head></html>`,
+  },
+});
+const readLabeledPage = (head) => labelChannelFiles(TITLE_PAGE(head), "beta")["index.html"].text;
+
+test("beta labels the Home Screen title however its tag is written", () => {
+  const tags = [
+    '<META NAME="apple-mobile-web-app-title" CONTENT="Ball">',
+    '<meta content="Ball" name="apple-mobile-web-app-title">',
+    "<meta name='apple-mobile-web-app-title' content='Ball'>",
+    "<meta name=apple-mobile-web-app-title content=Ball>",
+  ];
+  for (const tag of tags) assert.match(readLabeledPage(tag), /content="Ball beta"/i, tag);
+});
+
+test("beta labels only the real title tag, not one in a comment or raw text", () => {
+  const lookalike = '<meta name="apple-mobile-web-app-title" content="Fake">';
+  const page = readLabeledPage(
+    `<!-- ${lookalike} --><script>const tag = '${lookalike}';</script>` +
+      '<meta name="apple-mobile-web-app-title" content="Ball &amp; Co">',
+  );
+  assert.ok(page.includes(`<!-- ${lookalike} -->`));
+  assert.ok(page.includes(`const tag = '${lookalike}';`));
+  assert.ok(page.includes('content="Ball &amp; Co beta"'));
+});
+
+test("beta leaves a page with no Home Screen title as it was", () => {
+  const head = '<meta name="viewport" content="width=device-width">';
+  assert.equal(readLabeledPage(head), TITLE_PAGE(head)["index.html"].text);
+});
+
 test("labeling leaves every other file as it was", () => {
   const files = {
     "manifest.webmanifest": { contentType: "application/manifest+json", text: '{"name":"X"}' },
