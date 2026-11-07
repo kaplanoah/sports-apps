@@ -78,7 +78,7 @@ export function readRelease(app, git = runGit, now = new Date(), channel = "prod
 /** @param {import("./page-files.mjs").PageElement} element */
 const isHomeScreenTitle = (element) =>
   element.tagName === "meta" &&
-  readAttribute(element, "name")?.trim().toLowerCase() === "apple-mobile-web-app-title" &&
+  readAttribute(element, "name") === "apple-mobile-web-app-title" &&
   Boolean(readAttribute(element, "content"));
 
 /**

@@ -2,7 +2,7 @@
 // channel but production: the build writes the round into the page and loads the tuning panel
 // (shared/page/tuning-panel.js). Production never serves the panel, its round, or its files.
 
-import { findPageEnd, writeJsonScript } from "./page-files.mjs";
+import { applyPageEdits, findPageEnd, writeJsonScript } from "./page-files.mjs";
 
 const ROUND_FILE = "tuning-round.json";
 const PANEL_FILES = ["shared/tuning-panel.js", "shared/tuning-panel.css", "shared/tuning-round.js"];
@@ -26,11 +26,11 @@ const leaveOut = (files, paths) =>
 
 /**
  * @param {string} page
- * @param {string} insertion
+ * @param {string} text
  */
-function insertBeforePageEnd(page, insertion) {
-  const end = findPageEnd(page);
-  return page.slice(0, end) + insertion + page.slice(end);
+function insertAtPageEnd(page, text) {
+  const offset = findPageEnd(page);
+  return applyPageEdits(page, [{ startOffset: offset, endOffset: offset, text }]);
 }
 
 /**
@@ -44,6 +44,6 @@ export function addTuningPanel(files, label) {
   const round = files[ROUND_FILE]?.text;
   if (!label || !round) return leaveOut(files, [ROUND_FILE, ...PANEL_FILES]);
   const page = files["index.html"];
-  const text = page.text && insertBeforePageEnd(page.text, `${writePanelTags(round)}\n`);
+  const text = page.text && insertAtPageEnd(page.text, `${writePanelTags(round)}\n`);
   return { ...leaveOut(files, [ROUND_FILE]), "index.html": { ...page, text } };
 }
