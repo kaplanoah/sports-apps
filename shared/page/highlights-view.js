@@ -16,6 +16,8 @@ import { renderSheetPart } from "./sheet-part.js";
  * @property {number | null} length in seconds
  * @property {string | null} still
  * @property {string} video
+ * @property {string | null} [stream] the same video in pieces, which a stored document may not
+ *   have
  * @property {string | null} [expiresAt] when the league takes it down
  */
 
@@ -65,6 +67,10 @@ function renderStill(clip) {
   </span>`;
 }
 
+/** @param {Clip} clip */
+const renderStreamAddress = (clip) =>
+  isWebAddress(clip.stream ?? "") && html`data-stream="${clip.stream}"`;
+
 // A clip's button says what it shows, then that a tap plays it.
 const PLAY_VIDEO = html`<span class="spoken-only">, play video</span>`;
 
@@ -74,6 +80,7 @@ const renderRecap = (recap) =>
     type="button"
     class="clip-open clip-feature"
     data-video="${recap.video}"
+    ${renderStreamAddress(recap)}
   >
     ${renderStill(recap)}
     <span class="clip-text">
@@ -105,6 +112,7 @@ function renderPlay(clip, describePlay) {
     type="button"
     class="clip-open clip-row"
     data-video="${clip.video}"
+    ${renderStreamAddress(clip)}
   >
     ${renderStill(clip)}
     <span class="clip-text">

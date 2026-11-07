@@ -362,6 +362,9 @@ const RECAP_TITLE = /game highlights$/i;
 /** @param {any} video */
 const findVideo = (video) => video.links?.source?.HD?.href ?? video.links?.source?.href ?? null;
 
+/** @param {any} video */
+const findStream = (video) => video.links?.source?.HLS?.href ?? null;
+
 /**
  * A clip as the sheet shows it, or null for one without a video the phone can play.
  * @param {any} video
@@ -375,6 +378,7 @@ function describeClip(video) {
     length: Number.isFinite(video.duration) ? video.duration : null,
     still: video.thumbnail ?? null,
     video: url,
+    stream: findStream(video),
     expiresAt: video.timeRestrictions?.expirationDate ?? null,
   };
 }
