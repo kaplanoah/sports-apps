@@ -83,7 +83,7 @@ test("the panel goes in a document that leaves out its html start tag", () => {
   assert.match(page, /shared\/tuning-panel\.js"><\/script>\n$/);
 });
 
-test("the panel goes at the end of a document that leaves out its html start tag, closed or not", () => {
+test("the panel goes after the closing html tag of a document that leaves out its start tag", () => {
   const page = readTunedPage("<!doctype html><head></head><body>hi</body></html>");
   assert.match(page, /<\/html><script type="application\/json" id="tuningRound">/);
   assert.match(page, /shared\/tuning-panel\.js"><\/script>\n$/);
