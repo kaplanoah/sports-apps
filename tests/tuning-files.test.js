@@ -77,6 +77,12 @@ test("the panel skips a closing tag written in a comment or an inline script", (
   assert.match(page, /<script type="module" src="shared\/tuning-panel\.js"><\/script>\n<\/html>$/);
 });
 
+test("the panel goes in a document that leaves out its html start tag", () => {
+  const page = readTunedPage("<!doctype html><head></head><body>hi</body>");
+  assert.match(page, /<body>hi<\/body><script type="application\/json" id="tuningRound">/);
+  assert.match(page, /shared\/tuning-panel\.js"><\/script>\n$/);
+});
+
 test("the panel goes at the end of a document that never closes", () => {
   const page = readTunedPage("<!doctype html>\n<html>\n<body>hi</body>");
   assert.match(page, /<body>hi<\/body><script type="application\/json" id="tuningRound">/);

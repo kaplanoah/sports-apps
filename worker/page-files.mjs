@@ -89,12 +89,13 @@ export function applyPageEdits(page, edits) {
 }
 
 /**
- * Parse5 reports no closing tag for a document that never closes, which ends with its source.
+ * Parse5 reports no closing tag for a document that never closes, and no location at all for an
+ * html element the page left its start tag out of, so either ends with its source.
  * @param {string} page
  */
 export function findPageEnd(page) {
   const document = listPageElements(page).find((element) => element.tagName === "html");
-  return document?.sourceCodeLocation.endTag?.startOffset ?? page.length;
+  return document?.sourceCodeLocation?.endTag?.startOffset ?? page.length;
 }
 
 /** @param {string} page @param {PageElement} element */
