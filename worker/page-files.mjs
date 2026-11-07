@@ -57,7 +57,7 @@ function readFolder(pageRoot) {
 /** @typedef {{ startOffset: number, endOffset: number, text: string }} PageEdit */
 
 /** @param {string} page */
-function listPageElements(page) {
+export function listPageElements(page) {
   /** @type {PageElement[]} */
   const elements = [];
   /** @param {import("parse5").DefaultTreeAdapterTypes.Node} node */
@@ -71,7 +71,7 @@ function listPageElements(page) {
 }
 
 /** @param {PageElement} element @param {string} name */
-const readAttribute = (element, name) =>
+export const readAttribute = (element, name) =>
   element.attrs.find((attribute) => attribute.name === name)?.value;
 
 /** @param {PageElement} element @param {string} type */
@@ -79,13 +79,24 @@ const isScriptType = (element, type) =>
   element.tagName === "script" && readAttribute(element, "type")?.trim().toLowerCase() === type;
 
 /** @param {string} page @param {PageEdit[]} edits */
-function applyPageEdits(page, edits) {
+export function applyPageEdits(page, edits) {
   return edits
     .toSorted((left, right) => right.startOffset - left.startOffset)
     .reduce(
       (text, edit) => text.slice(0, edit.startOffset) + edit.text + text.slice(edit.endOffset),
       page,
     );
+}
+
+/**
+ * Where the closing html tag starts. Parse5 records no location for an html element the page left
+ * its start tag out of, nor an end tag for a document that never closes, so those end with their
+ * source, where a browser still reads what is added as part of the page.
+ * @param {string} page
+ */
+export function findPageEnd(page) {
+  const document = listPageElements(page).find((element) => element.tagName === "html");
+  return document?.sourceCodeLocation?.endTag?.startOffset ?? page.length;
 }
 
 /** @param {string} page @param {PageElement} element */

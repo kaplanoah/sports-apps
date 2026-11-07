@@ -56,3 +56,41 @@ test("a round's text can't end the script that holds it", () => {
   assert.equal(page.match(/<\/script>/g)?.length, 3);
   assert.match(page, /\\u003c\/script>\\u003cb>/);
 });
+
+const readTunedPage = (page) =>
+  addTuningPanel({ ...FILES, "index.html": text(page) }, "beta")["index.html"].text ?? "";
+
+test("the panel goes in before the real end of the document, however it is written", () => {
+  const page = readTunedPage("<!doctype html>\n<HTML>\n<body></body>\n</HTML>");
+  assert.match(page, /<script type="module" src="shared\/tuning-panel\.js"><\/script>\n<\/HTML>$/);
+});
+
+test("the panel skips a closing tag written in a comment or an inline script", () => {
+  const page = readTunedPage(
+    '<!doctype html>\n<html>\n<!-- </html> -->\n<script>const end = "</html>";</script>\n</html>',
+  );
+  assert.ok(
+    page.includes(
+      '<!-- </html> -->\n<script>const end = "</html>";</script>\n<script type="application/json" id="tuningRound">',
+    ),
+  );
+  assert.match(page, /<script type="module" src="shared\/tuning-panel\.js"><\/script>\n<\/html>$/);
+});
+
+test("the panel goes in a document that leaves out its html start tag", () => {
+  const page = readTunedPage("<!doctype html><head></head><body>hi</body>");
+  assert.match(page, /<body>hi<\/body><script type="application\/json" id="tuningRound">/);
+  assert.match(page, /shared\/tuning-panel\.js"><\/script>\n$/);
+});
+
+test("the panel goes after the closing html tag of a document that leaves out its start tag", () => {
+  const page = readTunedPage("<!doctype html><head></head><body>hi</body></html>");
+  assert.match(page, /<\/html><script type="application\/json" id="tuningRound">/);
+  assert.match(page, /shared\/tuning-panel\.js"><\/script>\n$/);
+});
+
+test("the panel goes at the end of a document that never closes", () => {
+  const page = readTunedPage("<!doctype html>\n<html>\n<body>hi</body>");
+  assert.match(page, /<body>hi<\/body><script type="application\/json" id="tuningRound">/);
+  assert.match(page, /shared\/tuning-panel\.js"><\/script>\n$/);
+});

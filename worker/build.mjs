@@ -10,8 +10,15 @@ import {
   isService,
   listWorkersOrExit,
 } from "./apps.mjs";
+import { html } from "../shared/page/html.js";
 import { findChannel, readCommandLine } from "./channels.mjs";
-import { pinPageFiles, readPageFiles } from "./page-files.mjs";
+import {
+  applyPageEdits,
+  listPageElements,
+  pinPageFiles,
+  readAttribute,
+  readPageFiles,
+} from "./page-files.mjs";
 import { readVersion } from "./release.mjs";
 import { addTuningPanel } from "./tuning-files.mjs";
 
@@ -68,7 +75,23 @@ export function readRelease(app, git = runGit, now = new Date(), channel = "prod
   return { version: `${version ?? commit}-${label}`, commit, builtAt, label };
 }
 
-const HOME_SCREEN_TITLE = /(<meta name="apple-mobile-web-app-title" content=")([^"]+)(")/;
+/** @param {import("./page-files.mjs").PageElement} element */
+const isHomeScreenTitle = (element) =>
+  element.tagName === "meta" &&
+  readAttribute(element, "name") === "apple-mobile-web-app-title" &&
+  Boolean(readAttribute(element, "content"));
+
+/**
+ * @param {string} page
+ * @param {string} label
+ */
+function labelHomeScreenTitleTag(page, label) {
+  const tag = listPageElements(page).find(isHomeScreenTitle);
+  if (!tag) return page;
+  const { startOffset, endOffset } = tag.sourceCodeLocation.attrs.content;
+  const title = `${readAttribute(tag, "content")} ${label}`;
+  return applyPageEdits(page, [{ startOffset, endOffset, text: html`content="${title}"`.text }]);
+}
 
 /**
  * @param {{ contentType: string, text?: string, base64?: string }} file
@@ -90,10 +113,7 @@ function labelManifest(file, label) {
  */
 const labelHomeScreenTitle = (file, label) => ({
   ...file,
-  text: file.text?.replace(
-    HOME_SCREEN_TITLE,
-    (_tag, start, title, end) => `${start}${title} ${label}${end}`,
-  ),
+  text: file.text && labelHomeScreenTitleTag(file.text, label),
 });
 
 /**
