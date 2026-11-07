@@ -6,6 +6,7 @@ import {
   findCellScrollLeft,
   findDayScrollTop,
   isFollowingStartDay,
+  isKeepingPutBack,
   isLedByOne,
   isRowOutOfSight,
   listShownDays,
@@ -760,10 +761,13 @@ function placeList(putBackDay) {
 }
 
 /**
- * Draws the season's days, keeping the day at the top of the list where it is.
+ * Draws the season's days, keeping the day at the top of the list where it is. `isScheduleDue`
+ * says the season's whole schedule is still on its way from the store, so the fill may list fewer
+ * days than the season has.
  * @param {DayStripFill} fill
+ * @param {{ isScheduleDue: boolean }} state
  */
-export function fillDayStrip(fill) {
+export function fillDayStrip(fill, { isScheduleDue }) {
   if (!view) return;
   if (!fill.days.length) {
     setHtml(view, html`<p class="empty-note">${fill.emptyNote}</p>`);
@@ -771,6 +775,10 @@ export function fillDayStrip(fill) {
     return;
   }
   const putBackDay = readPutBackDay();
+  if (isKeepingPutBackFor(fill, putBackDay, isScheduleDue)) {
+    dayStripLog.noteStep(`${putBackDay?.day} waits for the whole schedule`);
+    return;
+  }
   const lastStartDay = shown?.startDay;
   if (isListShown()) noteAnchor();
   const before = dayStripLog.isLogging() ? measureTopDay() : null;
@@ -781,6 +789,20 @@ export function fillDayStrip(fill) {
   if (dayStripLog.isLogging()) noteFill(drawing, before, measureTopDay());
   if (lastStartDay) followStartDay(lastStartDay);
 }
+
+/**
+ * Whether the list's first fill leaves the copy the page put back in place, as `isKeepingPutBack`
+ * decides.
+ * @param {DayStripFill} fill
+ * @param {{ day: string } | null} putBackDay
+ * @param {boolean} isScheduleDue
+ */
+const isKeepingPutBackFor = (fill, putBackDay, isScheduleDue) =>
+  isKeepingPutBack({
+    hasPutBackDay: !!putBackDay,
+    isPutBackDayFilled: fill.days.some(({ day }) => day === putBackDay?.day),
+    isScheduleDue,
+  });
 
 /**
  * The day the page put back at the list's top as it loaded, before the list's first fill, or null
