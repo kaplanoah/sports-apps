@@ -139,7 +139,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: node "$RUNNER_TEMP/native-rate-input/runtime.mjs" prepare "$RUNNER_TEMP/native-rate-input"
       - name: Investigate with native Codex
-        uses: openai/codex-action@c05cfd74ad95c626cdf05c6685e62becc3bf7813
+        uses: openai/codex-action@13e9c17417b29e9a276f73ec6ed7fb574137d3c3
         env:
           BASH_ENV: ${{ steps.rate.outputs.hook }}
         with:
