@@ -7,7 +7,7 @@ import { reloadWhenSignedOut } from "./access.js";
 import { COUNT_ROUTE } from "./count-path.js";
 import { readEasternDay } from "./days.js";
 import { readStoredText, storeText } from "./local-storage.js";
-import { WAKING_REQUEST_TIMEOUT_MS } from "./release.js";
+import { PAGE_REQUEST_TIMEOUT_MS } from "./release.js";
 import { watchTimeAway } from "./resume.js";
 
 const COUNTED_DAY_KEY = "countedDay";
@@ -32,7 +32,7 @@ async function sendCount(today) {
   isSending = true;
   const response = await fetch(new URL(COUNT_ROUTE, location.href), {
     method: "POST",
-    signal: AbortSignal.timeout(WAKING_REQUEST_TIMEOUT_MS),
+    signal: AbortSignal.timeout(PAGE_REQUEST_TIMEOUT_MS),
   }).catch(() => null);
   isSending = false;
   if (!response) return;

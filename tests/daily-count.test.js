@@ -2,7 +2,7 @@ import { createDeferred } from "./deferred.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { isCountOwed, startDailyCount } from "../shared/page/daily-count.js";
-import { WAKING_REQUEST_TIMEOUT_MS } from "../shared/page/release.js";
+import { PAGE_REQUEST_TIMEOUT_MS } from "../shared/page/release.js";
 import { watchReturns } from "../shared/page/resume.js";
 
 const HOUR_MS = 60 * 60 * 1000;
@@ -284,7 +284,7 @@ test("a count whose send never answers gives up in time, and the next return sen
   watchReturns();
 
   startDailyCount();
-  assert.deepEqual(timeoutsAsked, [WAKING_REQUEST_TIMEOUT_MS]);
+  assert.deepEqual(timeoutsAsked, [PAGE_REQUEST_TIMEOUT_MS]);
   isHanging = false;
   timeout.abort(new DOMException("timed out", "TimeoutError"));
   await settle();

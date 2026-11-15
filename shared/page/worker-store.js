@@ -4,7 +4,7 @@
 import { reloadWhenSignedOut } from "./access.js";
 import { UPDATING_WAIT_MS } from "./catch-up-note.js";
 import { noteStep } from "./diagnostics.js";
-import { WAKING_REQUEST_TIMEOUT_MS } from "./release.js";
+import { PAGE_REQUEST_TIMEOUT_MS } from "./release.js";
 import { isStoreDocumentPath } from "./store-path.js";
 import { readWorkerError } from "./worker-error.js";
 
@@ -62,18 +62,18 @@ function readSocketMessage(data) {
   return { kind: "push", path: message.path, data: message.data };
 }
 
-// A read the page's socket recovery or redraw awaits gives up after the deadline, headers and body
-// alike, so a stalled connection can't hold it open.
+// Every store read gives up after the deadline, headers and body alike, so a stalled connection
+// can't hold it open.
 async function requestJson(url) {
-  const signal = AbortSignal.timeout(WAKING_REQUEST_TIMEOUT_MS);
+  const signal = AbortSignal.timeout(PAGE_REQUEST_TIMEOUT_MS);
   let response;
   let body;
   try {
     response = await fetch(url, { cache: "no-store", signal });
     reloadWhenSignedOut(response);
     body = await response.json().catch((error) => {
-      if (signal.aborted) throw error;
-      return null;
+      if (error instanceof SyntaxError) return null;
+      throw error;
     });
   } catch (error) {
     throw new StoreError("unavailable", error instanceof Error ? error.message : String(error));

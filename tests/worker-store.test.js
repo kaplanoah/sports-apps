@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, mock, test } from "node:test";
 import assert from "node:assert/strict";
 import { UPDATING_WAIT_MS } from "../shared/page/catch-up-note.js";
-import { WAKING_REQUEST_TIMEOUT_MS } from "../shared/page/release.js";
+import { PAGE_REQUEST_TIMEOUT_MS } from "../shared/page/release.js";
 import { createWorkerStore } from "../shared/page/worker-store.js";
 import { settle } from "./settle.js";
 
@@ -15,6 +15,14 @@ function startStore({ isShowing } = {}) {
     (url, init) =>
       new Promise((resolve, reject) => {
         const answer = (body) => resolve(new Response(JSON.stringify(body)));
+        const cutBody = () =>
+          resolve(
+            new Response(
+              new ReadableStream({
+                start: (controller) => controller.error(new TypeError("network connection lost")),
+              }),
+            ),
+          );
         const stallBody = (status = 200) =>
           resolve(
             new Response(
@@ -26,7 +34,7 @@ function startStore({ isShowing } = {}) {
             ),
           );
         init?.signal?.addEventListener("abort", () => reject(init.signal.reason));
-        reads.push({ url: String(url), answer, resolve, stallBody });
+        reads.push({ url: String(url), answer, resolve, stallBody, cutBody });
       })
   );
   globalThis.WebSocket = /** @type {any} */ (
@@ -875,7 +883,7 @@ test("a document read that never answers fails as unavailable once its deadline 
 
   assert.deepEqual(
     deadlines.map(({ ms }) => ms),
-    [WAKING_REQUEST_TIMEOUT_MS],
+    [PAGE_REQUEST_TIMEOUT_MS],
   );
   deadlines[0].expire();
   await assert.rejects(reading, { code: "unavailable" });
@@ -900,6 +908,17 @@ test("a read whose body stalls after its headers fails as unavailable once its d
 
   deadlines[0].expire();
   await assert.rejects(reading, { code: "unavailable" });
+});
+
+test("a read whose body the network cuts off fails as unavailable, and one that is not JSON as unreadable", async () => {
+  const { store, reads } = startStore();
+  const cut = store.doc("seasons/2026").get();
+  reads[0].cutBody();
+  await assert.rejects(cut, { code: "unavailable" });
+
+  const portal = store.doc("seasons/2026").get();
+  reads[1].resolve(new Response("<html>sign in</html>"));
+  await assert.rejects(portal, { code: "bad_payload" });
 });
 
 test("a read that answers before its deadline is unaffected by it", async () => {
