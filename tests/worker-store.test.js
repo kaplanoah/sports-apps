@@ -1,20 +1,31 @@
 import { afterEach, beforeEach, mock, test } from "node:test";
 import assert from "node:assert/strict";
 import { UPDATING_WAIT_MS } from "../shared/page/catch-up-note.js";
+import { WAKING_REQUEST_TIMEOUT_MS } from "../shared/page/release.js";
 import { createWorkerStore } from "../shared/page/worker-store.js";
 import { settle } from "./settle.js";
 
-// Stand-ins for the browser: each read waits until the test answers it, and the socket opens
-// when the test says so.
+// Stand-ins for the browser: each read waits until the test answers it, or until its signal aborts,
+// and the socket opens when the test says so.
 /** @param {{ isShowing?: () => boolean }} [options] */
 function startStore({ isShowing } = {}) {
   const reads = [];
   const sockets = [];
   globalThis.fetch = /** @type {any} */ (
-    (url) =>
-      new Promise((resolve) => {
+    (url, init) =>
+      new Promise((resolve, reject) => {
         const answer = (body) => resolve(new Response(JSON.stringify(body)));
-        reads.push({ url: String(url), answer, resolve });
+        const stallBody = () =>
+          resolve(
+            new Response(
+              new ReadableStream({
+                start: (controller) =>
+                  init.signal.addEventListener("abort", () => controller.error(init.signal.reason)),
+              }),
+            ),
+          );
+        init?.signal?.addEventListener("abort", () => reject(init.signal.reason));
+        reads.push({ url: String(url), answer, resolve, stallBody });
       })
   );
   globalThis.WebSocket = /** @type {any} */ (
@@ -48,7 +59,24 @@ function startStore({ isShowing } = {}) {
 const START = Date.parse("2026-10-04T21:00:00Z");
 
 beforeEach(() => mock.timers.enable({ apis: ["setTimeout", "Date"], now: START }));
-afterEach(() => mock.timers.reset());
+afterEach(() => {
+  mock.timers.reset();
+  mock.restoreAll();
+});
+
+// Stands in for the platform's timeout signals, so a test can say when one runs out.
+function trackDeadlines() {
+  const deadlines = [];
+  mock.method(AbortSignal, "timeout", (/** @type {number} */ ms) => {
+    const controller = new AbortController();
+    deadlines.push({
+      ms,
+      expire: () => controller.abort(new DOMException("The operation timed out.", "TimeoutError")),
+    });
+    return controller.signal;
+  });
+  return deadlines;
+}
 
 const HANDSHAKE_WAIT_MS = 3 * 1000;
 const RECONNECT_MAX_MS = 30 * 1000;
@@ -822,4 +850,75 @@ test("a page that loads with the copy it last showed waits for the store's updat
   hear({ updating: false });
 
   assert.deepEqual(steps, [false, 8, "drawn", true]);
+});
+
+test("a document read that never answers fails as unavailable once its deadline runs out", async () => {
+  const deadlines = trackDeadlines();
+  const { store } = startStore();
+  const reading = store.doc("seasons/2026").get();
+  await settle();
+
+  assert.deepEqual(
+    deadlines.map(({ ms }) => ms),
+    [WAKING_REQUEST_TIMEOUT_MS],
+  );
+  deadlines[0].expire();
+  await assert.rejects(reading, { code: "unavailable" });
+});
+
+test("a listing read that never answers fails as unavailable once its deadline runs out", async () => {
+  const deadlines = trackDeadlines();
+  const { store } = startStore();
+  const reading = store.collection("readings-2026").limit(10).get();
+  await settle();
+
+  deadlines[0].expire();
+  await assert.rejects(reading, { code: "unavailable" });
+});
+
+test("a read whose body stalls after its headers fails as unavailable once its deadline runs out", async () => {
+  const deadlines = trackDeadlines();
+  const { store, reads } = startStore();
+  const reading = store.doc("seasons/2026").get();
+  reads[0].stallBody();
+  await settle();
+
+  deadlines[0].expire();
+  await assert.rejects(reading, { code: "unavailable" });
+});
+
+test("a read that answers before its deadline is unaffected by it", async () => {
+  const deadlines = trackDeadlines();
+  const { store, reads } = startStore();
+  const reading = store.doc("seasons/2026").get();
+  reads[0].answer({ data: SEASON });
+  const snapshot = await reading;
+  deadlines[0].expire();
+
+  assert.deepEqual(snapshot.data(), SEASON);
+});
+
+test("a watched read that never answers gives its socket up for a new one, whose read then arrives", async () => {
+  const deadlines = trackDeadlines();
+  const { store, reads, sockets, openSocket } = startStore();
+  const heard = [];
+  store.doc("seasons/2026").onSnapshot(
+    (snapshot) => {
+      heard.push(snapshot.data());
+    },
+    () => {},
+  );
+  openSocket();
+  await settle();
+
+  deadlines[0].expire();
+  await settle();
+  assert.ok(sockets[0].isClosed);
+
+  mock.timers.tick(RECONNECT_FIRST_MS);
+  assert.equal(sockets.length, 2);
+  openSocket();
+  reads.at(-1).answer({ data: SEASON });
+  await settle();
+  assert.deepEqual(heard, [SEASON]);
 });
