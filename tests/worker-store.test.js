@@ -15,13 +15,14 @@ function startStore({ isShowing } = {}) {
     (url, init) =>
       new Promise((resolve, reject) => {
         const answer = (body) => resolve(new Response(JSON.stringify(body)));
-        const stallBody = () =>
+        const stallBody = (status = 200) =>
           resolve(
             new Response(
               new ReadableStream({
                 start: (controller) =>
                   init.signal.addEventListener("abort", () => controller.error(init.signal.reason)),
               }),
+              { status },
             ),
           );
         init?.signal?.addEventListener("abort", () => reject(init.signal.reason));
@@ -429,6 +430,20 @@ test("a read the Worker turns away for want of the access code reloads the page"
   reads[0].resolve(
     new Response(JSON.stringify({ error: { code: "access_required" } }), { status: 401 }),
   );
+  await settle();
+  assert.equal(reloads, 1);
+  delete globalThis.location;
+});
+
+test("a signed-out read reloads the page without waiting for its body", async () => {
+  const { store, reads } = startStore();
+  let reloads = 0;
+  globalThis.location = /** @type {any} */ ({ reload: () => (reloads += 1) });
+  store
+    .doc("seasons/2026")
+    .get()
+    .catch(() => {});
+  reads[0].stallBody(401);
   await settle();
   assert.equal(reloads, 1);
   delete globalThis.location;

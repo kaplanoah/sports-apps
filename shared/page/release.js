@@ -1,8 +1,8 @@
 // A release's label names its channel, like beta, and is null on production.
 /** @typedef {{ version: string | null, commit: string, builtAt: string, label: string | null }} Release */
 
-// A phone waking a page can hold its first requests until they time out, so a request made as the
-// page wakes gives up rather than keep every later try waiting on it.
+// A phone waking a page can hold its requests until they time out, so a request the page makes as
+// it wakes or recovers gives up rather than keep every later try waiting on it.
 export const WAKING_REQUEST_TIMEOUT_MS = 10 * 1000;
 
 // The deploy writes version.json into the Worker's bundle; a local server has none, and answers

@@ -70,6 +70,7 @@ async function requestJson(url) {
   let body;
   try {
     response = await fetch(url, { cache: "no-store", signal });
+    reloadWhenSignedOut(response);
     body = await response.json().catch((error) => {
       if (signal.aborted) throw error;
       return null;
@@ -77,7 +78,6 @@ async function requestJson(url) {
   } catch (error) {
     throw new StoreError("unavailable", error instanceof Error ? error.message : String(error));
   }
-  reloadWhenSignedOut(response);
   if (!response.ok) {
     const { code, message } = readWorkerError(body, response.status, "The store");
     throw new StoreError(code, message);
