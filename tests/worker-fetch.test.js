@@ -126,7 +126,10 @@ test("a body the network cuts off, or the deadline stops, rejects with no status
     start: (controller) => controller.error(new TypeError("network connection lost")),
   });
   globalThis.fetch = /** @type {any} */ (async () => new Response(cut));
-  await assert.rejects(fetchFromWorker("cut", RULES), (error) => !("status" in error));
+  await assert.rejects(
+    fetchFromWorker("cut", RULES),
+    (error) => !("status" in /** @type {object} */ (error)),
+  );
 
   globalThis.fetch = /** @type {any} */ (
     async (_url, init) =>
@@ -139,6 +142,6 @@ test("a body the network cuts off, or the deadline stops, rejects with no status
   );
   await assert.rejects(
     fetchFromWorker("stalled", { ...RULES, timeoutMs: 20 }),
-    (error) => !("status" in error),
+    (error) => !("status" in /** @type {object} */ (error)),
   );
 });
