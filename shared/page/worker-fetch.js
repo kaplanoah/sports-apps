@@ -2,7 +2,7 @@
 // the same path is shared, so the read a finger starts as it comes down on a row serves the sheet
 // the tap opens, and a sheet opened again soon doesn't wait on another.
 import { reloadWhenSignedOut } from "./access.js";
-import { readWorkerError } from "./worker-error.js";
+import { readJsonBody, readWorkerError } from "./worker-error.js";
 
 /** @typedef {{ timeoutMs: number, isExpected: (body: any) => boolean }} ReadRules */
 
@@ -20,7 +20,7 @@ async function requestFromWorker(path, { timeoutMs, isExpected }) {
     signal: AbortSignal.timeout(timeoutMs),
   });
   reloadWhenSignedOut(response);
-  const body = await response.json().catch(() => null);
+  const body = await readJsonBody(response);
   if (!response.ok) {
     const failure = readWorkerError(body, response.status);
     throw Object.assign(new Error(failure.message), {

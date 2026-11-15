@@ -1,9 +1,10 @@
 // A release's label names its channel, like beta, and is null on production.
 /** @typedef {{ version: string | null, commit: string, builtAt: string, label: string | null }} Release */
 
-// A phone waking a page can hold its first requests until they time out, so a request made as the
-// page wakes gives up rather than keep every later try waiting on it.
-export const WAKING_REQUEST_TIMEOUT_MS = 10 * 1000;
+// A proxy, a captive portal, or a phone that has just woken can hold a request open, so a store
+// read, the release check, or the daily count gives up at this limit rather than keep every later
+// try waiting.
+export const PAGE_REQUEST_TIMEOUT_MS = 10 * 1000;
 
 // The deploy writes version.json into the Worker's bundle; a local server has none, and answers
 // null. A read that gets no answer rejects, so a caller can try again.
@@ -11,7 +12,7 @@ export const WAKING_REQUEST_TIMEOUT_MS = 10 * 1000;
 export async function fetchRelease() {
   const response = await fetch(new URL("version.json", location.href), {
     cache: "no-store",
-    signal: AbortSignal.timeout(WAKING_REQUEST_TIMEOUT_MS),
+    signal: AbortSignal.timeout(PAGE_REQUEST_TIMEOUT_MS),
   });
   if (response.status === 404) return null;
   if (!response.ok) throw new Error(`version.json answered ${response.status}`);
