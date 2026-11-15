@@ -119,3 +119,26 @@ test("an answer that isn't JSON, or isn't the one asked for, is unexpected", asy
     status: 200,
   });
 });
+
+test("a body the network cuts off, or the deadline stops, rejects with no status", async () => {
+  globalThis.location = /** @type {any} */ ({ href: PAGE });
+  const cut = new ReadableStream({
+    start: (controller) => controller.error(new TypeError("network connection lost")),
+  });
+  globalThis.fetch = /** @type {any} */ (async () => new Response(cut));
+  await assert.rejects(fetchFromWorker("cut", RULES), (error) => !("status" in error));
+
+  globalThis.fetch = /** @type {any} */ (
+    async (_url, init) =>
+      new Response(
+        new ReadableStream({
+          start: (controller) =>
+            init.signal.addEventListener("abort", () => controller.error(init.signal.reason)),
+        }),
+      )
+  );
+  await assert.rejects(
+    fetchFromWorker("stalled", { ...RULES, timeoutMs: 20 }),
+    (error) => !("status" in error),
+  );
+});

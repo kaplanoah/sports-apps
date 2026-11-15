@@ -1,8 +1,9 @@
 // A release's label names its channel, like beta, and is null on production.
 /** @typedef {{ version: string | null, commit: string, builtAt: string, label: string | null }} Release */
 
-// A proxy, a captive portal, or a phone that has just woken can hold a request open, so a read the
-// page makes of its own Worker gives up at this limit rather than keep every later try waiting.
+// A proxy, a captive portal, or a phone that has just woken can hold a request open, so a store
+// read, the release check, or the daily count gives up at this limit rather than keep every later
+// try waiting.
 export const PAGE_REQUEST_TIMEOUT_MS = 10 * 1000;
 
 // The deploy writes version.json into the Worker's bundle; a local server has none, and answers

@@ -6,7 +6,7 @@ import { UPDATING_WAIT_MS } from "./catch-up-note.js";
 import { noteStep } from "./diagnostics.js";
 import { PAGE_REQUEST_TIMEOUT_MS } from "./release.js";
 import { isStoreDocumentPath } from "./store-path.js";
-import { readWorkerError } from "./worker-error.js";
+import { readJsonBody, readWorkerError } from "./worker-error.js";
 
 const RECONNECT_FIRST_MS = 1000;
 // Pull to refresh holds the page down while the store catches up, but no longer than this.
@@ -71,10 +71,7 @@ async function requestJson(url) {
   try {
     response = await fetch(url, { cache: "no-store", signal });
     reloadWhenSignedOut(response);
-    body = await response.json().catch((error) => {
-      if (error instanceof SyntaxError) return null;
-      throw error;
-    });
+    body = await readJsonBody(response);
   } catch (error) {
     throw new StoreError("unavailable", error instanceof Error ? error.message : String(error));
   }

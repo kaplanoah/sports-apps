@@ -19,3 +19,18 @@ export function readWorkerError(body, status, answerer = "The Worker") {
     message: typeof message === "string" && message ? message : `${answerer} answered ${status}`,
   };
 }
+
+/**
+ * A response's JSON, or null when its body isn't JSON, as a captive portal's page isn't. A body
+ * the network cuts off or the page's deadline stops rejects instead, since nothing answered.
+ * @param {Response} response
+ * @returns {Promise<any>}
+ */
+export async function readJsonBody(response) {
+  try {
+    return await response.json();
+  } catch (error) {
+    if (error instanceof SyntaxError) return null;
+    throw error;
+  }
+}
