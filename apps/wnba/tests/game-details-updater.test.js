@@ -526,3 +526,48 @@ test("each run saves its status: when it ran, how many requests it made, and a r
   assert.equal(read.requests, 2);
   assert.deepEqual(read.lastFailure, failed.lastFailure);
 });
+
+test("a final's read keeps a lead saved while it ran beside the box score it read, and is read again", async () => {
+  const key = `games/${VALKYRIES_AT_WINGS.id}`;
+  const { docs, runJob, wait, takeRequests } = createRun({
+    kept: { [key]: { boxScore: null, lead: null } },
+    seasons: { 2026: [{ ...VALKYRIES_AT_WINGS, end: new Date(END).toISOString() }] },
+  });
+  const readDoc = docs.read;
+  let isSaved = false;
+  docs.read = async (readKey) => {
+    const value = await readDoc(readKey);
+    if (readKey === key && !isSaved) {
+      isSaved = true;
+      await docs.update(key, (latest) => ({ ...latest, lead: "newer" }));
+    }
+    return value;
+  };
+
+  await runJob();
+
+  const kept = docs.stored.get(key);
+  assert.equal(kept.lead, "newer");
+  assert.ok(kept.boxScore, "the box score it read lands beside the newer lead");
+  takeRequests();
+  wait(10);
+  await runJob();
+  assert.ok(takeRequests().length, "a read that lost its lead is read again");
+});
+
+test("a final whose stored details carry the store's own facts counts as read whole", async () => {
+  const key = `games/${VALKYRIES_AT_WINGS.id}`;
+  const { runJob, wait, takeRequests } = createRun({
+    kept: { [key]: { boxScore: null, lead: null, season: 2026, isCupFinal: false } },
+    seasons: { 2026: [{ ...VALKYRIES_AT_WINGS, end: new Date(END).toISOString() }] },
+  });
+  await runJob();
+  wait(5);
+  await runJob();
+  wait(10);
+  await runJob();
+  takeRequests();
+  wait(10);
+  await runJob();
+  assert.deepEqual(takeRequests(), []);
+});

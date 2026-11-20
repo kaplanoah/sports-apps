@@ -1,6 +1,6 @@
 import { isSameJson } from "../page/compare.js";
 import { listPastSeasons } from "./background-job.js";
-import { mergeReadDetails } from "./detail-merge.js";
+import { isReadKept, mergeReadDetails } from "./detail-merge.js";
 import { findSettledTime } from "./feed-keeper.js";
 import { noteFailure, runWithStatus } from "./job-status.js";
 
@@ -110,7 +110,7 @@ async function keepGame(context, league, game, read) {
       fields: league.detailFields,
     });
     // A read that lost a part to a newer write isn't whole, so the job reads the game again.
-    isWhole = answer.isWhole && isSameJson(kept, answer.details);
+    isWhole = answer.isWhole && isReadKept(kept, answer.details, league.detailFields);
   } catch (error) {
     noteFailure(context.failures, `Reading game ${game.id}'s details`, error);
   }

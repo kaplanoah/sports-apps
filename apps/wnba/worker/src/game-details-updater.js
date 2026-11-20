@@ -8,7 +8,7 @@ import { createGameDetailsJob, nameReadsKey } from "../../../../shared/worker/ga
 // (game-details-job.js), until the league and ESPN have both caught up: a season's playoff games
 // and each team's last, newest first.
 
-const NO_DETAILS = { boxScore: null, lead: null };
+const NO_DETAILS = Object.fromEntries(GAME_DETAIL_FIELDS.map((field) => [field, null]));
 // Where the WNBA's own job kept each season's reads, before the shared job kept them.
 const OWN_READS_PREFIX = "reads:";
 
