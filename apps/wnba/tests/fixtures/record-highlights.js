@@ -33,7 +33,11 @@ const trimVideo = (video) => ({
   thumbnail: video.thumbnail,
   timeRestrictions: { expirationDate: video.timeRestrictions?.expirationDate },
   links: {
-    source: { href: video.links?.source?.href, HD: { href: video.links?.source?.HD?.href } },
+    source: {
+      href: video.links?.source?.href,
+      HD: { href: video.links?.source?.HD?.href },
+      HLS: { href: video.links?.source?.HLS?.href },
+    },
   },
 });
 

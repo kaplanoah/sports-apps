@@ -226,6 +226,7 @@ const Clip = z.looseObject({
   length: z.number().nonnegative().nullable(),
   still: z.string().nullable(),
   video: Identifier,
+  stream: z.string().nullable(),
 });
 
 const Story = z.object({
