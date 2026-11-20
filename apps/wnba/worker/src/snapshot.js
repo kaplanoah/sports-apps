@@ -110,14 +110,15 @@ export function createSnapshotLoader({
   /**
    * @param {keyof typeof FEED_DATA} name
    * @param {string} url
-   * @param {number} season
    */
-  const fetchFeed = async (name, url, season) => {
-    const answer = await fetchWnbaJson(fetchImpl, url, LIVE_CACHE_SECONDS, (answer) =>
-      hasFeedData(name, answer),
-    );
+  const fetchFeed = (name, url) =>
+    fetchWnbaJson(fetchImpl, url, LIVE_CACHE_SECONDS, (answer) => hasFeedData(name, answer));
+
+  /** @param {keyof typeof FEED_DATA} name @param {any} answer @param {number} season */
+  function validateFeed(name, answer, season) {
+    if (!hasFeedData(name, answer)) throw new Error(`The WNBA's ${name} answer has no data`);
     return WNBASnapshot.validateFeedResponse(name, answer, { season });
-  };
+  }
 
   /**
    * @param {keyof typeof SLOW_FEEDS} name
@@ -126,7 +127,10 @@ export function createSnapshotLoader({
    * @param {{ isBehind?: (answer: any) => boolean, readAgain?: boolean, onFailure: (reason: string) => void, onNextRead: (at: number) => void }} options
    */
   const readSlowFeed = (name, url, season, options) =>
-    slowFeeds.readFeed(name, url, () => fetchFeed(name, url, season), options);
+    slowFeeds.readFeed(name, url, () => fetchFeed(name, url), {
+      ...options,
+      validate: (answer) => validateFeed(name, answer, season),
+    });
 
   /** @param {string} url */
   const fetchEspn = (url) => fetchEspnJson(fetchImpl, url, LIVE_CACHE_SECONDS);
@@ -232,11 +236,9 @@ export function createSnapshotLoader({
       noteReason(name)(describeError(error));
       return null;
     };
-    const scoreboard = await fetchFeed(
-      "scoreboard",
-      WNBASnapshot.REQUESTS.scoreboard,
-      season,
-    ).catch(noteFailure("scoreboard"));
+    const scoreboard = await fetchFeed("scoreboard", WNBASnapshot.REQUESTS.scoreboard)
+      .then((answer) => validateFeed("scoreboard", answer, season))
+      .catch(noteFailure("scoreboard"));
     await slowFeeds.noteFinalCount(scoreboard ? countFinals(scoreboard) : null);
     const hasGamesLeftLive = (schedule) =>
       WNBASnapshot.listGamesLeftLive(schedule, scoreboard, season).size > 0;
