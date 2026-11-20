@@ -5,6 +5,7 @@ import assert from "node:assert/strict";
 import { BACKGROUND_JOBS } from "../page/js/background-jobs.js";
 import { createSnapshotLoader } from "../worker/src/snapshot.js";
 import { SeasonStore } from "../worker/src/store.js";
+import { createDeferred } from "../../../tests/deferred.js";
 import { createDurableObjectContext } from "../../../tests/durable-object-context.js";
 import { createMemoryStorage, FAILED_FEED_WAIT_MS } from "../../../shared/worker/feed-keeper.js";
 import { readAfternoonEspn } from "./espn-fixtures.js";
@@ -105,9 +106,10 @@ test("the real league store keeps what its last update saved when a reminder ver
 /**
  * A league store over the afternoon fixture's feeds, read through the real snapshot loader, with
  * each feed named in `downFeeds` answering a page instead, and ESPN answering `espn` by URL.
- * @param {{ espn?: Record<string, unknown> }} [options]
+ * @param {{ espn?: Record<string, unknown>, loadDetails?: (...args: any[]) => Promise<any> }} [options]
+ *   `loadDetails` stands in for the watched game loader
  */
-function createLeagueStore({ espn = {} } = {}) {
+function createLeagueStore({ espn = {}, loadDetails = undefined } = {}) {
   const fixture = JSON.parse(
     readFileSync(new URL("./fixtures/2026-09-30-afternoon.json", import.meta.url), "utf8"),
   );
@@ -133,7 +135,7 @@ function createLeagueStore({ espn = {} } = {}) {
   const store = new SeasonStore(
     ctx,
     {},
-    { now: () => now, createLoadSnapshot: () => loadSnapshot },
+    { now: () => now, createLoadSnapshot: () => loadSnapshot, loadDetails },
   );
   return { store, stored, downFeeds, now };
 }
@@ -367,4 +369,27 @@ test("feed deadlines preserve faster live polling and do not turn unrelated fail
     );
     assert.equal(await store.updateSeason(), delay);
   }
+});
+
+test("a watched game's slow read keeps the box score it read and a lead saved while it ran", async () => {
+  const { promise: started, resolve: announceRead } = createDeferred();
+  const { promise: held, resolve: releaseRead } = createDeferred();
+  const { store, stored } = createLeagueStore({
+    loadDetails: async (id, snapshot, kept) => {
+      announceRead();
+      await held;
+      return { ...kept, boxScore: { state: "live 2" } };
+    },
+  });
+  const key = "games/1042600132";
+  await store.updateDoc(key, () => ({ boxScore: { state: "live" }, lead: { periods: 1 } }));
+
+  const refreshing = store.refreshDetails("1042600132", null);
+  await started;
+  await store.updateDoc(key, (latest) => ({ ...latest, lead: { periods: 2 } }));
+  releaseRead();
+  await refreshing;
+
+  assert.deepEqual(stored.get(key).boxScore, { state: "live 2" });
+  assert.deepEqual(stored.get(key).lead, { periods: 2 });
 });

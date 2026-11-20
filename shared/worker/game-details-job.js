@@ -1,5 +1,6 @@
 import { isSameJson } from "../page/compare.js";
 import { listPastSeasons } from "./background-job.js";
+import { isReadKept, mergeReadDetails } from "./detail-merge.js";
 import { findSettledTime } from "./feed-keeper.js";
 import { noteFailure, runWithStatus } from "./job-status.js";
 
@@ -38,6 +39,8 @@ const STATUS_KEY = "games/status";
  * @property {(id: string) => string} nameKey where the store keeps a game's details
  * @property {(details: any) => boolean} [isStandIn] whether details kept stand in for the league's
  *   own, so the game is read again past giving up, less often, until they don't
+ * @property {string[]} [detailFields] the fields of a game's details a read settles on its own;
+ *   without them the details are one whole
  * @property {number} [version] how much of a game the league keeps, raised when that grows
  */
 
@@ -69,6 +72,21 @@ function isDue(read, { now, version }) {
 }
 
 /**
+ * Saves what a read changed onto the details saved now, and answers the details kept.
+ * @param {JobContext["docs"]} docs
+ * @param {{ key: string, stored: any, details: any, fields?: string[] }} read
+ */
+async function saveDetails(docs, { key, stored, details, fields }) {
+  let kept = null;
+  await docs.update(key, (latest) => {
+    const merged = mergeReadDetails(stored, details, latest, fields);
+    kept = merged ?? latest;
+    return merged;
+  });
+  return kept;
+}
+
+/**
  * Reads a game's details and saves them when they changed, keeping what was saved when the read
  * fails.
  * @param {RunContext} context
@@ -85,9 +103,14 @@ async function keepGame(context, league, game, read) {
   let isWhole = false;
   try {
     const answer = await league.readDetails(context, game, stored);
-    if (!isSameJson(stored, answer.details)) await context.docs.write(key, answer.details);
-    kept = answer.details;
-    isWhole = answer.isWhole;
+    kept = await saveDetails(context.docs, {
+      key,
+      stored,
+      details: answer.details,
+      fields: league.detailFields,
+    });
+    // A read that lost a part to a newer write isn't whole, so the job reads the game again.
+    isWhole = answer.isWhole && isReadKept(kept, answer.details, league.detailFields);
   } catch (error) {
     noteFailure(context.failures, `Reading game ${game.id}'s details`, error);
   }

@@ -1,4 +1,5 @@
 import { countClaudeCalls } from "./claude.js";
+import { mergeReadDetails } from "./detail-merge.js";
 import { DETAIL_ANSWER_PREFIX } from "./detail-reads.js";
 import { nameStoredFeedKey } from "./feed-keeper.js";
 import { createIdentityDocuments } from "./identity-documents.js";
@@ -104,6 +105,8 @@ import { describeError, respondError, respondJson, respondMethodNotAllowed } fro
  * @property {(change: { before: Updates, after: Updates, snapshot: Snapshot, now: number }) => object[]} listNotifications
  * @property {(snapshot: Snapshot) => ReturnType<typeof import("../page/reminder-games.js").listTimedReminderGames>} [listReminderGames]
  * @property {string} [detailsCollection] where the details of the games pages have open are kept
+ * @property {string[]} [detailFields] the fields of those details that a read settles on its own;
+ *   without them a game's details are one whole
  * @property {(options: { fetchImpl: typeof fetch }) => (id: string, snapshot: Snapshot, stored: any, readDoc: SeasonDocuments["read"]) => Promise<object | null>} [createLoadDetails]
  *   reads a game's details, or answers null while it needs none
  * @property {(context: DetailContext) => (url: URL) => Promise<Response | null>} [createReadDetail]
@@ -849,7 +852,10 @@ export function createSeasonStore(league) {
       try {
         const stored = await this.docs.read(key);
         const details = await this.loadDetails(id, snapshot, stored, this.docs.read);
-        if (details && !isSameJson(stored, details)) await this.putDoc(key, details);
+        if (details)
+          await this.updateDoc(key, (latest) =>
+            mergeReadDetails(stored, details, latest, league.detailFields),
+          );
       } catch (error) {
         console.error(`Reading ${key} failed: ${describeError(error)}`);
       }

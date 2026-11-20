@@ -1,14 +1,14 @@
 import { createBoxScoreReader, isLeagueFinal } from "./adapters/box-score.js";
 import { isFromEspn } from "./adapters/espn-box-score.js";
 import { createEspnGameReader, describeGameLead } from "./adapters/lead.js";
-import { nameGameDetailsKey } from "./store-docs.js";
+import { GAME_DETAIL_FIELDS, nameGameDetailsKey } from "./store-docs.js";
 import { createGameDetailsJob, nameReadsKey } from "../../../../shared/worker/game-details-job.js";
 
 // Keeps each finished game's box score and lead, as the shared job reads each final
 // (game-details-job.js), until the league and ESPN have both caught up: a season's playoff games
 // and each team's last, newest first.
 
-const NO_DETAILS = { boxScore: null, lead: null };
+const NO_DETAILS = Object.fromEntries(GAME_DETAIL_FIELDS.map((field) => [field, null]));
 // Where the WNBA's own job kept each season's reads, before the shared job kept them.
 const OWN_READS_PREFIX = "reads:";
 
@@ -118,6 +118,7 @@ export function createWnbaGameDetailsJob() {
     listFinals,
     readDetails,
     nameKey: nameGameDetailsKey,
+    detailFields: GAME_DETAIL_FIELDS,
     isStandIn,
   });
   return {

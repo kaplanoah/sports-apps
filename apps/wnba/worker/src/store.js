@@ -10,7 +10,7 @@ import { createHighlightsUpdater } from "./highlights-updater.js";
 import { createWnbaNewsJob } from "./news-updater.js";
 import { PLAYER_JOB, createPlayerJob } from "./player-updater.js";
 import { createSnapshotLoader } from "./snapshot.js";
-import { GAME_DETAILS_COLLECTION } from "./store-docs.js";
+import { GAME_DETAIL_FIELDS, GAME_DETAILS_COLLECTION } from "./store-docs.js";
 import { createWatchedGameLoader } from "./watched-games.js";
 
 export { forwardToStore, readStoreHealth } from "../../../../shared/worker/season-store.js";
@@ -36,6 +36,7 @@ const league = {
   listNotifications: SeasonUpdater.listNotifications,
   listReminderGames,
   detailsCollection: GAME_DETAILS_COLLECTION,
+  detailFields: GAME_DETAIL_FIELDS,
   createLoadDetails: (options) => createWatchedGameLoader(options),
   createReadDetail,
   backgroundJobs: {
