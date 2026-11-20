@@ -266,6 +266,7 @@ Pages link these before their own stylesheet, and theme them with the tokens the
 - `identity-backfill.js`: versioned coverage checks, nested checkpoints, candidate-group indexes and persisted optional-work pacing
 - `sports-schema.js`: shared sports contracts and detail records, validated only in Workers with Zod configured without runtime compilation
 - `store-reads.js`: reading the documents a store-owned detail service keeps for a sheet
+- `detail-merge.js`: saving a game's read details onto the latest, never over a newer field
 - `detail-reads.js`: sharing store-owned detail reads and retaining usable answers across restarts
 - `request-budget.js`: bounding historical requests after live work and reminders
 - `story-lead.js`: a story's first lines as plain text

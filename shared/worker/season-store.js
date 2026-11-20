@@ -1,4 +1,5 @@
 import { countClaudeCalls } from "./claude.js";
+import { mergeReadDetails } from "./detail-merge.js";
 import { DETAIL_ANSWER_PREFIX } from "./detail-reads.js";
 import { nameStoredFeedKey } from "./feed-keeper.js";
 import { createIdentityDocuments } from "./identity-documents.js";
@@ -849,7 +850,8 @@ export function createSeasonStore(league) {
       try {
         const stored = await this.docs.read(key);
         const details = await this.loadDetails(id, snapshot, stored, this.docs.read);
-        if (details && !isSameJson(stored, details)) await this.putDoc(key, details);
+        if (details)
+          await this.updateDoc(key, (latest) => mergeReadDetails(stored, details, latest));
       } catch (error) {
         console.error(`Reading ${key} failed: ${describeError(error)}`);
       }

@@ -650,6 +650,37 @@ test("a game's details read the store's other documents, like the season's list 
   });
 });
 
+test("a slow read of a game's details never overwrites a field saved while it ran", async () => {
+  const context = createDurableObjectContext();
+  const { promise: started, resolve: announceRead } = createDeferred();
+  const { promise: held, resolve: releaseRead } = createDeferred();
+  const SeasonStore = createSeasonStore({ ...QUIET_LEAGUE, detailsCollection: "games" });
+  const store = new SeasonStore(
+    context.ctx,
+    {},
+    {
+      now: () => NOW,
+      loadDetails: async (id, snapshot, stored) => {
+        announceRead();
+        await held;
+        return { ...stored, boxScore: "final", lead: "old" };
+      },
+    },
+  );
+  context.stored.set("games/1", { boxScore: "live", lead: "old" });
+  const page = createPageSocket();
+  context.ctx.acceptWebSocket(page);
+  store.webSocketMessage(page, JSON.stringify({ watching: ["games/1"] }));
+
+  const updating = store.alarm();
+  await started;
+  await store.updateDoc("games/1", (latest) => ({ ...latest, lead: "new" }));
+  releaseRead();
+  await updating;
+
+  assert.deepEqual(await context.ctx.storage.get("games/1"), { boxScore: "final", lead: "new" });
+});
+
 test("a game's details that fail to load leave the saved ones and don't hold up the update", async () => {
   const context = createDurableObjectContext();
   const SeasonStore = createSeasonStore({ ...QUIET_LEAGUE, detailsCollection: "games" });

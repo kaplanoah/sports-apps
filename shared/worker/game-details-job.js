@@ -1,5 +1,6 @@
 import { isSameJson } from "../page/compare.js";
 import { listPastSeasons } from "./background-job.js";
+import { mergeReadDetails } from "./detail-merge.js";
 import { findSettledTime } from "./feed-keeper.js";
 import { noteFailure, runWithStatus } from "./job-status.js";
 
@@ -69,6 +70,21 @@ function isDue(read, { now, version }) {
 }
 
 /**
+ * Saves what a read changed onto the details saved now, and answers the details kept.
+ * @param {JobContext["docs"]} docs
+ * @param {{ key: string, stored: any, details: any }} read
+ */
+async function saveDetails(docs, { key, stored, details }) {
+  let kept = null;
+  await docs.update(key, (latest) => {
+    const merged = mergeReadDetails(stored, details, latest);
+    kept = merged ?? latest;
+    return merged;
+  });
+  return kept;
+}
+
+/**
  * Reads a game's details and saves them when they changed, keeping what was saved when the read
  * fails.
  * @param {RunContext} context
@@ -85,8 +101,7 @@ async function keepGame(context, league, game, read) {
   let isWhole = false;
   try {
     const answer = await league.readDetails(context, game, stored);
-    if (!isSameJson(stored, answer.details)) await context.docs.write(key, answer.details);
-    kept = answer.details;
+    kept = await saveDetails(context.docs, { key, stored, details: answer.details });
     isWhole = answer.isWhole;
   } catch (error) {
     noteFailure(context.failures, `Reading game ${game.id}'s details`, error);
