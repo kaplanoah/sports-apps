@@ -1,6 +1,12 @@
 import { finishSeries, WILD_CARD_SERIES, DIVISION_SERIES } from "./bracket-rounds.mjs";
 import { test, expect, openApp } from "./harness.mjs";
-import { expectReloadOpensOn, RELOAD_STATES } from "../../../../tests/browser/reload-states.mjs";
+import {
+  expectFailedScheduleLetsRecordFill,
+  expectLateRecordKeepsShownDay,
+  expectReloadOpensOn,
+  expectStalledScheduleLetsRecordFill,
+  RELOAD_STATES,
+} from "../../../../tests/browser/reload-states.mjs";
 import {
   MINUTE_MS,
   SHORT_PHONE,
@@ -42,6 +48,39 @@ for (const { name, opensOn } of RELOAD_STATES) {
     });
   }
 }
+
+const LATE_RECORD = {
+  today: "2026-09-24",
+  shownDay: SHOWN_DAYS.earlierDay,
+  schedulePath: "/store/schedules-2026",
+};
+
+test("a reload from the copy without its season, left on a day before the season's record lists, opens the Games list on that day when the record answers after the store stops holding", async ({
+  page,
+}) => {
+  await page.addInitScript(() => localStorage.setItem("lastTab", "games"));
+  await openApp(page, { isWholeSeason: true });
+
+  await expectLateRecordKeepsShownDay(page, LATE_RECORD);
+});
+
+test("a reload from the copy without its season, left on a day before the season's record lists, opens the Games list on today from the record when the schedule doesn't answer in time", async ({
+  page,
+}) => {
+  await page.addInitScript(() => localStorage.setItem("lastTab", "games"));
+  await openApp(page, { isWholeSeason: true });
+
+  await expectStalledScheduleLetsRecordFill(page, LATE_RECORD);
+});
+
+test("a reload from the copy without its season, left on a day before the season's record lists, opens the Games list on today from the record as soon as the schedule's read fails", async ({
+  page,
+}) => {
+  await page.addInitScript(() => localStorage.setItem("lastTab", "games"));
+  await openApp(page, { isWholeSeason: true });
+
+  await expectFailedScheduleLetsRecordFill(page, LATE_RECORD);
+});
 
 test("a reload two minutes or more after the page left the Games list on another day shows its strip of dates on today, before the page's code arrives and once it runs", async ({
   page,

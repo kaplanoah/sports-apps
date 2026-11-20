@@ -3,6 +3,7 @@ import { listSeasonYears } from "#shared/season-picker.js";
 import { buildBracket } from "./bracket.js";
 import { namePlayerIndexKey, readPlayerIndex } from "#shared/page-search.js";
 import { createSeasonDocFollower } from "#shared/season-doc-follower.js";
+import { createScheduleDue } from "#shared/schedule-due.js";
 import { SNAPSHOT_VERSION, nameScheduleCollection } from "./snapshot.js";
 import { composeState, guessSeasonYear, session } from "./session.js";
 import { TEAMS } from "./teams.js";
@@ -21,6 +22,7 @@ let deferredSeason = null;
 /** @type {number | null} */
 let scheduleYear = null;
 let unwatchSchedule = () => {};
+const scheduleDue = createScheduleDue((isDue) => (session.isScheduleDue = isDue));
 // A season's games run from March to November, a month to a document.
 const SCHEDULE_MONTHS = 12;
 
@@ -45,6 +47,10 @@ function readSchedule(docs) {
 function followSchedule(year, showChange) {
   if (year === scheduleYear) return;
   scheduleYear = year;
+  const redrawSchedule = () => {
+    if (!session.isReordering) showChange();
+  };
+  scheduleDue.expectAnswer(redrawSchedule);
   unwatchSchedule();
   unwatchSchedule = session.db
     .collection(nameScheduleCollection(year))
@@ -53,9 +59,12 @@ function followSchedule(year, showChange) {
       (/** @type {{ docs: { data: () => any }[] }} */ result) => {
         if (year !== scheduleYear) return;
         session.schedule = readSchedule(result.docs);
-        if (!session.isReordering) showChange();
+        scheduleDue.noteAnswer();
+        redrawSchedule();
       },
-      () => {},
+      () => {
+        if (year === scheduleYear) scheduleDue.stopWaiting(redrawSchedule);
+      },
     );
 }
 
