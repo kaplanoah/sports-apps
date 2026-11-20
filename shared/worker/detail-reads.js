@@ -1,4 +1,4 @@
-import { isSameJson } from "../page/compare.js";
+import { mergeReadDetails } from "./detail-merge.js";
 import { createReusedLoader } from "./upstream.js";
 import { respondError, respondJson } from "./responses.js";
 
@@ -50,16 +50,11 @@ export function createDetailReads(reads, { storage, now, docs, services }) {
       if (!response.ok) throw response;
       let body = await response.json();
       if (canonicalKey) {
-        await docs.update(canonicalKey, (stored) => {
-          const previous = service.field ? before?.[service.field] : before;
-          const current = service.field ? stored?.[service.field] : stored;
-          if (!isSameJson(previous, current)) {
-            body = current ?? body;
-            return null;
-          }
-          const answer = service.field ? { ...stored, [service.field]: body } : body;
-          return isSameJson(stored, answer) ? null : answer;
-        });
+        await docs.update(canonicalKey, (latest) =>
+          service.field
+            ? mergeReadDetails(before, { [service.field]: body }, latest, [service.field])
+            : mergeReadDetails(before, body, latest),
+        );
         const saved = await docs.read(canonicalKey);
         body = (service.field ? saved?.[service.field] : saved) ?? body;
       } else body = await keepAnswer(url.pathname + url.search, body);

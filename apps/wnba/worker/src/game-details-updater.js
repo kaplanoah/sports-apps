@@ -1,7 +1,7 @@
 import { createBoxScoreReader, isLeagueFinal } from "./adapters/box-score.js";
 import { isFromEspn } from "./adapters/espn-box-score.js";
 import { createEspnGameReader, describeGameLead } from "./adapters/lead.js";
-import { nameGameDetailsKey } from "./store-docs.js";
+import { GAME_DETAIL_FIELDS, nameGameDetailsKey } from "./store-docs.js";
 import { createGameDetailsJob, nameReadsKey } from "../../../../shared/worker/game-details-job.js";
 
 // Keeps each finished game's box score and lead, as the shared job reads each final
@@ -118,6 +118,7 @@ export function createWnbaGameDetailsJob() {
     listFinals,
     readDetails,
     nameKey: nameGameDetailsKey,
+    detailFields: GAME_DETAIL_FIELDS,
     isStandIn,
   });
   return {

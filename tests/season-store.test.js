@@ -654,7 +654,11 @@ test("a slow read of a game's details never overwrites a field saved while it ra
   const context = createDurableObjectContext();
   const { promise: started, resolve: announceRead } = createDeferred();
   const { promise: held, resolve: releaseRead } = createDeferred();
-  const SeasonStore = createSeasonStore({ ...QUIET_LEAGUE, detailsCollection: "games" });
+  const SeasonStore = createSeasonStore({
+    ...QUIET_LEAGUE,
+    detailsCollection: "games",
+    detailFields: ["boxScore", "lead"],
+  });
   const store = new SeasonStore(
     context.ctx,
     {},
@@ -1433,4 +1437,39 @@ test("a new alarm cancels an older history continuation before it can fetch besi
     "https://example.com/history-2-first",
     "https://example.com/history-2-second",
   ]);
+});
+
+test("a slow live read of a game's details leaves a box score saved while it ran", async () => {
+  const context = createDurableObjectContext();
+  const { promise: started, resolve: announceRead } = createDeferred();
+  const { promise: held, resolve: releaseRead } = createDeferred();
+  const SeasonStore = createSeasonStore({
+    ...QUIET_LEAGUE,
+    detailsCollection: "games",
+    detailFields: ["boxScore", "lead"],
+  });
+  const store = new SeasonStore(
+    context.ctx,
+    {},
+    {
+      now: () => NOW,
+      loadDetails: async (id, snapshot, stored) => {
+        announceRead();
+        await held;
+        return { ...stored, boxScore: "live 2" };
+      },
+    },
+  );
+  context.stored.set("games/1", { boxScore: "live", lead: "old" });
+  const page = createPageSocket();
+  context.ctx.acceptWebSocket(page);
+  store.webSocketMessage(page, JSON.stringify({ watching: ["games/1"] }));
+
+  const updating = store.alarm();
+  await started;
+  await store.updateDoc("games/1", (latest) => ({ ...latest, boxScore: "final" }));
+  releaseRead();
+  await updating;
+
+  assert.deepEqual(await context.ctx.storage.get("games/1"), { boxScore: "final", lead: "old" });
 });
