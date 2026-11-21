@@ -10,22 +10,27 @@ import { setHidden } from "./visibility.mjs";
 const PILL = "#bracketStandingsPill";
 
 /**
- * Has the next load find the pill saved as `saved`, before the page's own code runs.
+ * Has the next load find the pill saved as `saved`, with the markup it shows now, before the
+ * page's own code runs.
  * @param {import("@playwright/test").Page} page
  * @param {{ classes: string, markupClasses?: string }} saved
  */
-const saveObsoletePill = (page, saved) =>
-  page.addInitScript((pill) => {
-    const drawn = JSON.parse(localStorage.getItem("lastDrawn") ?? "{}");
-    drawn.bracketStandingsPill = {
-      markup: "",
-      hidden: false,
-      scrolls: [],
-      savedAt: Date.now(),
-      ...pill,
-    };
-    localStorage.setItem("lastDrawn", JSON.stringify(drawn));
-  }, saved);
+async function saveObsoletePill(page, saved) {
+  const markup = await page.locator(PILL).innerHTML();
+  await page.addInitScript(
+    (pill) => {
+      const drawn = JSON.parse(localStorage.getItem("lastDrawn") ?? "{}");
+      drawn.bracketStandingsPill = {
+        hidden: false,
+        scrolls: [],
+        savedAt: Date.now(),
+        ...pill,
+      };
+      localStorage.setItem("lastDrawn", JSON.stringify(drawn));
+    },
+    { markup, ...saved },
+  );
+}
 
 /**
  * Loads the page again with its modules held and says which classes the pill shows from the copy.
