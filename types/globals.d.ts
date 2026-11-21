@@ -65,6 +65,7 @@ declare function findPlaceToShow(
 };
 declare function readStored(key: string): string | null;
 declare function readSavedParts(): Record<string, any>;
+declare function readMarkupClasses(id: string): string | undefined;
 declare const LAST_DRAWN_KEY: string;
 declare const OPEN_SHEETS_KEY: string;
 declare const LAST_SWITCHED_KEY: string;

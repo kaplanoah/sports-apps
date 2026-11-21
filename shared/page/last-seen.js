@@ -7,7 +7,7 @@
 // time the page shows again (sheet-memory.js).
 
 /* global LAST_DRAWN_KEY -- from open-last-tab.js */
-/* global KEPT_SWITCHES, LAST_SWITCHED_KEY, OPEN_SHEETS_KEY -- from show-last-drawn.js */
+/* global KEPT_SWITCHES, LAST_SWITCHED_KEY, OPEN_SHEETS_KEY, readMarkupClasses -- from show-last-drawn.js */
 
 import { readPath } from "./element-path.js";
 import { forgetStored, readStoredJson, storeJson } from "./local-storage.js";
@@ -93,7 +93,8 @@ function readHolderTop(part) {
 const readPageTop = (part) => (part.closest("section.view.active") ? scrollY : undefined);
 
 // A part's classes and colors can come from its code rather than its markup, like a pager's
-// classes and a game sheet's teams' colors.
+// classes and a game sheet's teams' colors, so its classes are saved with the ones its markup gave
+// it, which a later release's layout may not give.
 /**
  * @param {HTMLElement} part
  * @param {number} savedAt
@@ -102,6 +103,8 @@ const readDrawnPart = (part, savedAt) => ({
   markup: part.innerHTML,
   hidden: part.hidden,
   classes: part.className,
+  markupClasses: readMarkupClasses(part.id),
+
   style: part.getAttribute("style"),
   scrolls: readScrolls(part),
   holderTop: readHolderTop(part),
