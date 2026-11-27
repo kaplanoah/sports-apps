@@ -70,6 +70,24 @@ test("a game's plays come in the order ESPN posted them, which follows the game,
   assert.match(plays[0].video, /^https:\/\/.+\.mp4$/);
 });
 
+test("each clip has ESPN's stream of its video beside the whole file", () => {
+  const { recap, plays } = describeHighlights(GAME.id, RECORDED.summary);
+
+  for (const clip of [recap, ...plays]) {
+    assert.match(clip?.stream ?? "", /^https:\/\/[\w.-]+\/.+\/playlist\.m3u8$/);
+  }
+});
+
+test("a clip ESPN offers no stream of keeps its whole video alone", () => {
+  const summary = structuredClone(RECORDED.summary);
+  for (const video of summary.videos) delete video.links.source.HLS;
+
+  const { plays } = describeHighlights(GAME.id, summary);
+
+  assert.equal(plays[0].stream, null);
+  assert.match(plays[0].video, /\.mp4$/);
+});
+
 test("a story that isn't ESPN's recap of the game, like its preview, stays out", () => {
   const summary = structuredClone(RECORDED.summary);
   summary.article.type = "Preview";
@@ -151,4 +169,47 @@ test("the store's job reads each of the season's finals in ESPN's scoreboard and
     docs.stored.get(nameHighlightsKey(GAME.id)),
     describeHighlights(GAME.id, RECORDED.summary),
   );
+});
+
+test("the store's job reads once more a final it kept before clips carried their stream", async () => {
+  const kept = describeHighlights(GAME.id, RECORDED.summary);
+  const withoutStreams = {
+    ...kept,
+    recap: kept.recap && { ...kept.recap, stream: undefined },
+    plays: kept.plays.map((play) => ({ ...play, stream: undefined })),
+  };
+  const docs = createDocs({
+    "live/current": { season: 2026 },
+    [nameScheduleKey(2026)]: {
+      games: [
+        {
+          id: GAME.id,
+          start: GAME.start,
+          state: "final",
+          away: { team: "IND" },
+          home: { team: "LVA" },
+        },
+      ],
+    },
+    [nameHighlightsKey(GAME.id)]: JSON.parse(JSON.stringify(withoutStreams)),
+  });
+  const longAfter = Date.parse("2026-10-20T12:00:00Z");
+  const espn = createEspnFetch();
+
+  await createHighlightsUpdater().updateStore(
+    /** @type {any} */ ({
+      docs,
+      storage: createJobStorage({
+        "highlight-reads:2026": {
+          [GAME.id]: { readAt: longAfter - 86400000, triedAt: longAfter - 86400000 },
+        },
+      }),
+      env: {},
+      fetchImpl: espn.fetchImpl,
+      now: () => longAfter,
+    }),
+  );
+
+  assert.equal(espn.requests.length, 2);
+  assert.deepEqual(docs.stored.get(nameHighlightsKey(GAME.id)), kept);
 });

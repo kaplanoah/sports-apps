@@ -19,7 +19,7 @@ import {
 // and its last stills swapped over the runs after. Past seasons fill from the remaining historical request budget.
 
 // How MLB's highlights are read; raising it reads each kept final once more (highlights-job.js).
-const HIGHLIGHTS_VERSION = 1;
+const HIGHLIGHTS_VERSION = 2;
 // A game MLB hasn't timed yet ends about three hours after it starts.
 const GAME_LENGTH_MS = 3 * 60 * 60 * 1000;
 

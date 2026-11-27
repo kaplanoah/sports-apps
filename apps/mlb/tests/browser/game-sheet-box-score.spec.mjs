@@ -364,7 +364,7 @@ test("a final's plays sit 13px apart with no line between them, each still 128px
   }
 });
 
-test("a tap anywhere on a play's row plays its clip full screen in the browser's own player", async ({
+test("a tap anywhere on a play's row plays its clip's stream full screen in the browser's own player", async ({
   page,
 }) => {
   const { body } = await openHighlights(page);
@@ -375,6 +375,8 @@ test("a tap anywhere on a play's row plays its clip full screen in the browser's
       this.dataset.askedFullscreen = "true";
       return Promise.resolve();
     };
+    HTMLMediaElement.prototype.canPlayType = (/** @type {string} */ type) =>
+      type === "application/vnd.apple.mpegurl" ? "maybe" : "";
     HTMLMediaElement.prototype.play = function () {
       played.clipsPlayed.push({ src: this.src, isFullscreen: this.dataset.askedFullscreen });
       return Promise.resolve();
@@ -383,6 +385,8 @@ test("a tap anywhere on a play's row plays its clip full screen in the browser's
   const row = body.locator(".clip-row").nth(6);
   await row.scrollIntoViewIfNeeded();
   const video = await row.getAttribute("data-video");
+  const stream = await row.getAttribute("data-stream");
+  expect(stream).toMatch(/\.m3u8$/);
   const title = await row.locator(".clip-title").boundingBox();
   if (!title) throw new Error("The row's title isn't shown");
   const center = { x: title.x + title.width / 2, y: title.y + title.height / 2 };
@@ -398,7 +402,45 @@ test("a tap anywhere on a play's row plays its clip full screen in the browser's
 
   await expect
     .poll(() => page.evaluate(() => /** @type {any} */ (window).clipsPlayed))
-    .toEqual([{ src: video, isFullscreen: "true" }]);
+    .toEqual([{ src: stream, isFullscreen: "true" }]);
+});
+
+test("a clip whose stream fails to load plays its video instead, full screen", async ({ page }) => {
+  const { body } = await openHighlights(page);
+  await page.evaluate(() => {
+    const played = /** @type {any} */ (window);
+    played.clipsPlayed = [];
+    HTMLElement.prototype.requestFullscreen = function () {
+      this.dataset.askedFullscreen = "true";
+      return Promise.resolve();
+    };
+    HTMLMediaElement.prototype.canPlayType = (/** @type {string} */ type) =>
+      type === "application/vnd.apple.mpegurl" ? "maybe" : "";
+    // A stream that fails fires the video's error, then refuses the play it was asked for.
+    HTMLMediaElement.prototype.play = function () {
+      played.clipsPlayed.push({ src: this.src, isFullscreen: this.dataset.askedFullscreen });
+      if (!this.src.endsWith(".m3u8")) return Promise.resolve();
+      this.dispatchEvent(new Event("error"));
+      return Promise.reject(new DOMException("The stream failed", "NotSupportedError"));
+    };
+  });
+  const row = body.locator(".clip-row").nth(6);
+  await row.scrollIntoViewIfNeeded();
+  const video = await row.getAttribute("data-video");
+  const stream = await row.getAttribute("data-stream");
+
+  await row.locator(".clip-title").click();
+
+  await expect
+    .poll(() => page.evaluate(() => /** @type {any} */ (window).clipsPlayed))
+    .toEqual([
+      { src: stream, isFullscreen: "true" },
+      { src: video, isFullscreen: "true" },
+    ]);
+  await expect(page.locator("video.clip-player")).toHaveAttribute(
+    "src",
+    /** @type {string} */ (video),
+  );
 });
 
 test("a still that doesn't load leaves its box's plain color, with no broken picture", async ({
