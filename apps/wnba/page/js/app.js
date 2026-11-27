@@ -106,7 +106,9 @@ function renderAll() {
   const keptScroll = takeBracketScroll();
   setHtml(findElement("bracketWrap"), renderBracket(session.season, now));
   placeBracket(keptScroll);
-  fillDayStrip(listSeasonDays(session.season, session.schedule, now));
+  fillDayStrip(listSeasonDays(session.season, session.schedule, now), {
+    isScheduleDue: session.isScheduleDue,
+  });
   refreshGameSearch();
   drawStandings(session.season);
   drawNews();
