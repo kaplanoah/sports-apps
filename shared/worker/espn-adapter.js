@@ -8,6 +8,8 @@ import {
   BasketballBoxScore,
   EspnGameState,
   GameListing,
+  BasketballGameFacts,
+  BasketballStandings,
   validateSportsData,
 } from "./sports-schema.js";
 import { fetchFeedJson } from "./upstream.js";
@@ -15,6 +17,7 @@ import { readEasternDay } from "#shared/days.js";
 import { readStoryLead } from "./story-lead.js";
 
 export const ESPN_VENDOR = "espn";
+export const ESPN_GAME_LIMIT = 1000;
 const ESPN_SITE = "https://site.api.espn.com/apis/site/v2/sports";
 // ESPN answers any caller, so it needs only to be asked for JSON.
 const JSON_HEADERS = { accept: "application/json" };
@@ -177,6 +180,132 @@ export const readBackupGames = (backup, findTeam) =>
   (backup?.answers ?? [])
     .flatMap((answer) => answer.events ?? [])
     .map((event) => readBackupGame(event, findTeam));
+
+function requireBasketballData(condition) {
+  if (!condition) throw new Error("Invalid ESPN basketball games");
+}
+
+function readBasketballEvent(event, options) {
+  const { season, seasonYear, day, findTeam, seasonTypes, playoffRounds, cupFinalType } = options;
+  requireBasketballData(event?.season?.year === seasonYear);
+  requireBasketballData(typeof event.id === "string" && event.id.trim().length > 0);
+  requireBasketballData(Array.isArray(event.competitions) && event.competitions.length === 1);
+  const competition = event.competitions[0];
+  const competitors = competition.competitors;
+  requireBasketballData(
+    Array.isArray(competitors) &&
+      competitors.length === 2 &&
+      ["away", "home"].every(
+        (side) => competitors.filter((entry) => entry.homeAway === side).length === 1,
+      ),
+  );
+  const status = competition.status ?? event.status;
+  requireBasketballData(["pre", "in", "post"].includes(status?.type?.state));
+  const isOff = ["STATUS_POSTPONED", "STATUS_CANCELED", "STATUS_CANCELLED"].includes(
+    status.type.name,
+  );
+  requireBasketballData(status.type.completed === (!isOff && status.type.state === "post"));
+  if (!isOff && status.type.state === "post")
+    requireBasketballData(status.type.name === "STATUS_FINAL");
+  const state = readBackupGame(event, findTeam);
+  requireBasketballData(
+    state.away?.team && state.home?.team && state.away.team !== state.home.team,
+  );
+  if (!isOff && state.state !== "pre")
+    requireBasketballData(
+      state.away.score !== null && state.home.score !== null && state.period > 0,
+    );
+  const eventDay = readEasternDay(Date.parse(state.start)).date;
+  requireBasketballData(eventDay === day);
+  const isCupFinal = competition.type?.abbreviation === cupFinalType;
+  const phase = isCupFinal ? "cup-final" : seasonTypes[event.season.type];
+  requireBasketballData(!!phase);
+  const round =
+    phase === "playoffs"
+      ? playoffRounds[competition.type?.abbreviation]
+      : phase === "play-in"
+        ? 0
+        : null;
+  requireBasketballData(phase !== "playoffs" || Number.isInteger(round));
+  const notes = (competition.notes ?? []).map((note) => note.headline ?? "");
+  const seriesNumber = notes.map((note) => / - Game (\d+)$/.exec(note)?.[1]).find(Boolean);
+  const isPre = isOff || state.state === "pre";
+  return validateSportsData(BasketballGameFacts, {
+    ...state,
+    state: isOff ? "off" : state.state,
+    id: event.id,
+    season,
+    day,
+    competition: phase,
+    isCupFinal,
+    round,
+    number: seriesNumber ? Number(seriesNumber) : null,
+    gameNumber: competition.gameNumber ?? null,
+    isTimeSet: !isOff && competition.timeValid === true,
+    period: isOff ? null : state.period,
+    clock: isOff ? null : state.clock,
+    away: { ...state.away, score: isPre ? null : state.away.score },
+    home: { ...state.home, score: isPre ? null : state.home.score },
+  });
+}
+
+/**
+ * Explicit league policy supplies season numbering and competition formats.
+ * @param {any} answer
+ * @param {{ leagueId: string, season: number, seasonYear: number, day: string, findTeam: (id: string) => string | null, seasonTypes: Record<number, string>, playoffRounds: Record<string, number>, cupFinalType: string }} options
+ * @returns {import("./sports-schema.js").BasketballGameFactsRecord[]}
+ */
+export function readBasketballGames(answer, options) {
+  requireBasketballData(Array.isArray(answer?.leagues) && answer.leagues.length === 1);
+  const league = answer.leagues[0];
+  requireBasketballData(
+    String(league.id) === options.leagueId && league.season?.year === options.seasonYear,
+  );
+  requireBasketballData(Array.isArray(answer.events) && answer.events.length < ESPN_GAME_LIMIT);
+  const games = answer.events.map((event) => readBasketballEvent(event, options));
+  requireBasketballData(new Set(games.map((game) => game.id)).size === games.length);
+  return games;
+}
+
+/** @param {any} answer @param {{ leagueId: string, seasonYear: number, findTeam: (id: string) => string | null, conferenceSize: number }} options */
+export function readConferenceStandings(
+  answer,
+  { leagueId, seasonYear, findTeam, conferenceSize },
+) {
+  requireBasketballData(
+    answer?.uid?.split("~").includes(`l:${leagueId}`) && answer.season?.year === seasonYear,
+  );
+  requireBasketballData(Array.isArray(answer.children) && answer.children.length === 2);
+  const rows = [];
+  const conferences = new Set();
+  for (const group of answer.children) {
+    const conference = group.abbreviation;
+    requireBasketballData(["East", "West"].includes(conference) && !conferences.has(conference));
+    conferences.add(conference);
+    const table = group.standings;
+    requireBasketballData(
+      table?.season === seasonYear &&
+        table.seasonType === 2 &&
+        Array.isArray(table.entries) &&
+        table.entries.length === conferenceSize,
+    );
+    for (const entry of table.entries) {
+      const team = findTeam(entry.team?.id);
+      const stats = new Map((entry.stats ?? []).map((stat) => [stat.name, stat.value]));
+      requireBasketballData(team && stats.has("wins") && stats.has("losses"));
+      const rank = stats.get("playoffSeed") ?? null;
+      requireBasketballData(
+        rank === null || (Number.isInteger(rank) && rank >= 1 && rank <= conferenceSize),
+      );
+      rows.push({ team, conference, rank, wins: stats.get("wins"), losses: stats.get("losses") });
+    }
+  }
+  requireBasketballData(new Set(rows.map((row) => row.team)).size === rows.length);
+  return validateSportsData(BasketballStandings, rows);
+}
+
+export const nameEspnStandingsRequest = (sport, seasonYear) =>
+  `https://site.web.api.espn.com/apis/v2/sports/${sport}/standings?season=${seasonYear}&type=0&level=2`;
 
 const readGameNumberFacts = (gameNumber) =>
   Number.isInteger(gameNumber) && gameNumber > 0 ? { gameNumber } : {};
