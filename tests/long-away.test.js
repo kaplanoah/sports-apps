@@ -26,6 +26,7 @@ const saveScrolledPart = (awayMs) => ({
   markup: "<div></div>",
   hidden: false,
   classes: "pager-bar held stuck",
+  markupClasses: "pager-bar",
   scrolls: [{ path: [0], left: 120, top: 40 }],
   holderTop: 868,
   pageTop: 300,
@@ -38,7 +39,7 @@ test("a part left under two minutes ago shows where it was, on the tab chosen, h
     scrolls: [{ path: [0], left: 120, top: 40, isOnStart: false }],
     holderTop: 868,
     pageTop: 300,
-    classes: "pager-bar held stuck",
+    classes: "held stuck",
     isOnFirstTab: false,
   });
 });
@@ -95,8 +96,26 @@ test("a part in a sheet stays where it was after two minutes, as long as the she
   const place = findPlaceToShow(saveScrolledPart(2 * MINUTE_MS), { isInSheet: true });
 
   assert.deepEqual(place.scrolls, [{ path: [0], left: 120, top: 40, isOnStart: false }]);
-  assert.equal(place.classes, "pager-bar held stuck");
+  assert.equal(place.classes, "held stuck");
   assert.equal(place.isOnFirstTab, false);
+});
+
+test("a part comes back with the classes its code gave it, never one its markup gave it when it was saved", () => {
+  const place = findPlaceToShow({
+    ...saveScrolledPart(MINUTE_MS),
+    classes: "settings-group control-row held",
+    markupClasses: "settings-group control-row",
+  });
+
+  assert.equal(place.classes, "held");
+});
+
+test("a part saved before the page kept its markup's classes comes back with none", () => {
+  const { markupClasses, ...legacy } = saveScrolledPart(MINUTE_MS);
+
+  assert.equal(markupClasses, "pager-bar");
+  assert.equal(findPlaceToShow(legacy).classes, "");
+  assert.equal(findPlaceToShow({ ...legacy, markupClasses: null }).classes, "");
 });
 
 test("a part saved at a time that can't be read starts over", () => {

@@ -25,6 +25,19 @@ function readSaved(key) {
   }
 }
 
+// The classes each part's markup gives it, noted before anything changes them, which last-seen.js
+// saves beside its classes, so a later release's layout isn't given a class the markup no longer has.
+/** @type {Map<string, string>} */
+const MARKUP_CLASSES = new Map();
+
+function noteMarkupClasses() {
+  for (const part of document.querySelectorAll("[data-last-drawn]"))
+    MARKUP_CLASSES.set(part.id, part.className);
+}
+
+/** @param {string} id */
+const readMarkupClasses = (id) => MARKUP_CLASSES.get(id);
+
 // Only a part the page draws whole goes back, since a release may have changed the markup around
 // it, and the page's modules redraw it from the season before it's ever used.
 /**
@@ -251,6 +264,7 @@ function showPickedAppearance() {
 // What the page last showed is a drawing of its own, so the note that its views are still empty
 // goes with it.
 function showLastDrawn() {
+  noteMarkupClasses();
   if (readNotificationIntent(location.href).isRequested) return;
   const parts = Object.entries(readSavedParts()).filter(([id, part]) => isDrawnPart(id, part));
   const now = Date.now();

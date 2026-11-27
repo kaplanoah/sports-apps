@@ -21,6 +21,22 @@ const isLongAwayFrom = (savedAt, now = Date.now()) =>
   !(now - Number(savedAt) < START_AFTER_AWAY_MS);
 
 /**
+ * The classes a part's code gave it, as a pager's and a sheet's teams' are, apart from the ones its
+ * markup gives it, which a release may have changed since. A copy saved before the page kept the
+ * markup's classes can't tell the two apart, so it gives none.
+ * @param {unknown} classes every class the part had when it was saved
+ * @param {unknown} markupClasses the classes its markup gave it then
+ */
+function listRuntimeClasses(classes, markupClasses) {
+  if (typeof classes !== "string" || typeof markupClasses !== "string") return "";
+  const fromMarkup = markupClasses.split(/\s+/);
+  return classes
+    .split(/\s+/)
+    .filter((name) => name && !fromMarkup.includes(name))
+    .join(" ");
+}
+
+/**
  * Where a part the page draws whole shows again on a reload, from what the page saved of it as it
  * left the screen (last-seen.js): as it was, or, two minutes or more later, from its start, with
  * what it holds scrolled to its start, its holder and the page at their tops, its tabs on the
@@ -28,12 +44,12 @@ const isLongAwayFrom = (savedAt, now = Date.now()) =>
  * list that names where it starts, like the Games list's start day or a sideways bracket's
  * opening round, goes there, and a part that starts hidden, like a search, is hidden again. A part
  * in a sheet stays where it was as long as the sheet does (sheet-memory.js).
- * @param {{ hidden?: unknown, scrolls?: unknown, holderTop?: unknown, pageTop?: unknown, classes?: unknown, savedAt?: unknown }} saved
+ * @param {{ hidden?: unknown, scrolls?: unknown, holderTop?: unknown, pageTop?: unknown, classes?: unknown, markupClasses?: unknown, savedAt?: unknown }} saved
  * @param {{ isInSheet: boolean, isStartHidden: boolean }} where
  * @param {number} now when the page loads, read once for all its parts, so they start over together
  */
 function findPlaceToShow(
-  { hidden, scrolls, holderTop, pageTop, classes, savedAt },
+  { hidden, scrolls, holderTop, pageTop, classes, markupClasses, savedAt },
   { isInSheet, isStartHidden },
   now,
 ) {
@@ -52,7 +68,7 @@ function findPlaceToShow(
     scrolls: Array.isArray(scrolls) ? scrolls.map(placeScroll) : [],
     holderTop: isStartedOver ? 0 : Number(holderTop) || 0,
     pageTop: isStartedOver ? 0 : Number(pageTop) || 0,
-    classes: !isStartedOver && typeof classes === "string" ? classes : "",
+    classes: isStartedOver ? "" : listRuntimeClasses(classes, markupClasses),
     isOnFirstTab: isStartedOver,
   };
 }
